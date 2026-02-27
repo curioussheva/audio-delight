@@ -1,0 +1,211 @@
+/**
+ * AudioEngine — Singleton
+ * Signal chain: Source → EQ Filters[10] → PannerNode(HRTF) → AnalyserNode → GainNode → Destination
+ */
+
+//import { AudioContext, BiquadFilterNode, GainNode } from 'react-native-audio-api';
+import { EQBand, SpatialPosition } from '../types/audio.types';
+import { AUDIO_CONFIG, DEFAULT_BANDS } from '../constants/eq';
+
+class AudioEngine {
+  private static _instance: AudioEngine;
+
+  private ctx: AudioContext | null = null;
+  private eqFilters: BiquadFilterNode[] = [];
+  private panner: any | null = null;        // PannerNode
+  private analyser: any | null = null;       // AnalyserNode
+  private masterGain: GainNode | null = null;
+  private _isInitialized = false;
+
+  // ─── Singleton ────────────────────────────────────────────────────────────
+
+  static getInstance(): AudioEngine {
+    if (!AudioEngine._instance) {
+      AudioEngine._instance = new AudioEngine();
+    }
+    return AudioEngine._instance;
+  }
+
+  private constructor() {}
+
+  // ─── Init ─────────────────────────────────────────────────────────────────
+
+  async init(): Promise<void> {
+    if (this._isInitialized) return;
+
+    try {
+      this.ctx = new AudioContext({
+        sampleRate: AUDIO_CONFIG.SAMPLE_RATE,
+        latencyHint: AUDIO_CONFIG.LATENCY_HINT,
+      });
+
+      // Master gain
+      this.masterGain = this.ctx.createGain();
+      this.masterGain.gain.value = 1.0;
+
+      // Analyser for visualizer
+      this.analyser = this.ctx.createAnalyser();
+      this.analyser.fftSize = AUDIO_CONFIG.FFT_SIZE;
+      this.analyser.smoothingTimeConstant = AUDIO_CONFIG.SMOOTHING;
+
+      // Spatial panner with HRTF
+      this.panner = this.ctx.createPanner();
+      this.panner.panningModel = 'HRTF';
+      this.panner.distanceModel = 'inverse';
+      this.panner.refDistance = 1;
+      this.panner.maxDistance = 10000;
+      this.panner.rolloffFactor = 1;
+      // Default: centered in front
+      this.panner.setPosition(0, 0, -1);
+
+      // Build EQ filter chain
+      this.eqFilters = this._buildEQChain(DEFAULT_BANDS);
+
+      // Connect: EQ chain last → Panner → Analyser → Master → Destination
+      const lastFilter = this.eqFilters[this.eqFilters.length - 1];
+      lastFilter.connect(this.panner);
+      this.panner.connect(this.analyser);
+      this.analyser.connect(this.masterGain);
+      this.masterGain.connect(this.ctx.destination);
+
+      this._isInitialized = true;
+      console.log('[AudioEngine] Initialized. Sample rate:', this.ctx.sampleRate);
+    } catch (err) {
+      console.error('[AudioEngine] Init failed:', err);
+      throw err;
+    }
+  }
+
+  // ─── EQ Chain ─────────────────────────────────────────────────────────────
+
+  private _buildEQChain(bands: EQBand[]): BiquadFilterNode[] {
+    const filters = bands.map((band) => {
+      const f = this.ctx!.createBiquadFilter();
+      f.type = band.type;
+      f.frequency.value = band.frequency;
+      f.gain.value = band.gain;
+      f.Q.value = band.q;
+      return f;
+    });
+
+    // Connect each filter to the next
+    for (let i = 1; i < filters.length; i++) {
+      filters[i - 1].connect(filters[i]);
+    }
+
+    return filters;
+  }
+
+  /**
+   * Connect an external audio source node to the EQ chain input.
+   * Call this after loading a track.
+   */
+  connectSource(sourceNode: any): void {
+    if (!this.eqFilters.length) {
+      console.warn('[AudioEngine] connectSource called before init');
+      return;
+    }
+    sourceNode.connect(this.eqFilters[0]);
+  }
+
+  // ─── EQ Controls ──────────────────────────────────────────────────────────
+
+  /**
+   * Update a single EQ band. Smooth transition (10ms) to avoid clicks.
+   */
+  setEQBand(index: number, gain: number, freq?: number, q?: number): void {
+    const filter = this.eqFilters[index];
+    if (!filter || !this.ctx) return;
+
+    const now = this.ctx.currentTime;
+    const SMOOTH = 0.01; // 10ms smooth
+    filter.gain.setTargetAtTime(gain, now, SMOOTH);
+    if (freq !== undefined) filter.frequency.setTargetAtTime(freq, now, SMOOTH);
+    if (q !== undefined) filter.Q.setTargetAtTime(q, now, SMOOTH);
+  }
+
+  /**
+   * Apply all bands at once (preset switch).
+   */
+  applyAllBands(bands: EQBand[]): void {
+    bands.forEach((band, i) => {
+      this.setEQBand(i, band.gain, band.frequency, band.q);
+    });
+  }
+
+  // ─── Spatial Controls ─────────────────────────────────────────────────────
+
+  setSpatialPosition(pos: SpatialPosition): void {
+    this.panner?.setPosition(pos.x, pos.y, pos.z);
+  }
+
+  setSpatialEnabled(enabled: boolean): void {
+    if (!this.panner) return;
+    if (enabled) {
+      this.panner.panningModel = 'HRTF';
+    } else {
+      // Disable: center + equalpower (no HRTF overhead)
+      this.panner.panningModel = 'equalpower';
+      this.panner.setPosition(0, 0, 0);
+    }
+  }
+
+  // ─── Master Volume ─────────────────────────────────────────────────────────
+
+  setMasterVolume(vol: number): void {
+    // vol 0.0 – 1.0
+    if (this.masterGain && this.ctx) {
+      this.masterGain.gain.setTargetAtTime(
+        Math.max(0, Math.min(1, vol)),
+        this.ctx.currentTime,
+        0.02
+      );
+    }
+  }
+
+  // ─── Analyser / Visualizer ────────────────────────────────────────────────
+
+  getFFTData(): Uint8Array {
+    if (!this.analyser) return new Uint8Array(0);
+    const data = new Uint8Array(this.analyser.frequencyBinCount);
+    this.analyser.getByteFrequencyData(data);
+    return data;
+  }
+
+  getWaveformData(): Uint8Array {
+    if (!this.analyser) return new Uint8Array(0);
+    const data = new Uint8Array(this.analyser.fftSize);
+    this.analyser.getByteTimeDomainData(data);
+    return data;
+  }
+
+  // ─── State ────────────────────────────────────────────────────────────────
+
+  get isInitialized(): boolean {
+    return this._isInitialized;
+  }
+
+  get audioContext(): AudioContext | null {
+    return this.ctx;
+  }
+
+  async suspend(): Promise<void> {
+    await this.ctx?.suspend();
+  }
+
+  async resume(): Promise<void> {
+    await this.ctx?.resume();
+  }
+
+  async destroy(): Promise<void> {
+    await this.ctx?.close();
+    this._isInitialized = false;
+    this.eqFilters = [];
+    this.panner = null;
+    this.analyser = null;
+    this.masterGain = null;
+    this.ctx = null;
+  }
+}
+
+export default AudioEngine.getInstance();

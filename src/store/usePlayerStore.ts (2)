@@ -1,0 +1,74 @@
+import { create } from 'zustand';
+import TrackPlayer, { RepeatMode } from 'react-native-track-player';
+import { Track, PlaybackState, RepeatMode as AppRepeatMode } from '../types/audio.types';
+
+interface PlayerState {
+  currentTrack: Track | null;
+  queue: Track[];
+  playbackState: PlaybackState;
+  position: number;       // seconds
+  duration: number;       // seconds
+  volume: number;         // 0.0 - 1.0
+  repeatMode: AppRepeatMode;
+  isShuffled: boolean;
+
+  // Actions
+  setCurrentTrack: (track: Track | null) => void;
+  setQueue: (tracks: Track[]) => void;
+  setPlaybackState: (state: PlaybackState) => void;
+  setProgress: (position: number, duration: number) => void;
+  setVolume: (vol: number) => void;
+  setRepeatMode: (mode: AppRepeatMode) => void;
+  toggleShuffle: () => void;
+  playTrack: (track: Track, queue?: Track[]) => Promise<void>;
+}
+
+export const usePlayerStore = create<PlayerState>((set, get) => ({
+  currentTrack: null,
+  queue: [],
+  playbackState: 'idle',
+  position: 0,
+  duration: 0,
+  volume: 1.0,
+  repeatMode: 'queue',
+  isShuffled: false,
+
+  setCurrentTrack: (track) => set({ currentTrack: track }),
+  setQueue: (tracks) => set({ queue: tracks }),
+  setPlaybackState: (playbackState) => set({ playbackState }),
+  setProgress: (position, duration) => set({ position, duration }),
+  setVolume: (volume) => {
+    set({ volume });
+    TrackPlayer.setVolume(volume);
+  },
+  setRepeatMode: (mode) => {
+    set({ repeatMode: mode });
+    const tpMode =
+      mode === 'track' ? RepeatMode.Track :
+      mode === 'queue' ? RepeatMode.Queue : RepeatMode.Off;
+    TrackPlayer.setRepeatMode(tpMode);
+  },
+  toggleShuffle: () => set((s) => ({ isShuffled: !s.isShuffled })),
+
+  playTrack: async (track, queue) => {
+    const tracks = queue ?? get().queue;
+    const tpTracks = tracks.map((t) => ({
+      id: t.id,
+      url: t.uri,
+      title: t.title,
+      artist: t.artist,
+      album: t.album ?? '',
+      artwork: t.artwork,
+      duration: t.duration,
+    }));
+
+    await TrackPlayer.reset();
+    await TrackPlayer.add(tpTracks);
+
+    const index = tracks.findIndex((t) => t.id === track.id);
+    if (index > 0) await TrackPlayer.skip(index);
+
+    await TrackPlayer.play();
+    set({ currentTrack: track, queue: tracks, playbackState: 'playing' });
+  },
+}));

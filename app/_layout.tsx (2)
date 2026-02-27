@@ -1,0 +1,44 @@
+import { useEffect } from 'react';
+import { Stack } from 'expo-router';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { StatusBar } from 'expo-status-bar';
+import TrackPlayer from 'react-native-track-player';
+import { PlaybackService, setupTrackPlayer } from '../src/services/TrackPlayerService';
+import AudioEngine from '../src/audio/AudioEngine';
+import { useTrackPlayerSync } from '../src/hooks/useTrackPlayerSync';
+
+// Register playback service for background audio
+TrackPlayer.registerPlaybackService(() => PlaybackService);
+
+function AppProviders() {
+  // Sync TrackPlayer state → Zustand
+  useTrackPlayerSync();
+
+  useEffect(() => {
+    const init = async () => {
+      try {
+        await setupTrackPlayer();
+        await AudioEngine.init();
+        console.log('[App] Audio ready');
+      } catch (err) {
+        console.error('[App] Audio init failed:', err);
+      }
+    };
+    init();
+  }, []);
+
+  return (
+    <>
+      <StatusBar style="light" backgroundColor="#080a0f" />
+      <Stack screenOptions={{ headerShown: false }} />
+    </>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#080a0f' }}>
+      <AppProviders />
+    </GestureHandlerRootView>
+  );
+}
