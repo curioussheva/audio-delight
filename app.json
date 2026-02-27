@@ -33,18 +33,14 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.audiodelight.app",
       "infoPlist": {
-        "UIBackgroundModes": ["audio"],
+        "UIBackgroundModes": [
+          "audio"
+        ],
         "NSMicrophoneUsageDescription": "Digunakan untuk analisis audio real-time"
       }
     },
     "plugins": [
       "expo-router",
-      [
-        "react-native-track-player",
-        {
-          "enableBackgroundAudio": true
-        }
-      ],
       [
         "expo-document-picker",
         {

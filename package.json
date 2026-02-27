@@ -8,7 +8,7 @@
     "ios": "expo start --ios",
     "build:android": "eas build --platform android --profile preview",
     "build:android:prod": "eas build --platform android --profile production",
-    "postinstall": "node scripts/fix-track-player.js || true",
+    "postinstall": "node scripts/fix-track-player.js && find node_modules/react-native-track-player/lib/src -name \"*.js\" -exec sed -i -E \"s|from '(\\.{1,2}/[^'.]+)'|from '\\1.js'|g\" {} \\; 2>/dev/null || true",
     "lint": "eslint . --ext .ts,.tsx"
   },
   "dependencies": {
