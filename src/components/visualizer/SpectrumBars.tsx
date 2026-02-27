@@ -37,7 +37,7 @@ export function SpectrumBars({ fftData, width, height, barCount = 32 }: Props) {
                 y={height - (bars.value[i] ?? 4)}
                 width={barWidth}
                 height={bars.value[i] ?? 4}
-                r={2}
+                rx={2} ry={2}
               >
                 <LinearGradient
                   start={vec(x, height)}
