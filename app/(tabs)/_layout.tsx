@@ -18,7 +18,6 @@ export default function TabLayout() {
         tabBarInactiveTintColor: Colors.textMuted,
         tabBarLabelStyle: {
           fontSize: 10,
-          fontFamily: 'monospace',
           letterSpacing: 0.5,
         },
       }}

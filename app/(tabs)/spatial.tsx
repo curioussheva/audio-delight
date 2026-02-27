@@ -1,8 +1,7 @@
 import React from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
+  View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context'; 
 import { Colors } from '../../src/constants/colors';
 import { useSpatialStore } from '../../src/store/useSpatialStore';
 import { useHeadTracking } from '../../src/hooks/useHeadTracking';
@@ -72,17 +71,12 @@ export default function SpatialScreen() {
         <View
           style={styles.pad}
           onTouchMove={(e) => {
-  const { locationX, locationY } = e.nativeEvent;
-  const padSize = 240;
-  
-  // Pastikan nilai tidak keluar dari batas 0 - padSize
-  const clampedX = Math.max(0, Math.min(padSize, locationX));
-  const clampedY = Math.max(0, Math.min(padSize, locationY));
-  
-  const x = ((clampedX / padSize) * 10) - 5;
-  const y = ((clampedY / padSize) * 4) - 2;
-  setPosition({ ...position, x, y });
-}}
+            const { locationX, locationY } = e.nativeEvent;
+            const padSize = 240;
+            const x = ((locationX / padSize) * 10) - 5;
+            const y = ((locationY / padSize) * 4) - 2;
+            setPosition({ ...position, x, y });
+          }}
         >
           {/* Rings */}
           {[60, 120, 180, 240].map((size) => (

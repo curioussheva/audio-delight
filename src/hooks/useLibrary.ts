@@ -1,59 +1,68 @@
-import { useState, useCallback } from 'react';
+/**
+ * useLibrary — Week 2
+ * Scan storage + pick files, persist to AsyncStorage
+ */
+import { useState, useEffect, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Track } from '../types/audio.types';
 import { scanLibrary, pickAudioFiles } from '../services/LibraryScanner';
 
-interface LibraryState {
-  tracks: Track[];
-  isLoading: boolean;
-  error: string | null;
-  hasScanned: boolean;
-}
+const STORAGE_KEY = 'audiodelight-library';
 
 export function useLibrary() {
-  const [state, setState] = useState<LibraryState>({
-    tracks: [],
-    isLoading: false,
-    error: null,
-    hasScanned: false,
-  });
+  const [tracks, setTracks] = useState<Track[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Load from storage on mount
+  useEffect(() => {
+    AsyncStorage.getItem(STORAGE_KEY).then(raw => {
+      if (raw) {
+        try { setTracks(JSON.parse(raw)); } catch (_) {}
+      }
+    });
+  }, []);
+
+  const saveTracks = async (newTracks: Track[]) => {
+    setTracks(newTracks);
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newTracks));
+  };
 
   const scan = useCallback(async () => {
-    setState((s) => ({ ...s, isLoading: true, error: null }));
+    setIsLoading(true);
     try {
-      const tracks = await scanLibrary();
-      setState({ tracks, isLoading: false, error: null, hasScanned: true });
-    } catch (err) {
-      setState((s) => ({
-        ...s,
-        isLoading: false,
-        error: 'Gagal scan library. Cek permission storage.',
-      }));
+      const found = await scanLibrary();
+      // Merge dengan existing tracks (dedupe by id)
+      const existingIds = new Set(tracks.map(t => t.id));
+      const newOnes = found.filter(t => !existingIds.has(t.id));
+      await saveTracks([...tracks, ...newOnes]);
+    } catch (e) {
+      console.warn('[Library] Scan error:', e);
+    } finally {
+      setIsLoading(false);
     }
-  }, []);
+  }, [tracks]);
 
-  const pickFiles = useCallback(async () => {
-    setState((s) => ({ ...s, isLoading: true, error: null }));
+  const pick = useCallback(async () => {
     try {
       const picked = await pickAudioFiles();
-      setState((s) => ({
-        ...s,
-        isLoading: false,
-        // Merge new files, avoid duplicates
-        tracks: [
-          ...s.tracks,
-          ...picked.filter((p) => !s.tracks.find((t) => t.uri === p.uri)),
-        ],
-      }));
-      return picked;
-    } catch (err) {
-      setState((s) => ({ ...s, isLoading: false, error: 'Gagal memilih file.' }));
-      return [];
+      if (!picked.length) return;
+      const existingIds = new Set(tracks.map(t => t.id));
+      const newOnes = picked.filter(t => !existingIds.has(t.id));
+      if (newOnes.length) {
+        await saveTracks([...tracks, ...newOnes]);
+      }
+    } catch (e) {
+      console.warn('[Library] Pick error:', e);
     }
+  }, [tracks]);
+
+  const remove = useCallback(async (id: string) => {
+    await saveTracks(tracks.filter(t => t.id !== id));
+  }, [tracks]);
+
+  const clear = useCallback(async () => {
+    await saveTracks([]);
   }, []);
 
-  return {
-    ...state,
-    scan,
-    pickFiles,
-  };
+  return { tracks, isLoading, scan, pick, remove, clear };
 }

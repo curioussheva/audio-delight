@@ -1,145 +1,80 @@
 /**
  * AudioEngine — Singleton
- * Signal chain: Source → EQ Filters[10] → PannerNode(HRTF) → AnalyserNode → GainNode → Destination
+ * Mock mode otomatis aktif jika react-native-audio-api tidak tersedia (Expo Go).
+ * Real mode aktif saat dev build dengan native module.
  */
 
 import { EQBand, SpatialPosition } from '../types/audio.types';
 import { AUDIO_CONFIG, DEFAULT_BANDS } from '../constants/eq';
 
-// --- MOCKING STRATEGY ---
-let NativeAudioContext: any = null;
-let NativeBiquadFilterNode: any = null;
-let NativeGainNode: any = null;
-let isNativeAudioAvailable = false;
-
-try {
-  // Attempt to require the native module
-  const AudioAPI = require('react-native-audio-api');
-  NativeAudioContext = AudioAPI.AudioContext;
-  NativeBiquadFilterNode = AudioAPI.BiquadFilterNode;
-  NativeGainNode = AudioAPI.GainNode;
-  isNativeAudioAvailable = true;
-} catch (e) {
-  console.warn("⚠️ [AudioEngine] Running in Mock Mode: react-native-audio-api not found.");
-  
-  // Define a dummy AudioContext to prevent runtime crashes
-  class MockAudioNode {
-    value = 0;
-    setTargetAtTime() {}
-    connect() {}
+// ─── Mock FFT generator untuk visualizer saat mock mode ──────────────────────
+function generateMockFFT(bins: number): Uint8Array {
+  const data = new Uint8Array(bins);
+  const t = Date.now() / 1000;
+  for (let i = 0; i < bins; i++) {
+    const freq = i / bins;
+    data[i] = Math.floor(
+      (Math.sin(t * 2 + i * 0.3) * 0.3 + 0.4 + Math.random() * 0.1) *
+      Math.exp(-freq * 2) * 200
+    );
   }
-  
-  NativeAudioContext = class MockAudioContext {
-    sampleRate = 44100;
-    currentTime = 0;
-    destination = new MockAudioNode();
-    
-    createGain() { 
-      return { gain: new MockAudioNode(), connect: () => {} }; 
-    }
-    createAnalyser() { 
-      return { 
-        fftSize: 2048, 
-        smoothingTimeConstant: 0.8, 
-        frequencyBinCount: 1024,
-        connect: () => {},
-        getByteFrequencyData: () => new Uint8Array(1024),
-        getByteTimeDomainData: () => new Uint8Array(2048)
-      }; 
-    }
-    createPanner() {
-      return { setPosition: () => {}, panningModel: 'equalpower', connect: () => {} };
-    }
-    createBiquadFilter() {
-      return { 
-        type: 'peaking', 
-        frequency: new MockAudioNode(), 
-        gain: new MockAudioNode(), 
-        Q: new MockAudioNode(), 
-        connect: () => {} 
-      };
-    }
-    suspend() { return Promise.resolve(); }
-    resume() { return Promise.resolve(); }
-    close() { return Promise.resolve(); }
-  };
+  return data;
 }
-
-// We use the resolved NativeAudioContext (either real or mock)
-type AudioContextType = typeof NativeAudioContext;
 
 class AudioEngine {
   private static _instance: AudioEngine;
 
-  private ctx: any | null = null; // Using 'any' here due to mock complexity, or cast to AudioContextType
+  private ctx: any = null;
   private eqFilters: any[] = [];
-  private panner: any | null = null;        
-  private analyser: any | null = null;       
-  private masterGain: any | null = null;
+  private panner: any = null;
+  private analyser: any = null;
+  private masterGain: any = null;
   private _isInitialized = false;
-
-  // ─── Singleton ────────────────────────────────────────────────────────────
+  private _isMockMode = false;
 
   static getInstance(): AudioEngine {
-    if (!AudioEngine._instance) {
-      AudioEngine._instance = new AudioEngine();
-    }
+    if (!AudioEngine._instance) AudioEngine._instance = new AudioEngine();
     return AudioEngine._instance;
   }
-
   private constructor() {}
-
-  // ─── Init ─────────────────────────────────────────────────────────────────
 
   async init(): Promise<void> {
     if (this._isInitialized) return;
-
     try {
-      this.ctx = new NativeAudioContext({
+      const { AudioContext } = require('react-native-audio-api');
+      this.ctx = new AudioContext({
         sampleRate: AUDIO_CONFIG.SAMPLE_RATE,
         latencyHint: AUDIO_CONFIG.LATENCY_HINT,
       });
-
-      // Master gain
       this.masterGain = this.ctx.createGain();
       this.masterGain.gain.value = 1.0;
-
-      // Analyser for visualizer
       this.analyser = this.ctx.createAnalyser();
       this.analyser.fftSize = AUDIO_CONFIG.FFT_SIZE;
       this.analyser.smoothingTimeConstant = AUDIO_CONFIG.SMOOTHING;
-
-      // Spatial panner with HRTF
       this.panner = this.ctx.createPanner();
       this.panner.panningModel = 'HRTF';
       this.panner.distanceModel = 'inverse';
-      this.panner.refDistance = 1;
-      this.panner.maxDistance = 10000;
-      this.panner.rolloffFactor = 1;
-      // Default: centered in front
       this.panner.setPosition(0, 0, -1);
-
-      // Build EQ filter chain
       this.eqFilters = this._buildEQChain(DEFAULT_BANDS);
-
-      // Connect: EQ chain last → Panner → Analyser → Master → Destination
-      const lastFilter = this.eqFilters[this.eqFilters.length - 1];
-      lastFilter.connect(this.panner);
+      const last = this.eqFilters[this.eqFilters.length - 1];
+      last.connect(this.panner);
       this.panner.connect(this.analyser);
       this.analyser.connect(this.masterGain);
       this.masterGain.connect(this.ctx.destination);
-
       this._isInitialized = true;
-      console.log(`[AudioEngine] Initialized (${isNativeAudioAvailable ? 'Native' : 'Mock'}). Sample rate:`, this.ctx.sampleRate);
-    } catch (err) {
-      console.error('[AudioEngine] Init failed:', err);
-      throw err;
+      this._isMockMode = false;
+      console.log('[AudioEngine] ✅ Real mode initialized');
+    } catch (e) {
+      // Fallback ke mock mode (Expo Go, emulator, dll)
+      this._isMockMode = true;
+      this._isInitialized = true;
+      console.warn('[AudioEngine] ⚠️ Running in Mock Mode: react-native-audio-api not found.');
+      console.warn('[AudioEngine] Audio processing disabled. Build dev build untuk full features.');
     }
   }
 
-  // ─── EQ Chain ─────────────────────────────────────────────────────────────
-
   private _buildEQChain(bands: EQBand[]): any[] {
+    if (!this.ctx || this._isMockMode) return [];
     const filters = bands.map((band) => {
       const f = this.ctx.createBiquadFilter();
       f.type = band.type;
@@ -148,145 +83,64 @@ class AudioEngine {
       f.Q.value = band.q;
       return f;
     });
-
-    // Connect each filter to the next
-    for (let i = 1; i < filters.length; i++) {
-      filters[i - 1].connect(filters[i]);
-    }
-
+    for (let i = 1; i < filters.length; i++) filters[i - 1].connect(filters[i]);
     return filters;
   }
 
-  /**
-   * Connect an external audio source node to the EQ chain input.
-   * Call this after loading a track.
-   */
   connectSource(sourceNode: any): void {
-    if (!this.eqFilters.length) {
-      console.warn('[AudioEngine] connectSource called before init');
-      return;
-    }
-    if (isNativeAudioAvailable) {
-       sourceNode.connect(this.eqFilters[0]);
-    } else {
-       console.log("[AudioEngine] Mock connectSource called");
-    }
+    if (this._isMockMode || !this.eqFilters.length) return;
+    sourceNode.connect(this.eqFilters[0]);
   }
 
-  // ─── EQ Controls ──────────────────────────────────────────────────────────
-
-  /**
-   * Update a single EQ band. Smooth transition (10ms) to avoid clicks.
-   */
   setEQBand(index: number, gain: number, freq?: number, q?: number): void {
+    if (this._isMockMode) return;
     const filter = this.eqFilters[index];
     if (!filter || !this.ctx) return;
-
     const now = this.ctx.currentTime;
-    const SMOOTH = 0.01; // 10ms smooth
-    
-    // Safety check for mock vs native implementation
-    if (filter.gain.setTargetAtTime) {
-      filter.gain.setTargetAtTime(gain, now, SMOOTH);
-      if (freq !== undefined) filter.frequency.setTargetAtTime(freq, now, SMOOTH);
-      if (q !== undefined) filter.Q.setTargetAtTime(q, now, SMOOTH);
-    } else {
-      filter.gain.value = gain;
-      if (freq !== undefined) filter.frequency.value = freq;
-      if (q !== undefined) filter.Q.value = q;
-    }
+    filter.gain.setTargetAtTime(gain, now, 0.01);
+    if (freq !== undefined) filter.frequency.setTargetAtTime(freq, now, 0.01);
+    if (q !== undefined) filter.Q.setTargetAtTime(q, now, 0.01);
   }
 
-  /**
-   * Apply all bands at once (preset switch).
-   */
   applyAllBands(bands: EQBand[]): void {
-    bands.forEach((band, i) => {
-      this.setEQBand(i, band.gain, band.frequency, band.q);
-    });
+    bands.forEach((band, i) => this.setEQBand(i, band.gain, band.frequency, band.q));
   }
-
-  // ─── Spatial Controls ─────────────────────────────────────────────────────
 
   setSpatialPosition(pos: SpatialPosition): void {
-    if (this.panner && this.panner.setPosition) {
-       this.panner.setPosition(pos.x, pos.y, pos.z);
-    }
+    if (this._isMockMode) return;
+    this.panner?.setPosition(pos.x, pos.y, pos.z);
   }
 
   setSpatialEnabled(enabled: boolean): void {
-    if (!this.panner) return;
-    if (enabled) {
-      this.panner.panningModel = 'HRTF';
-    } else {
-      // Disable: center + equalpower (no HRTF overhead)
-      this.panner.panningModel = 'equalpower';
-      if (this.panner.setPosition) this.panner.setPosition(0, 0, 0);
-    }
+    if (this._isMockMode || !this.panner) return;
+    this.panner.panningModel = enabled ? 'HRTF' : 'equalpower';
+    if (!enabled) this.panner.setPosition(0, 0, 0);
   }
-
-  // ─── Master Volume ─────────────────────────────────────────────────────────
 
   setMasterVolume(vol: number): void {
-    // vol 0.0 – 1.0
-    if (this.masterGain && this.ctx && this.masterGain.gain.setTargetAtTime) {
-      this.masterGain.gain.setTargetAtTime(
-        Math.max(0, Math.min(1, vol)),
-        this.ctx.currentTime,
-        0.02
-      );
-    } else if (this.masterGain) {
-      this.masterGain.gain.value = Math.max(0, Math.min(1, vol));
-    }
+    if (this._isMockMode || !this.masterGain || !this.ctx) return;
+    this.masterGain.gain.setTargetAtTime(Math.max(0, Math.min(1, vol)), this.ctx.currentTime, 0.02);
   }
 
-  // ─── Analyser / Visualizer ────────────────────────────────────────────────
-
   getFFTData(): Uint8Array {
+    if (this._isMockMode) return generateMockFFT(AUDIO_CONFIG.FFT_SIZE / 2);
     if (!this.analyser) return new Uint8Array(0);
     const data = new Uint8Array(this.analyser.frequencyBinCount);
-    if (this.analyser.getByteFrequencyData) {
-       this.analyser.getByteFrequencyData(data);
-    }
+    this.analyser.getByteFrequencyData(data);
     return data;
   }
 
   getWaveformData(): Uint8Array {
+    if (this._isMockMode) return generateMockFFT(AUDIO_CONFIG.FFT_SIZE);
     if (!this.analyser) return new Uint8Array(0);
     const data = new Uint8Array(this.analyser.fftSize);
-    if (this.analyser.getByteTimeDomainData) {
-       this.analyser.getByteTimeDomainData(data);
-    }
+    this.analyser.getByteTimeDomainData(data);
     return data;
   }
 
-  // ─── State ────────────────────────────────────────────────────────────────
-
-  get isInitialized(): boolean {
-    return this._isInitialized;
-  }
-
-  get audioContext(): any | null {
-    return this.ctx;
-  }
-
-  async suspend(): Promise<void> {
-    await this.ctx?.suspend?.();
-  }
-
-  async resume(): Promise<void> {
-    await this.ctx?.resume?.();
-  }
-
-  async destroy(): Promise<void> {
-    await this.ctx?.close?.();
-    this._isInitialized = false;
-    this.eqFilters = [];
-    this.panner = null;
-    this.analyser = null;
-    this.masterGain = null;
-    this.ctx = null;
-  }
+  get isInitialized(): boolean { return this._isInitialized; }
+  get isMockMode(): boolean { return this._isMockMode; }
+  get audioContext(): any { return this.ctx; }
 }
 
 export default AudioEngine.getInstance();
