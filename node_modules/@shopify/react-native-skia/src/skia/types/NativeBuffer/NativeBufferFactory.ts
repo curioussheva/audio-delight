@@ -1,7 +1,14 @@
 import type { SkImage } from "../Image";
 
+export abstract class CanvasKitWebGLBuffer {}
+
 export type NativeBuffer<
-  T extends bigint | ArrayBuffer | CanvasImageSource | unknown = unknown
+  T extends
+    | bigint
+    | ArrayBuffer
+    | CanvasImageSource
+    | CanvasKitWebGLBuffer
+    | unknown = unknown
 > = T;
 
 export type NativeBufferAddr = NativeBuffer<bigint>;
@@ -18,9 +25,10 @@ export const isNativeBufferWeb = (
   buffer instanceof HTMLCanvasElement ||
   buffer instanceof ImageBitmap ||
   buffer instanceof OffscreenCanvas ||
-  buffer instanceof VideoFrame ||
+  (typeof VideoFrame !== "undefined" && buffer instanceof VideoFrame) ||
   buffer instanceof HTMLImageElement ||
-  buffer instanceof SVGImageElement;
+  buffer instanceof SVGImageElement ||
+  buffer instanceof CanvasKitWebGLBuffer;
 
 export const isNativeBufferNode = (
   buffer: NativeBuffer

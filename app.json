@@ -7,31 +7,16 @@
     "icon": "./assets/images/icon.png",
     "scheme": "audiodelight",
     "userInterfaceStyle": "dark",
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/images/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#080a0f"
     },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#080a0f"
-      },
-      "package": "com.audiodelight.app",
-      "permissions": [
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.READ_MEDIA_AUDIO",
-        "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
-        "android.permission.WAKE_LOCK",
-        "android.permission.RECEIVE_BOOT_COMPLETED",
-        "android.permission.VIBRATE"
-      ],
-      "versionCode": 1
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.audiodelight.app",
+      "newArchEnabled": false,
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
@@ -39,15 +24,35 @@
         "NSMicrophoneUsageDescription": "Digunakan untuk analisis audio real-time"
       }
     },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#080a0f"
+      },
+      "package": "com.audiodelight.app",
+      "newArchEnabled": false,
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.WAKE_LOCK",
+        "android.permission.VIBRATE"
+      ]
+    },
     "plugins": [
       "expo-router",
+      "expo-font",
       [
-        "expo-document-picker",
+        "expo-build-properties",
         {
-          "iCloudContainerEnvironment": "Production"
+          "android": {
+            "usesCleartextTraffic": true
+          },
+          "ios": {}
         }
-      ],
-      "expo-font"
+      ]
     ],
     "experiments": {
       "typedRoutes": true

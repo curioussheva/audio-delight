@@ -1,19 +1,24 @@
-/**
- * usePlayerStore — Week 2
- * Connected to AudioPlayer (expo-av) + AudioEngine (mock FFT)
- */
 import { create } from 'zustand';
+import TrackPlayer, {
+  State, Event, RepeatMode,
+  usePlaybackState, useProgress, useActiveTrack,
+} from 'react-native-track-player';
 import { Track, PlaybackState } from '../types/audio.types';
-import AudioPlayer from '../services/AudioPlayer';
-import AudioEngine from '../audio/AudioEngine';
+
+function rnState(s: State | undefined): PlaybackState {
+  switch (s) {
+    case State.Playing: return 'playing';
+    case State.Paused: return 'paused';
+    case State.Loading:
+    case State.Buffering: return 'loading';
+    case State.Stopped: return 'stopped';
+    default: return 'idle';
+  }
+}
 
 interface PlayerState {
   currentTrack: Track | null;
   queue: Track[];
-  playbackState: PlaybackState;
-  position: number;
-  duration: number;
-  volume: number;
   repeatMode: 'off' | 'track' | 'queue';
   isInitialized: boolean;
 
@@ -25,83 +30,70 @@ interface PlayerState {
   seekTo: (seconds: number) => Promise<void>;
   setVolume: (vol: number) => void;
   setRepeatMode: (mode: 'off' | 'track' | 'queue') => void;
-
-  // Internal setters (called by AudioPlayer callbacks)
-  _setProgress: (pos: number, dur: number) => void;
-  _setState: (state: PlaybackState) => void;
-  _setTrack: (track: Track) => void;
+  setCurrentTrack: (track: Track | null) => void;
+  setQueue: (tracks: Track[]) => void;
 }
 
-export const usePlayerStore = create<PlayerState>((set, get) => {
-  // Wire up AudioPlayer callbacks → Zustand state
-  AudioPlayer.setOnProgress((pos, dur) => {
-    get()._setProgress(pos, dur);
-  });
-  AudioPlayer.setOnStateChange((state) => {
-    get()._setState(state as PlaybackState);
-  });
-  AudioPlayer.setOnTrackChange((track) => {
-    get()._setTrack(track);
-  });
+export const usePlayerStore = create<PlayerState>((set, get) => ({
+  currentTrack: null,
+  queue: [],
+  repeatMode: 'off',
+  isInitialized: false,
 
-  return {
-    currentTrack: null,
-    queue: [],
-    playbackState: 'idle',
-    position: 0,
-    duration: 0,
-    volume: 1.0,
-    repeatMode: 'off',
-    isInitialized: false,
-
-    init: async () => {
-      if (get().isInitialized) return;
-      await AudioPlayer.setup();
-      await AudioEngine.init();
+  init: async () => {
+    if (get().isInitialized) return;
+    try {
+      await TrackPlayer.setupPlayer({ minBuffer: 15, maxBuffer: 50 });
+      await TrackPlayer.updateOptions({
+        capabilities: [
+          'play' as any, 'pause' as any, 'skipToNext' as any,
+          'skipToPrevious' as any, 'seekTo' as any,
+        ],
+        compactCapabilities: ['play' as any, 'pause' as any, 'skipToNext' as any],
+      });
       set({ isInitialized: true });
-    },
+      console.log('[PlayerStore] ✅ RNTP ready');
+    } catch (e) {
+      console.warn('[PlayerStore] RNTP init error:', e);
+    }
+  },
 
-    playTrack: async (track, queue) => {
-      const tracks = queue ?? get().queue;
-      AudioPlayer.setQueue(tracks, tracks.findIndex(t => t.id === track.id));
-      set({ queue: tracks });
-      await AudioPlayer.play(track);
-    },
+  playTrack: async (track, queue) => {
+    const tracks = queue ?? get().queue;
+    set({ currentTrack: track, queue: tracks });
+    await TrackPlayer.reset();
+    await TrackPlayer.add(tracks.map(t => ({
+      id: t.id, url: t.uri,
+      title: t.title, artist: t.artist,
+      duration: t.duration,
+    })));
+    const idx = tracks.findIndex(t => t.id === track.id);
+    if (idx > 0) await TrackPlayer.skip(idx);
+    await TrackPlayer.play();
+  },
 
-    togglePlayPause: async () => {
-      const state = get().playbackState;
-      if (state === 'playing') {
-        await AudioPlayer.pause();
-      } else if (state === 'paused') {
-        await AudioPlayer.play();
-      }
-    },
+  togglePlayPause: async () => {
+    const state = (await TrackPlayer.getPlaybackState()).state;
+    if (state === State.Playing) await TrackPlayer.pause();
+    else await TrackPlayer.play();
+  },
 
-    skipToNext: async () => {
-      await AudioPlayer.skipToNext();
-    },
+  skipToNext: async () => { await TrackPlayer.skipToNext(); },
+  skipToPrevious: async () => { await TrackPlayer.skipToPrevious(); },
+  seekTo: async (s) => { await TrackPlayer.seekTo(s); },
+  setVolume: (vol) => { TrackPlayer.setVolume(vol); },
 
-    skipToPrevious: async () => {
-      await AudioPlayer.skipToPrevious();
-    },
+  setRepeatMode: (mode) => {
+    set({ repeatMode: mode });
+    const rm = mode === 'track' ? RepeatMode.Track
+             : mode === 'queue' ? RepeatMode.Queue
+             : RepeatMode.Off;
+    TrackPlayer.setRepeatMode(rm);
+  },
 
-    seekTo: async (seconds) => {
-      await AudioPlayer.seekTo(seconds);
-      set({ position: seconds });
-    },
+  setCurrentTrack: (track) => set({ currentTrack: track }),
+  setQueue: (tracks) => set({ queue: tracks }),
+}));
 
-    setVolume: (vol) => {
-      set({ volume: vol });
-      AudioPlayer.setVolume(vol);
-    },
-
-    setRepeatMode: (mode) => {
-      set({ repeatMode: mode });
-      AudioPlayer.setRepeatMode(mode);
-    },
-
-    _setProgress: (pos, dur) => set({ position: pos, duration: dur }),
-    _setState: (state) => set({ playbackState: state }),
-    _setTrack: (track) => set({ currentTrack: track }),
-  };
-});
+// ─── Hooks untuk komponen (harus dipanggil dari dalam React component) ────────
+export { usePlaybackState, useProgress, useActiveTrack, rnState };

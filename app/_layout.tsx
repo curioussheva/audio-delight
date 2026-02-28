@@ -2,14 +2,15 @@ import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
+import TrackPlayer from 'react-native-track-player';
+import { PlaybackService } from '../src/services/TrackPlayerService';
 import { usePlayerStore } from '../src/store/usePlayerStore';
+
+TrackPlayer.registerPlaybackService(() => PlaybackService);
 
 export default function RootLayout() {
   const { init } = usePlayerStore();
-
-  useEffect(() => {
-    init();
-  }, []);
+  useEffect(() => { init(); }, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#080a0f' }}>

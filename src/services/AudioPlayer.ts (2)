@@ -1,0 +1,193 @@
+/**
+ * AudioPlayer.ts — Full migration to react-native-track-player
+ * Queue management, progress, state callbacks, repeat, skip, etc.
+ */
+
+import TrackPlayer, {
+  Capability,
+  Event,
+  RepeatMode,
+  State,
+} from 'react-native-track-player';
+import { Track } from '../types/audio.types';
+
+type ProgressCallback = (position: number, duration: number) => void;
+type StateCallback = (state: 'idle' | 'loading' | 'playing' | 'paused' | 'stopped' | 'buffering' | 'error') => void;
+type TrackCallback = (track: Track) => void;
+
+class AudioPlayerService {
+  private static _instance: AudioPlayerService;
+  private currentTrack: Track | null = null;
+  private queue: Track[] = [];
+  private repeatMode: 'off' | 'track' | 'queue' = 'off';
+
+  private onProgress: ProgressCallback | null = null;
+  private onStateChange: StateCallback | null = null;
+  private onTrackChange: TrackCallback | null = null;
+
+  static getInstance() {
+    if (!AudioPlayerService._instance) {
+      AudioPlayerService._instance = new AudioPlayerService();
+    }
+    return AudioPlayerService._instance;
+  }
+
+  private constructor() {
+    this.setupListeners();
+  }
+
+  async setup() {
+    try {
+      // Cek kalau sudah setup
+      await TrackPlayer.getPlaybackState();
+    } catch {
+      await TrackPlayer.setupPlayer({
+        waitForBuffer: true,
+      });
+
+      await TrackPlayer.updateOptions({
+        capabilities: [
+          Capability.Play,
+          Capability.Pause,
+          Capability.Skip,
+          Capability.SkipToNext,
+          Capability.SkipToPrevious,
+          Capability.SeekTo,
+        ],
+        compactCapabilities: [
+          Capability.Play,
+          Capability.Pause,
+          Capability.SkipToNext,
+          Capability.SkipToPrevious,
+        ],
+        notificationCapabilities: [
+          Capability.Play,
+          Capability.Pause,
+          Capability.SkipToNext,
+          Capability.SkipToPrevious,
+          Capability.SeekTo,
+        ],
+        progressUpdateEventInterval: 1, // detik
+      });
+    }
+
+    console.log('[AudioPlayer] ✅ Setup RNTP complete');
+  }
+
+  private setupListeners() {
+    TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, ({ position, duration }) => {
+      this.onProgress?.(position, duration);
+    });
+
+    TrackPlayer.addEventListener(Event.PlaybackState, ({ state }) => {
+      let mapped: Parameters<StateCallback>[0] = 'idle'; // Fix TS error: pakai Parameters<T>
+      switch (state) {
+        case State.Playing:
+          mapped = 'playing';
+          break;
+        case State.Paused:
+          mapped = 'paused';
+          break;
+        case State.Buffering:
+          mapped = 'buffering';
+          break;
+        case State.Stopped:
+          mapped = 'stopped';
+          break;
+        case State.Error:
+          mapped = 'error';
+          break;
+        case State.Loading:
+          mapped = 'loading';
+          break;
+      }
+      this.onStateChange?.(mapped);
+    });
+
+    TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, async ({ index }) => {
+      if (index !== null && index !== undefined) {
+        const q = await TrackPlayer.getQueue();
+        const active = q[index];
+        if (active) {
+          const track = this.queue.find(t => t.id === active.id);
+          if (track) {
+            this.currentTrack = track;
+            this.onTrackChange?.(track);
+          }
+        }
+      }
+    });
+
+    TrackPlayer.addEventListener(Event.PlaybackQueueEnded, async () => {
+      if (this.repeatMode === 'queue') {
+        await TrackPlayer.skip(0);
+        await TrackPlayer.play();
+      } else if (this.repeatMode === 'track') {
+        await TrackPlayer.seekTo(0);
+        await TrackPlayer.play();
+      }
+    });
+  }
+
+  setOnProgress(cb: ProgressCallback) { this.onProgress = cb; }
+  setOnStateChange(cb: StateCallback) { this.onStateChange = cb; }
+  setOnTrackChange(cb: TrackCallback) { this.onTrackChange = cb; }
+
+  async setQueue(tracks: Track[], startIndex = 0) {
+    this.queue = tracks;
+    const rnTracks = tracks.map(t => ({
+      id: t.id,
+      url: t.uri,
+      title: t.title || 'Unknown',
+      // Tambah artist, artwork, duration kalau ada di Track type-mu
+    }));
+
+    await TrackPlayer.reset();
+    await TrackPlayer.add(rnTracks);
+    if (startIndex >= 0 && startIndex < rnTracks.length) {
+      await TrackPlayer.skip(startIndex);
+    }
+  }
+
+  getQueue() { return this.queue; }
+  getCurrentTrack() { return this.currentTrack; }
+
+  async play(track?: Track) {
+    if (track) {
+      await this.setQueue([track]);
+    }
+    await TrackPlayer.play();
+  }
+
+  async pause() {
+    await TrackPlayer.pause();
+  }
+
+  async stop() {
+    await TrackPlayer.stop();
+  }
+
+  async seekTo(seconds: number) {
+    await TrackPlayer.seekTo(seconds);
+  }
+
+  async setVolume(vol: number) {
+    await TrackPlayer.setVolume(Math.max(0, Math.min(1, vol)));
+  }
+
+  async skipToNext() {
+    await TrackPlayer.skipToNext();
+  }
+
+  async skipToPrevious() {
+    await TrackPlayer.skipToPrevious();
+  }
+
+  setRepeatMode(mode: 'off' | 'track' | 'queue') {
+    this.repeatMode = mode;
+    const rnMode = mode === 'track' ? RepeatMode.Track : mode === 'queue' ? RepeatMode.Queue : RepeatMode.Off;
+    TrackPlayer.setRepeatMode(rnMode);
+  }
+}
+
+export default AudioPlayerService.getInstance();
