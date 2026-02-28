@@ -5,60 +5,51 @@ import { SpatialPosition } from '../types/audio.types';
 import AudioEngine from '../audio/AudioEngine';
 
 interface SpatialState {
-  enabled: boolean;
-  binauralEnabled: boolean;
-  headTrackingEnabled: boolean;
+  isHRTFEnabled: boolean;
+  isSurroundEnabled: boolean;
+  isHeadTrackingEnabled: boolean;
   position: SpatialPosition;
-  reverbAmount: number;  // 0.0 - 1.0
+  reverbAmount: number;
 
-  // Actions
-  setSpatialEnabled: (enabled: boolean) => void;
-  setBinauralEnabled: (enabled: boolean) => void;
-  setHeadTrackingEnabled: (enabled: boolean) => void;
+  toggleHRTF: () => void;
+  toggleSurround: () => void;
+  toggleHeadTracking: () => void;
   setPosition: (pos: SpatialPosition) => void;
   setReverbAmount: (amount: number) => void;
   resetPosition: () => void;
 }
 
-const DEFAULT_POSITION: SpatialPosition = { x: 0, y: 0, z: -1 };
+const DEFAULT_POSITION: SpatialPosition = { x: 0, y: 0, z: 0 };
 
 export const useSpatialStore = create<SpatialState>()(
   persist(
     (set, get) => ({
-      enabled: false,
-      binauralEnabled: false,
-      headTrackingEnabled: false,
+      isHRTFEnabled: false,
+      isSurroundEnabled: false,
+      isHeadTrackingEnabled: false,
       position: DEFAULT_POSITION,
       reverbAmount: 0,
 
-      setSpatialEnabled: (enabled) => {
-        set({ enabled });
+      toggleHRTF: () => {
+        const enabled = !get().isHRTFEnabled;
+        set({ isHRTFEnabled: enabled });
         AudioEngine.setSpatialEnabled(enabled);
       },
 
-      setBinauralEnabled: (binauralEnabled) => {
-        set({ binauralEnabled });
-        // HRTF is enabled/disabled via spatial enabled state
-        if (binauralEnabled) AudioEngine.setSpatialEnabled(true);
-      },
+      toggleSurround: () => set(s => ({ isSurroundEnabled: !s.isSurroundEnabled })),
 
-      setHeadTrackingEnabled: (headTrackingEnabled) => {
-        set({ headTrackingEnabled });
-      },
+      toggleHeadTracking: () => set(s => ({ isHeadTrackingEnabled: !s.isHeadTrackingEnabled })),
 
       setPosition: (position) => {
         set({ position });
-        if (get().enabled) {
-          AudioEngine.setSpatialPosition(position);
-        }
+        if (get().isHRTFEnabled) AudioEngine.setSpatialPosition(position);
       },
 
       setReverbAmount: (reverbAmount) => set({ reverbAmount }),
 
       resetPosition: () => {
-        const pos = DEFAULT_POSITION;
-        set({ position: pos });
-        AudioEngine.setSpatialPosition(pos);
+        set({ position: DEFAULT_POSITION });
+        AudioEngine.setSpatialPosition(DEFAULT_POSITION);
       },
     }),
     {

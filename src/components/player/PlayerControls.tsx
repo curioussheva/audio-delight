@@ -1,61 +1,104 @@
+/**
+ * PlayerControls — Week 2
+ * Play/Pause/Skip dengan haptic feedback + repeat mode
+ */
 import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import TrackPlayer from 'react-native-track-player';
-import { usePlayerStore, usePlaybackState, rnState } from '../../store/usePlayerStore';
+import { usePlayerStore } from '../../store/usePlayerStore';
 
 export function PlayerControls() {
-  const { repeatMode, setRepeatMode } = usePlayerStore();
-  const pbState = usePlaybackState();
-  const playState = rnState(pbState.state);
-  const isPlaying = playState === 'playing';
-  const isLoading = playState === 'loading';
+  const {
+    playbackState, repeatMode,
+    togglePlayPause, skipToNext, skipToPrevious, setRepeatMode,
+  } = usePlayerStore();
 
-  const handlePlay = () => {
+  const isPlaying = playbackState === 'playing';
+  const isLoading = playbackState === 'loading';
+
+  const handlePlay = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    isPlaying ? TrackPlayer.pause() : TrackPlayer.play();
+    await togglePlayPause();
   };
-  const handleNext = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); TrackPlayer.skipToNext(); };
-  const handlePrev = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); TrackPlayer.skipToPrevious(); };
+
+  const handleNext = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await skipToNext();
+  };
+
+  const handlePrev = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await skipToPrevious();
+  };
+
   const handleRepeat = () => {
     Haptics.selectionAsync();
-    const modes = ['off','track','queue'] as const;
-    setRepeatMode(modes[(modes.indexOf(repeatMode)+1)%3]);
+    const modes: Array<'off' | 'track' | 'queue'> = ['off', 'track', 'queue'];
+    const next = modes[(modes.indexOf(repeatMode) + 1) % modes.length];
+    setRepeatMode(next);
   };
 
+  const repeatIcon = repeatMode === 'off' ? '↺' : repeatMode === 'track' ? '↺¹' : '↺∞';
   const repeatColor = repeatMode === 'off' ? '#2a2f45' : '#6378ff';
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.aux} onPress={handleRepeat}>
-        <Text style={[styles.auxText, { color: repeatColor }]}>
-          {repeatMode === 'off' ? '↺' : repeatMode === 'track' ? '↺¹' : '↺∞'}
-        </Text>
+      {/* Repeat */}
+      <TouchableOpacity style={styles.auxBtn} onPress={handleRepeat}>
+        <Text style={[styles.auxText, { color: repeatColor }]}>{repeatIcon}</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.side} onPress={handlePrev}>
+
+      {/* Previous */}
+      <TouchableOpacity style={styles.sideBtn} onPress={handlePrev}>
         <Text style={styles.sideText}>⏮</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={[styles.play, isPlaying && styles.playActive]} onPress={handlePlay} activeOpacity={0.85}>
+
+      {/* Play/Pause */}
+      <TouchableOpacity
+        style={[styles.playBtn, isPlaying && styles.playBtnActive]}
+        onPress={handlePlay}
+        activeOpacity={0.85}
+      >
         {isLoading
           ? <ActivityIndicator color="#fff" size="small" />
           : <Text style={styles.playText}>{isPlaying ? '⏸' : '▶'}</Text>
         }
       </TouchableOpacity>
-      <TouchableOpacity style={styles.side} onPress={handleNext}>
+
+      {/* Next */}
+      <TouchableOpacity style={styles.sideBtn} onPress={handleNext}>
         <Text style={styles.sideText}>⏭</Text>
       </TouchableOpacity>
-      <View style={styles.aux} />
+
+      {/* Placeholder (shuffle later) */}
+      <View style={styles.auxBtn} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexDirection:'row', alignItems:'center', justifyContent:'center', gap:20, paddingVertical:8 },
-  aux: { width:36, height:36, alignItems:'center', justifyContent:'center' },
-  auxText: { fontSize:18, fontWeight:'600' },
-  side: { width:44, height:44, alignItems:'center', justifyContent:'center' },
-  sideText: { fontSize:22, color:'#8090b0' },
-  play: { width:68, height:68, borderRadius:34, backgroundColor:'#6378ff', alignItems:'center', justifyContent:'center', elevation:10, shadowColor:'#6378ff', shadowOffset:{width:0,height:4}, shadowOpacity:0.5, shadowRadius:16 },
-  playActive: { backgroundColor:'#7a8fff' },
-  playText: { fontSize:26, color:'#fff' },
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+    paddingVertical: 8,
+  },
+  auxBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  auxText: { fontSize: 18, fontWeight: '600' },
+  sideBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  sideText: { fontSize: 22, color: '#8090b0' },
+  playBtn: {
+    width: 68, height: 68, borderRadius: 34,
+    backgroundColor: '#6378ff',
+    alignItems: 'center', justifyContent: 'center',
+    elevation: 10,
+    shadowColor: '#6378ff',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5, shadowRadius: 16,
+  },
+  playBtnActive: {
+    backgroundColor: '#7a8fff',
+  },
+  playText: { fontSize: 26, color: '#fff' },
 });

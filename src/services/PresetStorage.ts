@@ -1,37 +1,44 @@
+/**
+ * PresetStorage — Week 4
+ * Simpan/load custom EQ preset ke AsyncStorage
+ */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Preset } from '../types/audio.types';
+import { DEFAULT_Q, EQ_FREQUENCIES, EQ_BAND_TYPES } from '../constants/eq';
 
-const KEYS = {
-  CUSTOM_PRESETS: 'ad:custom_presets',
-  LAST_PRESET_ID: 'ad:last_preset_id',
-};
+const KEY = 'audiodelight-custom-presets';
+
+export async function loadCustomPresets(): Promise<Preset[]> {
+  try {
+    const raw = await AsyncStorage.getItem(KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
 
 export async function saveCustomPreset(preset: Preset): Promise<void> {
   const existing = await loadCustomPresets();
-  const updated = [...existing.filter((p) => p.id !== preset.id), preset];
-  await AsyncStorage.setItem(KEYS.CUSTOM_PRESETS, JSON.stringify(updated));
-}
-
-export async function loadCustomPresets(): Promise<Preset[]> {
-  const raw = await AsyncStorage.getItem(KEYS.CUSTOM_PRESETS);
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw) as Preset[];
-  } catch {
-    return [];
-  }
+  const idx = existing.findIndex(p => p.id === preset.id);
+  if (idx >= 0) existing[idx] = preset;
+  else existing.push(preset);
+  await AsyncStorage.setItem(KEY, JSON.stringify(existing));
 }
 
 export async function deleteCustomPreset(id: string): Promise<void> {
   const existing = await loadCustomPresets();
-  const updated = existing.filter((p) => p.id !== id);
-  await AsyncStorage.setItem(KEYS.CUSTOM_PRESETS, JSON.stringify(updated));
+  await AsyncStorage.setItem(KEY, JSON.stringify(existing.filter(p => p.id !== id)));
 }
 
-export async function saveLastPresetId(id: string): Promise<void> {
-  await AsyncStorage.setItem(KEYS.LAST_PRESET_ID, id);
-}
-
-export async function loadLastPresetId(): Promise<string | null> {
-  return AsyncStorage.getItem(KEYS.LAST_PRESET_ID);
+export function createCustomPreset(name: string, gains: number[]): Preset {
+  return {
+    id: `custom_${Date.now()}`,
+    name,
+    description: 'Custom preset',
+    isPremium: false,
+    bands: EQ_FREQUENCIES.map((freq, i) => ({
+      id: i, frequency: freq,
+      gain: gains[i] ?? 0,
+      q: DEFAULT_Q,
+      type: EQ_BAND_TYPES[i],
+    })),
+  };
 }

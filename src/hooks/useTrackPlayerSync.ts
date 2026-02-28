@@ -1,2 +1,2 @@
-// Stub - real sync aktif saat RNTP tersedia di native build
+// Stub - tidak dipakai, RNTP sudah handle langsung
 export function useTrackPlayerSync() {}

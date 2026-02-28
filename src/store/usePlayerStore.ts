@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 import TrackPlayer, {
-  State, Event, RepeatMode,
+  State, RepeatMode, Capability,
   usePlaybackState, useProgress, useActiveTrack,
 } from 'react-native-track-player';
 import { Track, PlaybackState } from '../types/audio.types';
 
-function rnState(s: State | undefined): PlaybackState {
+export function rnState(s: State | undefined): PlaybackState {
   switch (s) {
     case State.Playing: return 'playing';
     case State.Paused: return 'paused';
@@ -21,7 +21,6 @@ interface PlayerState {
   queue: Track[];
   repeatMode: 'off' | 'track' | 'queue';
   isInitialized: boolean;
-
   init: () => Promise<void>;
   playTrack: (track: Track, queue?: Track[]) => Promise<void>;
   togglePlayPause: () => Promise<void>;
@@ -31,7 +30,6 @@ interface PlayerState {
   setVolume: (vol: number) => void;
   setRepeatMode: (mode: 'off' | 'track' | 'queue') => void;
   setCurrentTrack: (track: Track | null) => void;
-  setQueue: (tracks: Track[]) => void;
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -43,18 +41,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   init: async () => {
     if (get().isInitialized) return;
     try {
+      await TrackPlayer.getPlaybackState();
+      set({ isInitialized: true }); return;
+    } catch (_) {}
+    try {
       await TrackPlayer.setupPlayer({ minBuffer: 15, maxBuffer: 50 });
       await TrackPlayer.updateOptions({
-        capabilities: [
-          'play' as any, 'pause' as any, 'skipToNext' as any,
-          'skipToPrevious' as any, 'seekTo' as any,
-        ],
-        compactCapabilities: ['play' as any, 'pause' as any, 'skipToNext' as any],
+        capabilities: [Capability.Play, Capability.Pause, Capability.SkipToNext, Capability.SkipToPrevious, Capability.SeekTo],
+        compactCapabilities: [Capability.Play, Capability.Pause, Capability.SkipToNext],
       });
       set({ isInitialized: true });
-      console.log('[PlayerStore] ✅ RNTP ready');
-    } catch (e) {
-      console.warn('[PlayerStore] RNTP init error:', e);
+    } catch (e: any) {
+      if (e?.message?.includes('already been initialized')) set({ isInitialized: true });
+      else console.error('[PlayerStore] init error:', e);
     }
   },
 
@@ -62,38 +61,27 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const tracks = queue ?? get().queue;
     set({ currentTrack: track, queue: tracks });
     await TrackPlayer.reset();
-    await TrackPlayer.add(tracks.map(t => ({
-      id: t.id, url: t.uri,
-      title: t.title, artist: t.artist,
-      duration: t.duration,
-    })));
+    await TrackPlayer.add(tracks.map(t => ({ id: t.id, url: t.uri, title: t.title, artist: t.artist, duration: t.duration })));
     const idx = tracks.findIndex(t => t.id === track.id);
     if (idx > 0) await TrackPlayer.skip(idx);
     await TrackPlayer.play();
   },
 
   togglePlayPause: async () => {
-    const state = (await TrackPlayer.getPlaybackState()).state;
+    const { state } = await TrackPlayer.getPlaybackState();
     if (state === State.Playing) await TrackPlayer.pause();
     else await TrackPlayer.play();
   },
 
   skipToNext: async () => { await TrackPlayer.skipToNext(); },
   skipToPrevious: async () => { await TrackPlayer.skipToPrevious(); },
-  seekTo: async (s) => { await TrackPlayer.seekTo(s); },
-  setVolume: (vol) => { TrackPlayer.setVolume(vol); },
-
-  setRepeatMode: (mode) => {
+  seekTo: async (s: number) => { await TrackPlayer.seekTo(s); },
+  setVolume: (vol: number) => { TrackPlayer.setVolume(vol); },
+  setRepeatMode: (mode: 'off' | 'track' | 'queue') => {
     set({ repeatMode: mode });
-    const rm = mode === 'track' ? RepeatMode.Track
-             : mode === 'queue' ? RepeatMode.Queue
-             : RepeatMode.Off;
-    TrackPlayer.setRepeatMode(rm);
+    TrackPlayer.setRepeatMode(mode === 'track' ? RepeatMode.Track : mode === 'queue' ? RepeatMode.Queue : RepeatMode.Off);
   },
-
   setCurrentTrack: (track) => set({ currentTrack: track }),
-  setQueue: (tracks) => set({ queue: tracks }),
 }));
 
-// ─── Hooks untuk komponen (harus dipanggil dari dalam React component) ────────
-export { usePlaybackState, useProgress, useActiveTrack, rnState };
+export { usePlaybackState, useProgress, useActiveTrack };
