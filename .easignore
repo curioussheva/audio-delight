@@ -1,0 +1,85 @@
+# Dependencies
+node_modules/
+.yarn/
+.pnp.*
+
+# Expo & Metro
+.expo/
+.expo-shared/
+dist/
+web-build/
+metro.config.js
+babel.config.js
+
+# Native
+android/
+ios/
+*.jks
+*.keystore
+*.p8
+*.p12
+*.mobileprovision
+
+# Build artifacts
+*.apk
+*.aab
+*.ipa
+*.tar.gz
+*.zip
+/build
+/dist
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example   # <- TANPA SPASI setelah !
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporary
+.tmp
+.temp
+*.tmp
+*.temp
+.DS_Store
+
+# Test
+coverage/
+*.test.ts
+*.spec.ts
+__tests__/
+
+# Documentation
+README.md
+LICENSE
+docs/
+*.md
+!README.md      # <- TANPA SPASI setelah !
+
+# Scripts & configs
+*.sh
+*.json
+!package.json
+!app.json
+tsconfig.json
+.eslint*
+.prettier*
+.husky/
+.lintstagedrc
