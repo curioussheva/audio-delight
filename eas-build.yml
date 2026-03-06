@@ -1,0 +1,39 @@
+name: EAS Build (Android Dev Client)
+
+on:
+  push:
+    branches:
+      - pristine-audio
+  pull_request:
+    branches:
+      - pristine-audio
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Yarn
+        run: npm install -g yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Install EAS CLI
+        run: yarn global add eas-cli
+
+      - name: EAS Login
+        env:
+          EXPO_TOKEN: ${{ secrets.EAS_TOKEN }}
+        run: eas login --token $EXPO_TOKEN
+
+      - name: Build Android dev client
+        run: eas build --platform android --profile development --non-interactive --no-wait
