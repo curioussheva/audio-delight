@@ -84,7 +84,7 @@
             "targetSdkVersion": 36,
             "minSdkVersion": 24,
             "buildToolsVersion": "36.0.0",
-            "kotlinVersion": "2.0.21",
+            "kotlinVersion": "1.9.24",
             "gradleVersion": "8.10.2",
             "extraMavenRepos": [
               "../../node_modules/react-native-track-player/android/repo"
