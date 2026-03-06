@@ -34,11 +34,13 @@ jobs:
       - name: Accept Android Licenses
         run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
 
-      # ⭐ YANG BARU: Generate folder android/
+      # ⭐ YANG DIPERBAIKI: Hapus android folder dulu
+      - name: Clean android folder
+        run: rm -rf android
+
       - name: Run Expo Prebuild
         run: npx expo prebuild --clean --non-interactive
 
-      # ⭐ PINDAHKAN KE SINI (setelah folder android/ ada)
       - name: Create local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 
