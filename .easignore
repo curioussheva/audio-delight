@@ -39,13 +39,13 @@ ios/
 .idea/
 *.swp
 *.swo
-*~
+*\~
 
 # Environment
 .env
 .env.local
 .env.*.local
-!.env.example   # <- TANPA SPASI setelah !
+!.env.example
 
 # Logs
 *.log
@@ -66,20 +66,34 @@ coverage/
 *.spec.ts
 __tests__/
 
-# Documentation
-README.md
-LICENSE
+# Documentation (ignore all docs except main ones)
 docs/
 *.md
-!README.md      # <- TANPA SPASI setelah !
+!README.md
+!CHANGELOG.md
+!CONTRIBUTING.md
 
-# Scripts & configs
+# Scripts & configs (ignore non-essential)
 *.sh
 *.json
 !package.json
 !app.json
-tsconfig.json
-.eslint*
-.prettier*
+!app.config.*
+!tsconfig.json
+!tsconfig.*.json
+!.eslintrc*
+!.prettierrc*
+!.lintstagedrc*
 .husky/
-.lintstagedrc
+
+# Expo-specific
+.expo-shared/
+.easignore
+eas.json
+
+# Sentry & crash reports
+sentry.properties
+
+# Temporary Expo files
+*.expo.js
+*.expo.ts

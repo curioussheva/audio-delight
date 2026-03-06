@@ -1,55 +1,74 @@
 {
   "cli": {
     "version": ">= 10.0.0",
-    "requireCommit": false,
-    "appVersionSource": "remote"
+    "appVersionSource": "remote",
+    "requireCommit": false
   },
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "node": "20.19.4",  // ← TAMBAHKAN INI
       "android": {
         "buildType": "apk",
-        "gradleCommand": ":app:assembleDebug"
+        "gradleCommand": ":app:assembleDebug",
+        "resourceClass": "medium"
       },
       "ios": {
-        "buildConfiguration": "Debug",
+        "resourceClass": "m1-medium",
         "simulator": true
       },
       "env": {
-        "APP_ENV": "development"
+        "APP_ENV": "development",
+        "EAS_NO_VCS": "1",
+        "EAS_NO_FINGERPRINT": "1",
+        "EXPO_PUBLIC_APP_NAME": "PristineAudio (Dev)"
       },
-      "channel": "development"
+      "cache": {
+        "disabled": false,
+        "key": "development-{{ checksum \"yarn.lock\" }}",
+        "paths": ["node_modules", ".expo"]
+      },
+      "channel": "development",
+      "autoIncrement": true
     },
     "development-simulator": {
       "extends": "development",
+      "node": "20.19.0",  // ← TAMBAHKAN
       "ios": {
-        "simulator": true
+        "simulator": true,
+        "resourceClass": "medium"
       }
     },
     "preview": {
       "distribution": "internal",
+      "node": "20.19.0",  // ← TAMBAHKAN
       "android": {
-        "buildType": "apk"
-      },
-      "ios": {
-        "buildConfiguration": "Release"
+        "buildType": "apk",
+        "resourceClass": "medium"
       },
       "env": {
-        "APP_ENV": "preview"
+        "APP_ENV": "preview",
+        "EAS_NO_VCS": "1",
+        "EAS_NO_FINGERPRINT": "1"
       },
-      "channel": "preview"
+      "channel": "preview",
+      "autoIncrement": true
     },
     "production": {
       "distribution": "store",
+      "node": "20.19.0",  // ← TAMBAHKAN
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "resourceClass": "large"
       },
       "ios": {
-        "buildConfiguration": "Release"
+        "resourceClass": "large"
       },
       "env": {
-        "APP_ENV": "production"
+        "APP_ENV": "production",
+        "EAS_NO_VCS": "1",
+        "EAS_NO_FINGERPRINT": "1"
       },
       "channel": "production",
       "autoIncrement": true
@@ -61,12 +80,7 @@
         "serviceAccountKeyPath": "./google-service-account.json",
         "track": "internal",
         "releaseStatus": "completed"
-      },
-      "ios": {
-        "appleId": "your-apple-id@example.com",
-        "ascAppId": "1234567890",
-        "appleTeamId": "ABCDEF1234"
       }
     }
   }
-}
+} 

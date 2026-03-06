@@ -1,14 +1,12 @@
-module.exports = function(api) {
+module.exports = function (api) {
   api.cache(true);
   return {
     presets: ['babel-preset-expo'],
     plugins: [
-      'react-native-reanimated/plugin',
       [
         'module-resolver',
         {
           root: ['./src'],
-          extensions: ['.ios.js', '.android.js', '.js', '.ts', '.tsx', '.json'],
           alias: {
             '@': './src',
             '@components': './src/components',
@@ -20,6 +18,8 @@ module.exports = function(api) {
           },
         },
       ],
+      // Reanimated plugin HARUS paling akhir
+      'react-native-reanimated/plugin',
     ],
   };
 };

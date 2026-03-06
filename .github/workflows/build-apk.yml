@@ -1,0 +1,84 @@
+# .github/workflows/build-apk.yml
+name: Build PristineAudio APK (Local EAS)
+
+on:
+  # Trigger manual dari GitHub (paling fleksibel)
+  workflow_dispatch:
+    inputs:
+      build_profile:
+        description: 'EAS Profile untuk build (development/preview)'
+        required: true
+        default: 'preview'
+        type: choice
+        options:
+          - development
+          - preview
+  # (Opsional) Trigger otomatis setiap push ke branch main
+  # push:
+  #   branches: [ "main" ]
+
+jobs:
+  build:
+    # Gunakan Ubuntu, gratis dan sudah banyak tools terinstall
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Ambil kode dari repositori
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Setup Node.js (versi harus sama persis dengan project Anda)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.0' # Pakai versi dari engines di package.json
+          cache: 'yarn'
+
+      # 3. Install dependencies
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      # 4. Setup Java JDK 17 (WAJIB untuk Android build)
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # 5. Setup Android SDK (agar perintah Android bisa jalan)
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # 6. Setup Expo dan EAS CLI
+      - name: Setup Expo and EAS CLI
+        run: |
+          npm install -g expo-cli eas-cli
+          # Cek versi untuk memastikan
+          eas --version
+
+      # 7. Login ke Expo menggunakan token dari secrets
+      - name: Login to Expo
+        run: eas cli login --non-interactive --token ${{ secrets.EXPO_TOKEN }}
+
+      # 8. Configure EAS Project (pastikan project ID di app.json sudah benar)
+      #    Jika project EAS belum terhubung, jalankan `eas init` secara lokal sekali.
+
+      # 9. Jalankan Build Lokal! 🚀
+      - name: Run EAS Local Build
+        env:
+          # Variabel penting untuk menghindari error fingerprint dan VCS
+          EAS_NO_VCS: 1
+          EAS_SKIP_AUTO_FINGERPRINT: 1
+        run: |
+          eas build --platform android \
+            --profile ${{ github.event.inputs.build_profile || 'preview' }} \
+            --local \
+            --non-interactive \
+            --output ${{ github.workspace }}/app-release.apk
+
+      # 10. Upload APK sebagai artifact (bisa di-download dari halaman Actions)
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pristineaudio-apk
+          path: ${{ github.workspace }}/app-release.apk
+          if-no-files-found: error

@@ -1,7 +1,14 @@
 {
-  "extends": "expo/tsconfig.base",
   "compilerOptions": {
+    "target": "es6",
+    "module": "esnext",
+    "moduleResolution": "node",
     "strict": true,
+    "jsx": "react-jsx",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noImplicitAny": true,
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
@@ -12,5 +19,7 @@
       "@constants/*": ["src/constants/*"],
       "@types/*": ["src/types/*"]
     }
-  }
+  },
+  "include": ["src", "app", "babel.config.js", "metro.config.js"],
+  "exclude": ["node_modules", "android", "ios", "build", "dist"]
 }

@@ -1,0 +1,13 @@
+Resolved "development" environment for the build. Learn more: https://docs.expo.dev/eas/environment-variables/#setting-the-environment-for-your-builds
+No environment variables with visibility "Plain text" and "Sensitive" found for the "development" environment on EAS.
+Environment variables loaded from the "development" build profile "env" configuration: APP_ENV, EAS_NO_VCS, EAS_NO_FINGERPRINT, EXPO_PUBLIC_APP_NAME.
+
+No remote versions are configured for this project, versionCode will be initialized based on the value from the local project.
+⠋ Incrementing versionCode from 1 to 2.⠙ Incrementing versionCode from 1 to 2.⠹ Incrementing versionCode from 1 to 2.⠸ Incrementing versionCode from 1 to 2.⠼ Incrementing versionCode from 1 to 2.⠴ Incrementing versionCode from 1 to 2.⠦ Incrementing versionCode from 1 to 2.✔ Incremented versionCode from 1 to 2.
+
+
+The build profile "development" has specified the channel "development", but the "expo-updates" package hasn't been installed. To use channels for your builds, install the "expo-updates" package by running "npx expo install expo-updates" followed by "eas update:configure".
+android.versionCode field in app config is ignored when version source is set to remote, but this value will still be in the manifest available via expo-constants. It's recommended to remove this value from app config.
+✔ Using remote Android credentials (Expo server)
+Generating a new Keystore is not supported in --non-interactive mode
+    Error: build command failed.
