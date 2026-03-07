@@ -1,4 +1,4 @@
-name: Build PristineAudio APK
+name: Build PristineAudio APK (No Updates)
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -34,7 +34,7 @@ jobs:
       - name: Accept Android Licenses
         run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
 
-      # ⭐ YANG DIPERBAIKI: Hapus android folder dulu
+      # ⭐ KOMENTAR DARI REMOTE (lebih deskriptif)
       - name: Clean android folder
         run: rm -rf android
 
