@@ -3377,6 +3377,11 @@ expo-document-picker@~14.0.8:
   resolved "https://registry.yarnpkg.com/expo-document-picker/-/expo-document-picker-14.0.8.tgz#ca1d99cc432c48e69a6390eb035f3301557e3699"
   integrity sha512-3tyQKpPqWWFlI8p9RiMX1+T1Zge5mEKeBuXWp1h8PEItFMUDSiOJbQ112sfdC6Hxt8wSxreV9bCRl/NgBdt+fA==
 
+expo-file-system@^55.0.10:
+  version "55.0.10"
+  resolved "https://registry.yarnpkg.com/expo-file-system/-/expo-file-system-55.0.10.tgz#fae0a424f404a456522193346cf07e9e51e2df26"
+  integrity sha512-ysFdVdUgtfj2ApY0Cn+pBg+yK4xp+SNwcaH8j2B91JJQ4OXJmnyCSmrNZYz7J4mdYVuv2GzxIP+N/IGlHQG3Yw==
+
 expo-file-system@~19.0.21:
   version "19.0.21"
   resolved "https://registry.yarnpkg.com/expo-file-system/-/expo-file-system-19.0.21.tgz#e96a68107fb629cf0dd1906fe7b46b566ff13e10"
@@ -3420,10 +3425,10 @@ expo-manifests@~1.0.10:
     "@expo/config" "~12.0.11"
     expo-json-utils "~0.15.0"
 
-expo-media-library@~18.2.1:
-  version "18.2.1"
-  resolved "https://registry.yarnpkg.com/expo-media-library/-/expo-media-library-18.2.1.tgz#22aac022cc3fabfc3e004e3f3f031c7b2cd355d8"
-  integrity sha512-dV1acx6Aseu+I5hmF61wY8UkD4vdt8d7YXHDfgNp6ZSs06qxayUxgrBsiG2eigLe54VLm3ycbFBbWi31lhfsCA==
+expo-media-library@^55.0.9:
+  version "55.0.9"
+  resolved "https://registry.yarnpkg.com/expo-media-library/-/expo-media-library-55.0.9.tgz#707f018d2c6dfc5ed3f8a49525b108df1d4fe25d"
+  integrity sha512-E12e4gjQEZNdAa7MHDLOAiOMQmhmOGHFMMU5DpiK6I01hPXyRcaxgAQQLpibIXNP4O5LjGi2psa3NBacjyjxkw==
 
 expo-modules-autolinking@3.0.24:
   version "3.0.24"

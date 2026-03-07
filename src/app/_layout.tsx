@@ -13,6 +13,8 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: '#0A1628' },
         }}
       >
+        {/* TAMBAHKAN SCREEN INDEX */}
+        <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       </Stack>
     </SafeAreaProvider>

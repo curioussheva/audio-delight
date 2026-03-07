@@ -1,44 +1,31 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function TabLayout() {
+export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarStyle: {
-          backgroundColor: '#141E33',
-          borderTopColor: '#1E3A5F',
-        },
+        headerShown: false,
+        tabBarStyle: { backgroundColor: '#0A1628' },
         tabBarActiveTintColor: '#00D4AA',
         tabBarInactiveTintColor: '#C8D4E0',
-        headerStyle: { backgroundColor: '#0A1628' },
-        headerTintColor: '#F0F4F8',
       }}
     >
       <Tabs.Screen
-        name="player"
+        name="library"
         options={{
-          title: 'Player',
+          title: 'Library',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="musical-notes" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="library"
+        name="player"
         options={{
-          title: 'Library',
+          title: 'Player',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="library" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="playlists"
-        options={{
-          title: 'Playlists',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="list" size={size} color={color} />
+            <Ionicons name="play-circle" size={size} color={color} />
           ),
         }}
       />
