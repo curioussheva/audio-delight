@@ -109,12 +109,6 @@
         "projectId": "62e1e6e9-9171-497b-b0f1-832a6d3e1424"
       }
     },
-    "owner": "curioussheva",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/62e1e6e9-9171-497b-b0f1-832a6d3e1424"
-    }
+    "owner": "curioussheva"
   }
 } 
