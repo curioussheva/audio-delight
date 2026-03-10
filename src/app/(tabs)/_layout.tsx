@@ -20,12 +20,53 @@ export default function TabsLayout() {
           ),
         }}
       />
+      
+      <Tabs.Screen
+        name="playlists"
+        options={{
+          title: 'Playlists',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="list" size={size} color={color} />
+          ),
+        }}
+      />
+      
       <Tabs.Screen
         name="player"
         options={{
           title: 'Player',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="play-circle" size={size} color={color} />
+          ),
+        }}
+      />
+      
+      <Tabs.Screen
+        name="search"
+        options={{
+          title: 'Search',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="search" size={size} color={color} />
+          ),
+        }}
+      />
+      
+      <Tabs.Screen
+        name="equalizer"
+        options={{
+          title: 'Equalizer',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="options" size={size} color={color} />
+          ),
+        }}
+      />
+      
+      <Tabs.Screen
+        name="visualizer"
+        options={{
+          title: 'Visualizer',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="analytics" size={size} color={color} />
           ),
         }}
       />

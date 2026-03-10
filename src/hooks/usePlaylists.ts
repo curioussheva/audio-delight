@@ -1,0 +1,77 @@
+import { useState, useEffect, useCallback } from 'react';
+import PlaylistService from '@/services/PlaylistService';
+import { Playlist, CreatePlaylistDTO } from '@/types/playlist';
+import { Song } from '@/types/audio';
+
+export const usePlaylists = () => {
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadPlaylists = useCallback(async () => {
+    setLoading(true);
+    try {
+      await PlaylistService.initialize();
+      const data = await PlaylistService.getAllPlaylists();
+      setPlaylists(data);
+      setError(null);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const createPlaylist = useCallback(async (dto: CreatePlaylistDTO) => {
+    try {
+      const newPlaylist = await PlaylistService.createPlaylist(dto);
+      setPlaylists(prev => [...prev, newPlaylist]);
+      return newPlaylist;
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    }
+  }, []);
+
+  const addToPlaylist = useCallback(async (playlistId: string, songs: Song[]) => {
+    try {
+      await PlaylistService.addToPlaylist(playlistId, songs.map(s => s.id));
+      await loadPlaylists(); // Reload
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }, [loadPlaylists]);
+
+  const removeFromPlaylist = useCallback(async (playlistId: string, songId: string) => {
+    try {
+      await PlaylistService.removeFromPlaylist(playlistId, songId);
+      await loadPlaylists(); // Reload
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }, [loadPlaylists]);
+
+  const deletePlaylist = useCallback(async (id: string) => {
+    try {
+      await PlaylistService.deletePlaylist(id);
+      setPlaylists(prev => prev.filter(p => p.id !== id));
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPlaylists();
+  }, []);
+
+  return {
+    playlists,
+    loading,
+    error,
+    createPlaylist,
+    addToPlaylist,
+    removeFromPlaylist,
+    deletePlaylist,
+    refresh: loadPlaylists,
+  };
+};
