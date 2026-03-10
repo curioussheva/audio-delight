@@ -1,17 +1,18 @@
-import { useAudioPlayer } from '@/hooks/useAudioPlayer';
 import React from 'react';
 import { View, Text, StyleSheet, Image, Dimensions } from 'react-native';
-import Animated from 'react-native-reanimated';
-import { useAudioStore } from '@store/audioStore';
-import { ProgressBar } from '@components/ui/ProgressBar';
+import { usePlayerStore } from '@/store/playerStore'; // ← UBAH INI
+import { useAudioPlayer } from '@/hooks/useAudioPlayer';
+import { ProgressBar } from '@/components/ui/ProgressBar';
 import { PlayerControls } from './PlayerControls';
-import { formatTime } from '@utils/time';
+import { formatTime } from '@/utils/time';
 
 const { width } = Dimensions.get('window');
 
 export const NowPlaying: React.FC = () => {
-  const currentSong = useAudioStore((state) => state.currentSong);
-  const playback = useAudioStore((state) => state.playback);
+  const currentSong = usePlayerStore((state) => state.currentSong); // ← UBAH
+  const isPlaying = usePlayerStore((state) => state.isPlaying); // ← UBAH
+  const position = usePlayerStore((state) => state.position); // ← UBAH
+  const duration = usePlayerStore((state) => state.duration); // ← UBAH
   const { seek } = useAudioPlayer();
 
   if (!currentSong) {
@@ -23,7 +24,7 @@ export const NowPlaying: React.FC = () => {
     );
   }
 
-  const progress = playback.duration > 0 ? playback.position / playback.duration : 0;
+  const progress = duration > 0 ? position / duration : 0;
 
   return (
     <View style={styles.container}>
@@ -46,22 +47,24 @@ export const NowPlaying: React.FC = () => {
         <Text style={styles.artist} numberOfLines={1}>
           {currentSong.artist}
         </Text>
-        <View style={styles.formatBadge}>
-          <Text style={styles.formatText}>
-            {currentSong.format.codec.toUpperCase()} • {currentSong.format.sampleRate / 1000}kHz
-          </Text>
-        </View>
+        {currentSong.format && (
+          <View style={styles.formatBadge}>
+            <Text style={styles.formatText}>
+              {currentSong.format.codec?.toUpperCase() || 'AUDIO'} • {Math.floor((currentSong.format.sampleRate || 44100) / 1000)}kHz
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Progress */}
       <View style={styles.progressContainer}>
         <ProgressBar 
           progress={progress} 
-          onSeek={(p) => seek(p * playback.duration)} 
+          onSeek={(p) => seek(p * duration)} 
         />
         <View style={styles.timeContainer}>
-          <Text style={styles.timeText}>{formatTime(playback.position)}</Text>
-          <Text style={styles.timeText}>{formatTime(playback.duration)}</Text>
+          <Text style={styles.timeText}>{formatTime(position)}</Text>
+          <Text style={styles.timeText}>{formatTime(duration)}</Text>
         </View>
       </View>
 
