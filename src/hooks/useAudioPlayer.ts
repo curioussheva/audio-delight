@@ -7,7 +7,7 @@ import TrackPlayer, {
   Capability,
   Event
 } from 'react-native-track-player';
-import { useAudioStore } from '@store/audioStore';
+import { usePlayerStore } from '@/store/playerStore';
 import { Song } from '@/types/audio';
 
 export const useAudioPlayer = () => {
@@ -15,9 +15,14 @@ export const useAudioPlayer = () => {
   const playbackState = usePlaybackState();
   const progress = useProgress();
   
-  const currentSong = useAudioStore((state) => state.currentSong);
-  const setPlayback = useAudioStore((state) => state.setPlayback);
-  const setCurrentSong = useAudioStore((state) => state.setCurrentSong);
+  // ✅ Ambil dari playerStore
+  const currentSong = usePlayerStore((state) => state.currentSong);
+  const setCurrentSong = usePlayerStore((state) => state.setCurrentSong);
+  const setIsPlaying = usePlayerStore((state) => state.setIsPlaying);
+  const setPosition = usePlayerStore((state) => state.setPosition);
+  const setDuration = usePlayerStore((state) => state.setDuration);
+  const playNext = usePlayerStore((state) => state.playNext);
+  const playPrevious = usePlayerStore((state) => state.playPrevious);
 
   // Setup Track Player
   useEffect(() => {
@@ -84,10 +89,9 @@ export const useAudioPlayer = () => {
 
       await TrackPlayer.play();
       setCurrentSong(song);
-      setPlayback({ isPlaying: true, isLoading: false });
+      setIsPlaying(true); // ✅
     } catch (error) {
       console.error('Error loading song:', error);
-      setPlayback({ isLoading: false });
     }
   }, []);
 
@@ -95,13 +99,13 @@ export const useAudioPlayer = () => {
   const play = useCallback(async () => {
     if (!isReady.current) return;
     await TrackPlayer.play();
-    setPlayback({ isPlaying: true });
+    setIsPlaying(true); // ✅
   }, []);
 
   const pause = useCallback(async () => {
     if (!isReady.current) return;
     await TrackPlayer.pause();
-    setPlayback({ isPlaying: false });
+    setIsPlaying(false); // ✅
   }, []);
 
   const togglePlayPause = useCallback(async () => {
@@ -117,38 +121,28 @@ export const useAudioPlayer = () => {
   // Seek
   const seek = useCallback(async (position: number) => {
     if (!isReady.current) return;
-    await TrackPlayer.seekTo(position * 1000); // Convert to milliseconds
+    await TrackPlayer.seekTo(position * 1000);
   }, []);
 
   // Skip
   const skipToNext = useCallback(async () => {
     if (!isReady.current) return;
     await TrackPlayer.skipToNext();
-    const queue = await TrackPlayer.getQueue();
-    const currentTrack = await TrackPlayer.getCurrentTrack();
-    if (currentTrack && queue[currentTrack]) {
-      setCurrentSong(queue[currentTrack] as unknown as Song);
-    }
-  }, []);
+    playNext(); // ✅ panggil dari store
+  }, [playNext]);
 
   const skipToPrevious = useCallback(async () => {
     if (!isReady.current) return;
     await TrackPlayer.skipToPrevious();
-    const queue = await TrackPlayer.getQueue();
-    const currentTrack = await TrackPlayer.getCurrentTrack();
-    if (currentTrack && queue[currentTrack]) {
-      setCurrentSong(queue[currentTrack] as unknown as Song);
-    }
-  }, []);
+    playPrevious(); // ✅ panggil dari store
+  }, [playPrevious]);
 
-  // Update playback state
+  // Update playback state dari progress ke store
   useEffect(() => {
-    setPlayback({
-      isPlaying: playbackState.state === State.Playing,
-      position: progress.position,
-      duration: progress.duration,
-    });
-  }, [playbackState.state, progress.position, progress.duration]);
+    setPosition(progress.position);
+    setDuration(progress.duration);
+    setIsPlaying(playbackState.state === State.Playing);
+  }, [playbackState.state, progress.position, progress.duration, setPosition, setDuration, setIsPlaying]);
 
   return {
     loadSong,
