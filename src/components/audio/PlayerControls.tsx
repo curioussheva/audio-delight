@@ -3,45 +3,35 @@ import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { 
   useAnimatedStyle, 
-  withSpring,
-  interpolate 
+  withSpring 
 } from 'react-native-reanimated';
-import { useAudioStore } from '@store/audioStore';
-import { useAudioPlayer } from '@hooks/useAudioPlayer';
+import { usePlayerStore } from '@/store/playerStore'; // ← UBAH
+import { useAudioPlayer } from '@/hooks/useAudioPlayer';
 
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
 export const PlayerControls: React.FC = () => {
-  const { play, pause } = useAudioPlayer();
-  const isPlaying = useAudioStore((state) => state.playback.isPlaying);
-  const queue = useAudioStore((state) => state.queue);
-  const next = useAudioStore((state) => state.next);
-  const previous = useAudioStore((state) => state.previous);
-  const toggleShuffle = useAudioStore((state) => state.toggleShuffle);
-  const toggleRepeat = useAudioStore((state) => state.toggleRepeat);
+  const { play, pause, skipToNext, skipToPrevious } = useAudioPlayer();
+  const isPlaying = usePlayerStore((state) => state.isPlaying); // ← UBAH
+  const currentSong = usePlayerStore((state) => state.currentSong); // ← UBAH
+  // Untuk shuffle & repeat, perlu ditambahkan ke playerStore
+  // Sementara gunakan state lokal atau placeholder
 
   const playButtonStyle = useAnimatedStyle(() => ({
     transform: [{ scale: withSpring(isPlaying ? 1 : 1.1) }],
   }));
 
-  const getRepeatIconName = () => {
-    if (queue.repeat === 'off') return 'repeat-outline';
-    return 'repeat'; // Untuk 'all' dan 'track' pakai icon yang sama
-  };
+  if (!currentSong) return null;
 
   return (
     <View style={styles.container}>
-      {/* Shuffle */}
-      <TouchableOpacity onPress={toggleShuffle} style={styles.secondaryButton}>
-        <Ionicons 
-          name="shuffle" 
-          size={24} 
-          color={queue.shuffle ? '#00D4AA' : '#C8D4E0'} 
-        />
+      {/* Shuffle (placeholder) */}
+      <TouchableOpacity style={styles.secondaryButton}>
+        <Ionicons name="shuffle" size={24} color="#C8D4E0" />
       </TouchableOpacity>
 
       {/* Previous */}
-      <TouchableOpacity onPress={previous} style={styles.mainButton}>
+      <TouchableOpacity onPress={skipToPrevious} style={styles.mainButton}>
         <Ionicons name="play-skip-back" size={32} color="#F0F4F8" />
       </TouchableOpacity>
 
@@ -58,23 +48,14 @@ export const PlayerControls: React.FC = () => {
       </AnimatedTouchable>
 
       {/* Next */}
-      <TouchableOpacity onPress={next} style={styles.mainButton}>
+      <TouchableOpacity onPress={skipToNext} style={styles.mainButton}>
         <Ionicons name="play-skip-forward" size={32} color="#F0F4F8" />
       </TouchableOpacity>
 
-      {/* Repeat */}
-      <View style={styles.repeatContainer}>
-        <TouchableOpacity onPress={toggleRepeat} style={styles.secondaryButton}>
-          <Ionicons 
-            name={getRepeatIconName()} 
-            size={24} 
-            color={queue.repeat !== 'off' ? '#00D4AA' : '#C8D4E0'} 
-          />
-        </TouchableOpacity>
-        {queue.repeat === 'track' && (
-          <View style={styles.repeatOneIndicator} />
-        )}
-      </View>
+      {/* Repeat (placeholder) */}
+      <TouchableOpacity style={styles.secondaryButton}>
+        <Ionicons name="repeat-outline" size={24} color="#C8D4E0" />
+      </TouchableOpacity>
     </View>
   );
 };
@@ -107,17 +88,5 @@ const styles = StyleSheet.create({
   secondaryButton: {
     padding: 8,
     opacity: 0.8,
-  },
-  repeatContainer: {
-    position: 'relative',
-  },
-  repeatOneIndicator: {
-    position: 'absolute',
-    top: 2,
-    right: 2,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#00D4AA',
   },
 });
