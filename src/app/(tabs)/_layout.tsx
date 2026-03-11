@@ -1,15 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { View } from 'react-native';
 import { COLORS } from '@/constants/theme';
-
-const TabBarIcon = ({ name, color, size }: { name: any; color: string; size: number }) => {
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <Ionicons name={name} size={size} color={color} />
-    </View>
-  );
-};
+import { View } from 'react-native';
 
 export default function TabsLayout() {
   return (
@@ -36,73 +28,34 @@ export default function TabsLayout() {
         options={{
           title: 'Library',
           tabBarIcon: ({ color, size }) => (
-            <TabBarIcon name="library" size={size} color={color} />
+            <Ionicons name="library" size={size} color={color} />
           ),
         }}
       />
-      
-      <Tabs.Screen
-        name="playlists"
-        options={{
-          title: 'Playlists',
-          tabBarIcon: ({ color, size }) => (
-            <TabBarIcon name="list" size={size} color={color} />
-          ),
-        }}
-      />
-      
       <Tabs.Screen
         name="player"
         options={{
           title: 'Player',
           tabBarIcon: ({ color, size }) => (
-            <View style={{
-              backgroundColor: COLORS.primary[500],
-              width: 50,
-              height: 50,
-              borderRadius: 25,
-              justifyContent: 'center',
-              alignItems: 'center',
-              marginBottom: 20,
-              shadowColor: COLORS.primary[500],
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.3,
-              shadowRadius: 8,
-              elevation: 8,
-            }}>
-              <Ionicons name="play" size={28} color={COLORS.background.primary} />
-            </View>
+            <Ionicons name="play-circle" size={size} color={color} />
           ),
-          tabBarLabel: () => null,
         }}
       />
-      
       <Tabs.Screen
         name="equalizer"
         options={{
           title: 'Equalizer',
           tabBarIcon: ({ color, size }) => (
-            <TabBarIcon name="options" size={size} color={color} />
+            <Ionicons name="options" size={size} color={color} />
           ),
         }}
       />
-      
       <Tabs.Screen
-        name="visualizer"
+        name="visualizer" // nama file visualizer.tsx
         options={{
-          title: 'Visualizer',
+          title: 'Analyzer',
           tabBarIcon: ({ color, size }) => (
-            <TabBarIcon name="analytics" size={size} color={color} />
-          ),
-        }}
-      />
-      
-      <Tabs.Screen
-        name="search"
-        options={{
-          title: 'Search',
-          tabBarIcon: ({ color, size }) => (
-            <TabBarIcon name="search" size={size} color={color} />
+            <Ionicons name="analytics" size={size} color={color} />
           ),
         }}
       />

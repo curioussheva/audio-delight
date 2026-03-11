@@ -6,19 +6,24 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
+import Slider from '@react-native-community/slider';
+import { Ionicons } from '@expo/vector-icons';
 import { SpectrumAnalyzer } from '@/components/visualizer/SpectrumAnalyzer';
 import { usePlayerStore } from '@/store/playerStore';
+import { COLORS, TYPOGRAPHY, SPACING } from '@/constants/theme';
 
-type VisualizerMode = 'bars' | 'waveform' | 'circle';
+type VisualizerMode = 'bars' | 'wave' | 'circle';
 
 export default function VisualizerScreen() {
   const { currentSong, isPlaying } = usePlayerStore();
   const [mode, setMode] = useState<VisualizerMode>('bars');
+  const [sensitivity, setSensitivity] = useState(0.5);
 
   if (!currentSong) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.noSong}>Putar lagu untuk melihat visualizer</Text>
+      <View style={styles.centerContainer}>
+        <Ionicons name="analytics" size={64} color={COLORS.background.tertiary} />
+        <Text style={styles.emptyText}>Putar lagu untuk melihat visualizer</Text>
       </View>
     );
   }
@@ -28,30 +33,17 @@ export default function VisualizerScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Visualizer</Text>
         <View style={styles.modeButtons}>
-          <TouchableOpacity
-            style={[styles.modeButton, mode === 'bars' && styles.modeButtonActive]}
-            onPress={() => setMode('bars')}
-          >
-            <Text style={[styles.modeText, mode === 'bars' && styles.modeTextActive]}>
-              Bars
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.modeButton, mode === 'waveform' && styles.modeButtonActive]}
-            onPress={() => setMode('waveform')}
-          >
-            <Text style={[styles.modeText, mode === 'waveform' && styles.modeTextActive]}>
-              Wave
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.modeButton, mode === 'circle' && styles.modeButtonActive]}
-            onPress={() => setMode('circle')}
-          >
-            <Text style={[styles.modeText, mode === 'circle' && styles.modeTextActive]}>
-              Circle
-            </Text>
-          </TouchableOpacity>
+          {(['bars', 'wave', 'circle'] as VisualizerMode[]).map((m) => (
+            <TouchableOpacity
+              key={m}
+              style={[styles.modeButton, mode === m && styles.modeButtonActive]}
+              onPress={() => setMode(m)}
+            >
+              <Text style={[styles.modeText, mode === m && styles.modeTextActive]}>
+                {m.charAt(0).toUpperCase() + m.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
 
@@ -61,17 +53,19 @@ export default function VisualizerScreen() {
             width={350}
             height={200}
             barCount={32}
-            color="#00D4AA"
+            color={COLORS.primary[500]}
+            sensitivity={sensitivity}
           />
         )}
-        {mode === 'waveform' && (
+        {mode === 'wave' && (
           <SpectrumAnalyzer
             width={350}
             height={200}
             barCount={64}
             barWidth={2}
             barSpacing={1}
-            color="#00D4AA"
+            color={COLORS.primary[500]}
+            sensitivity={sensitivity}
           />
         )}
         {mode === 'circle' && (
@@ -79,6 +73,21 @@ export default function VisualizerScreen() {
             <Text style={styles.comingSoon}>Coming Soon</Text>
           </View>
         )}
+      </View>
+
+      <View style={styles.controlPanel}>
+        <Text style={styles.controlLabel}>Sensitivity</Text>
+        <Slider
+          style={styles.slider}
+          minimumValue={0.2}
+          maximumValue={1.5}
+          value={sensitivity}
+          onValueChange={setSensitivity}
+          minimumTrackTintColor={COLORS.primary[500]}
+          maximumTrackTintColor={COLORS.background.tertiary}
+          thumbTintColor={COLORS.primary[500]}
+        />
+        <Text style={styles.sensitivityValue}>{sensitivity.toFixed(1)}x</Text>
       </View>
 
       <View style={styles.songInfo}>
@@ -92,51 +101,53 @@ export default function VisualizerScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A1628',
+    backgroundColor: COLORS.background.primary,
   },
-  center: {
+  centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#0A1628',
+    backgroundColor: COLORS.background.primary,
+    paddingHorizontal: SPACING.xl,
   },
-  noSong: {
-    color: '#C8D4E0',
-    fontSize: 16,
+  emptyText: {
+    ...TYPOGRAPHY.body1,
+    color: COLORS.text.secondary,
+    marginTop: SPACING.lg,
+    textAlign: 'center',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: SPACING.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#1F2A3A',
+    borderBottomColor: COLORS.background.tertiary,
   },
   title: {
-    color: '#F0F4F8',
-    fontSize: 24,
-    fontWeight: 'bold',
+    ...TYPOGRAPHY.h2,
+    color: COLORS.text.primary,
   },
   modeButtons: {
     flexDirection: 'row',
-    gap: 8,
+    gap: SPACING.xs,
   },
   modeButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
     borderRadius: 16,
-    backgroundColor: '#1F2A3A',
+    backgroundColor: COLORS.background.tertiary,
   },
   modeButtonActive: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: COLORS.primary[500],
   },
   modeText: {
-    color: '#C8D4E0',
-    fontSize: 12,
-    fontWeight: '500',
+    ...TYPOGRAPHY.caption,
+    color: COLORS.text.secondary,
   },
   modeTextActive: {
-    color: '#0A1628',
+    color: COLORS.background.primary,
+    fontWeight: '600',
   },
   visualizerContainer: {
     flex: 1,
@@ -147,28 +158,48 @@ const styles = StyleSheet.create({
     width: 250,
     height: 250,
     borderRadius: 125,
-    backgroundColor: '#1F2A3A',
+    backgroundColor: COLORS.background.tertiary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   comingSoon: {
-    color: '#C8D4E0',
-    fontSize: 16,
+    ...TYPOGRAPHY.body2,
+    color: COLORS.text.tertiary,
+  },
+  controlPanel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.lg,
+    gap: SPACING.md,
+  },
+  controlLabel: {
+    ...TYPOGRAPHY.body2,
+    color: COLORS.text.secondary,
+  },
+  slider: {
+    flex: 1,
+    height: 40,
+  },
+  sensitivityValue: {
+    ...TYPOGRAPHY.body2,
+    color: COLORS.primary[500],
+    width: 50,
+    textAlign: 'right',
   },
   songInfo: {
-    padding: 24,
+    padding: SPACING.xl,
     alignItems: 'center',
   },
   songTitle: {
-    color: '#F0F4F8',
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 4,
+    ...TYPOGRAPHY.h3,
+    color: COLORS.text.primary,
+    marginBottom: SPACING.xs,
     textAlign: 'center',
   },
   songArtist: {
-    color: '#C8D4E0',
-    fontSize: 16,
+    ...TYPOGRAPHY.body1,
+    color: COLORS.text.secondary,
     textAlign: 'center',
   },
 });

@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
-import { Canvas, Path, Skia, Group } from '@shopify/react-native-skia';
+import { Canvas, Path, Skia } from '@shopify/react-native-skia';
 import VisualizerService, { FrequencyData } from '@/services/audio/VisualizerService';
+import { useTheme } from '@/context/ThemeContext'; // ← IMPORT ThemeContext
 
 interface SpectrumAnalyzerProps {
   width?: number;
@@ -11,6 +12,7 @@ interface SpectrumAnalyzerProps {
   barSpacing?: number;
   color?: string;
   backgroundColor?: string;
+  sensitivity?: number;
 }
 
 export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
@@ -19,9 +21,17 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
   barCount = 32,
   barWidth = 6,
   barSpacing = 2,
-  color = '#00D4AA',
-  backgroundColor = '#0A1628',
+  color,
+  backgroundColor,
+  sensitivity = 1, // ← DEFAULT SENSITIVITY
 }) => {
+  const { theme } = useTheme(); // ← AMBIL THEME
+  const { colors } = theme;
+  
+  // Gunakan warna dari theme jika tidak disediakan props
+  const barColor = color || colors.primary[500];
+  const bgColor = backgroundColor || colors.background.primary;
+  
   const [frequencies, setFrequencies] = useState<number[]>(new Array(barCount).fill(0));
 
   useEffect(() => {
@@ -59,35 +69,37 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
 
   // Render bars menggunakan Skia Path
   const renderBars = () => {
-  const totalWidth = barCount * (barWidth + barSpacing) - barSpacing;
-  const startX = (width - totalWidth) / 2;
-  
-  const paths: React.JSX.Element[] = [];
-  
-  frequencies.forEach((value, index) => {
-    const barHeight = value * height * 0.8;
-    const x = startX + index * (barWidth + barSpacing);
-    const y = (height - barHeight) / 2;
+    const totalWidth = barCount * (barWidth + barSpacing) - barSpacing;
+    const startX = (width - totalWidth) / 2;
     
-    // Buat path untuk setiap bar
-    const path = Skia.Path.Make();
-    path.addRect(Skia.XYWHRect(x, y, barWidth, barHeight)); // ✅ fixed
+    const paths: React.JSX.Element[] = [];
     
-    paths.push(
-      <Path
-        key={index}
-        path={path}
-        color={color}
-        style="fill"
-      />
-    );
-  });
-  
-  return paths;
-};
+    frequencies.forEach((value, index) => {
+      // Terapkan sensitivity
+      const adjustedValue = value * sensitivity;
+      const barHeight = Math.min(adjustedValue * height * 0.8, height);
+      const x = startX + index * (barWidth + barSpacing);
+      const y = (height - barHeight) / 2;
+      
+      // Buat path untuk setiap bar
+      const path = Skia.Path.Make();
+      path.addRect(Skia.XYWHRect(x, y, barWidth, barHeight)); // ✅ fixed
+      
+      paths.push(
+        <Path
+          key={index}
+          path={path}
+          color={barColor}
+          style="fill"
+        />
+      );
+    });
+    
+    return paths;
+  };
 
   return (
-    <View style={[styles.container, { width, height, backgroundColor }]}>
+    <View style={[styles.container, { width, height, backgroundColor: bgColor }]}>
       <Canvas style={{ width, height }}>
         {renderBars()}
       </Canvas>

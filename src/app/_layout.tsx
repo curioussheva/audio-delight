@@ -1,30 +1,78 @@
-import { useState, useEffect } from 'react';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
+import { Drawer } from 'expo-router/drawer';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { SplashScreen } from '@/components/SplashScreen';
-import { COLORS } from '@/constants/theme';
+import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
+import { ThemeProvider, useTheme } from '@/context/ThemeContext';
+
+// Komponen untuk drawer yang menggunakan theme
+function DrawerContent() {
+  const { theme } = useTheme();
+  
+  return (
+    <Drawer
+      screenOptions={{
+        headerStyle: { backgroundColor: theme.colors.background.primary },
+        headerTintColor: theme.colors.text.primary,
+        drawerStyle: { backgroundColor: theme.colors.background.secondary },
+        drawerActiveTintColor: theme.colors.primary[500],
+        drawerInactiveTintColor: theme.colors.text.secondary,
+        drawerLabelStyle: { fontSize: 16, marginLeft: -16 },
+      }}
+    >
+      <Drawer.Screen
+        name="(tabs)"
+        options={{
+          drawerLabel: 'Home',
+          title: 'PristineAudio',
+          drawerIcon: ({ color }) => <Ionicons name="home" size={24} color={color} />,
+        }}
+      />
+      <Drawer.Screen
+        name="playlists"
+        options={{
+          drawerLabel: 'Playlists',
+          title: 'Playlists',
+          drawerIcon: ({ color }) => <Ionicons name="list" size={24} color={color} />,
+        }}
+      />
+      <Drawer.Screen
+        name="search"
+        options={{
+          drawerLabel: 'Search',
+          title: 'Search',
+          drawerIcon: ({ color }) => <Ionicons name="search" size={24} color={color} />,
+        }}
+      />
+      <Drawer.Screen
+        name="settings"
+        options={{
+          drawerLabel: 'Settings',
+          title: 'Settings',
+          drawerIcon: ({ color }) => <Ionicons name="settings" size={24} color={color} />,
+        }}
+      />
+      <Drawer.Screen
+        name="about"
+        options={{
+          drawerLabel: 'About',
+          title: 'About',
+          drawerIcon: ({ color }) => <Ionicons name="information-circle" size={24} color={color} />,
+        }}
+      />
+    </Drawer>
+  );
+}
 
 export default function RootLayout() {
-  const [isReady, setIsReady] = useState(false);
-
-  if (!isReady) {
-    return <SplashScreen onFinish={() => setIsReady(true)} />;
-  }
-
   return (
-    <SafeAreaProvider>
-      <StatusBar style="light" />
-      <Stack
-        screenOptions={{
-          headerStyle: { backgroundColor: COLORS.background.primary },
-          headerTintColor: COLORS.text.primary,
-          contentStyle: { backgroundColor: COLORS.background.primary },
-        }}
-      >
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      </Stack>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <SafeAreaProvider>
+          <StatusBar style="light" />
+          <DrawerContent />
+        </SafeAreaProvider>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }

@@ -7,11 +7,15 @@ import {
   TouchableOpacity,
   Switch,
 } from 'react-native';
+import { useTheme } from '@/context/ThemeContext';
 import { EqualizerBand } from '@/components/equalizer/EqualizerBand';
 import { FrequencyGraph } from '@/components/equalizer/FrequencyGraph';
 import { useEqualizer } from '@/hooks/useEqualizer';
 
 export default function EqualizerScreen() {
+  const { theme } = useTheme();
+  const { colors, spacing, typography } = theme;
+
   const {
     bands,
     isActive,
@@ -25,19 +29,25 @@ export default function EqualizerScreen() {
   const [showPresets, setShowPresets] = useState(false);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background.primary }]}>
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Equalizer</Text>
-        <View style={styles.headerRight}>
-          <Text style={styles.activeText}>
+      <View style={[styles.header, { 
+        borderBottomColor: colors.background.tertiary,
+        padding: spacing.lg,
+      }]}>
+        <Text style={[styles.title, { color: colors.text.primary }]}>Equalizer</Text>
+        <View style={[styles.headerRight, { gap: spacing.sm }]}>
+          <Text style={[styles.activeText, { color: colors.text.secondary }]}>
             {isActive ? 'Aktif' : 'Nonaktif'}
           </Text>
           <Switch
             value={isActive}
             onValueChange={toggleEQ}
-            trackColor={{ false: '#1F2A3A', true: '#00D4AA' }}
-            thumbColor={isActive ? '#F0F4F8' : '#C8D4E0'}
+            trackColor={{ 
+              false: colors.background.tertiary, 
+              true: colors.primary[500] 
+            }}
+            thumbColor={isActive ? colors.text.primary : colors.text.tertiary}
           />
         </View>
       </View>
@@ -46,51 +56,75 @@ export default function EqualizerScreen() {
       <FrequencyGraph bands={bands} />
 
       {/* EQ Bands */}
-      <ScrollView style={styles.bandsContainer}>
+      <ScrollView style={[styles.bandsContainer, { paddingHorizontal: spacing.md }]}>
         {bands.map((band, index) => (
           <EqualizerBand
             key={band.frequency}
             frequency={band.frequency}
             gain={band.gain}
-            onGainChange={(gain: number) => updateBand(index, gain)} // ← FIX: add type
+            onGainChange={(gain: number) => updateBand(index, gain)}
           />
         ))}
       </ScrollView>
 
       {/* Presets */}
-      <View style={styles.presetsSection}>
+      <View style={[styles.presetsSection, { 
+        borderTopColor: colors.background.tertiary,
+        padding: spacing.lg,
+      }]}>
         <TouchableOpacity
           style={styles.presetsHeader}
           onPress={() => setShowPresets(!showPresets)}
         >
-          <Text style={styles.presetsTitle}>Presets</Text>
-          <Text style={styles.presetsArrow}>
+          <Text style={[styles.presetsTitle, { color: colors.text.primary }]}>
+            Presets
+          </Text>
+          <Text style={[styles.presetsArrow, { color: colors.text.secondary }]}>
             {showPresets ? '▼' : '▶'}
           </Text>
         </TouchableOpacity>
 
         {showPresets && (
-          <View style={styles.presetsGrid}>
-            {presets.map((preset) => (
-              <TouchableOpacity
-                key={preset}
-                style={[
-                  styles.presetButton,
-                  presetName === preset && styles.presetButtonActive,
-                ]}
-                onPress={() => applyPreset(preset)}
-              >
-                <Text
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false} 
+            style={[styles.presetsScroll, { marginTop: spacing.md }]}
+          >
+            <View style={[styles.presetsGrid, { 
+              paddingHorizontal: spacing.md,
+              gap: spacing.sm,
+            }]}>
+              {presets.map((preset) => (
+                <TouchableOpacity
+                  key={preset}
                   style={[
-                    styles.presetText,
-                    presetName === preset && styles.presetTextActive,
+                    styles.presetButton,
+                    {
+                      paddingHorizontal: spacing.lg,
+                      paddingVertical: spacing.sm,
+                      backgroundColor: presetName === preset 
+                        ? colors.primary[500] 
+                        : colors.background.tertiary,
+                    },
                   ]}
+                  onPress={() => applyPreset(preset)}
                 >
-                  {preset.charAt(0).toUpperCase() + preset.slice(1)}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+                  <Text
+                    style={{
+                      fontSize: typography.button.fontSize,
+                      fontWeight: typography.button.fontWeight as any,
+                      lineHeight: typography.button.lineHeight,
+                      color: presetName === preset 
+                        ? colors.background.primary 
+                        : colors.text.secondary,
+                    }}
+                  >
+                    {preset.charAt(0).toUpperCase() + preset.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
         )}
       </View>
     </View>
@@ -100,38 +134,29 @@ export default function EqualizerScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A1628',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#1F2A3A',
   },
   title: {
-    color: '#F0F4F8',
     fontSize: 24,
     fontWeight: 'bold',
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   activeText: {
-    color: '#C8D4E0',
     fontSize: 14,
   },
   bandsContainer: {
     flex: 1,
-    paddingHorizontal: 16,
   },
   presetsSection: {
     borderTopWidth: 1,
-    borderTopColor: '#1F2A3A',
-    padding: 16,
   },
   presetsHeader: {
     flexDirection: 'row',
@@ -139,37 +164,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   presetsTitle: {
-    color: '#F0F4F8',
     fontSize: 18,
     fontWeight: '600',
   },
   presetsArrow: {
-    color: '#C8D4E0',
     fontSize: 16,
+  },
+  presetsScroll: {
+    // style di-inline
   },
   presetsGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 12,
-    gap: 8,
   },
   presetButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#1F2A3A',
-    minWidth: 80,
-    alignItems: 'center',
-  },
-  presetButtonActive: {
-    backgroundColor: '#00D4AA',
-  },
-  presetText: {
-    color: '#C8D4E0',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  presetTextActive: {
-    color: '#0A1628',
+    borderRadius: 24,
   },
 });

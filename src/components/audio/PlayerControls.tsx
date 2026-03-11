@@ -1,61 +1,65 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { 
-  useAnimatedStyle, 
-  withSpring 
-} from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { usePlayerStore } from '@/store/playerStore';
 import { useAudioPlayer } from '@/hooks/useAudioPlayer';
+import { COLORS, SPACING } from '@/constants/theme';
 
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
 export const PlayerControls: React.FC = () => {
   const { play, pause, skipToNext, skipToPrevious } = useAudioPlayer();
-  const isPlaying = usePlayerStore((state) => state.isPlaying);
-  const currentSong = usePlayerStore((state) => state.currentSong); // ← UBAH
-  // Untuk shuffle & repeat, perlu ditambahkan ke playerStore
-  // Sementara gunakan state lokal atau placeholder
+  const { isPlaying, shuffle, repeat, toggleShuffle, toggleRepeat } = usePlayerStore();
 
   const playButtonStyle = useAnimatedStyle(() => ({
     transform: [{ scale: withSpring(isPlaying ? 1 : 1.1) }],
   }));
 
-  if (!currentSong) return null;
-
   return (
     <View style={styles.container}>
-      {/* Shuffle (placeholder) */}
-      <TouchableOpacity style={styles.secondaryButton}>
-        <Ionicons name="shuffle" size={24} color="#C8D4E0" />
+      {/* Shuffle */}
+      <TouchableOpacity onPress={toggleShuffle} style={styles.secondaryButton}>
+        <Ionicons
+          name="shuffle"
+          size={24}
+          color={shuffle ? COLORS.primary[500] : COLORS.text.tertiary}
+        />
       </TouchableOpacity>
 
       {/* Previous */}
       <TouchableOpacity onPress={skipToPrevious} style={styles.mainButton}>
-        <Ionicons name="play-skip-back" size={32} color="#F0F4F8" />
+        <Ionicons name="play-skip-back" size={32} color={COLORS.text.primary} />
       </TouchableOpacity>
 
       {/* Play/Pause */}
-      <AnimatedTouchable 
-        onPress={isPlaying ? pause : play} 
+      <AnimatedTouchable
+        onPress={isPlaying ? pause : play}
         style={[styles.playButton, playButtonStyle]}
       >
-        <Ionicons 
-          name={isPlaying ? 'pause' : 'play'} 
-          size={40} 
-          color="#0A1628" 
+        <Ionicons
+          name={isPlaying ? 'pause' : 'play'}
+          size={40}
+          color={COLORS.background.primary}
         />
       </AnimatedTouchable>
 
       {/* Next */}
       <TouchableOpacity onPress={skipToNext} style={styles.mainButton}>
-        <Ionicons name="play-skip-forward" size={32} color="#F0F4F8" />
+        <Ionicons name="play-skip-forward" size={32} color={COLORS.text.primary} />
       </TouchableOpacity>
 
-      {/* Repeat (placeholder) */}
-      <TouchableOpacity style={styles.secondaryButton}>
-        <Ionicons name="repeat-outline" size={24} color="#C8D4E0" />
-      </TouchableOpacity>
+      {/* Repeat */}
+      <View style={styles.repeatContainer}>
+        <TouchableOpacity onPress={toggleRepeat} style={styles.secondaryButton}>
+          <Ionicons
+            name={repeat === 'track' ? 'repeat' : repeat === 'all' ? 'repeat' : 'repeat-outline'}
+            size={24}
+            color={repeat !== 'off' ? COLORS.primary[500] : COLORS.text.tertiary}
+          />
+        </TouchableOpacity>
+        {repeat === 'track' && <View style={styles.repeatOneIndicator} />}
+      </View>
     </View>
   );
 };
@@ -65,28 +69,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 32,
-    paddingVertical: 24,
-    gap: 24,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.lg,
+    gap: SPACING.lg,
   },
   playButton: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: '#00D4AA',
+    backgroundColor: COLORS.primary[500],
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#00D4AA',
+    shadowColor: COLORS.primary[500],
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
   },
   mainButton: {
-    padding: 12,
+    padding: SPACING.sm,
   },
   secondaryButton: {
-    padding: 8,
-    opacity: 0.8,
+    padding: SPACING.xs,
+  },
+  repeatContainer: {
+    position: 'relative',
+  },
+  repeatOneIndicator: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.primary[500],
   },
 });
