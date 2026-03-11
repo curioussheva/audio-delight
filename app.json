@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/images/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#000000"
+      "backgroundColor": "#0A1628"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -28,7 +28,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#0A1628"
       },
       "package": "com.pristineaudio.app",
       "versionCode": 1,
@@ -75,7 +75,18 @@
           "iCloudContainerEnvironment": "Production"
         }
       ],
-  
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0A1628",
+          "dark": {
+            "image": "./assets/images/splash.png",
+            "backgroundColor": "#0A1628"
+          }
+        }
+      ],
       [
         "expo-build-properties",
         {
@@ -111,4 +122,4 @@
     },
     "owner": "curioussheva"
   }
-} 
+}

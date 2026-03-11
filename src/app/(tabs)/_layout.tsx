@@ -1,14 +1,26 @@
+// src/app/(tabs)/_layout.tsx (update)
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { COLORS } from '@/constants/theme';
 
 export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: { backgroundColor: '#0A1628' },
-        tabBarActiveTintColor: '#00D4AA',
-        tabBarInactiveTintColor: '#C8D4E0',
+        tabBarStyle: {
+          backgroundColor: COLORS.background.secondary,
+          borderTopColor: COLORS.background.tertiary,
+          height: 60,
+          paddingBottom: 8,
+          paddingTop: 8,
+        },
+        tabBarActiveTintColor: COLORS.primary[500],
+        tabBarInactiveTintColor: COLORS.text.tertiary,
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '500',
+        },
       }}
     >
       <Tabs.Screen
@@ -16,7 +28,7 @@ export default function TabsLayout() {
         options={{
           title: 'Library',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="musical-notes" size={size} color={color} />
+            <Ionicons name="library" size={size} color={color} />
           ),
         }}
       />
@@ -36,18 +48,24 @@ export default function TabsLayout() {
         options={{
           title: 'Player',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="play-circle" size={size} color={color} />
+            <View style={{
+              backgroundColor: COLORS.primary[500],
+              width: 50,
+              height: 50,
+              borderRadius: 25,
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginBottom: 20,
+              shadowColor: COLORS.primary[500],
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 8,
+              elevation: 8,
+            }}>
+              <Ionicons name="play" size={28} color={COLORS.background.primary} />
+            </View>
           ),
-        }}
-      />
-      
-      <Tabs.Screen
-        name="search"
-        options={{
-          title: 'Search',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="search" size={size} color={color} />
-          ),
+          tabBarLabel: () => null,
         }}
       />
       

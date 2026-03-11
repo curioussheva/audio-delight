@@ -1,7 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 import { Playlist, CreatePlaylistDTO, UpdatePlaylistDTO } from '@/types/playlist';
 import { Song } from '@/types/audio';
-import { usePlayerStore } from '@/store/playerStore';
 
 const db = SQLite.openDatabaseSync('pristineaudio.db');
 
@@ -32,6 +31,8 @@ class PlaylistService {
     `);
   }
 
+  // ===== METHOD DASAR =====
+  
   async createPlaylist(dto: CreatePlaylistDTO): Promise<Playlist> {
     const id = Date.now().toString();
     const now = Date.now();
@@ -161,6 +162,59 @@ class PlaylistService {
       `UPDATE playlists SET ${updates.join(', ')} WHERE id = ?`,
       values
     );
+  }
+
+  // ===== SMART PLAYLIST =====
+  
+  async getAllSongs(): Promise<Song[]> {
+    // Method ini perlu diimplementasikan
+    // Sementara return array kosong
+    return [];
+  }
+
+  async createSmartPlaylist(name: string, criteria: {
+    minBitrate?: number;
+    isLossless?: boolean;
+    minDynamicRange?: number;
+    artist?: string;
+    genre?: string;
+  }) {
+    // Ambil semua lagu
+    const allSongs = await this.getAllSongs();
+    let filtered = allSongs;
+
+    if (criteria.minBitrate) {
+      filtered = filtered.filter(s => (s as any).bitrate >= criteria.minBitrate!);
+    }
+
+    if (criteria.isLossless !== undefined) {
+      // Perlu data analysis - filter berdasarkan hasil analisis
+      filtered = filtered.filter(s => {
+        // Implementasi sesuai kebutuhan
+        return true;
+      });
+    }
+
+    if (criteria.minDynamicRange) {
+      // Perlu data analysis
+      filtered = filtered.filter(s => {
+        // Implementasi sesuai kebutuhan
+        return true;
+      });
+    }
+
+    if (criteria.artist) {
+      filtered = filtered.filter(s => s.artist === criteria.artist);
+    }
+
+    // Buat playlist dari hasil filter
+    return this.createPlaylist({
+      name,
+      description: criteria.artist 
+        ? `Best of ${criteria.artist}` 
+        : 'Smart playlist based on quality criteria',
+      songIds: filtered.map(s => s.id),
+    });
   }
 }
 

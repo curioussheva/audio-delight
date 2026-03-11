@@ -1,0 +1,22 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background Circle -->
+  <circle cx="512" cy="512" r="512" fill="#0A1628"/>
+  
+  <!-- Outer Ring - Vinyl/Technology -->
+  <circle cx="512" cy="512" r="380" stroke="#00D4AA" stroke-width="12" fill="none" stroke-dasharray="20 10"/>
+  
+  <!-- Inner Circle -->
+  <circle cx="512" cy="512" r="280" fill="#141E33"/>
+  
+  <!-- Waveform Lines -->
+  <path d="M312 512 L372 452 L432 572 L492 392 L552 632 L612 452 L672 512" stroke="#00D4AA" stroke-width="24" stroke-linecap="round" fill="none"/>
+  
+  <!-- PA Letters (Stylized) -->
+  <path d="M412 612 L412 412 L482 412 Q532 412 532 462 Q532 512 482 512 L412 512" stroke="#F0F4F8" stroke-width="32" stroke-linecap="round" fill="none"/>
+  <circle cx="582" cy="512" r="50" stroke="#F0F4F8" stroke-width="32" fill="none"/>
+  
+  <!-- Small Accents - Audio Frequency Dots -->
+  <circle cx="712" cy="412" r="16" fill="#00D4AA"/>
+  <circle cx="752" cy="452" r="12" fill="#00D4AA" opacity="0.7"/>
+  <circle cx="782" cy="502" r="8" fill="#00D4AA" opacity="0.5"/>
+</svg>
