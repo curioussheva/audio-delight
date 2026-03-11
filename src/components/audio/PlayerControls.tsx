@@ -5,14 +5,14 @@ import Animated, {
   useAnimatedStyle, 
   withSpring 
 } from 'react-native-reanimated';
-import { usePlayerStore } from '@/store/playerStore'; // ← UBAH
+import { usePlayerStore } from '@/store/playerStore';
 import { useAudioPlayer } from '@/hooks/useAudioPlayer';
 
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
 export const PlayerControls: React.FC = () => {
   const { play, pause, skipToNext, skipToPrevious } = useAudioPlayer();
-  const isPlaying = usePlayerStore((state) => state.isPlaying); // ← UBAH
+  const isPlaying = usePlayerStore((state) => state.isPlaying);
   const currentSong = usePlayerStore((state) => state.currentSong); // ← UBAH
   // Untuk shuffle & repeat, perlu ditambahkan ke playerStore
   // Sementara gunakan state lokal atau placeholder

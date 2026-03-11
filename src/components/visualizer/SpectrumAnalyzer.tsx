@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
-import Canvas, { Image, useCanvasRef } from '@shopify/react-native-skia';
+import { Canvas, Path, Skia, Group } from '@shopify/react-native-skia';
 import VisualizerService, { FrequencyData } from '@/services/audio/VisualizerService';
 
 interface SpectrumAnalyzerProps {
@@ -22,7 +22,6 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
   color = '#00D4AA',
   backgroundColor = '#0A1628',
 }) => {
-  const canvasRef = useCanvasRef();
   const [frequencies, setFrequencies] = useState<number[]>(new Array(barCount).fill(0));
 
   useEffect(() => {
@@ -58,25 +57,40 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
     };
   }, []);
 
-  const draw = (ctx: CanvasRenderingContext2D) => {
-    ctx.clearRect(0, 0, width, height);
+  // Render bars menggunakan Skia Path
+  const renderBars = () => {
+  const totalWidth = barCount * (barWidth + barSpacing) - barSpacing;
+  const startX = (width - totalWidth) / 2;
+  
+  const paths: React.JSX.Element[] = [];
+  
+  frequencies.forEach((value, index) => {
+    const barHeight = value * height * 0.8;
+    const x = startX + index * (barWidth + barSpacing);
+    const y = (height - barHeight) / 2;
     
-    const totalWidth = barCount * (barWidth + barSpacing) - barSpacing;
-    const startX = (width - totalWidth) / 2;
+    // Buat path untuk setiap bar
+    const path = Skia.Path.Make();
+    path.addRect(Skia.XYWHRect(x, y, barWidth, barHeight)); // ✅ fixed
     
-    frequencies.forEach((value, index) => {
-      const barHeight = value * height * 0.8;
-      const x = startX + index * (barWidth + barSpacing);
-      const y = (height - barHeight) / 2;
-      
-      ctx.fillStyle = color;
-      ctx.fillRect(x, y, barWidth, barHeight);
-    });
-  };
+    paths.push(
+      <Path
+        key={index}
+        path={path}
+        color={color}
+        style="fill"
+      />
+    );
+  });
+  
+  return paths;
+};
 
   return (
     <View style={[styles.container, { width, height, backgroundColor }]}>
-      <Canvas ref={canvasRef} style={{ width, height }} onDraw={draw} />
+      <Canvas style={{ width, height }}>
+        {renderBars()}
+      </Canvas>
     </View>
   );
 };

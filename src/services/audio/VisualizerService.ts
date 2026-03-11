@@ -1,4 +1,3 @@
-import TrackPlayer from 'react-native-track-player';
 import { Audio } from 'expo-av';
 
 export interface FrequencyData {
@@ -42,13 +41,16 @@ class VisualizerService {
   private startAnimation() {
     const animate = () => {
       if (this.analyser && this.dataArray) {
-        this.analyser.getByteFrequencyData(this.dataArray);
+        // Konversi Uint8Array<ArrayBufferLike> ke Uint8Array<ArrayBuffer>
+        // dengan membuat salinan baru
+        const dataArray = new Uint8Array(this.dataArray);
+        this.analyser.getByteFrequencyData(dataArray);
         
         this.listeners.forEach(listener => {
           listener({
-            frequencies: this.dataArray!,
+            frequencies: dataArray,
             sampleRate: this.audioContext?.sampleRate || 44100,
-            bandwidth: this.audioContext?.sampleRate / this.analyser!.fftSize || 21.5,
+            bandwidth: (this.audioContext?.sampleRate || 44100) / (this.analyser?.fftSize || 2048) || 21.5,
           });
         });
       }

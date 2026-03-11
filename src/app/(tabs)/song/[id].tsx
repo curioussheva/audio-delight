@@ -21,7 +21,7 @@ export default function SongDetailScreen() {
   const { isFavorite, toggleFavorite } = useFavorites(songs);
   
   const [song, setSong] = useState<any>(null);
-  const analysis = song ? getAnalysis(song.id) : null;
+  const analysis = song ? getAnalysis(song.id) : undefined; // ← FIX: null → undefined
 
   useEffect(() => {
     const found = songs.find(s => s.id === id);
@@ -45,7 +45,7 @@ export default function SongDetailScreen() {
     <ScrollView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => {}}>
+        <TouchableOpacity>
           <Ionicons name="arrow-back" size={24} color="#F0F4F8" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Song Details</Text>
@@ -116,7 +116,7 @@ export default function SongDetailScreen() {
       )}
 
       {/* Warnings */}
-      {analysis?.warnings.length > 0 && (
+      {analysis?.warnings && analysis.warnings.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Warnings</Text>
           {analysis.warnings.map((warning, index) => (

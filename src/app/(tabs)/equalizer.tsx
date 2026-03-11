@@ -52,7 +52,7 @@ export default function EqualizerScreen() {
             key={band.frequency}
             frequency={band.frequency}
             gain={band.gain}
-            onGainChange={(gain) => updateBand(index, gain)}
+            onGainChange={(gain: number) => updateBand(index, gain)} // ← FIX: add type
           />
         ))}
       </ScrollView>

@@ -15,11 +15,11 @@ import { Song } from '@/types/audio';
 export default function LibraryScreen() {
   const { songs, loading, error, reload } = useMediaLibrary();
   const { setQueue } = usePlayerStore();
-  const { loadAndPlay } = useAudioPlayer();
+  const { loadSong } = useAudioPlayer(); // ← FIX: ganti loadAndPlay dengan loadSong
 
   const handlePlaySong = async (song: Song) => {
     setQueue(songs);
-    await loadAndPlay(song);
+    await loadSong(song); // ← FIX: panggil loadSong
   };
 
   if (loading) {

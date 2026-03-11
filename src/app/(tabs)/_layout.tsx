@@ -1,9 +1,8 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { View } from 'react-native'; // ← TAMBAHKAN IMPORT INI!
+import { View } from 'react-native';
 import { COLORS } from '@/constants/theme';
 
-// Jika menggunakan komponen TabBarIcon terpisah, pastikan juga mengimport View
 const TabBarIcon = ({ name, color, size }: { name: any; color: string; size: number }) => {
   return (
     <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>

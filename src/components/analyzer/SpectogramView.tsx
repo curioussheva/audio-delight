@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react'; // ← PASTIKAN REACT DI IMPORT
 import { View, StyleSheet, Dimensions, Text } from 'react-native';
-import { Canvas, Path, Skia, PaintStyle } from '@shopify/react-native-skia';
+import { Canvas, Path, Skia } from '@shopify/react-native-skia';
 import { AnalysisResult } from '@/services/audio/AudioAnalyzerService';
 
 interface SpectogramViewProps {
@@ -14,9 +14,9 @@ export const SpectogramView: React.FC<SpectogramViewProps> = ({
   width = Dimensions.get('window').width - 32,
   height = 200,
 }) => {
-  const [spectogramData, setSpectogramData] = useState<number[][]>([]);
+  const [spectogramData, setSpectogramData] = React.useState<number[][]>([]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (analysis?.spectogramData) {
       setSpectogramData(analysis.spectogramData);
     } else {
@@ -36,7 +36,7 @@ export const SpectogramView: React.FC<SpectogramViewProps> = ({
   const drawSpectogram = () => {
     if (!spectogramData.length) return null;
 
-    const paths: JSX.Element[] = [];
+    const paths: React.JSX.Element[] = []; // ← FIX: pakai React.JSX
     const timeSteps = spectogramData.length;
     const freqBins = spectogramData[0].length;
     const cellWidth = width / freqBins;

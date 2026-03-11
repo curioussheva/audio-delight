@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image, Dimensions } from 'react-native';
-import { usePlayerStore } from '@/store/playerStore'; // ← UBAH INI
+import { usePlayerStore } from '@/store/playerStore';
 import { useAudioPlayer } from '@/hooks/useAudioPlayer';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { PlayerControls } from './PlayerControls';
@@ -9,10 +9,10 @@ import { formatTime } from '@/utils/time';
 const { width } = Dimensions.get('window');
 
 export const NowPlaying: React.FC = () => {
-  const currentSong = usePlayerStore((state) => state.currentSong); // ← UBAH
-  const isPlaying = usePlayerStore((state) => state.isPlaying); // ← UBAH
-  const position = usePlayerStore((state) => state.position); // ← UBAH
-  const duration = usePlayerStore((state) => state.duration); // ← UBAH
+  const currentSong = usePlayerStore((state) => state.currentSong);
+  const isPlaying = usePlayerStore((state) => state.isPlaying);
+  const position = usePlayerStore((state) => state.position);
+  const duration = usePlayerStore((state) => state.duration);
   const { seek } = useAudioPlayer();
 
   if (!currentSong) {

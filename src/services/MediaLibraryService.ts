@@ -13,16 +13,24 @@ class MediaLibraryService {
 
     const media = await MediaLibrary.getAssetsAsync({
       mediaType: 'audio',
-      first: 1000, // batasi untuk MVP
+      first: 1000,
     });
 
     const songs: Song[] = media.assets.map((asset) => ({
       id: asset.id,
-      title: asset.filename.replace(/\.[^/.]+$/, ''), // hapus extension
-      artist: 'Unknown Artist', // MediaLibrary tidak menyediakan metadata artis
+      title: asset.filename.replace(/\.[^/.]+$/, ''),
+      artist: 'Unknown Artist',
+      album: '',
       duration: asset.duration || 0,
       uri: asset.uri,
       artwork: undefined,
+      format: {
+        codec: 'mp3',
+        sampleRate: 44100,
+        bitDepth: 16,
+        channels: 2,
+      },
+      dateAdded: Date.now(),
     }));
 
     return songs;
