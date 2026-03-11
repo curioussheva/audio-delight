@@ -1,7 +1,16 @@
-// src/app/(tabs)/_layout.tsx (update)
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { View } from 'react-native'; // ← TAMBAHKAN IMPORT INI!
 import { COLORS } from '@/constants/theme';
+
+// Jika menggunakan komponen TabBarIcon terpisah, pastikan juga mengimport View
+const TabBarIcon = ({ name, color, size }: { name: any; color: string; size: number }) => {
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      <Ionicons name={name} size={size} color={color} />
+    </View>
+  );
+};
 
 export default function TabsLayout() {
   return (
@@ -28,7 +37,7 @@ export default function TabsLayout() {
         options={{
           title: 'Library',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="library" size={size} color={color} />
+            <TabBarIcon name="library" size={size} color={color} />
           ),
         }}
       />
@@ -38,7 +47,7 @@ export default function TabsLayout() {
         options={{
           title: 'Playlists',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="list" size={size} color={color} />
+            <TabBarIcon name="list" size={size} color={color} />
           ),
         }}
       />
@@ -74,7 +83,7 @@ export default function TabsLayout() {
         options={{
           title: 'Equalizer',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="options" size={size} color={color} />
+            <TabBarIcon name="options" size={size} color={color} />
           ),
         }}
       />
@@ -84,7 +93,17 @@ export default function TabsLayout() {
         options={{
           title: 'Visualizer',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="analytics" size={size} color={color} />
+            <TabBarIcon name="analytics" size={size} color={color} />
+          ),
+        }}
+      />
+      
+      <Tabs.Screen
+        name="search"
+        options={{
+          title: 'Search',
+          tabBarIcon: ({ color, size }) => (
+            <TabBarIcon name="search" size={size} color={color} />
           ),
         }}
       />
