@@ -1,20 +1,25 @@
 import { Drawer } from 'expo-router/drawer';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 
-// Komponen untuk drawer yang menggunakan theme
+// Komponen untuk drawer yang menggunakan safe area
 function DrawerContent() {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets(); // ← AMBIL INSETS
   
   return (
     <Drawer
       screenOptions={{
         headerStyle: { backgroundColor: theme.colors.background.primary },
         headerTintColor: theme.colors.text.primary,
-        drawerStyle: { backgroundColor: theme.colors.background.secondary },
+        drawerStyle: { 
+          backgroundColor: theme.colors.background.secondary,
+          paddingTop: insets.top, // ← TERAPKAN SAFE AREA
+          paddingBottom: insets.bottom,
+        },
         drawerActiveTintColor: theme.colors.primary[500],
         drawerInactiveTintColor: theme.colors.text.secondary,
         drawerLabelStyle: { fontSize: 16, marginLeft: -16 },
@@ -68,7 +73,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
-        <SafeAreaProvider>
+        <SafeAreaProvider> {/* ← SUDAH BAIK */}
           <StatusBar style="light" />
           <DrawerContent />
         </SafeAreaProvider>

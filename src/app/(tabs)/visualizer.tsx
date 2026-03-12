@@ -1,205 +1,531 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
+  Dimensions,
+  Modal,
   ScrollView,
+  Alert,
 } from 'react-native';
-import Slider from '@react-native-community/slider';
 import { Ionicons } from '@expo/vector-icons';
-import { SpectrumAnalyzer } from '@/components/visualizer/SpectrumAnalyzer';
+import Slider from '@react-native-community/slider';
+import { GestureHandlerRootView, PanGestureHandler } from 'react-native-gesture-handler';
+import Animated, { 
+  useAnimatedStyle, 
+  useSharedValue,
+  withSpring,
+  runOnJS,
+} from 'react-native-reanimated';
+import { useTheme } from '@/context/ThemeContext';
 import { usePlayerStore } from '@/store/playerStore';
-import { COLORS, TYPOGRAPHY, SPACING } from '@/constants/theme';
+import { SpectrumAnalyzer } from '@/components/visualizer/SpectrumAnalyzer';
+import VisualizerService from '@/services/audio/VisualizerService';
+
+const { width, height } = Dimensions.get('window');
 
 type VisualizerMode = 'bars' | 'wave' | 'circle';
+type ColorTheme = 'default' | 'neon' | 'pastel' | 'fire' | 'ocean';
+
+interface ColorPreset {
+  name: string;
+  primary: string;
+  secondary: string;
+}
+
+const COLOR_PRESETS: Record<ColorTheme, ColorPreset> = {
+  default: { name: 'Default', primary: '#00D4AA', secondary: '#2B6EB0' },
+  neon: { name: 'Neon', primary: '#FF10F0', secondary: '#00FFFF' },
+  pastel: { name: 'Pastel', primary: '#FFB6C1', secondary: '#87CEEB' },
+  fire: { name: 'Fire', primary: '#FF4500', secondary: '#FFD700' },
+  ocean: { name: 'Ocean', primary: '#1E90FF', secondary: '#40E0D0' },
+};
 
 export default function VisualizerScreen() {
-  const { currentSong, isPlaying } = usePlayerStore();
+  const { theme } = useTheme();
+  const { colors, spacing, typography } = theme;
+  
+  // State
   const [mode, setMode] = useState<VisualizerMode>('bars');
   const [sensitivity, setSensitivity] = useState(0.5);
+  const [colorTheme, setColorTheme] = useState<ColorTheme>('default');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [fps, setFps] = useState(0);
+  const [isListening, setIsListening] = useState(false);
+  
+  // Refs
+  const frameCount = useRef(0);
+  const lastTime = useRef(Date.now());
+  
+  // Player state
+  const { currentSong, isPlaying } = usePlayerStore();
 
+  // FPS Counter
+  useEffect(() => {
+    if (!isListening) return;
+    
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const delta = now - lastTime.current;
+      const currentFps = Math.round((frameCount.current * 1000) / delta);
+      setFps(currentFps);
+      frameCount.current = 0;
+      lastTime.current = now;
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isListening]);
+
+  // Update frame count dari SpectrumAnalyzer (via callback)
+  const onFrameRendered = () => {
+    frameCount.current++;
+  };
+
+  // Toggle fullscreen dengan double tap
+  const doubleTapRef = useRef(0);
+  const handleDoubleTap = () => {
+    const now = Date.now();
+    if (now - doubleTapRef.current < 300) {
+      setIsFullscreen(!isFullscreen);
+      doubleTapRef.current = 0;
+    } else {
+      doubleTapRef.current = now;
+    }
+  };
+
+  // Handle sensitivity change
+  const handleSensitivityChange = (value: number) => {
+    setSensitivity(value);
+  };
+
+  // Toggle FPS monitor
+  const toggleFpsMonitor = () => {
+    setIsListening(!isListening);
+  };
+
+  // Reset to default
+  const resetToDefault = () => {
+    setMode('bars');
+    setSensitivity(0.5);
+    setColorTheme('default');
+    Alert.alert('✅', 'Visualizer reset ke default');
+  };
+
+  // Render mode selector
+  const renderModeSelector = () => (
+    <View style={[styles.modeSelector, { 
+      flexDirection: 'row',
+      backgroundColor: colors.background.secondary,
+      borderRadius: 25,
+      padding: spacing.xs,
+    }]}>
+      {(['bars', 'wave', 'circle'] as VisualizerMode[]).map((m) => (
+        <TouchableOpacity
+          key={m}
+          style={[
+            styles.modeButton,
+            {
+              flex: 1,
+              paddingVertical: spacing.sm,
+              alignItems: 'center',
+              borderRadius: 20,
+              backgroundColor: mode === m ? colors.primary[500] : 'transparent',
+            }
+          ]}
+          onPress={() => setMode(m)}
+        >
+          <Text style={{
+            color: mode === m ? colors.background.primary : colors.text.secondary,
+            fontWeight: mode === m ? '600' : '400',
+          }}>
+            {m.charAt(0).toUpperCase() + m.slice(1)}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
+  // Render color theme selector
+  const renderColorSelector = () => (
+    <ScrollView 
+      horizontal 
+      showsHorizontalScrollIndicator={false}
+      style={{ marginVertical: spacing.md }}
+    >
+      <View style={{ flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.md }}>
+        {(Object.keys(COLOR_PRESETS) as ColorTheme[]).map((key) => (
+          <TouchableOpacity
+            key={key}
+            style={[
+              styles.colorButton,
+              {
+                paddingHorizontal: spacing.md,
+                paddingVertical: spacing.sm,
+                borderRadius: 20,
+                backgroundColor: colorTheme === key ? COLOR_PRESETS[key].primary : colors.background.secondary,
+              }
+            ]}
+            onPress={() => setColorTheme(key)}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+              <View style={[styles.colorDot, { 
+                backgroundColor: COLOR_PRESETS[key].primary,
+                width: 12,
+                height: 12,
+                borderRadius: 6,
+              }]} />
+              <Text style={{
+                color: colorTheme === key ? colors.background.primary : colors.text.primary,
+              }}>
+                {COLOR_PRESETS[key].name}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </ScrollView>
+  );
+
+  // Main content
+  const renderVisualizer = () => {
+    const primaryColor = COLOR_PRESETS[colorTheme].primary;
+    const secondaryColor = COLOR_PRESETS[colorTheme].secondary;
+
+    return (
+      <View style={styles.visualizerWrapper}>
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={handleDoubleTap}
+          style={styles.visualizerContainer}
+        >
+          <SpectrumAnalyzer
+            width={isFullscreen ? width : width - spacing.xxl}
+            height={isFullscreen ? height / 2 : 250}
+            mode={mode}
+            sensitivity={sensitivity}
+            color={primaryColor}
+            backgroundColor={colors.background.primary}
+            onFrameRendered={onFrameRendered}
+            showCenterArt={mode === 'circle' && !!currentSong?.artwork}
+            centerArt={currentSong?.artwork}
+          />
+        </TouchableOpacity>
+
+        {/* FPS Counter (debug) */}
+        {isListening && (
+          <View style={[styles.fpsCounter, { 
+            position: 'absolute',
+            top: spacing.sm,
+            right: spacing.sm,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            paddingHorizontal: spacing.xs,
+            paddingVertical: 2,
+            borderRadius: 4,
+          }]}>
+            <Text style={{ color: colors.text.primary, fontSize: 10 }}>
+              {fps} fps
+            </Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  // Empty state
   if (!currentSong) {
     return (
-      <View style={styles.centerContainer}>
-        <Ionicons name="analytics" size={64} color={COLORS.background.tertiary} />
-        <Text style={styles.emptyText}>Putar lagu untuk melihat visualizer</Text>
+      <View style={[styles.container, { backgroundColor: colors.background.primary }]}>
+        <View style={[styles.centerContainer, { flex: 1, justifyContent: 'center', alignItems: 'center' }]}>
+          <Ionicons name="analytics-outline" size={64} color={colors.text.tertiary} />
+          <Text style={[styles.emptyText, { 
+            color: colors.text.secondary,
+            fontSize: 16,
+            marginTop: spacing.lg,
+            textAlign: 'center',
+            paddingHorizontal: spacing.xl,
+          }]}>
+            Putar lagu untuk melihat visualizer
+          </Text>
+        </View>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Visualizer</Text>
-        <View style={styles.modeButtons}>
-          {(['bars', 'wave', 'circle'] as VisualizerMode[]).map((m) => (
-            <TouchableOpacity
-              key={m}
-              style={[styles.modeButton, mode === m && styles.modeButtonActive]}
-              onPress={() => setMode(m)}
-            >
-              <Text style={[styles.modeText, mode === m && styles.modeTextActive]}>
-                {m.charAt(0).toUpperCase() + m.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
+    <GestureHandlerRootView style={[styles.container, { backgroundColor: colors.background.primary }]}>
+      {/* Header */}
+      <View style={[styles.header, { 
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.md,
+      }]}>
+        <Text style={[styles.title, { 
+          color: colors.text.primary,
+          fontSize: 28,
+          fontWeight: '700',
+        }]}>
+          Visualizer
+        </Text>
+        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+          <TouchableOpacity onPress={toggleFpsMonitor}>
+            <Ionicons 
+              name="speedometer-outline" 
+              size={24} 
+              color={isListening ? colors.primary[500] : colors.text.secondary} 
+            />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowSettings(true)}>
+            <Ionicons name="settings-outline" size={24} color={colors.text.primary} />
+          </TouchableOpacity>
         </View>
       </View>
 
-      <View style={styles.visualizerContainer}>
-        {mode === 'bars' && (
-          <SpectrumAnalyzer
-            width={350}
-            height={200}
-            barCount={32}
-            color={COLORS.primary[500]}
-            sensitivity={sensitivity}
-          />
-        )}
-        {mode === 'wave' && (
-          <SpectrumAnalyzer
-            width={350}
-            height={200}
-            barCount={64}
-            barWidth={2}
-            barSpacing={1}
-            color={COLORS.primary[500]}
-            sensitivity={sensitivity}
-          />
-        )}
-        {mode === 'circle' && (
-          <View style={styles.circlePlaceholder}>
-            <Text style={styles.comingSoon}>Coming Soon</Text>
+      {/* Main Visualizer */}
+      <View style={[styles.mainContent, { flex: 1 }]}>
+        {renderVisualizer()}
+
+        {/* Song Info */}
+        <View style={[styles.songInfo, { 
+          alignItems: 'center',
+          marginTop: spacing.lg,
+          paddingHorizontal: spacing.lg,
+        }]}>
+          <Text style={[styles.songTitle, { 
+            color: colors.text.primary,
+            fontSize: 18,
+            fontWeight: '600',
+            textAlign: 'center',
+          }]} numberOfLines={1}>
+            {currentSong.title}
+          </Text>
+          <Text style={[styles.songArtist, { 
+            color: colors.text.secondary,
+            fontSize: 14,
+            marginTop: spacing.xs,
+          }]} numberOfLines={1}>
+            {currentSong.artist}
+          </Text>
+        </View>
+      </View>
+
+      {/* Settings Modal */}
+      <Modal
+        visible={showSettings}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSettings(false)}
+      >
+        <View style={[styles.modalOverlay, { 
+          flex: 1,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          justifyContent: 'flex-end',
+        }]}>
+          <View style={[styles.modalContent, { 
+            backgroundColor: colors.background.primary,
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            padding: spacing.lg,
+          }]}>
+            {/* Header */}
+            <View style={[styles.modalHeader, { 
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: spacing.lg,
+            }]}>
+              <Text style={[styles.modalTitle, { 
+                color: colors.text.primary,
+                fontSize: 20,
+                fontWeight: '700',
+              }]}>
+                Visualizer Settings
+              </Text>
+              <TouchableOpacity onPress={() => setShowSettings(false)}>
+                <Ionicons name="close" size={24} color={colors.text.secondary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Mode Selector */}
+            <View style={{ marginBottom: spacing.lg }}>
+              <Text style={[styles.settingLabel, { 
+                color: colors.text.secondary,
+                fontSize: 14,
+                marginBottom: spacing.sm,
+              }]}>
+                Mode
+              </Text>
+              {renderModeSelector()}
+            </View>
+
+            {/* Color Theme */}
+            <View style={{ marginBottom: spacing.lg }}>
+              <Text style={[styles.settingLabel, { 
+                color: colors.text.secondary,
+                fontSize: 14,
+                marginBottom: spacing.sm,
+              }]}>
+                Color Theme
+              </Text>
+              {renderColorSelector()}
+            </View>
+
+            {/* Sensitivity */}
+            <View style={{ marginBottom: spacing.lg }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={[styles.settingLabel, { color: colors.text.secondary }]}>
+                  Sensitivity
+                </Text>
+                <Text style={{ color: colors.primary[500] }}>
+                  {sensitivity.toFixed(1)}x
+                </Text>
+              </View>
+              <Slider
+                style={{ width: '100%', height: 40 }}
+                minimumValue={0.2}
+                maximumValue={1.5}
+                step={0.1}
+                value={sensitivity}
+                onValueChange={handleSensitivityChange}
+                minimumTrackTintColor={colors.primary[500]}
+                maximumTrackTintColor={colors.background.tertiary}
+                thumbTintColor={colors.primary[500]}
+              />
+            </View>
+
+            {/* Reset Button */}
+            <TouchableOpacity
+              style={[styles.resetButton, { 
+                backgroundColor: colors.background.secondary,
+                padding: spacing.md,
+                borderRadius: 8,
+                alignItems: 'center',
+                marginBottom: spacing.md,
+              }]}
+              onPress={resetToDefault}
+            >
+              <Text style={{ color: colors.text.primary }}>Reset to Default</Text>
+            </TouchableOpacity>
+
+            {/* Fullscreen Toggle (quick) */}
+            <TouchableOpacity
+              style={[styles.fullscreenButton, { 
+                backgroundColor: colors.primary[500],
+                padding: spacing.md,
+                borderRadius: 8,
+                alignItems: 'center',
+              }]}
+              onPress={() => {
+                setIsFullscreen(!isFullscreen);
+                setShowSettings(false);
+              }}
+            >
+              <Text style={{ color: colors.background.primary }}>
+                {isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+              </Text>
+            </TouchableOpacity>
           </View>
-        )}
-      </View>
-
-      <View style={styles.controlPanel}>
-        <Text style={styles.controlLabel}>Sensitivity</Text>
-        <Slider
-          style={styles.slider}
-          minimumValue={0.2}
-          maximumValue={1.5}
-          value={sensitivity}
-          onValueChange={setSensitivity}
-          minimumTrackTintColor={COLORS.primary[500]}
-          maximumTrackTintColor={COLORS.background.tertiary}
-          thumbTintColor={COLORS.primary[500]}
-        />
-        <Text style={styles.sensitivityValue}>{sensitivity.toFixed(1)}x</Text>
-      </View>
-
-      <View style={styles.songInfo}>
-        <Text style={styles.songTitle}>{currentSong.title}</Text>
-        <Text style={styles.songArtist}>{currentSong.artist}</Text>
-      </View>
-    </View>
+        </View>
+      </Modal>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background.primary,
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: COLORS.background.primary,
-    paddingHorizontal: SPACING.xl,
-  },
-  emptyText: {
-    ...TYPOGRAPHY.body1,
-    color: COLORS.text.secondary,
-    marginTop: SPACING.lg,
-    textAlign: 'center',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: SPACING.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.background.tertiary,
   },
   title: {
-    ...TYPOGRAPHY.h2,
-    color: COLORS.text.primary,
+    fontSize: 28,
+    fontWeight: '700',
   },
-  modeButtons: {
-    flexDirection: 'row',
-    gap: SPACING.xs,
+  mainContent: {
+    flex: 1,
   },
-  modeButton: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: 16,
-    backgroundColor: COLORS.background.tertiary,
-  },
-  modeButtonActive: {
-    backgroundColor: COLORS.primary[500],
-  },
-  modeText: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.text.secondary,
-  },
-  modeTextActive: {
-    color: COLORS.background.primary,
-    fontWeight: '600',
+  visualizerWrapper: {
+    position: 'relative',
   },
   visualizerContainer: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
   },
-  circlePlaceholder: {
-    width: 250,
-    height: 250,
-    borderRadius: 125,
-    backgroundColor: COLORS.background.tertiary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  comingSoon: {
-    ...TYPOGRAPHY.body2,
-    color: COLORS.text.tertiary,
-  },
-  controlPanel: {
+  modeSelector: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.xl,
-    paddingVertical: SPACING.lg,
-    gap: SPACING.md,
+    borderRadius: 25,
   },
-  controlLabel: {
-    ...TYPOGRAPHY.body2,
-    color: COLORS.text.secondary,
-  },
-  slider: {
+  modeButton: {
     flex: 1,
-    height: 40,
+    alignItems: 'center',
   },
-  sensitivityValue: {
-    ...TYPOGRAPHY.body2,
-    color: COLORS.primary[500],
-    width: 50,
-    textAlign: 'right',
+  colorButton: {
+    borderRadius: 20,
+  },
+  colorDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
   },
   songInfo: {
-    padding: SPACING.xl,
     alignItems: 'center',
   },
   songTitle: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.text.primary,
-    marginBottom: SPACING.xs,
-    textAlign: 'center',
+    fontSize: 18,
+    fontWeight: '600',
   },
   songArtist: {
-    ...TYPOGRAPHY.body1,
-    color: COLORS.text.secondary,
+    fontSize: 14,
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 16,
     textAlign: 'center',
+  },
+  fpsCounter: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  settingLabel: {
+    fontSize: 14,
+  },
+  resetButton: {
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  fullscreenButton: {
+    borderRadius: 8,
+    alignItems: 'center',
   },
 });

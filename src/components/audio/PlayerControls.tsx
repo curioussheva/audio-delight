@@ -1,16 +1,20 @@
-import React from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+// Di src/components/audio/PlayerControls.tsx (update)
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';  // ← TAMBAHKAN Text
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { usePlayerStore } from '@/store/playerStore';
 import { useAudioPlayer } from '@/hooks/useAudioPlayer';
-import { COLORS, SPACING } from '@/constants/theme';
-
-const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
+import { useTheme } from '@/context/ThemeContext';
+import { SleepTimer } from './SleepTimer';
+import { PlaybackSpeed } from './PlaybackSpeed';
 
 export const PlayerControls: React.FC = () => {
+  const { theme } = useTheme();
+  const { colors, spacing } = theme;
   const { play, pause, skipToNext, skipToPrevious } = useAudioPlayer();
-  const { isPlaying, shuffle, repeat, toggleShuffle, toggleRepeat } = usePlayerStore();
+  const { isPlaying, shuffle, repeat, toggleShuffle, toggleRepeat } = usePlayerStore(); // ← HAPUS favorite
+  const [showMoreOptions, setShowMoreOptions] = useState(false);
 
   const playButtonStyle = useAnimatedStyle(() => ({
     transform: [{ scale: withSpring(isPlaying ? 1 : 1.1) }],
@@ -18,82 +22,103 @@ export const PlayerControls: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      {/* Shuffle */}
-      <TouchableOpacity onPress={toggleShuffle} style={styles.secondaryButton}>
-        <Ionicons
-          name="shuffle"
-          size={24}
-          color={shuffle ? COLORS.primary[500] : COLORS.text.tertiary}
-        />
-      </TouchableOpacity>
-
-      {/* Previous */}
-      <TouchableOpacity onPress={skipToPrevious} style={styles.mainButton}>
-        <Ionicons name="play-skip-back" size={32} color={COLORS.text.primary} />
-      </TouchableOpacity>
-
-      {/* Play/Pause */}
-      <AnimatedTouchable
-        onPress={isPlaying ? pause : play}
-        style={[styles.playButton, playButtonStyle]}
-      >
-        <Ionicons
-          name={isPlaying ? 'pause' : 'play'}
-          size={40}
-          color={COLORS.background.primary}
-        />
-      </AnimatedTouchable>
-
-      {/* Next */}
-      <TouchableOpacity onPress={skipToNext} style={styles.mainButton}>
-        <Ionicons name="play-skip-forward" size={32} color={COLORS.text.primary} />
-      </TouchableOpacity>
-
-      {/* Repeat */}
-      <View style={styles.repeatContainer}>
-        <TouchableOpacity onPress={toggleRepeat} style={styles.secondaryButton}>
+      {/* Main controls */}
+      <View style={[styles.mainControls, { gap: spacing.lg }]}>
+        <TouchableOpacity onPress={toggleShuffle}>
           <Ionicons
-            name={repeat === 'track' ? 'repeat' : repeat === 'all' ? 'repeat' : 'repeat-outline'}
+            name="shuffle"
             size={24}
-            color={repeat !== 'off' ? COLORS.primary[500] : COLORS.text.tertiary}
+            color={shuffle ? colors.primary[500] : colors.text.secondary}
           />
         </TouchableOpacity>
-        {repeat === 'track' && <View style={styles.repeatOneIndicator} />}
+
+        <TouchableOpacity onPress={skipToPrevious}>
+          <Ionicons name="play-skip-back" size={32} color={colors.text.primary} />
+        </TouchableOpacity>
+
+        <Animated.View style={[styles.playButton, playButtonStyle, { backgroundColor: colors.primary[500] }]}>
+          <TouchableOpacity onPress={isPlaying ? pause : play}>
+            <Ionicons
+              name={isPlaying ? 'pause' : 'play'}
+              size={40}
+              color={colors.background.primary}
+            />
+          </TouchableOpacity>
+        </Animated.View>
+
+        <TouchableOpacity onPress={skipToNext}>
+          <Ionicons name="play-skip-forward" size={32} color={colors.text.primary} />
+        </TouchableOpacity>
+
+        <View style={{ position: 'relative' }}>
+          <TouchableOpacity onPress={() => toggleRepeat()}>
+            <Ionicons
+              name={repeat === 'track' ? 'repeat' : repeat === 'all' ? 'repeat' : 'repeat-outline'}
+              size={24}
+              color={repeat !== 'off' ? colors.primary[500] : colors.text.secondary}
+            />
+          </TouchableOpacity>
+          {repeat === 'track' && (
+            <View style={[styles.repeatOneIndicator, { backgroundColor: colors.primary[500] }]} />
+          )}
+        </View>
       </View>
+
+      {/* Secondary controls - HAPUS FAVORITE SEMENTARA */}
+      <View style={[styles.secondaryControls, { gap: spacing.lg }]}>
+        <TouchableOpacity>
+          <Ionicons name="heart-outline" size={24} color={colors.text.secondary} />
+        </TouchableOpacity>
+
+        <TouchableOpacity>
+          <Ionicons name="add-circle-outline" size={24} color={colors.text.secondary} />
+        </TouchableOpacity>
+
+        <TouchableOpacity>
+          <Ionicons name="download-outline" size={24} color={colors.text.secondary} />
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={() => setShowMoreOptions(true)}>
+          <Ionicons name="ellipsis-horizontal" size={24} color={colors.text.secondary} />
+        </TouchableOpacity>
+      </View>
+
+      {/* More options modal - SEDERHANAKAN SEMENTARA */}
+      <Modal
+        visible={showMoreOptions}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowMoreOptions(false)}
+      >
+        <TouchableOpacity 
+          style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
+          activeOpacity={1}
+          onPress={() => setShowMoreOptions(false)}
+        >
+          <View style={[styles.modalContent, { backgroundColor: colors.background.primary }]}>
+            <Text style={{ color: colors.text.primary, padding: spacing.md }}>More options coming soon...</Text>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
+    // style di-inline
+  },
+  mainControls: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: SPACING.xl,
-    paddingVertical: SPACING.lg,
-    gap: SPACING.lg,
   },
   playButton: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: COLORS.primary[500],
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: COLORS.primary[500],
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  mainButton: {
-    padding: SPACING.sm,
-  },
-  secondaryButton: {
-    padding: SPACING.xs,
-  },
-  repeatContainer: {
-    position: 'relative',
   },
   repeatOneIndicator: {
     position: 'absolute',
@@ -102,6 +127,22 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: COLORS.primary[500],
+  },
+  secondaryControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '80%',
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
   },
 });

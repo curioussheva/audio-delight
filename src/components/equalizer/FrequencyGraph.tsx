@@ -1,26 +1,22 @@
+// src/components/equalizer/FrequencyGraph.tsx
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { useTheme } from '@/context/ThemeContext';
 import { EqualizerBand } from '@/types/equalizer';
 
 interface FrequencyGraphProps {
   bands: EqualizerBand[];
+  height?: number;
 }
 
-export const FrequencyGraph: React.FC<FrequencyGraphProps> = ({ bands }) => {
-  const { theme } = useTheme();
-  const { colors, spacing } = theme;
-
+export const FrequencyGraph: React.FC<FrequencyGraphProps> = ({ bands, height = 100 }) => {
   return (
-    <View style={[styles.container, { 
-      backgroundColor: colors.background.secondary,
-      marginVertical: spacing.md,
-    }]} />
+    <View style={[styles.container, { height }]} />
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    height: 100,
+    backgroundColor: '#1F2A3A',
+    borderRadius: 8,
   },
 });

@@ -1,4 +1,5 @@
 export interface EqualizerBand {
+  id?: number;
   frequency: number;
   gain: number;
   q?: number;
@@ -8,6 +9,23 @@ export interface EqualizerBand {
 export interface EqualizerPreset {
   name: string;
   bands: EqualizerBand[];
+}
+
+export interface Preset {
+  id: string;
+  name: string;
+  description?: string;
+  isPremium?: boolean;
+  bands: EqualizerBand[];
+}
+
+export interface EqualizerStore {
+  bands: EqualizerBand[];
+  activePresetId: string;
+  isEQEnabled: boolean;
+  applyPreset: (presetId: string) => void;
+  setBandGain: (index: number, gain: number) => void;
+  setEQEnabled: (enabled: boolean) => void;
 }
 
 export const EQ_PRESETS: Record<string, EqualizerBand[]> = {
@@ -72,3 +90,10 @@ export const EQ_PRESETS: Record<string, EqualizerBand[]> = {
     { frequency: 16000, gain: -2 },
   ],
 };
+
+export const EQ_FREQUENCIES = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+export const EQ_BAND_TYPES: Array<'peaking' | 'lowshelf' | 'highshelf'> = [
+  'lowshelf', 'peaking', 'peaking', 'peaking', 'peaking',
+  'peaking', 'peaking', 'peaking', 'peaking', 'highshelf'
+];
+export const DEFAULT_Q = 1.414;

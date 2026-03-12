@@ -1,21 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Alert,
   Switch,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/context/ThemeContext';
+import { useEqualizer } from '@/hooks/useEqualizer';
 import { EqualizerBand } from '@/components/equalizer/EqualizerBand';
 import { FrequencyGraph } from '@/components/equalizer/FrequencyGraph';
-import { useEqualizer } from '@/hooks/useEqualizer';
+import { SavePresetModal } from '@/components/equalizer/SavePresetModal';
+import { ALL_PRESETS } from '@/constants/equalizerPresets';
+import { Preset } from '@/types/equalizer';
+import { loadCustomPresets, deleteCustomPreset } from '@/services/PresetStorage';
 
 export default function EqualizerScreen() {
   const { theme } = useTheme();
   const { colors, spacing, typography } = theme;
-
+  
+  // Hooks
   const {
     bands,
     isActive,
@@ -26,108 +34,215 @@ export default function EqualizerScreen() {
     presets,
   } = useEqualizer();
 
-  const [showPresets, setShowPresets] = useState(false);
+  // State
+  const [saveVisible, setSaveVisible] = useState(false);
+  const [customPresets, setCustomPresets] = useState<Preset[]>([]);
+  const [activePresetId, setActivePresetId] = useState<string>('flat');
+
+  // Load custom presets
+  const reloadCustomPresets = useCallback(async () => {
+    const loaded = await loadCustomPresets();
+    setCustomPresets(loaded);
+  }, []);
+
+  useEffect(() => {
+    reloadCustomPresets();
+  }, []);
+
+  // Combine all presets
+  const allPresets = [...ALL_PRESETS, ...customPresets];
+
+  // Handle preset selection
+  const handleApplyPreset = (preset: Preset) => {
+    Haptics.selectionAsync();
+    applyPreset(preset.name.toLowerCase() as any);
+    setActivePresetId(preset.id);
+  };
+
+  // Handle delete custom preset
+  const handleDeletePreset = (preset: Preset) => {
+    Alert.alert(
+      'Hapus Preset',
+      `Yakin ingin menghapus "${preset.name}"?`,
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Hapus',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteCustomPreset(preset.id);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            reloadCustomPresets();
+          },
+        },
+      ]
+    );
+  };
+
+  // Handle save new preset
+  const handleSavePreset = (name: string) => {
+    reloadCustomPresets();
+    Alert.alert('✅', `Preset "${name}" disimpan`);
+  };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background.primary }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background.primary }]}>
       {/* Header */}
       <View style={[styles.header, { 
-        borderBottomColor: colors.background.tertiary,
-        padding: spacing.lg,
+        paddingHorizontal: spacing.lg,
+        paddingTop: spacing.sm,
+        paddingBottom: spacing.xs,
       }]}>
-        <Text style={[styles.title, { color: colors.text.primary }]}>Equalizer</Text>
-        <View style={[styles.headerRight, { gap: spacing.sm }]}>
-          <Text style={[styles.activeText, { color: colors.text.secondary }]}>
-            {isActive ? 'Aktif' : 'Nonaktif'}
-          </Text>
+        <Text style={[styles.title, { 
+          color: colors.text.primary,
+          fontSize: 24,
+          fontWeight: '800',
+        }]}>
+          Equalizer
+        </Text>
+        
+        <View style={[styles.headerRight, { 
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: spacing.sm,
+        }]}>
           <Switch
             value={isActive}
-            onValueChange={toggleEQ}
+            onValueChange={(value) => {
+              Haptics.selectionAsync();
+              toggleEQ();
+            }}
             trackColor={{ 
               false: colors.background.tertiary, 
-              true: colors.primary[500] 
+              true: colors.primary[500] + '80' 
             }}
-            thumbColor={isActive ? colors.text.primary : colors.text.tertiary}
+            thumbColor={isActive ? colors.primary[500] : colors.text.tertiary}
           />
+          
+          <TouchableOpacity 
+            style={[styles.saveBtn, { 
+              backgroundColor: colors.primary[500],
+              paddingHorizontal: spacing.md,
+              paddingVertical: spacing.xs,
+              borderRadius: 20,
+            }]} 
+            onPress={() => setSaveVisible(true)}
+          >
+            <Text style={[styles.saveBtnText, { 
+              fontSize: 12,
+              color: colors.background.primary,
+              fontWeight: '700',
+            }]}>
+              + Simpan
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
-      {/* Frequency Response Graph */}
-      <FrequencyGraph bands={bands} />
-
-      {/* EQ Bands */}
-      <ScrollView style={[styles.bandsContainer, { paddingHorizontal: spacing.md }]}>
-        {bands.map((band, index) => (
-          <EqualizerBand
-            key={band.frequency}
-            frequency={band.frequency}
-            gain={band.gain}
-            onGainChange={(gain: number) => updateBand(index, gain)}
-          />
-        ))}
-      </ScrollView>
+      {/* Frequency Graph */}
+      <View style={[styles.graphContainer, { 
+        marginHorizontal: spacing.lg,
+        marginBottom: spacing.sm,
+        padding: spacing.sm,
+        backgroundColor: colors.background.secondary,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: colors.background.tertiary,
+      }]}>
+        <FrequencyGraph bands={bands} height={80} />
+      </View>
 
       {/* Presets */}
-      <View style={[styles.presetsSection, { 
-        borderTopColor: colors.background.tertiary,
-        padding: spacing.lg,
-      }]}>
-        <TouchableOpacity
-          style={styles.presetsHeader}
-          onPress={() => setShowPresets(!showPresets)}
-        >
-          <Text style={[styles.presetsTitle, { color: colors.text.primary }]}>
-            Presets
-          </Text>
-          <Text style={[styles.presetsArrow, { color: colors.text.secondary }]}>
-            {showPresets ? '▼' : '▶'}
-          </Text>
-        </TouchableOpacity>
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false} 
+        contentContainerStyle={[styles.presetsContainer, { 
+          paddingHorizontal: spacing.lg,
+          paddingBottom: spacing.sm,
+          gap: spacing.xs,
+        }]}
+      >
+        {allPresets.map((preset) => {
+          const isActive = preset.id === activePresetId;
+          const isCustom = preset.id.startsWith('custom_');
+          
+          return (
+            <TouchableOpacity
+              key={preset.id}
+              style={[
+                styles.presetChip,
+                {
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingHorizontal: spacing.md,
+                  paddingVertical: spacing.xs,
+                  borderRadius: 20,
+                  borderWidth: 1,
+                  borderColor: isActive 
+                    ? colors.primary[500] 
+                    : isCustom 
+                      ? colors.primary[500] + '40' 
+                      : colors.background.tertiary,
+                  backgroundColor: isActive 
+                    ? colors.primary[500] 
+                    : 'transparent',
+                }
+              ]}
+              onPress={() => handleApplyPreset(preset)}
+              onLongPress={() => isCustom && handleDeletePreset(preset)}
+              activeOpacity={0.7}
+            >
+              {isCustom && (
+                <Text style={[styles.presetStar, { 
+                  fontSize: 12,
+                  color: '#FFB84D',
+                  marginRight: 2,
+                }]}>
+                  ★
+                </Text>
+              )}
+              <Text style={[
+                styles.presetText,
+                {
+                  fontSize: 12,
+                  fontWeight: isActive ? '700' : '400',
+                  color: isActive 
+                    ? colors.background.primary 
+                    : colors.text.secondary,
+                }
+              ]}>
+                {preset.name}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
 
-        {showPresets && (
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false} 
-            style={[styles.presetsScroll, { marginTop: spacing.md }]}
-          >
-            <View style={[styles.presetsGrid, { 
-              paddingHorizontal: spacing.md,
-              gap: spacing.sm,
-            }]}>
-              {presets.map((preset) => (
-                <TouchableOpacity
-                  key={preset}
-                  style={[
-                    styles.presetButton,
-                    {
-                      paddingHorizontal: spacing.lg,
-                      paddingVertical: spacing.sm,
-                      backgroundColor: presetName === preset 
-                        ? colors.primary[500] 
-                        : colors.background.tertiary,
-                    },
-                  ]}
-                  onPress={() => applyPreset(preset)}
-                >
-                  <Text
-                    style={{
-                      fontSize: typography.button.fontSize,
-                      fontWeight: typography.button.fontWeight as any,
-                      lineHeight: typography.button.lineHeight,
-                      color: presetName === preset 
-                        ? colors.background.primary 
-                        : colors.text.secondary,
-                    }}
-                  >
-                    {preset.charAt(0).toUpperCase() + preset.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </ScrollView>
-        )}
+      {/* EQ Sliders */}
+      <View style={styles.slidersContainer}>
+        <ScrollView style={{ flex: 1 }}>
+          {bands.map((band, index) => (
+            <EqualizerBand
+              key={band.frequency}
+              frequency={band.frequency}
+              gain={band.gain}
+              onGainChange={(gain) => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                updateBand(index, gain);
+              }}
+            />
+          ))}
+        </ScrollView>
       </View>
-    </View>
+
+      {/* Save Preset Modal */}
+      <SavePresetModal
+        visible={saveVisible}
+        onClose={() => setSaveVisible(false)}
+        onSaved={handleSavePreset}
+        currentBands={bands}
+      />
+    </SafeAreaView>
   );
 }
 
@@ -139,44 +254,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderBottomWidth: 1,
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: '800',
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  activeText: {
-    fontSize: 14,
+  saveBtn: {
+    borderRadius: 20,
   },
-  bandsContainer: {
-    flex: 1,
+  saveBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
-  presetsSection: {
-    borderTopWidth: 1,
-  },
-  presetsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  presetsTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  presetsArrow: {
-    fontSize: 16,
-  },
-  presetsScroll: {
+  graphContainer: {
     // style di-inline
   },
-  presetsGrid: {
+  presetsContainer: {
     flexDirection: 'row',
   },
-  presetButton: {
-    borderRadius: 24,
+  presetChip: {
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  presetStar: {
+    fontSize: 12,
+  },
+  presetText: {
+    fontSize: 12,
+  },
+  slidersContainer: {
+    flex: 1,
   },
 });

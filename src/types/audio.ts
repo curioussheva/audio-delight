@@ -1,13 +1,27 @@
 export interface Song {
   id: string;
-  uri: string;
   title: string;
   artist: string;
   album: string;
+  duration: number;
+  uri: string;
   artwork?: string;
-  duration: number; // in seconds
-  format: AudioFormat;
+  format: {
+    codec: string;
+    sampleRate: number;
+    bitDepth: number;
+    bitrate?: number; // Tambahkan bitrate
+  };
   dateAdded: number;
+  dateModified?: number;
+  year?: number;
+  genre?: string;
+  trackNumber?: number;
+  discNumber?: number;
+  composer?: string;
+  rating?: number; // 1-5
+  playCount?: number;
+  lastPlayed?: number;
 }
 
 export interface AudioFormat {
