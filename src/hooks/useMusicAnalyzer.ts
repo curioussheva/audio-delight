@@ -1,3 +1,4 @@
+// src/hooks/useMusicAnalyzer.ts
 import { useState, useCallback } from 'react';
 import MusicMetadataService, { MusicAnalysisResult } from '@/services/audio/MusicMetadataService';
 import { Song } from '@/types/audio';
@@ -23,31 +24,6 @@ export const useMusicAnalyzer = () => {
     }
   }, []);
 
-  const analyzeBatch = useCallback(async (songs: Song[]) => {
-    setAnalyzing(true);
-    setError(null);
-    
-    try {
-      const uris = songs.map(s => s.uri);
-      const batchResults = await MusicMetadataService.analyzeBatch(uris);
-      
-      const newMap = new Map();
-      songs.forEach((song, index) => {
-        if (batchResults[index]) {
-          newMap.set(song.id, batchResults[index]);
-        }
-      });
-      
-      setResults(newMap);
-      return batchResults;
-    } catch (err: any) {
-      setError(err.message);
-      throw err;
-    } finally {
-      setAnalyzing(false);
-    }
-  }, []);
-
   const getAnalysis = useCallback((songId: string) => {
     return results.get(songId);
   }, [results]);
@@ -60,7 +36,6 @@ export const useMusicAnalyzer = () => {
     analyzing,
     error,
     analyzeSong,
-    analyzeBatch,
     getAnalysis,
     clearAnalysis,
   };

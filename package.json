@@ -51,7 +51,6 @@
     "fft-js": "^0.0.12",
     "immer": "^11.1.4",
     "jimp": "0.16.1",
-    "music-metadata": "^11.12.2",
     "react": "19.1.0",
     "react-native": "0.81.5",
     "react-native-draggable-flatlist": "^4.0.3",

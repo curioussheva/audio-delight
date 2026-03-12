@@ -196,20 +196,20 @@ export default function SongDetailScreen() {
               </View>
             )}
             
-            {analysis.metadata.genre.length > 0 && (
-              <View style={[styles.detailRow, { 
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                paddingVertical: spacing.xs,
-              }]}>
-                <Text style={[styles.detailLabel, { color: colors.text.secondary }]}>
-                  Genre
-                </Text>
-                <Text style={[styles.detailValue, { color: colors.text.primary }]}>
-                  {analysis.metadata.genre.join(', ')}
-                </Text>
-              </View>
-            )}
+{analysis.metadata.genre && analysis.metadata.genre.length > 0 && (
+  <View style={[styles.detailRow, { 
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.xs,
+  }]}>
+    <Text style={[styles.detailLabel, { color: colors.text.secondary }]}>
+      Genre
+    </Text>
+    <Text style={[styles.detailValue, { color: colors.text.primary }]}>
+      {analysis.metadata.genre.join(', ')}
+    </Text>
+  </View>
+)}
           </View>
 
           {/* Technical Info */}
