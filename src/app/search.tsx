@@ -1,5 +1,6 @@
 // src/app/search.tsx
 import React, { useState, useMemo } from 'react';
+import { Song } from '@/types/audio';
 import {
   View,
   Text,
@@ -10,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
-import { useMediaLibrary } from '@/hooks/useMediaLibrary';
+import { useLibrary } from '@/hooks/useLibrary';
 import { usePlayerStore } from '@/store/playerStore';
 import { useAudioPlayer } from '@/hooks/useAudioPlayer';
 import { formatTime } from '@/utils/time';
@@ -19,11 +20,15 @@ export default function SearchScreen() {
   const { theme } = useTheme();
   const { colors, spacing } = theme;
   
-  const { songs } = useMediaLibrary();
+  const { songs } = useLibrary();
   const { setQueue } = usePlayerStore();
   const { loadSong } = useAudioPlayer();
   
   const [query, setQuery] = useState('');
+  const filteredSongs = songs.filter((song: Song) => { // Tambahkan tipe Song
+  return song.title.toLowerCase().includes(query.toLowerCase());
+});
+
   const [filterBy, setFilterBy] = useState<'all' | 'title' | 'artist' | 'album'>('all');
 
   const results = useMemo(() => {

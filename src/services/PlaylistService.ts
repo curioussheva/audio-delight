@@ -6,33 +6,38 @@ const db = SQLite.openDatabaseSync('pristineaudio.db');
 
 class PlaylistService {
   async initialize() {
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS playlists (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        description TEXT,
-        createdAt INTEGER NOT NULL,
-        updatedAt INTEGER NOT NULL,
-        artwork TEXT,
-        songCount INTEGER DEFAULT 0,
-        duration INTEGER DEFAULT 0
-      );
+  // 1. Aktifkan Foreign Keys terlebih dahulu
+  await db.execAsync('PRAGMA foreign_keys = ON;');
 
-      CREATE TABLE IF NOT EXISTS playlist_songs (
-        playlistId TEXT NOT NULL,
-        songId TEXT NOT NULL,
-        position INTEGER NOT NULL,
-        FOREIGN KEY (playlistId) REFERENCES playlists (id) ON DELETE CASCADE,
-        PRIMARY KEY (playlistId, songId)
-      );
+  // 2. Jalankan pembuatan tabel dalam satu blok transaksi
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS playlists (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL,
+      artwork TEXT,
+      songCount INTEGER DEFAULT 0,
+      duration INTEGER DEFAULT 0
+    );
 
-      CREATE INDEX IF NOT EXISTS idx_playlist_songs_playlistId ON playlist_songs(playlistId);
-      CREATE INDEX IF NOT EXISTS idx_playlist_songs_songId ON playlist_songs(songId);
-    `);
-    
-    // Inisialisasi tabel songs jika belum ada
-    await this.initializeSongsTable();
-  }
+    CREATE TABLE IF NOT EXISTS playlist_songs (
+      playlistId TEXT NOT NULL,
+      songId TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      FOREIGN KEY (playlistId) REFERENCES playlists (id) ON DELETE CASCADE,
+      PRIMARY KEY (playlistId, songId)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_playlist_songs_playlistId ON playlist_songs(playlistId);
+    CREATE INDEX IF NOT EXISTS idx_playlist_songs_songId ON playlist_songs(songId);
+  `);
+  
+  // 3. Inisialisasi tabel songs
+  await this.initializeSongsTable();
+}
+
 
   private async initializeSongsTable() {
     await db.execAsync(`
@@ -224,10 +229,13 @@ class PlaylistService {
   }
 
   async addSongs(songs: Song[]): Promise<void> {
+  await db.withTransactionAsync(async () => {
     for (const song of songs) {
       await this.addSong(song);
     }
-  }
+  });
+}
+
 
   async getAllSongs(): Promise<Song[]> {
     const songs = await db.getAllAsync<any>('SELECT * FROM songs ORDER BY title');

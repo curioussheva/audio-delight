@@ -1,4 +1,3 @@
-// src/app/(tabs)/song/[id].tsx
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -11,29 +10,34 @@ import {
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
-import { useMediaLibrary } from '@/hooks/useMediaLibrary';
-import { useMusicAnalyzer } from '@/hooks/useMusicAnalyzer';
+import { useLibrary } from '@/hooks/useLibrary';
+// Perhatikan: Pastikan file ini ada atau buat deklarasi di globals.d.ts seperti langkah sebelumnya
+import { useMusicAnalyzer } from '@/hooks/useMusicAnalyzer'; 
 import { useFavorites } from '@/hooks/useFavorites';
-import { QualityBadge } from '@/components/analyzer/QualityBadge';
-import MusicMetadataService from '@/services/audio/MusicMetadataService';
+import QualityBadge from '@/components/ui/QualityBadge';
+import { Song } from '@/types/audio';
 
 export default function SongDetailScreen() {
   const { id } = useLocalSearchParams();
   const { theme } = useTheme();
   const { colors, spacing } = theme;
   
-  const { songs } = useMediaLibrary();
+  const { songs } = useLibrary();
   const { getAnalysis, analyzeSong, analyzing } = useMusicAnalyzer();
   const { isFavorite, toggleFavorite } = useFavorites(songs);
   
-  const [song, setSong] = useState<any>(null);
-  const analysis = song ? getAnalysis(song.id) : undefined;
+  const [song, setSong] = useState<Song | null>(null);
+  
+  // Gunakan type casting 'any' sementara untuk hasil analisis jika interface belum lengkap
+  const analysis = song ? (getAnalysis(song.id) as any) : undefined;
 
   useEffect(() => {
-    const found = songs.find(s => s.id === id);
-    setSong(found);
-    if (found && !getAnalysis(found.id)) {
-      analyzeSong(found);
+    const found = songs.find((s: Song) => s.id === id);
+    if (found) {
+      setSong(found);
+      if (!getAnalysis(found.id)) {
+        analyzeSong(found);
+      }
     }
   }, [id, songs]);
 
@@ -47,13 +51,18 @@ export default function SongDetailScreen() {
 
   const favorite = isFavorite(song.id);
 
+  const formatBitrate = (br?: number) => br ? `${br} kbps` : '---';
+  
+  const formatDuration = (sec: number) => {
+    const mins = Math.floor(sec / 60);
+    const secs = Math.floor(sec % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.background.primary }]}>
       {/* Header */}
       <View style={[styles.header, { 
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
         padding: spacing.md,
         borderBottomWidth: 1,
         borderBottomColor: colors.background.tertiary,
@@ -62,7 +71,7 @@ export default function SongDetailScreen() {
           <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text.primary }]}>
-          Song Details
+          AUDIO ANALYSIS
         </Text>
         <TouchableOpacity onPress={() => toggleFavorite(song.id)}>
           <Ionicons 
@@ -73,423 +82,110 @@ export default function SongDetailScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Song Info */}
-      <View style={[styles.infoContainer, { 
-        padding: spacing.xl,
-        alignItems: 'center',
-      }]}>
-        <Text style={[styles.title, { 
-          color: colors.text.primary,
-          fontSize: 24,
-          fontWeight: '700',
-          textAlign: 'center',
-          marginBottom: spacing.xs,
-        }]}>
+      {/* Song Info Header */}
+      <View style={[styles.infoContainer, { padding: spacing.xl }]}>
+        <Text style={[styles.title, { color: colors.text.primary }]}>
           {song.title}
         </Text>
-        <Text style={[styles.artist, { 
-          color: colors.text.secondary,
-          fontSize: 18,
-          marginBottom: spacing.xs,
-        }]}>
+        <Text style={[styles.artist, { color: colors.text.secondary }]}>
           {song.artist}
         </Text>
-        {song.album && (
-          <Text style={[styles.album, { 
-            color: colors.primary[500],
-            fontSize: 16,
-          }]}>
-            {song.album}
-          </Text>
-        )}
+        
+        <View style={{ marginTop: spacing.md }}>
+          {/* PERBAIKAN: Kirim props langsung, bukan lewat objek 'quality' */}
+          <QualityBadge 
+            sampleRate={song.sampleRate}
+            bitDepth={song.bitDepth}
+            codec={song.codec || (song as any).format?.codec}
+            isHiRes={song.sampleRate ? song.sampleRate > 48000 : false}
+          />
+        </View>
       </View>
 
-      {/* Analysis Section */}
-      {analyzing && (
+      {/* Real-time Analysis Result */}
+      {analyzing ? (
         <View style={{ padding: spacing.xl, alignItems: 'center' }}>
-          <ActivityIndicator size="large" color={colors.primary[500]} />
+          <ActivityIndicator size="small" color={colors.primary[500]} />
           <Text style={{ color: colors.text.secondary, marginTop: spacing.md }}>
-            Menganalisis audio...
+            Deep scanning audio peaks...
           </Text>
         </View>
-      )}
+      ) : analysis ? (
+        <View style={styles.sectionContainer}>
+           {/* Technical Specs Card */}
+           <View style={[styles.card, { backgroundColor: colors.background.secondary }]}>
+              <Text style={[styles.cardTitle, { color: colors.text.primary }]}>Technical Info</Text>
+              
+              <DetailRow label="Codec" value={(song.codec || (song as any).format?.codec || 'Unknown').toUpperCase()} color={colors} />
+              <DetailRow label="Sample Rate" value={`${(song.sampleRate || 0) / 1000} kHz`} color={colors} />
+              <DetailRow label="Bit Depth" value={`${song.bitDepth || 16}-bit`} color={colors} />
+              <DetailRow label="Bitrate" value={formatBitrate(song.bitrate || (song as any).format?.bitrate)} color={colors} />
+              <DetailRow label="Duration" value={formatDuration(song.duration)} color={colors} />
+           </View>
 
-      {analysis && !analyzing && (
-        <>
-          {/* Quality Badge */}
-          <View style={{ paddingHorizontal: spacing.lg, marginBottom: spacing.lg }}>
-            <QualityBadge 
-              badge={analysis.quality.qualityBadge}
-              score={analysis.quality.qualityScore}
-              size="large"
-            />
-          </View>
+           {/* Spectral Analysis Card */}
+           <View style={[styles.card, { backgroundColor: colors.background.secondary, marginTop: spacing.md }]}>
+              <Text style={[styles.cardTitle, { color: colors.text.primary }]}>Spectral Integrity</Text>
+              <DetailRow 
+                label="Peak Frequency" 
+                value={`${analysis.quality?.spectralCutoff || '---'} Hz`} 
+                color={colors} 
+              />
+              <DetailRow 
+                label="Dynamic Range" 
+                value={`${analysis.quality?.dynamicRange?.toFixed(1) || '---'} dB`} 
+                color={colors} 
+              />
+           </View>
+        </View>
+      ) : null}
 
-          {/* Metadata Section */}
-          <View style={[styles.section, { 
-            marginHorizontal: spacing.lg,
-            marginBottom: spacing.lg,
-            backgroundColor: colors.background.secondary,
-            borderRadius: 12,
-            padding: spacing.md,
-          }]}>
-            <Text style={[styles.sectionTitle, { 
-              color: colors.text.primary,
-              fontSize: 18,
-              fontWeight: '600',
-              marginBottom: spacing.md,
-            }]}>
-              Metadata
-            </Text>
-            
-            <View style={[styles.detailRow, { 
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              paddingVertical: spacing.xs,
-            }]}>
-              <Text style={[styles.detailLabel, { color: colors.text.secondary }]}>
-                Title
-              </Text>
-              <Text style={[styles.detailValue, { color: colors.text.primary }]}>
-                {analysis.metadata.title}
-              </Text>
-            </View>
-            
-            <View style={[styles.detailRow, { 
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              paddingVertical: spacing.xs,
-            }]}>
-              <Text style={[styles.detailLabel, { color: colors.text.secondary }]}>
-                Artist
-              </Text>
-              <Text style={[styles.detailValue, { color: colors.text.primary }]}>
-                {analysis.metadata.artist}
-              </Text>
-            </View>
-            
-            <View style={[styles.detailRow, { 
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              paddingVertical: spacing.xs,
-            }]}>
-              <Text style={[styles.detailLabel, { color: colors.text.secondary }]}>
-                Album
-              </Text>
-              <Text style={[styles.detailValue, { color: colors.text.primary }]}>
-                {analysis.metadata.album}
-              </Text>
-            </View>
-            
-            {analysis.metadata.year > 0 && (
-              <View style={[styles.detailRow, { 
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                paddingVertical: spacing.xs,
-              }]}>
-                <Text style={[styles.detailLabel, { color: colors.text.secondary }]}>
-                  Year
-                </Text>
-                <Text style={[styles.detailValue, { color: colors.text.primary }]}>
-                  {analysis.metadata.year}
-                </Text>
-              </View>
-            )}
-            
-{analysis.metadata.genre && analysis.metadata.genre.length > 0 && (
-  <View style={[styles.detailRow, { 
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.xs,
-  }]}>
-    <Text style={[styles.detailLabel, { color: colors.text.secondary }]}>
-      Genre
-    </Text>
-    <Text style={[styles.detailValue, { color: colors.text.primary }]}>
-      {analysis.metadata.genre.join(', ')}
-    </Text>
-  </View>
-)}
-          </View>
-
-          {/* Technical Info */}
-          <View style={[styles.section, { 
-            marginHorizontal: spacing.lg,
-            marginBottom: spacing.lg,
-            backgroundColor: colors.background.secondary,
-            borderRadius: 12,
-            padding: spacing.md,
-          }]}>
-            <Text style={[styles.sectionTitle, { 
-              color: colors.text.primary,
-              fontSize: 18,
-              fontWeight: '600',
-              marginBottom: spacing.md,
-            }]}>
-              Technical Info
-            </Text>
-            
-            <View style={[styles.detailRow, { 
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              paddingVertical: spacing.xs,
-            }]}>
-              <Text style={[styles.detailLabel, { color: colors.text.secondary }]}>
-                Format
-              </Text>
-              <Text style={[styles.detailValue, { color: colors.text.primary }]}>
-                {analysis.technical.format} • {analysis.technical.lossless ? 'Lossless' : 'Lossy'}
-              </Text>
-            </View>
-            
-            <View style={[styles.detailRow, { 
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              paddingVertical: spacing.xs,
-            }]}>
-              <Text style={[styles.detailLabel, { color: colors.text.secondary }]}>
-                Sample Rate
-              </Text>
-              <Text style={[styles.detailValue, { color: colors.text.primary }]}>
-                {analysis.technical.sampleRate / 1000} kHz
-              </Text>
-            </View>
-            
-            <View style={[styles.detailRow, { 
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              paddingVertical: spacing.xs,
-            }]}>
-              <Text style={[styles.detailLabel, { color: colors.text.secondary }]}>
-                Bit Depth
-              </Text>
-              <Text style={[styles.detailValue, { color: colors.text.primary }]}>
-                {analysis.technical.bitDepth}-bit
-              </Text>
-            </View>
-            
-            <View style={[styles.detailRow, { 
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              paddingVertical: spacing.xs,
-            }]}>
-              <Text style={[styles.detailLabel, { color: colors.text.secondary }]}>
-                Bitrate
-              </Text>
-              <Text style={[styles.detailValue, { color: colors.text.primary }]}>
-                {MusicMetadataService.formatBitrate(analysis.technical.bitrate)}
-              </Text>
-            </View>
-            
-            <View style={[styles.detailRow, { 
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              paddingVertical: spacing.xs,
-            }]}>
-              <Text style={[styles.detailLabel, { color: colors.text.secondary }]}>
-                Channels
-              </Text>
-              <Text style={[styles.detailValue, { color: colors.text.primary }]}>
-                {analysis.technical.channels} ({analysis.technical.channelMode})
-              </Text>
-            </View>
-            
-            <View style={[styles.detailRow, { 
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              paddingVertical: spacing.xs,
-            }]}>
-              <Text style={[styles.detailLabel, { color: colors.text.secondary }]}>
-                Duration
-              </Text>
-              <Text style={[styles.detailValue, { color: colors.text.primary }]}>
-                {MusicMetadataService.formatDuration(analysis.technical.duration)}
-              </Text>
-            </View>
-            
-            {analysis.technical.encoder && (
-              <View style={[styles.detailRow, { 
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                paddingVertical: spacing.xs,
-              }]}>
-                <Text style={[styles.detailLabel, { color: colors.text.secondary }]}>
-                  Encoder
-                </Text>
-                <Text style={[styles.detailValue, { color: colors.text.primary }]}>
-                  {analysis.technical.encoder}
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* Quality Analysis */}
-          <View style={[styles.section, { 
-            marginHorizontal: spacing.lg,
-            marginBottom: spacing.xl,
-            backgroundColor: colors.background.secondary,
-            borderRadius: 12,
-            padding: spacing.md,
-          }]}>
-            <Text style={[styles.sectionTitle, { 
-              color: colors.text.primary,
-              fontSize: 18,
-              fontWeight: '600',
-              marginBottom: spacing.md,
-            }]}>
-              Quality Analysis
-            </Text>
-            
-            <View style={[styles.detailRow, { 
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              paddingVertical: spacing.xs,
-            }]}>
-              <Text style={[styles.detailLabel, { color: colors.text.secondary }]}>
-                Spectral Cutoff
-              </Text>
-              <Text style={[styles.detailValue, { color: colors.text.primary }]}>
-                {analysis.quality.spectralCutoff} Hz
-                {analysis.quality.spectralCutoff > 21000 && ' (Hi-Res)'}
-              </Text>
-            </View>
-            
-            <View style={[styles.detailRow, { 
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              paddingVertical: spacing.xs,
-            }]}>
-              <Text style={[styles.detailLabel, { color: colors.text.secondary }]}>
-                Dynamic Range
-              </Text>
-              <Text style={[styles.detailValue, { color: colors.text.primary }]}>
-                {analysis.quality.dynamicRange.toFixed(1)} dB
-              </Text>
-            </View>
-            
-            {analysis.replayGain && (
-              <View style={[styles.detailRow, { 
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                paddingVertical: spacing.xs,
-              }]}>
-                <Text style={[styles.detailLabel, { color: colors.text.secondary }]}>
-                  ReplayGain
-                </Text>
-                <Text style={[styles.detailValue, { color: colors.text.primary }]}>
-                  {analysis.replayGain.trackGain > 0 ? '+' : ''}
-                  {analysis.replayGain.trackGain.toFixed(1)} dB
-                </Text>
-              </View>
-            )}
-          </View>
-        </>
-      )}
-
-      {/* Actions */}
-      <View style={[styles.actions, { 
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        padding: spacing.xl,
-        gap: spacing.md,
-      }]}>
-        <TouchableOpacity style={[styles.actionButton, { 
-          flex: 1,
-          backgroundColor: colors.primary[500],
-          paddingVertical: spacing.md,
-          paddingHorizontal: spacing.lg,
-          borderRadius: 8,
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: spacing.xs,
-        }]}>
-          <Ionicons name="play" size={20} color={colors.background.primary} />
-          <Text style={[styles.actionText, { color: colors.background.primary }]}>
-            Play
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={[styles.actionButton, { 
-          flex: 1,
-          backgroundColor: colors.background.secondary,
-          paddingVertical: spacing.md,
-          paddingHorizontal: spacing.lg,
-          borderRadius: 8,
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: spacing.xs,
-        }]}>
-          <Ionicons name="add-circle" size={20} color={colors.text.primary} />
-          <Text style={[styles.actionText, { color: colors.text.primary }]}>
-            Add to Playlist
-          </Text>
+      {/* Action Bar */}
+      <View style={styles.actionRow}>
+        <TouchableOpacity 
+          style={[styles.playButton, { backgroundColor: colors.primary[500] }]}
+          onPress={() => {/* Tambahkan logika play song di sini */}}
+        >
+          <Ionicons name="play" size={20} color="#000" />
+          <Text style={styles.playButtonText}>PLAY NOW</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
   );
 }
 
+const DetailRow = ({ label, value, color }: any) => (
+  <View style={styles.detailRow}>
+    <Text style={{ color: color.text.secondary, fontSize: 13 }}>{label}</Text>
+    <Text style={{ color: color.text.primary, fontWeight: '600', fontSize: 13 }}>{value}</Text>
+  </View>
+);
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  centerContainer: {
-    flex: 1,
+  container: { flex: 1 },
+  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  headerTitle: { fontSize: 14, fontWeight: '800', letterSpacing: 2 },
+  infoContainer: { alignItems: 'center' },
+  title: { fontSize: 24, fontWeight: '800', textAlign: 'center' },
+  artist: { fontSize: 16, marginTop: 4, opacity: 0.8 },
+  sectionContainer: { paddingHorizontal: 20 },
+  card: { padding: 18, borderRadius: 16 },
+  cardTitle: { fontSize: 12, fontWeight: '700', marginBottom: 14, opacity: 0.5, letterSpacing: 1 },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 },
+  actionRow: { padding: 24 },
+  playButton: { 
+    flexDirection: 'row', 
+    height: 58, 
+    borderRadius: 29, 
+    alignItems: 'center', 
     justifyContent: 'center',
-    alignItems: 'center',
+    gap: 10,
+    elevation: 8,
+    shadowColor: '#00D4AA',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  infoContainer: {
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-  },
-  artist: {
-    fontSize: 18,
-  },
-  album: {
-    fontSize: 16,
-  },
-  section: {
-    // style di-inline
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  detailLabel: {
-    fontSize: 14,
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  actions: {
-    flexDirection: 'row',
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
+  playButtonText: { fontWeight: '900', fontSize: 16, letterSpacing: 1 }
 });

@@ -1,62 +1,40 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import Slider from '@react-native-community/slider';
+import Slider from '@react-native-community/slider'; // Pastikan sudah install ini
 import { useTheme } from '@/context/ThemeContext';
 
 interface EqualizerBandProps {
   frequency: number;
   gain: number;
-  onGainChange: (gain: number) => void;
+  onValueChange: (value: number) => void;
 }
 
-export const EqualizerBand: React.FC<EqualizerBandProps> = ({
-  frequency,
-  gain,
-  onGainChange,
-}) => {
+export const EqualizerBand: React.FC<EqualizerBandProps> = ({ frequency, gain, onValueChange }) => {
   const { theme } = useTheme();
-  const { colors, spacing, typography } = theme;
-  const [localGain, setLocalGain] = useState(gain);
 
-  const handleValueChange = (value: number) => {
-    setLocalGain(value);
-  };
-
-  const handleSlidingComplete = (value: number) => {
-    onGainChange(value);
-  };
-
-  // Format frequency (Hz -> kHz jika >1000)
-  const freqText = frequency >= 1000 ? `${frequency / 1000}kHz` : `${frequency}Hz`;
+  // Format label frekuensi (contoh: 1000 -> 1kHz)
+  const formatFreq = (freq: number) => freq >= 1000 ? `${freq / 1000}kHz` : `${freq}Hz`;
 
   return (
-    <View style={[styles.container, { 
-      paddingVertical: spacing.sm,
-      gap: spacing.md,
-    }]}>
-      <Text style={[styles.freqText, { 
-        color: colors.text.secondary,
-        width: 60,
-      }]}>
-        {freqText}
+    <View style={styles.container}>
+      <Text style={[styles.label, { color: theme.colors.text.secondary }]}>
+        {formatFreq(frequency)}
       </Text>
+      
       <Slider
         style={styles.slider}
         minimumValue={-12}
         maximumValue={12}
-        value={localGain}
-        onValueChange={handleValueChange}
-        onSlidingComplete={handleSlidingComplete}
-        minimumTrackTintColor={colors.primary[500]}
-        maximumTrackTintColor={colors.background.tertiary}
-        thumbTintColor={colors.primary[500]}
+        step={0.5}
+        value={gain}
+        onValueChange={onValueChange}
+        minimumTrackTintColor={theme.colors.primary[500]}
+        maximumTrackTintColor={theme.colors.background.tertiary}
+        thumbTintColor={theme.colors.primary[500]}
       />
-      <Text style={[styles.gainText, { 
-        color: localGain > 0 ? colors.primary[500] : colors.text.secondary,
-        width: 50,
-        textAlign: 'right',
-      }]}>
-        {localGain > 0 ? `+${localGain}` : localGain} dB
+
+      <Text style={[styles.gainValue, { color: theme.colors.primary[500] }]}>
+        {gain > 0 ? `+${gain.toFixed(1)}` : gain.toFixed(1)} dB
       </Text>
     </View>
   );
@@ -66,15 +44,10 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  slider: {
-    flex: 1,
+    marginBottom: 15,
     height: 40,
   },
-  freqText: {
-    fontSize: 14,
-  },
-  gainText: {
-    fontSize: 14,
-  },
+  label: { width: 55, fontSize: 12, fontWeight: '700' },
+  slider: { flex: 1, height: 40 },
+  gainValue: { width: 60, fontSize: 12, textAlign: 'right', fontWeight: '600', fontVariant: ['tabular-nums'] }
 });

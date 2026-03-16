@@ -1,10 +1,16 @@
-// Di src/components/audio/AlbumArt.tsx
-import React, { useState } from 'react';
+import React, { useEffect } from 'react';
 import { View, Image, TouchableOpacity, StyleSheet, Text } from 'react-native';
 import { BlurView } from 'expo-blur';
-import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/context/ThemeContext';
 import { SpectrumAnalyzer } from '@/components/visualizer/SpectrumAnalyzer';
+import Animated, { 
+  useAnimatedStyle, 
+  useSharedValue, 
+  withRepeat, 
+  withTiming, 
+  Easing,
+  cancelAnimation 
+} from 'react-native-reanimated';
 
 interface AlbumArtProps {
   artwork?: string;
@@ -22,44 +28,64 @@ export const AlbumArt: React.FC<AlbumArtProps> = ({
   size = 280,
 }) => {
   const { theme } = useTheme();
-  const [isPressed, setIsPressed] = useState(false);
+  
+  const rotation = useSharedValue(0);
+
+  useEffect(() => {
+    if (isPlaying) {
+      rotation.value = withRepeat(
+        withTiming(360, {
+          duration: 10000,
+          easing: Easing.linear,
+        }),
+        -1,
+        false
+      );
+    } else {
+      cancelAnimation(rotation);
+    }
+  }, [isPlaying]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${rotation.value}deg` }],
+  }));
 
   return (
     <TouchableOpacity
       activeOpacity={0.9}
       onPress={onToggleVisualizer}
-      onPressIn={() => setIsPressed(true)}
-      onPressOut={() => setIsPressed(false)}
       style={[
         styles.container,
         {
           width: size,
           height: size,
-          borderRadius: showVisualizer ? size / 2 : 16,
-          transform: [{ scale: isPressed ? 0.98 : 1 }],
+          borderRadius: size / 2, 
         },
       ]}
     >
-      {artwork && !showVisualizer ? (
-        <Image
-          source={{ uri: artwork }}
-          style={[styles.image, { width: size, height: size, borderRadius: 16 }]}
-        />
-      ) : showVisualizer ? (
-        <SpectrumAnalyzer   // ← HAPUS style prop, tidak didukung
-          width={size}
-          height={size}
-          barCount={32}
-          color={theme.colors.primary[500]}
-          backgroundColor={theme.colors.background.secondary}
-        />
-      ) : (
-        <View style={[styles.placeholder, { backgroundColor: theme.colors.background.tertiary }]}>
-          <Text style={[styles.placeholderText, { color: theme.colors.primary[500] }]}>  // ← PAKAI Text
-            ♪
-          </Text>
-        </View>
-      )}
+      <Animated.View style={[{ width: size, height: size }, animatedStyle]}>
+        {artwork && !showVisualizer ? (
+          <Image
+            source={{ uri: artwork }}
+            style={[styles.image, { width: size, height: size, borderRadius: size / 2 }]}
+          />
+        ) : showVisualizer ? (
+          <SpectrumAnalyzer
+            isPlaying={isPlaying} // <--- PERBAIKAN: Tambahkan ini agar error TS2741 hilang
+            width={size}
+            height={size}
+            barCount={32}
+            color={theme.colors.primary[500]}
+            backgroundColor={theme.colors.background.secondary}
+          />
+        ) : (
+          <View style={[styles.placeholder, { backgroundColor: theme.colors.background.tertiary, borderRadius: size / 2 }]}>
+            <Text style={[styles.placeholderText, { color: theme.colors.primary[500] }]}>
+              ♪
+            </Text>
+          </View>
+        )}
+      </Animated.View>
 
       {showVisualizer && isPlaying && (
         <BlurView
@@ -74,14 +100,21 @@ export const AlbumArt: React.FC<AlbumArtProps> = ({
 const styles = StyleSheet.create({
   container: {
     overflow: 'hidden',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
   },
-  image: {},
+  image: {
+    resizeMode: 'cover',
+  },
   placeholder: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  placeholderText: {  // ← TAMBAHKAN
+  placeholderText: {
     fontSize: 48,
     fontWeight: 'bold',
   },

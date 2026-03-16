@@ -1,43 +1,29 @@
+// src/services/audio/DSPPipeline.ts
+import { NativeModules } from 'react-native';
 import { EqualizerBand } from '../../types/dsp.types';
 
+const { USBDACModule } = NativeModules;
+
 export class DSPPipeline {
-  private filters: any[] = [];
-  private context: AudioContext;
-  
-  constructor(context: AudioContext, bands: EqualizerBand[]) {
-    this.context = context;
-    
-    // Buat filter untuk tiap band
-    bands.forEach(band => {
-      const filter = context.createBiquadFilter();
-      filter.type = this.getFilterType(band.frequency);
-      filter.frequency.value = band.frequency;
-      filter.gain.value = band.gain;
-      filter.Q.value = band.q || 1.414;
-      
-      this.filters.push(filter);
-    });
-    
-    // Connect in series
-    for (let i = 0; i < this.filters.length - 1; i++) {
-      this.filters[i].connect(this.filters[i + 1]);
+  /**
+   * Mengirim parameter EQ ke Android Native.
+   * Di sisi Native, kita akan menggunakan android.media.audiofx.Equalizer
+   */
+  static async updateEqualizer(bands: EqualizerBand[]) {
+    if (!USBDACModule) return;
+
+    try {
+      // Kita kirim array gain saja, karena frekuensi biasanya tetap (fixed bands)
+      const gains = bands.map(b => b.gain);
+      await USBDACModule.setEqualizerGains(gains);
+    } catch (e) {
+      console.error("DSP Error:", e);
     }
   }
-  
-  private getFilterType(freq: number): BiquadFilterType {
-    if (freq < 100) return 'lowshelf';
-    if (freq > 8000) return 'highshelf';
-    return 'peaking';
-  }
-  
-  process(channelData: Float32Array[]): Float32Array[] {
-    // Implementasi proses DSP
-    return channelData;
-  }
-  
-  updateBand(index: number, gain: number) {
-    if (this.filters[index]) {
-      this.filters[index].gain.value = gain;
+
+  static async setEnabled(enabled: boolean) {
+    if (USBDACModule) {
+      await USBDACModule.toggleEqualizer(enabled);
     }
   }
 }

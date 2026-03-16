@@ -1,292 +1,176 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  Switch,
+import React, { useState } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  ScrollView, 
+  SafeAreaView, 
+  TouchableOpacity 
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
+
+// Hooks & Store
 import { useTheme } from '@/context/ThemeContext';
 import { useEqualizer } from '@/hooks/useEqualizer';
+
+// UI Components (Asumsi Anda memisahkan file atau menaruhnya di folder components)
 import { EqualizerBand } from '@/components/equalizer/EqualizerBand';
 import { FrequencyGraph } from '@/components/equalizer/FrequencyGraph';
+import { PresetChip } from '@/components/equalizer/PresetChip';
 import { SavePresetModal } from '@/components/equalizer/SavePresetModal';
-import { ALL_PRESETS } from '@/constants/equalizerPresets';
-import { Preset } from '@/types/equalizer';
-import { loadCustomPresets, deleteCustomPreset } from '@/services/PresetStorage';
 
 export default function EqualizerScreen() {
   const { theme } = useTheme();
-  const { colors, spacing, typography } = theme;
-  
-  // Hooks
-  const {
-    bands,
-    isActive,
-    presetName,
-    updateBand,
+  const { 
+    currentBands, 
+    activePresetId, 
+    allPresets, 
+    updateBandGain, 
     applyPreset,
-    toggleEQ,
-    presets,
+    savePreset,
+    isDSPDisabled 
   } = useEqualizer();
 
-  // State
-  const [saveVisible, setSaveVisible] = useState(false);
-  const [customPresets, setCustomPresets] = useState<Preset[]>([]);
-  const [activePresetId, setActivePresetId] = useState<string>('flat');
-
-  // Load custom presets
-  const reloadCustomPresets = useCallback(async () => {
-    const loaded = await loadCustomPresets();
-    setCustomPresets(loaded);
-  }, []);
-
-  useEffect(() => {
-    reloadCustomPresets();
-  }, []);
-
-  // Combine all presets
-  const allPresets = [...ALL_PRESETS, ...customPresets];
-
-  // Handle preset selection
-  const handleApplyPreset = (preset: Preset) => {
-    Haptics.selectionAsync();
-    applyPreset(preset.name.toLowerCase() as any);
-    setActivePresetId(preset.id);
-  };
-
-  // Handle delete custom preset
-  const handleDeletePreset = (preset: Preset) => {
-    Alert.alert(
-      'Hapus Preset',
-      `Yakin ingin menghapus "${preset.name}"?`,
-      [
-        { text: 'Batal', style: 'cancel' },
-        {
-          text: 'Hapus',
-          style: 'destructive',
-          onPress: async () => {
-            await deleteCustomPreset(preset.id);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            reloadCustomPresets();
-          },
-        },
-      ]
-    );
-  };
-
-  // Handle save new preset
-  const handleSavePreset = (name: string) => {
-    reloadCustomPresets();
-    Alert.alert('✅', `Preset "${name}" disimpan`);
-  };
+  const [modalVisible, setModalVisible] = useState(false);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background.primary }]}>
-      {/* Header */}
-      <View style={[styles.header, { 
-        paddingHorizontal: spacing.lg,
-        paddingTop: spacing.sm,
-        paddingBottom: spacing.xs,
-      }]}>
-        <Text style={[styles.title, { 
-          color: colors.text.primary,
-          fontSize: 24,
-          fontWeight: '800',
-        }]}>
-          Equalizer
-        </Text>
-        
-        <View style={[styles.headerRight, { 
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: spacing.sm,
-        }]}>
-          <Switch
-            value={isActive}
-            onValueChange={(value) => {
-              Haptics.selectionAsync();
-              toggleEQ();
-            }}
-            trackColor={{ 
-              false: colors.background.tertiary, 
-              true: colors.primary[500] + '80' 
-            }}
-            thumbColor={isActive ? colors.primary[500] : colors.text.tertiary}
-          />
-          
-          <TouchableOpacity 
-            style={[styles.saveBtn, { 
-              backgroundColor: colors.primary[500],
-              paddingHorizontal: spacing.md,
-              paddingVertical: spacing.xs,
-              borderRadius: 20,
-            }]} 
-            onPress={() => setSaveVisible(true)}
-          >
-            <Text style={[styles.saveBtnText, { 
-              fontSize: 12,
-              color: colors.background.primary,
-              fontWeight: '700',
-            }]}>
-              + Simpan
-            </Text>
-          </TouchableOpacity>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
+      {/* 1. Header & Status */}
+      <View style={styles.header}>
+        <View>
+          <Text style={[styles.title, { color: theme.colors.text.primary }]}>Equalizer</Text>
+          <Text style={[styles.subtitle, { color: theme.colors.text.secondary }]}>
+            10-Band Precision Engine
+          </Text>
         </View>
+        {isDSPDisabled && (
+          <View style={styles.bitPerfectBadge}>
+            <Ionicons name="shield-checkmark" size={14} color="#D4AF37" />
+            <Text style={styles.bitPerfectText}>Bit-Perfect Active</Text>
+          </View>
+        )}
       </View>
 
-      {/* Frequency Graph */}
-      <View style={[styles.graphContainer, { 
-        marginHorizontal: spacing.lg,
-        marginBottom: spacing.sm,
-        padding: spacing.sm,
-        backgroundColor: colors.background.secondary,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: colors.background.tertiary,
-      }]}>
-        <FrequencyGraph bands={bands} height={80} />
-      </View>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        
+        {/* 2. Visualisasi Kurva (Skia) */}
+        <View style={styles.graphContainer}>
+          <FrequencyGraph bands={currentBands} />
+        </View>
 
-      {/* Presets */}
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false} 
-        contentContainerStyle={[styles.presetsContainer, { 
-          paddingHorizontal: spacing.lg,
-          paddingBottom: spacing.sm,
-          gap: spacing.xs,
-        }]}
-      >
-        {allPresets.map((preset) => {
-          const isActive = preset.id === activePresetId;
-          const isCustom = preset.id.startsWith('custom_');
-          
-          return (
-            <TouchableOpacity
-              key={preset.id}
-              style={[
-                styles.presetChip,
-                {
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  paddingHorizontal: spacing.md,
-                  paddingVertical: spacing.xs,
-                  borderRadius: 20,
-                  borderWidth: 1,
-                  borderColor: isActive 
-                    ? colors.primary[500] 
-                    : isCustom 
-                      ? colors.primary[500] + '40' 
-                      : colors.background.tertiary,
-                  backgroundColor: isActive 
-                    ? colors.primary[500] 
-                    : 'transparent',
-                }
-              ]}
-              onPress={() => handleApplyPreset(preset)}
-              onLongPress={() => isCustom && handleDeletePreset(preset)}
-              activeOpacity={0.7}
+        {/* 3. Preset Selector (Horizontal) */}
+        <View style={styles.presetSection}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
+            {/* Tombol Simpan Custom */}
+            <TouchableOpacity 
+              onPress={() => setModalVisible(true)}
+              style={[styles.saveAction, { borderColor: theme.colors.primary[500] }]}
             >
-              {isCustom && (
-                <Text style={[styles.presetStar, { 
-                  fontSize: 12,
-                  color: '#FFB84D',
-                  marginRight: 2,
-                }]}>
-                  ★
-                </Text>
-              )}
-              <Text style={[
-                styles.presetText,
-                {
-                  fontSize: 12,
-                  fontWeight: isActive ? '700' : '400',
-                  color: isActive 
-                    ? colors.background.primary 
-                    : colors.text.secondary,
-                }
-              ]}>
-                {preset.name}
-              </Text>
+              <Ionicons name="add" size={20} color={theme.colors.primary[500]} />
             </TouchableOpacity>
-          );
-        })}
+
+            {allPresets.map((preset) => (
+              <PresetChip
+                key={preset.id}
+                label={preset.name}
+                isActive={activePresetId === preset.id}
+                onPress={() => applyPreset(preset.id)}
+                disabled={isDSPDisabled}
+              />
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* 4. Sliders (10-Band) */}
+        <View style={[styles.slidersCard, { backgroundColor: theme.colors.background.secondary }]}>
+          {isDSPDisabled ? (
+            <View style={styles.disabledOverlay}>
+              <Ionicons name="lock-closed" size={40} color={theme.colors.text.tertiary} />
+              <Text style={[styles.disabledText, { color: theme.colors.text.secondary }]}>
+                DSP dinonaktifkan untuk menjaga kualitas Bit-Perfect
+              </Text>
+            </View>
+          ) : (
+            currentBands.map((band, index) => (
+              <EqualizerBand
+                key={band.id}
+                frequency={band.frequency}
+                gain={band.gain}
+                onValueChange={(val) => updateBandGain(index, val)}
+              />
+            ))
+          )}
+        </View>
       </ScrollView>
 
-      {/* EQ Sliders */}
-      <View style={styles.slidersContainer}>
-        <ScrollView style={{ flex: 1 }}>
-          {bands.map((band, index) => (
-            <EqualizerBand
-              key={band.frequency}
-              frequency={band.frequency}
-              gain={band.gain}
-              onGainChange={(gain) => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                updateBand(index, gain);
-              }}
-            />
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Save Preset Modal */}
+      {/* 5. Modal Simpan */}
       <SavePresetModal
-        visible={saveVisible}
-        onClose={() => setSaveVisible(false)}
-        onSaved={handleSavePreset}
-        currentBands={bands}
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        onSave={(name) => {
+          savePreset(name);
+          setModalVisible(false);
+        }}
       />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   header: {
+    paddingHorizontal: 20,
+    paddingVertical: 15,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'center'
   },
-  title: {
-    fontSize: 24,
-    fontWeight: '800',
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  saveBtn: {
-    borderRadius: 20,
-  },
-  saveBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
+  title: { fontSize: 28, fontWeight: '800' },
+  subtitle: { fontSize: 13, marginTop: 2 },
+  scrollContent: { paddingBottom: 40 },
   graphContainer: {
-    // style di-inline
+    alignItems: 'center',
+    marginVertical: 20,
+    paddingHorizontal: 10,
   },
-  presetsContainer: {
-    flexDirection: 'row',
-  },
-  presetChip: {
-    borderRadius: 20,
+  presetSection: { marginBottom: 25 },
+  chipScroll: { paddingLeft: 20, paddingRight: 10, alignItems: 'center' },
+  saveAction: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12
   },
-  presetStar: {
-    fontSize: 12,
+  slidersCard: {
+    marginHorizontal: 20,
+    borderRadius: 24,
+    padding: 20,
+    minHeight: 400,
   },
-  presetText: {
-    fontSize: 12,
+  bitPerfectBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)'
   },
-  slidersContainer: {
+  bitPerfectText: { color: '#D4AF37', fontSize: 11, fontWeight: '700', marginLeft: 5 },
+  disabledOverlay: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
   },
+  disabledText: {
+    textAlign: 'center',
+    marginTop: 15,
+    lineHeight: 20,
+    fontSize: 14
+  }
 });

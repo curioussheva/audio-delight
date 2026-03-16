@@ -22,6 +22,11 @@ export interface Song {
   rating?: number; // 1-5
   playCount?: number;
   lastPlayed?: number;
+  codec?: string;
+  sampleRate?: number;
+  bitDepth?: number;
+  bitrate?: number;
+  isHiRes?: boolean;
 }
 
 export interface AudioFormat {
@@ -58,3 +63,44 @@ export interface Queue {
 }
 
 export type RepeatMode = 'off' | 'track' | 'queue';
+
+export interface MusicAnalysisResult {
+  id: string;
+  technical: {
+    format: string;
+    sampleRate: number;
+    bitDepth: number;
+    bitrate: number;
+    channels: number;
+    lossless: boolean;
+  };
+  quality: {
+    spectralCutoff: number;
+    dynamicRange: number;
+  };
+  confidence: number;
+  metadata: {
+    title: string;
+    artist: string;
+    album: string;
+    year?: number;
+    genre?: string[];
+  };
+  replayGain?: {
+    trackGain: number;
+    trackPeak: number;
+  };
+}
+
+export interface AudioMetadata {
+  title: string;
+  artist: string;
+  album: string;
+  duration: number;
+  sampleRate: number;
+  bitDepth: number;
+  codec: string;
+  bitrate: number;
+}
+
+

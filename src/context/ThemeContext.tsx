@@ -1,138 +1,45 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// Tipe untuk tema
-export interface Theme {
-  colors: {
-    primary: {
-      500: string;
-    };
-    background: {
-      primary: string;
-      secondary: string;
-      tertiary: string;
-    };
-    text: {
-      primary: string;
-      secondary: string;
-      tertiary: string;
-    };
-    status: {
-      error: string;
-      warning: string;
-      success: string;
-    };
-  };
-  spacing: {
-    xxs: number;
-    xs: number;
-    sm: number;
-    md: number;
-    lg: number;
-    xl: number;
-    xxl: number;
-    xxxl: number;
-  };
-  typography: {
-    h1: { fontSize: number; fontWeight: string; lineHeight: number };
-    h2: { fontSize: number; fontWeight: string; lineHeight: number };
-    h3: { fontSize: number; fontWeight: string; lineHeight: number };
-    h4: { fontSize: number; fontWeight: string; lineHeight: number };
-    body1: { fontSize: number; fontWeight: string; lineHeight: number };
-    body2: { fontSize: number; fontWeight: string; lineHeight: number };
-    caption: { fontSize: number; fontWeight: string; lineHeight: number };
-    button: { fontSize: number; fontWeight: string; lineHeight: number };
-  };
-}
-
-// Tema Default (Dark Mode)
-export const DEFAULT_THEME: Theme = {
-  colors: {
-    primary: { 500: '#00D4AA' },
-    background: {
-      primary: '#0A1628',
-      secondary: '#141E33',
-      tertiary: '#1F2A3A',
-    },
-    text: {
-      primary: '#F0F4F8',
-      secondary: '#C8D4E0',
-      tertiary: '#9AA8B9',
-    },
-    status: {
-      error: '#EF4444',
-      warning: '#F59E0B',
-      success: '#10B981',
-    },
-  },
-  spacing: {
-    xxs: 2,
-    xs: 4,
-    sm: 8,
-    md: 16,
-    lg: 24,
-    xl: 32,
-    xxl: 48,
-    xxxl: 64,
-  },
-  typography: {
-    h1: { fontSize: 32, fontWeight: '700', lineHeight: 40 },
-    h2: { fontSize: 28, fontWeight: '700', lineHeight: 36 },
-    h3: { fontSize: 24, fontWeight: '600', lineHeight: 32 },
-    h4: { fontSize: 20, fontWeight: '600', lineHeight: 28 },
-    body1: { fontSize: 16, fontWeight: '400', lineHeight: 24 },
-    body2: { fontSize: 14, fontWeight: '400', lineHeight: 20 },
-    caption: { fontSize: 12, fontWeight: '400', lineHeight: 16 },
-    button: { fontSize: 16, fontWeight: '600', lineHeight: 24 },
-  },
-};
-
-// Tema Light Mode (opsional)
-export const LIGHT_THEME: Theme = {
-  ...DEFAULT_THEME,
-  colors: {
-    primary: { 500: '#00D4AA' },
-    background: {
-      primary: '#F0F4F8',
-      secondary: '#E0E8F0',
-      tertiary: '#C8D4E0',
-    },
-    text: {
-      primary: '#0A1628',
-      secondary: '#141E33',
-      tertiary: '#1F2A3A',
-    },
-    status: DEFAULT_THEME.colors.status,
-  },
-};
+import { Theme, ThemeId } from '@/constants/themes/types';  // ← IMPOR DARI TYPES
+import { DEFAULT_THEME, getThemeById, THEMES_LIST, ALL_THEMES } from '@/constants/themes';
 
 interface ThemeContextType {
   theme: Theme;
+  themeId: ThemeId;
+  availableThemes: typeof THEMES_LIST;
   isDarkMode: boolean;
+  setTheme: (themeId: ThemeId) => Promise<void>;
   toggleTheme: () => void;
-  setTheme: (theme: Theme) => void;
+  nextTheme: () => void;
+  randomTheme: () => Promise<void>;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+const THEME_STORAGE_KEY = '@pristineaudio/theme_id';
+
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const systemColorScheme = useColorScheme();
-  const [isDarkMode, setIsDarkMode] = useState(systemColorScheme === 'dark');
-  const [theme, setTheme] = useState<Theme>(isDarkMode ? DEFAULT_THEME : LIGHT_THEME);
+  const [themeId, setThemeId] = useState<ThemeId>('deep-navy');
+  const [theme, setThemeObj] = useState<Theme>(DEFAULT_THEME);
 
-  // Load saved theme preference
+  // Load saved theme
   useEffect(() => {
     const loadTheme = async () => {
       try {
-        const saved = await AsyncStorage.getItem('theme_mode');
-        if (saved !== null) {
-          setIsDarkMode(saved === 'dark');
-          setTheme(saved === 'dark' ? DEFAULT_THEME : LIGHT_THEME);
+        const saved = await AsyncStorage.getItem(THEME_STORAGE_KEY) as ThemeId | null;
+        
+        // ✅ CEK APAKAH saved VALID
+        if (saved && saved in ALL_THEMES) {
+          setThemeId(saved);
+          setThemeObj(getThemeById(saved));
         } else {
-          // Default ke system
-          setIsDarkMode(systemColorScheme === 'dark');
-          setTheme(systemColorScheme === 'dark' ? DEFAULT_THEME : LIGHT_THEME);
+          // Default ke system preference
+          // Gunakan type assertion yang aman
+          const defaultTheme = systemColorScheme === 'dark' ? 'deep-navy' as ThemeId : 'light-gray' as ThemeId;
+          setThemeId(defaultTheme);
+          setThemeObj(getThemeById(defaultTheme));
         }
       } catch (error) {
         console.error('Failed to load theme:', error);
@@ -141,20 +48,52 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     loadTheme();
   }, []);
 
-  const toggleTheme = async () => {
-    const newMode = !isDarkMode;
-    setIsDarkMode(newMode);
-    setTheme(newMode ? DEFAULT_THEME : LIGHT_THEME);
-    await AsyncStorage.setItem('theme_mode', newMode ? 'dark' : 'light');
+  const setTheme = async (newThemeId: ThemeId) => {
+    try {
+      // ✅ VALIDASI newThemeId
+      if (!(newThemeId in ALL_THEMES)) {
+        console.warn(`Theme ${newThemeId} not found, using default`);
+        newThemeId = 'deep-navy';
+      }
+      
+      const newTheme = getThemeById(newThemeId);
+      setThemeId(newThemeId);
+      setThemeObj(newTheme);
+      await AsyncStorage.setItem(THEME_STORAGE_KEY, newThemeId);
+    } catch (error) {
+      console.error('Failed to save theme:', error);
+    }
   };
 
-  const handleSetTheme = (newTheme: Theme) => {
-    setTheme(newTheme);
-    // Optionally save custom theme
+  const toggleTheme = () => {
+    // Switch antara dark dan light mode
+    const isDark = theme.isDark;
+    const newThemeId: ThemeId = isDark ? 'light-gray' : 'deep-navy';
+    setTheme(newThemeId);
+  };
+
+  const nextTheme = () => {
+    const currentIndex = THEMES_LIST.findIndex(t => t.id === themeId);
+    const nextIndex = (currentIndex + 1) % THEMES_LIST.length;
+    setTheme(THEMES_LIST[nextIndex].id as ThemeId);
+  };
+
+  const randomTheme = async () => {
+    const randomIndex = Math.floor(Math.random() * THEMES_LIST.length);
+    await setTheme(THEMES_LIST[randomIndex].id as ThemeId);
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, isDarkMode, toggleTheme, setTheme: handleSetTheme }}>
+    <ThemeContext.Provider value={{
+      theme,
+      themeId,
+      availableThemes: THEMES_LIST,
+      isDarkMode: theme.isDark,
+      setTheme,
+      toggleTheme,
+      nextTheme,
+      randomTheme,
+    }}>
       {children}
     </ThemeContext.Provider>
   );

@@ -79,10 +79,11 @@ export default function VisualizerScreen() {
   }, [isListening]);
 
   // Update frame count dari SpectrumAnalyzer (via callback)
+  {/*
   const onFrameRendered = () => {
     frameCount.current++;
   };
-
+*/}
   // Toggle fullscreen dengan double tap
   const doubleTapRef = useRef(0);
   const handleDoubleTap = () => {
@@ -201,13 +202,13 @@ export default function VisualizerScreen() {
           style={styles.visualizerContainer}
         >
           <SpectrumAnalyzer
-            width={isFullscreen ? width : width - spacing.xxl}
+            isPlaying={isPlaying} // <--- Tambahkan ini
+            width={isFullscreen ? width : width - 40}
             height={isFullscreen ? height / 2 : 250}
             mode={mode}
             sensitivity={sensitivity}
             color={primaryColor}
             backgroundColor={colors.background.primary}
-            onFrameRendered={onFrameRendered}
             showCenterArt={mode === 'circle' && !!currentSong?.artwork}
             centerArt={currentSong?.artwork}
           />
@@ -215,15 +216,7 @@ export default function VisualizerScreen() {
 
         {/* FPS Counter (debug) */}
         {isListening && (
-          <View style={[styles.fpsCounter, { 
-            position: 'absolute',
-            top: spacing.sm,
-            right: spacing.sm,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            paddingHorizontal: spacing.xs,
-            paddingVertical: 2,
-            borderRadius: 4,
-          }]}>
+          <View style={styles.fpsCounter}>
             <Text style={{ color: colors.text.primary, fontSize: 10 }}>
               {fps} fps
             </Text>
@@ -529,3 +522,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 });
+

@@ -1,205 +1,161 @@
-// src/components/visualizer/SpectrumAnalyzer.tsx (update)
-import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, Dimensions, Image } from 'react-native';
-import { Canvas, Path, Skia, Circle, Group } from '@shopify/react-native-skia';
-import VisualizerService, { FrequencyData } from '@/services/audio/VisualizerService';
-import { useTheme } from '@/context/ThemeContext';
+import React, { useEffect } from 'react';
+import { View, StyleSheet, Dimensions } from 'react-native';
+import { 
+  Canvas, 
+  Path, 
+  Skia, 
+  Group, 
+  Image as SkiaImage, 
+  useImage,
+  LinearGradient,
+  vec,
+  BlurMask
+} from '@shopify/react-native-skia';
+import { 
+  useSharedValue, 
+  useDerivedValue,
+} from 'react-native-reanimated';
+import VisualizerService from '@/services/audio/VisualizerService';
 
-interface SpectrumAnalyzerProps {
+export interface SpectrumAnalyzerProps {
   width?: number;
   height?: number;
   mode?: 'bars' | 'wave' | 'circle';
   barCount?: number;
-  barWidth?: number;
-  barSpacing?: number;
   color?: string;
   backgroundColor?: string;
   sensitivity?: number;
-  onFrameRendered?: () => void;
-  showCenterArt?: boolean;
   centerArt?: string;
+  showCenterArt?: boolean;
+  isPlaying: boolean;
 }
-
 export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
-  width = Dimensions.get('window').width - 32,
-  height = 200,
+  width = Dimensions.get('window').width - 40,
+  height = 250,
   mode = 'bars',
-  barCount = 32,
-  barWidth = 6,
-  barSpacing = 2,
+  barCount = 48,
   color = '#00D4AA',
-  backgroundColor = '#0A1628',
-  sensitivity = 1,
-  onFrameRendered,
-  showCenterArt = false,
+  backgroundColor = 'transparent',
+  sensitivity = 2.0,
   centerArt,
+  showCenterArt = false,
 }) => {
-  const { theme } = useTheme();
-  const { colors } = theme;
-  const [frequencies, setFrequencies] = useState<number[]>(new Array(barCount).fill(0));
-  const [waveform, setWaveform] = useState<number[]>(new Array(128).fill(0));
+  const freqData = useSharedValue<number[]>(new Array(barCount).fill(0));
+  const prevProcessedData = useSharedValue<number[]>(new Array(barCount).fill(0));
+  const albumArt = useImage(centerArt);
+
+  const centerX = width / 2;
+  const centerY = height / 2;
 
   useEffect(() => {
-    const unsubscribe = VisualizerService.addListener((data: FrequencyData) => {
-      // Process frequencies untuk bars
-      const step = Math.floor(data.frequencies.length / barCount);
-      const newFrequencies = [];
-      
-      for (let i = 0; i < barCount; i++) {
-        const start = i * step;
-        const end = start + step;
-        let sum = 0;
-        
-        for (let j = start; j < end; j++) {
-          sum += data.frequencies[j] || 0;
-        }
-        
-        const avg = sum / step;
-        newFrequencies.push((avg / 255) * sensitivity);
-      }
-      setFrequencies(newFrequencies);
+    VisualizerService.initialize(freqData);
+    return () => VisualizerService.stop();
+  }, [barCount]);
 
-      // Process waveform untuk wave mode
-      if (mode === 'wave') {
-        const newWaveform = [];
-        for (let i = 0; i < 128; i++) {
-          const idx = Math.floor(i * (data.frequencies.length / 128));
-          newWaveform.push((data.frequencies[idx] / 255) * sensitivity);
-        }
-        setWaveform(newWaveform);
-      }
+  // Efek denyut (pulse) berbasis Bass (Frekuensi 0-5)
+  const pulseScale = useDerivedValue(() => {
+    if (!freqData.value.length) return 1;
+    const bassSum = freqData.value.slice(0, 5).reduce((a, b) => a + b, 0);
+    const avgBass = (bassSum / 5) / 255;
+    return 1 + (avgBass * 0.15 * sensitivity);
+  });
 
-      onFrameRendered?.();
-    });
-
-    return unsubscribe;
-  }, [barCount, sensitivity, mode, onFrameRendered]);
-
-  useEffect(() => {
-    VisualizerService.initialize();
-    return () => {
-      VisualizerService.destroy();
-    };
-  }, []);
-
-  // Render bars
-  const renderBars = () => {
-    const totalWidth = barCount * (barWidth + barSpacing) - barSpacing;
-    const startX = (width - totalWidth) / 2;
-    
-    const paths: React.JSX.Element[] = [];
-    
-    frequencies.forEach((value, index) => {
-      const barHeight = Math.max(2, value * height * 0.8);
-      const x = startX + index * (barWidth + barSpacing);
-      const y = (height - barHeight) / 2;
-      
-      const path = Skia.Path.Make();
-      path.addRect(Skia.XYWHRect(x, y, barWidth, barHeight));
-      
-      paths.push(
-        <Path
-          key={index}
-          path={path}
-          color={color}
-          style="fill"
-        />
-      );
-    });
-    
-    return paths;
-  };
-
-  // Render wave
-  const renderWave = () => {
+  const visualizerPath = useDerivedValue(() => {
     const path = Skia.Path.Make();
-    const step = width / waveform.length;
-    
-    path.moveTo(0, height / 2);
-    
-    for (let i = 0; i < waveform.length; i++) {
-      const x = i * step;
-      const y = (height / 2) + (waveform[i] * height * 0.4 * Math.sin(i * 0.2));
-      path.lineTo(x, y);
+    const rawData = freqData.value;
+    if (!rawData || rawData.length === 0) return path;
+
+    const currentProcessed = new Array(barCount).fill(0);
+    const falloff = 0.92; // Kecepatan bar turun (gravitasi)
+
+    for (let i = 0; i < barCount; i++) {
+      // 1. LOGARITHMIC MAPPING
+      const logIndex = Math.floor(Math.pow(i / barCount, 1.5) * (rawData.length - 1));
+      const nextLogIndex = Math.floor(Math.pow((i + 1) / barCount, 1.5) * (rawData.length - 1));
+      const range = Math.max(1, nextLogIndex - logIndex);
+
+      let sum = 0;
+      for (let j = 0; j < range; j++) {
+        sum += rawData[logIndex + j] || 0;
+      }
+      
+      const avg = sum / range;
+      
+      // 2. TREBLE BOOST (Kompensasi sensitivitas telinga)
+      const trebleBoost = 1 + (i / barCount) * 0.8; 
+      let targetVal = Math.max(0.02, (avg / 255) * sensitivity * trebleBoost);
+
+      // 3. GRAVITY FALL-OFF (Mencegah bar patah-patah)
+      if (targetVal < prevProcessedData.value[i] * falloff) {
+        targetVal = prevProcessedData.value[i] * falloff;
+      }
+      currentProcessed[i] = targetVal;
     }
-    
-    return (
-      <Path
-        path={path}
-        color={color}
-        style="stroke"
-        strokeWidth={2}
-      />
-    );
-  };
 
-  // Render circle
-  const renderCircle = () => {
-    const centerX = width / 2;
-    const centerY = height / 2;
-    const radius = Math.min(width, height) * 0.3;
-    
-    const paths: React.JSX.Element[] = [];
-    
-    frequencies.forEach((value, index) => {
-      const angle = (index / frequencies.length) * Math.PI * 2;
-      const barLength = value * radius * 1.5;
-      const x1 = centerX + Math.cos(angle) * radius;
-      const y1 = centerY + Math.sin(angle) * radius;
-      const x2 = centerX + Math.cos(angle) * (radius + barLength);
-      const y2 = centerY + Math.sin(angle) * (radius + barLength);
-      
-      const path = Skia.Path.Make();
-      path.moveTo(x1, y1);
-      path.lineTo(x2, y2);
-      
-      paths.push(
-        <Path
-          key={index}
-          path={path}
-          color={color}
-          style="stroke"
-          strokeWidth={2}
-        />
-      );
-    });
+    // Update data sebelumnya untuk iterasi berikutnya
+    prevProcessedData.value = currentProcessed;
 
-    return (
-      <Group>
-        {paths}
-        {showCenterArt && centerArt ? (
-          <Image 
-            source={{ uri: centerArt }} 
-            style={[
-              StyleSheet.absoluteFill,
-              { 
-                width: radius * 1.5, 
-                height: radius * 1.5,
-                borderRadius: radius * 0.75,
-                position: 'absolute',
-                top: centerY - radius * 0.75,
-                left: centerX - radius * 0.75,
-              }
-            ]} 
-          />
-        ) : (
-          <Circle 
-            cx={centerX} 
-            cy={centerY} 
-            r={radius * 0.5} 
-            color={color + '40'} 
-          />
-        )}
-      </Group>
-    );
-  };
+    // 4. DRAWING MODES
+    if (mode === 'bars') {
+      const gap = 3;
+      const bWidth = (width - (barCount - 1) * gap) / barCount;
+      currentProcessed.forEach((amp, i) => {
+        const bHeight = Math.max(4, amp * height * 0.8);
+        const x = i * (bWidth + gap);
+        const y = centerY - (bHeight / 2); // Center vertical bars
+        path.addRRect(Skia.RRectXY(Skia.XYWHRect(x, y, bWidth, bHeight), 4, 4));
+      });
+    } else if (mode === 'circle') {
+      const radius = Math.min(width, height) * 0.28;
+      currentProcessed.forEach((amp, i) => {
+        const angle = (i / barCount) * Math.PI * 2;
+        const bLength = amp * radius * 0.7;
+        const x1 = centerX + Math.cos(angle) * radius;
+        const y1 = centerY + Math.sin(angle) * radius;
+        const x2 = centerX + Math.cos(angle) * (radius + bLength);
+        const y2 = centerY + Math.sin(angle) * (radius + bLength);
+        path.moveTo(x1, y1);
+        path.lineTo(x2, y2);
+      });
+    }
+
+    return path;
+  });
 
   return (
     <View style={[styles.container, { width, height, backgroundColor }]}>
-      <Canvas style={{ width, height }}>
-        {mode === 'bars' && renderBars()}
-        {mode === 'wave' && renderWave()}
-        {mode === 'circle' && renderCircle()}
+      <Canvas style={{ flex: 1 }}>
+        <Group>
+          {/* Efek Glow pada Path */}
+          <Path 
+            path={visualizerPath} 
+            color={color} 
+            style={mode === 'wave' ? "stroke" : "fill"} 
+            strokeWidth={mode === 'circle' ? 3 : 0}
+            strokeCap="round"
+          >
+            <BlurMask blur={3} style="solid" />
+          </Path>
+        </Group>
+
+        {/* Center Album Art (Hanya di mode circle) */}
+        {mode === 'circle' && showCenterArt && albumArt && (
+          <Group 
+            origin={{ x: centerX, y: centerY }}
+            transform={useDerivedValue(() => [{ scale: pulseScale.value }])}
+          >
+            <Group clip={Skia.Path.Make().addCircle(centerX, centerY, Math.min(width, height) * 0.25)}>
+              <SkiaImage
+                image={albumArt}
+                x={centerX - Math.min(width, height) * 0.25}
+                y={centerY - Math.min(width, height) * 0.25}
+                width={Math.min(width, height) * 0.5}
+                height={Math.min(width, height) * 0.5}
+                fit="cover"
+              />
+            </Group>
+          </Group>
+        )}
       </Canvas>
     </View>
   );
@@ -207,7 +163,8 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
     overflow: 'hidden',
   },
 });

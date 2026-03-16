@@ -1,35 +1,45 @@
-// src/styles/index.ts
-import { StyleSheet } from 'react-native';
+// src/styles/premium.ts
+import { StyleSheet, Platform } from 'react-native';
 
-export const globalStyles = StyleSheet.create({
-  container: {
-    flex: 1,
+export const premiumStyles = StyleSheet.create({
+  // Kartu Utama yang terlihat melayang
+  albumCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)', // Transparansi halus
+    borderRadius: 24, // Lebih membulat agar cozy
+    padding: 12,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
   },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+  // Efek Glassmorphism untuk elemen kecil (seperti Badge Hi-Res)
+  glassBadge: {
+    backgroundColor: 'rgba(212, 175, 55, 0.15)', // Warna emas transparan
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  // Teks Header yang berkelas
+  heroTitle: {
+    fontSize: 32,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif', // Sedikit sentuhan serif agar mewah
   },
-  section: {
-    marginHorizontal: 16,
-    marginVertical: 8,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  spaceBetween: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  badgeText: {
+    color: '#D4AF37',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
 });

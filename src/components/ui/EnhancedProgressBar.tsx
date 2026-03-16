@@ -1,98 +1,52 @@
-// src/components/ui/EnhancedProgressBar.tsx
 import React, { useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { 
   useAnimatedStyle,
   useSharedValue,
-  runOnJS
+  runOnJS,
+  useDerivedValue
 } from 'react-native-reanimated';
 import { useTheme } from '@/context/ThemeContext';
+import { usePlayerStore } from '@/store/playerStore'; // Tambahkan ini
 import { formatTime } from '@/utils/time';
 
-interface EnhancedProgressBarProps {
-  progress: number;
-  duration: number;
-  onSeek: (position: number) => void;
-  chapters?: { time: number; title: string }[];
-}
-
-export const EnhancedProgressBar: React.FC<EnhancedProgressBarProps> = ({
-  progress,
-  duration,
-  onSeek,
-  chapters = [],
-}) => {
+export const EnhancedProgressBar: React.FC = () => {
   const { theme } = useTheme();
   const { colors, spacing } = theme;
+  
+  // Ambil state dari store
+  const position = usePlayerStore((state) => state.position);
+  const duration = usePlayerStore((state) => state.duration);
+  const setPosition = usePlayerStore((state) => state.setPosition);
+
   const [showPreview, setShowPreview] = useState(false);
   const [previewTime, setPreviewTime] = useState(0);
-  const width = useSharedValue(0);
-  const startX = useSharedValue(0);
+  
+  const containerWidth = useSharedValue(0);
+  
+  // Hitung progress (0 sampai 1)
+  const progress = duration > 0 ? position / duration : 0;
 
-  // Gunakan Gesture.Pan() dari react-native-gesture-handler
   const panGesture = Gesture.Pan()
     .onStart(() => {
       runOnJS(setShowPreview)(true);
     })
     .onUpdate((event) => {
-      const newX = Math.max(0, Math.min(width.value, event.x));
-      const newProgress = newX / width.value;
-      runOnJS(setPreviewTime)(newProgress * duration);
+      const newX = Math.max(0, Math.min(containerWidth.value, event.x));
+      const calcProgress = newX / containerWidth.value;
+      runOnJS(setPreviewTime)(calcProgress * duration);
     })
     .onEnd((event) => {
-      const newProgress = Math.max(0, Math.min(1, event.x / width.value));
-      runOnJS(onSeek)(newProgress * duration);
+      const finalX = Math.max(0, Math.min(containerWidth.value, event.x));
+      const finalProgress = finalX / containerWidth.value;
+      runOnJS(setPosition)(finalProgress * duration);
       runOnJS(setShowPreview)(false);
     });
 
   return (
     <View style={styles.container}>
-      <GestureDetector gesture={panGesture}>
-        <Animated.View 
-          style={styles.track}
-          onLayout={(e) => {
-            width.value = e.nativeEvent.layout.width;
-          }}
-        >
-          {/* Chapter markers */}
-          {chapters.map((chapter, index) => (
-            <View
-              key={index}
-              style={[
-                styles.chapterMarker,
-                {
-                  left: `${(chapter.time / duration) * 100}%`,
-                  backgroundColor: colors.primary[500],
-                },
-              ]}
-            />
-          ))}
-
-          {/* Progress bar */}
-          <Animated.View 
-            style={[
-              styles.progress,
-              {
-                width: `${progress * 100}%`,
-                backgroundColor: colors.primary[500],
-              },
-            ]} 
-          />
-        </Animated.View>
-      </GestureDetector>
-
-      {/* Time display */}
-      <View style={[styles.timeContainer, { marginTop: spacing.xs }]}>
-        <Text style={[styles.timeText, { color: colors.text.primary }]}>
-          {formatTime(progress * duration)}
-        </Text>
-        <Text style={[styles.timeText, { color: colors.text.secondary }]}>
-          {formatTime(duration)}
-        </Text>
-      </View>
-
-      {/* Preview tooltip */}
+      {/* Tooltip Preview */}
       {showPreview && (
         <View style={[styles.previewContainer, { 
           left: `${(previewTime / duration) * 100}%`,
@@ -106,57 +60,49 @@ export const EnhancedProgressBar: React.FC<EnhancedProgressBarProps> = ({
           <View style={[styles.previewLine, { backgroundColor: colors.primary[500] }]} />
         </View>
       )}
+
+      <GestureDetector gesture={panGesture}>
+        <View 
+          style={styles.gestureArea}
+          onLayout={(e) => {
+            containerWidth.value = e.nativeEvent.layout.width;
+          }}
+        >
+          <View style={[styles.track, { backgroundColor: 'rgba(255,255,255,0.1)' }]}>
+            <Animated.View 
+              style={[
+                styles.progress,
+                {
+                  width: `${progress * 100}%`,
+                  backgroundColor: colors.primary[500],
+                },
+              ]} 
+            />
+          </View>
+        </View>
+      </GestureDetector>
+
+      <View style={[styles.timeContainer, { marginTop: 8 }]}>
+        <Text style={[styles.timeText, { color: colors.text.secondary }]}>
+          {formatTime(position)}
+        </Text>
+        <Text style={[styles.timeText, { color: colors.text.secondary }]}>
+          {formatTime(duration)}
+        </Text>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    width: '100%',
-  },
-  track: {
-    height: 4,
-    backgroundColor: '#1F2A3A',
-    borderRadius: 2,
-    position: 'relative',
-  },
-  chapterMarker: {
-    position: 'absolute',
-    width: 2,
-    height: 8,
-    top: -2,
-    borderRadius: 1,
-  },
-  progress: {
-    position: 'absolute',
-    height: 4,
-    borderRadius: 2,
-  },
-  timeContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  timeText: {
-    fontSize: 12,
-  },
-  previewContainer: {
-    position: 'absolute',
-    top: -30,
-    alignItems: 'center',
-    width: 60,
-  },
-  previewTooltip: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  previewText: {
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  previewLine: {
-    width: 2,
-    height: 16,
-    marginTop: 2,
-  },
+  container: { width: '100%', height: 40, justifyContent: 'center' },
+  gestureArea: { height: 20, justifyContent: 'center', width: '100%' },
+  track: { height: 4, borderRadius: 2, overflow: 'hidden' },
+  progress: { height: '100%' },
+  timeContainer: { flexDirection: 'row', justifyContent: 'space-between' },
+  timeText: { fontSize: 11, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  previewContainer: { position: 'absolute', top: -25, alignItems: 'center', width: 60, zIndex: 10 },
+  previewTooltip: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  previewText: { fontSize: 10, fontWeight: 'bold' },
+  previewLine: { width: 1.5, height: 10, marginTop: 2 }
 });

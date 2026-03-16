@@ -6,7 +6,7 @@ import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated'
 import { usePlayerStore } from '@/store/playerStore';
 import { useAudioPlayer } from '@/hooks/useAudioPlayer';
 import { useTheme } from '@/context/ThemeContext';
-import { SleepTimer } from './SleepTimer';
+import { SleepTimerModal } from './SleepTimerModal';
 import { PlaybackSpeed } from './PlaybackSpeed';
 
 export const PlayerControls: React.FC = () => {

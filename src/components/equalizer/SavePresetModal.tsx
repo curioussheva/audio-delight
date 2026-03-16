@@ -1,138 +1,37 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Modal,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-} from 'react-native';
-import * as Haptics from 'expo-haptics';
-import { useTheme } from '@/context/ThemeContext';
-import { EqualizerBand } from '@/types/equalizer';
-import { saveCustomPreset } from '@/services/PresetStorage';
+import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 
-interface SavePresetModalProps {
+interface Props {
   visible: boolean;
+  onSave: (name: string) => void;
   onClose: () => void;
-  onSaved: (name: string) => void;
-  currentBands: EqualizerBand[];
 }
 
-export const SavePresetModal: React.FC<SavePresetModalProps> = ({
-  visible,
-  onClose,
-  onSaved,
-  currentBands,
-}) => {
-  const { theme } = useTheme();
-  const { colors, spacing } = theme;
-  const [presetName, setPresetName] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-
-  const handleSave = async () => {
-    if (!presetName.trim()) {
-      Alert.alert('Error', 'Nama preset tidak boleh kosong');
-      return;
-    }
-
-    setIsSaving(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    try {
-      const newPreset = {
-        id: `custom_${Date.now()}`,
-        name: presetName.trim(),
-        description: 'Custom preset',
-        bands: currentBands.map((band, index) => ({
-          ...band,
-          id: index,
-        })),
-      };
-
-      await saveCustomPreset(newPreset);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      onSaved(presetName);
-      setPresetName('');
-      onClose();
-    } catch (error) {
-      Alert.alert('Error', 'Gagal menyimpan preset');
-    } finally {
-      setIsSaving(false);
-    }
-  };
+export const SavePresetModal: React.FC<Props> = ({ visible, onSave, onClose }) => {
+  const [name, setName] = useState('');
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <View style={[styles.overlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-        <View style={[styles.modal, { 
-          backgroundColor: colors.background.primary,
-          borderRadius: 16,
-          padding: spacing.lg,
-          width: '80%',
-        }]}>
-          <Text style={[styles.title, { 
-            color: colors.text.primary,
-            fontSize: 18,
-            fontWeight: '700',
-            marginBottom: spacing.md,
-          }]}>
-            Simpan Preset
-          </Text>
-
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={styles.overlay}>
+        <View style={styles.content}>
+          <Text style={styles.title}>Simpan Preset Custom</Text>
           <TextInput
-            style={[styles.input, { 
-              backgroundColor: colors.background.secondary,
-              color: colors.text.primary,
-              padding: spacing.md,
-              borderRadius: 8,
-              marginBottom: spacing.lg,
-            }]}
-            placeholder="Nama preset"
-            placeholderTextColor={colors.text.tertiary}
-            value={presetName}
-            onChangeText={setPresetName}
+            style={styles.input}
+            placeholder="Nama Preset (misal: My Bass 2.0)"
+            placeholderTextColor="#666"
+            value={name}
+            onChangeText={setName}
             autoFocus
           />
-
-          <View style={[styles.buttons, { 
-            flexDirection: 'row',
-            gap: spacing.md,
-          }]}>
-            <TouchableOpacity
-              style={[styles.button, { 
-                flex: 1,
-                backgroundColor: colors.background.secondary,
-                padding: spacing.md,
-                borderRadius: 8,
-                alignItems: 'center',
-              }]}
-              onPress={onClose}
-              disabled={isSaving}
-            >
-              <Text style={{ color: colors.text.secondary }}>Batal</Text>
+          <View style={styles.actions}>
+            <TouchableOpacity onPress={onClose} style={styles.btn}>
+              <Text style={styles.btnText}>Batal</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.button, { 
-                flex: 1,
-                backgroundColor: colors.primary[500],
-                padding: spacing.md,
-                borderRadius: 8,
-                alignItems: 'center',
-              }]}
-              onPress={handleSave}
-              disabled={isSaving}
+            <TouchableOpacity 
+              onPress={() => { onSave(name); setName(''); }}
+              style={[styles.btn, styles.saveBtn]}
             >
-              <Text style={{ color: colors.background.primary }}>
-                {isSaving ? 'Menyimpan...' : 'Simpan'}
-              </Text>
+              <Text style={styles.saveBtnText}>Simpan</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -142,26 +41,13 @@ export const SavePresetModal: React.FC<SavePresetModalProps> = ({
 };
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modal: {
-    // style di-inline
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  input: {
-    // style di-inline
-  },
-  buttons: {
-    flexDirection: 'row',
-  },
-  button: {
-    flex: 1,
-    alignItems: 'center',
-  },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 30 },
+  content: { backgroundColor: '#162539', borderRadius: 16, padding: 20 },
+  title: { color: '#FFF', fontSize: 18, fontWeight: 'bold', marginBottom: 15 },
+  input: { backgroundColor: '#0A1628', color: '#FFF', padding: 12, borderRadius: 8, marginBottom: 20 },
+  actions: { flexDirection: 'row', justifyContent: 'flex-end' },
+  btn: { padding: 10, marginLeft: 10 },
+  btnText: { color: '#C8D4E0' },
+  saveBtn: { backgroundColor: '#00D4AA', borderRadius: 8, paddingHorizontal: 20 },
+  saveBtnText: { color: '#0A1628', fontWeight: 'bold' }
 });

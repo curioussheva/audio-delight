@@ -11,14 +11,31 @@
     "noImplicitAny": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@components/*": ["src/components/*"],
-      "@hooks/*": ["src/hooks/*"],
-      "@store/*": ["src/store/*"],
-      "@utils/*": ["src/utils/*"],
-      "@constants/*": ["src/constants/*"],
-      "@types/*": ["src/types/*"],
-      "typeRoots": ["./node_modules/@types", "./src/types"]
+      "@/*": [
+        "src/*"
+      ],
+      "@components/*": [
+        "src/components/*"
+      ],
+      "@hooks/*": [
+        "src/hooks/*"
+      ],
+      "@store/*": [
+        "src/store/*"
+      ],
+      "@utils/*": [
+        "src/utils/*"
+      ],
+      "@constants/*": [
+        "src/constants/*"
+      ],
+      "@types/*": [
+        "src/types/*"
+      ],
+      "typeRoots": [
+        "./node_modules/@types",
+        "./src/types"
+      ]
     }
   },
   "include": [
@@ -26,7 +43,9 @@
     "app/**/*",
     "index.tsx",
     "babel.config.js",
-    "metro.config.js"
+    "metro.config.js",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
   ],
   "exclude": [
     "node_modules",
@@ -36,5 +55,6 @@
     "dist",
     "**/*.test.ts",
     "**/*.spec.ts"
-  ]
-} 
+  ],
+  "extends": "expo/tsconfig.base"
+}

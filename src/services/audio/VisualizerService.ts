@@ -1,80 +1,97 @@
-import { Audio } from 'expo-av';
+import { AppState, AppStateStatus, NativeModules, NativeEventEmitter, EmitterSubscription } from 'react-native';
+import { SharedValue } from 'react-native-reanimated';
 
-export interface FrequencyData {
-  frequencies: Uint8Array;
-  sampleRate: number;
-  bandwidth: number;
-}
+const { NativeVisualizerBridge } = NativeModules;
+const visualizerEmitter = new NativeEventEmitter(NativeVisualizerBridge);
 
 class VisualizerService {
-  private analyser: AnalyserNode | null = null;
-  private audioContext: AudioContext | null = null;
-  private source: MediaElementAudioSourceNode | null = null;
-  private dataArray: Uint8Array | null = null;
-  private animationFrame: number | null = null;
-  private listeners: ((data: FrequencyData) => void)[] = [];
+  private frequencyData: SharedValue<number[]> | null = null;
+  private subscription: EmitterSubscription | null = null;
+  private isStarted: boolean = false;
+  private lastSessionId: number = 0; // Menyimpan ID terakhir untuk resume
 
-  async initialize() {
-    if (this.analyser) return;
+  constructor() {
+    // Listener untuk menangani siklus hidup aplikasi (Background/Foreground)
+    AppState.addEventListener('change', this.handleAppStateChange);
+  }
+
+  private handleAppStateChange = async (nextAppState: AppStateStatus) => {
+    if (nextAppState === 'background' || nextAppState === 'inactive') {
+      // Hentikan pemrosesan native saat tidak terlihat untuk menghemat CPU/Baterai
+      this.stopNativeVisualizer();
+    } else if (nextAppState === 'active' && this.isStarted) {
+      // Otomatis jalan lagi saat app dibuka kembali
+      try {
+        await NativeVisualizerBridge.startVisualizer(this.lastSessionId);
+      } catch (e) {
+        console.warn('[VisualizerService] Failed to resume visualizer:', e);
+      }
+    }
+  };
+
+  /**
+   * Menghubungkan SharedValue ke stream data FFT Native
+   */
+  initialize(sharedValue: SharedValue<number[]>) {
+    this.frequencyData = sharedValue;
+    
+    // Pastikan tidak ada duplikasi listener
+    this.stopSubscription();
+
+    this.subscription = visualizerEmitter.addListener('onFftData', (data: number[]) => {
+      if (this.frequencyData) {
+        // Update langsung ke UI Thread tanpa melewati Bridge JS berulang kali
+        this.frequencyData.value = data;
+      }
+    });
+  }
+
+  /**
+   * Memulai penangkapan data audio
+   */
+  async start(sessionId: number = 0) {
+    if (!NativeVisualizerBridge) {
+      console.error('[VisualizerService] NativeVisualizerBridge is null');
+      return;
+    }
+    
+    this.lastSessionId = sessionId;
+    this.isStarted = true;
 
     try {
-      // Buat AudioContext
-      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      
-      // Buat AnalyserNode
-      this.analyser = this.audioContext.createAnalyser();
-      this.analyser.fftSize = 2048;
-      this.analyser.smoothingTimeConstant = 0.8;
-      
-      const bufferLength = this.analyser.frequencyBinCount;
-      this.dataArray = new Uint8Array(bufferLength);
-
-      // Hubungkan ke TrackPlayer (perlu native module)
-      // Untuk MVP, kita gunakan data simulasi
-      
-      this.startAnimation();
+      await NativeVisualizerBridge.startVisualizer(sessionId);
     } catch (error) {
-      console.error('Failed to initialize visualizer:', error);
+      this.isStarted = false;
+      console.error('[VisualizerService] Start Error:', error);
     }
   }
 
-  private startAnimation() {
-    const animate = () => {
-      if (this.analyser && this.dataArray) {
-        // Konversi Uint8Array<ArrayBufferLike> ke Uint8Array<ArrayBuffer>
-        // dengan membuat salinan baru
-        const dataArray = new Uint8Array(this.dataArray);
-        this.analyser.getByteFrequencyData(dataArray);
-        
-        this.listeners.forEach(listener => {
-          listener({
-            frequencies: dataArray,
-            sampleRate: this.audioContext?.sampleRate || 44100,
-            bandwidth: (this.audioContext?.sampleRate || 44100) / (this.analyser?.fftSize || 2048) || 21.5,
-          });
-        });
+  /**
+   * Menghentikan total visualizer (saat pindah layar atau stop musik)
+   */
+  stop() {
+    this.isStarted = false;
+    this.stopSubscription();
+    this.stopNativeVisualizer();
+  }
+
+  private stopNativeVisualizer() {
+    if (NativeVisualizerBridge) {
+      try {
+        NativeVisualizerBridge.stopVisualizer();
+      } catch (e) {
+        // Seringkali gagal jika sudah berhenti, kita abaikan
       }
-      this.animationFrame = requestAnimationFrame(animate);
-    };
-    
-    this.animationFrame = requestAnimationFrame(animate);
-  }
-
-  addListener(callback: (data: FrequencyData) => void) {
-    this.listeners.push(callback);
-    return () => {
-      this.listeners = this.listeners.filter(cb => cb !== callback);
-    };
-  }
-
-  destroy() {
-    if (this.animationFrame) {
-      cancelAnimationFrame(this.animationFrame);
     }
-    if (this.audioContext) {
-      this.audioContext.close();
+  }
+
+  private stopSubscription() {
+    if (this.subscription) {
+      this.subscription.remove();
+      this.subscription = null;
     }
   }
 }
 
+// Export sebagai Singleton agar state isStarted konsisten di seluruh aplikasi
 export default new VisualizerService();
