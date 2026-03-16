@@ -41,6 +41,18 @@ jobs:
       - name: Run Expo Prebuild
         run: npx expo prebuild --clean --non-interactive
 
+      - name: Patch Android Build Files
+        run: |
+          # 1. Paksa lokasi Maven untuk AsyncStorage & Track Player di level root
+          # Menggunakan sed untuk menyisipkan repositori lokal tepat setelah google()
+          sed -i '/google()/a \        maven { url "${{ github.workspace }}/node_modules/@react-native-async-storage/async-storage/android/libs" }' android/build.gradle
+          sed -i '/google()/a \        maven { url "${{ github.workspace }}/node_modules/react-native-track-player/android/repo" }' android/build.gradle
+          
+          # 2. Tambahkan flatDir sebagai cadangan (Fallback) agar file .aar terbaca tanpa .pom
+          sed -i '/repositories {/a \        flatDir { dirs "${{ github.workspace }}/node_modules/@react-native-async-storage/async-storage/android/libs" }' android/app/build.gradle
+          
+          echo "✅ Android build files patched with local paths"
+
       - name: Create local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 
@@ -48,11 +60,9 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: pristineaudio-app-release
-          path: android/app/build/outputs/apk/release/app-release.apk
-          if-no-files-found: error
+          # Menambahkan JVM args untuk stabilitas memori di GitHub Runner
+          ./gradlew assembleRelease \
+            --no-daemon \
+            -PkotlinVersion=2.0.21 \
+            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g" \
+            --stacktrace

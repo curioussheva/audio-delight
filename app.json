@@ -102,9 +102,10 @@
             "kotlinVersion": "2.0.21",
             "gradleVersion": "8.10.2",
             "extraMavenRepos": [
-              "../../node_modules/react-native-track-player/android/repo",
-              "../../node_modules/@react-native-async-storage/async-storage/android/libs"
-            ]
+  "../../node_modules/react-native-track-player/android/repo",
+  "../../node_modules/@react-native-async-storage/async-storage/android/libs"
+]
+
           },
           "ios": {
             "deploymentTarget": "15.1",
