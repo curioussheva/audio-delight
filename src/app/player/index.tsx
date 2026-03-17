@@ -52,11 +52,11 @@ export default function PlayerScreen() {
       </View>
 
       <Image 
-        source={currentSong.artwork ? { uri: currentSong.artwork } : require('@/assets/images/icon.png')} 
-        style={StyleSheet.absoluteFill} 
-        contentFit="cover"
-        blurRadius={50}
-      />
+  source={currentSong.artwork ? { uri: currentSong.artwork } : require('../../../assets/images/icon.png')} 
+  style={StyleSheet.absoluteFill} 
+  contentFit="cover"
+  blurRadius={50}
+/>
       <View style={[styles.overlay, { backgroundColor: 'rgba(4, 11, 19, 0.75)' }]} />
 
       <SafeAreaView style={styles.safeArea}>
@@ -100,10 +100,10 @@ export default function PlayerScreen() {
           {!showLyrics ? (
             <View style={styles.artworkContainer}>
               <Image 
-                source={currentSong.artwork ? { uri: currentSong.artwork } : require('@/assets/images/icon.png')} 
-                style={styles.mainArtwork}
-                contentFit="cover"
-              />
+  source={currentSong.artwork ? { uri: currentSong.artwork } : require('../../../assets/images/icon.png')} 
+  style={styles.mainArtwork}
+  contentFit="cover"
+/>
               <View style={styles.artworkShadow} />
               
               <View style={styles.analyzerWrapper}>

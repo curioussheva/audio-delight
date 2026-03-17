@@ -1,4 +1,4 @@
-name: Build PristineAudio APK (No Updates)
+name: Build PristineAudio APK (Optimized)
 
 on:
   push:
@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.19.4'
+          node-version: '20.x'
           cache: 'yarn'
 
       - name: Install dependencies
@@ -27,42 +27,48 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+          # Mengaktifkan cache Gradle otomatis dari action resmi
+          cache: 'gradle'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Accept Android Licenses
-        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
-
-      # ⭐ KOMENTAR DARI REMOTE (lebih deskriptif)
-      - name: Clean android folder
-        run: rm -rf android
-
-      - name: Run Expo Prebuild
-        run: npx expo prebuild --clean --non-interactive
+      # Optimasi: Prebuild hanya jika folder android tidak ada atau butuh pembersihan
+      - name: Expo Prebuild
+        run: npx expo prebuild --clean --platform android --non-interactive
 
       - name: Patch Android Build Files
         run: |
-          # 1. Paksa lokasi Maven untuk AsyncStorage & Track Player di level root
-          # Menggunakan sed untuk menyisipkan repositori lokal tepat setelah google()
-          sed -i '/google()/a \        maven { url "${{ github.workspace }}/node_modules/@react-native-async-storage/async-storage/android/libs" }' android/build.gradle
-          sed -i '/google()/a \        maven { url "${{ github.workspace }}/node_modules/react-native-track-player/android/repo" }' android/build.gradle
+          # Menggunakan path yang lebih dinamis agar tidak hardcoded total
+          ROOT_DIR="${{ github.workspace }}"
           
-          # 2. Tambahkan flatDir sebagai cadangan (Fallback) agar file .aar terbaca tanpa .pom
-          sed -i '/repositories {/a \        flatDir { dirs "${{ github.workspace }}/node_modules/@react-native-async-storage/async-storage/android/libs" }' android/app/build.gradle
+          # Patch build.gradle (allprojects) agar lebih stabil mencari libs
+          sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/build.gradle
+          sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/react-native-track-player/android/repo\" }" android/build.gradle
           
-          echo "✅ Android build files patched with local paths"
-
-      - name: Create local.properties
-        run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+          # Patch app/build.gradle untuk flatDir
+          sed -i "/repositories {/a \        flatDir { dirs \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/app/build.gradle
+          
+          echo "✅ Android build files patched successfully"
 
       - name: Build APK with Gradle
         run: |
           cd android
           chmod +x gradlew
-          # Menambahkan JVM args untuk stabilitas memori di GitHub Runner
+          # Optimasi Flags: 
+          # --no-daemon (wajib di CI)
+          # --build-cache (mempercepat build berikutnya)
+          # -Xmx (menghindari OOM / Out of Memory)
           ./gradlew assembleRelease \
             --no-daemon \
+            --build-cache \
+            --parallel \
             -PkotlinVersion=2.0.21 \
-            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g" \
-            --stacktrace
+            -Dorg.gradle.jvmargs="-Xmx4g -Xms1g -XX:+HeapDumpOnOutOfMemoryError"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PristineAudio-Release
+          path: android/app/build/outputs/apk/release/*.apk
+          retention-days: 7
