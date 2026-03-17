@@ -29,9 +29,9 @@ export default function AboutScreen() {
       {/* Header Section */}
       <View style={[styles.header, { marginTop: spacing.xxl }]}>
         <Image 
-          source={require('@/assets/images/dev-logo.png')} 
-          style={styles.logo}
-          contentFit="contain"
+          source={require('../../../assets/images/dev-logo.png')} 
+  style={styles.logo}
+  contentFit="contain"
         />
         <Text style={[styles.title, { color: colors.primary[500] }]}>PristineAudio</Text>
         <Text style={[styles.version, { color: colors.text.tertiary }]}>v1.0.0-PRO</Text>
