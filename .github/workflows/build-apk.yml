@@ -36,6 +36,12 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --clean --platform android --non-interactive
 
+      # TAMBAHKAN STEP INI
+      - name: Configure Android SDK Path
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+          echo "✅ local.properties created with SDK path: $ANDROID_HOME"
+
       - name: Build Release APK
         run: |
           cd android
