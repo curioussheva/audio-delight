@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/images/splash.png",
-      "resizeMode": "contain",
+      "resizeMode": "cover",
       "backgroundColor": "#0A1628",
       "dark": {
         "image": "./assets/images/splash.png",
@@ -83,7 +83,7 @@
         "expo-splash-screen",
         {
           "image": "./assets/images/splash.png",
-          "resizeMode": "contain",
+          "resizeMode": "cover",
           "backgroundColor": "#0A1628",
           "dark": {
             "image": "./assets/images/splash.png",
@@ -115,7 +115,7 @@
       ]
     ],
     "experiments": {
-      "typedRoutes": true,
+      "typedRoutes": false,
       "tsconfigPaths": true
     },
     "extra": {

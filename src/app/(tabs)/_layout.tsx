@@ -1,18 +1,18 @@
 import React from 'react';
-import { Tabs, Stack } from 'expo-router';
+import { Tabs } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import { StyleSheet, Platform, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+
 import { useTheme } from '@/context/ThemeContext';
 import FloatingPlayer from '@/components/audio/FloatingPlayer';
 import { LyricsPreview } from '@/components/audio/LyricPreview';
-
 
 export default function TabsLayout() {
   const { theme } = useTheme();
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.container}>
       <Tabs
         screenOptions={{
           headerShown: false,
@@ -20,11 +20,10 @@ export default function TabsLayout() {
           tabBarActiveTintColor: theme.colors.primary[500],
           tabBarInactiveTintColor: theme.colors.text.tertiary,
           tabBarStyle: styles.tabBar,
-          // Menggunakan BlurView sebagai latar belakang Tab Bar
           tabBarBackground: () => (
             <BlurView
               intensity={Platform.OS === 'ios' ? 80 : 100}
-              tint={(theme as any).dark ? 'dark' : 'light'}
+              tint={theme.isDark ? 'dark' : 'light'}
               style={StyleSheet.absoluteFill}
             />
           ),
@@ -34,49 +33,65 @@ export default function TabsLayout() {
           name="library"
           options={{
             title: 'Library',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="library-outline" size={size} color={color} />
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={focused ? 'library' : 'library-outline'}
+                size={size}
+                color={color}
+                accessibilityLabel="Library"
+              />
             ),
           }}
         />
+
         <Tabs.Screen
           name="equalizer"
           options={{
             title: 'DSP',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="analytics-outline" size={size} color={color} />
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={focused ? 'analytics' : 'analytics-outline'}
+                size={size}
+                color={color}
+                accessibilityLabel="DSP / Equalizer"
+              />
             ),
           }}
         />
+
         <Tabs.Screen
           name="visualizer"
           options={{
             title: 'Live',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="pulse-outline" size={size} color={color} />
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={focused ? 'pulse' : 'pulse-outline'}
+                size={size}
+                color={color}
+                accessibilityLabel="Live Visualizer"
+              />
             ),
           }}
         />
       </Tabs>
 
-      {/* Floating Player tetap berada di atas Tabs */}
-      <View style={{ flex: 1 }}>
-  <Stack /> 
-  <LyricsPreview />
-  <FloatingPlayer />
-</View>
-
+      {/* Global overlays – always visible above tabs */}
+      <LyricsPreview />
+      <FloatingPlayer />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   tabBar: {
-    position: 'absolute', // Membuatnya melayang agar blur terlihat
+    position: 'absolute',
     borderTopWidth: 0,
     elevation: 0,
     height: Platform.OS === 'ios' ? 88 : 64,
     paddingBottom: Platform.OS === 'ios' ? 30 : 10,
-    backgroundColor: 'transparent', // Penting agar BlurView bekerja
+    backgroundColor: 'transparent',
   },
 });

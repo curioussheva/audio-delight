@@ -43,9 +43,7 @@
     "app/**/*",
     "index.tsx",
     "babel.config.js",
-    "metro.config.js",
-    ".expo/types/**/*.ts",
-    "expo-env.d.ts"
+    "metro.config.js"
   ],
   "exclude": [
     "node_modules",

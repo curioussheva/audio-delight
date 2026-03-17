@@ -27,48 +27,38 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          # Mengaktifkan cache Gradle otomatis dari action resmi
           cache: 'gradle'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # Optimasi: Prebuild hanya jika folder android tidak ada atau butuh pembersihan
+      # Prebuild dengan --clean untuk pastikan expo-router baru terintegrasi benar
       - name: Expo Prebuild
         run: npx expo prebuild --clean --platform android --non-interactive
 
-      - name: Patch Android Build Files
+      - name: Patch Android Build Files (jika masih pakai custom maven)
         run: |
-          # Menggunakan path yang lebih dinamis agar tidak hardcoded total
           ROOT_DIR="${{ github.workspace }}"
           
-          # Patch build.gradle (allprojects) agar lebih stabil mencari libs
-          sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/build.gradle
-          sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/react-native-track-player/android/repo\" }" android/build.gradle
+          # Patch repositories jika diperlukan (untuk react-native-track-player & async-storage)
+          sed -i "/allprojects {/a \    repositories {\n        maven { url \"$ROOT_DIR/node_modules/react-native-track-player/android/repo\" }\n        maven { url \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }\n    }" android/build.gradle
           
-          # Patch app/build.gradle untuk flatDir
-          sed -i "/repositories {/a \        flatDir { dirs \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/app/build.gradle
-          
-          echo "✅ Android build files patched successfully"
+          echo "✅ Android build files patched"
 
-      - name: Build APK with Gradle
+      - name: Build Release APK
         run: |
           cd android
           chmod +x gradlew
-          # Optimasi Flags: 
-          # --no-daemon (wajib di CI)
-          # --build-cache (mempercepat build berikutnya)
-          # -Xmx (menghindari OOM / Out of Memory)
           ./gradlew assembleRelease \
             --no-daemon \
             --build-cache \
             --parallel \
             -PkotlinVersion=2.0.21 \
-            -Dorg.gradle.jvmargs="-Xmx4g -Xms1g -XX:+HeapDumpOnOutOfMemoryError"
+            -Dorg.gradle.jvmargs="-Xmx4g -Xms1g -XX:+HeapDumpOnOutOfMemoryError -XX:MaxMetaspaceSize=1g"
 
-      - name: Upload APK
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: PristineAudio-Release
           path: android/app/build/outputs/apk/release/*.apk
-          retention-days: 7
+          retention-days: 7 
