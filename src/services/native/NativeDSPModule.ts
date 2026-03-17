@@ -6,7 +6,12 @@ interface NativeDSPInterface {
   toggleExclusiveMode(enabled: boolean): Promise<boolean>;
   setEqualizer(bands: EqualizerBand[]): Promise<void>;
   getHardwareSampleRate(): Promise<number>;
+  // Tambahkan ini agar sinkron dengan Kotlin:
+  setBassBoost(strength: number, audioSessionId: number): Promise<boolean>;
+  setReverbPreset(preset: number, audioSessionId: number): Promise<boolean>;
+  releaseAllFX(): Promise<boolean>;
 }
+
 
 // Ambil dari NativeModules
 const { NativeDSPModule } = NativeModules;

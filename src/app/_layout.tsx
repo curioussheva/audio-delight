@@ -6,9 +6,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { LoadingScreen } from '@/components/ui/LoadingScreen';
 import { AudioPropertyToast } from '@/components/audio/AudioPropertyToast';
-import FloatingPlayer from '@/components/audio/FloatingPlayer'; // Import ini juga
+import FloatingPlayer from '@/components/audio/FloatingPlayer'; 
 import { useTrackPlayerHandler } from '@/hooks/useTrackPlayerHandler';
-import AudioEngine from '@/services/audio/AudioEngine';
+
+// PERBAIKAN 1: Import dengan kurung kurawal dan huruf kecil
+import { audioEngine } from '@/services/audio/AudioEngine'; 
 import { usePlayerStore } from '@/store/playerStore';
 
 export default function RootLayout() {
@@ -23,9 +25,9 @@ export default function RootLayout() {
   useEffect(() => {
     const prepare = async () => {
       try {
-        // Init Audio Engine & Store secara paralel
+        // PERBAIKAN 2: Gunakan 'audioEngine' (huruf kecil) hasil import tadi
         await Promise.all([
-          AudioEngine.initialize(),
+          audioEngine.initialize(), 
           initStore(),
           AsyncStorage.getItem('has_onboarded').then(val => setHasOnboarded(val === 'true'))
         ]);
@@ -42,7 +44,7 @@ export default function RootLayout() {
   useEffect(() => {
     if (!isReady || hasOnboarded === null) return;
 
-    const firstSegment = segments[0] as any;
+    const firstSegment = segments[0] as string; // Casting ke string agar lebih aman
     const isInsideApp = firstSegment === '(drawer)' || firstSegment === '(tabs)';
 
     if (!hasOnboarded && isInsideApp) {
@@ -62,7 +64,6 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
-        {/* View pembungkus agar UI Toast & FloatingPlayer tetap berada di atas Stack */}
         <View style={{ flex: 1 }}>
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="onboarding" />
@@ -70,14 +71,14 @@ export default function RootLayout() {
             <Stack.Screen 
               name="player/index" 
               options={{ 
-                presentation: 'transparentModal', // Gunakan transparent agar background player terlihat mewah
+                presentation: 'transparentModal', 
                 animation: 'slide_from_bottom',
                 gestureEnabled: true,
               }} 
             />
           </Stack>
 
-          {/* Komponen Global - Sekarang bisa akses theme.colors */}
+          {/* Toast dan FloatingPlayer diletakkan di luar Stack agar tetap melayang */}
           <AudioPropertyToast />
           <FloatingPlayer />
         </View>

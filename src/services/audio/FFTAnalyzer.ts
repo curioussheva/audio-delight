@@ -1,35 +1,33 @@
-import FFT from 'fft.js';
-import { FrequencyData } from '@/types/dsp.types';  // Gunakan path alias
+import { FrequencyData } from '@/types/dsp.types';
 
 class FFTAnalyzer {
-  private fft: any;
-  private bufferSize = 2048;
-  
-  constructor() {
-    this.fft = new FFT(this.bufferSize);
-  }
-  
-  analyze(samples: Float32Array): FrequencyData {
-    const complex = new Array(this.bufferSize * 2).fill(0);
-    for (let i = 0; i < Math.min(samples.length, this.bufferSize); i++) {
-      complex[2*i] = samples[i];
-    }
+  private readonly bufferSize = 2048;
+  private readonly defaultSampleRate = 44100;
+
+  /**
+   * Mengolah data FFT mentah yang dikirim oleh NativeVisualizerBridge.
+   * Native sudah melakukan FFT, jadi kita tinggal melakukan normalisasi jika perlu.
+   */
+  processNativeData(fftData: number[], customSampleRate?: number): FrequencyData {
+    // Data dari Android Visualizer biasanya sudah berupa besaran (magnitude) 
+    // atau gabungan real/imaginary tergantung implementasi Kotlin-mu.
     
-    this.fft.transform(complex);
-    
-    const magnitudes = new Float32Array(this.bufferSize/2);
-    for (let i = 0; i < this.bufferSize/2; i++) {
-      const real = complex[2*i];
-      const imag = complex[2*i+1];
-      magnitudes[i] = Math.sqrt(real*real + imag*imag);
-    }
+    const magnitudes = new Float32Array(fftData);
     
     return {
       frequencies: magnitudes,
-      sampleRate: 44100,
-      bins: this.bufferSize/2
+      sampleRate: customSampleRate || this.defaultSampleRate,
+      bins: fftData.length
     };
+  }
+
+  /**
+   * Helper untuk memetakan indeks bin ke frekuensi Hz
+   * Rumus: f = i * (sampleRate / nfft)
+   */
+  getFrequencyAtIndex(index: number, sampleRate: number, bins: number): number {
+    return index * (sampleRate / (bins * 2));
   }
 }
 
-export default FFTAnalyzer;
+export default new FFTAnalyzer();

@@ -96,7 +96,7 @@ export default function EqualizerScreen() {
                 key={band.id}
                 frequency={band.frequency}
                 gain={band.gain}
-                onValueChange={(val) => updateBandGain(index, val)}
+                onValueChange={(val: number) => updateBandGain(index, val)}
               />
             ))
           )}

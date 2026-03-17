@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import Slider from '@react-native-community/slider'; // Pastikan sudah install ini
+import Slider from '@react-native-community/slider';
 import { useTheme } from '@/context/ThemeContext';
 
 interface EqualizerBandProps {
@@ -9,10 +9,14 @@ interface EqualizerBandProps {
   onValueChange: (value: number) => void;
 }
 
-export const EqualizerBand: React.FC<EqualizerBandProps> = ({ frequency, gain, onValueChange }) => {
+export const EqualizerBand: React.FC<EqualizerBandProps> = React.memo(({ frequency, gain, onValueChange }) => {
   const { theme } = useTheme();
+  const [localGain, setLocalGain] = useState(gain);
 
-  // Format label frekuensi (contoh: 1000 -> 1kHz)
+  useEffect(() => {
+    setLocalGain(gain);
+  }, [gain]);
+
   const formatFreq = (freq: number) => freq >= 1000 ? `${freq / 1000}kHz` : `${freq}Hz`;
 
   return (
@@ -23,30 +27,26 @@ export const EqualizerBand: React.FC<EqualizerBandProps> = ({ frequency, gain, o
       
       <Slider
         style={styles.slider}
-        minimumValue={-12}
-        maximumValue={12}
+        minimumValue={-15}
+        maximumValue={15}
         step={0.5}
-        value={gain}
-        onValueChange={onValueChange}
+        value={localGain}
+        onValueChange={setLocalGain}
+        onSlidingComplete={onValueChange}
         minimumTrackTintColor={theme.colors.primary[500]}
         maximumTrackTintColor={theme.colors.background.tertiary}
-        thumbTintColor={theme.colors.primary[500]}
+        thumbTintColor={theme.colors.text.primary}
       />
 
       <Text style={[styles.gainValue, { color: theme.colors.primary[500] }]}>
-        {gain > 0 ? `+${gain.toFixed(1)}` : gain.toFixed(1)} dB
+        {localGain > 0 ? `+${localGain.toFixed(1)}` : localGain.toFixed(1)} dB
       </Text>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 15,
-    height: 40,
-  },
+  container: { flexDirection: 'row', alignItems: 'center', marginBottom: 15, height: 40 },
   label: { width: 55, fontSize: 12, fontWeight: '700' },
   slider: { flex: 1, height: 40 },
   gainValue: { width: 60, fontSize: 12, textAlign: 'right', fontWeight: '600', fontVariant: ['tabular-nums'] }

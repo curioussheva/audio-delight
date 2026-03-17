@@ -6,6 +6,7 @@ import { useTheme } from '@/context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image'; // Gunakan expo-image untuk performa
+import NativeDSPModule from '@/services/native/NativeDSPModule';
 
 export default function OnboardingScreen() {
   const { theme } = useTheme();
@@ -19,30 +20,40 @@ export default function OnboardingScreen() {
   };
 
   const handleFinish = async () => {
-    if (!selectedMode) return;
+  if (!selectedMode) return;
+  
+  try {
+    // 1. Simpan preferensi
+    await AsyncStorage.setItem('audio_mode_preference', selectedMode);
+    await AsyncStorage.setItem('has_onboarded', 'true');
     
-    try {
-      await AsyncStorage.setItem('audio_mode_preference', selectedMode);
-      await AsyncStorage.setItem('has_onboarded', 'true');
-      
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      
-      // Mengarahkan ke rute utama aplikasi
-      router.replace('/(drawer)/(tabs)/library' as any);
-    } catch (e) {
-      console.error("Gagal menyimpan onboarding", e);
+    // 2. Set mode awal ke Native
+    if (selectedMode === 'bit-perfect') {
+      await NativeDSPModule.toggleExclusiveMode(true);
+      await NativeDSPModule.releaseAllFX(); // Pastikan efek bersih
+    } else {
+      await NativeDSPModule.toggleExclusiveMode(false);
+      // Opsional: set default bass boost sedikit agar terasa bedanya
+      // Note: Ini butuh sessionId, biasanya dilakukan saat player mulai
     }
-  };
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    router.replace('/(drawer)/(tabs)/library' as any);
+  } catch (e) {
+    console.error("Gagal menyimpan onboarding", e);
+  }
+};
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background.primary }]}>
       <View style={styles.header}>
         {/* Menggunakan Logo Premium Anda */}
         <Image 
-          source={require('@/assets/images/splash.png')} 
-          style={styles.logo}
-          contentFit="contain"
-        />
+  source={require('../../assets/images/splash.png')} 
+  style={styles.logo}
+  contentFit="contain"
+/>
+
         <Text style={[styles.welcomeText, { color: colors.text.secondary }]}>Experience Pure Sound</Text>
         <View style={[styles.divider, { backgroundColor: colors.primary[500] }]} />
       </View>

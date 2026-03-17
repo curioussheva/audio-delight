@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import { Song } from '@/types/audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import AudioEngine from '@/services/audio/AudioEngine';
+
+// PERBAIKAN 1: Import instance singleton
+import { audioEngine } from '@/services/audio/AudioEngine';
 
 interface LirikLine {
   time: number;
@@ -22,7 +24,6 @@ export interface PlayerState {
   lyrics: LirikLine[];
   sleepTimerEnd: number | null;
   
-  // Actions
   initStore: () => Promise<void>;
   setCurrentSong: (song: Song | null) => void;
   setQueue: (songs: Song[]) => void;
@@ -58,7 +59,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   sleepTimerEnd: null,
 
   seek: (pos: number) => {
-    AudioEngine.seek(pos);
+    // PERBAIKAN 2: Gunakan audioEngine
+    audioEngine.seekTo(pos); 
     set({ position: pos });
   },
 
@@ -88,7 +90,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const endTime = Date.now() + minutes * 60000;
     set({ sleepTimerEnd: endTime });
 
-    // Gunakan interval pengecekan yang lebih aman
     const checkTimer = setInterval(() => {
       const state = get();
       if (!state.sleepTimerEnd) {
@@ -96,7 +97,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         return;
       }
       if (Date.now() >= state.sleepTimerEnd) {
-        state.setIsPlaying(false);
+        get().setIsPlaying(false); // Gunakan setIsPlaying agar engine juga pause
         set({ sleepTimerEnd: null });
         clearInterval(checkTimer);
       }
@@ -109,39 +110,36 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
     set({ currentSong: song, queue: targetQueue, isPlaying: true, position: 0 });
     
-    await AudioEngine.setQueue(targetQueue, index >= 0 ? index : 0);
-    await AudioEngine.play();
+    await audioEngine.setQueue(targetQueue, index >= 0 ? index : 0);
+    await audioEngine.play();
   },
 
   togglePlay: () => {
-    const { isPlaying, setIsPlaying } = get();
-    setIsPlaying(!isPlaying);
+    const { isPlaying } = get();
+    // Panggil setter agar logic engine terpicu
+    get().setIsPlaying(!isPlaying);
   },
 
   setIsPlaying: (isPlaying) => {
-    isPlaying ? AudioEngine.play() : AudioEngine.pause();
+    // PERBAIKAN 3: Trigger engine sesuai state
+    isPlaying ? audioEngine.play() : audioEngine.pause();
     set({ isPlaying });
   },
 
   playNext: async () => {
-    const { queue, currentSong, shuffle } = get();
-    if (!queue.length || !currentSong) return;
-    
-    // UI Update langsung agar terasa responsif
-    await AudioEngine.skipToNext(); 
-    // State lagu akan diupdate otomatis oleh useTrackPlayerEvents di RootLayout
+    if (!get().queue.length) return;
+    await audioEngine.skipToNext(); 
   },
 
   playPrevious: async () => {
-    const { queue, currentSong } = get();
-    if (!queue.length || !currentSong) return;
-    
-    await AudioEngine.skipToPrevious();
+    if (!get().queue.length) return;
+    await audioEngine.skipToPrevious();
   },
 
   setAudioMode: async (mode) => {
     await AsyncStorage.setItem('audio_mode_preference', mode);
-    await AudioEngine.setExclusiveMode(mode === 'bit-perfect');
+    // PERBAIKAN 4: Nama method sesuai AudioEngine.ts
+    await audioEngine.toggleExclusiveMode(mode === 'bit-perfect');
     set({ audioMode: mode });
   },
 
@@ -152,8 +150,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   
   setPlaybackSpeed: async (speed) => {
     set({ playbackSpeed: speed });
-    // Perbaikan: gunakan setPlaybackRate sesuai nama fungsi di AudioEngine.ts
-    await AudioEngine.setPlaybackRate(speed);
+    await audioEngine.setPlaybackRate(speed);
     await AsyncStorage.setItem('playback_speed', speed.toString());
   },
   
@@ -163,7 +160,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const current = get().repeat;
     const nextRepeat = current === 'off' ? 'all' : 
                        current === 'all' ? 'track' : 'off';
-    AudioEngine.setRepeatMode(nextRepeat);
+    
+    audioEngine.setRepeatMode(nextRepeat);
     set({ repeat: nextRepeat });
   },
 

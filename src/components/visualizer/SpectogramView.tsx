@@ -22,7 +22,7 @@ export const SpectogramView = memo(({
   const [, forceUpdate] = React.useReducer(x => x + 1, 0);
 
   useEffect(() => {
-    const subscription = visualizerEmitter.addListener('onFftData', (fftData: number[]) => {
+    const subscription = visualizerEmitter?.addListener('onFftData', (fftData: number[]) => {
       // 1. Downsampling: Ambil rata-rata atau skip data agar sesuai dengan BINS
       const step = Math.floor(fftData.length / BINS);
       const normalizedRow = [];
@@ -40,7 +40,7 @@ export const SpectogramView = memo(({
       forceUpdate();
     });
 
-    return () => subscription.remove();
+    return () => subscription?.remove();
   }, []);
 
   /**
