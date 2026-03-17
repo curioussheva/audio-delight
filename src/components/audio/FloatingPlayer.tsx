@@ -87,7 +87,7 @@ export default function FloatingPlayer() {
 
             <View style={styles.content}>
               <Image 
-                source={currentSong.artwork ? { uri: currentSong.artwork } : require('@/assets/images/icon.png')} 
+                source={currentSong.artwork ? { uri: currentSong.artwork } : require('../../../assets/images/icon.png')}
                 style={styles.artwork}
                 contentFit="cover"
                 transition={200}

@@ -27,7 +27,7 @@ const COLORS = {
 };
 
 // PERBAIKAN: Tentukan path ke file gambar logo Anda
-const LOGO_SOURCE = require('@/assets/images/splash.png');
+const LOGO_SOURCE = require('../../../assets/images/splash.png');
 
 export const LoadingScreen: React.FC = () => {
   // Animasi untuk memudarkan (fade-in) seluruh layar saat pertama dimuat
