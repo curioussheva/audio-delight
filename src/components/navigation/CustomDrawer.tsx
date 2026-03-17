@@ -25,10 +25,10 @@ export default function CustomDrawer(props: DrawerContentComponentProps) {
         {/* HEADER: Area Logo Premium */}
         <View style={[styles.header, { paddingTop: insets.top + 20, backgroundColor: colors.background.secondary }]}>
           <Image
-            source={require('@/assets/images/logo.png')}
-            style={styles.logo}
-            contentFit="contain"
-          />
+  source={require('../../../assets/images/logo.png')}
+  style={styles.logo}
+  contentFit="contain"
+/>
           <View style={styles.versionBadge}>
             <Text style={[styles.versionText, { color: colors.primary[500] }]}>v1.0.0 GOLD</Text>
           </View>
