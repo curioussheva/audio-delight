@@ -51,49 +51,56 @@ jobs:
 
       - name: Pin Gradle to 8.7
         run: |
-          # 8.7 = versi terakhir sebelum serviceOf dihapus di 8.8
           sed -i 's|gradle-[0-9][0-9]*\.[0-9][0-9]*\(\.[0-9][0-9]*\)\?-bin\.zip|gradle-8.7-bin.zip|g' \
             android/gradle/wrapper/gradle-wrapper.properties
-          echo "Gradle wrapper:"
           grep distributionUrl android/gradle/wrapper/gradle-wrapper.properties
 
       - name: Patch settings.gradle for CI
+        env:
+          ROOT_DIR: ${{ github.workspace }}
         run: |
-          ROOT_DIR="${{ github.workspace }}"
-          # Ganti dynamic node resolution dengan absolute path langsung
-          # karena subprocess node dari Groovy gagal di CI environment
-          python3 -c "
-import re, sys
+          # Perbaikan Baris 66: Menggunakan python script tanpa tabrakan tanda kutip
+          python3 << 'EOF'
+          import re, os, sys
 
-with open('android/settings.gradle', 'r') as f:
-    content = f.read()
+          root_dir = os.environ['ROOT_DIR']
+          file_path = 'android/settings.gradle'
 
-# Pattern: includeBuild(new File([...].execute(...).text.trim()).parentFile.toString())
-patched = re.sub(
-    r'includeBuild\s*\(\s*new\s+File\s*\(\s*\[.*?\]\s*\.execute\s*\(.*?\)\s*\.text\s*\.trim\s*\(\s*\)\s*\)\s*\.parentFile\s*\.toString\s*\(\s*\)\s*\)',
-    'includeBuild(\"$ROOT_DIR/node_modules/@react-native/gradle-plugin\")',
-    content,
-    flags=re.DOTALL
-)
+          if not os.path.exists(file_path):
+              print(f'Error: {file_path} not found')
+              sys.exit(1)
 
-if patched == content:
-    print('WARNING: Pattern not matched, settings.gradle unchanged', file=sys.stderr)
-else:
-    print('OK: settings.gradle patched')
+          with open(file_path, 'r') as f:
+              content = f.read()
 
-with open('android/settings.gradle', 'w') as f:
-    f.write(patched)
-"
-          echo "--- settings.gradle ---"
+          # Ganti dynamic resolution dengan absolute path ke node_modules
+          replacement = f'includeBuild("{root_dir}/node_modules/@react-native/gradle-plugin")'
+          pattern = r'includeBuild\s*\(\s*new\s+File\s*\(\s*\[.*?\]\s*\.execute\s*\(.*?\)\s*\.text\s*\.trim\s*\(\s*\)\s*\)\s*\.parentFile\s*\.toString\s*\(\s*\)\s*\)'
+
+          patched = re.sub(pattern, replacement, content, flags=re.DOTALL)
+
+          if patched == content:
+              print('WARNING: Pattern settings.gradle not matched')
+          else:
+              print('OK: settings.gradle patched successfully')
+
+          with open(file_path, 'w') as f:
+              f.write(patched)
+          EOF
+          
+          echo "--- Resulting settings.gradle ---"
           cat android/settings.gradle
 
       - name: Patch Android Build Files
         run: |
           ROOT_DIR="${{ github.workspace }}"
 
+          # Tambahkan maven repo untuk library spesifik yang sering gagal resolve di CI
           sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/build.gradle
           sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/react-native-track-player/android/repo\" }" android/build.gradle
           sed -i "/repositories {/a \        flatDir { dirs \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/app/build.gradle
+          
+          # Optimasi build untuk arm64 saja
           sed -i "/defaultConfig {/a \        ndk { abiFilters 'arm64-v8a' }" android/app/build.gradle
 
           echo "✅ Patched successfully"
@@ -117,3 +124,4 @@ with open('android/settings.gradle', 'w') as f:
           name: PristineAudio-Debug
           path: android/app/build/outputs/apk/debug/*.apk
           retention-days: 7
+ 
