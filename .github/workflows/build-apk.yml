@@ -12,16 +12,9 @@ jobs:
     steps:
       - name: Free Disk Space
         run: |
-          echo "Disk before cleanup:"
-          df -h
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android/sdk/ndk
-          sudo rm -rf /usr/local/lib/android/sdk/build-tools/3[0-2]*
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
-          sudo rm -rf /usr/local/share/boost
           sudo apt-get clean
-          echo "Disk after cleanup:"
           df -h
 
       - name: Checkout code
@@ -53,7 +46,6 @@ jobs:
         run: |
           sed -i 's|gradle-[0-9][0-9]*\.[0-9][0-9]*\(\.[0-9][0-9]*\)\?-bin\.zip|gradle-8.7-bin.zip|g' \
             android/gradle/wrapper/gradle-wrapper.properties
-          echo "Gradle wrapper updated to 8.7"
 
       - name: Patch settings.gradle for CI
         env:
@@ -61,40 +53,44 @@ jobs:
         run: |
           FILE_PATH="android/settings.gradle"
           
-          # 1. Ambil isi asli file tapi buang baris includeBuild yang bermasalah
-          sed -i '/includeBuild.*react-native\/gradle-plugin/d' "$FILE_PATH"
+          # 1. Bersihkan total file asli dari blok-blok sensitif agar tidak duplikasi
+          # Kami menghapus blok pluginManagement dan includeBuild yang lama
+          sed -i '/pluginManagement {/,/}/d' "$FILE_PATH"
+          sed -i '/includeBuild.*gradle-plugin/d' "$FILE_PATH"
           
-          # 2. Buat file settings baru dengan urutan yang BENAR
-          # Baris 1: pluginManagement (WAJIB PERTAMA)
-          echo "pluginManagement { repositories { gradlePluginPortal(); google(); mavenCentral() } }" > settings.new
-          
-          # Baris 2: includeBuild (Daftarkan plugin lokal)
-          echo "includeBuild(\"${ROOT_DIR}/node_modules/@react-native/gradle-plugin\")" >> settings.new
-          
-          # Baris selanjutnya: Isi asli settings.gradle (yang mengandung blok plugins {})
+          # 2. Re-build file dari nol dengan urutan SAKRAL (Tanpa spasi di baris 1)
+          cat <<EOF > settings.new
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+includeBuild("${ROOT_DIR}/node_modules/@react-native/gradle-plugin")
+EOF
+          # Tambahkan sisa konten asli
           cat "$FILE_PATH" >> settings.new
           
-          # 3. Timpa file asli
+          # 3. Hapus baris kosong yang mungkin muncul di paling atas (Critical Fix)
+          sed -i './,/^$/ { /^$/d }' settings.new
+          
           mv settings.new "$FILE_PATH"
           
-          echo "--- Final settings.gradle (Correct Order) ---"
-          cat "$FILE_PATH"
+          echo "--- Verifikasi Nomor Baris (Harus pluginManagement di baris 1) ---"
+          cat -n "$FILE_PATH" | head -n 20
 
       - name: Patch Android Build Files
         env:
           ROOT_DIR: ${{ github.workspace }}
         run: |
-          # Tambahkan maven repositori manual untuk library yang sulit di-resolve
-          sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/build.gradle
+          # Patch build.gradle utama
           sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/react-native-track-player/android/repo\" }" android/build.gradle
           
-          # Tambahkan flatDir untuk library AAR
-          sed -i "/repositories {/a \        flatDir { dirs \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/app/build.gradle
-          
-          # Batasi ABI ke arm64-v8a untuk mempercepat build
+          # Patch app/build.gradle
           sed -i "/defaultConfig {/a \        ndk { abiFilters 'arm64-v8a' }" android/app/build.gradle
-
-          echo "✅ Android build files patched successfully"
+          
+          echo "✅ Android build files patched"
 
       - name: Build Debug APK
         run: |
@@ -104,9 +100,8 @@ jobs:
             --no-daemon \
             --no-parallel \
             --max-workers=2 \
-            --build-cache \
             -PkotlinVersion=2.0.21 \
-            -Dorg.gradle.jvmargs="-Xmx3g -Xms512m -XX:MaxMetaspaceSize=512m"
+            -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=512m"
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
