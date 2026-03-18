@@ -14,7 +14,6 @@ jobs:
         run: |
           echo "Disk before cleanup:"
           df -h
-          # Hapus tools besar yang tidak dipakai
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android/sdk/ndk
           sudo rm -rf /usr/local/lib/android/sdk/build-tools/3[0-2]*
@@ -53,10 +52,16 @@ jobs:
       - name: Patch Android Build Files
         run: |
           ROOT_DIR="${{ github.workspace }}"
+
+          # Maven repos untuk RNTP dan AsyncStorage
           sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/build.gradle
           sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/react-native-track-player/android/repo\" }" android/build.gradle
           sed -i "/repositories {/a \        flatDir { dirs \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/app/build.gradle
-          echo "✅ Patched"
+
+          # Batasi ABI ke arm64-v8a saja — mencegah CMake Skia build 4x paralel yang OOM
+          sed -i "/defaultConfig {/a \        ndk { abiFilters 'arm64-v8a' }" android/app/build.gradle
+
+          echo "✅ Patched successfully"
 
       - name: Build APK with Gradle
         run: |
@@ -64,10 +69,12 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease \
             --no-daemon \
+            --no-parallel \
+            --max-workers=2 \
             --build-cache \
-            --parallel \
             -PkotlinVersion=2.0.21 \
-            -Dorg.gradle.jvmargs="-Xmx6g -Xms2g -XX:+HeapDumpOnOutOfMemoryError -XX:MaxMetaspaceSize=512m"
+            -Pandroid.injected.build.abi.filters=arm64-v8a \
+            -Dorg.gradle.jvmargs="-Xmx3g -Xms512m -XX:MaxMetaspaceSize=512m"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
