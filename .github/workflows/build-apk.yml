@@ -61,17 +61,23 @@ jobs:
         run: |
           FILE_PATH="android/settings.gradle"
           
-          # 1. Hapus baris includeBuild yang menggunakan dynamic resolution (node.exe)
-          # karena sering gagal di environment CI
+          # 1. Ambil isi asli file tapi buang baris includeBuild yang bermasalah
           sed -i '/includeBuild.*react-native\/gradle-plugin/d' "$FILE_PATH"
           
-          # 2. Sisipkan includeBuild dengan Absolute Path di baris paling atas
-          # Ini memperbaiki error "Plugin [id: 'com.facebook.react.settings'] was not found"
-          echo "includeBuild(\"${ROOT_DIR}/node_modules/@react-native/gradle-plugin\")" > settings.tmp
-          cat "$FILE_PATH" >> settings.tmp
-          mv settings.tmp "$FILE_PATH"
+          # 2. Buat file settings baru dengan urutan yang BENAR
+          # Baris 1: pluginManagement (WAJIB PERTAMA)
+          echo "pluginManagement { repositories { gradlePluginPortal(); google(); mavenCentral() } }" > settings.new
           
-          echo "--- Patched settings.gradle ---"
+          # Baris 2: includeBuild (Daftarkan plugin lokal)
+          echo "includeBuild(\"${ROOT_DIR}/node_modules/@react-native/gradle-plugin\")" >> settings.new
+          
+          # Baris selanjutnya: Isi asli settings.gradle (yang mengandung blok plugins {})
+          cat "$FILE_PATH" >> settings.new
+          
+          # 3. Timpa file asli
+          mv settings.new "$FILE_PATH"
+          
+          echo "--- Final settings.gradle (Correct Order) ---"
           cat "$FILE_PATH"
 
       - name: Patch Android Build Files
