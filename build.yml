@@ -51,39 +51,33 @@ jobs:
 
       - name: Pin Gradle to 8.7
         run: |
-          # 8.7 = versi terakhir sebelum serviceOf dihapus di 8.8
           sed -i 's|gradle-[0-9][0-9]*\.[0-9][0-9]*\(\.[0-9][0-9]*\)\?-bin\.zip|gradle-8.7-bin.zip|g' \
             android/gradle/wrapper/gradle-wrapper.properties
-          echo "Gradle wrapper:"
           grep distributionUrl android/gradle/wrapper/gradle-wrapper.properties
 
       - name: Patch settings.gradle for CI
         run: |
-          ROOT_DIR="${{ github.workspace }}"
-          # Ganti dynamic node resolution dengan absolute path langsung
-          # karena subprocess node dari Groovy gagal di CI environment
-          python3 -c "
-import re, sys
-
-with open('android/settings.gradle', 'r') as f:
-    content = f.read()
-
-# Pattern: includeBuild(new File([...].execute(...).text.trim()).parentFile.toString())
-patched = re.sub(
-    r'includeBuild\s*\(\s*new\s+File\s*\(\s*\[.*?\]\s*\.execute\s*\(.*?\)\s*\.text\s*\.trim\s*\(\s*\)\s*\)\s*\.parentFile\s*\.toString\s*\(\s*\)\s*\)',
-    'includeBuild(\"$ROOT_DIR/node_modules/@react-native/gradle-plugin\")',
-    content,
-    flags=re.DOTALL
-)
-
-if patched == content:
-    print('WARNING: Pattern not matched, settings.gradle unchanged', file=sys.stderr)
-else:
-    print('OK: settings.gradle patched')
-
-with open('android/settings.gradle', 'w') as f:
-    f.write(patched)
-"
+          # Tulis Python script ke file untuk menghindari masalah YAML quote
+          cat > /tmp/patch_settings.py << 'PYEOF'
+          import re, sys, os
+          root_dir = os.environ['GITHUB_WORKSPACE']
+          with open('android/settings.gradle', 'r') as f:
+              content = f.read()
+          replacement = 'includeBuild("' + root_dir + '/node_modules/@react-native/gradle-plugin")'
+          patched = re.sub(
+              r'includeBuild\s*\(\s*new\s+File\s*\(\s*\[.*?\]\s*\.execute\s*\(.*?\)\s*\.text\s*\.trim\s*\(\s*\)\s*\)\s*\.parentFile\s*\.toString\s*\(\s*\)\s*\)',
+              replacement,
+              content,
+              flags=re.DOTALL
+          )
+          if patched == content:
+              print('WARNING: Pattern not matched, settings.gradle unchanged', file=sys.stderr)
+          else:
+              print('OK: settings.gradle patched')
+          with open('android/settings.gradle', 'w') as f:
+              f.write(patched)
+          PYEOF
+          python3 /tmp/patch_settings.py
           echo "--- settings.gradle ---"
           cat android/settings.gradle
 
@@ -96,7 +90,7 @@ with open('android/settings.gradle', 'w') as f:
           sed -i "/repositories {/a \        flatDir { dirs \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/app/build.gradle
           sed -i "/defaultConfig {/a \        ndk { abiFilters 'arm64-v8a' }" android/app/build.gradle
 
-          echo "✅ Patched successfully"
+          echo "Patched successfully"
 
       - name: Build Debug APK
         run: |
