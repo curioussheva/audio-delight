@@ -10,6 +10,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Free Disk Space
+        run: |
+          echo "Disk before cleanup:"
+          df -h
+          # Hapus tools besar yang tidak dipakai
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android/sdk/ndk
+          sudo rm -rf /usr/local/lib/android/sdk/build-tools/3[0-2]*
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/share/boost
+          sudo apt-get clean
+          echo "Disk after cleanup:"
+          df -h
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -27,43 +42,33 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          # Mengaktifkan cache Gradle otomatis dari action resmi
           cache: 'gradle'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # Optimasi: Prebuild hanya jika folder android tidak ada atau butuh pembersihan
       - name: Expo Prebuild
         run: npx expo prebuild --clean --platform android --non-interactive
 
       - name: Patch Android Build Files
         run: |
-          # Menggunakan path yang lebih dinamis agar tidak hardcoded total
           ROOT_DIR="${{ github.workspace }}"
-          
-          # Patch build.gradle (allprojects) agar lebih stabil mencari libs
           sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/build.gradle
           sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/react-native-track-player/android/repo\" }" android/build.gradle
-          
-          # Patch app/build.gradle untuk flatDir
           sed -i "/repositories {/a \        flatDir { dirs \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/app/build.gradle
-          
-          echo "✅ Android build files patched successfully"
+          echo "✅ Patched"
+
       - name: Build APK with Gradle
         run: |
           cd android
           chmod +x gradlew
-          # Optimasi Flags: 
-          # --no-daemon (wajib di CI)
-          # --build-cache (mempercepat build berikutnya)
-          # -Xmx (menghindari OOM / Out of Memory)
           ./gradlew assembleRelease \
             --no-daemon \
             --build-cache \
             --parallel \
             -PkotlinVersion=2.0.21 \
-            -Dorg.gradle.jvmargs="-Xmx4g -Xms1g -XX:+HeapDumpOnOutOfMemoryError"
+            -Dorg.gradle.jvmargs="-Xmx6g -Xms2g -XX:+HeapDumpOnOutOfMemoryError -XX:MaxMetaspaceSize=512m"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
