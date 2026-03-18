@@ -49,12 +49,15 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --clean --platform android --non-interactive
 
-      - name: Pin Gradle to 8.6.0
+      - name: Pin Gradle to 8.7
         run: |
-          sed -i 's|gradle-[0-9]*\.[0-9]*\.[0-9]*-bin.zip|gradle-8.6.0-bin.zip|g' \
+          # 8.7 = versi terakhir sebelum serviceOf dihapus di 8.8
+          # Format Gradle tanpa patch number: 8.7 bukan 8.7.0
+          sed -i 's|gradle-[0-9][0-9]*\.[0-9][0-9]*\(\.[0-9][0-9]*\)\?-bin\.zip|gradle-8.7-bin.zip|g' \
             android/gradle/wrapper/gradle-wrapper.properties
+          echo "Gradle wrapper:"
           grep distributionUrl android/gradle/wrapper/gradle-wrapper.properties
-          
+
       - name: Patch Android Build Files
         run: |
           ROOT_DIR="${{ github.workspace }}"
@@ -84,4 +87,4 @@ jobs:
         with:
           name: PristineAudio-Debug
           path: android/app/build/outputs/apk/debug/*.apk
-          retention-days: 7
+          retention-days: 7  
