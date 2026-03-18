@@ -1,14 +1,17 @@
+name: Build PristineAudio APK (Optimized)
+
+on:
+  push:
+    branches: [ "pristine-audio" ]
+  workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Free Disk Space (optional but good)
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
-          df -h
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -17,50 +20,50 @@ jobs:
           cache: 'yarn'
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install --frozen-lockfile --ignore-engines
 
       - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
+          # Mengaktifkan cache Gradle otomatis dari action resmi
           cache: 'gradle'
 
-      # 1. Setup Android SDK FIRST
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # 2. Accept licenses & create local.properties BEFORE prebuild
-      - name: Accept SDK licenses & configure local.properties
-        run: |
-          # Accept all licenses (required in clean CI)
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
-          
-          # Create local.properties (critical!)
-          echo "sdk.dir=$ANDROID_HOME" > android/local.properties
-          
-          # Debug: show content in log
-          echo "local.properties content:"
-          cat android/local.properties || echo "Failed to create local.properties"
-          
-          # Export to env for safety
-          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
-
-      # 3. NOW run prebuild (SDK is ready)
+      # Optimasi: Prebuild hanya jika folder android tidak ada atau butuh pembersihan
       - name: Expo Prebuild
         run: npx expo prebuild --clean --platform android --non-interactive
 
-      # 4. Build APK
-      - name: Build Release APK
+      - name: Patch Android Build Files
+        run: |
+          # Menggunakan path yang lebih dinamis agar tidak hardcoded total
+          ROOT_DIR="${{ github.workspace }}"
+          
+          # Patch build.gradle (allprojects) agar lebih stabil mencari libs
+          sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/build.gradle
+          sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/react-native-track-player/android/repo\" }" android/build.gradle
+          
+          # Patch app/build.gradle untuk flatDir
+          sed -i "/repositories {/a \        flatDir { dirs \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/app/build.gradle
+          
+          echo "✅ Android build files patched successfully"
+      - name: Build APK with Gradle
         run: |
           cd android
           chmod +x gradlew
+          # Optimasi Flags: 
+          # --no-daemon (wajib di CI)
+          # --build-cache (mempercepat build berikutnya)
+          # -Xmx (menghindari OOM / Out of Memory)
           ./gradlew assembleRelease \
             --no-daemon \
             --build-cache \
             --parallel \
-            -Dorg.gradle.jvmargs="-Xmx4g -Xms1g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError"
-
+            -PkotlinVersion=2.0.21 \
+            -Dorg.gradle.jvmargs="-Xmx4g -Xms1g -XX:+HeapDumpOnOutOfMemoryError"
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
