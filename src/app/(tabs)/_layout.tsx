@@ -1,12 +1,12 @@
-import React from 'react';
-import { Tabs } from 'expo-router';
-import { BlurView } from 'expo-blur';
-import { StyleSheet, Platform, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React from "react";
+import { Tabs } from "expo-router";
+import { BlurView } from "expo-blur";
+import { StyleSheet, Platform, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
-import { useTheme } from '@/context/ThemeContext';
-import FloatingPlayer from '@/components/audio/FloatingPlayer';
-import { LyricsPreview } from '@/components/audio/LyricPreview';
+import { useTheme } from "@/context/ThemeContext";
+import FloatingPlayer from "@/components/audio/FloatingPlayer";
+import { LyricsPreview } from "@/components/audio/LyricPreview";
 
 export default function TabsLayout() {
   const { theme } = useTheme();
@@ -22,8 +22,8 @@ export default function TabsLayout() {
           tabBarStyle: styles.tabBar,
           tabBarBackground: () => (
             <BlurView
-              intensity={Platform.OS === 'ios' ? 80 : 100}
-              tint={theme.isDark ? 'dark' : 'light'}
+              intensity={Platform.OS === "ios" ? 80 : 100}
+              tint={theme.isDark ? "dark" : "light"}
               style={StyleSheet.absoluteFill}
             />
           ),
@@ -32,10 +32,10 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="library"
           options={{
-            title: 'Library',
+            title: "Library",
             tabBarIcon: ({ color, size, focused }) => (
               <Ionicons
-                name={focused ? 'library' : 'library-outline'}
+                name={focused ? "library" : "library-outline"}
                 size={size}
                 color={color}
                 accessibilityLabel="Library"
@@ -47,10 +47,10 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="equalizer"
           options={{
-            title: 'DSP',
+            title: "DSP",
             tabBarIcon: ({ color, size, focused }) => (
               <Ionicons
-                name={focused ? 'analytics' : 'analytics-outline'}
+                name={focused ? "analytics" : "analytics-outline"}
                 size={size}
                 color={color}
                 accessibilityLabel="DSP / Equalizer"
@@ -62,10 +62,10 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="visualizer"
           options={{
-            title: 'Live',
+            title: "Live",
             tabBarIcon: ({ color, size, focused }) => (
               <Ionicons
-                name={focused ? 'pulse' : 'pulse-outline'}
+                name={focused ? "pulse" : "pulse-outline"}
                 size={size}
                 color={color}
                 accessibilityLabel="Live Visualizer"
@@ -87,11 +87,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tabBar: {
-    position: 'absolute',
+    position: "absolute",
     borderTopWidth: 0,
     elevation: 0,
-    height: Platform.OS === 'ios' ? 88 : 64,
-    paddingBottom: Platform.OS === 'ios' ? 30 : 10,
-    backgroundColor: 'transparent',
+    height: Platform.OS === "ios" ? 88 : 64,
+    paddingBottom: Platform.OS === "ios" ? 30 : 10,
+    backgroundColor: "transparent",
   },
 });

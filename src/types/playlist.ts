@@ -1,4 +1,4 @@
-import { Song } from './audio';
+import { Song } from "./audio";
 
 export interface Playlist {
   id: string;

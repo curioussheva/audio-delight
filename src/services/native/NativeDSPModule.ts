@@ -1,5 +1,5 @@
-import { NativeModules } from 'react-native';
-import { EqualizerBand } from '@/types/dsp.types';
+import { NativeModules } from "react-native";
+import { EqualizerBand } from "@/types/dsp.types";
 
 // Definisi interface agar TS tidak komplain
 interface NativeDSPInterface {
@@ -11,7 +11,6 @@ interface NativeDSPInterface {
   setReverbPreset(preset: number, audioSessionId: number): Promise<boolean>;
   releaseAllFX(): Promise<boolean>;
 }
-
 
 // Ambil dari NativeModules
 const { NativeDSPModule } = NativeModules;

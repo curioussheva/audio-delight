@@ -1,5 +1,5 @@
 // src/types/music-metadata.d.ts
-declare module 'music-metadata' {
+declare module "music-metadata" {
   export interface IAudioMetadata {
     format: IFormat;
     common: ICommonTagsResult;
@@ -44,7 +44,11 @@ declare module 'music-metadata' {
   }
 
   export function parseBlob(
-    blob: Blob, 
-    options?: { duration?: boolean; skipCovers?: boolean; includeChapters?: boolean }
+    blob: Blob,
+    options?: {
+      duration?: boolean;
+      skipCovers?: boolean;
+      includeChapters?: boolean;
+    },
   ): Promise<IAudioMetadata>;
 }

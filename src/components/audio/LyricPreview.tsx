@@ -1,7 +1,7 @@
-import React, { useMemo } from 'react';
-import { Text, StyleSheet } from 'react-native';
-import Animated, { FadeInUp, FadeOutDown } from 'react-native-reanimated';
-import { usePlayerStore } from '@/store/playerStore';
+import React, { useMemo } from "react";
+import { Text, StyleSheet } from "react-native";
+import Animated, { FadeInUp, FadeOutDown } from "react-native-reanimated";
+import { usePlayerStore } from "@/store/playerStore";
 
 export const LyricsPreview = () => {
   const { lyrics, position: progress } = usePlayerStore();
@@ -15,9 +15,9 @@ export const LyricsPreview = () => {
   if (!currentLine) return null;
 
   return (
-    <Animated.View 
-      entering={FadeInUp} 
-      exiting={FadeOutDown} 
+    <Animated.View
+      entering={FadeInUp}
+      exiting={FadeOutDown}
       style={styles.container}
     >
       <Text style={styles.text} numberOfLines={1}>
@@ -29,19 +29,19 @@ export const LyricsPreview = () => {
 
 const styles = StyleSheet.create({
   container: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 170, // Di atas FloatingPlayer
-    alignSelf: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignSelf: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
     paddingHorizontal: 15,
     paddingVertical: 5,
     borderRadius: 10,
-    maxWidth: '80%',
+    maxWidth: "80%",
   },
   text: {
-    color: '#00D4AA', // Aksen Teal
+    color: "#00D4AA", // Aksen Teal
     fontSize: 13,
-    fontWeight: '600',
-    textAlign: 'center',
+    fontWeight: "600",
+    textAlign: "center",
   },
 });

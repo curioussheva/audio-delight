@@ -59,6 +59,7 @@ yarn-error.log*
 *.tmp
 *.temp
 .DS_Store
+temp/
 
 # Test
 coverage/

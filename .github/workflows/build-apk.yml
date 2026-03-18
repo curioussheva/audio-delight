@@ -1,4 +1,4 @@
-name: Build PristineAudio APK (Optimized)
+name: Build PristineAudio APK (Debug)
 
 on:
   push:
@@ -53,21 +53,18 @@ jobs:
         run: |
           ROOT_DIR="${{ github.workspace }}"
 
-          # Maven repos untuk RNTP dan AsyncStorage
           sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/build.gradle
           sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/react-native-track-player/android/repo\" }" android/build.gradle
           sed -i "/repositories {/a \        flatDir { dirs \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/app/build.gradle
-
-          # Batasi ABI ke arm64-v8a saja — mencegah CMake Skia build 4x paralel yang OOM
           sed -i "/defaultConfig {/a \        ndk { abiFilters 'arm64-v8a' }" android/app/build.gradle
 
           echo "✅ Patched successfully"
 
-      - name: Build APK with Gradle
+      - name: Build Debug APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease \
+          ./gradlew assembleDebug \
             --no-daemon \
             --no-parallel \
             --max-workers=2 \
@@ -76,9 +73,9 @@ jobs:
             -Pandroid.injected.build.abi.filters=arm64-v8a \
             -Dorg.gradle.jvmargs="-Xmx3g -Xms512m -XX:MaxMetaspaceSize=512m"
 
-      - name: Upload APK
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: PristineAudio-Release
-          path: android/app/build/outputs/apk/release/*.apk
-          retention-days: 7 
+          name: PristineAudio-Debug
+          path: android/app/build/outputs/apk/debug/*.apk
+          retention-days: 7

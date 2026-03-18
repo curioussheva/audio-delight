@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { Song } from '@/types/audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// PERBAIKAN 1: Import instance singleton
 import { audioEngine } from '@/services/audio/AudioEngine';
 
 interface LirikLine {
@@ -59,7 +58,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   sleepTimerEnd: null,
 
   seek: (pos: number) => {
-    // PERBAIKAN 2: Gunakan audioEngine
     audioEngine.seekTo(pos); 
     set({ position: pos });
   },
@@ -97,7 +95,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         return;
       }
       if (Date.now() >= state.sleepTimerEnd) {
-        get().setIsPlaying(false); // Gunakan setIsPlaying agar engine juga pause
+        get().setIsPlaying(false);
         set({ sleepTimerEnd: null });
         clearInterval(checkTimer);
       }
@@ -116,14 +114,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   togglePlay: () => {
     const { isPlaying } = get();
-    // Panggil setter agar logic engine terpicu
     get().setIsPlaying(!isPlaying);
   },
 
   setIsPlaying: (isPlaying) => {
-    // PERBAIKAN 3: Trigger engine sesuai state
-    isPlaying ? audioEngine.play() : audioEngine.pause();
-    set({ isPlaying });
+    if (isPlaying) {
+      audioEngine.play();
+    } else {
+      audioEngine.pause();
+    }
+    set({ isPlaying }); // ← ini yang hilang sebelumnya
   },
 
   playNext: async () => {
@@ -138,7 +138,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setAudioMode: async (mode) => {
     await AsyncStorage.setItem('audio_mode_preference', mode);
-    // PERBAIKAN 4: Nama method sesuai AudioEngine.ts
     await audioEngine.toggleExclusiveMode(mode === 'bit-perfect');
     set({ audioMode: mode });
   },

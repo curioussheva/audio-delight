@@ -55,14 +55,46 @@ export interface ThemeSpacing {
 }
 
 export interface ThemeTypography {
-  h1: { fontSize: number; fontWeight: '400' | '500' | '600' | '700'; lineHeight: number };
-  h2: { fontSize: number; fontWeight: '400' | '500' | '600' | '700'; lineHeight: number };
-  h3: { fontSize: number; fontWeight: '400' | '500' | '600' | '700'; lineHeight: number };
-  h4: { fontSize: number; fontWeight: '400' | '500' | '600' | '700'; lineHeight: number };
-  body1: { fontSize: number; fontWeight: '400' | '500' | '600' | '700'; lineHeight: number };
-  body2: { fontSize: number; fontWeight: '400' | '500' | '600' | '700'; lineHeight: number };
-  caption: { fontSize: number; fontWeight: '400' | '500' | '600' | '700'; lineHeight: number };
-  button: { fontSize: number; fontWeight: '400' | '500' | '600' | '700'; lineHeight: number };
+  h1: {
+    fontSize: number;
+    fontWeight: "400" | "500" | "600" | "700";
+    lineHeight: number;
+  };
+  h2: {
+    fontSize: number;
+    fontWeight: "400" | "500" | "600" | "700";
+    lineHeight: number;
+  };
+  h3: {
+    fontSize: number;
+    fontWeight: "400" | "500" | "600" | "700";
+    lineHeight: number;
+  };
+  h4: {
+    fontSize: number;
+    fontWeight: "400" | "500" | "600" | "700";
+    lineHeight: number;
+  };
+  body1: {
+    fontSize: number;
+    fontWeight: "400" | "500" | "600" | "700";
+    lineHeight: number;
+  };
+  body2: {
+    fontSize: number;
+    fontWeight: "400" | "500" | "600" | "700";
+    lineHeight: number;
+  };
+  caption: {
+    fontSize: number;
+    fontWeight: "400" | "500" | "600" | "700";
+    lineHeight: number;
+  };
+  button: {
+    fontSize: number;
+    fontWeight: "400" | "500" | "600" | "700";
+    lineHeight: number;
+  };
 }
 
 export interface ThemeShadows {
@@ -108,15 +140,15 @@ export interface Theme {
 }
 
 // ✅ DEFINE ThemeId DI SINI (SATU-SATUNYA)
-export type ThemeId = 
-  | 'deep-navy'
-  | 'midnight-blue'
-  | 'charcoal-black'
-  | 'light-gray'
-  | 'pure-white'
-  | 'golden-hour'
-  | 'rose-gold'
-  | 'forest-green'
-  | 'ocean-wave'
-  | 'neon-cyber'
-  | 'sunset-orange';
+export type ThemeId =
+  | "deep-navy"
+  | "midnight-blue"
+  | "charcoal-black"
+  | "light-gray"
+  | "pure-white"
+  | "golden-hour"
+  | "rose-gold"
+  | "forest-green"
+  | "ocean-wave"
+  | "neon-cyber"
+  | "sunset-orange";

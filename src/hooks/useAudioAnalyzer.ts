@@ -1,14 +1,27 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
-import { audioAnalyzer, AnalysisResult } from '@/services/audio/AudioAnalyzerService';
-import { Song } from '@/types/audio';
-import { visualizerEmitter, startVisualizer, stopVisualizer } from '@/services/native/VisualizerBridge';
+import { useState, useCallback, useEffect, useMemo } from "react";
+import {
+  audioAnalyzer,
+  AnalysisResult,
+} from "@/services/audio/AudioAnalyzerService";
+import { Song } from "@/types/audio";
+import {
+  visualizerEmitter,
+  startVisualizer,
+  stopVisualizer,
+} from "@/services/native/VisualizerBridge";
 
 interface UseAudioAnalyzerReturn {
   isAnalyzing: boolean;
   analysisError: string | null;
   spectrumData: number[];
-  analyzeSingle: (song: Song, options?: { force?: boolean }) => Promise<AnalysisResult | null>;
-  analyzeBatch: (songs: Song[], options?: { force?: boolean }) => Promise<AnalysisResult[]>;
+  analyzeSingle: (
+    song: Song,
+    options?: { force?: boolean },
+  ) => Promise<AnalysisResult | null>;
+  analyzeBatch: (
+    songs: Song[],
+    options?: { force?: boolean },
+  ) => Promise<AnalysisResult[]>;
   startLiveVisualizer: (sessionId: number) => Promise<void>;
   getAnalysis: (songId: string) => AnalysisResult | undefined;
   clearResults: () => void;
@@ -17,16 +30,21 @@ interface UseAudioAnalyzerReturn {
 export const useAudioAnalyzer = (): UseAudioAnalyzerReturn => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
-  const [results, setResults] = useState<Map<string, AnalysisResult>>(new Map());
+  const [results, setResults] = useState<Map<string, AnalysisResult>>(
+    new Map(),
+  );
   const [spectrumData, setSpectrumData] = useState<number[]>([]);
 
   // ─── Live Visualizer Listener ───────────────────────────────────────
   useEffect(() => {
     if (!visualizerEmitter) return;
 
-    const subscription = visualizerEmitter.addListener('onFftData', (data: number[]) => {
-      setSpectrumData(data);
-    });
+    const subscription = visualizerEmitter.addListener(
+      "onFftData",
+      (data: number[]) => {
+        setSpectrumData(data);
+      },
+    );
 
     // Cleanup on unmount
     return () => {
@@ -36,24 +54,30 @@ export const useAudioAnalyzer = (): UseAudioAnalyzerReturn => {
   }, []);
 
   // ─── Live Visualizer Control ────────────────────────────────────────
-  const startLiveVisualizer = useCallback(async (sessionId: number): Promise<void> => {
-    if (!sessionId || sessionId <= 0) {
-      console.warn('[useAudioAnalyzer] Invalid session ID for visualizer');
-      return;
-    }
+  const startLiveVisualizer = useCallback(
+    async (sessionId: number): Promise<void> => {
+      if (!sessionId || sessionId <= 0) {
+        console.warn("[useAudioAnalyzer] Invalid session ID for visualizer");
+        return;
+      }
 
-    try {
-      await startVisualizer(sessionId);
-    } catch (err) {
-      console.error('[useAudioAnalyzer] Failed to start visualizer:', err);
-    }
-  }, []);
+      try {
+        await startVisualizer(sessionId);
+      } catch (err) {
+        console.error("[useAudioAnalyzer] Failed to start visualizer:", err);
+      }
+    },
+    [],
+  );
 
   // ─── Static File Analysis ───────────────────────────────────────────
   const analyzeSingle = useCallback(
-    async (song: Song, { force = false } = {}): Promise<AnalysisResult | null> => {
+    async (
+      song: Song,
+      { force = false } = {},
+    ): Promise<AnalysisResult | null> => {
       if (!song?.id) {
-        setAnalysisError('Invalid song: missing ID');
+        setAnalysisError("Invalid song: missing ID");
         return null;
       }
 
@@ -74,19 +98,25 @@ export const useAudioAnalyzer = (): UseAudioAnalyzerReturn => {
         });
         return result;
       } catch (err: any) {
-        const message = err?.message || 'Failed to analyze song';
+        const message = err?.message || "Failed to analyze song";
         setAnalysisError(message);
-        console.error(`[useAudioAnalyzer] analyzeSingle failed for ${song.title || song.id}:`, err);
+        console.error(
+          `[useAudioAnalyzer] analyzeSingle failed for ${song.title || song.id}:`,
+          err,
+        );
         return null;
       } finally {
         setIsAnalyzing(false);
       }
     },
-    [results]
+    [results],
   );
 
   const analyzeBatch = useCallback(
-    async (songs: Song[], { force = false } = {}): Promise<AnalysisResult[]> => {
+    async (
+      songs: Song[],
+      { force = false } = {},
+    ): Promise<AnalysisResult[]> => {
       if (!songs?.length) return [];
 
       setIsAnalyzing(true);
@@ -99,7 +129,9 @@ export const useAudioAnalyzer = (): UseAudioAnalyzerReturn => {
           : songs.filter((s) => !results.has(s.id));
 
         if (songsToAnalyze.length === 0) {
-          return songs.map((s) => results.get(s.id)!).filter(Boolean) as AnalysisResult[];
+          return songs
+            .map((s) => results.get(s.id)!)
+            .filter(Boolean) as AnalysisResult[];
         }
 
         const batchResults = await audioAnalyzer.batchAnalyze(songsToAnalyze);
@@ -111,23 +143,27 @@ export const useAudioAnalyzer = (): UseAudioAnalyzerReturn => {
         });
 
         // Return results for all requested songs (including cached ones)
-        return songs.map((song) => results.get(song.id) || batchResults.find((r) => r.songId === song.id)!);
+        return songs.map(
+          (song) =>
+            results.get(song.id) ||
+            batchResults.find((r) => r.songId === song.id)!,
+        );
       } catch (err: any) {
-        const message = err?.message || 'Batch analysis failed';
+        const message = err?.message || "Batch analysis failed";
         setAnalysisError(message);
-        console.error('[useAudioAnalyzer] analyzeBatch failed:', err);
+        console.error("[useAudioAnalyzer] analyzeBatch failed:", err);
         return [];
       } finally {
         setIsAnalyzing(false);
       }
     },
-    [results]
+    [results],
   );
 
   // ─── Helpers ────────────────────────────────────────────────────────
   const getAnalysis = useCallback(
     (songId: string): AnalysisResult | undefined => results.get(songId),
-    [results]
+    [results],
   );
 
   const clearResults = useCallback(() => {
@@ -155,6 +191,6 @@ export const useAudioAnalyzer = (): UseAudioAnalyzerReturn => {
       startLiveVisualizer,
       getAnalysis,
       clearResults,
-    ]
+    ],
   );
-}; 
+};

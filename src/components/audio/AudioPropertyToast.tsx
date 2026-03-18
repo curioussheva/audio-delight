@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View, Platform } from 'react-native';
-import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
-import { BlurView } from 'expo-blur';
-import { Ionicons } from '@expo/vector-icons';
-import { usePlayerStore } from '@/store/playerStore';
+import React, { useEffect, useState } from "react";
+import { StyleSheet, Text, View, Platform } from "react-native";
+import Animated, { FadeInUp, FadeOutUp } from "react-native-reanimated";
+import { BlurView } from "expo-blur";
+import { Ionicons } from "@expo/vector-icons";
+import { usePlayerStore } from "@/store/playerStore";
 
 export const AudioPropertyToast = () => {
   const { currentSong } = usePlayerStore();
@@ -20,24 +20,30 @@ export const AudioPropertyToast = () => {
   if (!visible || !currentSong) return null;
 
   return (
-    <Animated.View 
-      entering={FadeInUp.springify()} 
-      exiting={FadeOutUp} 
+    <Animated.View
+      entering={FadeInUp.springify()}
+      exiting={FadeOutUp}
       style={styles.container}
     >
       <BlurView intensity={60} tint="dark" style={styles.blur}>
-        <View style={[styles.indicator, { backgroundColor: currentSong.isHiRes ? '#D4AF37' : '#00D4AA' }]} />
-        <Ionicons 
-          name={currentSong.isHiRes ? "ribbon" : "checkmark-circle"} 
-          size={18} 
-          color={currentSong.isHiRes ? "#D4AF37" : "#00D4AA"} 
+        <View
+          style={[
+            styles.indicator,
+            { backgroundColor: currentSong.isHiRes ? "#D4AF37" : "#00D4AA" },
+          ]}
+        />
+        <Ionicons
+          name={currentSong.isHiRes ? "ribbon" : "checkmark-circle"}
+          size={18}
+          color={currentSong.isHiRes ? "#D4AF37" : "#00D4AA"}
         />
         <View style={styles.textContainer}>
           <Text style={styles.title}>
-            {currentSong.isHiRes ? 'Hi-Res Audio Output' : 'Pure Audio Output'}
+            {currentSong.isHiRes ? "Hi-Res Audio Output" : "Pure Audio Output"}
           </Text>
           <Text style={styles.details}>
-            {currentSong.codec?.toUpperCase()} • {currentSong.bitDepth}bit / {(currentSong.sampleRate || 0) / 1000}kHz.
+            {currentSong.codec?.toUpperCase()} • {currentSong.bitDepth}bit /{" "}
+            {(currentSong.sampleRate || 0) / 1000}kHz.
           </Text>
         </View>
       </BlurView>
@@ -47,20 +53,20 @@ export const AudioPropertyToast = () => {
 
 const styles = StyleSheet.create({
   container: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 60 : 40,
-    alignSelf: 'center',
+    position: "absolute",
+    top: Platform.OS === "ios" ? 60 : 40,
+    alignSelf: "center",
     zIndex: 9999,
-    width: '85%',
+    width: "85%",
   },
   blur: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     padding: 12,
     borderRadius: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: "rgba(255,255,255,0.1)",
   },
   indicator: {
     width: 4,
@@ -72,15 +78,15 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   title: {
-    color: '#FFF',
+    color: "#FFF",
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: "800",
     letterSpacing: 0.5,
   },
   details: {
-    color: 'rgba(255,255,255,0.6)',
+    color: "rgba(255,255,255,0.6)",
     fontSize: 10,
     marginTop: 2,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
 });

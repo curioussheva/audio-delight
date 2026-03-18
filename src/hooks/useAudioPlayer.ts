@@ -1,22 +1,20 @@
 // src/hooks/useAudioPlayer.ts
-import { useState, useEffect, useCallback, useRef } from 'react';
-import TrackPlayer, { 
+import { useEffect, useCallback, useRef } from "react";
+import TrackPlayer, {
   usePlaybackState,
   useProgress,
   State,
   Capability,
-  Event
-} from 'react-native-track-player';
-import { usePlayerStore } from '@/store/playerStore';
-import { Song } from '@/types/audio';
+} from "react-native-track-player";
+import { usePlayerStore } from "@/store/playerStore";
+import { Song } from "@/types/audio";
 
 export const useAudioPlayer = () => {
   const isReady = useRef(false);
   const playbackState = usePlaybackState();
   const progress = useProgress();
-  
+
   // ✅ Ambil dari playerStore
-  const currentSong = usePlayerStore((state) => state.currentSong);
   const setCurrentSong = usePlayerStore((state) => state.setCurrentSong);
   const setIsPlaying = usePlayerStore((state) => state.setIsPlaying);
   const setPosition = usePlayerStore((state) => state.setPosition);
@@ -28,7 +26,7 @@ export const useAudioPlayer = () => {
   useEffect(() => {
     const setupPlayer = async () => {
       if (isReady.current) return;
-      
+
       try {
         await TrackPlayer.setupPlayer({
           autoHandleInterruptions: true,
@@ -59,7 +57,7 @@ export const useAudioPlayer = () => {
 
         isReady.current = true;
       } catch (error) {
-        console.error('Failed to setup TrackPlayer:', error);
+        console.error("Failed to setup TrackPlayer:", error);
       }
     };
 
@@ -91,7 +89,7 @@ export const useAudioPlayer = () => {
       setCurrentSong(song);
       setIsPlaying(true); // ✅
     } catch (error) {
-      console.error('Error loading song:', error);
+      console.error("Error loading song:", error);
     }
   }, []);
 
@@ -142,7 +140,14 @@ export const useAudioPlayer = () => {
     setPosition(progress.position);
     setDuration(progress.duration);
     setIsPlaying(playbackState.state === State.Playing);
-  }, [playbackState.state, progress.position, progress.duration, setPosition, setDuration, setIsPlaying]);
+  }, [
+    playbackState.state,
+    progress.position,
+    progress.duration,
+    setPosition,
+    setDuration,
+    setIsPlaying,
+  ]);
 
   return {
     loadSong,

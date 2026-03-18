@@ -1,6 +1,10 @@
-import { useEffect } from 'react';
-import TrackPlayer, { Capability, Event, RepeatMode, State, useTrackPlayerEvents } from 'react-native-track-player';
-import { usePlayerStore } from '@/store/playerStore';
+import { useEffect } from "react";
+import TrackPlayer, {
+  Event,
+  State,
+  useTrackPlayerEvents,
+} from "react-native-track-player";
+import { usePlayerStore } from "@/store/playerStore";
 
 const events = [
   Event.PlaybackActiveTrackChanged,
@@ -9,19 +13,14 @@ const events = [
 ];
 
 export const useTrackPlayerHandler = () => {
-  const { 
-    setDuration, 
-    setCurrentSong, 
-    setIsPlaying, 
-    queue 
-  } = usePlayerStore();
+  const { setDuration, setCurrentSong, queue } = usePlayerStore();
 
-  useTrackPlayerEvents(events, async (event: any) => { 
+  useTrackPlayerEvents(events, async (event: any) => {
     // 1. Menangani Perubahan Lagu (Pindah Otomatis/Manual)
     if (event.type === Event.PlaybackActiveTrackChanged) {
       if (event.track) {
         // Cari data asli dari queue berdasarkan ID untuk mendapatkan metadata lengkap
-        const activeSong = queue.find(s => s.id === event.track?.id);
+        const activeSong = queue.find((s) => s.id === event.track?.id);
         if (activeSong) {
           setCurrentSong(activeSong);
           setDuration(activeSong.duration);
@@ -38,7 +37,7 @@ export const useTrackPlayerHandler = () => {
 
     // 3. Menangani Error
     if (event.type === Event.PlaybackError) {
-      console.error('[TrackPlayer] Playback error:', event.message);
+      console.error("[TrackPlayer] Playback error:", event.message);
     }
   });
 

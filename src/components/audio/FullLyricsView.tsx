@@ -1,13 +1,8 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, Dimensions } from 'react-native';
-import Animated, { 
-  useAnimatedStyle, 
-  interpolateColor, 
-  withSpring 
-} from 'react-native-reanimated';
-import { usePlayerStore } from '@/store/playerStore';
+import React, { useEffect, useRef } from "react";
+import { View, Text, StyleSheet, FlatList, Dimensions } from "react-native";
+import { usePlayerStore } from "@/store/playerStore";
 
-const { height } = Dimensions.get('window');
+const { height } = Dimensions.get("window");
 
 export const FullLyricsView = () => {
   const { lyrics, position: progress } = usePlayerStore();
@@ -31,15 +26,15 @@ export const FullLyricsView = () => {
     }
   }, [activeIndex]);
 
-  const renderItem = ({ item, index }: { item: any, index: number }) => {
+  const renderItem = ({ item, index }: { item: any; index: number }) => {
     const isActive = index === activeIndex;
 
     return (
       <View style={styles.lineWrapper}>
-        <Text 
+        <Text
           style={[
-            styles.lyricText, 
-            isActive ? styles.activeText : styles.inactiveText
+            styles.lyricText,
+            isActive ? styles.activeText : styles.inactiveText,
           ]}
         >
           {item.text}
@@ -83,26 +78,26 @@ const styles = StyleSheet.create({
   },
   lyricText: {
     fontSize: 24,
-    fontWeight: '800',
-    textAlign: 'left',
+    fontWeight: "800",
+    textAlign: "left",
   },
   activeText: {
-    color: '#00D4AA', // Teal Akses (Karaoke Style)
-    textShadowColor: 'rgba(0, 212, 170, 0.4)',
+    color: "#00D4AA", // Teal Akses (Karaoke Style)
+    textShadowColor: "rgba(0, 212, 170, 0.4)",
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 15,
   },
   inactiveText: {
-    color: 'rgba(255, 255, 255, 0.2)', // Redup jika bukan baris aktif
+    color: "rgba(255, 255, 255, 0.2)", // Redup jika bukan baris aktif
   },
   emptyContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   emptyText: {
-    color: 'rgba(255, 255, 255, 0.4)',
+    color: "rgba(255, 255, 255, 0.4)",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -6,18 +6,15 @@ import {
   Animated,
   Easing,
   Dimensions,
-} from 'react-native';
-import Svg, {
-  Circle,
-  Path,
-  Text as SvgText,
-  G,
-} from 'react-native-svg';
-import { COLORS, TYPOGRAPHY } from '@/constants/theme';
+} from "react-native";
+import Svg, { Circle, Path } from "react-native-svg";
+import { COLORS, TYPOGRAPHY } from "@/constants/theme";
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get("window");
 
-export const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
+export const SplashScreen: React.FC<{ onFinish: () => void }> = ({
+  onFinish,
+}) => {
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -33,7 +30,7 @@ export const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) =
         duration: 8000,
         easing: Easing.linear,
         useNativeDriver: true,
-      })
+      }),
     ).start();
 
     // Scale in animasi
@@ -68,7 +65,7 @@ export const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) =
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
-        ])
+        ]),
       ).start();
     };
 
@@ -83,13 +80,18 @@ export const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) =
 
   const spin = rotateAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
+    outputRange: ["0deg", "360deg"],
   });
 
   return (
     <View style={styles.container}>
       {/* Vinyl Disc */}
-      <Animated.View style={[styles.vinylContainer, { transform: [{ rotate: spin }, { scale: scaleAnim }] }]}>
+      <Animated.View
+        style={[
+          styles.vinylContainer,
+          { transform: [{ rotate: spin }, { scale: scaleAnim }] },
+        ]}
+      >
         <Svg width={300} height={300} viewBox="0 0 300 300">
           {/* Outer Ring */}
           <Circle
@@ -111,8 +113,13 @@ export const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) =
             fill="none"
           />
           {/* Center */}
-          <Circle cx="150" cy="150" r="100" fill={COLORS.background.secondary} />
-          
+          <Circle
+            cx="150"
+            cy="150"
+            r="100"
+            fill={COLORS.background.secondary}
+          />
+
           {/* Waveform */}
           <Path
             d="M90 150 L110 130 L130 170 L150 110 L170 170 L190 130 L210 150"
@@ -121,7 +128,7 @@ export const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) =
             strokeLinecap="round"
             fill="none"
           />
-          
+
           {/* PA Letters */}
           <Path
             d="M110 180 L110 120 L140 120 Q160 120 160 140 Q160 160 140 160 L110 160"
@@ -130,7 +137,14 @@ export const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) =
             strokeLinecap="round"
             fill="none"
           />
-          <Circle cx="180" cy="150" r="20" stroke={COLORS.text.primary} strokeWidth="8" fill="none" />
+          <Circle
+            cx="180"
+            cy="150"
+            r="20"
+            stroke={COLORS.text.primary}
+            strokeWidth="8"
+            fill="none"
+          />
         </Svg>
       </Animated.View>
 
@@ -173,14 +187,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   vinylContainer: {
     marginBottom: 40,
   },
   textContainer: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 40,
   },
   title: {
@@ -203,9 +217,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   dotsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 60,
   },
   dot: {
@@ -216,7 +230,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   wave: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 50,
   },
 });

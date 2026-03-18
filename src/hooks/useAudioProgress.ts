@@ -1,8 +1,8 @@
-import { useProgress } from 'react-native-track-player';
+import { useProgress } from "react-native-track-player";
 
-export const useAudioProgress = (updateInterval = 250) => {
+export const useAudioProgress = (_updateInterval = 250) => {
   // lovegaoshi fork mendukung interval update milidetik
-  const { position, duration, buffered } = useProgress(); 
+  const { position, duration, buffered } = useProgress();
 
   return {
     position,

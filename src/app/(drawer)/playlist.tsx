@@ -1,5 +1,5 @@
 // src/app/playlist.tsx
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -7,24 +7,21 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  TextInput,
-  Modal,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/context/ThemeContext';
-import { usePlaylists } from '@/hooks/usePlaylists';
-import { Playlist } from '@/types/playlist';
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useTheme } from "@/context/ThemeContext";
+import { usePlaylists } from "@/hooks/usePlaylists";
+import { Playlist } from "@/types/playlist";
 
 export default function PlaylistsScreen() {
   const { theme } = useTheme();
   const { colors, spacing } = theme;
-  
-  const { playlists, loading, deletePlaylist } = usePlaylists();
-  
-  const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editName, setEditName] = useState('');
-  const [editDesc, setEditDesc] = useState('');
+
+  const { playlists, deletePlaylist } = usePlaylists();
+
+  const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(
+    null,
+  );
 
   // Detail view
   if (selectedPlaylist) {
@@ -36,13 +33,20 @@ export default function PlaylistsScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background.primary }]}>
+    <View
+      style={[styles.container, { backgroundColor: colors.background.primary }]}
+    >
       {/* Header */}
-      <View style={[styles.header, { 
-        padding: spacing.lg,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.background.tertiary,
-      }]}>
+      <View
+        style={[
+          styles.header,
+          {
+            padding: spacing.lg,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.background.tertiary,
+          },
+        ]}
+      >
         <Text style={[styles.title, { color: colors.text.primary }]}>
           Playlists
         </Text>
@@ -54,48 +58,63 @@ export default function PlaylistsScreen() {
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <TouchableOpacity
-            style={[styles.playlistItem, { 
-              padding: spacing.md,
-              borderBottomWidth: 1,
-              borderBottomColor: colors.background.tertiary,
-            }]}
+            style={[
+              styles.playlistItem,
+              {
+                padding: spacing.md,
+                borderBottomWidth: 1,
+                borderBottomColor: colors.background.tertiary,
+              },
+            ]}
             onPress={() => setSelectedPlaylist(item)}
             onLongPress={() => {
-              Alert.alert(
-                'Hapus Playlist',
-                `Hapus "${item.name}"?`,
-                [
-                  { text: 'Batal' },
-                  { 
-                    text: 'Hapus', 
-                    style: 'destructive',
-                    onPress: () => deletePlaylist(item.id)
-                  },
-                ]
-              );
+              Alert.alert("Hapus Playlist", `Hapus "${item.name}"?`, [
+                { text: "Batal" },
+                {
+                  text: "Hapus",
+                  style: "destructive",
+                  onPress: () => deletePlaylist(item.id),
+                },
+              ]);
             }}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <View style={[styles.playlistIcon, { 
-                backgroundColor: colors.primary[500] + '20',
-                width: 50,
-                height: 50,
-                borderRadius: 8,
-                justifyContent: 'center',
-                alignItems: 'center',
-                marginRight: spacing.md,
-              }]}>
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <View
+                style={[
+                  styles.playlistIcon,
+                  {
+                    backgroundColor: colors.primary[500] + "20",
+                    width: 50,
+                    height: 50,
+                    borderRadius: 8,
+                    justifyContent: "center",
+                    alignItems: "center",
+                    marginRight: spacing.md,
+                  },
+                ]}
+              >
                 <Ionicons name="list" size={24} color={colors.primary[500]} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.playlistName, { color: colors.text.primary }]}>
+                <Text
+                  style={[styles.playlistName, { color: colors.text.primary }]}
+                >
                   {item.name}
                 </Text>
-                <Text style={[styles.playlistMeta, { color: colors.text.secondary }]}>
+                <Text
+                  style={[
+                    styles.playlistMeta,
+                    { color: colors.text.secondary },
+                  ]}
+                >
                   {item.songCount} lagu • {Math.floor(item.duration / 60)} menit
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.text.secondary} />
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={colors.text.secondary}
+              />
             </View>
           </TouchableOpacity>
         )}
@@ -109,13 +128,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   title: {
     fontSize: 24,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   playlistItem: {
     // style di-inline
@@ -124,12 +143,12 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   playlistName: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   playlistMeta: {
     fontSize: 12,

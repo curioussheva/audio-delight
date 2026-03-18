@@ -30,7 +30,7 @@ export interface Song {
 }
 
 export interface AudioFormat {
-  codec: 'mp3' | 'wav' | 'aac' | 'm4a' | 'ogg' | 'flac' | 'dsd' | 'other';
+  codec: "mp3" | "wav" | "aac" | "m4a" | "ogg" | "flac" | "dsd" | "other";
   sampleRate: number; // 44100, 48000, 96000, 192000
   bitDepth?: number; // 16, 24, 32
   bitrate?: number; // kbps
@@ -59,10 +59,10 @@ export interface Queue {
   songs: Song[];
   currentIndex: number;
   shuffle: boolean;
-  repeat: 'off' | 'track' | 'queue';
+  repeat: "off" | "track" | "queue";
 }
 
-export type RepeatMode = 'off' | 'track' | 'queue';
+export type RepeatMode = "off" | "track" | "queue";
 
 export interface MusicAnalysisResult {
   id: string;
@@ -102,5 +102,3 @@ export interface AudioMetadata {
   codec: string;
   bitrate: number;
 }
-
-

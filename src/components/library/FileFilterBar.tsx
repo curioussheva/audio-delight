@@ -1,6 +1,6 @@
-import React from 'react';
-import { ScrollView, TouchableOpacity, Text, StyleSheet } from 'react-native';
-import { useTheme } from '@/context/ThemeContext';
+import React from "react";
+import { ScrollView, TouchableOpacity, Text, StyleSheet } from "react-native";
+import { useTheme } from "@/context/ThemeContext";
 
 interface FileFilterBarProps {
   selectedType: string;
@@ -8,29 +8,31 @@ interface FileFilterBarProps {
 }
 
 const FILE_TYPES = [
-  { label: 'All', value: '' },
-  { label: 'FLAC', value: 'flac' },
-  { label: 'DSD', value: 'dsf' },
-  { label: 'WAV', value: 'wav' },
-  { label: 'M4A', value: 'm4a' },
-  { label: 'M3U', value: 'm3u' },
+  { label: "All", value: "" },
+  { label: "FLAC", value: "flac" },
+  { label: "DSD", value: "dsf" },
+  { label: "WAV", value: "wav" },
+  { label: "M4A", value: "m4a" },
+  { label: "M3U", value: "m3u" },
 ];
 
-export const FileFilterBar: React.FC<FileFilterBarProps> = ({ 
-  selectedType, 
-  onSelectType 
+export const FileFilterBar: React.FC<FileFilterBarProps> = ({
+  selectedType,
+  onSelectType,
 }) => {
   const { theme } = useTheme();
   const { colors, spacing } = theme;
 
   // Helper untuk mendapatkan warna string dari objek palet atau string langsung
   const getActiveColor = () => {
-    return typeof colors.primary === 'string' ? colors.primary : colors.primary[500];
+    return typeof colors.primary === "string"
+      ? colors.primary
+      : colors.primary[500];
   };
 
   return (
-    <ScrollView 
-      horizontal 
+    <ScrollView
+      horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.container}
     >
@@ -44,17 +46,21 @@ export const FileFilterBar: React.FC<FileFilterBarProps> = ({
             onPress={() => onSelectType(type.value)}
             style={[
               styles.chip,
-              { 
-                backgroundColor: isActive ? activeColor : colors.background.elevated,
+              {
+                backgroundColor: isActive
+                  ? activeColor
+                  : colors.background.elevated,
                 borderColor: isActive ? activeColor : colors.border.medium,
                 marginRight: spacing.sm,
-              }
+              },
             ]}
           >
-            <Text style={[
-              styles.chipText, // Gunakan style teks yang benar
-              { color: isActive ? '#FFF' : colors.text.secondary }
-            ]}>
+            <Text
+              style={[
+                styles.chipText, // Gunakan style teks yang benar
+                { color: isActive ? "#FFF" : colors.text.secondary },
+              ]}
+            >
               {type.label}
             </Text>
           </TouchableOpacity>
@@ -74,12 +80,12 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 20,
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   chipText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 0.5,
   },
 });

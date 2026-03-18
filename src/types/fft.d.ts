@@ -1,4 +1,4 @@
-declare module 'fft.js' {
+declare module "fft.js" {
   class FFT {
     constructor(size: number);
     forward(input: Float32Array | number[]): Float32Array;

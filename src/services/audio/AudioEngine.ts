@@ -1,17 +1,15 @@
 import TrackPlayer, {
   Capability,
-  Event,
   RepeatMode,
   State,
-  Track,
-} from 'react-native-track-player';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+} from "react-native-track-player";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { Song } from '@/types/audio';
-import { requestAudioPermissions } from '@/utils/permissions';
-import USBDACService from '@/services/hardware/USBDACService';
-import NativeDSPModule from '../native/NativeDSPModule';
-import { startVisualizer, stopVisualizer } from '../native/VisualizerBridge';
+import { Song } from "@/types/audio";
+import { requestAudioPermissions } from "@/utils/permissions";
+import USBDACService from "@/services/hardware/USBDACService";
+import NativeDSPModule from "../native/NativeDSPModule";
+import { startVisualizer, stopVisualizer } from "../native/VisualizerBridge";
 
 // ────────────────────────────────────────────────
 //  Types & Interfaces
@@ -29,7 +27,7 @@ const DEFAULT_CONFIG: Required<AudioEngineConfig> = {
   playBufferMs: 1,
 };
 
-type RepeatModeType = 'off' | 'all' | 'track';
+type RepeatModeType = "off" | "all" | "track";
 
 // ────────────────────────────────────────────────
 //  AudioEngine
@@ -61,7 +59,7 @@ export class AudioEngine {
 
       await TrackPlayer.updateOptions({
         android: {
-          appKilledPlaybackBehavior: 'stop-playback-and-remove-notification',
+          appKilledPlaybackBehavior: "stop-playback-and-remove-notification",
           alwaysPauseOnInterruption: true,
         },
         capabilities: [
@@ -72,15 +70,19 @@ export class AudioEngine {
           Capability.Stop,
           Capability.SeekTo,
         ],
-        compactCapabilities: [Capability.Play, Capability.Pause, Capability.SkipToNext],
+        compactCapabilities: [
+          Capability.Play,
+          Capability.Pause,
+          Capability.SkipToNext,
+        ],
       });
 
       await this.refreshSessionId();
 
       this.isInitialized = true;
-      console.log('[AudioEngine] Initialized');
+      console.log("[AudioEngine] Initialized");
     } catch (error) {
-      console.error('[AudioEngine] Initialization failed:', error);
+      console.error("[AudioEngine] Initialization failed:", error);
       throw error;
     }
   }
@@ -89,14 +91,14 @@ export class AudioEngine {
     try {
       // react-native-track-player doesn't officially expose this → type hole expected
       const id = await (TrackPlayer as any).getAudioSessionId?.();
-      if (typeof id === 'number' && id > 0) {
+      if (typeof id === "number" && id > 0) {
         this.sessionId = id;
         console.log(`[AudioEngine] Audio session ID: ${id}`);
         return id;
       }
       return null;
     } catch (err) {
-      console.warn('[AudioEngine] Could not retrieve audio session ID', err);
+      console.warn("[AudioEngine] Could not retrieve audio session ID", err);
       return null;
     }
   }
@@ -112,9 +114,9 @@ export class AudioEngine {
       await TrackPlayer.reset();
       this.isInitialized = false;
       this.sessionId = null;
-      console.log('[AudioEngine] Destroyed');
+      console.log("[AudioEngine] Destroyed");
     } catch (error) {
-      console.error('[AudioEngine] Destroy failed:', error);
+      console.error("[AudioEngine] Destroy failed:", error);
     }
   }
 
@@ -134,7 +136,7 @@ export class AudioEngine {
 
       return await (NativeDSPModule as any).toggleExclusiveMode(enable);
     } catch (err) {
-      console.error('[AudioEngine] Failed to toggle exclusive mode:', err);
+      console.error("[AudioEngine] Failed to toggle exclusive mode:", err);
       return false;
     }
   }
@@ -153,10 +155,12 @@ export class AudioEngine {
       url: song.uri,
       title: song.title,
       artist: song.artist,
-      album: song.album || 'Pristine Audio',
+      album: song.album || "Pristine Audio",
       duration: song.duration,
       artwork: song.artwork,
-      contentType: song.uri.toLowerCase().endsWith('.flac') ? 'audio/flac' : 'audio/mpeg',
+      contentType: song.uri.toLowerCase().endsWith(".flac")
+        ? "audio/flac"
+        : "audio/mpeg",
       // Pastikan property ini sesuai dengan ekspektasi TrackPlayer versi terbaru
       sampleRate: song.sampleRate,
       bitDepth: song.bitDepth,
@@ -169,7 +173,6 @@ export class AudioEngine {
     }
   }
 
-
   // ─── Playback Controls ────────────────────────────────
 
   async play(): Promise<void> {
@@ -180,9 +183,9 @@ export class AudioEngine {
     // Beri sedikit delay agar SessionID benar-benar siap (Android quirk)
     setTimeout(async () => {
       const sessionId = await this.refreshSessionId();
-      const mode = await AsyncStorage.getItem('audio_mode_preference');
+      const mode = await AsyncStorage.getItem("audio_mode_preference");
 
-      if (mode !== 'bit-perfect' && sessionId && !this.isVisualizerRunning) {
+      if (mode !== "bit-perfect" && sessionId && !this.isVisualizerRunning) {
         const hasPermission = await requestAudioPermissions();
         if (hasPermission) {
           startVisualizer(sessionId);
@@ -197,7 +200,7 @@ export class AudioEngine {
     stopVisualizer();
     this.isVisualizerRunning = false;
   }
-  
+
   async stop(): Promise<void> {
     await TrackPlayer.stop();
     stopVisualizer();
@@ -222,9 +225,11 @@ export class AudioEngine {
 
   async setRepeatMode(mode: RepeatModeType): Promise<void> {
     const repeat =
-      mode === 'track' ? RepeatMode.Track :
-      mode === 'all'   ? RepeatMode.Queue :
-                         RepeatMode.Off;
+      mode === "track"
+        ? RepeatMode.Track
+        : mode === "all"
+          ? RepeatMode.Queue
+          : RepeatMode.Off;
 
     await (TrackPlayer as any).setRepeatMode?.(repeat);
   }
@@ -236,15 +241,15 @@ export class AudioEngine {
         return Math.round(progress.position * 1000);
       }
       const pos = await (TrackPlayer as any).getPosition?.();
-      return typeof pos === 'number' ? Math.round(pos * 1000) : 0;
+      return typeof pos === "number" ? Math.round(pos * 1000) : 0;
     } catch {
       return 0;
     }
   }
 
   async getPlaybackState() {
-  return await TrackPlayer.getState();
-}
+    return await TrackPlayer.getState();
+  }
 
   async isPlaying(): Promise<boolean> {
     const state = await this.getPlaybackState();

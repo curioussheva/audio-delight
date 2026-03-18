@@ -1,16 +1,16 @@
-import React, { useEffect } from 'react';
-import { View, Image, TouchableOpacity, StyleSheet, Text } from 'react-native';
-import { BlurView } from 'expo-blur';
-import { useTheme } from '@/context/ThemeContext';
-import { SpectrumAnalyzer } from '@/components/visualizer/SpectrumAnalyzer';
-import Animated, { 
-  useAnimatedStyle, 
-  useSharedValue, 
-  withRepeat, 
-  withTiming, 
+import React, { useEffect } from "react";
+import { View, Image, TouchableOpacity, StyleSheet, Text } from "react-native";
+import { BlurView } from "expo-blur";
+import { useTheme } from "@/context/ThemeContext";
+import { SpectrumAnalyzer } from "@/components/visualizer/SpectrumAnalyzer";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
   Easing,
-  cancelAnimation 
-} from 'react-native-reanimated';
+  cancelAnimation,
+} from "react-native-reanimated";
 
 interface AlbumArtProps {
   artwork?: string;
@@ -28,7 +28,7 @@ export const AlbumArt: React.FC<AlbumArtProps> = ({
   size = 280,
 }) => {
   const { theme } = useTheme();
-  
+
   const rotation = useSharedValue(0);
 
   useEffect(() => {
@@ -39,7 +39,7 @@ export const AlbumArt: React.FC<AlbumArtProps> = ({
           easing: Easing.linear,
         }),
         -1,
-        false
+        false,
       );
     } else {
       cancelAnimation(rotation);
@@ -59,7 +59,7 @@ export const AlbumArt: React.FC<AlbumArtProps> = ({
         {
           width: size,
           height: size,
-          borderRadius: size / 2, 
+          borderRadius: size / 2,
         },
       ]}
     >
@@ -67,7 +67,10 @@ export const AlbumArt: React.FC<AlbumArtProps> = ({
         {artwork && !showVisualizer ? (
           <Image
             source={{ uri: artwork }}
-            style={[styles.image, { width: size, height: size, borderRadius: size / 2 }]}
+            style={[
+              styles.image,
+              { width: size, height: size, borderRadius: size / 2 },
+            ]}
           />
         ) : showVisualizer ? (
           <SpectrumAnalyzer
@@ -79,8 +82,21 @@ export const AlbumArt: React.FC<AlbumArtProps> = ({
             backgroundColor={theme.colors.background.secondary}
           />
         ) : (
-          <View style={[styles.placeholder, { backgroundColor: theme.colors.background.tertiary, borderRadius: size / 2 }]}>
-            <Text style={[styles.placeholderText, { color: theme.colors.primary[500] }]}>
+          <View
+            style={[
+              styles.placeholder,
+              {
+                backgroundColor: theme.colors.background.tertiary,
+                borderRadius: size / 2,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.placeholderText,
+                { color: theme.colors.primary[500] },
+              ]}
+            >
               ♪
             </Text>
           </View>
@@ -99,23 +115,23 @@ export const AlbumArt: React.FC<AlbumArtProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    overflow: 'hidden',
+    overflow: "hidden",
     elevation: 10,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.3,
     shadowRadius: 10,
   },
   image: {
-    resizeMode: 'cover',
+    resizeMode: "cover",
   },
   placeholder: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   placeholderText: {
     fontSize: 48,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
 });

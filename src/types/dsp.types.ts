@@ -2,7 +2,7 @@ export interface EqualizerBand {
   frequency: number;
   gain: number;
   q?: number;
-  type?: 'peaking' | 'lowshelf' | 'highshelf';
+  type?: "peaking" | "lowshelf" | "highshelf";
 }
 
 export interface FrequencyData {

@@ -29,20 +29,20 @@ export interface DACInfo {
 export interface DACConfig {
   dacId: string;
   exclusiveMode: boolean;
-  sampleRate: 'auto' | number;
+  sampleRate: "auto" | number;
   bitDepth: 16 | 24 | 32;
   bufferSize: number; // in samples
-  dsdMode: 'native' | 'dop' | 'off';
-  mqaMode: 'renderer' | 'decoder' | 'off';
-  volumeControl: 'hardware' | 'software' | 'none';
+  dsdMode: "native" | "dop" | "off";
+  mqaMode: "renderer" | "decoder" | "off";
+  volumeControl: "hardware" | "software" | "none";
 }
 
-export type AudioOutputMode = 'system' | 'exclusive' | 'direct';
+export type AudioOutputMode = "system" | "exclusive" | "direct";
 
 export interface AudioRoute {
   id: string;
   name: string;
-  type: 'builtin' | 'usb' | 'bluetooth' | 'hdmi';
+  type: "builtin" | "usb" | "bluetooth" | "hdmi";
   isDefault: boolean;
   isSelected: boolean;
   sampleRates: number[];

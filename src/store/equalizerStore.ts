@@ -1,23 +1,23 @@
-import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { EqualizerStore, Preset } from '@/types/equalizer';
-import { ALL_PRESETS, makeBands } from '@/constants/equalizerPresets';
+import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { EqualizerStore, Preset } from "@/types/equalizer";
+import { ALL_PRESETS, makeBands } from "@/constants/equalizerPresets";
 
 // PERBAIKAN 1: Gunakan { audioEngine } dengan huruf kecil
-import { audioEngine } from '@/services/audio/AudioEngine';
+import { audioEngine } from "@/services/audio/AudioEngine";
 
 export const useEqualizerStore = create<EqualizerStore>()(
   persist(
     (set, get) => ({
       bands: makeBands([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-      activePresetId: 'flat',
+      activePresetId: "flat",
       isEQEnabled: false,
       customPresets: [],
 
       setEQEnabled: async (enabled: boolean) => {
         set({ isEQEnabled: enabled });
-        
+
         if (!enabled) {
           // PERBAIKAN 2: Gunakan audioEngine (huruf kecil)
           // Asumsi: Kita mengirim array 0 sekaligus lebih efisien jika bridge mendukung
@@ -25,23 +25,25 @@ export const useEqualizerStore = create<EqualizerStore>()(
             await (audioEngine as any).setEqBand?.(i, 0);
           }
         } else {
-          get().bands.forEach(band => (audioEngine as any).setEqBand?.(band.id, band.gain));
+          get().bands.forEach((band) =>
+            (audioEngine as any).setEqBand?.(band.id, band.gain),
+          );
         }
       },
 
       applyPreset: (presetId: string) => {
         const { customPresets, isEQEnabled } = get();
-        
-        const preset = 
-          ALL_PRESETS.find(p => p.id === presetId) || 
-          customPresets.find(p => p.id === presetId);
+
+        const preset =
+          ALL_PRESETS.find((p) => p.id === presetId) ||
+          customPresets.find((p) => p.id === presetId);
 
         if (preset) {
-          const newBands = preset.bands.map(b => ({ ...b }));
-          
+          const newBands = preset.bands.map((b) => ({ ...b }));
+
           set({
             activePresetId: presetId,
-            bands: newBands
+            bands: newBands,
           });
 
           if (isEQEnabled) {
@@ -59,7 +61,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
 
         set({
           bands: newBands,
-          activePresetId: 'custom_unsaved'
+          activePresetId: "custom_unsaved",
         });
 
         if (isEQEnabled) {
@@ -69,35 +71,35 @@ export const useEqualizerStore = create<EqualizerStore>()(
 
       saveCustomPreset: (name: string) => {
         const { bands, customPresets } = get();
-        
+
         const newPreset: Preset = {
           id: `custom_${Date.now()}`,
           name: name,
-          description: 'Custom user preset',
+          description: "Custom user preset",
           isCustom: true,
-          bands: bands.map(b => ({ ...b }))
+          bands: bands.map((b) => ({ ...b })),
         };
 
         set({
           customPresets: [...customPresets, newPreset],
-          activePresetId: newPreset.id
+          activePresetId: newPreset.id,
         });
       },
 
       deleteCustomPreset: (id: string) => {
         const { customPresets, activePresetId } = get();
-        const updatedPresets = customPresets.filter(p => p.id !== id);
+        const updatedPresets = customPresets.filter((p) => p.id !== id);
 
         set({ customPresets: updatedPresets });
 
         if (activePresetId === id) {
-          get().applyPreset('flat');
+          get().applyPreset("flat");
         }
-      }
+      },
     }),
     {
-      name: 'equalizer-storage',
+      name: "equalizer-storage",
       storage: createJSONStorage(() => AsyncStorage),
-    }
-  )
+    },
+  ),
 );

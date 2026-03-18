@@ -1,8 +1,8 @@
 // src/hooks/usePlaylists.ts
-import { useState, useEffect, useCallback } from 'react';
-import PlaylistService from '@/services/PlaylistService';
-import { Playlist, CreatePlaylistDTO } from '@/types/playlist';
-import { Song } from '@/types/audio';
+import { useState, useEffect, useCallback } from "react";
+import PlaylistService from "@/services/PlaylistService";
+import { Playlist, CreatePlaylistDTO } from "@/types/playlist";
+import { Song } from "@/types/audio";
 
 export const usePlaylists = () => {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
@@ -26,7 +26,7 @@ export const usePlaylists = () => {
   const createPlaylist = useCallback(async (dto: CreatePlaylistDTO) => {
     try {
       const newPlaylist = await PlaylistService.createPlaylist(dto);
-      setPlaylists(prev => [...prev, newPlaylist]);
+      setPlaylists((prev) => [...prev, newPlaylist]);
       return newPlaylist;
     } catch (err: any) {
       setError(err.message);
@@ -34,28 +34,37 @@ export const usePlaylists = () => {
     }
   }, []);
 
-  const addToPlaylist = useCallback(async (playlistId: string, songs: Song[]) => {
-    try {
-      await PlaylistService.addToPlaylist(playlistId, songs.map(s => s.id));
-      await loadPlaylists();
-    } catch (err: any) {
-      setError(err.message);
-    }
-  }, [loadPlaylists]);
+  const addToPlaylist = useCallback(
+    async (playlistId: string, songs: Song[]) => {
+      try {
+        await PlaylistService.addToPlaylist(
+          playlistId,
+          songs.map((s) => s.id),
+        );
+        await loadPlaylists();
+      } catch (err: any) {
+        setError(err.message);
+      }
+    },
+    [loadPlaylists],
+  );
 
-  const removeFromPlaylist = useCallback(async (playlistId: string, songId: string) => {
-    try {
-      await PlaylistService.removeFromPlaylist(playlistId, songId);
-      await loadPlaylists();
-    } catch (err: any) {
-      setError(err.message);
-    }
-  }, [loadPlaylists]);
+  const removeFromPlaylist = useCallback(
+    async (playlistId: string, songId: string) => {
+      try {
+        await PlaylistService.removeFromPlaylist(playlistId, songId);
+        await loadPlaylists();
+      } catch (err: any) {
+        setError(err.message);
+      }
+    },
+    [loadPlaylists],
+  );
 
   const deletePlaylist = useCallback(async (id: string) => {
     try {
       await PlaylistService.deletePlaylist(id);
-      setPlaylists(prev => prev.filter(p => p.id !== id));
+      setPlaylists((prev) => prev.filter((p) => p.id !== id));
     } catch (err: any) {
       setError(err.message);
     }
@@ -64,7 +73,7 @@ export const usePlaylists = () => {
   const importM3U = useCallback(async (content: string) => {
     try {
       const newPlaylist = await PlaylistService.importM3U(content);
-      setPlaylists(prev => [...prev, newPlaylist]);
+      setPlaylists((prev) => [...prev, newPlaylist]);
       return newPlaylist;
     } catch (err: any) {
       setError(err.message);

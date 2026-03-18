@@ -61,6 +61,7 @@ __tests__/
 .temp
 *.tmp
 *.temp
+temp/
 
 # TypeScript
 *.tsbuildinfo
@@ -69,3 +70,4 @@ __tests__/
 
 expo-env.d.ts
 # @end expo-cli
+

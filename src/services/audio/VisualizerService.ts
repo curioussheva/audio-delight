@@ -1,9 +1,17 @@
-import { AppState, AppStateStatus, NativeModules, NativeEventEmitter, EmitterSubscription } from 'react-native';
-import { SharedValue } from 'react-native-reanimated';
+import {
+  AppState,
+  AppStateStatus,
+  NativeModules,
+  NativeEventEmitter,
+  EmitterSubscription,
+} from "react-native";
+import { SharedValue } from "react-native-reanimated";
 
 const { NativeVisualizerBridge } = NativeModules;
 // Safety: Cek keberadaan modul sebelum membuat Emitter
-const visualizerEmitter = NativeVisualizerBridge ? new NativeEventEmitter(NativeVisualizerBridge) : null;
+const visualizerEmitter = NativeVisualizerBridge
+  ? new NativeEventEmitter(NativeVisualizerBridge)
+  : null;
 
 class VisualizerService {
   private frequencyData: SharedValue<number[]> | null = null;
@@ -12,14 +20,18 @@ class VisualizerService {
   private lastSessionId: number = 0;
 
   constructor() {
-    AppState.addEventListener('change', this.handleAppStateChange);
+    AppState.addEventListener("change", this.handleAppStateChange);
   }
 
   private handleAppStateChange = async (nextAppState: AppStateStatus) => {
     // Gunakan regex atau check sederhana untuk status tidak aktif
     if (nextAppState.match(/inactive|background/)) {
       this.stopNativeVisualizer();
-    } else if (nextAppState === 'active' && this.isStarted && this.lastSessionId !== 0) {
+    } else if (
+      nextAppState === "active" &&
+      this.isStarted &&
+      this.lastSessionId !== 0
+    ) {
       this.resume();
     }
   };
@@ -30,7 +42,7 @@ class VisualizerService {
         await NativeVisualizerBridge.startVisualizer(this.lastSessionId);
       }
     } catch (e) {
-      console.warn('[VisualizerService] Failed to resume:', e);
+      console.warn("[VisualizerService] Failed to resume:", e);
     }
   }
 
@@ -39,18 +51,21 @@ class VisualizerService {
     this.stopSubscription();
 
     if (visualizerEmitter) {
-      this.subscription = visualizerEmitter.addListener('onFftData', (data: number[]) => {
-        if (this.frequencyData) {
-          // Update ke UI Thread via Reanimated
-          this.frequencyData.value = data;
-        }
-      });
+      this.subscription = visualizerEmitter.addListener(
+        "onFftData",
+        (data: number[]) => {
+          if (this.frequencyData) {
+            // Update ke UI Thread via Reanimated
+            this.frequencyData.value = data;
+          }
+        },
+      );
     }
   }
 
   async start(sessionId: number = 0) {
     if (!NativeVisualizerBridge || sessionId === 0) return;
-    
+
     this.lastSessionId = sessionId;
     this.isStarted = true;
 
@@ -58,7 +73,7 @@ class VisualizerService {
       await NativeVisualizerBridge.startVisualizer(sessionId);
     } catch (error) {
       this.isStarted = false;
-      console.error('[VisualizerService] Start Error:', error);
+      console.error("[VisualizerService] Start Error:", error);
     }
   }
 
