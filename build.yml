@@ -56,33 +56,37 @@ jobs:
           grep distributionUrl android/gradle/wrapper/gradle-wrapper.properties
 
       - name: Patch settings.gradle for CI
+        env:
+          ROOT_DIR: ${{ github.workspace }}
         run: |
-          export ROOT_DIR="${{ github.workspace }}"
+          # Menggunakan pipe '|' agar YAML membaca baris-baris di bawah sebagai raw string
           python3 -c "
 import re, os, sys
 
 root_dir = os.environ['ROOT_DIR']
-with open('android/settings.gradle', 'r') as f:
+file_path = 'android/settings.gradle'
+
+with open(file_path, 'r') as f:
     content = f.read()
 
-# Gunakan f-string atau concatenation agar lebih aman dari escape character
+# Gunakan f-string agar tidak pusing dengan backslash dan tanda kutip
 replacement = f'includeBuild(\"{root_dir}/node_modules/@react-native/gradle-plugin\")'
 
-patched = re.sub(
-    r'includeBuild\s*\(\s*new\s+File\s*\(\s*\[.*?\]\s*\.execute\s*\(.*?\)\s*\.text\s*\.trim\s*\(\s*\)\s*\)\s*\.parentFile\s*\.toString\s*\(\s*\)\s*\)',
-    replacement,
-    content,
-    flags=re.DOTALL
-)
+# Regex ini mencari blok dynamic resolution dari Expo/React Native
+pattern = r'includeBuild\s*\(\s*new\s+File\s*\(\s*\[.*?\]\s*\.execute\s*\(.*?\)\s*\.text\s*\.trim\s*\(\s*\)\s*\)\s*\.parentFile\s*\.toString\s*\(\s*\)\s*\)'
+
+patched = re.sub(pattern, replacement, content, flags=re.DOTALL)
 
 if patched == content:
-    print('WARNING: Pattern not matched', file=sys.stderr)
+    print('WARNING: Pattern not matched, settings.gradle unchanged', file=sys.stderr)
 else:
     print('OK: settings.gradle patched')
 
-with open('android/settings.gradle', 'w') as f:
+with open(file_path, 'w') as f:
     f.write(patched)
 "
+          echo "--- Resulting settings.gradle ---"
+          cat android/settings.gradle
 
 
       - name: Patch Android Build Files
