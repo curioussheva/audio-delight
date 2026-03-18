@@ -57,29 +57,33 @@ jobs:
 
       - name: Patch settings.gradle for CI
         run: |
-          # Tulis Python script ke file untuk menghindari masalah YAML quote
-          cat > /tmp/patch_settings.py << 'PYEOF'
-          import re, sys, os
-          root_dir = os.environ['GITHUB_WORKSPACE']
-          with open('android/settings.gradle', 'r') as f:
-              content = f.read()
-          replacement = 'includeBuild("' + root_dir + '/node_modules/@react-native/gradle-plugin")'
-          patched = re.sub(
-              r'includeBuild\s*\(\s*new\s+File\s*\(\s*\[.*?\]\s*\.execute\s*\(.*?\)\s*\.text\s*\.trim\s*\(\s*\)\s*\)\s*\.parentFile\s*\.toString\s*\(\s*\)\s*\)',
-              replacement,
-              content,
-              flags=re.DOTALL
-          )
-          if patched == content:
-              print('WARNING: Pattern not matched, settings.gradle unchanged', file=sys.stderr)
-          else:
-              print('OK: settings.gradle patched')
-          with open('android/settings.gradle', 'w') as f:
-              f.write(patched)
-          PYEOF
-          python3 /tmp/patch_settings.py
-          echo "--- settings.gradle ---"
-          cat android/settings.gradle
+          export ROOT_DIR="${{ github.workspace }}"
+          python3 -c "
+import re, os, sys
+
+root_dir = os.environ['ROOT_DIR']
+with open('android/settings.gradle', 'r') as f:
+    content = f.read()
+
+# Gunakan f-string atau concatenation agar lebih aman dari escape character
+replacement = f'includeBuild(\"{root_dir}/node_modules/@react-native/gradle-plugin\")'
+
+patched = re.sub(
+    r'includeBuild\s*\(\s*new\s+File\s*\(\s*\[.*?\]\s*\.execute\s*\(.*?\)\s*\.text\s*\.trim\s*\(\s*\)\s*\)\s*\.parentFile\s*\.toString\s*\(\s*\)\s*\)',
+    replacement,
+    content,
+    flags=re.DOTALL
+)
+
+if patched == content:
+    print('WARNING: Pattern not matched', file=sys.stderr)
+else:
+    print('OK: settings.gradle patched')
+
+with open('android/settings.gradle', 'w') as f:
+    f.write(patched)
+"
+
 
       - name: Patch Android Build Files
         run: |
