@@ -1,58 +1,119 @@
-name: Build PristineAudio APK
+name: Build PristineAudio APK (Debug)
 
 on:
   push:
-    branches: [ "pristine-audio" ]
-  pull_request:
     branches: [ "pristine-audio" ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
+      - name: Free Disk Space
+        run: |
+          echo "Disk before cleanup:"
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android/sdk/ndk
+          sudo rm -rf /usr/local/lib/android/sdk/build-tools/3[0-2]*
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/share/boost
+          sudo apt-get clean
+          echo "Disk after cleanup:"
+          df -h
+
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.19.0'
+          node-version: '20.x'
           cache: 'yarn'
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install --frozen-lockfile --ignore-engines
 
       - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: 'gradle'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Setup Expo CLI
-        run: npm install -g expo-cli eas-cli
+      - name: Expo Prebuild
+        run: npx expo prebuild --clean --platform android --non-interactive
 
-      - name: Login to Expo
-        run: eas cli login --non-interactive --token ${{ secrets.EXPO_TOKEN }}
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      - name: Pin Gradle to 8.7
+        run: |
+          # 8.7 = versi terakhir sebelum serviceOf dihapus di 8.8
+          sed -i 's|gradle-[0-9][0-9]*\.[0-9][0-9]*\(\.[0-9][0-9]*\)\?-bin\.zip|gradle-8.7-bin.zip|g' \
+            android/gradle/wrapper/gradle-wrapper.properties
+          echo "Gradle wrapper:"
+          grep distributionUrl android/gradle/wrapper/gradle-wrapper.properties
 
-      - name: Run prebuild
-        run: npx expo prebuild --clean
+      - name: Patch settings.gradle for CI
+        run: |
+          ROOT_DIR="${{ github.workspace }}"
+          # Ganti dynamic node resolution dengan absolute path langsung
+          # karena subprocess node dari Groovy gagal di CI environment
+          python3 -c "
+import re, sys
 
-      - name: Build APK with Gradle
+with open('android/settings.gradle', 'r') as f:
+    content = f.read()
+
+# Pattern: includeBuild(new File([...].execute(...).text.trim()).parentFile.toString())
+patched = re.sub(
+    r'includeBuild\s*\(\s*new\s+File\s*\(\s*\[.*?\]\s*\.execute\s*\(.*?\)\s*\.text\s*\.trim\s*\(\s*\)\s*\)\s*\.parentFile\s*\.toString\s*\(\s*\)\s*\)',
+    'includeBuild(\"$ROOT_DIR/node_modules/@react-native/gradle-plugin\")',
+    content,
+    flags=re.DOTALL
+)
+
+if patched == content:
+    print('WARNING: Pattern not matched, settings.gradle unchanged', file=sys.stderr)
+else:
+    print('OK: settings.gradle patched')
+
+with open('android/settings.gradle', 'w') as f:
+    f.write(patched)
+"
+          echo "--- settings.gradle ---"
+          cat android/settings.gradle
+
+      - name: Patch Android Build Files
+        run: |
+          ROOT_DIR="${{ github.workspace }}"
+
+          sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/build.gradle
+          sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/react-native-track-player/android/repo\" }" android/build.gradle
+          sed -i "/repositories {/a \        flatDir { dirs \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/app/build.gradle
+          sed -i "/defaultConfig {/a \        ndk { abiFilters 'arm64-v8a' }" android/app/build.gradle
+
+          echo "✅ Patched successfully"
+
+      - name: Build Debug APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease
-          
-      - name: Upload APK
+          ./gradlew assembleDebug \
+            --no-daemon \
+            --no-parallel \
+            --max-workers=2 \
+            --build-cache \
+            -PkotlinVersion=2.0.21 \
+            -Pandroid.injected.build.abi.filters=arm64-v8a \
+            -Dorg.gradle.jvmargs="-Xmx3g -Xms512m -XX:MaxMetaspaceSize=512m"
+
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: pristineaudio-app-release
-          path: android/app/build/outputs/apk/release/app-release.apk
-          if-no-files-found: error
+          name: PristineAudio-Debug
+          path: android/app/build/outputs/apk/debug/*.apk
+          retention-days: 7
