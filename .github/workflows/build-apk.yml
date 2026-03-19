@@ -5,6 +5,10 @@ on:
     branches: [ "pristine-audio" ]
   workflow_dispatch:
 
+# Menghilangkan warning Node.js 20 Deprecated di GitHub Actions
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -51,10 +55,12 @@ jobs:
           ROOT_DIR: ${{ github.workspace }}
         run: |
           FILE_PATH="android/settings.gradle"
-          sed -i '/pluginManagement {/,/}/d' "$FILE_PATH"
-          sed -i '/includeBuild.*gradle-plugin/d' "$FILE_PATH"
           
-          # Menggunakan echo per baris menjaga indentasi YAML tetap rapi dan valid
+          # Taktik "Potong Kepala": Kita simpan isi file HANYA mulai dari tulisan "plugins {" 
+          # sampai ke paling bawah. Ini otomatis membuang SEMUA sampah includeBuild multi-baris di atasnya.
+          sed -n '/plugins {/,$p' "$FILE_PATH" > settings.tail
+          
+          # Buat kepala file yang baru, bersih, dan statis
           echo "pluginManagement {" > settings.new
           echo "    repositories {" >> settings.new
           echo "        google()" >> settings.new
@@ -64,11 +70,10 @@ jobs:
           echo "}" >> settings.new
           echo "includeBuild(\"${ROOT_DIR}/node_modules/@react-native/gradle-plugin\")" >> settings.new
           
-          cat "$FILE_PATH" >> settings.new
+          # Sambungkan kepala baru dengan sisa file asli (badan file)
+          cat settings.tail >> settings.new
           
-          # Hapus baris kosong di bagian paling atas
-          sed -i '1{/^$/d}' settings.new
-          
+          # Timpa file lama
           mv settings.new "$FILE_PATH"
           cat -n "$FILE_PATH" | head -n 20
 
