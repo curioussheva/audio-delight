@@ -1,4 +1,3 @@
-cat > /tmp/build-debug3.yml << 'ENDOFWORKFLOW'
 name: Build PristineAudio APK (Debug)
 
 on:
@@ -102,6 +101,3 @@ jobs:
           name: PristineAudio-Debug
           path: android/app/build/outputs/apk/debug/*.apk
           retention-days: 7
-ENDOFWORKFLOW
-cp /tmp/build-debug3.yml /mnt/user-data/outputs/build-debug.yml
-echo "done" 
