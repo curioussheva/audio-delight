@@ -52,13 +52,10 @@ jobs:
           ROOT_DIR: ${{ github.workspace }}
         run: |
           FILE_PATH="android/settings.gradle"
-          
-          # 1. Bersihkan total file asli dari blok-blok sensitif agar tidak duplikasi
-          # Kami menghapus blok pluginManagement dan includeBuild yang lama
           sed -i '/pluginManagement {/,/}/d' "$FILE_PATH"
           sed -i '/includeBuild.*gradle-plugin/d' "$FILE_PATH"
           
-          # 2. Re-build file dari nol dengan urutan SAKRAL (Tanpa spasi di baris 1)
+          # Gunakan heredoc tanpa indentasi agar bersih di baris 1
           cat <<EOF > settings.new
 pluginManagement {
     repositories {
@@ -69,25 +66,23 @@ pluginManagement {
 }
 includeBuild("${ROOT_DIR}/node_modules/@react-native/gradle-plugin")
 EOF
-          # Tambahkan sisa konten asli
           cat "$FILE_PATH" >> settings.new
           
-          # 3. Hapus baris kosong yang mungkin muncul di paling atas (Critical Fix)
-          sed -i './,/^$/ { /^$/d }' settings.new
+          # Hapus baris kosong di bagian paling atas
+          sed -i '1{/^$/d}' settings.new
           
           mv settings.new "$FILE_PATH"
-          
-          echo "--- Verifikasi Nomor Baris (Harus pluginManagement di baris 1) ---"
           cat -n "$FILE_PATH" | head -n 20
 
       - name: Patch Android Build Files
         env:
           ROOT_DIR: ${{ github.workspace }}
         run: |
-          # Patch build.gradle utama
-          sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/react-native-track-player/android/repo\" }" android/build.gradle
+          # Perbaikan Baris 63: Menggunakan format sed yang lebih aman tanpa backslash spasi
+          # Menyisipkan maven repo tepat setelah baris 'repositories {'
+          sed -i "/repositories {/a \        maven { url \"${ROOT_DIR}/node_modules/react-native-track-player/android/repo\" }" android/build.gradle
           
-          # Patch app/build.gradle
+          # Menyisipkan abiFilters
           sed -i "/defaultConfig {/a \        ndk { abiFilters 'arm64-v8a' }" android/app/build.gradle
           
           echo "✅ Android build files patched"
