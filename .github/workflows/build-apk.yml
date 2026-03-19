@@ -44,8 +44,8 @@ jobs:
 
       - name: Pin Gradle to 8.7
         run: |
-          sed -i 's|gradle-[0-9][0-9]*\.[0-9][0-9]*\(\.[0-9][0-9]*\)\?-bin\.zip|gradle-8.7-bin.zip|g' \
-            android/gradle/wrapper/gradle-wrapper.properties
+          # Dibuat menjadi satu baris agar tidak ada backslash (\) yang membingungkan YAML
+          sed -i 's|gradle-[0-9][0-9]*\.[0-9][0-9]*\(\.[0-9][0-9]*\)\?-bin\.zip|gradle-8.7-bin.zip|g' android/gradle/wrapper/gradle-wrapper.properties
 
       - name: Patch settings.gradle for CI
         env:
@@ -55,7 +55,6 @@ jobs:
           sed -i '/pluginManagement {/,/}/d' "$FILE_PATH"
           sed -i '/includeBuild.*gradle-plugin/d' "$FILE_PATH"
           
-          # Gunakan heredoc tanpa indentasi agar bersih di baris 1
           cat <<EOF > settings.new
 pluginManagement {
     repositories {
@@ -67,10 +66,7 @@ pluginManagement {
 includeBuild("${ROOT_DIR}/node_modules/@react-native/gradle-plugin")
 EOF
           cat "$FILE_PATH" >> settings.new
-          
-          # Hapus baris kosong di bagian paling atas
           sed -i '1{/^$/d}' settings.new
-          
           mv settings.new "$FILE_PATH"
           cat -n "$FILE_PATH" | head -n 20
 
@@ -78,12 +74,12 @@ EOF
         env:
           ROOT_DIR: ${{ github.workspace }}
         run: |
-          # Perbaikan Baris 63: Menggunakan format sed yang lebih aman tanpa backslash spasi
-          # Menyisipkan maven repo tepat setelah baris 'repositories {'
-          sed -i "/repositories {/a \        maven { url \"${ROOT_DIR}/node_modules/react-native-track-player/android/repo\" }" android/build.gradle
+          # Perbaikan: Menggunakan inline string replacement! 
+          # Menyisipkan maven di dalam kurung kurawal 'repositories {' tanpa perlu pindah baris
+          sed -i "s|repositories {|repositories { maven { url \"${ROOT_DIR}/node_modules/react-native-track-player/android/repo\" }|g" android/build.gradle
           
-          # Menyisipkan abiFilters
-          sed -i "/defaultConfig {/a \        ndk { abiFilters 'arm64-v8a' }" android/app/build.gradle
+          # Menyisipkan abiFilters secara inline di dalam 'defaultConfig {'
+          sed -i "s|defaultConfig {|defaultConfig { ndk { abiFilters 'arm64-v8a' }|g" android/app/build.gradle
           
           echo "✅ Android build files patched"
 
@@ -104,3 +100,4 @@ EOF
           name: PristineAudio-Debug
           path: android/app/build/outputs/apk/debug/*.apk
           retention-days: 7
+ 
