@@ -1,4 +1,5 @@
-name: Build PristineAudio APK (Optimized)
+cat > /tmp/build-debug3.yml << 'ENDOFWORKFLOW'
+name: Build PristineAudio APK (Debug)
 
 on:
   push:
@@ -49,25 +50,44 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --clean --platform android --non-interactive
 
+      - name: Pin Gradle to 8.7
+        run: |
+          sed -i 's|gradle-[0-9][0-9]*\.[0-9][0-9]*\(\.[0-9][0-9]*\)\?-bin\.zip|gradle-8.7-bin.zip|g' \
+            android/gradle/wrapper/gradle-wrapper.properties
+          grep distributionUrl android/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Patch settings.gradle for CI
+        run: |
+          ROOT_DIR="${{ github.workspace }}"
+          # Ganti baris includeBuild(...node...execute...) dengan path absolut
+          # Menggunakan node sendiri untuk resolve path yang benar
+          PLUGIN_PATH=$(node --print "require.resolve('@react-native/gradle-plugin/package.json')" | xargs dirname)
+          echo "Plugin path: $PLUGIN_PATH"
+          # Hapus baris includeBuild lama, ganti dengan yang baru
+          sed -i "s|includeBuild(new File(\[.*\]\.execute.*toString())|includeBuild('$PLUGIN_PATH')|g" android/settings.gradle
+          # Fallback: jika baris tidak cocok, tambahkan di baris pertama setelah pluginManagement
+          if ! grep -q "includeBuild('$PLUGIN_PATH')" android/settings.gradle; then
+            sed -i "0,/includeBuild/{s|includeBuild([^)]*)|includeBuild('$PLUGIN_PATH')|}" android/settings.gradle
+          fi
+          echo "--- settings.gradle result ---"
+          head -25 android/settings.gradle
+
       - name: Patch Android Build Files
         run: |
           ROOT_DIR="${{ github.workspace }}"
 
-          # Maven repos untuk RNTP dan AsyncStorage
           sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/build.gradle
           sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/react-native-track-player/android/repo\" }" android/build.gradle
           sed -i "/repositories {/a \        flatDir { dirs \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/app/build.gradle
-
-          # Batasi ABI ke arm64-v8a saja — mencegah CMake Skia build 4x paralel yang OOM
           sed -i "/defaultConfig {/a \        ndk { abiFilters 'arm64-v8a' }" android/app/build.gradle
 
-          echo "✅ Patched successfully"
+          echo "Patched successfully"
 
-      - name: Build APK with Gradle
+      - name: Build Debug APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease \
+          ./gradlew assembleDebug \
             --no-daemon \
             --no-parallel \
             --max-workers=2 \
@@ -76,9 +96,12 @@ jobs:
             -Pandroid.injected.build.abi.filters=arm64-v8a \
             -Dorg.gradle.jvmargs="-Xmx3g -Xms512m -XX:MaxMetaspaceSize=512m"
 
-      - name: Upload APK
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: PristineAudio-Release
-          path: android/app/build/outputs/apk/release/*.apk
-          retention-days: 7  
+          name: PristineAudio-Debug
+          path: android/app/build/outputs/apk/debug/*.apk
+          retention-days: 7
+ENDOFWORKFLOW
+cp /tmp/build-debug3.yml /mnt/user-data/outputs/build-debug.yml
+echo "done" 
