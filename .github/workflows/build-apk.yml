@@ -37,7 +37,7 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: 'gradle'
+          cache: 'gradle' # Mengaktifkan caching otomatis untuk library Gradle
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -49,19 +49,30 @@ jobs:
         run: |
           sed -i 's|gradle-[0-9][0-9]*\.[0-9][0-9]*\(\.[0-9][0-9]*\)\?-bin\.zip|gradle-8.7-bin.zip|g' android/gradle/wrapper/gradle-wrapper.properties
 
-      - name: Patch settings.gradle for CI
+      - name: Patch settings.gradle (Smart Detection)
         env:
           ROOT_DIR: ${{ github.workspace }}
         run: |
           FILE_PATH="android/settings.gradle"
           
-          # Ambil isi file HANYA mulai dari tulisan "plugins {" sampai ke bawah
+          # Deteksi lokasi plugin secara dinamis
+          if [ -d "${ROOT_DIR}/node_modules/@react-native/gradle-plugin" ]; then
+            PLUGIN_PATH="${ROOT_DIR}/node_modules/@react-native/gradle-plugin"
+          elif [ -d "${ROOT_DIR}/node_modules/react-native/gradle-plugin" ]; then
+            PLUGIN_PATH="${ROOT_DIR}/node_modules/react-native/gradle-plugin"
+          else
+            echo "❌ ERROR: gradle-plugin not found in node_modules"
+            exit 1
+          fi
+          
+          echo "Using Plugin Path: $PLUGIN_PATH"
+
+          # Ambil bagian bawah file (mulai dari plugins {})
           sed -n '/plugins {/,$p' "$FILE_PATH" > settings.tail
           
-          # Buat kepala file yang baru, bersih, dan statis
+          # Susun ulang file dengan format yang BENAR
           echo "pluginManagement {" > settings.new
-          # KUNCI JAWABANNYA: includeBuild diletakkan DI DALAM pluginManagement
-          echo "    includeBuild(\"${ROOT_DIR}/node_modules/@react-native/gradle-plugin\")" >> settings.new
+          echo "    includeBuild(\"$PLUGIN_PATH\")" >> settings.new
           echo "    repositories {" >> settings.new
           echo "        google()" >> settings.new
           echo "        mavenCentral()" >> settings.new
@@ -69,22 +80,20 @@ jobs:
           echo "    }" >> settings.new
           echo "}" >> settings.new
           
-          # Sambungkan dengan sisa file asli
           cat settings.tail >> settings.new
-          
-          # Timpa file lama
           mv settings.new "$FILE_PATH"
-          echo "--- Verifikasi Struktur settings.gradle ---"
-          cat -n "$FILE_PATH" | head -n 20
+          
+          echo "--- Resulting settings.gradle ---"
+          cat -n "$FILE_PATH" | head -n 15
 
       - name: Patch Android Build Files
         env:
           ROOT_DIR: ${{ github.workspace }}
         run: |
-          # Menyisipkan maven di dalam kurung kurawal 'repositories {'
+          # Menyisipkan maven repo untuk track-player
           sed -i "s|repositories {|repositories { maven { url \"${ROOT_DIR}/node_modules/react-native-track-player/android/repo\" }|g" android/build.gradle
           
-          # Menyisipkan abiFilters secara inline di dalam 'defaultConfig {'
+          # Membatasi arsitektur agar build lebih ringan (arm64 saja)
           sed -i "s|defaultConfig {|defaultConfig { ndk { abiFilters 'arm64-v8a' }|g" android/app/build.gradle
           
           echo "✅ Android build files patched"
@@ -93,10 +102,12 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
+          # Menambahkan build-cache flag untuk efisiensi
           ./gradlew assembleDebug \
             --no-daemon \
             --no-parallel \
             --max-workers=2 \
+            --build-cache \
             -PkotlinVersion=2.0.21 \
             -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=512m"
 
@@ -106,3 +117,4 @@ jobs:
           name: PristineAudio-Debug
           path: android/app/build/outputs/apk/debug/*.apk
           retention-days: 7
+ 
