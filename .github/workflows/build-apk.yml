@@ -44,7 +44,6 @@ jobs:
 
       - name: Pin Gradle to 8.7
         run: |
-          # Dibuat menjadi satu baris agar tidak ada backslash (\) yang membingungkan YAML
           sed -i 's|gradle-[0-9][0-9]*\.[0-9][0-9]*\(\.[0-9][0-9]*\)\?-bin\.zip|gradle-8.7-bin.zip|g' android/gradle/wrapper/gradle-wrapper.properties
 
       - name: Patch settings.gradle for CI
@@ -55,18 +54,21 @@ jobs:
           sed -i '/pluginManagement {/,/}/d' "$FILE_PATH"
           sed -i '/includeBuild.*gradle-plugin/d' "$FILE_PATH"
           
-          cat <<EOF > settings.new
-pluginManagement {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
-}
-includeBuild("${ROOT_DIR}/node_modules/@react-native/gradle-plugin")
-EOF
+          # Menggunakan echo per baris menjaga indentasi YAML tetap rapi dan valid
+          echo "pluginManagement {" > settings.new
+          echo "    repositories {" >> settings.new
+          echo "        google()" >> settings.new
+          echo "        mavenCentral()" >> settings.new
+          echo "        gradlePluginPortal()" >> settings.new
+          echo "    }" >> settings.new
+          echo "}" >> settings.new
+          echo "includeBuild(\"${ROOT_DIR}/node_modules/@react-native/gradle-plugin\")" >> settings.new
+          
           cat "$FILE_PATH" >> settings.new
+          
+          # Hapus baris kosong di bagian paling atas
           sed -i '1{/^$/d}' settings.new
+          
           mv settings.new "$FILE_PATH"
           cat -n "$FILE_PATH" | head -n 20
 
@@ -74,8 +76,7 @@ EOF
         env:
           ROOT_DIR: ${{ github.workspace }}
         run: |
-          # Perbaikan: Menggunakan inline string replacement! 
-          # Menyisipkan maven di dalam kurung kurawal 'repositories {' tanpa perlu pindah baris
+          # Menyisipkan maven di dalam kurung kurawal 'repositories {'
           sed -i "s|repositories {|repositories { maven { url \"${ROOT_DIR}/node_modules/react-native-track-player/android/repo\" }|g" android/build.gradle
           
           # Menyisipkan abiFilters secara inline di dalam 'defaultConfig {'
