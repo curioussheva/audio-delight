@@ -5,7 +5,6 @@ on:
     branches: [ "pristine-audio" ]
   workflow_dispatch:
 
-# Menghilangkan warning Node.js 20 Deprecated di GitHub Actions
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -56,25 +55,26 @@ jobs:
         run: |
           FILE_PATH="android/settings.gradle"
           
-          # Taktik "Potong Kepala": Kita simpan isi file HANYA mulai dari tulisan "plugins {" 
-          # sampai ke paling bawah. Ini otomatis membuang SEMUA sampah includeBuild multi-baris di atasnya.
+          # Ambil isi file HANYA mulai dari tulisan "plugins {" sampai ke bawah
           sed -n '/plugins {/,$p' "$FILE_PATH" > settings.tail
           
           # Buat kepala file yang baru, bersih, dan statis
           echo "pluginManagement {" > settings.new
+          # KUNCI JAWABANNYA: includeBuild diletakkan DI DALAM pluginManagement
+          echo "    includeBuild(\"${ROOT_DIR}/node_modules/@react-native/gradle-plugin\")" >> settings.new
           echo "    repositories {" >> settings.new
           echo "        google()" >> settings.new
           echo "        mavenCentral()" >> settings.new
           echo "        gradlePluginPortal()" >> settings.new
           echo "    }" >> settings.new
           echo "}" >> settings.new
-          echo "includeBuild(\"${ROOT_DIR}/node_modules/@react-native/gradle-plugin\")" >> settings.new
           
-          # Sambungkan kepala baru dengan sisa file asli (badan file)
+          # Sambungkan dengan sisa file asli
           cat settings.tail >> settings.new
           
           # Timpa file lama
           mv settings.new "$FILE_PATH"
+          echo "--- Verifikasi Struktur settings.gradle ---"
           cat -n "$FILE_PATH" | head -n 20
 
       - name: Patch Android Build Files
@@ -106,4 +106,3 @@ jobs:
           name: PristineAudio-Debug
           path: android/app/build/outputs/apk/debug/*.apk
           retention-days: 7
- 
