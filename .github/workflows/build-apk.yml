@@ -65,7 +65,7 @@ jobs:
             --no-daemon \
             --no-parallel \
             --max-workers=2 \
-            --build-cache \
+            --stacktrace \
             -PkotlinVersion=2.0.21 \
             -Pandroid.injected.build.abi.filters=arm64-v8a \
             -Dorg.gradle.jvmargs="-Xmx3g -Xms512m -XX:MaxMetaspaceSize=512m"
