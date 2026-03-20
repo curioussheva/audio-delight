@@ -1,0 +1,27 @@
+pluginManagement {
+  // Static paths — menggantikan providers.exec yang gagal di CI
+  includeBuild(new File(rootDir, "../../node_modules/@react-native/gradle-plugin").canonicalPath)
+  includeBuild(new File(rootDir, "../../node_modules/expo-modules-autolinking/android/expo-gradle-plugin").canonicalPath)
+}
+
+plugins {
+  id("com.facebook.react.settings")
+  id("expo-autolinking-settings")
+}
+
+extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
+  if (System.getenv('EXPO_USE_COMMUNITY_AUTOLINKING') == '1') {
+    ex.autolinkLibrariesFromCommand()
+  } else {
+    ex.autolinkLibrariesFromCommand(expoAutolinking.rnConfigCommand)
+  }
+}
+
+expoAutolinking.useExpoModules()
+
+rootProject.name = 'PristineAudio'
+
+expoAutolinking.useExpoVersionCatalog()
+
+include ':app'
+includeBuild(expoAutolinking.reactNativeGradlePlugin) 

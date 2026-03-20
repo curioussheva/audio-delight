@@ -10,7 +10,6 @@ dist/
 web-build/
 
 # Native (generated)
-android/
 ios/
 *.jks
 *.keystore

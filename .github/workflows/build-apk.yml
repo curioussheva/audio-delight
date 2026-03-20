@@ -46,31 +46,6 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Expo Prebuild
-        run: npx expo prebuild --clean --platform android --non-interactive
-
-      - name: Pin Gradle to 8.7
-        run: |
-          sed -i 's|gradle-[0-9][0-9]*\.[0-9][0-9]*\(\.[0-9][0-9]*\)\?-bin\.zip|gradle-8.7-bin.zip|g' \
-            android/gradle/wrapper/gradle-wrapper.properties
-          grep distributionUrl android/gradle/wrapper/gradle-wrapper.properties
-
-      - name: Patch settings.gradle for CI
-        run: |
-          ROOT_DIR="${{ github.workspace }}"
-          # Ganti baris includeBuild(...node...execute...) dengan path absolut
-          # Menggunakan node sendiri untuk resolve path yang benar
-          PLUGIN_PATH=$(node --print "require.resolve('@react-native/gradle-plugin/package.json')" | xargs dirname)
-          echo "Plugin path: $PLUGIN_PATH"
-          # Hapus baris includeBuild lama, ganti dengan yang baru
-          sed -i "s|includeBuild(new File(\[.*\]\.execute.*toString())|includeBuild('$PLUGIN_PATH')|g" android/settings.gradle
-          # Fallback: jika baris tidak cocok, tambahkan di baris pertama setelah pluginManagement
-          if ! grep -q "includeBuild('$PLUGIN_PATH')" android/settings.gradle; then
-            sed -i "0,/includeBuild/{s|includeBuild([^)]*)|includeBuild('$PLUGIN_PATH')|}" android/settings.gradle
-          fi
-          echo "--- settings.gradle result ---"
-          head -25 android/settings.gradle
-
       - name: Patch Android Build Files
         run: |
           ROOT_DIR="${{ github.workspace }}"
@@ -101,3 +76,4 @@ jobs:
           name: PristineAudio-Debug
           path: android/app/build/outputs/apk/debug/*.apk
           retention-days: 7
+ 

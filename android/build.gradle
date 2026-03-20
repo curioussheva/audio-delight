@@ -1,0 +1,40 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+  ext {
+    // Memastikan versi Kotlin sinkron untuk menghindari error KSP di log Anda
+    kotlinVersion = "2.0.21"
+  }
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+    classpath('com.android.tools.build:gradle')
+    classpath('com.facebook.react:react-native-gradle-plugin')
+    classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
+  }
+}
+
+allprojects {
+  repositories {
+    google()
+    mavenCentral()
+    
+    // PERBAIKAN UTAMA: Tambahkan repositori Maven lokal untuk AsyncStorage
+    maven {
+      url "$rootDir/../node_modules/@react-native-async-storage/async-storage/android/libs"
+    }
+    
+    // Tambahkan ini juga jika Anda menggunakan React Native Track Player 
+    // (Terlihat di log Anda ada referensi ke repo ini)
+    maven {
+      url "$rootDir/../node_modules/react-native-track-player/android/repo"
+    }
+
+    maven { url 'https://www.jitpack.io' }
+  }
+}
+
+apply plugin: "expo-root-project"
+apply plugin: "com.facebook.react.rootproject"
