@@ -99,3 +99,4 @@ class USBDACModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
                device.type == AudioDeviceInfo.TYPE_USB_ACCESSORY
     }
 }
+ 
