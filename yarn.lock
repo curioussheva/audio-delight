@@ -6301,9 +6301,9 @@ react-native-tab-view@^3.5.2:
   dependencies:
     use-latest-callback "^0.1.5"
 
-react-native-track-player@lovegaoshi/react-native-track-player#v4.0.0-rc03:
-  version "4.0.0-rc03"
-  resolved "https://codeload.github.com/lovegaoshi/react-native-track-player/tar.gz/807101ecb2f1e3828521fd9294055d9ddddbad6e"
+react-native-track-player@lovegaoshi/react-native-track-player#chore/rn0.83:
+  version "4.1.1"
+  resolved "https://codeload.github.com/lovegaoshi/react-native-track-player/tar.gz/5a02c10d65c9dcfb4ac19fbfa71a0834a4d67f8e"
 
 react-native-worklets@0.5.1:
   version "0.5.1"
