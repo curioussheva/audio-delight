@@ -25,7 +25,10 @@ export default function RootLayout() {
     const prepareApp = async () => {
       try {
         await Promise.all([
-          audioEngine.initialize(),
+          // Guard: jangan crash app jika RNTP service belum siap
+          audioEngine.initialize().catch((e) =>
+            console.warn("[App] AudioEngine init deferred:", e)
+          ),
           initStore(),
           AsyncStorage.getItem("has_onboarded").then((val) => {
             setHasOnboarded(val === "true");
@@ -75,7 +78,7 @@ export default function RootLayout() {
             <Stack.Screen name="onboarding" options={{ headerShown: false }} />
             <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
             <Stack.Screen
-              name="player"
+              name="player/index"
               options={{
                 presentation: "fullScreenModal",
                 animation: "slide_from_bottom",
@@ -94,3 +97,4 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+ 

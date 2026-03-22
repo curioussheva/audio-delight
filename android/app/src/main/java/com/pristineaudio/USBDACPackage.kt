@@ -6,15 +6,14 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.uimanager.ViewManager
 
 class USBDACPackage : ReactPackage {
-    // Di dalam USBDACPackage.kt
-    override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
-    return listOf(
-        USBDACModule(reactContext),
-        NativeDSPModule(reactContext),
-        NativeVisualizerBridge(reactContext) // Tambahkan ini
-    )
-}
 
+    override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
+        return listOf(
+            USBDACModule(reactContext),
+            NativeDSPModule(reactContext),
+            NativeVisualizerBridge(reactContext)
+        )
+    }
 
     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {
         return emptyList()
