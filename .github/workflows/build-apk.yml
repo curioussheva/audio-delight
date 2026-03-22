@@ -1,3 +1,4 @@
+cat > /tmp/build-final.yml << 'ENDOFWORKFLOW'
 name: Build PristineAudio APK (Debug)
 
 on:
@@ -26,9 +27,6 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Restore custom native Kotlin files
-        run: bash scripts/restore-native.sh
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -76,4 +74,7 @@ jobs:
         with:
           name: PristineAudio-Debug
           path: android/app/build/outputs/apk/debug/*.apk
-          retention-days: 7 
+          retention-days: 7
+ENDOFWORKFLOW
+cp /tmp/build-final.yml /mnt/user-data/outputs/build-debug.yml
+echo "done"
