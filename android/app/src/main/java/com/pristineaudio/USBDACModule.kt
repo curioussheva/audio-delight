@@ -70,6 +70,17 @@ class USBDACModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
             promise.reject("ERR_EQ", e.message)
         }
     }
+    
+    
+    @ReactMethod
+    fun addListener(eventName: String) {
+    // Required for NativeEventEmitter
+}
+
+    @ReactMethod
+    fun removeListeners(count: Int) {
+    // Required for NativeEventEmitter
+}
 
     /**
      * Routing audio ke DAC spesifik tanpa mengganggu sistem Mixer Android.

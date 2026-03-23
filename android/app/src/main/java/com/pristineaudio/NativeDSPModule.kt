@@ -14,15 +14,21 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
 
     override fun getName(): String = "NativeDSPModule"
 
-    /**
-     * Mengaktifkan/Matikan Parameter Hardware Khusus (Vendor-specific)
-     */
+    @ReactMethod
+    fun addListener(eventName: String) {
+        // Required for NativeEventEmitter
+    }
+
+    @ReactMethod
+    fun removeListeners(count: Int) {
+        // Required for NativeEventEmitter
+    }
+
     @ReactMethod
     fun toggleExclusiveMode(enabled: Boolean, promise: Promise) {
         try {
             val audioManager = reactApplicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             if (enabled) {
-                // Parameter umum untuk beberapa chip DAC onboard (seperti LG/Vivo/Samsung)
                 audioManager.setParameters("hifi_mode=on")
                 audioManager.setParameters("dac_direct=on")
             } else {
@@ -35,10 +41,6 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
         }
     }
 
-    /**
-     * Bass Boost Implementation
-     * @param strength 0 to 1000
-     */
     @ReactMethod
     fun setBassBoost(strength: Int, audioSessionId: Int, promise: Promise) {
         try {
@@ -47,7 +49,6 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
                 return
             }
 
-            // Inisialisasi ulang jika Session ID berubah
             if (bassBoost == null || currentSessionId != audioSessionId) {
                 bassBoost?.release()
                 bassBoost = BassBoost(0, audioSessionId)
@@ -64,10 +65,6 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
         }
     }
 
-    /**
-     * Preset Reverb Implementation
-     * @param preset 0: None, 1: SmallRoom, 2: MediumRoom, 3: LargeRoom, 4: MediumHall, 5: LargeHall, 6: Plate
-     */
     @ReactMethod
     fun setReverbPreset(preset: Int, audioSessionId: Int, promise: Promise) {
         try {
@@ -82,7 +79,6 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
                 currentSessionId = audioSessionId
             }
 
-            // Preset 0 di Android biasanya 'None'
             presetReverb?.enabled = preset > 0
             if (preset > 0) {
                 presetReverb?.preset = preset.toShort()
@@ -100,7 +96,6 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
         promise.resolve(sampleRate?.toInt() ?: 44100)
     }
 
-    // Dipanggil saat aplikasi dimatikan atau saat user memilih 'Bit-Perfect' (Direct)
     @ReactMethod
     fun releaseAllFX(promise: Promise) {
         try {
@@ -114,3 +109,4 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
         }
     }
 }
+ 

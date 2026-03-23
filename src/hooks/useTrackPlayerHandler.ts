@@ -16,10 +16,9 @@ export const useTrackPlayerHandler = () => {
   const { setDuration, setCurrentSong, queue } = usePlayerStore();
 
   useTrackPlayerEvents(events, async (event: any) => {
-    // 1. Menangani Perubahan Lagu (Pindah Otomatis/Manual)
+    // 1. Menangani Perubahan Lagu
     if (event.type === Event.PlaybackActiveTrackChanged) {
       if (event.track) {
-        // Cari data asli dari queue berdasarkan ID untuk mendapatkan metadata lengkap
         const activeSong = queue.find((s) => s.id === event.track?.id);
         if (activeSong) {
           setCurrentSong(activeSong);
@@ -28,10 +27,9 @@ export const useTrackPlayerHandler = () => {
       }
     }
 
-    // 2. Menangani Perubahan Status (Play/Pause/Buffering)
+    // 2. Menangani Perubahan Status
     if (event.type === Event.PlaybackState) {
       const playing = event.state === State.Playing;
-      // Gunakan set state internal zustand tanpa memicu loop ke AudioEngine
       usePlayerStore.setState({ isPlaying: playing });
     }
 
@@ -41,16 +39,21 @@ export const useTrackPlayerHandler = () => {
     }
   });
 
-  // Loop untuk mengupdate progress (position) setiap 500ms
+  // Loop untuk mengupdate progress setiap 500ms
   useEffect(() => {
     const interval = setInterval(async () => {
-      const state = await TrackPlayer.getPlaybackState();
-      if (state.state === State.Playing) {
-        const pos = await TrackPlayer.getPosition();
-        usePlayerStore.setState({ position: pos });
+      try {
+        const state = await TrackPlayer.getPlaybackState();
+        if (state.state === State.Playing) {
+          const pos = await TrackPlayer.getPosition();
+          usePlayerStore.setState({ position: pos });
+        }
+      } catch {
+        // Player belum siap, skip iteration ini
       }
     }, 500);
 
     return () => clearInterval(interval);
   }, []);
 };
+ 

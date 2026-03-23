@@ -19,18 +19,16 @@ class NativeVisualizerBridge(reactContext: ReactApplicationContext) : ReactConte
                 return
             }
 
-            // Cleanup jika ada visualizer lama
             stopVisualizer()
 
             visualizer = Visualizer(audioSessionId).apply {
-                captureSize = Visualizer.getCaptureSizeRange()[1] // Ambil resolusi maksimal
+                captureSize = Visualizer.getCaptureSizeRange()[1]
                 setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
                     override fun onWaveFormDataCapture(v: Visualizer?, waveform: ByteArray?, samplingRate: Int) {
-                        // Tidak digunakan untuk spectrum analyzer biasa
+                        // Not used
                     }
 
                     override fun onFftDataCapture(v: Visualizer?, fft: ByteArray?, samplingRate: Int) {
-                        // Kirim data FFT ke JavaScript
                         if (fft != null) {
                             sendFftToJs(fft)
                         }
@@ -51,33 +49,34 @@ class NativeVisualizerBridge(reactContext: ReactApplicationContext) : ReactConte
         visualizer = null
     }
 
-    private fun sendFftToJs(fft: ByteArray) {
-    val data = Arguments.createArray()
-    
-    // Visualizer.getCaptureSizeRange()[1] biasanya 1024
-    // fft berisi [real0, imag0, real1, imag1, ...]
-    // Kita ambil hingga 128 atau 256 komponen saja untuk efisiensi di JS
-    val numBins = 128 
-    
-    for (i in 0 until numBins) {
-        val rIndex = (i + 1) * 2
-        if (rIndex + 1 >= fft.size) break
-        
-        val re = fft[rIndex].toDouble()
-        val im = fft[rIndex + 1].toDouble()
-        val magnitude = Math.sqrt(re * re + im * im)
-        
-        // Normalisasi ke rentang 0.0 - 1.0 agar JS mudah mengolahnya
-        // Nilai magnitude maksimal secara teoritis sekitar 127-180
-        val normalized = (magnitude / 128.0).coerceIn(0.0, 1.0)
-        
-        // Terapkan log scaling untuk sensitivitas yang lebih baik pada volume rendah
-        val db = if (normalized > 0) Math.log10(1.0 + 9.0 * normalized) else 0.0
-        
-        data.pushDouble(db)
+    @ReactMethod
+    fun addListener(eventName: String) {
+        // Required for NativeEventEmitter
     }
 
-    context.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-        .emit("onFftData", data)
+    @ReactMethod
+    fun removeListeners(count: Int) {
+        // Required for NativeEventEmitter
     }
-}
+
+    private fun sendFftToJs(fft: ByteArray) {
+        val data = Arguments.createArray()
+        val numBins = 128
+
+        for (i in 0 until numBins) {
+            val rIndex = (i + 1) * 2
+            if (rIndex + 1 >= fft.size) break
+
+            val re = fft[rIndex].toDouble()
+            val im = fft[rIndex + 1].toDouble()
+            val magnitude = Math.sqrt(re * re + im * im)
+            val normalized = (magnitude / 128.0).coerceIn(0.0, 1.0)
+            val db = if (normalized > 0) Math.log10(1.0 + 9.0 * normalized) else 0.0
+
+            data.pushDouble(db)
+        }
+
+        context.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+            .emit("onFftData", data)
+    }
+} 
