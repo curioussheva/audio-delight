@@ -108,5 +108,4 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
             promise.reject("RELEASE_ERROR", e.message)
         }
     }
-}
- 
+} 

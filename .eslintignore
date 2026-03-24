@@ -6,3 +6,4 @@ dist/
 build/
 *.config.js
 temp/
+temp_migration/

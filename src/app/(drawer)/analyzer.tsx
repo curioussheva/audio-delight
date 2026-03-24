@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet, ScrollView } from "react-native";
-import { usePlayerStore } from "@/store/playerStore";
+import { usePlayerStore } from "@/features/player/store/playerStore";
 import { Ionicons } from "@expo/vector-icons";
 
 export default function FLACAnalyzerScreen() {
@@ -26,8 +26,8 @@ export default function FLACAnalyzerScreen() {
       <View style={styles.card}>
         <Text style={styles.label}>Stream Authenticity</Text>
         <Text style={styles.value}>
-          {currentSong.format?.sampleRate &&
-          currentSong.format.sampleRate > 48000
+          {currentSong?.sampleRate &&
+          currentSong.sampleRate > 48000
             ? "High-Resolution Verified"
             : "Standard Resolution"}
         </Text>
@@ -38,7 +38,7 @@ export default function FLACAnalyzerScreen() {
           <View>
             <Text style={styles.subLabel}>Container</Text>
             <Text style={styles.subValue}>
-              {currentSong.format?.codec || "FLAC"}
+              {currentSong?.codec || "FLAC"}
             </Text>
           </View>
           <View>
@@ -48,7 +48,7 @@ export default function FLACAnalyzerScreen() {
           <View>
             <Text style={styles.subLabel}>Sample Rate</Text>
             <Text style={styles.subValue}>
-              {currentSong.format?.sampleRate || 44100} Hz
+              {currentSong?.sampleRate || 44100} Hz
             </Text>
           </View>
         </View>

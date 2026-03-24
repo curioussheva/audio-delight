@@ -70,8 +70,8 @@ class USBDACModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
             promise.reject("ERR_EQ", e.message)
         }
     }
-    
-    
+
+
     @ReactMethod
     fun addListener(eventName: String) {
     // Required for NativeEventEmitter
@@ -109,5 +109,4 @@ class USBDACModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
                device.type == AudioDeviceInfo.TYPE_USB_HEADSET ||
                device.type == AudioDeviceInfo.TYPE_USB_ACCESSORY
     }
-}
- 
+} 

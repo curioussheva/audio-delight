@@ -10,8 +10,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@/context/ThemeContext";
-import { usePlaylists } from "@/hooks/usePlaylists";
-import { Playlist } from "@/types/playlist";
+import { usePlaylists } from "@/features/playlist/hooks/usePlaylists";
+import { Playlist } from "@/features/playlist/types";
 
 export default function PlaylistsScreen() {
   const { theme } = useTheme();

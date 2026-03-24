@@ -1,6 +1,6 @@
 // src/app/search.tsx
 import React, { useState, useMemo } from "react";
-import { Song } from "@/types/audio";
+import { Song } from "@/shared/types/audio";
 import {
   View,
   Text,
@@ -11,10 +11,10 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@/context/ThemeContext";
-import { useLibrary } from "@/hooks/useLibrary";
-import { usePlayerStore } from "@/store/playerStore";
-import { useAudioPlayer } from "@/hooks/useAudioPlayer";
-import { formatTime } from "@/utils/time";
+import { useLibrary } from "@/features/library/hooks/useLibrary";
+import { usePlayerStore } from "@/features/player/store/playerStore";
+import { useAudioPlayer } from "@/features/player/hooks/useAudioPlayer";
+import { formatTime } from "@/shared/utils/time";
 
 export default function SearchScreen() {
   const { theme } = useTheme();

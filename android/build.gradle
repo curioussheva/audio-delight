@@ -1,23 +1,33 @@
-// Top-level build file where you can add configuration options common to all sub-projects/modules.
-
 buildscript {
-  repositories {
-    google()
-    mavenCentral()
-  }
-  dependencies {
-    classpath('com.android.tools.build:gradle')
-    classpath('com.facebook.react:react-native-gradle-plugin')
-    classpath('org.jetbrains.kotlin:kotlin-gradle-plugin')
-  }
+    ext {
+        // Mengambil nilai dari expo-build-properties jika memungkinkan, 
+        // atau mendefinisikannya secara eksplisit di sini.
+        buildToolsVersion = "36.0.0"
+        minSdkVersion = 24
+        compileSdkVersion = 36
+        targetSdkVersion = 36
+        kotlinVersion = "2.0.21" // Harus match dengan app.json
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        // Gunakan versi AGP (Android Gradle Plugin) yang mendukung SDK 36 (biasanya 8.x ke atas)
+        classpath('com.android.tools.build:gradle:8.2.1') 
+        classpath('com.facebook.react:react-native-gradle-plugin')
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
+    }
 }
 
 allprojects {
-  repositories {
-    google()
-    mavenCentral()
-    maven { url 'https://www.jitpack.io' }
-  }
+    repositories {
+        google()
+        mavenCentral()
+        maven { url 'https://www.jitpack.io' }
+        // Repo tambahan untuk track player sesuai app.json
+        maven { url "$rootDir/../node_modules/react-native-track-player/android/repo" }
+    }
 }
 
 apply plugin: "expo-root-project"

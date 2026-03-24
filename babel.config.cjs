@@ -6,20 +6,26 @@ module.exports = function (api) {
       [
         'module-resolver',
         {
-          root: ['./src'],
+          root: ['./'],
           alias: {
-            '@': './src',
-            '@components': './src/components',
-            '@hooks': './src/hooks',
-            '@store': './src/store',
-            '@utils': './src/utils',
-            '@constants': './src/constants',
-            '@types': './src/types',
+            // ── Spesifik dulu, baru yang umum ──
+            '@/app':        './src/app',
+            '@/features':   './src/features',
+            '@/shared':     './src/shared',
+            '@/components': './src/shared/components',
+            '@/ui':         './src/shared/components/ui',
+            '@/hooks':      './src/shared/hooks',
+            '@/utils':      './src/shared/utils',
+            '@/types':      './src/shared/types',
+            '@/constants':  './src/shared/constants',
+            '@/context':    './src/shared/context',
+            '@/assets':     './assets',
+            // ── Umum terakhir ──
+            '@':            './src',
           },
         },
       ],
-      // Reanimated plugin HARUS paling akhir
       'react-native-reanimated/plugin',
     ],
   };
-};
+}; 

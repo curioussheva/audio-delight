@@ -79,4 +79,4 @@ class NativeVisualizerBridge(reactContext: ReactApplicationContext) : ReactConte
         context.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
             .emit("onFftData", data)
     }
-} 
+}  

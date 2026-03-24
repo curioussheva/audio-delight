@@ -13,14 +13,14 @@ import { Image } from "expo-image";
 import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { usePlayerStore } from "@/store/playerStore";
-import { formatTime } from "@/utils/time";
+import { usePlayerStore } from "@/features/player/store/playerStore";
+import { formatTime } from "@/shared/utils/time";
 import Slider from "@react-native-community/slider";
-import { FullLyricsView } from "@/components/audio/FullLyricsView";
+import { FullLyricsView } from "@/features/player/components/FullLyricsView";
 // Pastikan folder ini benar (visualizer atau visualizers)
-import { SpectogramView } from "@/components/visualizer/SpectogramView";
-import { SpectrumAnalyzer } from "@/components/visualizer/SpectrumAnalyzer";
-import { SleepTimerModal } from "@/components/audio/SleepTimerModal";
+import { SpectogramView } from "@/features/visualizer/components/SpectogramView";
+import { SpectrumAnalyzer } from "@/features/visualizer/components/SpectrumAnalyzer";
+import { SleepTimerModal } from "@/features/player/components/SleepTimerModal";
 
 const { width } = Dimensions.get("window");
 

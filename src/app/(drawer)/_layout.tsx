@@ -1,7 +1,7 @@
 import { Drawer } from "expo-router/drawer";
-import CustomDrawer from "@/components/navigation/CustomDrawer";
-import { useTheme } from "@/context/ThemeContext";
 import { Ionicons } from "@expo/vector-icons";
+import { useTheme } from "@/context/ThemeContext";
+import CustomDrawer from "@/shared/components/navigation/CustomDrawer";
 
 export default function DrawerLayout() {
   const { theme } = useTheme();
@@ -12,39 +12,56 @@ export default function DrawerLayout() {
       drawerContent={(props) => <CustomDrawer {...props} />}
       screenOptions={{
         headerShown: false,
-        drawerType: "slide", // Efek geser premium
         drawerStyle: {
-          width: 280,
           backgroundColor: colors.background.primary,
+          width: 280,
         },
-        drawerActiveBackgroundColor: "rgba(0, 212, 170, 0.1)",
         drawerActiveTintColor: colors.primary[500],
         drawerInactiveTintColor: colors.text.secondary,
-        drawerLabelStyle: {
-          marginLeft: -15,
-          fontSize: 15,
-          fontWeight: "600",
-        },
       }}
     >
+      {/* Tabs: Library, Equalizer, Visualizer */}
       <Drawer.Screen
         name="(tabs)"
         options={{
-          drawerLabel: "Music Library",
+          title: "Library",
           drawerIcon: ({ color }) => (
             <Ionicons name="musical-notes" size={22} color={color} />
           ),
         }}
       />
+      
+      {/* Drawer-only: FLAC Analyzer */}
+      <Drawer.Screen
+        name="analyzer"
+        options={{
+          title: "FLAC Analyzer",
+          drawerIcon: ({ color }) => (
+            <Ionicons name="analytics" size={22} color={color} />
+          ),
+        }}
+      />
+      
       <Drawer.Screen
         name="settings"
         options={{
-          drawerLabel: "Audio Settings",
+          title: "Settings",
           drawerIcon: ({ color }) => (
-            <Ionicons name="settings" size={22} color={color} />
+            <Ionicons name="settings-outline" size={22} color={color} />
+          ),
+        }}
+      />
+      
+      <Drawer.Screen
+        name="about"
+        options={{
+          title: "About",
+          drawerIcon: ({ color }) => (
+            <Ionicons name="information-circle-outline" size={22} color={color} />
           ),
         }}
       />
     </Drawer>
   );
 }
+ 

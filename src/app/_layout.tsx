@@ -1,38 +1,32 @@
-// src/app/_layout.tsx (refactored)
 import React, { useState, useEffect } from "react";
-import { View, Platform } from "react-native";
-import { Stack, useSegments, useRouter } from "expo-router";
+import { Stack, usePathname } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import TrackPlayer from "react-native-track-player";
 
 import { ThemeProvider } from "@/context/ThemeContext";
-import { LoadingScreen } from "@/components/ui/LoadingScreen";
-import { AudioPropertyToast } from "@/components/audio/AudioPropertyToast";
-import FloatingPlayer from "@/components/audio/FloatingPlayer";
-import { useTrackPlayerHandler } from "@/hooks/useTrackPlayerHandler";
-import { audioEngine } from "@/services/audio/AudioEngine";
-import { usePlayerStore } from "@/store/playerStore";
+//import { LoadingScreen } from "@/shared/components/ui/LoadingScreen";
+import { AudioPropertyToast } from "@/features/player/components/AudioPropertyToast";
+import FloatingPlayer from "@/features/player/components/FloatingPlayer";
+import { useTrackPlayerHandler } from "@/features/player/hooks/useTrackPlayerHandler";
+import { audioEngine } from "@/features/player/api/engine";
+import { usePlayerStore } from "@/features/player/store/playerStore";
+import { playbackService } from "@/features/player/api/playback";
+
+TrackPlayer.registerPlaybackService(() => playbackService);
 
 export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
-  const [hasOnboarded, setHasOnboarded] = useState<boolean | null>(null);
-
-  const segments = useSegments();
-  const router = useRouter();
   const initStore = usePlayerStore((state) => state.initStore);
+  const pathname = usePathname();
+  const isPlayerOpen = pathname.startsWith("/player");
 
   useEffect(() => {
     const prepareApp = async () => {
       try {
         await Promise.all([
-          // Guard: jangan crash app jika RNTP service belum siap
-          audioEngine.initialize().catch((e) =>
-            console.warn("[App] AudioEngine init deferred:", e)
-          ),
+          audioEngine.initialize().catch(() => console.warn("Audio init deferred")),
           initStore(),
-          AsyncStorage.getItem("has_onboarded").then((val) => {
-            setHasOnboarded(val === "true");
-          }),
         ]);
       } catch (error) {
         console.error("App initialization failed:", error);
@@ -40,61 +34,37 @@ export default function RootLayout() {
         setIsReady(true);
       }
     };
-
     prepareApp();
   }, []);
 
-  useEffect(() => {
-    if (!isReady || hasOnboarded === null) return;
-
-    const currentRoot = segments[0];
-
-    if (!hasOnboarded && currentRoot && currentRoot !== "onboarding") {
-      router.replace("/onboarding" as any);
-    } else if (hasOnboarded && currentRoot === "onboarding") {
-      router.replace("/(drawer)/(tabs)/library" as any);
-    }
-  }, [isReady, hasOnboarded, segments, router]);
-
   useTrackPlayerHandler();
 
-  if (!isReady) {
-    return <LoadingScreen />;
-  }
+ // if (!isReady) return <LoadingScreen />;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
-        <View style={{ flex: 1 }}>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              animation:
-                Platform.OS === "ios"
-                  ? "slide_from_bottom"
-                  : "fade_from_bottom",
-            }}
-          >
-            <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-            <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
-            <Stack.Screen
-              name="player/index"
-              options={{
-                presentation: "fullScreenModal",
-                animation: "slide_from_bottom",
-                gestureEnabled: true,
-                gestureDirection: "vertical",
-                headerShown: false,
-              }}
-            />
-          </Stack>
+        <SafeAreaProvider>
+          <SafeAreaView style={{ flex: 1 }}>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="onboarding" />
+              <Stack.Screen name="(drawer)" />
+              <Stack.Screen
+                name="player/index"
+                options={{
+                  presentation: "modal",
+                  animation: "slide_from_bottom",
+                }}
+              />
+            </Stack>
 
-          {/* Persistent UI layers */}
-          <AudioPropertyToast />
-          <FloatingPlayer />
-        </View>
+            <AudioPropertyToast />
+            
+          </SafeAreaView>
+        </SafeAreaProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
   );
 }
- 
+  
