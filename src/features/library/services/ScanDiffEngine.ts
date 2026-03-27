@@ -1,6 +1,6 @@
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system';
-import { LibraryScanner } from '@/api/scanner';
+import { LibraryScanner } from '@/features/library/api/scanner';
 import {
   getMetadata,
   getArtwork,

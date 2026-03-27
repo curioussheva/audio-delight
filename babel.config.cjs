@@ -8,7 +8,6 @@ module.exports = function (api) {
         {
           root: ['./'],
           alias: {
-            // ── Spesifik dulu, baru yang umum ──
             '@/app':        './src/app',
             '@/features':   './src/features',
             '@/shared':     './src/shared',
@@ -20,7 +19,6 @@ module.exports = function (api) {
             '@/constants':  './src/shared/constants',
             '@/context':    './src/shared/context',
             '@/assets':     './assets',
-            // ── Umum terakhir ──
             '@':            './src',
             'expo-file-system': 'expo-file-system/legacy',
           },

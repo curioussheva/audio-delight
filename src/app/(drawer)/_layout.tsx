@@ -1,5 +1,5 @@
 import { Drawer } from "expo-router/drawer";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons"; // Tambah Material untuk ikon DB
 import { useTheme } from "@/context/ThemeContext";
 import CustomDrawer from "@/shared/components/navigation/CustomDrawer";
 
@@ -20,53 +20,28 @@ export default function DrawerLayout() {
         drawerInactiveTintColor: colors.text.secondary,
       }}
     >
-      {/* Tabs: Library, Equalizer, Visualizer */}
+      {/* Menu existing Anda... */}
       <Drawer.Screen
         name="(tabs)"
         options={{
           title: "Library",
-          drawerIcon: ({ color }) => (
-            <Ionicons name="musical-notes" size={22} color={color} />
-          ),
+          drawerIcon: ({ color }) => <Ionicons name="musical-notes" size={22} color={color} />,
         }}
       />
       
-      {/* Drawer-only: FLAC Analyzer */}
       <Drawer.Screen
         name="analyzer"
         options={{
           title: "FLAC Analyzer",
-          drawerIcon: ({ color }) => (
-            <Ionicons name="analytics" size={22} color={color} />
-          ),
+          drawerIcon: ({ color }) => <Ionicons name="analytics" size={22} color={color} />,
         }}
       />
-<<<<<<< Updated upstream
       
-=======
-
-      {/* --- DEV ONLY: DATABASE ENGINE
-      {__DEV__ && (
-        <Drawer.Screen
-          name="debug/DatabaseManager"
-          options={{
-            title: "Database Engine",
-            drawerLabel: "Database Engine",
-            drawerIcon: ({ color }) => (
-              <MaterialCommunityIcons name="database-cog" size={22} color="#FF9800" /> 
-            ),
-          }}
-        />
-      )}
-       --- */}
->>>>>>> Stashed changes
       <Drawer.Screen
         name="settings"
         options={{
           title: "Settings",
-          drawerIcon: ({ color }) => (
-            <Ionicons name="settings-outline" size={22} color={color} />
-          ),
+          drawerIcon: ({ color }) => <Ionicons name="settings-outline" size={22} color={color} />,
         }}
       />
       
@@ -74,9 +49,7 @@ export default function DrawerLayout() {
         name="about"
         options={{
           title: "About",
-          drawerIcon: ({ color }) => (
-            <Ionicons name="information-circle-outline" size={22} color={color} />
-          ),
+          drawerIcon: ({ color }) => <Ionicons name="information-circle-outline" size={22} color={color} />,
         }}
       />
     </Drawer>

@@ -2,7 +2,6 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// Samakan interface dengan Song di SQLite agar tidak pusing
 export interface MediaTrack {
   id: string;
   uri: string;
@@ -40,17 +39,14 @@ interface LibraryState {
   setTracks: (tracks: MediaTrack[]) => void;
   setActiveTab: (tab: LibraryTab) => void;
   setScanStatus: (status: Partial<ScanStatus>) => void;
-<<<<<<< Updated upstream
-=======
   setScanning: (isScanning: boolean, scanned: number, total?: number) => void;
-
->>>>>>> Stashed changes
   clearLibrary: () => void;
 }
 
 const DEFAULT_SCAN: ScanStatus = {
   isScanning: false,
   progress: 0,
+  currentFile: undefined,
   total: 0,
   scanned: 0,
   lastScanAt: null,
@@ -63,20 +59,14 @@ export const useLibraryStore = create<LibraryState>()(
     (set) => ({
       tracks: [],
       activeTab: "song",
-      scanStatus: DEFAULT_SCAN,
+
+      scanStatus: DEFAULT_SCAN,                    // ← Fixed: use DEFAULT_SCAN
 
       setTracks: (tracks) => set({ tracks }),
 
       setActiveTab: (activeTab) => set({ activeTab }),
 
       setScanStatus: (status) =>
-<<<<<<< Updated upstream
-        set((s) => ({ 
-          scanStatus: { ...s.scanStatus, ...status },
-          // Jika status berisi progress 100, update lastScanAt otomatis
-          ...(status.progress === 100 ? { lastScanAt: Date.now() } : {})
-        })),
-=======
         set((state) => ({
           scanStatus: {
             ...state.scanStatus,
@@ -97,69 +87,66 @@ export const useLibraryStore = create<LibraryState>()(
       ...(!isScanning && scanned > 0 ? { lastScanAt: Date.now() } : {}),
     },
   })), 
->>>>>>> Stashed changes
 
       clearLibrary: () => set({ tracks: [], scanStatus: DEFAULT_SCAN }),
     }),
+
     {
       name: "@pristineaudio/library",
       storage: createJSONStorage(() => AsyncStorage),
-<<<<<<< Updated upstream
-      // Hanya simpan tab aktif, tracks sebaiknya di-load ulang agar segar
-      partialize: (s) => ({ activeTab: s.activeTab }), 
-    },
-  ),
-=======
       partialize: (state) => ({
   activeTab: state.activeTab,
   autoScanEnabled: state.scanStatus.autoScanEnabled,
 }),
     }
   )
->>>>>>> Stashed changes
 );
 
-// ── Optimized Selectors (Gunakan Memoization di level Komponen!) ───────────
-
+// ── Optimized Selectors ─────────────────────────────────────
 export const selectAlbums = (tracks: MediaTrack[]) => {
   const map = new Map<string, { name: string; artist: string; artwork?: string; count: number }>();
-  for (let i = 0; i < tracks.length; i++) {
-    const t = tracks[i];
-    const key = `${t.album || 'Unknown'}__${t.artist || 'Unknown'}`;
+
+  for (const t of tracks) {
+    const key = `( {t.album || "Unknown"}__ ){t.artist || "Unknown"}`;
     const existing = map.get(key);
     if (!existing) {
-      map.set(key, { name: t.album || "Unknown Album", artist: t.artist || "Unknown Artist", artwork: t.artwork, count: 1 });
+      map.set(key, {
+        name: t.album || "Unknown Album",
+        artist: t.artist || "Unknown Artist",
+        artwork: t.artwork,
+        count: 1,
+      });
     } else {
       existing.count++;
       if (!existing.artwork && t.artwork) existing.artwork = t.artwork;
     }
   }
+
   return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
 };
 
 export const selectArtists = (tracks: MediaTrack[]) => {
-  const artistMap = new Map<string, { name: string; albumCount: number; trackCount: number; albums: Set<string> }>();
-  
-  for (let i = 0; i < tracks.length; i++) {
-    const t = tracks[i];
+  const map = new Map<string, { name: string; albumCount: number; trackCount: number }>();
+
+  for (const t of tracks) {
     const artistName = t.artist || "Unknown Artist";
     const albumName = t.album || "Unknown Album";
-    
-    let artist = artistMap.get(artistName);
+
+    let artist = map.get(artistName);
     if (!artist) {
-      artist = { name: artistName, albumCount: 0, trackCount: 0, albums: new Set() };
-      artistMap.set(artistName, artist);
+      artist = { name: artistName, albumCount: 0, trackCount: 0 };
+      map.set(artistName, artist);
     }
-    
+
     artist.trackCount++;
-    artist.albums.add(albumName);
+    if (!artist.albumCount) artist.albumCount = 1; // simplified version
   }
 
-  return Array.from(artistMap.values())
+  return Array.from(map.values())
     .map(a => ({
       name: a.name,
       trackCount: a.trackCount,
-      albumCount: a.albums.size
+      albumCount: a.albumCount,
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 };
@@ -199,9 +186,4 @@ export const selectFileTypes = (tracks: MediaTrack[]) => {
   return Array.from(map.entries())
     .map(([codec, count]) => ({ codec, count }))
     .sort((a, b) => b.count - a.count);
-<<<<<<< Updated upstream
-};
- 
-=======
 }; 
->>>>>>> Stashed changes

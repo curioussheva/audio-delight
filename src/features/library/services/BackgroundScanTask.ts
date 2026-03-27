@@ -4,7 +4,7 @@ import * as Notifications from 'expo-notifications';
 import * as MediaLibrary from 'expo-media-library';
 import { Platform } from 'react-native';
 import { runMediaStoreDiff, runEnrichment } from './ScanDiffEngine';
-import { useLibraryStore } from '@/store/libraryStore';
+import { useLibraryStore } from '../store/libraryStore';
 
 // ── Konstanta ──────────────────────────────────────────────────
 const TASK_NAME = 'PRISTINE_BACKGROUND_SCAN';

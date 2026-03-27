@@ -12,8 +12,8 @@ import { useTrackPlayerHandler } from "@/features/player/hooks/useTrackPlayerHan
 import { audioEngine } from "@/features/player/api/engine";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { playbackService } from "@/features/player/api/playback";
-import { BackgroundScanTask } from '@/services/BackgroundScanTask';
-import { useLibraryStore } from '@/store/libraryStore';
+import { BackgroundScanTask } from '@/features/library/services/BackgroundScanTask';
+import { useLibraryStore } from '@/features/library/store/libraryStore';
 
 TrackPlayer.registerPlaybackService(() => playbackService);
 
@@ -30,7 +30,7 @@ export default function RootLayout() {
     } else {
       BackgroundScanTask.unregister();
     }
-  }, [autoScanEnabled]);
+  }, [autoScanEnabled]); 
 
   useEffect(() => {
     const prepareApp = async () => {
