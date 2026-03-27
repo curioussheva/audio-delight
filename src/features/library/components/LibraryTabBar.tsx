@@ -22,6 +22,7 @@ interface Props {
   onTabChange: (tab: LibraryTab) => void;
   isScanning: boolean;
   scanProgress: number;
+  scanTotal?: number;
   onRefresh: () => void;
   trackCount: number;
 }
@@ -128,16 +129,36 @@ export const LibraryTabBar: React.FC<Props> = ({
       </ScrollView>
 
       {/* Track count */}
-      {!isScanning && (
-        <Text
-          style={[
-            styles.countText,
-            { color: colors.text.tertiary, paddingHorizontal: spacing.md, paddingBottom: spacing.xs },
-          ]}
-        >
-          {trackCount} track
+      {isScanning && (
+  <View style={[styles.scanBar, { backgroundColor: colors.background.tertiary, paddingHorizontal: spacing.md }]}>
+    <ActivityIndicator size="small" color={colors.primary[500]} />
+
+    {scanTotal > 0 ? (
+      // Fase 2: tahu total — tampilkan X / Y + progress bar
+      <>
+        <Text style={[styles.scanText, { color: colors.text.secondary, marginLeft: spacing.xs }]}>
+          Memindai {scanProgress} / {scanTotal}
         </Text>
-      )}
+        <View style={[styles.progressBar, { backgroundColor: colors.background.elevated, flex: 1, marginLeft: spacing.sm }]}>
+          <View
+            style={[
+              styles.progressFill,
+              {
+                backgroundColor: colors.primary[500],
+                width: `${Math.floor((scanProgress / scanTotal) * 100)}%`,
+              },
+            ]}
+          />
+        </View>
+      </>
+    ) : (
+      // Fase 1: belum tahu total — collect phase
+      <Text style={[styles.scanText, { color: colors.text.secondary, marginLeft: spacing.xs }]}>
+        Mengumpulkan file...
+      </Text>
+    )}
+  </View>
+)} 
     </View>
   );
 };

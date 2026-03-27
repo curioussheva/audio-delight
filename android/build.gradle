@@ -1,19 +1,17 @@
 buildscript {
     ext {
-        // Mengambil nilai dari expo-build-properties jika memungkinkan, 
-        // atau mendefinisikannya secara eksplisit di sini.
         buildToolsVersion = "36.0.0"
         minSdkVersion = 24
         compileSdkVersion = 36
         targetSdkVersion = 36
-        kotlinVersion = "2.0.21" // Harus match dengan app.json
+        kotlinVersion = "2.0.21"
+        ndkVersion = "27.1.12297006"
     }
     repositories {
         google()
         mavenCentral()
     }
     dependencies {
-        // Gunakan versi AGP (Android Gradle Plugin) yang mendukung SDK 36 (biasanya 8.x ke atas)
         classpath('com.android.tools.build:gradle:8.2.1') 
         classpath('com.facebook.react:react-native-gradle-plugin')
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
@@ -25,8 +23,22 @@ allprojects {
         google()
         mavenCentral()
         maven { url 'https://www.jitpack.io' }
-        // Repo tambahan untuk track player sesuai app.json
         maven { url "$rootDir/../node_modules/react-native-track-player/android/repo" }
+    }
+
+    configurations.all {
+        resolutionStrategy {
+            force 'androidx.media3:media3-extractor:1.9.1'
+            force 'androidx.media3:media3-common:1.9.1'
+            force 'androidx.media3:media3-datasource:1.9.1'
+            force 'androidx.media3:media3-decoder:1.9.1'
+            force 'androidx.media3:media3-exoplayer:1.9.1'
+        }
+        exclude group: 'com.github.MissingCore.media', module: 'media3-extractor'
+        exclude group: 'com.github.MissingCore.media', module: 'media3-common'
+        exclude group: 'com.github.MissingCore.media', module: 'media3-datasource'
+        exclude group: 'com.github.MissingCore.media', module: 'media3-decoder'
+        exclude group: 'com.github.MissingCore.media', module: 'media3-exoplayer'
     }
 }
 

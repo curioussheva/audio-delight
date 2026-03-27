@@ -17,7 +17,7 @@ import { useOptimizedLibrary } from "@/features/library/hooks/useOptimizedLibrar
 import { SongListItem } from "@/features/library/components/SongListItem";
 import { EmptyLibrary } from "@/features/library/components/EmptyLibrary";
 import { LibraryScanner } from '@/features/library/api/scanner';
-import { BackgroundScanTask } from "@/features/library/services/BackgroundScanTask";
+import { runManualScan } from "@/features/library/services/BackgroundScanTask";
 import { LibraryTabBar } from "@/features/library/components/LibraryTabBar";
 import {
   useLibraryStore,
