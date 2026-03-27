@@ -74,18 +74,24 @@ android {
         }
     }
 
-    buildTypes {
+        buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
             signingConfig signingConfigs.debug // Ganti dengan release keystore nanti
-            shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false').toBoolean()
-            minifyEnabled enableMinifyInReleaseBuilds
+            
+            // PERBAIKAN DI SINI: Gunakan tanda '=' untuk properti
+            shrinkResources = (findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false').toBoolean()
+            minifyEnabled = enableMinifyInReleaseBuilds
+            
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
-            crunchPngs (findProperty('android.enablePngCrunchInReleaseBuilds') ?: 'true').toBoolean()
+            
+            // PERBAIKAN DI SINI: Gunakan tanda '=' untuk properti
+            crunchPngs = (findProperty('android.enablePngCrunchInReleaseBuilds') ?: 'true').toBoolean()
         }
     }
+ 
 
     packagingOptions {
         jniLibs {
