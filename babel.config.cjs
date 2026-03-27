@@ -22,6 +22,7 @@ module.exports = function (api) {
             '@/assets':     './assets',
             // ── Umum terakhir ──
             '@':            './src',
+            'expo-file-system': 'expo-file-system/legacy',
           },
         },
       ],

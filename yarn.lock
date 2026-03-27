@@ -1360,6 +1360,11 @@
   dependencies:
     fast-text-encoding "^1.0.6"
 
+"@missingcore/react-native-metadata-retriever@^2.5.0":
+  version "2.5.0"
+  resolved "https://registry.yarnpkg.com/@missingcore/react-native-metadata-retriever/-/react-native-metadata-retriever-2.5.0.tgz#a4ee00eb6898c1644c9bfe84a0856dbc6ff9804b"
+  integrity sha512-xGcyG1/G1rTbO/Mhn+fuPqrLDCJ82XDMQKsLfQnVutYl2zXguLi+z3oB+/XGRVVM+HQL29RlgIQO+tt2gYWziQ==
+
 "@oxlint/binding-android-arm-eabi@1.56.0":
   version "1.56.0"
   resolved "https://registry.yarnpkg.com/@oxlint/binding-android-arm-eabi/-/binding-android-arm-eabi-1.56.0.tgz#c62ca8fb50d8134cfcd107d98ff5c43cadbebd81"

@@ -41,7 +41,25 @@ export default function DrawerLayout() {
           ),
         }}
       />
+<<<<<<< Updated upstream
       
+=======
+
+      {/* --- DEV ONLY: DATABASE ENGINE
+      {__DEV__ && (
+        <Drawer.Screen
+          name="debug/DatabaseManager"
+          options={{
+            title: "Database Engine",
+            drawerLabel: "Database Engine",
+            drawerIcon: ({ color }) => (
+              <MaterialCommunityIcons name="database-cog" size={22} color="#FF9800" /> 
+            ),
+          }}
+        />
+      )}
+       --- */}
+>>>>>>> Stashed changes
       <Drawer.Screen
         name="settings"
         options={{

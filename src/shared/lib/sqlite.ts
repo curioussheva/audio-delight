@@ -6,6 +6,7 @@ export const db = open({ name: "pristine_audio.db" });
 const SQLiteService = {
   db,
   initDatabase: () => {
+<<<<<<< Updated upstream
     // Gunakan 'songs' agar sinkron dengan LibraryScanner.ts
     db.execute(`
       CREATE TABLE IF NOT EXISTS songs (
@@ -30,6 +31,37 @@ const SQLiteService = {
         isFavorite  INTEGER DEFAULT 0
       );
     `);
+=======
+    try {
+      // Jalankan dalam satu batch jika memungkinkan, atau satu per satu
+      
+      // Tabel Utama: Songs
+      db.execute(`
+  CREATE TABLE IF NOT EXISTS songs (
+    id          TEXT PRIMARY KEY NOT NULL,
+    title       TEXT,
+    artist      TEXT,
+    album       TEXT,
+    genre       TEXT,
+    folder      TEXT,
+    filename    TEXT,
+    uri         TEXT UNIQUE NOT NULL,
+    originalUri TEXT,
+    artwork     TEXT,
+    duration    INTEGER,
+    sampleRate  INTEGER,
+    bitDepth    INTEGER,
+    codec       TEXT,
+    bitrate     INTEGER,
+    fileSize    INTEGER,
+    dateAdded   INTEGER,
+    playCount   INTEGER DEFAULT 0,
+    isFavorite  INTEGER DEFAULT 0,
+    isEnriched  INTEGER DEFAULT 0,   -- ← baru: 0=basic, 1=fully enriched
+    lastSeenAt  INTEGER DEFAULT 0    -- ← baru: timestamp terakhir file terdeteksi
+  );
+`); 
+>>>>>>> Stashed changes
 
     // Tabel Playlist
     db.execute(`
@@ -60,5 +92,28 @@ const SQLiteService = {
   },
 };
 
+<<<<<<< Updated upstream
+=======
+// Auto-init saat aplikasi pertama kali memuat file ini
+SQLiteService.initDatabase();
+
+const runMigrations = () => {
+  const migrations = [
+    `ALTER TABLE songs ADD COLUMN isEnriched INTEGER DEFAULT 0;`,
+    `ALTER TABLE songs ADD COLUMN lastSeenAt INTEGER DEFAULT 0;`,
+  ];
+
+  for (const sql of migrations) {
+    try {
+      db.execute(sql);
+    } catch {
+      // Kolom sudah ada — SQLite lempar error jika duplicate, abaikan saja
+    }
+  }
+};
+
+runMigrations();
+
+>>>>>>> Stashed changes
 export default SQLiteService;
  

@@ -12,6 +12,8 @@ import { useTrackPlayerHandler } from "@/features/player/hooks/useTrackPlayerHan
 import { audioEngine } from "@/features/player/api/engine";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { playbackService } from "@/features/player/api/playback";
+import { BackgroundScanTask } from '@/services/BackgroundScanTask';
+import { useLibraryStore } from '@/store/libraryStore';
 
 TrackPlayer.registerPlaybackService(() => playbackService);
 
@@ -20,6 +22,15 @@ export default function RootLayout() {
   const initStore = usePlayerStore((state) => state.initStore);
   const pathname = usePathname();
   const isPlayerOpen = pathname.startsWith("/player");
+  const autoScanEnabled = useLibraryStore(s => s.scanStatus.autoScanEnabled);
+
+  useEffect(() => {
+    if (autoScanEnabled) {
+      BackgroundScanTask.register(30); // setiap 30 menit
+    } else {
+      BackgroundScanTask.unregister();
+    }
+  }, [autoScanEnabled]);
 
   useEffect(() => {
     const prepareApp = async () => {

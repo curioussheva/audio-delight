@@ -30,6 +30,7 @@ interface ScanStatus {
   scanned: number;
   lastScanAt: number | null;
   error: string | null;
+  autoScanEnabled: boolean;   // ← tambah ini
 }
 
 interface LibraryState {
@@ -39,6 +40,11 @@ interface LibraryState {
   setTracks: (tracks: MediaTrack[]) => void;
   setActiveTab: (tab: LibraryTab) => void;
   setScanStatus: (status: Partial<ScanStatus>) => void;
+<<<<<<< Updated upstream
+=======
+  setScanning: (isScanning: boolean, scanned: number, total?: number) => void;
+
+>>>>>>> Stashed changes
   clearLibrary: () => void;
 }
 
@@ -49,6 +55,7 @@ const DEFAULT_SCAN: ScanStatus = {
   scanned: 0,
   lastScanAt: null,
   error: null,
+  autoScanEnabled: true,
 };
 
 export const useLibraryStore = create<LibraryState>()(
@@ -63,21 +70,53 @@ export const useLibraryStore = create<LibraryState>()(
       setActiveTab: (activeTab) => set({ activeTab }),
 
       setScanStatus: (status) =>
+<<<<<<< Updated upstream
         set((s) => ({ 
           scanStatus: { ...s.scanStatus, ...status },
           // Jika status berisi progress 100, update lastScanAt otomatis
           ...(status.progress === 100 ? { lastScanAt: Date.now() } : {})
         })),
+=======
+        set((state) => ({
+          scanStatus: {
+            ...state.scanStatus,
+            ...status,
+            // Auto-update lastScanAt when scan reaches 100%
+            ...(status.progress === 100 ? { lastScanAt: Date.now() } : {}),
+          },
+        })),
+
+      setScanning: (isScanning, scanned, total) =>
+  set((state) => ({
+    scanStatus: {
+      ...state.scanStatus,
+      isScanning,
+      scanned,
+      ...(total !== undefined ? { total } : {}),
+      // Set lastScanAt saat scan selesai
+      ...(!isScanning && scanned > 0 ? { lastScanAt: Date.now() } : {}),
+    },
+  })), 
+>>>>>>> Stashed changes
 
       clearLibrary: () => set({ tracks: [], scanStatus: DEFAULT_SCAN }),
     }),
     {
       name: "@pristineaudio/library",
       storage: createJSONStorage(() => AsyncStorage),
+<<<<<<< Updated upstream
       // Hanya simpan tab aktif, tracks sebaiknya di-load ulang agar segar
       partialize: (s) => ({ activeTab: s.activeTab }), 
     },
   ),
+=======
+      partialize: (state) => ({
+  activeTab: state.activeTab,
+  autoScanEnabled: state.scanStatus.autoScanEnabled,
+}),
+    }
+  )
+>>>>>>> Stashed changes
 );
 
 // ── Optimized Selectors (Gunakan Memoization di level Komponen!) ───────────
@@ -160,5 +199,9 @@ export const selectFileTypes = (tracks: MediaTrack[]) => {
   return Array.from(map.entries())
     .map(([codec, count]) => ({ codec, count }))
     .sort((a, b) => b.count - a.count);
+<<<<<<< Updated upstream
 };
  
+=======
+}; 
+>>>>>>> Stashed changes
