@@ -1,11 +1,7 @@
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system';
+import { getAudioMetadata } from '@missingcore/audio-metadata';
 import { LibraryScanner } from '@/features/library/api/scanner';
-import {
-  getMetadata,
-  getArtwork,
-  MetadataPresets,
-} from '@missingcore/react-native-metadata-retriever';
 
 const SAF = FileSystem.StorageAccessFramework;
 
@@ -24,18 +20,15 @@ export type DiffResult = {
 // PUBLIC API
 // ─────────────────────────────────────────────────────────────
 
-/**
- * DISCOVERY via MediaStore (primary — cepat, seperti native player)
- * Cocok untuk internal storage & SD card yang terindeks Android.
- */
-export async function runMediaStoreDiff(): Promise<DiffResult> {
+export async function runMediaStoreDiff(
+  onProgress?: (current: number, total: number) => void
+): Promise<DiffResult> {
   const permission = await MediaLibrary.requestPermissionsAsync();
   if (!permission.granted) {
     console.warn('[DiffEngine] MediaLibrary permission not granted');
     return { newCount: 0, deletedCount: 0, totalAfter: 0 };
   }
 
-  // Ambil semua asset audio dari MediaStore
   const currentUris = new Set<string>();
   const currentAssets: MediaLibrary.Asset[] = [];
   let after: string | undefined = undefined;
@@ -60,48 +53,44 @@ export async function runMediaStoreDiff(): Promise<DiffResult> {
     after = page.endCursor;
   }
 
-  return await _applyDiff(currentUris, currentAssets, 'mediastore');
+  return await _applyDiff(currentUris, currentAssets, 'mediastore', onProgress);
 }
 
-/**
- * DISCOVERY via SAF (fallback — untuk SD card / OTG yang tidak terindeks)
- * Cocok untuk folder spesifik yang dipilih user.
- */
 export async function runSAFDiff(
   directoryUri: string,
   onProgress?: (current: number, total: number) => void
 ): Promise<DiffResult> {
-  // Kumpulkan semua file via SAF walk
   const allFiles: Array<{ uri: string; filename: string }> = [];
   const visited = new Set<string>();
   await _collectSAFFiles(directoryUri, allFiles, visited);
 
   const currentUris = new Set(allFiles.map(f => f.uri));
 
-  // Konversi ke format MediaLibrary.Asset minimal agar bisa dipakai _applyDiff
   const assets = allFiles.map(f => ({
-    uri: f.uri,
-    filename: f.filename,
-    id: f.uri,
-    mediaType: 'audio' as const,
-    width: 0, height: 0,
-    creationTime: Date.now(),
+    uri:              f.uri,
+    filename:         f.filename,
+    id:               f.uri,
+    mediaType:        'audio' as const,
+    width:            0,
+    height:           0,
+    creationTime:     Date.now(),
     modificationTime: Date.now(),
-    duration: 0,
-    albumId: '',
+    duration:         0,
+    albumId:          '',
   }));
 
   return await _applyDiff(currentUris, assets, 'saf', onProgress);
 }
 
 /**
- * ENRICHMENT — isi sampleRate, bitDepth, artwork untuk track yang belum di-enrich.
- * Jalankan setelah discovery selesai, atau sebagai background task.
+ * ENRICHMENT — isi sampleRate & bitDepth via copy-to-cache.
+ * @missingcore/audio-metadata tidak support SAF URI langsung,
+ * jadi file di-copy sementara ke cache, dibaca, lalu dihapus.
  */
 export async function runEnrichment(
   onProgress?: (current: number, total: number) => void
 ): Promise<number> {
-  const tracks = LibraryScanner.getUnenrichedTracks(100);
+  const tracks = LibraryScanner.getUnenrichedTracks(30); // batch kecil agar tidak OOM
   const total = tracks.length;
 
   if (total === 0) {
@@ -113,22 +102,32 @@ export async function runEnrichment(
   let enriched = 0;
 
   for (const track of tracks) {
+    const ext = track.filename.split('.').pop() ?? 'mp3';
+    const cacheUri = `${FileSystem.cacheDirectory}enrich_${Date.now()}.${ext}`;
+
     try {
-      // MetadataPresets.extended memberikan sampleRate, bitDepth
-      const meta = await getMetadata(track.uri, MetadataPresets.extended);
-      let artwork: string | null = null;
-      try { artwork = await getArtwork(track.uri); } catch {}
+      // Copy ke cache — bisa dibaca oleh audio-metadata
+      await FileSystem.copyAsync({ from: track.uri, to: cacheUri });
+
+      const meta = await getAudioMetadata(cacheUri, ['sampleRate', 'bitDepth', 'artwork']);
 
       LibraryScanner.updateEnrichment(track.uri, {
         sampleRate: meta?.sampleRate ?? 0,
         bitDepth:   meta?.bitDepth   ?? 0,
-        artwork:    artwork ?? undefined,
+        artwork:    typeof meta?.artwork === 'string' ? meta.artwork : undefined,
       });
 
       enriched++;
       onProgress?.(enriched, total);
     } catch (e) {
       console.warn(`[DiffEngine] Enrich failed for ${track.filename}:`, e);
+      // Tandai tetap enriched agar tidak loop terus
+      LibraryScanner.updateEnrichment(track.uri, { sampleRate: 0, bitDepth: 0 });
+    } finally {
+      // Selalu hapus cache file
+      try {
+        await FileSystem.deleteAsync(cacheUri, { idempotent: true });
+      } catch {}
     }
   }
 
@@ -146,51 +145,32 @@ async function _applyDiff(
   source: 'mediastore' | 'saf',
   onProgress?: (current: number, total: number) => void
 ): Promise<DiffResult> {
-  // Bandingkan dengan DB
   const existingUris = LibraryScanner.getExistingUris();
-
-  const newAssets    = assets.filter(a => !existingUris.has(a.uri));
-  const deletedUris  = [...existingUris].filter(uri => !currentUris.has(uri));
+  const newAssets   = assets.filter(a => !existingUris.has(a.uri));
+  const deletedUris = [...existingUris].filter(uri => !currentUris.has(uri));
 
   console.log(`[DiffEngine][${source}] New: ${newAssets.length} | Deleted: ${deletedUris.length}`);
 
-  // 1. Hapus track yang sudah tidak ada di storage
   if (deletedUris.length > 0) {
     LibraryScanner.markAsDeleted(deletedUris);
   }
 
-  // 2. Insert track baru (basic metadata dulu, isEnriched = false)
   const total = newAssets.length;
   let processed = 0;
 
   for (const asset of newAssets) {
     try {
-      // Basic metadata dari MediaStore asset
-      let title  = asset.filename.replace(/\.[^/.]+$/, "");
-      let artist = "Unknown Artist";
-      let album  = "Unknown Album";
-      let duration = Math.floor(asset.duration ?? 0);
-
-      // Coba ambil metadata dasar via retriever
-      try {
-        const meta = await getMetadata(asset.uri, MetadataPresets.standard);
-        if (meta?.title)    title    = meta.title;
-        if (meta?.artist)   artist   = meta.artist;
-        if (meta?.album)    album    = meta.album;
-        if (meta?.duration) duration = Math.floor(meta.duration / 1000);
-      } catch {}
-
-      const folder = _extractFolder(asset.uri, source);
-
+      // Pakai data MediaStore langsung — tidak perlu extract metadata saat insert
+      // sampleRate & bitDepth diisi oleh runEnrichment() setelahnya
       await LibraryScanner.saveToDatabase({
         uri:        asset.uri,
         filename:   asset.filename,
-        title,
-        artist,
-        album,
+        title:      asset.filename.replace(/\.[^/.]+$/, ""),
+        artist:     "Unknown Artist",
+        album:      "Unknown Album",
         genre:      "Unknown Genre",
-        folder,
-        duration,
+        folder:     _extractFolder(asset.uri, source),
+        duration:   Math.floor(asset.duration ?? 0),
         codec:      asset.filename.split('.').pop()?.toUpperCase() ?? 'UNKNOWN',
         isEnriched: false,
         dateAdded:  asset.creationTime ?? Date.now(),
@@ -203,14 +183,8 @@ async function _applyDiff(
     onProgress?.(processed, total);
   }
 
-  // Hitung total setelah diff
   const totalAfter = existingUris.size - deletedUris.length + newAssets.length;
-
-  return {
-    newCount:     newAssets.length,
-    deletedCount: deletedUris.length,
-    totalAfter,
-  };
+  return { newCount: newAssets.length, deletedCount: deletedUris.length, totalAfter };
 }
 
 async function _collectSAFFiles(
@@ -247,10 +221,9 @@ function _extractFolder(uri: string, source: 'mediastore' | 'saf'): string {
   try {
     if (source === 'saf') {
       const parts = uri.split('%2F');
-      parts.pop(); // hapus filename
+      parts.pop();
       return decodeURIComponent(parts[parts.length - 1] ?? 'Music');
     }
-    // MediaStore: /storage/emulated/0/Music/Artist/Album/track.mp3
     const decoded = decodeURIComponent(uri);
     const parts   = decoded.split('/');
     parts.pop();
@@ -258,4 +231,4 @@ function _extractFolder(uri: string, source: 'mediastore' | 'saf'): string {
   } catch {
     return 'Music';
   }
-}
+} 

@@ -25,21 +25,6 @@ allprojects {
         maven { url 'https://www.jitpack.io' }
         maven { url "$rootDir/../node_modules/react-native-track-player/android/repo" }
     }
-
-    configurations.all {
-        resolutionStrategy {
-            force 'androidx.media3:media3-extractor:1.9.1'
-            force 'androidx.media3:media3-common:1.9.1'
-            force 'androidx.media3:media3-datasource:1.9.1'
-            force 'androidx.media3:media3-decoder:1.9.1'
-            force 'androidx.media3:media3-exoplayer:1.9.1'
-        }
-        exclude group: 'com.github.MissingCore.media', module: 'media3-extractor'
-        exclude group: 'com.github.MissingCore.media', module: 'media3-common'
-        exclude group: 'com.github.MissingCore.media', module: 'media3-datasource'
-        exclude group: 'com.github.MissingCore.media', module: 'media3-decoder'
-        exclude group: 'com.github.MissingCore.media', module: 'media3-exoplayer'
-    }
 }
 
 apply plugin: "expo-root-project"

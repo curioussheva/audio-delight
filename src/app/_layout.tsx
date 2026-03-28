@@ -50,7 +50,7 @@ export default function RootLayout() {
 
   useTrackPlayerHandler();
 
- // if (!isReady) return <LoadingScreen />;
+  if (!isReady) return <LoadingScreen />;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

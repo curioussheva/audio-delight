@@ -76,7 +76,7 @@ export default function OnboardingScreen() {
         console.log("⚠️ [Onboarding] Click diabaikan: belum pilih mode atau sedang submit.");
         return;
     }
-    
+
     console.log("🚀 [Onboarding] Memulai proses handleFinish...");
     setIsSubmitting(true);
 
@@ -93,10 +93,10 @@ export default function OnboardingScreen() {
       if (NativeDSPModule) {
         const isBitPerfect = selectedMode === "bit-perfect";
         console.log(`🔌 [Onboarding] Memanggil NativeDSPModule.toggleExclusiveMode(${isBitPerfect})...`);
-        
+
         // Kita beri timeout/safety agar tidak hang jika native module stuck
         await NativeDSPModule.toggleExclusiveMode?.(isBitPerfect);
-        
+
         if (isBitPerfect) {
           console.log("🔌 [Onboarding] Memanggil NativeDSPModule.releaseAllFX()...");
           await NativeDSPModule.releaseAllFX?.();
@@ -109,7 +109,7 @@ export default function OnboardingScreen() {
       // Step 3: Navigasi
       console.log("📍 [Onboarding] Mencoba pindah ke rute: /library");
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      
+
       router.replace("/library");
       console.log("🏁 [Onboarding] Fungsi router.replace telah dipanggil.");
 
@@ -207,8 +207,4 @@ const styles = StyleSheet.create({
   footer: { paddingHorizontal: 24, paddingBottom: 20 },
   nextButton: { height: 58, borderRadius: 20, justifyContent: "center", alignItems: "center" },
   nextButtonText: { fontSize: 16, fontWeight: "700" },
-});
- 
- 
- 
- 
+}); 
