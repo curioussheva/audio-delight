@@ -5,7 +5,7 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import TrackPlayer from "react-native-track-player";
 
 import { ThemeProvider } from "@/context/ThemeContext";
-//import { LoadingScreen } from "@/shared/components/ui/LoadingScreen";
+import { LoadingScreen } from "@/shared/components/ui/LoadingScreen";
 import { AudioPropertyToast } from "@/features/player/components/AudioPropertyToast";
 import FloatingPlayer from "@/features/player/components/FloatingPlayer";
 import { useTrackPlayerHandler } from "@/features/player/hooks/useTrackPlayerHandler";
