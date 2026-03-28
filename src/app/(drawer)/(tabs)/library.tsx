@@ -18,6 +18,8 @@ import { SongListItem } from "@/features/library/components/SongListItem";
 import { EmptyLibrary } from "@/features/library/components/EmptyLibrary";
 import { LibraryScanner } from '@/features/library/api/scanner';
 import { runManualScan } from "@/features/library/services/BackgroundScanTask";
+import { BackgroundScanTask } from "@/features/library/services/BackgroundScanTask";
+
 import { LibraryTabBar } from "@/features/library/components/LibraryTabBar";
 import {
   useLibraryStore,
@@ -56,7 +58,7 @@ export default function LibraryScreen() {
       try {
         const existingSongs = await LibraryScanner.getLibrarySongs() ?? [];
         console.log(`📊 [Library] Found ${existingSongs.length} songs in DB`);
-        if (existingSongs.length > 0) setTracks(existingSongs);
+        if (existingSongs.length > 0) setTracks(existingSongs as any);
       } catch (err) {
         console.error("❌ [Library] Init Error:", err);
       }
@@ -87,11 +89,11 @@ export default function LibraryScreen() {
   }, [reload]);
 
   // ── 3. Register background task sekali saat mount ────────────
-  useEffect(() => {
+{/*  useEffect(() => {
     if (scanStatus.autoScanEnabled) {
       BackgroundScanTask.register(30);
     }
-  }, []);
+  }, []); */}
 
   // ── 4. Scan Handler ──────────────────────────────────────────
   const handleScanLibrary = useCallback(async () => {
@@ -186,14 +188,15 @@ export default function LibraryScreen() {
             </View>
           ) : (
             <FlashList
-              data={songs}
-              renderItem={renderItem}
-              keyExtractor={(item) => item.id}
-              estimatedItemSize={72}
-              ListEmptyComponent={
-                <EmptyLibrary colors={colors} onScan={handleScanLibrary} />
-              }
-            />
+  data={songs}
+  renderItem={renderItem}
+  keyExtractor={(item) => item.id}
+  estimatedItemSize={72}
+  contentContainerStyle={{ paddingBottom: 160 }} // ← tambah ini
+  ListEmptyComponent={
+    <EmptyLibrary colors={colors} onScan={handleScanLibrary} />
+  }
+/>
           )
         ) : activeTab === "album" ? (
           <AlbumGrid albums={albums} />
@@ -228,4 +231,4 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   scanLabel: { fontSize: 12, fontWeight: "600" },
-});  
+});   

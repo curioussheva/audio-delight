@@ -46,13 +46,12 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-router",
       "expo-dev-client",
       [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash.png",
-          "imageWidth": 1080,
+          "imageWidth": 2080,
           "resizeMode": "cover",
           "backgroundColor": "#0A1628",
           "dark": {
@@ -88,7 +87,13 @@
             "useFrameworks": "static"
           }
         }
-      ]
+      ],
+      [
+      "expo-router",
+        {
+          "sitemap": false
+        }
+     ]   
     ],
     "experiments": {
       "typedRoutes": false,

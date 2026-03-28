@@ -28,7 +28,7 @@ interface Props {
 }
 
 export const LibraryTabBar: React.FC<Props> = ({
-  activeTab, onTabChange, isScanning, scanProgress, onRefresh, trackCount,
+  activeTab, onTabChange, isScanning, scanProgress, scanTotal = 0, onRefresh, trackCount,
 }) => {
   const { theme } = useTheme();
   const { colors, spacing } = theme;

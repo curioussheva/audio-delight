@@ -3,11 +3,7 @@ import * as FileSystem from 'expo-file-system';
 import { Platform } from 'react-native';
 import { useLibraryStore } from '../store/libraryStore';
 import { LibraryScanner } from '../api/scanner';
-import {
-  getMetadata,
-  getArtwork,
-  MetadataPresets,
-} from '@missingcore/react-native-metadata-retriever';
+
 
 let isScanning = false;
 let shouldCancel = false;

@@ -162,22 +162,31 @@ export class AudioEngine {
 
     await TrackPlayer.reset();
 
+    const getContentType = (uri: string): string => {
+  const ext = uri.split('.').pop()?.toLowerCase() ?? '';
+  const map: Record<string, string> = {
+    flac: 'audio/flac',
+    wav:  'audio/wav',
+    m4a:  'audio/mp4',
+    aac:  'audio/aac',
+    ogg:  'audio/ogg',
+    opus: 'audio/opus',
+    mp3:  'audio/mpeg',
+  };
+  return map[ext] ?? 'audio/mpeg';
+};
+
     // Hapus anotasi tipe ': tracks' dan perbaiki kurung '()'
     const tracks = songs.map((song) => ({
-      id: song.id,
-      url: song.uri,
-      title: song.title,
-      artist: song.artist,
-      album: song.album || "Pristine Audio",
-      duration: song.duration,
-      artwork: song.artwork,
-      contentType: song.uri.toLowerCase().endsWith(".flac")
-        ? "audio/flac"
-        : "audio/mpeg",
-      // Pastikan property ini sesuai dengan ekspektasi TrackPlayer versi terbaru
-      sampleRate: song.sampleRate,
-      bitDepth: song.bitDepth,
-    }));
+  id:       song.id,
+  url:      song.uri,
+  title:    song.title,
+  artist:   song.artist,
+  album:    song.album || '',
+  duration: song.duration,
+  artwork:  song.artwork,
+  contentType: getContentType(song.uri),  // ← pakai helper
+}));
 
     await TrackPlayer.add(tracks);
 

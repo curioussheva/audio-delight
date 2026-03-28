@@ -172,7 +172,7 @@ export default function DevDBManager({ onClose }: { onClose: () => void }) {
             <Ionicons name="terminal-outline" size={22} color={colors.primary[400]} />
           </TouchableOpacity>
           <TouchableOpacity onPress={handleWipe} style={s.iconBtn}>
-            <Ionicons name="trash-outline" size={22} color={colors.error ?? '#f87171'} />
+            <Ionicons name="trash-outline" size={22} color={colors.status?.error ?? '#f87171'} />
           </TouchableOpacity>
           <TouchableOpacity onPress={onClose} style={s.iconBtn}>
             <Ionicons name="close" size={24} color={colors.text.primary} />

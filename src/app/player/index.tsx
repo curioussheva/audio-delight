@@ -21,10 +21,13 @@ import { FullLyricsView } from "@/features/player/components/FullLyricsView";
 import { SpectogramView } from "@/features/visualizer/components/SpectogramView";
 import { SpectrumAnalyzer } from "@/features/visualizer/components/SpectrumAnalyzer";
 import { SleepTimerModal } from "@/features/player/components/SleepTimerModal";
+import { useTheme } from "@/context/ThemeContext";
 
 const { width } = Dimensions.get("window");
 
 export default function PlayerScreen() {
+  const { theme } = useTheme();
+  const { colors } = theme;
   const {
     currentSong,
     isPlaying,
@@ -110,40 +113,40 @@ export default function PlayerScreen() {
           </View>
         </View>
 
-        {/* MIDDLE SECTION */}
-        <Pressable
-          style={styles.middleSection}
-          onPress={() => setShowLyrics(!showLyrics)}
-        >
-          {!showLyrics ? (
-            <View style={styles.artworkContainer}>
-              <Image
-                source={
-                  currentSong.artwork
-                    ? { uri: currentSong.artwork }
-                    : require("../../../assets/images/icon.png")
-                }
-                style={styles.mainArtwork}
-                contentFit="cover"
-              />
-              <View style={styles.artworkShadow} />
+        {/* MIDDLE SECTION — pisah artwork dan info */}
+       <Pressable
+        style={styles.middleSection}
+        onPress={() => setShowLyrics(!showLyrics)}
+       >
+  {!showLyrics ? (
+    <>
+      {/* Artwork */}
+      <View style={styles.artworkContainer}>
+        <Image
+          source={currentSong.artwork ? { uri: currentSong.artwork } : require("../../../assets/images/icon.png")}
+          style={styles.mainArtwork}
+          contentFit="cover"
+        />
+        <View style={styles.artworkShadow} />
+        <View style={styles.analyzerWrapper}>
+          <SpectrumAnalyzer isPlaying={isPlaying} color="#00D4AA" />
+        </View>
+      </View>
 
-              <View style={styles.analyzerWrapper}>
-                {/* Pastikan SpectrumAnalyzer sudah menerima prop isPlaying & color */}
-                <SpectrumAnalyzer isPlaying={isPlaying} color="#00D4AA" />
-              </View>
-
-              <View style={styles.infoContainer}>
-                <Text style={styles.titleText} numberOfLines={1}>
-                  {currentSong.title}
-                </Text>
-                <Text style={styles.artistText}>{currentSong.artist}</Text>
-              </View>
-            </View>
-          ) : (
-            <FullLyricsView />
-          )}
-        </Pressable>
+      {/* Info — di luar artworkContainer */}
+      <View style={styles.infoContainer}>
+        <Text style={styles.titleText} numberOfLines={1}>
+          {currentSong.title}
+        </Text>
+        <Text style={styles.artistText} numberOfLines={1}>
+          {currentSong.artist}
+        </Text>
+      </View>
+    </>
+  ) : (
+    <FullLyricsView />
+  )}
+</Pressable>
 
         {/* BOTTOM SECTION */}
         <View style={styles.bottomSection}>
@@ -199,13 +202,13 @@ export default function PlayerScreen() {
           </View>
 
           <BlurView intensity={20} tint="dark" style={styles.engineBadge}>
-            <Ionicons name="pulse" size={16} color="#00D4AA" />
-            <Text style={styles.engineText}>
-              {(currentSong.sampleRate || 0) / 1000} kHz •{" "}
-              {currentSong.bitDepth || 0} bit •{" "}
-              {currentSong.codec?.toUpperCase() || "PCM"}
-            </Text>
-          </BlurView>
+  <Ionicons name="pulse" size={16} color={colors.primary[500]} />
+  <Text style={[styles.engineText, { color: colors.primary[400] }]}>
+    {(currentSong.sampleRate || 0) / 1000} kHz •{" "}
+    {currentSong.bitDepth || 0} bit •{" "}
+    {currentSong.codec?.toUpperCase() || "MP3"}
+  </Text>
+</BlurView>
 
           {/* Tambahkan prop visible dan onClose ke SleepTimerModal jika belum ada */}
           <SleepTimerModal
@@ -264,19 +267,27 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.1)",
   },
   artworkShadow: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: -1,
-    backgroundColor: "#00D4AA",
-    opacity: 0.1,
-    borderRadius: 25,
-    transform: [{ scale: 0.95 }],
-    shadowColor: "#00D4AA",
-    shadowRadius: 40,
-    shadowOpacity: 0.8,
-    elevation: 20,
-  },
+  position: 'absolute',
+  bottom: -10,
+  left: 10,
+  right: 10,
+  height: 30,
+  backgroundColor: "#00D4AA",
+  opacity: 0.15,
+  borderRadius: 25,
+  shadowColor: "#00D4AA",
+  shadowRadius: 30,
+  shadowOpacity: 0.6,
+  elevation: 15,
+  zIndex: -1,
+}, 
 
-  infoContainer: { marginTop: 40, alignItems: "center" },
+  infoContainer: {
+  marginTop: 24,
+  alignItems: "center",
+  paddingHorizontal: 30,
+},
+
   titleText: {
     color: "#FFF",
     fontSize: 24,

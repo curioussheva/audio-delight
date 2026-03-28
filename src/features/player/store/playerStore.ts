@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { Song } from '@/shared/types/audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from "expo-file-system";
-
 import { audioEngine } from '@/features/player/api/engine';
 
 interface LirikLine {
@@ -10,9 +9,9 @@ interface LirikLine {
   text: string;
 }
 
-// ─── Helper: resolve content:// ke file:// cache ──────────────────────────
+// ─── Resolve SATU URI content:// ke file:// cache ─────────────────────────
 const resolvePlayableUri = async (uri: string): Promise<string> => {
-  if (!uri.startsWith("content://")) return uri; // file:// langsung return
+  if (!uri.startsWith("content://")) return uri;
 
   try {
     const filename = decodeURIComponent(
@@ -30,20 +29,34 @@ const resolvePlayableUri = async (uri: string): Promise<string> => {
     return dest;
   } catch (e) {
     console.warn("[resolvePlayableUri] Gagal copy ke cache:", e);
-    return uri; // fallback ke original
+    return uri;
   }
 };
 
-// ─── Resolve seluruh queue ─────────────────────────────────────────────────
-const resolveQueue = async (songs: Song[]): Promise<Song[]> => {
-  return Promise.all(
-    songs.map(async (s) => ({
+// ─── Resolve sebagian queue di sekitar lagu aktif (max 20 lagu) ───────────
+const resolveQueuePartial = async (
+  songs: Song[],
+  centerIndex: number
+): Promise<Song[]> => {
+  const start = Math.max(0, centerIndex - 5);
+  const end   = Math.min(songs.length, centerIndex + 15);
+  const slice = songs.slice(start, end);
+
+  const resolved = await Promise.all(
+    slice.map(async (s) => ({
       ...s,
       uri: await resolvePlayableUri(s.uri),
     }))
   );
+
+  return [
+    ...songs.slice(0, start),
+    ...resolved,
+    ...songs.slice(end),
+  ];
 };
 
+// ─────────────────────────────────────────────────────────────────────────
 export interface PlayerState {
   currentSong: Song | null;
   queue: Song[];
@@ -57,7 +70,7 @@ export interface PlayerState {
   audioMode: 'bit-perfect' | 'dsp';
   lyrics: LirikLine[];
   sleepTimerEnd: number | null;
-  
+
   initStore: () => Promise<void>;
   setCurrentSong: (song: Song | null) => void;
   setQueue: (songs: Song[]) => void;
@@ -79,24 +92,26 @@ export interface PlayerState {
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
-  currentSong: null,
-  queue: [],
-  isPlaying: false,
-  position: 0,
-  duration: 0,
-  shuffle: false,
-  repeat: 'off',
+  currentSong:   null,
+  queue:         [],
+  isPlaying:     false,
+  position:      0,
+  duration:      0,
+  shuffle:       false,
+  repeat:        'off',
   playbackSpeed: 1.0,
-  defaultEQ: 'Flat',
-  audioMode: 'dsp',
-  lyrics: [],
+  defaultEQ:     'Flat',
+  audioMode:     'dsp',
+  lyrics:        [],
   sleepTimerEnd: null,
 
-  seek: (pos: number) => {
-    audioEngine.seekTo(pos); 
+  // ── Seek ──────────────────────────────────────────────────────
+  seek: (pos) => {
+    audioEngine.seekTo(pos);
     set({ position: pos });
   },
 
+  // ── Init ──────────────────────────────────────────────────────
   initStore: async () => {
     try {
       const [speed, eq, mode] = await Promise.all([
@@ -104,17 +119,113 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         AsyncStorage.getItem('default_eq'),
         AsyncStorage.getItem('audio_mode_preference'),
       ]);
-      
       if (speed) set({ playbackSpeed: parseFloat(speed) });
-      if (eq) set({ defaultEQ: eq });
-      if (mode) set({ audioMode: mode as 'bit-perfect' | 'dsp' });
+      if (eq)    set({ defaultEQ: eq });
+      if (mode)  set({ audioMode: mode as 'bit-perfect' | 'dsp' });
     } catch (e) {
       console.error("Failed to init store", e);
     }
   },
 
-  setLyrics: (lyrics) => set({ lyrics }),
+  // ── Play Song ─────────────────────────────────────────────────
+  playSong: async (song, newQueue) => {
+    try {
+      console.log('▶️ [Player] playSong:', song.title);
 
+      const targetQueue  = newQueue ?? get().queue;
+      const centerIndex  = targetQueue.findIndex(s => s.id === song.id);
+      const sessionSongId = song.id;
+
+      // 1. Resolve URI lagu aktif saja — ini yang paling penting
+      const playableUri  = await resolvePlayableUri(song.uri);
+      const playableSong = { ...song, uri: playableUri };
+
+      // 2. Update UI segera
+      set({ currentSong: playableSong, queue: targetQueue, isPlaying: true, position: 0 });
+
+      // 3. Play lagu aktif dulu tanpa tunggu queue penuh
+      await audioEngine.setQueue([playableSong], 0);
+      await audioEngine.play();
+      console.log('✅ [Player] Playing:', song.title);
+
+      // 4. Resolve 20 lagu di sekitar lagu aktif di background
+      //    Hanya update queue jika user belum pindah lagu
+      resolveQueuePartial(targetQueue, centerIndex >= 0 ? centerIndex : 0)
+        .then(async (resolvedQueue) => {
+          if (get().currentSong?.id !== sessionSongId) return;
+          const idx = resolvedQueue.findIndex(s => s.id === song.id);
+          await audioEngine.setQueue(resolvedQueue, idx >= 0 ? idx : 0);
+          console.log('📋 [Player] Queue loaded:', resolvedQueue.length, 'tracks');
+        })
+        .catch(e => {
+          console.warn('[Player] Background queue resolve failed:', e);
+        });
+
+    } catch (e) {
+      console.error('❌ [Player] playSong error:', e);
+      set({ isPlaying: false });
+    }
+  },
+
+  // ── Playback Controls ─────────────────────────────────────────
+  togglePlay: () => {
+    get().setIsPlaying(!get().isPlaying);
+  },
+
+  setIsPlaying: (isPlaying) => {
+    if (isPlaying) audioEngine.play();
+    else           audioEngine.pause();
+    set({ isPlaying });
+  },
+
+  playNext: async () => {
+  const { queue, currentSong } = get();
+  if (!queue.length) return;
+
+  const currentIndex = queue.findIndex(s => s.id === currentSong?.id);
+  const nextIndex = currentIndex < queue.length - 1 ? currentIndex + 1 : 0;
+  const nextSong = queue[nextIndex];
+
+  if (nextSong) {
+    await get().playSong(nextSong, queue);
+  }
+},
+
+  playPrevious: async () => {
+  const { queue, currentSong, position } = get();
+  if (!queue.length) return;
+
+  // Jika sudah lebih dari 3 detik, restart lagu saat ini
+  if (position > 3) {
+    await audioEngine.seekTo(0);
+    usePlayerStore.setState({ position: 0 });
+    return;
+  }
+
+  const currentIndex = queue.findIndex(s => s.id === currentSong?.id);
+  const prevIndex = currentIndex > 0 ? currentIndex - 1 : queue.length - 1;
+  const prevSong = queue[prevIndex];
+
+  if (prevSong) {
+    await get().playSong(prevSong, queue);
+  }
+},
+
+  seek: (pos) => {
+    audioEngine.seekTo(pos);
+    set({ position: pos });
+  },
+  
+  
+
+  // ── Audio Mode ────────────────────────────────────────────────
+  setAudioMode: async (mode) => {
+    await AsyncStorage.setItem('audio_mode_preference', mode);
+    await audioEngine.toggleExclusiveMode(mode === 'bit-perfect');
+    set({ audioMode: mode });
+  },
+
+  // ── Sleep Timer ───────────────────────────────────────────────
   setSleepTimer: (minutes) => {
     if (minutes === null) {
       set({ sleepTimerEnd: null });
@@ -125,10 +236,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
     const checkTimer = setInterval(() => {
       const state = get();
-      if (!state.sleepTimerEnd) {
-        clearInterval(checkTimer);
-        return;
-      }
+      if (!state.sleepTimerEnd) { clearInterval(checkTimer); return; }
       if (Date.now() >= state.sleepTimerEnd) {
         get().setIsPlaying(false);
         set({ sleepTimerEnd: null });
@@ -137,78 +245,31 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }, 1000);
   },
 
-  playSong: async (song, newQueue) => {
-  const targetQueue = newQueue || get().queue;
+  // ── Shuffle & Repeat ──────────────────────────────────────────
+  toggleShuffle: () => set((state) => ({ shuffle: !state.shuffle })),
 
-  // Resolve URI untuk lagu yang akan diplay sekarang
-  const playableUri = await resolvePlayableUri(song.uri);
-  const playableSong = { ...song, uri: playableUri };
-
-  // Resolve seluruh queue di background (tidak block UI)
-  resolveQueue(targetQueue).then(async (resolvedQueue) => {
-    const index = resolvedQueue.findIndex(s => s.id === song.id);
-    await audioEngine.setQueue(resolvedQueue, index >= 0 ? index : 0);
-  });
-
-  set({ currentSong: playableSong, queue: targetQueue, isPlaying: true, position: 0 });
-  await audioEngine.setQueue([playableSong], 0);
-  await audioEngine.play();
-},
-
-  togglePlay: () => {
-    const { isPlaying } = get();
-    get().setIsPlaying(!isPlaying);
+  toggleRepeat: () => {
+    const current = get().repeat;
+    const next = current === 'off' ? 'all' : current === 'all' ? 'track' : 'off';
+    audioEngine.setRepeatMode(next);
+    set({ repeat: next });
   },
 
-  setIsPlaying: (isPlaying) => {
-    if (isPlaying) {
-      audioEngine.play();
-    } else {
-      audioEngine.pause();
-    }
-    set({ isPlaying }); // ← ini yang hilang sebelumnya
-  },
+  // ── Setters ───────────────────────────────────────────────────
+  setCurrentSong:  (song)     => set({ currentSong: song }),
+  setQueue:        (songs)    => set({ queue: songs }),
+  setPosition:     (position) => set({ position }),
+  setDuration:     (duration) => set({ duration }),
+  setLyrics:       (lyrics)   => set({ lyrics }),
 
-  playNext: async () => {
-    if (!get().queue.length) return;
-    await audioEngine.skipToNext(); 
-  },
-
-  playPrevious: async () => {
-    if (!get().queue.length) return;
-    await audioEngine.skipToPrevious();
-  },
-
-  setAudioMode: async (mode) => {
-    await AsyncStorage.setItem('audio_mode_preference', mode);
-    await audioEngine.toggleExclusiveMode(mode === 'bit-perfect');
-    set({ audioMode: mode });
-  },
-
-  setCurrentSong: (song) => set({ currentSong: song }),
-  setQueue: (songs) => set({ queue: songs }),
-  setPosition: (position) => set({ position }),
-  setDuration: (duration) => set({ duration }),
-  
   setPlaybackSpeed: async (speed) => {
     set({ playbackSpeed: speed });
     await audioEngine.setPlaybackRate(speed);
     await AsyncStorage.setItem('playback_speed', speed.toString());
-  },
-  
-  toggleShuffle: () => set((state) => ({ shuffle: !state.shuffle })),
-  
-  toggleRepeat: () => {
-    const current = get().repeat;
-    const nextRepeat = current === 'off' ? 'all' : 
-                       current === 'all' ? 'track' : 'off';
-    
-    audioEngine.setRepeatMode(nextRepeat);
-    set({ repeat: nextRepeat });
   },
 
   setDefaultEQ: async (eq) => {
     set({ defaultEQ: eq });
     await AsyncStorage.setItem('default_eq', eq);
   },
-})); 
+}));  

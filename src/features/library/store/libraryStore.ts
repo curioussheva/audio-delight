@@ -11,7 +11,7 @@ export interface MediaTrack {
   album: string;
   genre: string;
   duration: number;
-  fileSize: number;
+  fileSize?: number; 
   sampleRate?: number;
   bitDepth?: number;
   codec: string;
@@ -46,7 +46,7 @@ interface LibraryState {
 const DEFAULT_SCAN: ScanStatus = {
   isScanning: false,
   progress: 0,
-  currentFile: undefined,
+//  currentFile: undefined,
   total: 0,
   scanned: 0,
   lastScanAt: null,

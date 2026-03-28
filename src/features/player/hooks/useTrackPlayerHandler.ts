@@ -16,8 +16,10 @@ export const useTrackPlayerHandler = () => {
   const { setDuration, setCurrentSong, queue } = usePlayerStore();
 
   useTrackPlayerEvents(events, async (event: any) => {
-    // 1. Menangani Perubahan Lagu
+
+    // 1. Perubahan Lagu
     if (event.type === Event.PlaybackActiveTrackChanged) {
+      usePlayerStore.setState({ position: 0 }); // reset position saat ganti lagu
       if (event.track) {
         const activeSong = queue.find((s) => s.id === event.track?.id);
         if (activeSong) {
@@ -27,19 +29,20 @@ export const useTrackPlayerHandler = () => {
       }
     }
 
-    // 2. Menangani Perubahan Status
+    // 2. Perubahan Status
     if (event.type === Event.PlaybackState) {
       const playing = event.state === State.Playing;
       usePlayerStore.setState({ isPlaying: playing });
     }
 
-    // 3. Menangani Error
+    // 3. Error
     if (event.type === Event.PlaybackError) {
       console.error("[TrackPlayer] Playback error:", event.message);
     }
+
   });
 
-  // Loop untuk mengupdate progress setiap 500ms
+  // Update progress setiap 500ms
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
@@ -49,11 +52,10 @@ export const useTrackPlayerHandler = () => {
           usePlayerStore.setState({ position: pos });
         }
       } catch {
-        // Player belum siap, skip iteration ini
+        // Player belum siap, skip
       }
     }, 500);
 
     return () => clearInterval(interval);
   }, []);
-};
- 
+}; 

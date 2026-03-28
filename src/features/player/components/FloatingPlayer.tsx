@@ -1,7 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet, Pressable, Platform } from "react-native";
 import { Image } from "expo-image";
-import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import Animated, {
@@ -15,233 +14,310 @@ import { GestureDetector, Gesture } from "react-native-gesture-handler";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useTheme } from "@/context/ThemeContext";
 
+const PLACEHOLDER = require("../../../../assets/images/icon.png");
+
 export default function FloatingPlayer() {
   const { theme } = useTheme();
+  const { colors, shadows, spacing } = theme;
   const router = useRouter();
 
   const {
-    currentSong,
-    isPlaying,
-    togglePlay,
-    position: progress,
-    duration,
-    playNext,
-    playPrevious,
-  } = usePlayerStore();
+  currentSong,
+  isPlaying,
+  togglePlay,
+  position,
+  duration,
+  playNext,
+  playPrevious,
+  shuffle,          
+  repeat,           
+  toggleShuffle,    
+  toggleRepeat,
+} = usePlayerStore();
 
   const translateX = useSharedValue(0);
 
-  // --- SEMUA HOOK HARUS DI ATAS ---
-
   const swipeGesture = Gesture.Pan()
-    .activeOffsetX([-10, 10])
-    .onUpdate((event) => {
-      translateX.value = event.translationX;
-    })
-    .onEnd((event) => {
-      if (event.translationX > 100) {
-        runOnJS(playPrevious)();
-      } else if (event.translationX < -100) {
-        runOnJS(playNext)();
-      }
+    .activeOffsetX([-15, 15])
+    .onUpdate((e) => { translateX.value = e.translationX; })
+    .onEnd((e) => {
+      if (e.translationX > 80)       runOnJS(playPrevious)();
+      else if (e.translationX < -80) runOnJS(playNext)();
       translateX.value = withSpring(0);
     });
 
-  const animatedProgressStyle = useAnimatedStyle(() => {
-    const validDuration = duration > 0 ? duration : 1;
-    const percentage = Math.min(Math.max(progress / validDuration, 0), 1);
-    return { width: `${percentage * 100}%` };
+  const animatedProgress = useAnimatedStyle(() => {
+    const pct = duration > 0 ? Math.min(position / duration, 1) : 0;
+    return { width: `${pct * 100}%` };
   });
 
-  const animatedContainerStyle = useAnimatedStyle(() => ({
+  const animatedContainer = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
-    opacity: withTiming(translateX.value === 0 ? 1 : 0.7),
+    opacity: withTiming(translateX.value === 0 ? 1 : 0.75),
   }));
 
-  // --- BARU BOLEH CEK CONDITION UNTUK RENDER ---
-  
-  if (!currentSong) return null; // Pindahkan ke sini (setelah semua hook terpanggil)
- 
+  if (!currentSong) return null;
+
+  const artworkSource = currentSong.artwork
+    ? { uri: currentSong.artwork }
+    : PLACEHOLDER;
+
   return (
-    <View style={styles.outerContainer}>
+    <View style={s.outer}>
       <GestureDetector gesture={swipeGesture}>
-        <Animated.View style={[styles.wrapper, animatedContainerStyle]}>
-          <Pressable
-            style={styles.pressable}
-            onPress={() => router.push("/player" as any)} // Casting to any untuk router path
+        <Animated.View
+          style={[
+            s.wrapper,
+            {
+              backgroundColor: colors.background.elevated,
+              borderColor: colors.border.light,
+              // shadow dari theme
+              ...shadows.xl,
+            },
+            animatedContainer,
+          ]}
+        >
+          {/* Accent line atas */}
+          <View
+            style={[
+              s.accentLine,
+              { backgroundColor: colors.primary[500] },
+            ]}
+          />
+
+          {/* Progress bar */}
+          <View
+            style={[
+              s.progressBg,
+              { backgroundColor: colors.background.tertiary },
+            ]}
           >
-            <BlurView
-              intensity={80}
-              tint="dark"
-              style={StyleSheet.absoluteFill}
+            <Animated.View
+              style={[
+                s.progressFill,
+                { backgroundColor: colors.primary[400] },
+                animatedProgress,
+              ]}
             />
+          </View>
 
-            <View style={styles.progressBarBackground}>
-              <Animated.View
-                style={[
-                  styles.progressBarFill,
-                  { backgroundColor: theme.colors.primary[500] },
-                  animatedProgressStyle,
-                ]}
-              />
-            </View>
+          {/* Content */}
+          <View style={s.content}>
 
-            <View style={styles.content}>
+            {/* Artwork — tap buka player */}
+            <Pressable onPress={() => router.push("/player" as any)}>
               <Image
-                source={
-                  currentSong.artwork
-                    ? { uri: currentSong.artwork }
-                    : require("../../../../assets/images/icon.png")
-                }
-                style={styles.artwork}
+                source={artworkSource}
+                style={[
+                  s.artwork,
+                  { backgroundColor: colors.background.tertiary },
+                ]}
                 contentFit="cover"
-                transition={200}
+                transition={300}
               />
+            </Pressable>
 
-              <View style={styles.info}>
+            {/* Info — tap buka player */}
+            <Pressable
+              style={s.info}
+              onPress={() => router.push("/player" as any)}
+            >
+              <Text
+                style={[s.title, { color: colors.text.primary }]}
+                numberOfLines={1}
+              >
+                {currentSong.title}
+              </Text>
+              <View style={s.metaRow}>
+                {currentSong.bitDepth && currentSong.bitDepth > 16 && (
+                  <View
+                    style={[
+                      s.hiResBadge,
+                      { borderColor: colors.status.warning },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        s.hiResText,
+                        { color: colors.status.warning },
+                      ]}
+                    >
+                      HI-RES
+                    </Text>
+                  </View>
+                )}
                 <Text
-                  style={[styles.title, { color: theme.colors.text.primary }]}
+                  style={[s.artist, { color: colors.text.secondary }]}
                   numberOfLines={1}
                 >
-                  {currentSong.title}
+                  {currentSong.artist}
                 </Text>
-
-                <View style={styles.row}>
-                  {/* 3. Gunakan currentSong.bitDepth > 16 sebagai indikator Hi-Res jika isHiRes undefined */}
-                  {(currentSong.isHiRes ||
-                    (currentSong.bitDepth && currentSong.bitDepth > 16)) && (
-                    <View
-                      style={[styles.hiResBadge, { borderColor: "#D4AF37" }]}
-                    >
-                      <Text style={styles.hiResText}>HI-RES</Text>
-                    </View>
-                  )}
-                  <Text
-                    style={[
-                      styles.artist,
-                      { color: theme.colors.text.secondary },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {currentSong.artist}
-                  </Text>
-                </View>
               </View>
+            </Pressable>
 
-              <Pressable
-                onPress={(e) => {
-                  e.stopPropagation(); // 4. Tambahkan stopPropagation agar tidak membuka player screen saat klik play
-                  togglePlay();
-                }}
-                style={({ pressed }) => [
-                  styles.playButton,
-                  { opacity: pressed ? 0.6 : 1 },
-                ]}
-              >
-                <Ionicons
-                  name={isPlaying ? "pause" : "play"}
-                  size={28}
-                  color={isPlaying ? theme.colors.primary[500] : "#FFF"}
-                />
-              </Pressable>
-            </View>
-          </Pressable>
+            {/* Controls */}
+            <View style={s.controls}>
+  {/* Shuffle */}
+  <Pressable
+    onPress={() => toggleShuffle()}
+    hitSlop={8}
+    style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}
+  >
+    <Ionicons
+      name="shuffle"
+      size={18}
+      color={shuffle ? colors.primary[400] : colors.text.tertiary}
+    />
+  </Pressable>
+
+  {/* Prev */}
+  <Pressable
+    onPress={() => playPrevious()}
+    hitSlop={8}
+    style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}
+  >
+    <Ionicons name="play-skip-back" size={20} color={colors.text.secondary} />
+  </Pressable>
+
+  {/* Play/Pause */}
+  <Pressable
+    onPress={() => togglePlay()}
+    style={({ pressed }) => [
+      s.playBtn,
+      {
+        backgroundColor: colors.primary[500],
+        opacity: pressed ? 0.8 : 1,
+      },
+    ]}
+  >
+    <Ionicons
+      name={isPlaying ? "pause" : "play"}
+      size={20}
+      color={colors.text.inverse}
+      style={{ marginLeft: isPlaying ? 0 : 2 }}
+    />
+  </Pressable>
+
+  {/* Next */}
+  <Pressable
+    onPress={() => playNext()}
+    hitSlop={8}
+    style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}
+  >
+    <Ionicons name="play-skip-forward" size={20} color={colors.text.secondary} />
+  </Pressable>
+
+  {/* Repeat */}
+  <Pressable
+    onPress={() => toggleRepeat()}
+    hitSlop={8}
+    style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}
+  >
+    <Ionicons
+      name={repeat === 'track' ? "repeat-outline" : "repeat"}
+      size={18}
+      color={repeat !== 'off' ? colors.primary[400] : colors.text.tertiary}
+    />
+    {/* Indikator repeat-one */}
+    {repeat === 'track' && (
+      <View style={[s.repeatOneDot, { backgroundColor: colors.primary[400] }]} />
+    )}
+  </Pressable>
+</View>
+
+          </View>
         </Animated.View>
       </GestureDetector>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  // ... (Tetap gunakan styles yang Anda berikan, sudah bagus)
-  outerContainer: {
+const s = StyleSheet.create({
+  outer: {
     position: "absolute",
-    bottom: Platform.OS === "ios" ? 100 : 85, // Penyesuaian jarak dari bawah
+    bottom: Platform.OS === "ios" ? 100 : 85,
     left: 12,
     right: 12,
     zIndex: 1000,
   },
   wrapper: {
-    borderRadius: 18,
+    borderRadius: 16,
+    borderWidth: 1,
     overflow: "hidden",
-    backgroundColor: "rgba(0,0,0,0.5)", // Fallback jika blur tidak render
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.4,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 12,
-      },
-    }),
   },
-  pressable: {
-    height: 68,
-    flexDirection: "column",
+  accentLine: {
+    height: 2.5,
+    width: "100%",
+  },
+  progressBg: {
+    height: 1.5,
+    width: "100%",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 1,
   },
   content: {
-    flex: 1,
+    height: 68,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 12,
+    gap: 10,
   },
   artwork: {
-    width: 48,
-    height: 48,
-    borderRadius: 10,
-    backgroundColor: "#1A1A1A",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
+    width: 44,
+    height: 44,
+    borderRadius: 8,
   },
   info: {
     flex: 1,
-    marginLeft: 14,
     justifyContent: "center",
+    minWidth: 0,
   },
   title: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "700",
     letterSpacing: -0.2,
   },
-  row: {
+  metaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
     marginTop: 2,
   },
   artist: {
     fontSize: 12,
-    opacity: 0.7,
+    flexShrink: 1,
   },
   hiResBadge: {
     borderWidth: 1,
-    paddingHorizontal: 5,
+    paddingHorizontal: 4,
     paddingVertical: 1,
-    borderRadius: 4,
-    backgroundColor: "rgba(212, 175, 55, 0.1)",
+    borderRadius: 3,
   },
   hiResText: {
-    fontSize: 8,
+    fontSize: 7,
     fontWeight: "900",
-    color: "#D4AF37",
+    letterSpacing: 0.5,
   },
-  playButton: {
-    width: 44,
-    height: 44,
+  controls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  playBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: "center",
     alignItems: "center",
-    borderRadius: 22,
-    backgroundColor: "rgba(255,255,255,0.05)",
   },
-  progressBarBackground: {
-    height: 2.5,
-    width: "100%",
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-  progressBarFill: {
-    height: "100%",
-    // shadow tidak akan terlihat tanpa width/height di android, tapi biarkan untuk iOS
-  },
-});
+  repeatOneDot: {
+  position: 'absolute',
+  width: 5,
+  height: 5,
+  borderRadius: 3,
+  bottom: -2,
+  alignSelf: 'center',
+},
+}); 

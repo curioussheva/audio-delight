@@ -90,41 +90,37 @@ export async function runSAFDiff(
 export async function runEnrichment(
   onProgress?: (current: number, total: number) => void
 ): Promise<number> {
-  const tracks = LibraryScanner.getUnenrichedTracks(30); // batch kecil agar tidak OOM
+  const tracks = LibraryScanner.getUnenrichedTracks(30);
   const total = tracks.length;
-
-  if (total === 0) {
-    console.log('[DiffEngine] No tracks to enrich.');
-    return 0;
-  }
+  if (total === 0) return 0;
 
   console.log(`💎 [DiffEngine] Enriching ${total} tracks...`);
   let enriched = 0;
 
   for (const track of tracks) {
-    const ext = track.filename.split('.').pop() ?? 'mp3';
+    // Normalize ekstensi ke lowercase
+    const ext = track.filename.split('.').pop()?.toLowerCase() ?? 'mp3';
     const cacheUri = `${FileSystem.cacheDirectory}enrich_${Date.now()}.${ext}`;
 
     try {
-      // Copy ke cache — bisa dibaca oleh audio-metadata
+      // Copy dari MediaStore URI ke cache
       await FileSystem.copyAsync({ from: track.uri, to: cacheUri });
 
-      const meta = await getAudioMetadata(cacheUri, ['sampleRate', 'bitDepth', 'artwork']);
+      const meta = await getAudioMetadata(cacheUri);
 
       LibraryScanner.updateEnrichment(track.uri, {
-        sampleRate: meta?.sampleRate ?? 0,
-        bitDepth:   meta?.bitDepth   ?? 0,
-        artwork:    typeof meta?.artwork === 'string' ? meta.artwork : undefined,
+        sampleRate: (meta as any)?.sampleRate ?? 0,
+        bitDepth:   (meta as any)?.bitDepth   ?? 0,
+        artwork:    (meta as any)?.artwork     ?? undefined,
       });
 
       enriched++;
       onProgress?.(enriched, total);
     } catch (e) {
       console.warn(`[DiffEngine] Enrich failed for ${track.filename}:`, e);
-      // Tandai tetap enriched agar tidak loop terus
+      // Mark enriched agar tidak retry terus
       LibraryScanner.updateEnrichment(track.uri, { sampleRate: 0, bitDepth: 0 });
     } finally {
-      // Selalu hapus cache file
       try {
         await FileSystem.deleteAsync(cacheUri, { idempotent: true });
       } catch {}
