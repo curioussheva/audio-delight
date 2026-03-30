@@ -1,62 +1,22 @@
 import { create } from 'zustand';
 import { Song } from '@/shared/types/audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from "expo-file-system";
+import TrackPlayer from 'react-native-track-player';
 import { audioEngine } from '@/features/player/api/engine';
 
-interface LirikLine {
-  time: number;
-  text: string;
-}
+interface LirikLine { time: number; text: string; }
 
-// ─── Resolve SATU URI content:// ke file:// cache ─────────────────────────
-const resolvePlayableUri = async (uri: string): Promise<string> => {
-  if (!uri.startsWith("content://")) return uri;
+// Song → RNTP Track mapping
+const songToTrack = (s: Song) => ({
+  id:       s.id,
+  url:      s.uri,
+  title:    s.title,
+  artist:   s.artist,
+  album:    s.album || '',
+  duration: s.duration,
+  artwork:  s.artwork,
+});
 
-  try {
-    const filename = decodeURIComponent(
-      uri.split("%2F").pop() ?? uri.split("/").pop() ?? "audio"
-    );
-    const cacheDir = `${FileSystem.cacheDirectory}audio/`;
-    const dest = `${cacheDir}${filename}`;
-
-    await FileSystem.makeDirectoryAsync(cacheDir, { intermediates: true });
-
-    const info = await FileSystem.getInfoAsync(dest);
-    if (!info.exists) {
-      await FileSystem.copyAsync({ from: uri, to: dest });
-    }
-    return dest;
-  } catch (e) {
-    console.warn("[resolvePlayableUri] Gagal copy ke cache:", e);
-    return uri;
-  }
-};
-
-// ─── Resolve sebagian queue di sekitar lagu aktif (max 20 lagu) ───────────
-const resolveQueuePartial = async (
-  songs: Song[],
-  centerIndex: number
-): Promise<Song[]> => {
-  const start = Math.max(0, centerIndex - 5);
-  const end   = Math.min(songs.length, centerIndex + 15);
-  const slice = songs.slice(start, end);
-
-  const resolved = await Promise.all(
-    slice.map(async (s) => ({
-      ...s,
-      uri: await resolvePlayableUri(s.uri),
-    }))
-  );
-
-  return [
-    ...songs.slice(0, start),
-    ...resolved,
-    ...songs.slice(end),
-  ];
-};
-
-// ─────────────────────────────────────────────────────────────────────────
 export interface PlayerState {
   currentSong: Song | null;
   queue: Song[];
@@ -132,34 +92,26 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     try {
       console.log('▶️ [Player] playSong:', song.title);
 
-      const targetQueue  = newQueue ?? get().queue;
-      const centerIndex  = targetQueue.findIndex(s => s.id === song.id);
+      const targetQueue   = newQueue ?? get().queue;
       const sessionSongId = song.id;
+      const songIndex     = targetQueue.findIndex(s => s.id === song.id);
 
-      // 1. Resolve URI lagu aktif saja — ini yang paling penting
-      const playableUri  = await resolvePlayableUri(song.uri);
-      const playableSong = { ...song, uri: playableUri };
+      // 1. Update UI segera
+      set({ currentSong: song, queue: targetQueue, isPlaying: true, position: 0 });
 
-      // 2. Update UI segera
-      set({ currentSong: playableSong, queue: targetQueue, isPlaying: true, position: 0 });
+      // 2. Reset RNTP dan load lagu aktif + seluruh queue sekaligus
+      //    Content URI sudah bisa dibaca ExoPlayer langsung — tidak perlu copy
+      await TrackPlayer.reset();
+      await TrackPlayer.add(targetQueue.map(songToTrack));
 
-      // 3. Play lagu aktif dulu tanpa tunggu queue penuh
-      await audioEngine.setQueue([playableSong], 0);
-      await audioEngine.play();
-      console.log('✅ [Player] Playing:', song.title);
+      // 3. Skip ke lagu yang dipilih
+      if (songIndex > 0) {
+        await TrackPlayer.skip(songIndex);
+      }
 
-      // 4. Resolve 20 lagu di sekitar lagu aktif di background
-      //    Hanya update queue jika user belum pindah lagu
-      resolveQueuePartial(targetQueue, centerIndex >= 0 ? centerIndex : 0)
-        .then(async (resolvedQueue) => {
-          if (get().currentSong?.id !== sessionSongId) return;
-          const idx = resolvedQueue.findIndex(s => s.id === song.id);
-          await audioEngine.setQueue(resolvedQueue, idx >= 0 ? idx : 0);
-          console.log('📋 [Player] Queue loaded:', resolvedQueue.length, 'tracks');
-        })
-        .catch(e => {
-          console.warn('[Player] Background queue resolve failed:', e);
-        });
+      // 4. Play
+      await TrackPlayer.play();
+      console.log('✅ [Player] Playing:', song.title, `| Queue: ${targetQueue.length} tracks`);
 
     } catch (e) {
       console.error('❌ [Player] playSong error:', e);
@@ -168,9 +120,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   // ── Playback Controls ─────────────────────────────────────────
-  togglePlay: () => {
-    get().setIsPlaying(!get().isPlaying);
-  },
+  togglePlay: () => get().setIsPlaying(!get().isPlaying),
 
   setIsPlaying: (isPlaying) => {
     if (isPlaying) audioEngine.play();
@@ -179,44 +129,26 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   playNext: async () => {
-  const { queue, currentSong } = get();
-  if (!queue.length) return;
-
-  const currentIndex = queue.findIndex(s => s.id === currentSong?.id);
-  const nextIndex = currentIndex < queue.length - 1 ? currentIndex + 1 : 0;
-  const nextSong = queue[nextIndex];
-
-  if (nextSong) {
-    await get().playSong(nextSong, queue);
-  }
-},
+    const { queue, currentSong } = get();
+    if (!queue.length) return;
+    const idx  = queue.findIndex(s => s.id === currentSong?.id);
+    const next = queue[(idx + 1) % queue.length];
+    if (next) await get().playSong(next, queue);
+  },
 
   playPrevious: async () => {
-  const { queue, currentSong, position } = get();
-  if (!queue.length) return;
-
-  // Jika sudah lebih dari 3 detik, restart lagu saat ini
-  if (position > 3) {
-    await audioEngine.seekTo(0);
-    usePlayerStore.setState({ position: 0 });
-    return;
-  }
-
-  const currentIndex = queue.findIndex(s => s.id === currentSong?.id);
-  const prevIndex = currentIndex > 0 ? currentIndex - 1 : queue.length - 1;
-  const prevSong = queue[prevIndex];
-
-  if (prevSong) {
-    await get().playSong(prevSong, queue);
-  }
-},
-
-  seek: (pos) => {
-    audioEngine.seekTo(pos);
-    set({ position: pos });
+    const { queue, currentSong, position } = get();
+    if (!queue.length) return;
+    // Restart lagu jika sudah > 3 detik
+    if (position > 3) {
+      await audioEngine.seekTo(0);
+      set({ position: 0 });
+      return;
+    }
+    const idx  = queue.findIndex(s => s.id === currentSong?.id);
+    const prev = queue[idx > 0 ? idx - 1 : queue.length - 1];
+    if (prev) await get().playSong(prev, queue);
   },
-  
-  
 
   // ── Audio Mode ────────────────────────────────────────────────
   setAudioMode: async (mode) => {
@@ -227,13 +159,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   // ── Sleep Timer ───────────────────────────────────────────────
   setSleepTimer: (minutes) => {
-    if (minutes === null) {
-      set({ sleepTimerEnd: null });
-      return;
-    }
+    if (minutes === null) { set({ sleepTimerEnd: null }); return; }
     const endTime = Date.now() + minutes * 60000;
     set({ sleepTimerEnd: endTime });
-
     const checkTimer = setInterval(() => {
       const state = get();
       if (!state.sleepTimerEnd) { clearInterval(checkTimer); return; }
@@ -272,4 +200,4 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({ defaultEQ: eq });
     await AsyncStorage.setItem('default_eq', eq);
   },
-}));  
+})); 

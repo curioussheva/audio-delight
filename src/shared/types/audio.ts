@@ -11,34 +11,34 @@ export interface Song {
   title: string;
   artist: string;
   album: string;
-  genre: string;         // Diwajibkan agar tidak null di Store
-  folder: string;        // Penting untuk Folder View
-  filename: string;      // Penting untuk fallback jika title kosong
+  genre: string;
+  folder: string;
+  filename: string;
   uri: string;
   artwork?: string;
-  duration: number;      // Milidetik (ms) agar presisi
-  
-  // Audio Tech Info (Flattened agar mudah di-query di SQLite)
+  duration: number;      // Dalam DETIK
+
   codec: string;
   sampleRate: number;
   bitDepth?: number;
   bitrate?: number;
-  isHiRes: boolean;
+  isHiRes?: boolean;     // ← optional, belum selalu ada di DB
 
-  // Timestamps
   dateAdded: number;
   dateModified?: number;
 
-  // Metadata Tambahan
   year?: number;
   trackNumber?: number;
   discNumber?: number;
-  
-  // Stats
-  rating?: number;       // 1-5
-  playCount: number;     // Default 0
+
+  rating?: number;
+  playCount: number;
   lastPlayed?: number;
-}
+
+  // DB fields
+  isEnriched?: number;   // ← tambah, 0 atau 1 dari SQLite
+  lastSeenAt?: number;   // ← tambah, dari migration
+} 
 
 export interface Playlist {
   id: string;

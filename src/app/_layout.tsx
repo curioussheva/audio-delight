@@ -1,7 +1,8 @@
+ // app/_layout.tsx
 import React, { useState, useEffect } from "react";
-import { Stack, usePathname } from "expo-router";
+import { Stack } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import TrackPlayer from "react-native-track-player";
 
 import { ThemeProvider } from "@/context/ThemeContext";
@@ -14,24 +15,28 @@ import { usePlayerStore } from "@/features/player/store/playerStore";
 import { playbackService } from "@/features/player/api/playback";
 import { BackgroundScanTask } from '@/features/library/services/BackgroundScanTask';
 import { useLibraryStore } from '@/features/library/store/libraryStore';
+import * as SplashScreen from 'expo-splash-screen';
 
 TrackPlayer.registerPlaybackService(() => playbackService);
+
+// Tahan Splash Screen Native agar tidak flicker
+SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
   const initStore = usePlayerStore((state) => state.initStore);
-  const pathname = usePathname();
-  const isPlayerOpen = pathname.startsWith("/player");
   const autoScanEnabled = useLibraryStore(s => s.scanStatus.autoScanEnabled);
 
+  // 1. Background Task Logic
   useEffect(() => {
     if (autoScanEnabled) {
-      BackgroundScanTask.register(30); // setiap 30 menit
+      BackgroundScanTask.register(30);
     } else {
       BackgroundScanTask.unregister();
     }
   }, [autoScanEnabled]); 
 
+  // 2. Initialization Logic
   useEffect(() => {
     const prepareApp = async () => {
       try {
@@ -43,6 +48,7 @@ export default function RootLayout() {
         console.error("App initialization failed:", error);
       } finally {
         setIsReady(true);
+        await SplashScreen.hideAsync(); // Sembunyikan splash native
       }
     };
     prepareApp();
@@ -50,32 +56,29 @@ export default function RootLayout() {
 
   useTrackPlayerHandler();
 
+  // 3. Render Logic
   if (!isReady) return <LoadingScreen />;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
         <SafeAreaProvider>
-          <SafeAreaView style={{ flex: 1 }}>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="index" />
-              <Stack.Screen name="onboarding" />
-              <Stack.Screen name="(drawer)" />
-              <Stack.Screen
-                name="player/index"
-                options={{
-                  presentation: "modal",
-                  animation: "slide_from_bottom",
-                }}
-              />
-            </Stack>
 
-            <AudioPropertyToast />
-            
-          </SafeAreaView>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="(drawer)" />
+            <Stack.Screen
+              name="player/index"
+              options={{
+                presentation: "modal",
+                animation: "slide_from_bottom",
+              }}
+            />
+          </Stack>
+          
+          <AudioPropertyToast />
         </SafeAreaProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
   );
 }
-  

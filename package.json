@@ -36,7 +36,7 @@
     "color-convert": "^2.0.1",
     "color-name": "^1.1.4",
     "expo": "~54.0.0",
-    "expo-background-fetch": "~14.0.9",
+    "expo-background-task": "~1.0.10",
     "expo-blur": "~15.0.8",
     "expo-build-properties": "~1.0.10",
     "expo-constants": "~18.0.13",
@@ -46,6 +46,7 @@
     "expo-font": "~14.0.11",
     "expo-haptics": "~15.0.8",
     "expo-image": "~3.0.11",
+    "expo-linear-gradient": "~15.0.8",
     "expo-linking": "~8.0.11",
     "expo-media-library": "~18.2.1",
     "expo-notifications": "~0.32.16",
@@ -55,6 +56,7 @@
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.9",
     "expo-task-manager": "~14.0.9",
+    "moti": "^0.30.0",
     "react": "19.1.0",
     "react-native": "0.81.5",
     "react-native-draggable-flatlist": "^4.0.3",
@@ -110,4 +112,3 @@
     "yarn": ">=1.22.0"
   }
 }
- 

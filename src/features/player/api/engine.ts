@@ -162,8 +162,8 @@ export class AudioEngine {
 
     await TrackPlayer.reset();
 
-    const getContentType = (uri: string): string => {
-  const ext = uri.split('.').pop()?.toLowerCase() ?? '';
+    const getContentType = (song: Song): string => {
+  const ext = song.filename.split('.').pop()?.toLowerCase() ?? '';
   const map: Record<string, string> = {
     flac: 'audio/flac',
     wav:  'audio/wav',
@@ -174,19 +174,19 @@ export class AudioEngine {
     mp3:  'audio/mpeg',
   };
   return map[ext] ?? 'audio/mpeg';
-};
+}; 
 
     // Hapus anotasi tipe ': tracks' dan perbaiki kurung '()'
     const tracks = songs.map((song) => ({
-  id:       song.id,
-  url:      song.uri,
-  title:    song.title,
-  artist:   song.artist,
-  album:    song.album || '',
-  duration: song.duration,
-  artwork:  song.artwork,
-  contentType: getContentType(song.uri),  // ← pakai helper
-}));
+  id:          song.id,
+  url:         song.uri,
+  title:       song.title,
+  artist:      song.artist,
+  album:       song.album || '',
+  duration:    song.duration,
+  artwork:     song.artwork,
+  contentType: getContentType(song), // ← pakai song, bukan uri
+})); 
 
     await TrackPlayer.add(tracks);
 
@@ -237,8 +237,8 @@ export class AudioEngine {
     await TrackPlayer.skipToPrevious();
   }
 
-  async seekTo(positionMs: number): Promise<void> {
-    await TrackPlayer.seekTo(positionMs / 1000); // RNTP expects seconds
+  async seekTo(positionSeconds: number): Promise<void> {
+  await TrackPlayer.seekTo(positionSeconds);
   }
 
   async setPlaybackRate(rate: number): Promise<void> {
@@ -280,4 +280,4 @@ export class AudioEngine {
 }
 
 // Singleton export (most common pattern for audio engines)
-export const audioEngine = new AudioEngine();
+export const audioEngine = new AudioEngine(); 

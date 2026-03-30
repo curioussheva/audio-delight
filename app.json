@@ -7,12 +7,17 @@
     "icon": "./assets/images/icon.png",
     "scheme": "pristineaudio",
     "userInterfaceStyle": "automatic",
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.pristineaudio.app",
       "infoPlist": {
-        "UIBackgroundModes": ["audio", "fetch"]
+        "UIBackgroundModes": [
+          "audio",
+          "fetch"
+        ]
       }
     },
     "android": {
@@ -89,23 +94,16 @@
         }
       ],
       [
-      "expo-router",
+        "expo-router",
         {
           "sitemap": false
         }
-     ]   
+      ],
+      "expo-background-task"
     ],
     "experiments": {
       "typedRoutes": false,
       "tsconfigPaths": true
-    },
-    "extra": {
-      "router": {
-        "origin": false
-      },
-      "eas": {
-        "projectId": "62e1e6e9-9171-497b-b0f1-832a6d3e1424"
-      }
     },
     "owner": "curioussheva"
   }

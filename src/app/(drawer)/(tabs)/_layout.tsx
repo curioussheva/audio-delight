@@ -1,9 +1,9 @@
 import React from "react";
-import { Tabs } from "expo-router";
-import { Stack, usePathname } from "expo-router";
+import { Tabs, usePathname } from "expo-router";
 import { BlurView } from "expo-blur";
 import { StyleSheet, Platform, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context"; // WAJIB dari sini
 
 import { useTheme } from "@/context/ThemeContext";
 import FloatingPlayer from "@/features/player/components/FloatingPlayer";
@@ -11,77 +11,47 @@ import { LyricsPreview } from "@/features/player/components/LyricPreview";
 
 export default function TabsLayout() {
   const { theme } = useTheme();
+  const { colors } = theme;
   const pathname = usePathname();
   const isPlayerOpen = pathname.startsWith("/player");
 
   return (
-    <View style={styles.container}>
-      <Tabs
-        screenOptions={{
-          headerShown: false,
-          tabBarShowLabel: true,
-          tabBarActiveTintColor: theme.colors.primary[500],
-          tabBarInactiveTintColor: theme.colors.text.tertiary,
-          tabBarStyle: styles.tabBar,
-          tabBarBackground: () => (
-            <BlurView
-              intensity={Platform.OS === "ios" ? 80 : 100}
-              tint={theme.isDark ? "dark" : "light"}
-              style={StyleSheet.absoluteFill}
-            />
-          ),
-        }}
-      >
-        <Tabs.Screen
-          name="library"
-          options={{
-            title: "Library",
-            tabBarIcon: ({ color, size, focused }) => (
-              <Ionicons
-                name={focused ? "library" : "library-outline"}
-                size={size}
-                color={color}
-                accessibilityLabel="Library"
+    /* PENTING: Gunakan edges untuk menghindari double padding di bawah 
+      karena TabBar sudah punya padding sendiri.
+    */
+    <SafeAreaView 
+  style={{ flex: 1, backgroundColor: colors.background.primary }} 
+  edges={['top']} // Hanya ambil area status bar
+> 
+      <View style={styles.container}>
+        <Tabs
+          screenOptions={{
+            headerShown: false,
+            tabBarShowLabel: true,
+            tabBarActiveTintColor: colors.primary[500],
+            tabBarInactiveTintColor: colors.text.tertiary,
+            tabBarStyle: styles.tabBar,
+            tabBarBackground: () => (
+              <BlurView
+                intensity={Platform.OS === "ios" ? 80 : 100}
+                tint={theme.isDark ? "dark" : "light"}
+                style={StyleSheet.absoluteFill}
               />
             ),
           }}
-        />
+        >
+          {/* Screens tetap sama */}
+          <Tabs.Screen name="library" options={{ title: "Library" }} />
+          <Tabs.Screen name="equalizer" options={{ title: "DSP" }} />
+          <Tabs.Screen name="visualizer" options={{ title: "Live" }} />
+          <Tabs.Screen name="song/[id]" options={{ href: null }} />
+        </Tabs>
 
-        <Tabs.Screen
-          name="equalizer"
-          options={{
-            title: "DSP",
-            tabBarIcon: ({ color, size, focused }) => (
-              <Ionicons
-                name={focused ? "analytics" : "analytics-outline"}
-                size={size}
-                color={color}
-                accessibilityLabel="DSP / Equalizer"
-              />
-            ),
-          }}
-        />
-
-        <Tabs.Screen
-          name="visualizer"
-          options={{
-            title: "Live",
-            tabBarIcon: ({ color, size, focused }) => (
-              <Ionicons
-                name={focused ? "pulse" : "pulse-outline"}
-                size={size}
-                color={color}
-                accessibilityLabel="Live Visualizer"
-              />
-            ),
-          }}
-        />
-      </Tabs>
-
-      {/* Global overlays – always visible above tabs */}
-      <LyricsPreview />
-      {!isPlayerOpen && <FloatingPlayer />}
-    </View>
+        {/* Overlays */}
+        <LyricsPreview />
+        {!isPlayerOpen && <FloatingPlayer />}
+      </View>
+    </SafeAreaView>
   );
 }
 
@@ -93,7 +63,8 @@ const styles = StyleSheet.create({
     position: "absolute",
     borderTopWidth: 0,
     elevation: 0,
-    height: Platform.OS === "ios" ? 88 : 64,
+    // Di Android, jangan terlalu tinggi agar tidak menutupi FloatingPlayer
+    height: Platform.OS === "ios" ? 88 : 64, 
     paddingBottom: Platform.OS === "ios" ? 30 : 10,
     backgroundColor: "transparent",
   },

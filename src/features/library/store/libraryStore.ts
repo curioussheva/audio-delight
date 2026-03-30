@@ -102,12 +102,15 @@ export const useLibraryStore = create<LibraryState>()(
   )
 );
 
-// ── Optimized Selectors ─────────────────────────────────────
+// ── Optimized Selectors
+
 export const selectAlbums = (tracks: MediaTrack[]) => {
+  if (!tracks?.length) return [];
   const map = new Map<string, { name: string; artist: string; artwork?: string; count: number }>();
 
   for (const t of tracks) {
-    const key = `( {t.album || "Unknown"}__ ){t.artist || "Unknown"}`;
+    // ✅ Fixed: template literal yang benar
+    const key = `${t.album || "Unknown"}__${t.artist || "Unknown"}`;
     const existing = map.get(key);
     if (!existing) {
       map.set(key, {
@@ -123,7 +126,7 @@ export const selectAlbums = (tracks: MediaTrack[]) => {
   }
 
   return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-};
+}; 
 
 export const selectArtists = (tracks: MediaTrack[]) => {
   const map = new Map<string, { name: string; albumCount: number; trackCount: number }>();

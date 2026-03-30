@@ -22,18 +22,18 @@ export default function FloatingPlayer() {
   const router = useRouter();
 
   const {
-  currentSong,
-  isPlaying,
-  togglePlay,
-  position,
-  duration,
-  playNext,
-  playPrevious,
-  shuffle,          
-  repeat,           
-  toggleShuffle,    
-  toggleRepeat,
-} = usePlayerStore();
+    currentSong,
+    isPlaying,
+    togglePlay,
+    position,
+    duration,
+    playNext,
+    playPrevious,
+    shuffle,
+    repeat,
+    toggleShuffle,
+    toggleRepeat,
+  } = usePlayerStore();
 
   const translateX = useSharedValue(0);
 
@@ -320,4 +320,4 @@ const s = StyleSheet.create({
   bottom: -2,
   alignSelf: 'center',
 },
-}); 
+});  

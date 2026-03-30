@@ -4,10 +4,10 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   Platform,
   Alert,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useTheme } from "@/context/ThemeContext";
@@ -125,7 +125,11 @@ export default function OnboardingScreen() {
 
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background.primary }]}>
+    <SafeAreaView 
+    style={[styles.container, { backgroundColor: colors.background.primary }]}
+    // Tambahkan edges jika ingin kontrol lebih detail (opsional)
+    edges={['right', 'top', 'left']} 
+  >
       <View style={styles.header}>
         <Image
           source={require("../../assets/images/logo.png")} // Path sudah disesuaikan untuk src/app/
@@ -207,4 +211,4 @@ const styles = StyleSheet.create({
   footer: { paddingHorizontal: 24, paddingBottom: 20 },
   nextButton: { height: 58, borderRadius: 20, justifyContent: "center", alignItems: "center" },
   nextButtonText: { fontSize: 16, fontWeight: "700" },
-}); 
+});  
