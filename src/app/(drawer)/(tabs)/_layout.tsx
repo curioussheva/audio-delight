@@ -3,7 +3,6 @@ import { Tabs, usePathname } from "expo-router";
 import { BlurView } from "expo-blur";
 import { StyleSheet, Platform, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { SafeAreaView } from "react-native-safe-area-context"; // WAJIB dari sini
 
 import { useTheme } from "@/context/ThemeContext";
 import FloatingPlayer from "@/features/player/components/FloatingPlayer";
@@ -19,10 +18,7 @@ export default function TabsLayout() {
     /* PENTING: Gunakan edges untuk menghindari double padding di bawah 
       karena TabBar sudah punya padding sendiri.
     */
-    <SafeAreaView 
-  style={{ flex: 1, backgroundColor: colors.background.primary }} 
-  edges={['top']} // Hanya ambil area status bar
-> 
+
       <View style={styles.container}>
         <Tabs
           screenOptions={{
@@ -51,7 +47,7 @@ export default function TabsLayout() {
         <LyricsPreview />
         {!isPlayerOpen && <FloatingPlayer />}
       </View>
-    </SafeAreaView>
+    
   );
 }
 

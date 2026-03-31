@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   Dimensions,
   Platform,
   Pressable,
@@ -17,22 +16,28 @@ import { usePlayerStore } from "@/features/player/store/playerStore";
 import { formatTime } from "@/shared/utils/time";
 import Slider from "@react-native-community/slider";
 import { FullLyricsView } from "@/features/player/components/FullLyricsView";
-// Pastikan folder ini benar (visualizer atau visualizers)
 import { SpectogramView } from "@/features/visualizer/components/SpectogramView";
 import { SpectrumAnalyzer } from "@/features/visualizer/components/SpectrumAnalyzer";
 import { SleepTimerModal } from "@/features/player/components/SleepTimerModal";
 import { useTheme } from "@/context/ThemeContext";
+
+// ← Tambahkan ini
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width } = Dimensions.get("window");
 
 export default function PlayerScreen() {
   const { theme } = useTheme();
   const { colors } = theme;
+
+  // ← Tambahkan hook ini
+  const insets = useSafeAreaInsets();
+
   const {
     currentSong,
     isPlaying,
     togglePlay,
-    position, // Kita ambil 'position' asli dari store
+    position,
     duration,
     seek,
     playNext,
@@ -44,7 +49,6 @@ export default function PlayerScreen() {
     audioMode,
   } = usePlayerStore();
 
-  // Ambil progress dari position (alias agar UI tidak error jika sebelumnya pakai nama 'progress')
   const progress = position || 0;
 
   const [showLyrics, setShowLyrics] = useState(false);
@@ -55,9 +59,8 @@ export default function PlayerScreen() {
 
   return (
     <View style={styles.container}>
-      {/* BACKGROUND AREA - Visualizer */}
+      {/* BACKGROUND AREA - Visualizer & Blur */}
       <View style={styles.spectrogramContainer}>
-        {/* Pastikan SpectogramView sudah menerima prop isPlaying di filenya */}
         <SpectogramView isPlaying={isPlaying} />
       </View>
 
@@ -75,7 +78,18 @@ export default function PlayerScreen() {
         style={[styles.overlay, { backgroundColor: "rgba(4, 11, 19, 0.75)" }]}
       />
 
-      <SafeAreaView style={styles.safeArea}>
+      {/* KONTEN UTAMA dengan Safe Area Insets */}
+      <View
+        style={[
+          styles.content,
+          {
+            paddingTop: insets.top,
+            paddingBottom: insets.bottom + 10, // tambahan sedikit biar tidak terlalu rapat dengan home indicator
+            paddingLeft: insets.left,
+            paddingRight: insets.right,
+          },
+        ]}
+      >
         {/* HEADER */}
         <View style={styles.header}>
           <TouchableOpacity
@@ -113,40 +127,42 @@ export default function PlayerScreen() {
           </View>
         </View>
 
-        {/* MIDDLE SECTION — pisah artwork dan info */}
-       <Pressable
-        style={styles.middleSection}
-        onPress={() => setShowLyrics(!showLyrics)}
-       >
-  {!showLyrics ? (
-    <>
-      {/* Artwork */}
-      <View style={styles.artworkContainer}>
-        <Image
-          source={currentSong.artwork ? { uri: currentSong.artwork } : require("../../../assets/images/icon.png")}
-          style={styles.mainArtwork}
-          contentFit="cover"
-        />
-        <View style={styles.artworkShadow} />
-        <View style={styles.analyzerWrapper}>
-          <SpectrumAnalyzer isPlaying={isPlaying} color="#00D4AA" />
-        </View>
-      </View>
+        {/* MIDDLE SECTION */}
+        <Pressable
+          style={styles.middleSection}
+          onPress={() => setShowLyrics(!showLyrics)}
+        >
+          {!showLyrics ? (
+            <>
+              <View style={styles.artworkContainer}>
+                <Image
+                  source={
+                    currentSong.artwork
+                      ? { uri: currentSong.artwork }
+                      : require("../../../assets/images/icon.png")
+                  }
+                  style={styles.mainArtwork}
+                  contentFit="cover"
+                />
+                <View style={styles.artworkShadow} />
+                <View style={styles.analyzerWrapper}>
+                  <SpectrumAnalyzer isPlaying={isPlaying} color="#00D4AA" />
+                </View>
+              </View>
 
-      {/* Info — di luar artworkContainer */}
-      <View style={styles.infoContainer}>
-        <Text style={styles.titleText} numberOfLines={1}>
-          {currentSong.title}
-        </Text>
-        <Text style={styles.artistText} numberOfLines={1}>
-          {currentSong.artist}
-        </Text>
-      </View>
-    </>
-  ) : (
-    <FullLyricsView />
-  )}
-</Pressable>
+              <View style={styles.infoContainer}>
+                <Text style={styles.titleText} numberOfLines={1}>
+                  {currentSong.title}
+                </Text>
+                <Text style={styles.artistText} numberOfLines={1}>
+                  {currentSong.artist}
+                </Text>
+              </View>
+            </>
+          ) : (
+            <FullLyricsView />
+          )}
+        </Pressable>
 
         {/* BOTTOM SECTION */}
         <View style={styles.bottomSection}>
@@ -202,29 +218,35 @@ export default function PlayerScreen() {
           </View>
 
           <BlurView intensity={20} tint="dark" style={styles.engineBadge}>
-  <Ionicons name="pulse" size={16} color={colors.primary[500]} />
-  <Text style={[styles.engineText, { color: colors.primary[400] }]}>
-    {(currentSong.sampleRate || 0) / 1000} kHz •{" "}
-    {currentSong.bitDepth || 0} bit •{" "}
-    {currentSong.codec?.toUpperCase() || "MP3"}
-  </Text>
-</BlurView>
+            <Ionicons name="pulse" size={16} color={colors.primary[500]} />
+            <Text style={[styles.engineText, { color: colors.primary[400] }]}>
+              {(currentSong.sampleRate || 0) / 1000} kHz •{" "}
+              {currentSong.bitDepth || 0} bit •{" "}
+              {currentSong.codec?.toUpperCase() || "MP3"}
+            </Text>
+          </BlurView>
 
-          {/* Tambahkan prop visible dan onClose ke SleepTimerModal jika belum ada */}
           <SleepTimerModal
             visible={isTimerVisible}
             onClose={() => setIsTimerVisible(false)}
           />
         </View>
-      </SafeAreaView>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#040B13" },
-  overlay: { ...StyleSheet.absoluteFillObject },
-  safeArea: { flex: 1 },
+  container: { 
+    flex: 1, 
+    backgroundColor: "#040B13" 
+  },
+  overlay: { 
+    ...StyleSheet.absoluteFillObject 
+  },
+  content: { 
+    flex: 1 
+  },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -366,7 +388,7 @@ const styles = StyleSheet.create({
   },
   spectrogramContainer: {
     ...StyleSheet.absoluteFillObject,
-    opacity: 0.4, // Jangan terlalu terang agar teks lirik terbaca
+    opacity: 0.4,
     zIndex: -1,
   },
   analyzerWrapper: {

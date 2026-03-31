@@ -1,5 +1,5 @@
 import { Drawer } from "expo-router/drawer";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons"; // Tambah Material untuk ikon DB
+import { Music, Activity, Settings, Info } from "lucide-react-native";
 import { useTheme } from "@/context/ThemeContext";
 import CustomDrawer from "@/shared/components/navigation/CustomDrawer";
 
@@ -18,14 +18,18 @@ export default function DrawerLayout() {
         },
         drawerActiveTintColor: colors.primary[500],
         drawerInactiveTintColor: colors.text.secondary,
+
+        // ← Tambahkan ini untuk membantu safe area di dalam Drawer + Tabs
+        sceneContainerStyle: {
+          backgroundColor: colors.background.primary,
+        },
       }}
     >
-      {/* Menu existing Anda... */}
       <Drawer.Screen
         name="(tabs)"
         options={{
           title: "Library",
-          drawerIcon: ({ color }) => <Ionicons name="musical-notes" size={22} color={color} />,
+          drawerIcon: ({ color }) => <Music size={22} color={color} />,
         }}
       />
       
@@ -33,7 +37,7 @@ export default function DrawerLayout() {
         name="analyzer"
         options={{
           title: "FLAC Analyzer",
-          drawerIcon: ({ color }) => <Ionicons name="analytics" size={22} color={color} />,
+          drawerIcon: ({ color }) => <Activity size={22} color={color} />,
         }}
       />
       
@@ -41,7 +45,7 @@ export default function DrawerLayout() {
         name="settings"
         options={{
           title: "Settings",
-          drawerIcon: ({ color }) => <Ionicons name="settings-outline" size={22} color={color} />,
+          drawerIcon: ({ color }) => <Settings size={22} color={color} />,
         }}
       />
       
@@ -49,10 +53,9 @@ export default function DrawerLayout() {
         name="about"
         options={{
           title: "About",
-          drawerIcon: ({ color }) => <Ionicons name="information-circle-outline" size={22} color={color} />,
+          drawerIcon: ({ color }) => <Info size={22} color={color} />,
         }}
       />
     </Drawer>
   );
-}
- 
+} 

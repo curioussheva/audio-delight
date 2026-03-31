@@ -157,20 +157,27 @@ export class LibraryScanner {
   sampleRate?: number;
   bitDepth?: number;
   artwork?: string;
+  title?: string;    // ← tambah
+  artist?: string;   // ← tambah
+  album?: string;    // ← tambah
 }): void {
+  // Build dynamic SET clause
+  const sets: string[] = ['isEnriched = 1', 'lastSeenAt = ?'];
+  const params: any[]  = [Date.now()];
+
+  if (data.sampleRate !== undefined) { sets.push('sampleRate = ?'); params.push(data.sampleRate ?? null); }
+  if (data.bitDepth   !== undefined) { sets.push('bitDepth = ?');   params.push(data.bitDepth   ?? null); }
+  if (data.artwork    !== undefined) { sets.push('artwork = ?');     params.push(data.artwork    ?? null); }
+  // Hanya update jika ada nilai dari ID3 tag
+  if (data.title  && data.title.trim()  !== '') { sets.push('title = ?');  params.push(data.title.trim());  }
+  if (data.artist && data.artist.trim() !== '') { sets.push('artist = ?'); params.push(data.artist.trim()); }
+  if (data.album  && data.album.trim()  !== '') { sets.push('album = ?');  params.push(data.album.trim());  }
+
+  params.push(uri); // WHERE clause
+
   db.execute(
-    `UPDATE songs SET
-      sampleRate = ?,
-      bitDepth   = ?,
-      artwork    = ?,
-      isEnriched = 1
-     WHERE uri = ?`,
-    [
-      data.sampleRate ?? null,
-      data.bitDepth   ?? null,
-      data.artwork    ?? null,
-      uri,
-    ]
+    `UPDATE songs SET ${sets.join(', ')} WHERE uri = ?`,
+    params
   );
-} 
-} 
+}
+}  

@@ -7,18 +7,20 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-// Hooks & Store
+
+// Hooks
 import { useTheme } from "@/context/ThemeContext";
 import { useEqualizer } from "@/features/equalizer/hooks/useEqualizer";
+import { useSafePadding } from '@/shared/hooks/useSafePadding';
 
-// UI Components (Asumsi Anda memisahkan file atau menaruhnya di folder components)
+// UI Components
 import { EqualizerBand } from "@/features/equalizer/components/Band";
 import { FrequencyGraph } from "@/features/equalizer/components/Graph";
 import { PresetChip } from "@/features/equalizer/components/PresetChip";
 import { SavePresetModal } from "@/features/equalizer/components/SavePresetModal";
 
 export default function EqualizerScreen() {
+  const safePadding = useSafePadding();     // ← Gunakan ini saja
   const { theme } = useTheme();
   const {
     currentBands,
@@ -33,10 +35,17 @@ export default function EqualizerScreen() {
   const [modalVisible, setModalVisible] = useState(false);
 
   return (
-    <SafeAreaView
+    <View
       style={[
         styles.container,
-        { backgroundColor: theme.colors.background.primary },
+        {
+          flex: 1,
+          backgroundColor: theme.colors.background.primary,
+          paddingTop: safePadding.paddingTop,
+          paddingBottom: safePadding.paddingBottom + 20,
+          paddingLeft: safePadding.paddingLeft,
+          paddingRight: safePadding.paddingRight,
+        },
       ]}
     >
       {/* 1. Header & Status */}
@@ -63,19 +72,18 @@ export default function EqualizerScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* 2. Visualisasi Kurva (Skia) */}
+        {/* 2. Visualisasi Kurva */}
         <View style={styles.graphContainer}>
           <FrequencyGraph bands={currentBands} />
         </View>
 
-        {/* 3. Preset Selector (Horizontal) */}
+        {/* 3. Preset Selector */}
         <View style={styles.presetSection}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.chipScroll}
           >
-            {/* Tombol Simpan Custom */}
             <TouchableOpacity
               onPress={() => setModalVisible(true)}
               style={[
@@ -136,6 +144,9 @@ export default function EqualizerScreen() {
             ))
           )}
         </View>
+
+        {/* Spacer agar tidak tertutup floating player */}
+        <View style={{ height: 100 }} />
       </ScrollView>
 
       {/* 5. Modal Simpan */}
@@ -147,7 +158,7 @@ export default function EqualizerScreen() {
           setModalVisible(false);
         }}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -162,7 +173,9 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 28, fontWeight: "800" },
   subtitle: { fontSize: 13, marginTop: 2 },
-  scrollContent: { paddingBottom: 40 },
+  scrollContent: { 
+    paddingBottom: 40 
+  },
   graphContainer: {
     alignItems: "center",
     marginVertical: 20,
@@ -213,4 +226,4 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontSize: 14,
   },
-});
+}); 

@@ -5,12 +5,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, FlatList,
   TextInput, Alert, ActivityIndicator, Modal,
-  StyleSheet, Platform, SafeAreaView,
+  StyleSheet, Platform
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import * as DocumentPicker from 'expo-document-picker';
 import { db } from '@/shared/lib/sqlite';
 import { useTheme } from '@/context/ThemeContext';
 import { LibraryScanner } from '@/features/library/api/scanner';
@@ -18,6 +18,7 @@ import { LibraryScanner } from '@/features/library/api/scanner';
 const DB_NAME = 'pristine_audio.db';
 const COL_W = 140;
 const ACT_W = 50;
+const PAGE_SIZE = 100; // Ukuran batch data untuk pagination
 
 interface RowData { [key: string]: any }
 
@@ -32,6 +33,11 @@ export default function DevDBManager({ onClose }: { onClose: () => void }) {
   const [loading, setLoading]         = useState(false);
   const [processing, setProcessing]   = useState(false);
   const [refreshKey, setRefresh]      = useState(0);
+
+  // Pagination states
+  const [offset, setOffset]           = useState(0);
+  const [hasMore, setHasMore]         = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const [showSQL, setShowSQL]         = useState(false);
   const [sqlQuery, setSqlQuery]       = useState('SELECT * FROM songs LIMIT 10');
@@ -52,30 +58,54 @@ export default function DevDBManager({ onClose }: { onClose: () => void }) {
     }
   }, []);
 
-  // ── Load Table Data ───────────────────────────────────────────
-  const loadData = useCallback(() => {
+  // ── Load Table Data (With Pagination) ───────────────────────
+  const loadData = useCallback(async (isInitial = true) => {
     if (!selectedTable) return;
-    setLoading(true);
+
+    if (isInitial) {
+      setLoading(true);
+      setOffset(0);
+      setHasMore(true);
+    } else {
+      if (!hasMore || loadingMore) return;
+      setLoadingMore(true);
+    }
+
     try {
-      const res = db.execute(`SELECT * FROM ${selectedTable} LIMIT 200`);
+      const currentOffset = isInitial ? 0 : offset;
+      const res = db.execute(`SELECT * FROM ${selectedTable} LIMIT ${PAGE_SIZE} OFFSET ${currentOffset}`);
       const rows: RowData[] = res.rows?._array ?? [];
-      if (rows.length > 0) {
-        setColumns(Object.keys(rows[0]));
-        setData(rows);
+
+      if (isInitial) {
+        if (rows.length > 0) {
+          setColumns(Object.keys(rows[0]));
+          setData(rows);
+        } else {
+          const info = db.execute(`PRAGMA table_info(${selectedTable})`);
+          setColumns(info.rows?._array?.map((i: any) => i.name) ?? []);
+          setData([]);
+        }
       } else {
-        const info = db.execute(`PRAGMA table_info(${selectedTable})`);
-        setColumns(info.rows?._array?.map((i: any) => i.name) ?? []);
-        setData([]);
+        setData(prev => [...prev, ...rows]);
       }
+
+      setHasMore(rows.length === PAGE_SIZE);
+      setOffset(currentOffset + PAGE_SIZE);
     } catch (e: any) {
       Alert.alert('Query Error', e.message);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
-  }, [selectedTable]);
+  }, [selectedTable, offset, hasMore, loadingMore]);
 
   useEffect(() => { loadTables(); }, [refreshKey, loadTables]);
-  useEffect(() => { loadData();   }, [selectedTable, refreshKey, loadData]);
+  
+  useEffect(() => { 
+    if (selectedTable) {
+      loadData(true); 
+    }
+  }, [selectedTable, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Update Cell ───────────────────────────────────────────────
   const handleUpdate = () => {
@@ -86,8 +116,13 @@ export default function DevDBManager({ onClose }: { onClose: () => void }) {
         `UPDATE ${selectedTable} SET ${editCell.col} = ? WHERE id = ?`,
         [editValue, rowId]
       );
+      
+      // Update data lokal biar tidak perlu loading ulang ke awal offset
+      const newData = [...data];
+      newData[editCell.rowIndex][editCell.col] = editValue;
+      setData(newData);
+      
       setEditCell(null);
-      setRefresh(k => k + 1);
       Alert.alert('✅ Updated');
     } catch (e: any) {
       Alert.alert('Update Error', e.message);
@@ -103,13 +138,57 @@ export default function DevDBManager({ onClose }: { onClose: () => void }) {
         onPress: () => {
           try {
             db.execute(`DELETE FROM ${selectedTable} WHERE id = ?`, [row.id]);
-            setRefresh(k => k + 1);
+            setData(data.filter(r => r.id !== row.id));
           } catch (e: any) {
             Alert.alert('Delete Error', e.message);
           }
         }
       }
     ]);
+  };
+
+  // ── Export CSV ────────────────────────────────────────────────
+  const handleExportCSV = async () => {
+    if (!selectedTable || data.length === 0) {
+      return Alert.alert('Peringatan', 'Pilih tabel dan pastikan ada data untuk di-export.');
+    }
+
+    try {
+      setProcessing(true);
+      
+      // Ambil seluruh data tanpa limit khusus untuk export
+      const res = db.execute(`SELECT * FROM ${selectedTable}`);
+      const allRows: RowData[] = res.rows?._array ?? [];
+      
+      if (allRows.length === 0) throw new Error("Tabel kosong");
+
+      const header = columns.join(',');
+      const csvRows = allRows.map(row => 
+        columns.map(col => {
+            const val = String(row[col] ?? '');
+            return `"${val.replace(/"/g, '""')}"`; // Escape double quotes
+        }).join(',')
+      );
+      
+      const csvContent = `${header}\n${csvRows.join('\n')}`;
+      const fileName = `${selectedTable}_Export_${Date.now()}.csv`;
+      const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
+
+      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+
+      await Sharing.shareAsync(fileUri, {
+        mimeType: 'text/csv',
+        dialogTitle: `Export ${selectedTable} ke CSV`,
+        UTI: 'public.comma-separated-values-text',
+      });
+
+    } catch (e: any) {
+      Alert.alert('Export Error', e.message);
+    } finally {
+      setProcessing(false);
+    }
   };
 
   // ── Run Custom SQL ────────────────────────────────────────────
@@ -159,12 +238,15 @@ export default function DevDBManager({ onClose }: { onClose: () => void }) {
 
   // ── Render ────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={[s.root, { backgroundColor: colors.background.primary }]}>
+    <SafeAreaView style={[s.root, { backgroundColor: colors.background.primary }]} edges={['top', 'bottom']}>
 
       {/* HEADER */}
       <View style={[s.header, { backgroundColor: colors.background.secondary, borderBottomColor: colors.border?.primary ?? '#333' }]}>
         <Text style={[s.title, { color: colors.text.primary }]}>🛠 DB Manager</Text>
         <View style={s.headerActions}>
+          <TouchableOpacity onPress={handleExportCSV} disabled={processing} style={s.iconBtn}>
+            <Ionicons name="document-text-outline" size={22} color={colors.primary[400]} />
+          </TouchableOpacity>
           <TouchableOpacity onPress={handleBackup} disabled={processing} style={s.iconBtn}>
             <Ionicons name="cloud-download-outline" size={22} color={colors.primary[400]} />
           </TouchableOpacity>
@@ -181,42 +263,43 @@ export default function DevDBManager({ onClose }: { onClose: () => void }) {
       </View>
 
       {/* TABLE SELECTOR */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}
-        style={{ maxHeight: 48, backgroundColor: colors.background.secondary }}
-        contentContainerStyle={{ paddingHorizontal: spacing.md, alignItems: 'center', gap: 8 }}
-      >
-        {tables.map(t => (
-          <TouchableOpacity
-            key={t}
-            onPress={() => setSelected(t)}
-            style={[
-              s.chip,
-              {
-                backgroundColor: selectedTable === t
-                  ? colors.primary[500]
-                  : colors.background.tertiary,
-              }
-            ]}
-          >
-            <Text style={{ color: selectedTable === t ? '#fff' : colors.text.secondary, fontSize: 12, fontWeight: '600' }}>
-              {t}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      <View style={{ height: 48, backgroundColor: colors.background.secondary }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: spacing.md, alignItems: 'center', gap: 8 }}
+        >
+          {tables.map(t => (
+            <TouchableOpacity
+              key={t}
+              onPress={() => setSelected(t)}
+              style={[
+                s.chip,
+                {
+                  backgroundColor: selectedTable === t
+                    ? colors.primary[500]
+                    : colors.background.tertiary,
+                }
+              ]}
+            >
+              <Text style={{ color: selectedTable === t ? '#fff' : colors.text.secondary, fontSize: 12, fontWeight: '600' }}>
+                {t}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
-      {/* ROW COUNT */}
+      {/* ROW COUNT (Sekarang dinamis mengikuti offset) */}
       {selectedTable && !loading && (
         <Text style={[s.rowCount, { color: colors.text.tertiary }]}>
-          {data.length} rows {data.length === 200 ? '(limit 200)' : ''}
+          Menampilkan {data.length} baris
         </Text>
       )}
 
       {/* DATA GRID */}
       <View style={{ flex: 1 }}>
-        {loading ? (
+        {loading && data.length === 0 ? (
           <View style={s.center}>
-            <ActivityIndicator color={colors.primary[500]} />
+            <ActivityIndicator color={colors.primary[500]} size="large" />
           </View>
         ) : !selectedTable ? (
           <View style={s.center}>
@@ -242,6 +325,9 @@ export default function DevDBManager({ onClose }: { onClose: () => void }) {
               <FlatList
                 data={data}
                 keyExtractor={(_, i) => i.toString()}
+                onEndReached={() => loadData(false)}
+                onEndReachedThreshold={0.5}
+                ListFooterComponent={loadingMore ? <ActivityIndicator style={{ padding: 20 }} color={colors.primary[500]} /> : null}
                 renderItem={({ item, index }) => (
                   <View style={[s.row, { backgroundColor: index % 2 === 0 ? colors.background.primary : colors.background.secondary }]}>
                     {/* Delete */}
@@ -274,7 +360,7 @@ export default function DevDBManager({ onClose }: { onClose: () => void }) {
                               onChangeText={setEditValue}
                               onBlur={handleUpdate}
                               autoFocus
-                              style={{ color: colors.primary[300], fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}
+                              style={{ color: colors.primary[300], fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', padding: 0 }}
                             />
                           ) : (
                             <Text numberOfLines={1} style={{ color: colors.text.secondary, fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>
@@ -337,7 +423,6 @@ export default function DevDBManager({ onClose }: { onClose: () => void }) {
               </ScrollView>
             )}
 
-            {/* Shortcut queries */}
             <Text style={{ color: colors.text.tertiary, fontSize: 12, marginTop: 12 }}>SHORTCUTS</Text>
             {[
               'SELECT COUNT(*) FROM songs',
@@ -384,3 +469,4 @@ const s = StyleSheet.create({
   shortcut:     { padding: 10, borderRadius: 6, marginBottom: 6 },
   overlay:      { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999 },
 });
+ 

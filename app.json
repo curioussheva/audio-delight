@@ -7,17 +7,12 @@
     "icon": "./assets/images/icon.png",
     "scheme": "pristineaudio",
     "userInterfaceStyle": "automatic",
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.pristineaudio.app",
       "infoPlist": {
-        "UIBackgroundModes": [
-          "audio",
-          "fetch"
-        ]
+        "UIBackgroundModes": ["audio", "fetch"]
       }
     },
     "android": {
@@ -56,12 +51,12 @@
         "expo-splash-screen",
         {
           "image": "./assets/images/splash.png",
-          "imageWidth": 2080,
           "resizeMode": "cover",
-          "backgroundColor": "#0A1628",
+          "backgroundColor": "#040B13",
+          "imageWidth": 1280,
           "dark": {
             "image": "./assets/images/splash.png",
-            "backgroundColor": "#0A1628"
+            "backgroundColor": "#040B13"
           }
         }
       ],
@@ -107,4 +102,4 @@
     },
     "owner": "curioussheva"
   }
-}
+} 

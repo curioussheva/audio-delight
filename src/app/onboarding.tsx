@@ -7,7 +7,7 @@ import {
   Platform,
   Alert,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useTheme } from "@/context/ThemeContext";
@@ -16,7 +16,6 @@ import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import NativeDSPModule from "@/features/visualizer/native/DSPModule";
 
-// 1. Tipe Data Terpusat
 type AudioMode = "bit-perfect" | "dsp";
 
 interface ModeCardProps {
@@ -30,7 +29,6 @@ interface ModeCardProps {
   colors: any;
 }
 
-// 2. Sub-Komponen untuk Card (Clean Code)
 const ModeCard = ({ mode, isSelected, onSelect, title, description, icon, tags, colors }: ModeCardProps) => (
   <TouchableOpacity
     activeOpacity={0.7}
@@ -59,6 +57,7 @@ const ModeCard = ({ mode, isSelected, onSelect, title, description, icon, tags, 
 );
 
 export default function OnboardingScreen() {
+  const insets = useSafeAreaInsets();        // ← Sudah benar diimport
   const { theme } = useTheme();
   const { colors } = theme;
   const router = useRouter();
@@ -72,67 +71,52 @@ export default function OnboardingScreen() {
   };
 
   const handleFinish = async () => {
-    if (!selectedMode || isSubmitting) {
-        console.log("⚠️ [Onboarding] Click diabaikan: belum pilih mode atau sedang submit.");
-        return;
-    }
+    if (!selectedMode || isSubmitting) return;
 
-    console.log("🚀 [Onboarding] Memulai proses handleFinish...");
     setIsSubmitting(true);
 
     try {
-      // Step 1: Simpan Preferences
-      console.log("💾 [Onboarding] Menyimpan ke AsyncStorage...");
       await Promise.all([
         AsyncStorage.setItem("audio_mode_preference", selectedMode),
         AsyncStorage.setItem("has_onboarded", "true"),
       ]);
-      console.log("✅ [Onboarding] AsyncStorage berhasil diupdate.");
 
-      // Step 2: Native Module Call
       if (NativeDSPModule) {
         const isBitPerfect = selectedMode === "bit-perfect";
-        console.log(`🔌 [Onboarding] Memanggil NativeDSPModule.toggleExclusiveMode(${isBitPerfect})...`);
-
-        // Kita beri timeout/safety agar tidak hang jika native module stuck
         await NativeDSPModule.toggleExclusiveMode?.(isBitPerfect);
-
         if (isBitPerfect) {
-          console.log("🔌 [Onboarding] Memanggil NativeDSPModule.releaseAllFX()...");
           await NativeDSPModule.releaseAllFX?.();
         }
-        console.log("✅ [Onboarding] Native Module calls selesai.");
-      } else {
-        console.warn("⚠️ [Onboarding] NativeDSPModule tidak terdeteksi!");
       }
 
-      // Step 3: Navigasi
-      console.log("📍 [Onboarding] Mencoba pindah ke rute: /library");
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
       router.replace("/library");
-      console.log("🏁 [Onboarding] Fungsi router.replace telah dipanggil.");
 
     } catch (error) {
-      console.error("❌ [Onboarding] CRASH/ERROR:", error);
+      console.error("❌ [Onboarding] Error:", error);
       Alert.alert("Error", "Gagal menyelesaikan pengaturan.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setIsSubmitting(false);
-      console.log("🔚 [Onboarding] State isSubmitting dikembalikan ke false.");
     }
   };
 
-
   return (
-    <SafeAreaView 
-    style={[styles.container, { backgroundColor: colors.background.primary }]}
-    // Tambahkan edges jika ingin kontrol lebih detail (opsional)
-    edges={['right', 'top', 'left']} 
-  >
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: colors.background.primary,
+          paddingTop: insets.top,
+          paddingBottom: insets.bottom + 24,   // ← Penting agar tombol tidak nabrak home indicator
+          paddingLeft: insets.left,
+          paddingRight: insets.right,
+        },
+      ]}
+    >
       <View style={styles.header}>
         <Image
-          source={require("../../assets/images/logo.png")} // Path sudah disesuaikan untuk src/app/
+          source={require("../../assets/images/logo.png")}
           style={styles.logo}
           contentFit="contain"
         />
@@ -179,7 +163,7 @@ export default function OnboardingScreen() {
           </Text>
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -211,4 +195,4 @@ const styles = StyleSheet.create({
   footer: { paddingHorizontal: 24, paddingBottom: 20 },
   nextButton: { height: 58, borderRadius: 20, justifyContent: "center", alignItems: "center" },
   nextButtonText: { fontSize: 16, fontWeight: "700" },
-});  
+}); 

@@ -1,69 +1,77 @@
- // app/_layout.tsx
+// app/_layout.tsx
 import React, { useState, useEffect } from "react";
 import { Stack } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import TrackPlayer from "react-native-track-player";
+import * as SplashScreen from 'expo-splash-screen';
 
 import { ThemeProvider } from "@/context/ThemeContext";
-import { LoadingScreen } from "@/shared/components/ui/LoadingScreen";
+import LoadingScreen from '@/shared/components/ui/LoadingScreen';
 import { AudioPropertyToast } from "@/features/player/components/AudioPropertyToast";
 import FloatingPlayer from "@/features/player/components/FloatingPlayer";
+
+import TrackPlayer from "react-native-track-player";
 import { useTrackPlayerHandler } from "@/features/player/hooks/useTrackPlayerHandler";
 import { audioEngine } from "@/features/player/api/engine";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { playbackService } from "@/features/player/api/playback";
 import { BackgroundScanTask } from '@/features/library/services/BackgroundScanTask';
 import { useLibraryStore } from '@/features/library/store/libraryStore';
-import * as SplashScreen from 'expo-splash-screen';
 
 TrackPlayer.registerPlaybackService(() => playbackService);
-
-// Tahan Splash Screen Native agar tidak flicker
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
+
   const initStore = usePlayerStore((state) => state.initStore);
   const autoScanEnabled = useLibraryStore(s => s.scanStatus.autoScanEnabled);
 
-  // 1. Background Task Logic
+  // Background Task
   useEffect(() => {
     if (autoScanEnabled) {
       BackgroundScanTask.register(30);
     } else {
       BackgroundScanTask.unregister();
     }
-  }, [autoScanEnabled]); 
+  }, [autoScanEnabled]);
 
-  // 2. Initialization Logic
+  // Main Initialization + Minimum Loading Time
   useEffect(() => {
     const prepareApp = async () => {
       try {
+        // Inisialisasi yang diperlukan
         await Promise.all([
           audioEngine.initialize().catch(() => console.warn("Audio init deferred")),
           initStore(),
         ]);
+
+        // ★★★ Minimum loading time (agar LoadingScreen terlihat jelas) ★★★
+        await new Promise(resolve => setTimeout(resolve, 2400)); // 2.4 detik
+
       } catch (error) {
         console.error("App initialization failed:", error);
       } finally {
         setIsReady(true);
-        await SplashScreen.hideAsync(); // Sembunyikan splash native
+        await SplashScreen.hideAsync();   // Hide native splash
       }
     };
+
     prepareApp();
-  }, []);
+  }, [initStore]);
 
   useTrackPlayerHandler();
 
-  // 3. Render Logic
-  if (!isReady) return <LoadingScreen />;
+  // Tampilkan LoadingScreen selama proses inisialisasi
+  if (!isReady) {
+    return <LoadingScreen />;
+  }
 
+  // App utama
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
         <SafeAreaProvider>
-
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="index" />
             <Stack.Screen name="(drawer)" />
@@ -75,10 +83,13 @@ export default function RootLayout() {
               }}
             />
           </Stack>
-          
+
+          {/* Floating Player harus di luar Stack agar selalu muncul */}
+          <FloatingPlayer />
+
           <AudioPropertyToast />
         </SafeAreaProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
   );
-}
+} 

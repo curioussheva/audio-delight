@@ -14,9 +14,13 @@ import Slider from "@react-native-community/slider";
 import {
   GestureHandlerRootView,
 } from "react-native-gesture-handler";
+import { useSafePadding } from '@/shared/hooks/useSafePadding';
+
 import { useTheme } from "@/context/ThemeContext";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { SpectrumAnalyzer } from "@/features/visualizer/components/SpectrumAnalyzer";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 
 const { width, height } = Dimensions.get("window");
 
@@ -40,6 +44,8 @@ const COLOR_PRESETS: Record<ColorTheme, ColorPreset> = {
 export default function VisualizerScreen() {
   const { theme } = useTheme();
   const { colors, spacing } = theme;
+  const insets = useSafeAreaInsets();
+  const safePadding = useSafePadding(); 
 
   // State
   const [mode, setMode] = useState<VisualizerMode>("bars");
@@ -261,15 +267,16 @@ export default function VisualizerScreen() {
       <View
         style={[
           styles.container,
-          { backgroundColor: colors.background.primary },
+          { 
+            backgroundColor: colors.background.primary,
+            paddingTop: safePadding.paddingTop,
+            paddingBottom: safePadding.paddingBottom,
+            paddingLeft: safePadding.paddingLeft,
+            paddingRight: safePadding.paddingRight,
+          },
         ]}
       >
-        <View
-          style={[
-            styles.centerContainer,
-            { flex: 1, justifyContent: "center", alignItems: "center" },
-          ]}
-        >
+        <View style={styles.centerContainer}>
           <Ionicons
             name="analytics-outline"
             size={64}
@@ -280,7 +287,6 @@ export default function VisualizerScreen() {
               styles.emptyText,
               {
                 color: colors.text.secondary,
-                fontSize: 16,
                 marginTop: spacing.lg,
                 textAlign: "center",
                 paddingHorizontal: spacing.xl,
@@ -296,31 +302,28 @@ export default function VisualizerScreen() {
 
   return (
     <GestureHandlerRootView
-      style={[styles.container, { backgroundColor: colors.background.primary }]}
+      style={[
+        styles.container,
+        { 
+          backgroundColor: colors.background.primary,
+          paddingTop: safePadding.paddingTop,
+          paddingBottom: safePadding.paddingBottom + 20,   // sedikit ekstra untuk visualizer
+          paddingLeft: safePadding.paddingLeft,
+          paddingRight: safePadding.paddingRight,
+        },
+      ]}
     >
       {/* Header */}
       <View
         style={[
           styles.header,
           {
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
             paddingHorizontal: spacing.lg,
             paddingVertical: spacing.md,
           },
         ]}
       >
-        <Text
-          style={[
-            styles.title,
-            {
-              color: colors.text.primary,
-              fontSize: 28,
-              fontWeight: "700",
-            },
-          ]}
-        >
+        <Text style={[styles.title, { color: colors.text.primary }]}>
           Visualizer
         </Text>
         <View style={{ flexDirection: "row", gap: spacing.sm }}>
@@ -341,44 +344,19 @@ export default function VisualizerScreen() {
         </View>
       </View>
 
-      {/* Main Visualizer */}
+      {/* Main Visualizer + Song Info */}
       <View style={[styles.mainContent, { flex: 1 }]}>
         {renderVisualizer()}
 
-        {/* Song Info */}
-        <View
-          style={[
-            styles.songInfo,
-            {
-              alignItems: "center",
-              marginTop: spacing.lg,
-              paddingHorizontal: spacing.lg,
-            },
-          ]}
-        >
+        <View style={[styles.songInfo, { paddingHorizontal: spacing.lg }]}>
           <Text
-            style={[
-              styles.songTitle,
-              {
-                color: colors.text.primary,
-                fontSize: 18,
-                fontWeight: "600",
-                textAlign: "center",
-              },
-            ]}
+            style={[styles.songTitle, { color: colors.text.primary }]}
             numberOfLines={1}
           >
             {currentSong.title}
           </Text>
           <Text
-            style={[
-              styles.songArtist,
-              {
-                color: colors.text.secondary,
-                fontSize: 14,
-                marginTop: spacing.xs,
-              },
-            ]}
+            style={[styles.songArtist, { color: colors.text.secondary }]}
             numberOfLines={1}
           >
             {currentSong.artist}
