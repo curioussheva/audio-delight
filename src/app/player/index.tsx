@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,7 +10,6 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import { BlurView } from "expo-blur";
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { formatTime } from "@/shared/utils/time";
@@ -20,18 +19,28 @@ import { SpectogramView } from "@/features/visualizer/components/SpectogramView"
 import { SpectrumAnalyzer } from "@/features/visualizer/components/SpectrumAnalyzer";
 import { SleepTimerModal } from "@/features/player/components/SleepTimerModal";
 import { useTheme } from "@/context/ThemeContext";
+import { useSafePadding } from '@/shared/hooks/useSafePadding';
 
-// ← Tambahkan ini
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+// Lucide Icons
+import {
+  ChevronDown,
+  Clock,
+  Shuffle,
+  SkipBack,
+  SkipForward,
+  Repeat,
+  Music,
+  Activity,
+  Play,
+  Pause,
+} from "lucide-react-native";
 
 const { width } = Dimensions.get("window");
 
 export default function PlayerScreen() {
   const { theme } = useTheme();
   const { colors } = theme;
-
-  // ← Tambahkan hook ini
-  const insets = useSafeAreaInsets();
+  const safePadding = useSafePadding();        // ← Gunakan ini saja
 
   const {
     currentSong,
@@ -55,11 +64,20 @@ export default function PlayerScreen() {
   const [isTimerVisible, setIsTimerVisible] = useState(false);
   const router = useRouter();
 
+  // Hide Floating Player saat berada di Main Player
+  useEffect(() => {
+    usePlayerStore.getState().setMainPlayerOpen(true);
+    
+    return () => {
+      usePlayerStore.getState().setMainPlayerOpen(false);
+    };
+  }, []);
+
   if (!currentSong) return null;
 
   return (
     <View style={styles.container}>
-      {/* BACKGROUND AREA - Visualizer & Blur */}
+      {/* BACKGROUND AREA */}
       <View style={styles.spectrogramContainer}>
         <SpectogramView isPlaying={isPlaying} />
       </View>
@@ -74,29 +92,24 @@ export default function PlayerScreen() {
         contentFit="cover"
         blurRadius={50}
       />
-      <View
-        style={[styles.overlay, { backgroundColor: "rgba(4, 11, 19, 0.75)" }]}
-      />
+      <View style={[styles.overlay, { backgroundColor: "rgba(4, 11, 19, 0.75)" }]} />
 
-      {/* KONTEN UTAMA dengan Safe Area Insets */}
+      {/* KONTEN UTAMA dengan Safe Padding */}
       <View
         style={[
           styles.content,
           {
-            paddingTop: insets.top,
-            paddingBottom: insets.bottom + 10, // tambahan sedikit biar tidak terlalu rapat dengan home indicator
-            paddingLeft: insets.left,
-            paddingRight: insets.right,
+            paddingTop: safePadding.paddingTop,
+            paddingBottom: safePadding.paddingBottom + 10,
+            paddingLeft: safePadding.paddingLeft,
+            paddingRight: safePadding.paddingRight,
           },
         ]}
       >
         {/* HEADER */}
         <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.headerBtn}
-            onPress={() => router.back()}
-          >
-            <Ionicons name="chevron-down" size={28} color="#FFF" />
+          <TouchableOpacity style={styles.headerBtn} onPress={() => router.back()}>
+            <ChevronDown size={28} color="#FFF" strokeWidth={2.5} />
           </TouchableOpacity>
 
           <View style={styles.headerTitle}>
@@ -111,18 +124,14 @@ export default function PlayerScreen() {
               style={styles.headerBtnSmall}
               onPress={() => setShowLyrics(!showLyrics)}
             >
-              <Ionicons
-                name="musical-notes"
-                size={22}
-                color={showLyrics ? "#00D4AA" : "#FFF"}
-              />
+              <Music size={22} color={showLyrics ? "#00D4AA" : "#FFF"} strokeWidth={2.2} />
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.headerBtnSmall}
               onPress={() => setIsTimerVisible(true)}
             >
-              <Ionicons name="time-outline" size={22} color="#FFF" />
+              <Clock size={22} color="#FFF" strokeWidth={2.2} />
             </TouchableOpacity>
           </View>
         </View>
@@ -185,40 +194,36 @@ export default function PlayerScreen() {
 
           <View style={styles.controlsRow}>
             <TouchableOpacity onPress={toggleShuffle}>
-              <Ionicons
-                name="shuffle-outline"
-                size={24}
-                color={shuffle ? "#00D4AA" : "rgba(255,255,255,0.6)"}
-              />
+              <Shuffle size={24} color={shuffle ? "#00D4AA" : "rgba(255,255,255,0.6)"} strokeWidth={2.5} />
             </TouchableOpacity>
 
             <TouchableOpacity onPress={playPrevious}>
-              <Ionicons name="play-skip-back" size={36} color="#FFF" />
+              <SkipBack size={36} color="#FFF" strokeWidth={2.5} />
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.playBtn} onPress={togglePlay}>
-              <Ionicons
-                name={isPlaying ? "pause" : "play"}
-                size={42}
-                color="#000"
-              />
+              {isPlaying ? (
+                <Pause size={42} color="#000" strokeWidth={3} />
+              ) : (
+                <Play size={42} color="#000" strokeWidth={3} style={{ marginLeft: 3 }} />
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity onPress={playNext}>
-              <Ionicons name="play-skip-forward" size={36} color="#FFF" />
+              <SkipForward size={36} color="#FFF" strokeWidth={2.5} />
             </TouchableOpacity>
 
             <TouchableOpacity onPress={toggleRepeat}>
-              <Ionicons
-                name={repeat === "track" ? "repeat" : "repeat-outline"}
+              <Repeat
                 size={24}
                 color={repeat !== "off" ? "#00D4AA" : "rgba(255,255,255,0.6)"}
+                strokeWidth={2.5}
               />
             </TouchableOpacity>
           </View>
 
           <BlurView intensity={20} tint="dark" style={styles.engineBadge}>
-            <Ionicons name="pulse" size={16} color={colors.primary[500]} />
+            <Activity size={16} color={colors.primary[500]} strokeWidth={2.5} />
             <Text style={[styles.engineText, { color: colors.primary[400] }]}>
               {(currentSong.sampleRate || 0) / 1000} kHz •{" "}
               {currentSong.bitDepth || 0} bit •{" "}
@@ -237,16 +242,9 @@ export default function PlayerScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: "#040B13" 
-  },
-  overlay: { 
-    ...StyleSheet.absoluteFillObject 
-  },
-  content: { 
-    flex: 1 
-  },
+  container: { flex: 1, backgroundColor: "#040B13" },
+  overlay: { ...StyleSheet.absoluteFillObject },
+  content: { flex: 1 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -273,7 +271,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginTop: 2,
   },
-
   middleSection: { flex: 1, justifyContent: "center" },
 
   artworkContainer: {
@@ -289,26 +286,26 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.1)",
   },
   artworkShadow: {
-  position: 'absolute',
-  bottom: -10,
-  left: 10,
-  right: 10,
-  height: 30,
-  backgroundColor: "#00D4AA",
-  opacity: 0.15,
-  borderRadius: 25,
-  shadowColor: "#00D4AA",
-  shadowRadius: 30,
-  shadowOpacity: 0.6,
-  elevation: 15,
-  zIndex: -1,
-}, 
+    position: "absolute",
+    bottom: -10,
+    left: 10,
+    right: 10,
+    height: 30,
+    backgroundColor: "#00D4AA",
+    opacity: 0.15,
+    borderRadius: 25,
+    shadowColor: "#00D4AA",
+    shadowRadius: 30,
+    shadowOpacity: 0.6,
+    elevation: 15,
+    zIndex: -1,
+  },
 
   infoContainer: {
-  marginTop: 24,
-  alignItems: "center",
-  paddingHorizontal: 30,
-},
+    marginTop: 24,
+    alignItems: "center",
+    paddingHorizontal: 30,
+  },
 
   titleText: {
     color: "#FFF",
@@ -396,4 +393,4 @@ const styles = StyleSheet.create({
     width: "100%",
     marginTop: 20,
   },
-});  
+}); 

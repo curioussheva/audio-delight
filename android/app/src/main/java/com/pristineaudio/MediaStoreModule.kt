@@ -32,6 +32,10 @@ class MediaStoreModule(private val reactContext: ReactApplicationContext) :
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     add(MediaStore.Audio.Media.RELATIVE_PATH)
                 }
+                // GENRE tersedia di Android 10+ (API 30 = R)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    add(MediaStore.Audio.Media.GENRE)
+                }
             }.toTypedArray()
 
             val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND " +
@@ -50,20 +54,22 @@ class MediaStoreModule(private val reactContext: ReactApplicationContext) :
             val result = Arguments.createArray()
 
             cursor?.use { c ->
-                val idCol        = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-                val nameCol      = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
-                val titleCol     = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-                val artistCol    = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-                val albumCol     = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
-                val albumIdCol   = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
-                val durationCol  = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-                val dateCol      = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
-                val yearCol      = c.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
-                val trackCol     = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
-                val mimeCol      = c.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
-                val sizeCol      = c.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
-                val relPathCol   = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+                val idCol       = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                val nameCol     = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+                val titleCol    = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+                val artistCol   = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+                val albumCol    = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+                val albumIdCol  = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
+                val durationCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+                val dateCol     = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
+                val yearCol     = c.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
+                val trackCol    = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
+                val mimeCol     = c.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
+                val sizeCol     = c.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
+                val relPathCol  = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                     c.getColumnIndex(MediaStore.Audio.Media.RELATIVE_PATH) else -1
+                val genreCol    = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+                    c.getColumnIndex(MediaStore.Audio.Media.GENRE) else -1
 
                 while (c.moveToNext()) {
                     val id      = c.getLong(idCol)
@@ -81,15 +87,36 @@ class MediaStoreModule(private val reactContext: ReactApplicationContext) :
                         c.getString(relPathCol)?.trimEnd('/')?.substringAfterLast('/') ?: "Music"
                     } else "Music"
 
-                    val mime  = c.getString(mimeCol) ?: "audio/mpeg"
-                    val codec = when {
-                        mime.contains("flac", true) -> "FLAC"
-                        mime.contains("wav",  true) -> "WAV"
-                        mime.contains("ogg",  true) -> "OGG"
-                        mime.contains("opus", true) -> "OPUS"
-                        mime.contains("mp4",  true) -> "M4A"
-                        mime.contains("aac",  true) -> "AAC"
-                        else                        -> "MP3"
+                    val genre = if (genreCol >= 0) {
+                        c.getString(genreCol)?.takeIf {
+                            it.isNotBlank() && it != "<unknown>"
+                        } ?: "Unknown Genre"
+                    } else "Unknown Genre"
+
+                    // ── Fix codec: prioritaskan extension filename ──────────
+                    val filename = c.getString(nameCol) ?: ""
+                    val ext      = filename.substringAfterLast('.', "").uppercase()
+                    val mime     = c.getString(mimeCol) ?: "audio/mpeg"
+                    val codec    = when (ext) {
+                        "FLAC"       -> "FLAC"
+                        "WAV"        -> "WAV"
+                        "M4A", "MP4" -> "M4A"
+                        "OGG"        -> "OGG"
+                        "OPUS"       -> "OPUS"
+                        "AAC"        -> "AAC"
+                        "DSF", "DSD" -> "DSD"
+                        "DFF"        -> "DFF"
+                        "ALAC"       -> "ALAC"
+                        "MP3"        -> "MP3"
+                        else         -> when {
+                            mime.contains("flac", true) -> "FLAC"
+                            mime.contains("wav",  true) -> "WAV"
+                            mime.contains("ogg",  true) -> "OGG"
+                            mime.contains("opus", true) -> "OPUS"
+                            mime.contains("mp4",  true) -> "M4A"
+                            mime.contains("aac",  true) -> "AAC"
+                            else                        -> "MP3"
+                        }
                     }
 
                     val durationSec = c.getLong(durationCol) / 1000.0
@@ -97,9 +124,9 @@ class MediaStoreModule(private val reactContext: ReactApplicationContext) :
                     val song = Arguments.createMap().apply {
                         putString("id",         id.toString())
                         putString("uri",        contentUri)
-                        putString("filename",   c.getString(nameCol) ?: "")
+                        putString("filename",   filename)
                         putString("title",      c.getString(titleCol)?.takeIf { it.isNotBlank() }
-                            ?: c.getString(nameCol)?.substringBeforeLast('.') ?: "")
+                            ?: filename.substringBeforeLast('.'))
                         putString("artist",     c.getString(artistCol)?.takeIf {
                             it.isNotBlank() && it != "<unknown>"
                         } ?: "Unknown Artist")
@@ -108,6 +135,7 @@ class MediaStoreModule(private val reactContext: ReactApplicationContext) :
                         } ?: "Unknown Album")
                         putString("artworkUri", artworkUri)
                         putString("folder",     folder)
+                        putString("genre",      genre)
                         putString("codec",      codec)
                         putString("mimeType",   mime)
                         putDouble("duration",   durationSec)
@@ -136,4 +164,4 @@ class MediaStoreModule(private val reactContext: ReactApplicationContext) :
         ).toString()
         promise.resolve(uri)
     }
-}
+} 

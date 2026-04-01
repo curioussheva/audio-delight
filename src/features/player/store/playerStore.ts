@@ -30,6 +30,10 @@ export interface PlayerState {
   audioMode: 'bit-perfect' | 'dsp';
   lyrics: LirikLine[];
   sleepTimerEnd: number | null;
+  isMainPlayerOpen: boolean;
+  isVisualizerOpen: boolean;
+  isDrawerOpen: boolean;
+  
 
   initStore: () => Promise<void>;
   setCurrentSong: (song: Song | null) => void;
@@ -49,6 +53,7 @@ export interface PlayerState {
   setPlaybackSpeed: (speed: number) => Promise<void>;
   setDefaultEQ: (eq: string) => Promise<void>;
   setAudioMode: (mode: 'bit-perfect' | 'dsp') => Promise<void>;
+  resetFloatingPlayerVisibility: () => void;
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -64,6 +69,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   audioMode:     'dsp',
   lyrics:        [],
   sleepTimerEnd: null,
+  isMainPlayerOpen: false,
+  isVisualizerOpen: false,
+  isDrawerOpen: false,
+  
+  resetFloatingPlayerVisibility: () => set({
+  isMainPlayerOpen: false,
+  isVisualizerOpen: false,
+  isDrawerOpen: false,
+}),
 
   // ── Seek ──────────────────────────────────────────────────────
   seek: (pos) => {
@@ -200,4 +214,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({ defaultEQ: eq });
     await AsyncStorage.setItem('default_eq', eq);
   },
+  
+  setMainPlayerOpen: (open: boolean) => set({ isMainPlayerOpen: open }),
+  setVisualizerOpen: (open: boolean) => set({ isVisualizerOpen: open }),
+  setDrawerOpen: (open: boolean) => set({ isDrawerOpen: open }),
 })); 

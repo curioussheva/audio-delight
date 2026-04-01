@@ -9,14 +9,28 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+
+// Lucide Icons
+import {
+  Palette,
+  Cpu,
+  Music,
+  Info,
+  Brush,
+  Moon,
+  Sun,
+  ChevronRight,
+  CheckCircle,
+  RefreshCw,
+} from "lucide-react-native";
+
 import { useTheme } from "@/context/ThemeContext";
 import { useUSBDAC } from "@/features/hardware/hooks/useUSBDAC";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { ThemePicker } from "@/shared/components/ui/ThemePicker";
 import type { Theme } from "@/constants/themes/types";
 
-// ─── Reusable sub-components ────────────────────────────────────────────────
+// ─── Reusable Sub Components ────────────────────────────────────────────────
 
 type SectionProps = {
   colors: Theme["colors"];
@@ -39,7 +53,7 @@ const Section: React.FC<SectionProps> = ({ colors, spacing, children }) => (
 );
 
 type SectionHeaderProps = {
-  icon: React.ComponentProps<typeof Ionicons>["name"];
+  icon: React.ReactNode;
   title: string;
   colors: Theme["colors"];
   spacing: Theme["spacing"];
@@ -60,6 +74,7 @@ const SectionHeader: React.FC<SectionHeaderProps> = ({
   rightSlot,
 }) => {
   const Wrapper = collapsible ? TouchableOpacity : View;
+
   return (
     <Wrapper
       style={[
@@ -72,18 +87,19 @@ const SectionHeader: React.FC<SectionHeaderProps> = ({
       onPress={onPress}
     >
       <View style={styles.row}>
-        <Ionicons name={icon} size={24} color={colors.primary[500]} />
+        {icon}
         <Text style={[styles.sectionTitle, { color: colors.text.primary, marginLeft: spacing.sm }]}>
           {title}
         </Text>
       </View>
+
       <View style={styles.row}>
         {rightSlot}
         {collapsible && (
-          <Ionicons
-            name={expanded ? "chevron-up" : "chevron-down"}
+          <ChevronRight
             size={20}
             color={colors.text.secondary}
+            style={{ transform: [{ rotate: expanded ? "90deg" : "0deg" }] }}
           />
         )}
       </View>
@@ -167,7 +183,7 @@ export default function SettingsScreen() {
           style: "destructive",
           onPress: () => Alert.alert("Sukses", "Semua pengaturan telah direset"),
         },
-      ],
+      ]
     );
   };
 
@@ -176,7 +192,7 @@ export default function SettingsScreen() {
   const renderTampilan = () => (
     <Section colors={colors} spacing={spacing}>
       <SectionHeader
-        icon="color-palette-outline"
+        icon={<Palette size={24} color={colors.primary[500]} strokeWidth={2.2} />}
         title="Tampilan"
         colors={colors}
         spacing={spacing}
@@ -196,7 +212,7 @@ export default function SettingsScreen() {
         ]}
       >
         <View style={styles.row}>
-          <Ionicons name="brush-outline" size={20} color={colors.text.secondary} />
+          <Brush size={20} color={colors.text.secondary} strokeWidth={2.2} />
           <Text style={{ color: colors.text.primary, marginLeft: spacing.sm }}>Tema</Text>
         </View>
         <View style={styles.row}>
@@ -209,7 +225,7 @@ export default function SettingsScreen() {
           <Text style={{ color: colors.text.secondary, marginRight: spacing.xs }}>
             {theme.name}
           </Text>
-          <Ionicons name="chevron-forward" size={20} color={colors.text.secondary} />
+          <ChevronRight size={20} color={colors.text.secondary} strokeWidth={2.5} />
         </View>
       </TouchableOpacity>
 
@@ -221,11 +237,11 @@ export default function SettingsScreen() {
         ]}
       >
         <View style={styles.row}>
-          <Ionicons
-            name={isDarkMode ? "moon-outline" : "sunny-outline"}
-            size={20}
-            color={colors.text.secondary}
-          />
+          {isDarkMode ? (
+            <Moon size={20} color={colors.text.secondary} strokeWidth={2.2} />
+          ) : (
+            <Sun size={20} color={colors.text.secondary} strokeWidth={2.2} />
+          )}
           <Text style={{ color: colors.text.primary, marginLeft: spacing.sm }}>
             Mode Gelap
           </Text>
@@ -243,7 +259,7 @@ export default function SettingsScreen() {
   const renderDAC = () => (
     <Section colors={colors} spacing={spacing}>
       <SectionHeader
-        icon="hardware-chip-outline"
+        icon={<Cpu size={24} color={colors.primary[500]} strokeWidth={2.2} />}
         title="USB DAC"
         colors={colors}
         spacing={spacing}
@@ -252,9 +268,7 @@ export default function SettingsScreen() {
         onPress={() => setShowDacSettings((v) => !v)}
         rightSlot={
           currentDAC ? (
-            <View
-              style={[styles.statusDot, { backgroundColor: colors.status.success, marginRight: spacing.sm }]}
-            />
+            <View style={[styles.statusDot, { backgroundColor: colors.status.success }]} />
           ) : null
         }
       />
@@ -262,52 +276,27 @@ export default function SettingsScreen() {
       {showDacSettings && (
         <View style={{ padding: spacing.md }}>
           {error && (
-            <View
-              style={[
-                styles.alertBox,
-                {
-                  backgroundColor: colors.status.error + "20",
-                  borderColor: colors.status.error,
-                  marginBottom: spacing.sm,
-                },
-              ]}
-            >
-              <Text style={{ color: colors.status.error, fontSize: 12 }}>
-                Error: {error}
-              </Text>
+            <View style={[styles.alertBox, { backgroundColor: colors.status.error + "20", borderColor: colors.status.error }]}>
+              <Text style={{ color: colors.status.error, fontSize: 12 }}>Error: {error}</Text>
             </View>
           )}
 
-          {loading && (
-            <View style={{ alignItems: "center", paddingVertical: spacing.sm }}>
-              <ActivityIndicator size="small" color={colors.primary[500]} />
-              <Text style={{ color: colors.text.secondary, fontSize: 12, marginTop: spacing.xs }}>
-                Processing...
-              </Text>
-            </View>
-          )}
-
-          {/* Status & Scan */}
-          <View style={[styles.settingRow, { marginBottom: spacing.md }]}>
-            <Text style={{ color: colors.text.secondary }}>
-              Status: {currentDAC ? "Terhubung" : "Tidak terdeteksi"}
+          {/* Scan Button */}
+          <TouchableOpacity
+            onPress={handleScanDAC}
+            disabled={loading}
+            style={[styles.pill, { backgroundColor: colors.primary[500], marginBottom: spacing.md }]}
+          >
+            <Text style={{ color: colors.background.primary, fontSize: 12 }}>
+              {loading ? "Scanning..." : "Scan USB DAC"}
             </Text>
-            <TouchableOpacity
-              onPress={handleScanDAC}
-              disabled={loading}
-              style={[styles.pill, { backgroundColor: colors.primary[500] }]}
-            >
-              <Text style={{ color: colors.background.primary, fontSize: 12 }}>
-                {loading ? "Scanning..." : "Scan"}
-              </Text>
-            </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
 
           {/* Daftar DAC */}
           {dacs.length > 0 && (
             <View style={{ marginBottom: spacing.md }}>
               <Text style={{ color: colors.text.secondary, fontSize: 12, marginBottom: spacing.xs }}>
-                Device tersedia:
+                Device Tersedia:
               </Text>
               {dacs.map((dac) => (
                 <TouchableOpacity
@@ -315,121 +304,58 @@ export default function SettingsScreen() {
                   onPress={() => selectDAC(dac.id)}
                   style={[
                     styles.dacItem,
-                    {
-                      backgroundColor:
-                        currentDAC?.id === dac.id
-                          ? colors.primary[500] + "25"
-                          : "transparent",
-                      padding: spacing.sm,
-                      borderRadius: 8,
-                    },
+                    currentDAC?.id === dac.id && { backgroundColor: colors.primary[500] + "25" },
                   ]}
                 >
                   <View style={{ flex: 1 }}>
-                    <Text style={{ color: colors.text.primary, fontWeight: "600" }}>
-                      {dac.name}
-                    </Text>
+                    <Text style={{ color: colors.text.primary, fontWeight: "600" }}>{dac.name}</Text>
                     <Text style={{ color: colors.text.secondary, fontSize: 11 }}>
                       {dac.id} • {dac.channelCount} Channels
                     </Text>
                   </View>
                   {currentDAC?.id === dac.id && (
-                    <Ionicons name="checkmark-circle" size={22} color={colors.primary[500]} />
+                    <CheckCircle size={22} color={colors.primary[500]} strokeWidth={2.5} />
                   )}
                 </TouchableOpacity>
               ))}
             </View>
           )}
 
-          {/* Exclusive Mode + Sample Rate */}
+          {/* Exclusive Mode & Sample Rate */}
           {currentDAC && (
             <>
               <SettingRow colors={colors} spacing={spacing}>
                 <Text style={{ color: colors.text.primary }}>Exclusive Mode</Text>
-                <View style={[styles.row, { gap: spacing.xs }]}>
-                  {isExclusiveMode && (
-                    <View style={[styles.statusDot, { backgroundColor: colors.status.success }]} />
-                  )}
-                  <Switch
-                    value={isExclusiveMode}
-                    onValueChange={() => { toggleExclusiveMode(); }}
-                    disabled={loading}
-                    trackColor={{ false: colors.background.tertiary, true: colors.primary[500] }}
-                    thumbColor={isExclusiveMode ? colors.text.primary : "#f4f3f4"}
-                  />
-                </View>
+                <Switch
+                  value={isExclusiveMode}
+                  onValueChange={toggleExclusiveMode}
+                  disabled={loading}
+                  trackColor={{ false: colors.background.tertiary, true: colors.primary[500] }}
+                  thumbColor={isExclusiveMode ? colors.text.primary : "#f4f3f4"}
+                />
               </SettingRow>
 
+              {/* Sample Rate Selector */}
               <View style={{ marginTop: spacing.sm }}>
-                <Text style={{ color: colors.text.secondary, marginBottom: spacing.xs }}>
-                  Sample Rate
-                </Text>
+                <Text style={{ color: colors.text.secondary, marginBottom: spacing.xs }}>Sample Rate</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={[styles.row, { gap: spacing.xs }]}>
+                  <View style={{ flexDirection: "row", gap: spacing.xs }}>
                     {currentDAC.sampleRates?.map((rate) => (
                       <TouchableOpacity
                         key={rate}
                         onPress={() => setSampleRate(rate)}
                         style={[
                           styles.pill,
-                          {
-                            backgroundColor:
-                              config?.sampleRate === rate
-                                ? colors.primary[500]
-                                : colors.background.tertiary,
-                          },
+                          { backgroundColor: config?.sampleRate === rate ? colors.primary[500] : colors.background.tertiary },
                         ]}
                       >
-                        <Text
-                          style={{
-                            color:
-                              config?.sampleRate === rate
-                                ? colors.background.primary
-                                : colors.text.primary,
-                            fontSize: 12,
-                          }}
-                        >
+                        <Text style={{ color: config?.sampleRate === rate ? colors.background.primary : colors.text.primary, fontSize: 12 }}>
                           {rate / 1000}kHz
                         </Text>
                       </TouchableOpacity>
                     ))}
-                    <TouchableOpacity
-                      onPress={() => setSampleRate(0)}
-                      style={[
-                        styles.pill,
-                        {
-                          backgroundColor:
-                            config?.sampleRate === 0
-                              ? colors.primary[500]
-                              : colors.background.tertiary,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={{
-                          color:
-                            config?.sampleRate === 0
-                              ? colors.background.primary
-                              : colors.text.primary,
-                          fontSize: 12,
-                        }}
-                      >
-                        Auto
-                      </Text>
-                    </TouchableOpacity>
                   </View>
                 </ScrollView>
-              </View>
-
-              <View
-                style={[
-                  styles.infoBox,
-                  { backgroundColor: colors.background.tertiary, marginTop: spacing.md },
-                ]}
-              >
-                <Text style={{ color: colors.text.secondary, fontSize: 11 }}>
-                  ℹ️ Exclusive mode mengirim audio langsung ke DAC tanpa modifikasi.
-                </Text>
               </View>
             </>
           )}
@@ -441,7 +367,7 @@ export default function SettingsScreen() {
   const renderAudio = () => (
     <Section colors={colors} spacing={spacing}>
       <SectionHeader
-        icon="musical-notes-outline"
+        icon={<Music size={24} color={colors.primary[500]} strokeWidth={2.2} />}
         title="Audio"
         colors={colors}
         spacing={spacing}
@@ -452,31 +378,14 @@ export default function SettingsScreen() {
 
       {showAudioSettings && (
         <View style={{ padding: spacing.md }}>
-          {/* Default EQ */}
-          <TouchableOpacity style={styles.settingRow}>
+          <SettingRow colors={colors} spacing={spacing}>
             <Text style={{ color: colors.text.primary }}>Default EQ</Text>
-            <View style={styles.row}>
-              <Text style={{ color: colors.text.secondary, marginRight: spacing.xs }}>
-                {defaultEQ || "Flat"}
-              </Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.text.secondary} />
-            </View>
-          </TouchableOpacity>
+            <Text style={{ color: colors.primary[500] }}>{defaultEQ || "Flat"}</Text>
+          </SettingRow>
 
-          {/* Playback Speed */}
           <SettingRow colors={colors} spacing={spacing}>
             <Text style={{ color: colors.text.primary }}>Playback Speed</Text>
             <Text style={{ color: colors.primary[500] }}>{playbackSpeed || 1.0}x</Text>
-          </SettingRow>
-
-          {/* ReplayGain */}
-          <SettingRow colors={colors} spacing={spacing}>
-            <Text style={{ color: colors.text.primary }}>ReplayGain</Text>
-            <Switch
-              value={false}
-              onValueChange={() => {}}
-              trackColor={{ false: colors.background.tertiary, true: colors.primary[500] }}
-            />
           </SettingRow>
         </View>
       )}
@@ -486,7 +395,7 @@ export default function SettingsScreen() {
   const renderAbout = () => (
     <Section colors={colors} spacing={spacing}>
       <SectionHeader
-        icon="information-circle-outline"
+        icon={<Info size={24} color={colors.primary[500]} strokeWidth={2.2} />}
         title="Tentang"
         colors={colors}
         spacing={spacing}
@@ -498,47 +407,21 @@ export default function SettingsScreen() {
       {showAbout && (
         <View style={{ padding: spacing.md }}>
           <View style={{ alignItems: "center", marginBottom: spacing.md }}>
-            <Text style={[styles.appName, { color: colors.primary[500] }]}>
-              PristineAudio
-            </Text>
-            <Text style={{ color: colors.text.secondary, fontSize: 12 }}>
-              Version 1.0.0 (Build 2026.03)
-            </Text>
+            <Text style={[styles.appName, { color: colors.primary[500] }]}>PristineAudio</Text>
+            <Text style={{ color: colors.text.secondary, fontSize: 12 }}>Version 1.0.0 (Build 2026)</Text>
           </View>
 
-          <View
-            style={[
-              styles.infoBox,
-              { backgroundColor: colors.background.tertiary, marginBottom: spacing.md },
-            ]}
-          >
+          <View style={[styles.infoBox, { backgroundColor: colors.background.tertiary }]}>
             <Text style={{ color: colors.text.primary, marginBottom: spacing.xs }}>
               High-Fidelity Audio Player for Audiophiles
             </Text>
-            <Text style={{ color: colors.text.secondary, fontSize: 12 }}>
-              {"• 10-band Equalizer with presets\n"}
-              {"• Real-time spectrum visualizer\n"}
-              {"• FLAC/DSD support\n"}
-              {"• USB DAC exclusive mode\n"}
-              {"• M3U playlist import/export"}
-            </Text>
           </View>
-
-          <TouchableOpacity style={styles.settingRow}>
-            <Text style={{ color: colors.text.primary }}>Lisensi & Kredit</Text>
-            <Ionicons name="chevron-forward" size={20} color={colors.text.secondary} />
-          </TouchableOpacity>
-
-          <SettingRow colors={colors} spacing={spacing}>
-            <Text style={{ color: colors.text.primary }}>Kebijakan Privasi</Text>
-            <Ionicons name="chevron-forward" size={20} color={colors.text.secondary} />
-          </SettingRow>
         </View>
       )}
     </Section>
   );
 
-  // ─── Render ────────────────────────────────────────────────────────────────
+  // ─── Main Render ─────────────────────────────────────────────────────────────
 
   return (
     <ScrollView
@@ -566,13 +449,11 @@ export default function SettingsScreen() {
           },
         ]}
       >
+        <RefreshCw size={20} color={colors.status.error} strokeWidth={2.5} style={{ marginRight: 8 }} />
         <Text style={{ color: colors.status.error }}>Reset All Settings</Text>
       </TouchableOpacity>
 
-      <ThemePicker
-        visible={showThemePicker}
-        onClose={() => setShowThemePicker(false)}
-      />
+      <ThemePicker visible={showThemePicker} onClose={() => setShowThemePicker(false)} />
     </ScrollView>
   );
 }
@@ -580,73 +461,33 @@ export default function SettingsScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  screenTitle: {
-    fontSize: 32,
-    fontWeight: "700",
-  },
-  section: {
-    borderRadius: 16,
-    overflow: "hidden",
-  },
+  container: { flex: 1 },
+  screenTitle: { fontSize: 32, fontWeight: "700" },
+  section: { borderRadius: 16, overflow: "hidden" },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     borderBottomWidth: 1,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-  },
+  sectionTitle: { fontSize: 18, fontWeight: "600" },
   settingRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  themeColorDot: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  pill: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  dacItem: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  alertBox: {
-    padding: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  infoBox: {
-    padding: 8,
-    borderRadius: 8,
-  },
+  row: { flexDirection: "row", alignItems: "center" },
+  themeColorDot: { width: 20, height: 20, borderRadius: 4 },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  pill: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
+  infoBox: { padding: 12, borderRadius: 12 },
   resetButton: {
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: "center",
     borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "center",
   },
-  appName: {
-    fontSize: 28,
-    fontWeight: "700",
-    marginBottom: 4,
-  },
-}); 
+  appName: { fontSize: 28, fontWeight: "700", marginBottom: 4 },
+});

@@ -6,7 +6,13 @@ import {
   ScrollView,
   TouchableOpacity,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+
+// Lucide Icons
+import {
+  Plus,
+  ShieldCheck,
+  Lock,
+} from "lucide-react-native";
 
 // Hooks
 import { useTheme } from "@/context/ThemeContext";
@@ -20,7 +26,7 @@ import { PresetChip } from "@/features/equalizer/components/PresetChip";
 import { SavePresetModal } from "@/features/equalizer/components/SavePresetModal";
 
 export default function EqualizerScreen() {
-  const safePadding = useSafePadding();     // ← Gunakan ini saja
+  const safePadding = useSafePadding();
   const { theme } = useTheme();
   const {
     currentBands,
@@ -42,13 +48,13 @@ export default function EqualizerScreen() {
           flex: 1,
           backgroundColor: theme.colors.background.primary,
           paddingTop: safePadding.paddingTop,
-          paddingBottom: safePadding.paddingBottom + 20,
+          paddingBottom: safePadding.paddingBottom + 40,   // ekstra ruang untuk sliders + floating
           paddingLeft: safePadding.paddingLeft,
           paddingRight: safePadding.paddingRight,
         },
       ]}
     >
-      {/* 1. Header & Status */}
+      {/* Header */}
       <View style={styles.header}>
         <View>
           <Text style={[styles.title, { color: theme.colors.text.primary }]}>
@@ -60,9 +66,10 @@ export default function EqualizerScreen() {
             10-Band Precision Engine
           </Text>
         </View>
+
         {isDSPDisabled && (
           <View style={styles.bitPerfectBadge}>
-            <Ionicons name="shield-checkmark" size={14} color="#D4AF37" />
+            <ShieldCheck size={16} color="#D4AF37" strokeWidth={2.5} />
             <Text style={styles.bitPerfectText}>Bit-Perfect Active</Text>
           </View>
         )}
@@ -72,12 +79,12 @@ export default function EqualizerScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* 2. Visualisasi Kurva */}
+        {/* Visualisasi Kurva */}
         <View style={styles.graphContainer}>
           <FrequencyGraph bands={currentBands} />
         </View>
 
-        {/* 3. Preset Selector */}
+        {/* Preset Selector */}
         <View style={styles.presetSection}>
           <ScrollView
             horizontal
@@ -91,11 +98,7 @@ export default function EqualizerScreen() {
                 { borderColor: theme.colors.primary[500] },
               ]}
             >
-              <Ionicons
-                name="add"
-                size={20}
-                color={theme.colors.primary[500]}
-              />
+              <Plus size={20} color={theme.colors.primary[500]} strokeWidth={3} />
             </TouchableOpacity>
 
             {allPresets.map((preset) => (
@@ -110,7 +113,7 @@ export default function EqualizerScreen() {
           </ScrollView>
         </View>
 
-        {/* 4. Sliders (10-Band) */}
+        {/* Sliders */}
         <View
           style={[
             styles.slidersCard,
@@ -119,11 +122,7 @@ export default function EqualizerScreen() {
         >
           {isDSPDisabled ? (
             <View style={styles.disabledOverlay}>
-              <Ionicons
-                name="lock-closed"
-                size={40}
-                color={theme.colors.text.tertiary}
-              />
+              <Lock size={40} color={theme.colors.text.tertiary} strokeWidth={2} />
               <Text
                 style={[
                   styles.disabledText,
@@ -145,11 +144,11 @@ export default function EqualizerScreen() {
           )}
         </View>
 
-        {/* Spacer agar tidak tertutup floating player */}
-        <View style={{ height: 100 }} />
+        {/* Spacer */}
+        <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* 5. Modal Simpan */}
+      {/* Modal */}
       <SavePresetModal
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
@@ -173,9 +172,7 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 28, fontWeight: "800" },
   subtitle: { fontSize: 13, marginTop: 2 },
-  scrollContent: { 
-    paddingBottom: 40 
-  },
+  scrollContent: { paddingBottom: 40 },
   graphContainer: {
     alignItems: "center",
     marginVertical: 20,

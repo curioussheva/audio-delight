@@ -31,7 +31,7 @@ export default function LoadingScreen() {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 1800,           // lebih halus
+        duration: 1200,           // lebih halus
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
@@ -47,7 +47,7 @@ export default function LoadingScreen() {
     Animated.loop(
       Animated.timing(rotateAnim, {
         toValue: 1,
-        duration: 32000,          // 32 detik sekali putaran (sangat slow)
+        duration: 18000,          // 32 detik sekali putaran (sangat slow)
         easing: Easing.linear,
         useNativeDriver: true,
       })

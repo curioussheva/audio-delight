@@ -4,7 +4,16 @@ import {
   ActivityIndicator, Platform, TextInput, Keyboard,
 } from "react-native";
 import { FlashList, ListRenderItem } from "@shopify/flash-list";
-import { Ionicons } from "@expo/vector-icons";
+
+// ← Import Lucide Icons
+import {
+  Menu,
+  ArrowLeft,
+  X,
+  Search,
+  Scan,
+} from "lucide-react-native";
+
 import { useNavigation } from "expo-router";
 import { DrawerActions } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
@@ -36,13 +45,11 @@ import { FolderList } from "@/features/library/components/FolderList";
 import { FileTypeList } from "@/features/library/components/FileTypeList";
 import { Song } from "@/shared/types/audio";
 import type { MediaTrack } from "@/features/library/store/libraryStore";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function LibraryScreen() {
   const navigation = useNavigation();
   const { theme } = useTheme();
   const { colors, spacing } = theme;
-  const insets = useSafeAreaInsets();
   const safePadding = useSafePadding();
 
   const { playSong, currentSong } = usePlayerStore();
@@ -91,42 +98,42 @@ export default function LibraryScreen() {
 
   // ── 2. Auto-detect file baru via MediaLibrary listener ───────
   useEffect(() => {
-  let subscription: MediaLibrary.Subscription | null = null;
+    let subscription: MediaLibrary.Subscription | null = null;
 
-  const setupListener = async () => {
-    const { granted } = await MediaLibrary.requestPermissionsAsync();
-    if (!granted) return;
+    const setupListener = async () => {
+      const { granted } = await MediaLibrary.requestPermissionsAsync();
+      if (!granted) return;
 
-    subscription = MediaLibrary.addListener(async (event) => {
-      const hasInsert = event.hasIncrementalChanges && (event.insertedAssets?.length ?? 0) > 0;
-      const hasDelete = event.hasIncrementalChanges && (event.deletedAssets?.length ?? 0) > 0;
+      subscription = MediaLibrary.addListener(async (event) => {
+        const hasInsert = event.hasIncrementalChanges && (event.insertedAssets?.length ?? 0) > 0;
+        const hasDelete = event.hasIncrementalChanges && (event.deletedAssets?.length ?? 0) > 0;
 
-      if (hasInsert || hasDelete) {
-        console.log(`🔔 [Library] Changes detected — insert: ${event.insertedAssets?.length ?? 0}, delete: ${event.deletedAssets?.length ?? 0}`);
-        await BackgroundScanTask.runManual();
+        if (hasInsert || hasDelete) {
+          console.log(`🔔 [Library] Changes detected — insert: ${event.insertedAssets?.length ?? 0}, delete: ${event.deletedAssets?.length ?? 0}`);
+          await BackgroundScanTask.runManual();
+          await refreshLibrary();
+        }
+      });
+    };
+
+    setupListener();
+    return () => { subscription?.remove(); };
+  }, [refreshLibrary]);
+
+  useEffect(() => {
+    let lastState = AppState.currentState;
+
+    const handleAppStateChange = async (nextState: AppStateStatus) => {
+      if (lastState.match(/inactive|background/) && nextState === 'active') {
+        console.log('📱 [Library] App foregrounded — checking for changes...');
         await refreshLibrary();
       }
-    });
-  };
+      lastState = nextState;
+    };
 
-  setupListener();
-  return () => { subscription?.remove(); };
-}, [refreshLibrary]);
-  
-  useEffect(() => {
-  let lastState = AppState.currentState;
-
-  const handleAppStateChange = async (nextState: AppStateStatus) => {
-    if (lastState.match(/inactive|background/) && nextState === 'active') {
-      console.log('📱 [Library] App foregrounded — checking for changes...');
-      await refreshLibrary();
-    }
-    lastState = nextState;
-  };
-
-  const sub = AppState.addEventListener('change', handleAppStateChange);
-  return () => sub.remove();
-}, [refreshLibrary]);
+    const sub = AppState.addEventListener('change', handleAppStateChange);
+    return () => sub.remove();
+  }, [refreshLibrary]);
 
   // ── 3. Scan Handler ──────────────────────────────────────────
   const handleScanLibrary = useCallback(async () => {
@@ -163,11 +170,11 @@ export default function LibraryScreen() {
   }, []);
 
   // ── 5. Derived Data ──────────────────────────────────────────
-  const albums     = useMemo(() => selectAlbums(tracks ?? []),     [tracks]);
-  const artists    = useMemo(() => selectArtists(tracks ?? []),    [tracks]);
-  const folders    = useMemo(() => selectFolders(tracks ?? []),    [tracks]);
-  const genres     = useMemo(() => selectGenres(tracks ?? []),     [tracks]);
-  const fileTypes  = useMemo(() => selectFileTypes(tracks ?? []),  [tracks]);
+  const albums = useMemo(() => selectAlbums(tracks ?? []), [tracks]);
+  const artists = useMemo(() => selectArtists(tracks ?? []), [tracks]);
+  const folders = useMemo(() => selectFolders(tracks ?? []), [tracks]);
+  const genres = useMemo(() => selectGenres(tracks ?? []), [tracks]);
+  const fileTypes = useMemo(() => selectFileTypes(tracks ?? []), [tracks]);
 
   // ── 6. Progress label ────────────────────────────────────────
   const scanLabel = useMemo(() => {
@@ -210,14 +217,14 @@ export default function LibraryScreen() {
 
   return (
     <View style={[
-      s.container, 
-      { 
+      s.container,
+      {
         flex: 1,
-          backgroundColor: colors.background.primary,
-          paddingTop: safePadding.paddingTop,
-          paddingBottom: safePadding.paddingBottom,
-          paddingLeft: safePadding.paddingLeft,
-          paddingRight: safePadding.paddingRight,
+        backgroundColor: colors.background.primary,
+        paddingTop: safePadding.paddingTop,
+        paddingBottom: safePadding.paddingBottom,
+        paddingLeft: safePadding.paddingLeft,
+        paddingRight: safePadding.paddingRight,
       }
     ]}>
 
@@ -226,8 +233,9 @@ export default function LibraryScreen() {
         {showSearch ? (
           <>
             <TouchableOpacity onPress={handleToggleSearch} hitSlop={8}>
-              <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
+              <ArrowLeft size={24} color={colors.text.primary} strokeWidth={2.5} />
             </TouchableOpacity>
+
             <TextInput
               ref={searchInputRef}
               style={[s.searchInput, {
@@ -242,31 +250,36 @@ export default function LibraryScreen() {
               autoCapitalize="none"
               returnKeyType="search"
             />
+
             {searchQuery.length > 0 && (
               <TouchableOpacity onPress={() => setSearchQuery("")} hitSlop={8}>
-                <Ionicons name="close-circle" size={20} color={colors.text.tertiary} />
+                <X size={20} color={colors.text.tertiary} strokeWidth={3} />
               </TouchableOpacity>
             )}
           </>
         ) : (
           <>
             <TouchableOpacity onPress={() => navigation.dispatch(DrawerActions.openDrawer())}>
-              <Ionicons name="menu-outline" size={28} color={colors.text.primary} />
+              <Menu size={28} color={colors.text.primary} strokeWidth={2.5} />
             </TouchableOpacity>
+
             <Text style={[s.headerTitle, { color: colors.text.primary }]}>Library</Text>
+
             <View style={s.headerActions}>
               <TouchableOpacity onPress={handleToggleSearch} style={s.headerBtn}>
-                <Ionicons name="search-outline" size={22} color={colors.text.primary} />
+                <Search size={22} color={colors.text.primary} strokeWidth={2.5} />
               </TouchableOpacity>
+
               <TouchableOpacity
                 onPress={handleScanLibrary}
                 disabled={scanStatus.isScanning}
                 style={s.headerBtn}
               >
-                {scanStatus.isScanning
-                  ? <ActivityIndicator size="small" color={colors.primary[500]} />
-                  : <Ionicons name="scan-outline" size={22} color={colors.text.primary} />
-                }
+                {scanStatus.isScanning ? (
+                  <ActivityIndicator size="small" color={colors.primary[500]} />
+                ) : (
+                  <Scan size={22} color={colors.text.primary} strokeWidth={2.5} />
+                )}
               </TouchableOpacity>
             </View>
           </>
@@ -308,16 +321,14 @@ export default function LibraryScreen() {
           ) : (
             <FlashList
               data={showSearch && searchQuery ? filteredSongs : songs}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.id}
-          estimatedItemSize={72}
-          contentContainerStyle={{ 
-            paddingBottom: 100
-          }}
+              renderItem={renderItem}
+              keyExtractor={(item) => item.id}
+              estimatedItemSize={72}
+              contentContainerStyle={{ paddingBottom: 100 }}
               ListEmptyComponent={
                 showSearch
                   ? <View style={s.center}>
-                      <Ionicons name="search-outline" size={48} color={colors.text.tertiary} />
+                      <Search size={48} color={colors.text.tertiary} strokeWidth={1.8} />
                       <Text style={[s.emptyText, { color: colors.text.tertiary }]}>
                         Tidak ada hasil untuk "{searchQuery}"
                       </Text>
@@ -373,24 +384,23 @@ export default function LibraryScreen() {
         )}
       </View>
     </View>
-    
   );
 }
 
 const s = StyleSheet.create({
-  container:    { flex: 1 },
-  center:       { flex: 1, justifyContent: "center", alignItems: "center", padding: 40 },
+  container: { flex: 1 },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 40 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingTop: Platform.OS === "ios" ? 50 : 20,
+    paddingTop: Platform.OS === "ios" ? 12 : 8,
     paddingBottom: 12,
     gap: 8,
   },
-  headerTitle:   { fontSize: 24, fontWeight: "800", flex: 1, textAlign: "center" },
+  headerTitle: { fontSize: 24, fontWeight: "800", flex: 1, textAlign: "center" },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 4 },
-  headerBtn:     { padding: 4 },
+  headerBtn: { padding: 4 },
   searchInput: {
     flex: 1,
     height: 38,
@@ -406,8 +416,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 6,
   },
-  scanLabel:   { fontSize: 12, fontWeight: "600" },
+  scanLabel: { fontSize: 12, fontWeight: "600" },
   resultCount: { fontSize: 12, paddingHorizontal: 16, paddingVertical: 4 },
-  emptyText:   { marginTop: 12, fontSize: 14, textAlign: "center" },
-});
- 
+  emptyText: { marginTop: 12, fontSize: 14, textAlign: "center" },
+}); 

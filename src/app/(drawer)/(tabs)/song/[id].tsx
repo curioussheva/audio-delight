@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,7 +8,14 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+
+// ← Import Lucide Icons
+import {
+  ArrowLeft,
+  Heart,
+  Play,
+} from "lucide-react-native";
+
 import { useTheme } from "@/context/ThemeContext";
 import { useLibrary } from "@/features/library/hooks/useLibrary";
 import { useFavorites } from "@/features/favorites/hooks/useFavorites";
@@ -21,7 +28,7 @@ export default function SongDetailScreen() {
   const { colors, spacing } = theme;
 
   const { songs } = useLibrary();
-  const { isFavorite, toggleFavorite } = useFavorites(); // Gunakan tanpa argumen jika hook sudah mendukung context
+  const { isFavorite, toggleFavorite } = useFavorites();
 
   const [song, setSong] = useState<Song | null>(null);
 
@@ -49,13 +56,13 @@ export default function SongDetailScreen() {
 
   const formatBitrate = (br?: number) => {
     if (!br) return "---";
-    return br > 1000 ? `${(br / 1000).toFixed(1)} Mbps` : `${br} kbps`;
+    return br > 1000 ? `\( {(br / 1000).toFixed(1)} Mbps` : ` \){br} kbps`;
   };
 
   const formatDuration = (sec: number) => {
     const mins = Math.floor(sec / 60);
     const secs = Math.floor(sec % 60);
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
+    return `\( {mins}: \){secs.toString().padStart(2, "0")}`;
   };
 
   return (
@@ -68,23 +75,26 @@ export default function SongDetailScreen() {
           styles.header,
           {
             padding: spacing.md,
-            paddingTop: 60, // Sesuaikan dengan safe area
+            paddingTop: 60,
             borderBottomWidth: 1,
             borderBottomColor: colors.background.tertiary,
           },
         ]}
       >
         <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
+          <ArrowLeft size={24} color={colors.text.primary} strokeWidth={2.5} />
         </TouchableOpacity>
+
         <Text style={[styles.headerTitle, { color: colors.text.primary }]}>
           FILE INFORMATION
         </Text>
+
         <TouchableOpacity onPress={() => toggleFavorite(song.id)}>
-          <Ionicons
-            name={favorite ? "heart" : "heart-outline"}
+          <Heart
             size={24}
             color={favorite ? colors.status.error : colors.text.primary}
+            strokeWidth={favorite ? 0 : 2.5}   // filled jika favorite
+            fill={favorite ? colors.status.error : "transparent"}
           />
         </TouchableOpacity>
       </View>
@@ -150,7 +160,7 @@ export default function SongDetailScreen() {
           <DetailRow label="Channel Mode" value="Stereo" color={colors} />
         </View>
 
-        {/* File Path Card (Sangat berguna untuk Audiophile) */}
+        {/* File Path Card */}
         <View
           style={[
             styles.card,
@@ -180,11 +190,10 @@ export default function SongDetailScreen() {
         <TouchableOpacity
           style={[styles.playButton, { backgroundColor: colors.primary[500] }]}
           onPress={() => {
-            // Gunakan router untuk navigasi ke player atau panggil playback service
             router.push("/player");
           }}
         >
-          <Ionicons name="play" size={20} color="#000" />
+          <Play size={20} color="#000" strokeWidth={3} />
           <Text style={styles.playButtonText}>PLAY THIS FILE</Text>
         </TouchableOpacity>
       </View>
@@ -244,4 +253,4 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   playButtonText: { fontWeight: "900", fontSize: 16, letterSpacing: 1 },
-});
+}); 

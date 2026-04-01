@@ -1,6 +1,6 @@
 // app/_layout.tsx
 import React, { useState, useEffect } from "react";
-import { Stack } from "expo-router";
+import { Stack, usePathname } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SplashScreen from 'expo-splash-screen';
@@ -26,6 +26,9 @@ export default function RootLayout() {
 
   const initStore = usePlayerStore((state) => state.initStore);
   const autoScanEnabled = useLibraryStore(s => s.scanStatus.autoScanEnabled);
+  
+  const pathname = usePathname();
+  const isPlayerOpen = pathname.startsWith("/player");
 
   // Background Task
   useEffect(() => {

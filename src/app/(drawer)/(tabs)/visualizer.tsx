@@ -9,18 +9,21 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
-import {
-  GestureHandlerRootView,
-} from "react-native-gesture-handler";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSafePadding } from '@/shared/hooks/useSafePadding';
 
 import { useTheme } from "@/context/ThemeContext";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { SpectrumAnalyzer } from "@/features/visualizer/components/SpectrumAnalyzer";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+// Lucide Icons
+import {
+  Activity,      // untuk analytics / speedometer
+  Settings,
+  Gauge,         // untuk speedometer
+  X,             // untuk close button di modal
+} from "lucide-react-native";
 
 const { width, height } = Dimensions.get("window");
 
@@ -42,10 +45,9 @@ const COLOR_PRESETS: Record<ColorTheme, ColorPreset> = {
 };
 
 export default function VisualizerScreen() {
+  const safePadding = useSafePadding();
   const { theme } = useTheme();
   const { colors, spacing } = theme;
-  const insets = useSafeAreaInsets();
-  const safePadding = useSafePadding(); 
 
   // State
   const [mode, setMode] = useState<VisualizerMode>("bars");
@@ -79,14 +81,6 @@ export default function VisualizerScreen() {
     return () => clearInterval(interval);
   }, [isListening]);
 
-  // Update frame count dari SpectrumAnalyzer (via callback)
-  {
-    /*
-  const onFrameRendered = () => {
-    frameCount.current++;
-  };
-*/
-  }
   // Toggle fullscreen dengan double tap
   const doubleTapRef = useRef(0);
   const handleDoubleTap = () => {
@@ -99,17 +93,14 @@ export default function VisualizerScreen() {
     }
   };
 
-  // Handle sensitivity change
   const handleSensitivityChange = (value: number) => {
     setSensitivity(value);
   };
 
-  // Toggle FPS monitor
   const toggleFpsMonitor = () => {
     setIsListening(!isListening);
   };
 
-  // Reset to default
   const resetToDefault = () => {
     setMode("bars");
     setSensitivity(0.5);
@@ -147,8 +138,7 @@ export default function VisualizerScreen() {
         >
           <Text
             style={{
-              color:
-                mode === m ? colors.background.primary : colors.text.secondary,
+              color: mode === m ? colors.background.primary : colors.text.secondary,
               fontWeight: mode === m ? "600" : "400",
             }}
           >
@@ -237,7 +227,7 @@ export default function VisualizerScreen() {
           style={styles.visualizerContainer}
         >
           <SpectrumAnalyzer
-            isPlaying={isPlaying} // <--- Tambahkan ini
+            isPlaying={isPlaying}
             width={isFullscreen ? width : width - 40}
             height={isFullscreen ? height / 2 : 250}
             mode={mode}
@@ -249,7 +239,6 @@ export default function VisualizerScreen() {
           />
         </TouchableOpacity>
 
-        {/* FPS Counter (debug) */}
         {isListening && (
           <View style={styles.fpsCounter}>
             <Text style={{ color: colors.text.primary, fontSize: 10 }}>
@@ -267,7 +256,7 @@ export default function VisualizerScreen() {
       <View
         style={[
           styles.container,
-          { 
+          {
             backgroundColor: colors.background.primary,
             paddingTop: safePadding.paddingTop,
             paddingBottom: safePadding.paddingBottom,
@@ -277,11 +266,7 @@ export default function VisualizerScreen() {
         ]}
       >
         <View style={styles.centerContainer}>
-          <Ionicons
-            name="analytics-outline"
-            size={64}
-            color={colors.text.tertiary}
-          />
+          <Activity size={64} color={colors.text.tertiary} strokeWidth={1.8} />
           <Text
             style={[
               styles.emptyText,
@@ -304,10 +289,10 @@ export default function VisualizerScreen() {
     <GestureHandlerRootView
       style={[
         styles.container,
-        { 
+        {
           backgroundColor: colors.background.primary,
           paddingTop: safePadding.paddingTop,
-          paddingBottom: safePadding.paddingBottom + 20,   // sedikit ekstra untuk visualizer
+          paddingBottom: safePadding.paddingBottom + 20,
           paddingLeft: safePadding.paddingLeft,
           paddingRight: safePadding.paddingRight,
         },
@@ -326,19 +311,21 @@ export default function VisualizerScreen() {
         <Text style={[styles.title, { color: colors.text.primary }]}>
           Visualizer
         </Text>
+
         <View style={{ flexDirection: "row", gap: spacing.sm }}>
           <TouchableOpacity onPress={toggleFpsMonitor}>
-            <Ionicons
-              name="speedometer-outline"
+            <Gauge
               size={24}
               color={isListening ? colors.primary[500] : colors.text.secondary}
+              strokeWidth={2.5}
             />
           </TouchableOpacity>
+
           <TouchableOpacity onPress={() => setShowSettings(true)}>
-            <Ionicons
-              name="settings-outline"
+            <Settings
               size={24}
               color={colors.text.primary}
+              strokeWidth={2.5}
             />
           </TouchableOpacity>
         </View>
@@ -392,7 +379,7 @@ export default function VisualizerScreen() {
               },
             ]}
           >
-            {/* Header */}
+            {/* Modal Header */}
             <View
               style={[
                 styles.modalHeader,
@@ -417,26 +404,13 @@ export default function VisualizerScreen() {
                 Visualizer Settings
               </Text>
               <TouchableOpacity onPress={() => setShowSettings(false)}>
-                <Ionicons
-                  name="close"
-                  size={24}
-                  color={colors.text.secondary}
-                />
+                <X size={24} color={colors.text.secondary} strokeWidth={3} />
               </TouchableOpacity>
             </View>
 
             {/* Mode Selector */}
             <View style={{ marginBottom: spacing.lg }}>
-              <Text
-                style={[
-                  styles.settingLabel,
-                  {
-                    color: colors.text.secondary,
-                    fontSize: 14,
-                    marginBottom: spacing.sm,
-                  },
-                ]}
-              >
+              <Text style={[styles.settingLabel, { color: colors.text.secondary }]}>
                 Mode
               </Text>
               {renderModeSelector()}
@@ -444,16 +418,7 @@ export default function VisualizerScreen() {
 
             {/* Color Theme */}
             <View style={{ marginBottom: spacing.lg }}>
-              <Text
-                style={[
-                  styles.settingLabel,
-                  {
-                    color: colors.text.secondary,
-                    fontSize: 14,
-                    marginBottom: spacing.sm,
-                  },
-                ]}
-              >
+              <Text style={[styles.settingLabel, { color: colors.text.secondary }]}>
                 Color Theme
               </Text>
               {renderColorSelector()}
@@ -461,18 +426,8 @@ export default function VisualizerScreen() {
 
             {/* Sensitivity */}
             <View style={{ marginBottom: spacing.lg }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                }}
-              >
-                <Text
-                  style={[
-                    styles.settingLabel,
-                    { color: colors.text.secondary },
-                  ]}
-                >
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <Text style={[styles.settingLabel, { color: colors.text.secondary }]}>
                   Sensitivity
                 </Text>
                 <Text style={{ color: colors.primary[500] }}>
@@ -492,35 +447,21 @@ export default function VisualizerScreen() {
               />
             </View>
 
-            {/* Reset Button */}
+            {/* Reset & Fullscreen */}
             <TouchableOpacity
               style={[
                 styles.resetButton,
-                {
-                  backgroundColor: colors.background.secondary,
-                  padding: spacing.md,
-                  borderRadius: 8,
-                  alignItems: "center",
-                  marginBottom: spacing.md,
-                },
+                { backgroundColor: colors.background.secondary },
               ]}
               onPress={resetToDefault}
             >
-              <Text style={{ color: colors.text.primary }}>
-                Reset to Default
-              </Text>
+              <Text style={{ color: colors.text.primary }}>Reset to Default</Text>
             </TouchableOpacity>
 
-            {/* Fullscreen Toggle (quick) */}
             <TouchableOpacity
               style={[
                 styles.fullscreenButton,
-                {
-                  backgroundColor: colors.primary[500],
-                  padding: spacing.md,
-                  borderRadius: 8,
-                  alignItems: "center",
-                },
+                { backgroundColor: colors.primary[500] },
               ]}
               onPress={() => {
                 setIsFullscreen(!isFullscreen);
@@ -538,63 +479,31 @@ export default function VisualizerScreen() {
   );
 }
 
+// Styles tetap sama
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "700",
-  },
-  mainContent: {
-    flex: 1,
-  },
-  visualizerWrapper: {
-    position: "relative",
-  },
-  visualizerContainer: {
-    alignItems: "center",
-  },
-  modeSelector: {
-    flexDirection: "row",
-    borderRadius: 25,
-  },
-  modeButton: {
-    flex: 1,
-    alignItems: "center",
-  },
-  colorButton: {
-    borderRadius: 20,
-  },
-  colorDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  songInfo: {
-    alignItems: "center",
-  },
-  songTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  songArtist: {
-    fontSize: 14,
-  },
+  title: { fontSize: 28, fontWeight: "700" },
+  mainContent: { flex: 1 },
+  visualizerWrapper: { position: "relative" },
+  visualizerContainer: { alignItems: "center" },
+  modeSelector: { flexDirection: "row", borderRadius: 25 },
+  modeButton: { flex: 1, alignItems: "center" },
+  colorButton: { borderRadius: 20 },
+  colorDot: { width: 12, height: 12, borderRadius: 6 },
+  songInfo: { alignItems: "center" },
+  songTitle: { fontSize: 18, fontWeight: "600" },
+  songArtist: { fontSize: 14 },
   centerContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
-  emptyText: {
-    fontSize: 16,
-    textAlign: "center",
-  },
+  emptyText: { fontSize: 16, textAlign: "center" },
   fpsCounter: {
     position: "absolute",
     top: 8,
@@ -604,10 +513,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 4,
   },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
+  modalOverlay: { flex: 1, justifyContent: "flex-end" },
   modalContent: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
@@ -617,19 +523,17 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-  },
-  settingLabel: {
-    fontSize: 14,
-  },
+  modalTitle: { fontSize: 20, fontWeight: "700" },
+  settingLabel: { fontSize: 14 },
   resetButton: {
     borderRadius: 8,
     alignItems: "center",
+    padding: 14,
+    marginBottom: 12,
   },
   fullscreenButton: {
     borderRadius: 8,
     alignItems: "center",
+    padding: 14,
   },
-});
+}); 

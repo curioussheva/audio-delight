@@ -1,20 +1,36 @@
-//src/features/library/components/LibraryTabBar.tsx
 import React, { useRef } from "react";
 import {
-  View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator,
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+  ActivityIndicator,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+
+// Lucide Icons (nama yang benar)
+import {
+  Music,        // musical notes
+  Disc,         // album
+  User,         // artist
+  Grid,         // genre
+  Folder,       // folder
+  List,         // playlist
+  FileText,     // filetype
+  RefreshCw,    // refresh
+} from "lucide-react-native";
+
 import { useTheme } from "@/context/ThemeContext";
 import type { LibraryTab } from "../store/libraryStore";
 
-export const TABS: { id: LibraryTab; label: string; icon: string }[] = [
-  { id: "song",     label: "Song",     icon: "musical-note-outline"  },
-  { id: "album",    label: "Album",    icon: "albums-outline"         },
-  { id: "artist",   label: "Artist",   icon: "person-outline"         },
-  { id: "genre",    label: "Genre",    icon: "grid-outline"           },
-  { id: "folder",   label: "Folder",   icon: "folder-outline"         },
-  { id: "playlist", label: "Playlist", icon: "list-outline"           },
-  { id: "filetype", label: "Format",   icon: "document-outline"       },
+export const TABS: { id: LibraryTab; label: string; icon: React.ReactNode }[] = [
+  { id: "song",     label: "Song",     icon: <Music size={14} strokeWidth={2.5} /> },
+  { id: "album",    label: "Album",    icon: <Disc size={14} strokeWidth={2.5} /> },
+  { id: "artist",   label: "Artist",   icon: <User size={14} strokeWidth={2.5} /> },
+  { id: "genre",    label: "Genre",    icon: <Grid size={14} strokeWidth={2.5} /> },
+  { id: "folder",   label: "Folder",   icon: <Folder size={14} strokeWidth={2.5} /> },
+  { id: "playlist", label: "Playlist", icon: <List size={14} strokeWidth={2.5} /> },
+  { id: "filetype", label: "Format",   icon: <FileText size={14} strokeWidth={2.5} /> },
 ];
 
 interface Props {
@@ -28,7 +44,13 @@ interface Props {
 }
 
 export const LibraryTabBar: React.FC<Props> = ({
-  activeTab, onTabChange, isScanning, scanProgress, scanTotal = 0, onRefresh, trackCount,
+  activeTab,
+  onTabChange,
+  isScanning,
+  scanProgress,
+  scanTotal = 0,
+  onRefresh,
+  trackCount,
 }) => {
   const { theme } = useTheme();
   const { colors, spacing } = theme;
@@ -38,29 +60,31 @@ export const LibraryTabBar: React.FC<Props> = ({
     <View style={{ backgroundColor: colors.background.secondary }}>
       {/* Scan status bar */}
       {isScanning && (
-        <View
-          style={[
-            styles.scanBar,
-            { backgroundColor: colors.background.tertiary, paddingHorizontal: spacing.md },
-          ]}
-        >
+        <View style={[styles.scanBar, { backgroundColor: colors.background.tertiary, paddingHorizontal: spacing.md }]}>
           <ActivityIndicator size="small" color={colors.primary[500]} />
-          <Text style={[styles.scanText, { color: colors.text.secondary, marginLeft: spacing.xs }]}>
-            Scanning... {scanProgress}%
-          </Text>
-          <View
-            style={[
-              styles.progressBar,
-              { backgroundColor: colors.background.elevated, flex: 1, marginLeft: spacing.sm },
-            ]}
-          >
-            <View
-              style={[
-                styles.progressFill,
-                { backgroundColor: colors.primary[500], width: `${scanProgress}%` },
-              ]}
-            />
-          </View>
+
+          {scanTotal > 0 ? (
+            <>
+              <Text style={[styles.scanText, { color: colors.text.secondary, marginLeft: spacing.xs }]}>
+                Memindai {scanProgress} / {scanTotal}
+              </Text>
+              <View style={[styles.progressBar, { backgroundColor: colors.background.elevated, flex: 1, marginLeft: spacing.sm }]}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    {
+                      backgroundColor: colors.primary[500],
+                      width: `${Math.floor((scanProgress / scanTotal) * 100)}%`,
+                    },
+                  ]}
+                />
+              </View>
+            </>
+          ) : (
+            <Text style={[styles.scanText, { color: colors.text.secondary, marginLeft: spacing.xs }]}>
+              Mengumpulkan file...
+            </Text>
+          )}
         </View>
       )}
 
@@ -73,6 +97,7 @@ export const LibraryTabBar: React.FC<Props> = ({
       >
         {TABS.map((tab) => {
           const isActive = tab.id === activeTab;
+
           return (
             <TouchableOpacity
               key={tab.id}
@@ -87,11 +112,9 @@ export const LibraryTabBar: React.FC<Props> = ({
                 },
               ]}
             >
-              <Ionicons
-                name={tab.icon as any}
-                size={14}
-                color={isActive ? colors.background.primary : colors.text.secondary}
-              />
+              <View style={{ color: isActive ? colors.background.primary : colors.text.secondary }}>
+                {tab.icon}
+              </View>
               <Text
                 style={[
                   styles.tabLabel,
@@ -120,45 +143,13 @@ export const LibraryTabBar: React.FC<Props> = ({
             },
           ]}
         >
-          <Ionicons
-            name="refresh-outline"
+          <RefreshCw
             size={16}
             color={isScanning ? colors.text.disabled : colors.primary[500]}
+            strokeWidth={2.5}
           />
         </TouchableOpacity>
       </ScrollView>
-
-      {/* Track count */}
-      {isScanning && (
-  <View style={[styles.scanBar, { backgroundColor: colors.background.tertiary, paddingHorizontal: spacing.md }]}>
-    <ActivityIndicator size="small" color={colors.primary[500]} />
-
-    {scanTotal > 0 ? (
-      // Fase 2: tahu total — tampilkan X / Y + progress bar
-      <>
-        <Text style={[styles.scanText, { color: colors.text.secondary, marginLeft: spacing.xs }]}>
-          Memindai {scanProgress} / {scanTotal}
-        </Text>
-        <View style={[styles.progressBar, { backgroundColor: colors.background.elevated, flex: 1, marginLeft: spacing.sm }]}>
-          <View
-            style={[
-              styles.progressFill,
-              {
-                backgroundColor: colors.primary[500],
-                width: `${Math.floor((scanProgress / scanTotal) * 100)}%`,
-              },
-            ]}
-          />
-        </View>
-      </>
-    ) : (
-      // Fase 1: belum tahu total — collect phase
-      <Text style={[styles.scanText, { color: colors.text.secondary, marginLeft: spacing.xs }]}>
-        Mengumpulkan file...
-      </Text>
-    )}
-  </View>
-)} 
     </View>
   );
 };
@@ -173,8 +164,13 @@ const styles = StyleSheet.create({
   scanText: { fontSize: 11 },
   progressBar: { height: 3, borderRadius: 2, overflow: "hidden" },
   progressFill: { height: "100%", borderRadius: 2 },
-  tab: { flexDirection: "row", alignItems: "center", borderRadius: 20 },
-  tabLabel: { fontSize: 13, fontWeight: "600" },
-  countText: { fontSize: 11 },
-});
-
+  tab: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 20,
+  },
+  tabLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+}); 

@@ -1,10 +1,16 @@
 import React, { memo } from 'react';
 import { TouchableOpacity, View, Text, StyleSheet, Platform } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import QualityBadge from '@/shared/components/ui/QualityBadge';
 import { formatTime } from '@/shared/utils/time';
 import { Song } from '@/shared/types/audio';
+
+// ← Import Lucide Icons
+import {
+  Music,           // musical-note
+  BarChart3,       // stats-chart (untuk now playing)
+  Heart,           // heart / heart-outline
+} from 'lucide-react-native';
 
 interface SongListItemProps {
   item: Song;
@@ -15,16 +21,15 @@ interface SongListItemProps {
   onToggleFavorite: (id: string) => void;
 }
 
-// Optimization: Gunakan comparison function untuk memo
-export const SongListItem = memo(({ 
-  item, 
-  isNowPlaying, 
-  isFavorite, 
-  colors, 
-  onPress, 
-  onToggleFavorite 
+export const SongListItem = memo(({
+  item,
+  isNowPlaying,
+  isFavorite,
+  colors,
+  onPress,
+  onToggleFavorite,
 }: SongListItemProps) => {
-  
+
   const handlePress = () => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -46,7 +51,7 @@ export const SongListItem = memo(({
         isNowPlaying && { backgroundColor: colors.background.tertiary },
       ]}
       onPress={handlePress}
-      activeOpacity={0.6} // Sedikit lebih rendah agar feedback visual jelas
+      activeOpacity={0.6}
     >
       {/* Artwork Section */}
       <View
@@ -54,16 +59,24 @@ export const SongListItem = memo(({
           styles.artworkPlaceholder,
           {
             backgroundColor: isNowPlaying
-              ? `${colors.primary[500]}20` // Beri opacity 20% agar soft
+              ? `${colors.primary[500]}20`
               : colors.background.secondary,
           },
         ]}
       >
-        <Ionicons
-          name={isNowPlaying ? "stats-chart" : "musical-note"}
-          size={22}
-          color={isNowPlaying ? colors.primary[500] : colors.text.tertiary}
-        />
+        {isNowPlaying ? (
+          <BarChart3
+            size={22}
+            color={colors.primary[500]}
+            strokeWidth={2.5}
+          />
+        ) : (
+          <Music
+            size={22}
+            color={colors.text.tertiary}
+            strokeWidth={2.2}
+          />
+        )}
       </View>
 
       {/* Info Section */}
@@ -79,11 +92,15 @@ export const SongListItem = memo(({
           >
             {item.title}
           </Text>
-          {/* Badge hanya muncul jika ada data kualitas */}
+
           {(item.sampleRate || item.codec) && (
-             <QualityBadge sampleRate={item.sampleRate} codec={item.codec} />
+            <QualityBadge
+              sampleRate={item.sampleRate}
+              codec={item.codec}
+            />
           )}
         </View>
+
         <Text
           style={[styles.songArtist, { color: colors.text.secondary }]}
           numberOfLines={1}
@@ -97,14 +114,16 @@ export const SongListItem = memo(({
         <TouchableOpacity
           onPress={handleFavoritePress}
           style={styles.favoriteBtn}
-          hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }} // HitSlop lebih besar agar jempol gampang tekan
+          hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
         >
-          <Ionicons
-            name={isFavorite ? "heart" : "heart-outline"}
+          <Heart
             size={20}
             color={isFavorite ? colors.status.error : colors.text.tertiary}
+            strokeWidth={isFavorite ? 0 : 2.5}
+            fill={isFavorite ? colors.status.error : "transparent"}
           />
         </TouchableOpacity>
+
         <Text style={[styles.durationText, { color: colors.text.tertiary }]}>
           {formatTime(item.duration || 0)}
         </Text>
@@ -112,7 +131,6 @@ export const SongListItem = memo(({
     </TouchableOpacity>
   );
 }, (prevProps, nextProps) => {
-  // Hanya re-render jika id, status playing, status favorite, atau warna tema berubah
   return (
     prevProps.item.id === nextProps.item.id &&
     prevProps.isNowPlaying === nextProps.isNowPlaying &&
@@ -125,36 +143,36 @@ const styles = StyleSheet.create({
   songCard: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16, // Standar material design
+    paddingHorizontal: 16,
     height: 72,
   },
   artworkPlaceholder: {
     width: 52,
     height: 52,
-    borderRadius: 8, // Sedikit lebih kotak agar terlihat profesional
+    borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
   },
-  songInfo: { 
-    flex: 1, 
+  songInfo: {
+    flex: 1,
     marginHorizontal: 14,
   },
-  titleRow: { 
-    flexDirection: "row", 
+  titleRow: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: 'space-between',
   },
-  songTitle: { 
-    fontSize: 16, 
-    fontWeight: "600", // Semi-bold lebih enak dibaca daripada bold 800
+  songTitle: {
+    fontSize: 16,
+    fontWeight: "600",
     flex: 1,
     marginRight: 4,
   },
-  songArtist: { 
-    fontSize: 13, 
+  songArtist: {
+    fontSize: 13,
     marginTop: 1,
   },
-  rightActions: { 
+  rightActions: {
     alignItems: "flex-end",
     justifyContent: 'center',
     height: '100%',
@@ -167,5 +185,4 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
     marginTop: 2,
   },
-});
- 
+}); 
