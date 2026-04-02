@@ -4,32 +4,26 @@ import {
   ActivityIndicator, Platform, TextInput, Keyboard,
 } from "react-native";
 import { FlashList, ListRenderItem } from "@shopify/flash-list";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useNavigation } from "expo-router";
+import { DrawerActions } from "@react-navigation/native";
+import * as Haptics from "expo-haptics";
+import { AppState } from "react-native";
 
-// ← Import Lucide Icons
+// ── Icons ────────────────────────────────────────────────────────────────────
 import {
   Menu,
   ArrowLeft,
   X,
   Search,
-  Scan,
+  ScanText,
+  SearchX
 } from "lucide-react-native";
 
-import { useNavigation } from "expo-router";
-import { DrawerActions } from "@react-navigation/native";
-import * as Haptics from "expo-haptics";
-import * as MediaLibrary from "expo-media-library";
-import { AppState, AppStateStatus } from "react-native";
-
+// ── Context & Stores ─────────────────────────────────────────────────────────
 import { useTheme } from "@/context/ThemeContext";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useOptimizedLibrary } from "@/features/library/hooks/useOptimizedLibrary";
-import { useSafePadding } from '@/shared/hooks/useSafePadding';
-
-import { SongListItem } from "@/features/library/components/SongListItem";
-import { EmptyLibrary } from "@/features/library/components/EmptyLibrary";
-import { LibraryScanner } from '@/features/library/api/scanner';
-import { BackgroundScanTask } from "@/features/library/services/BackgroundScanTask";
-import { LibraryTabBar } from "@/features/library/components/LibraryTabBar";
 import {
   useLibraryStore,
   selectAlbums,
@@ -38,20 +32,31 @@ import {
   selectGenres,
   selectFileTypes,
 } from "@/features/library/store/libraryStore";
+
+// ── Components & Services ────────────────────────────────────────────────────
+import { SongListItem } from "@/features/library/components/SongListItem";
+import { EmptyLibrary } from "@/features/library/components/EmptyLibrary";
+import { LibraryScanner } from '@/features/library/api/scanner';
+import { BackgroundScanTask } from "@/features/library/services/BackgroundScanTask";
+import { LibraryTabBar } from "@/features/library/components/LibraryTabBar";
 import { AlbumGrid } from "@/features/library/components/AlbumGrid";
 import { ArtistList } from "@/features/library/components/ArtistList";
 import { GenreList } from "@/features/library/components/GenreList";
 import { FolderList } from "@/features/library/components/FolderList";
 import { FileTypeList } from "@/features/library/components/FileTypeList";
+import { PlaylistList } from "@/features/library/components/PlaylistList";
+
+// ── Types ────────────────────────────────────────────────────────────────────
 import { Song } from "@/shared/types/audio";
 import type { MediaTrack } from "@/features/library/store/libraryStore";
 
 export default function LibraryScreen() {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { colors, spacing } = theme;
-  const safePadding = useSafePadding();
+  const { colors } = theme;
 
+  // ── Player & Library Store ─────────────────────────────────────────────────
   const { playSong, currentSong } = usePlayerStore();
   const {
     activeTab, setActiveTab,
@@ -59,102 +64,58 @@ export default function LibraryScreen() {
     scanStatus, setScanning,
   } = useLibraryStore();
 
-  // ── Search state ─────────────────────────────────────────────
+  // ── Layout Constants ───────────────────────────────────────────────────────
+  // Menghitung kompensasi agar list tidak tertutup Floating Player & TabBar
+  const BOTTOM_COMPENSATION = Platform.OS === 'ios' ? insets.bottom + 145 : 155;
+
+  // ── Search State ───────────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const searchInputRef = useRef<TextInput>(null);
 
   const { songs, loading, reload, isFavorite, toggleFavorite } = useOptimizedLibrary({
-    searchQuery,
+    searchQuery: "", 
     filterBy: "all",
     sortBy: "title-asc",
   });
 
-  // ── Helper: refresh semua data dari DB ───────────────────────
+  // ── Smart Multi-Term Filter ────────────────────────────────────────────────
+  const filteredSongs = useMemo(() => {
+    if (!searchQuery.trim()) return songs;
+    const terms = searchQuery.toLowerCase().split(" ").filter(Boolean);
+    return songs.filter(s => 
+      terms.every(term => 
+        s.title?.toLowerCase().includes(term) ||
+        s.artist?.toLowerCase().includes(term) ||
+        s.album?.toLowerCase().includes(term) ||
+        s.codec?.toLowerCase().includes(term) ||
+        s.filename?.toLowerCase().includes(term)
+      )
+    );
+  }, [songs, searchQuery]);
+
+  // ── Handlers ───────────────────────────────────────────────────────────────
   const refreshLibrary = useCallback(async () => {
     try {
       const freshSongs = await LibraryScanner.getLibrarySongs() ?? [];
       setTracks(freshSongs as any);
       await reload();
-    } catch (err) {
-      console.error("❌ [Library] Refresh Error:", err);
-    }
+    } catch (err) { console.error(err); }
   }, [setTracks, reload]);
 
-  // ── 1. Initial Load ──────────────────────────────────────────
-  useEffect(() => {
-    const init = async () => {
-      console.log("🔍 [Library] Initializing database...");
-      try {
-        const existingSongs = await LibraryScanner.getLibrarySongs() ?? [];
-        console.log(`📊 [Library] Found ${existingSongs.length} songs in DB`);
-        if (existingSongs.length > 0) setTracks(existingSongs as any);
-      } catch (err) {
-        console.error("❌ [Library] Init Error:", err);
-      }
-    };
-    init();
-  }, [setTracks]);
-
-  // ── 2. Auto-detect file baru via MediaLibrary listener ───────
-  useEffect(() => {
-    let subscription: MediaLibrary.Subscription | null = null;
-
-    const setupListener = async () => {
-      const { granted } = await MediaLibrary.requestPermissionsAsync();
-      if (!granted) return;
-
-      subscription = MediaLibrary.addListener(async (event) => {
-        const hasInsert = event.hasIncrementalChanges && (event.insertedAssets?.length ?? 0) > 0;
-        const hasDelete = event.hasIncrementalChanges && (event.deletedAssets?.length ?? 0) > 0;
-
-        if (hasInsert || hasDelete) {
-          console.log(`🔔 [Library] Changes detected — insert: ${event.insertedAssets?.length ?? 0}, delete: ${event.deletedAssets?.length ?? 0}`);
-          await BackgroundScanTask.runManual();
-          await refreshLibrary();
-        }
-      });
-    };
-
-    setupListener();
-    return () => { subscription?.remove(); };
-  }, [refreshLibrary]);
-
-  useEffect(() => {
-    let lastState = AppState.currentState;
-
-    const handleAppStateChange = async (nextState: AppStateStatus) => {
-      if (lastState.match(/inactive|background/) && nextState === 'active') {
-        console.log('📱 [Library] App foregrounded — checking for changes...');
-        await refreshLibrary();
-      }
-      lastState = nextState;
-    };
-
-    const sub = AppState.addEventListener('change', handleAppStateChange);
-    return () => sub.remove();
-  }, [refreshLibrary]);
-
-  // ── 3. Scan Handler ──────────────────────────────────────────
   const handleScanLibrary = useCallback(async () => {
     if (scanStatus.isScanning) return;
-    console.log("📂 [Scan] Manual scan triggered...");
-
     try {
       await BackgroundScanTask.runManual((current, total) => {
         setScanning(true, current, total);
       });
-
       await refreshLibrary();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (err) {
-      console.error("❌ [Scan] Error:", err);
-      setScanning(false, 0, 0);
-    }
+    } catch (err) { setScanning(false, 0, 0); }
   }, [scanStatus.isScanning, setScanning, refreshLibrary]);
 
-  // ── 4. Search handlers ───────────────────────────────────────
   const handleToggleSearch = useCallback(() => {
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (showSearch) {
       setSearchQuery("");
       setShowSearch(false);
@@ -165,120 +126,78 @@ export default function LibraryScreen() {
     }
   }, [showSearch]);
 
-  const handleSearchChange = useCallback((text: string) => {
-    setSearchQuery(text);
-  }, []);
+  const handleSongPress = useCallback((song: Song, list: Song[]) => {
+    playSong(song, list);
+  }, [playSong]);
 
-  // ── 5. Derived Data ──────────────────────────────────────────
+  // ── Derived Data ───────────────────────────────────────────────────────────
   const albums = useMemo(() => selectAlbums(tracks ?? []), [tracks]);
   const artists = useMemo(() => selectArtists(tracks ?? []), [tracks]);
   const folders = useMemo(() => selectFolders(tracks ?? []), [tracks]);
   const genres = useMemo(() => selectGenres(tracks ?? []), [tracks]);
   const fileTypes = useMemo(() => selectFileTypes(tracks ?? []), [tracks]);
 
-  // ── 6. Progress label ────────────────────────────────────────
-  const scanLabel = useMemo(() => {
-    if (!scanStatus.isScanning) return null;
-    if (scanStatus.total > 0) return `Memindai ${scanStatus.scanned} / ${scanStatus.total}`;
-    return "Mengumpulkan file...";
-  }, [scanStatus.isScanning, scanStatus.scanned, scanStatus.total]);
-
-  // ── 7. Render item ───────────────────────────────────────────
-  const renderItem: ListRenderItem<Song> = useCallback(({ item }) => (
+  // ── Render ─────────────────────────────────────────────────────────────────
+  const renderSongItem: ListRenderItem<Song> = useCallback(({ item }) => (
     <SongListItem
       item={item}
       isNowPlaying={currentSong?.id === item.id}
       isFavorite={isFavorite(item.id)}
       colors={colors}
-      onPress={(s) => playSong(s, songs)}
+      onPress={(s) => handleSongPress(s, showSearch ? filteredSongs : songs)}
       onToggleFavorite={toggleFavorite}
     />
-  ), [currentSong?.id, isFavorite, colors, playSong, songs, toggleFavorite]);
-
-  // ── 8. Filtered songs untuk search ───────────────────────────
-  const filteredSongs = useMemo(() => {
-    if (!searchQuery.trim()) return songs;
-    const q = searchQuery.toLowerCase();
-    return songs.filter(s =>
-      s.title?.toLowerCase().includes(q) ||
-      s.artist?.toLowerCase().includes(q) ||
-      s.album?.toLowerCase().includes(q) ||
-      s.filename?.toLowerCase().includes(q)
-    );
-  }, [songs, searchQuery]);
-
-  // ── 9. AlbumGrid handlers ────────────────────────────────────
-  const handleAlbumSongPress = useCallback(
-    (track: MediaTrack, queue: MediaTrack[]) => {
-      playSong(track as unknown as Song, queue as unknown as Song[]);
-    },
-    [playSong]
-  );
+  ), [currentSong?.id, isFavorite, colors, showSearch, filteredSongs, songs, toggleFavorite, handleSongPress]);
 
   return (
-    <View style={[
-      s.container,
-      {
-        flex: 1,
-        backgroundColor: colors.background.primary,
-        paddingTop: safePadding.paddingTop,
-        paddingBottom: safePadding.paddingBottom,
-        paddingLeft: safePadding.paddingLeft,
-        paddingRight: safePadding.paddingRight,
-      }
-    ]}>
-
-      {/* HEADER */}
-      <View style={[s.header, { paddingHorizontal: spacing.md }]}>
+    <View style={[s.container, { backgroundColor: colors.background.primary }]}>
+      
+      {/* ── Header ── */}
+      <View style={[s.header, { paddingTop: insets.top + 8, paddingHorizontal: 20 }]}>
         {showSearch ? (
-          <>
-            <TouchableOpacity onPress={handleToggleSearch} hitSlop={8}>
+          <View style={s.searchRow}>
+            <TouchableOpacity onPress={handleToggleSearch} hitSlop={15}>
               <ArrowLeft size={24} color={colors.text.primary} strokeWidth={2.5} />
             </TouchableOpacity>
-
-            <TextInput
-              ref={searchInputRef}
-              style={[s.searchInput, {
-                color: colors.text.primary,
-                backgroundColor: colors.background.tertiary,
-                borderColor: colors.border.light,
-              }]}
-              placeholder="Cari lagu, artist, album..."
-              placeholderTextColor={colors.text.tertiary}
-              value={searchQuery}
-              onChangeText={handleSearchChange}
-              autoCapitalize="none"
-              returnKeyType="search"
-            />
-
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery("")} hitSlop={8}>
-                <X size={20} color={colors.text.tertiary} strokeWidth={3} />
-              </TouchableOpacity>
-            )}
-          </>
+            <View style={[s.searchBar, { backgroundColor: colors.background.secondary, borderColor: colors.border.default }]}>
+              <Search size={18} color={colors.primary[500]} />
+              <TextInput
+                ref={searchInputRef}
+                style={[s.searchInput, { color: colors.text.primary }]}
+                placeholder="Search High-Res Audio..."
+                placeholderTextColor={colors.text.disabled}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery("")} hitSlop={10}>
+                  <X size={18} color={colors.text.tertiary} strokeWidth={3} />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
         ) : (
           <>
-            <TouchableOpacity onPress={() => navigation.dispatch(DrawerActions.openDrawer())}>
-              <Menu size={28} color={colors.text.primary} strokeWidth={2.5} />
+            <TouchableOpacity 
+              onPress={() => navigation.dispatch(DrawerActions.openDrawer())} 
+              style={s.headerSide}
+            >
+              <Menu size={26} color={colors.text.primary} strokeWidth={2.2} />
             </TouchableOpacity>
 
-            <Text style={[s.headerTitle, { color: colors.text.primary }]}>Library</Text>
+            <Text style={[s.headerTitle, { color: colors.text.primary }]}>LIBRARY</Text>
 
-            <View style={s.headerActions}>
-              <TouchableOpacity onPress={handleToggleSearch} style={s.headerBtn}>
-                <Search size={22} color={colors.text.primary} strokeWidth={2.5} />
+            <View style={[s.headerSide, s.headerTrailing]}>
+              <TouchableOpacity onPress={handleToggleSearch} style={s.iconBtn}>
+                <Search size={22} color={colors.text.primary} strokeWidth={2.2} />
               </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={handleScanLibrary}
-                disabled={scanStatus.isScanning}
-                style={s.headerBtn}
-              >
+              <TouchableOpacity onPress={handleScanLibrary} style={s.iconBtn}>
                 {scanStatus.isScanning ? (
                   <ActivityIndicator size="small" color={colors.primary[500]} />
                 ) : (
-                  <Scan size={22} color={colors.text.primary} strokeWidth={2.5} />
+                  <ScanText size={22} color={colors.text.primary} strokeWidth={2.2} />
                 )}
               </TouchableOpacity>
             </View>
@@ -286,21 +205,16 @@ export default function LibraryScreen() {
         )}
       </View>
 
-      {/* SCAN PROGRESS BANNER */}
-      {scanLabel && (
-        <View style={[s.scanBanner, { backgroundColor: colors.primary[900] }]}>
-          <ActivityIndicator size="small" color={colors.primary[400]} />
-          <Text style={[s.scanLabel, { color: colors.primary[300] }]}>{scanLabel}</Text>
+      {/* ── Search Info ── */}
+      {showSearch && searchQuery.length > 0 && (
+        <View style={s.searchMeta}>
+          <Text style={[s.resultText, { color: colors.primary[500] }]}>
+            {filteredSongs.length} TRACKS FOUND
+          </Text>
         </View>
       )}
 
-      {/* SEARCH RESULT COUNT */}
-      {showSearch && searchQuery.length > 0 && (
-        <Text style={[s.resultCount, { color: colors.text.tertiary }]}>
-          {filteredSongs.length} hasil untuk "{searchQuery}"
-        </Text>
-      )}
-
+      {/* ── Tab Bar ── */}
       <LibraryTabBar
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -311,8 +225,8 @@ export default function LibraryScreen() {
         trackCount={showSearch ? filteredSongs.length : songs.length}
       />
 
-      {/* CONTENT */}
-      <View style={{ flex: 1 }}>
+      {/* ── Content Area ── */}
+      <View style={s.content}>
         {activeTab === "song" ? (
           loading && songs.length === 0 ? (
             <View style={s.center}>
@@ -320,66 +234,37 @@ export default function LibraryScreen() {
             </View>
           ) : (
             <FlashList
-              data={showSearch && searchQuery ? filteredSongs : songs}
-              renderItem={renderItem}
+              data={showSearch ? filteredSongs : songs}
+              renderItem={renderSongItem}
               keyExtractor={(item) => item.id}
               estimatedItemSize={72}
-              contentContainerStyle={{ paddingBottom: 100 }}
+              contentContainerStyle={{ 
+                paddingBottom: BOTTOM_COMPENSATION,
+                paddingHorizontal: 12 
+              }}
               ListEmptyComponent={
-                showSearch
-                  ? <View style={s.center}>
-                      <Search size={48} color={colors.text.tertiary} strokeWidth={1.8} />
-                      <Text style={[s.emptyText, { color: colors.text.tertiary }]}>
-                        Tidak ada hasil untuk "{searchQuery}"
-                      </Text>
-                    </View>
-                  : <EmptyLibrary colors={colors} onScan={handleScanLibrary} />
+                showSearch ? (
+                  <View style={s.emptySearch}>
+                    <SearchX size={56} color={colors.text.disabled} strokeWidth={1.5} />
+                    <Text style={[s.emptySearchTitle, { color: colors.text.primary }]}>No matches found</Text>
+                    <Text style={[s.emptySearchSub, { color: colors.text.tertiary }]}>
+                      Try adjusting your keywords, e.g. "FLAC" or "24bit".
+                    </Text>
+                  </View>
+                ) : (
+                  <EmptyLibrary colors={colors} onScan={handleScanLibrary} />
+                )
               }
             />
           )
-        ) : activeTab === "album" ? (
-          <AlbumGrid
-            albums={albums}
-            tracks={tracks ?? []}
-            currentTrackId={currentSong?.id}
-            onSongPress={handleAlbumSongPress}
-            onToggleFavorite={toggleFavorite}
-          />
-        ) : activeTab === "artist" ? (
-          <ArtistList
-            artists={artists}
-            tracks={tracks ?? []}
-            currentTrackId={currentSong?.id}
-            onSongPress={handleAlbumSongPress}
-            onToggleFavorite={toggleFavorite}
-          />
-        ) : activeTab === "folder" ? (
-          <FolderList
-            folders={folders}
-            tracks={tracks ?? []}
-            currentTrackId={currentSong?.id}
-            onSongPress={handleAlbumSongPress}
-            onToggleFavorite={toggleFavorite}
-          />
-        ) : activeTab === "genre" ? (
-          <GenreList
-            genres={genres}
-            tracks={tracks ?? []}
-            currentTrackId={currentSong?.id}
-            onSongPress={handleAlbumSongPress}
-            onToggleFavorite={toggleFavorite}
-          />
-        ) : activeTab === "filetype" ? (
-          <FileTypeList
-            fileTypes={fileTypes}
-            tracks={tracks ?? []}
-            currentTrackId={currentSong?.id}
-            onSongPress={handleAlbumSongPress}
-            onToggleFavorite={toggleFavorite}
-          />
         ) : (
-          <View style={s.center}>
-            <Text style={{ color: colors.text.tertiary }}>Coming Soon</Text>
+          <View style={{ flex: 1, paddingBottom: BOTTOM_COMPENSATION }}>
+            {activeTab === "album" && <AlbumGrid albums={albums} tracks={tracks ?? []} currentTrackId={currentSong?.id} onSongPress={handleSongPress as any} onToggleFavorite={toggleFavorite} />}
+            {activeTab === "artist" && <ArtistList artists={artists} tracks={tracks ?? []} currentTrackId={currentSong?.id} onSongPress={handleSongPress as any} onToggleFavorite={toggleFavorite} />}
+            {activeTab === "folder" && <FolderList folders={folders} tracks={tracks ?? []} currentTrackId={currentSong?.id} onSongPress={handleSongPress as any} onToggleFavorite={toggleFavorite} />}
+            {activeTab === "genre" && <GenreList genres={genres} tracks={tracks ?? []} currentTrackId={currentSong?.id} onSongPress={handleSongPress as any} onToggleFavorite={toggleFavorite} />}
+            {activeTab === "filetype" && <FileTypeList fileTypes={fileTypes} tracks={tracks ?? []} currentTrackId={currentSong?.id} onSongPress={handleSongPress as any} onToggleFavorite={toggleFavorite} />}
+            {activeTab === "playlist" && <PlaylistList playlists={[]} favoriteCount={songs.filter(s => isFavorite(s.id)).length} onPlaylistPress={() => {}} onCreateNew={() => {}} />}
           </View>
         )}
       </View>
@@ -389,34 +274,70 @@ export default function LibraryScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 40 },
+  content: { flex: 1 },
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  
+  // Header Symmetris
   header: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingTop: Platform.OS === "ios" ? 12 : 8,
-    paddingBottom: 12,
-    gap: 8,
+    justifyContent: "space-between",
+    paddingBottom: 16,
   },
-  headerTitle: { fontSize: 24, fontWeight: "800", flex: 1, textAlign: "center" },
-  headerActions: { flexDirection: "row", alignItems: "center", gap: 4 },
-  headerBtn: { padding: 4 },
-  searchInput: {
+  headerSide: {
+    width: 44, // Fixed width agar title benar-benar di tengah
+    justifyContent: 'center',
+  },
+  headerTrailing: {
+    flexDirection: 'row',
+    width: 80, // Penyeimbang lebar ikon di kanan
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  headerTitle: { 
+    fontSize: 15, 
+    fontWeight: "800", 
+    letterSpacing: 4, 
+    textAlign: "center",
     flex: 1,
-    height: 38,
-    borderRadius: 10,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    fontSize: 14,
+    textTransform: 'uppercase'
   },
-  scanBanner: {
+  
+  // Search Bar
+  searchRow: { flexDirection: "row", alignItems: "center", flex: 1, gap: 16 },
+  searchBar: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    height: 46,
+    borderRadius: 23,
+    borderWidth: 1.5,
     paddingHorizontal: 16,
-    paddingVertical: 6,
+    gap: 10,
   },
-  scanLabel: { fontSize: 12, fontWeight: "600" },
-  resultCount: { fontSize: 12, paddingHorizontal: 16, paddingVertical: 4 },
-  emptyText: { marginTop: 12, fontSize: 14, textAlign: "center" },
-}); 
+  searchInput: { 
+    flex: 1, 
+    fontSize: 15, 
+    fontWeight: "600",
+    paddingVertical: 8
+  },
+  iconBtn: { padding: 4 },
+
+  // Search Meta
+  searchMeta: { 
+    paddingHorizontal: 24, 
+    paddingBottom: 16,
+    marginTop: -4 
+  },
+  resultText: { 
+    fontSize: 10, 
+    fontWeight: "800", 
+    letterSpacing: 1.5,
+  },
+
+  // Empty State
+  emptySearch: { flex: 1, justifyContent: "center", alignItems: "center", padding: 40, marginTop: 60 },
+  emptySearchTitle: { fontSize: 18, fontWeight: "800", marginTop: 16 },
+  emptySearchSub: { fontSize: 14, textAlign: "center", marginTop: 8, lineHeight: 20 },
+});
+ 

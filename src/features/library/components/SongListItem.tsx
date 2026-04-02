@@ -1,15 +1,18 @@
 import React, { memo } from 'react';
 import { TouchableOpacity, View, Text, StyleSheet, Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import QualityBadge from '@/shared/components/ui/QualityBadge';
-import { formatTime } from '@/shared/utils/time';
 import { Song } from '@/shared/types/audio';
+import { formatTime } from '@/shared/utils/time';
 
-// ← Import Lucide Icons
+// Komponen internal UI Anda
+import QualityBadge from '@/shared/components/ui/QualityBadge';
+
+// Icons - Menggunakan Music2 dan AudioLines untuk kesan lebih "Pro"
 import {
-  Music,           // musical-note
-  BarChart3,       // stats-chart (untuk now playing)
-  Heart,           // heart / heart-outline
+  Music2,
+  AudioLines,
+  Heart,
+  MoreVertical
 } from 'lucide-react-native';
 
 interface SongListItemProps {
@@ -19,6 +22,7 @@ interface SongListItemProps {
   colors: any;
   onPress: (song: Song) => void;
   onToggleFavorite: (id: string) => void;
+  onMorePress?: (song: Song) => void; // Tambahan untuk menu context
 }
 
 export const SongListItem = memo(({
@@ -28,6 +32,7 @@ export const SongListItem = memo(({
   colors,
   onPress,
   onToggleFavorite,
+  onMorePress
 }: SongListItemProps) => {
 
   const handlePress = () => {
@@ -37,152 +42,121 @@ export const SongListItem = memo(({
     onPress(item);
   };
 
-  const handleFavoritePress = () => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    onToggleFavorite(item.id);
-  };
-
   return (
     <TouchableOpacity
       style={[
-        styles.songCard,
-        isNowPlaying && { backgroundColor: colors.background.tertiary },
+        styles.container,
+        isNowPlaying && { backgroundColor: `${colors.primary[500]}10` }, // Soft highlight
       ]}
       onPress={handlePress}
-      activeOpacity={0.6}
+      activeOpacity={0.7}
     >
-      {/* Artwork Section */}
-      <View
-        style={[
-          styles.artworkPlaceholder,
-          {
-            backgroundColor: isNowPlaying
-              ? `${colors.primary[500]}20`
-              : colors.background.secondary,
-          },
-        ]}
-      >
+      {/* 1. Artwork / Status Indicator */}
+      <View style={[
+        styles.artworkContainer,
+        { backgroundColor: isNowPlaying ? colors.primary[500] : colors.background.secondary }
+      ]}>
         {isNowPlaying ? (
-          <BarChart3
-            size={22}
-            color={colors.primary[500]}
-            strokeWidth={2.5}
-          />
+          <AudioLines size={20} color={colors.background.primary} strokeWidth={2.5} />
         ) : (
-          <Music
-            size={22}
-            color={colors.text.tertiary}
-            strokeWidth={2.2}
-          />
+          <Music2 size={20} color={colors.text.tertiary} strokeWidth={1.5} />
         )}
       </View>
 
-      {/* Info Section */}
-      <View style={styles.songInfo}>
-        <View style={styles.titleRow}>
+      {/* 2. Main Info Section */}
+      <View style={styles.infoContent}>
+        <View style={styles.topRow}>
           <Text
             style={[
-              styles.songTitle,
-              { color: isNowPlaying ? colors.primary[500] : colors.text.primary },
+              styles.title,
+              { color: isNowPlaying ? colors.primary[500] : colors.text.primary }
             ]}
             numberOfLines={1}
-            ellipsizeMode="tail"
           >
-            {item.title}
+            {item.title || item.filename}
           </Text>
-
-          {(item.sampleRate || item.codec) && (
-            <QualityBadge
-              sampleRate={item.sampleRate}
-              codec={item.codec}
-            />
-          )}
+          
+          {/* Badge diletakkan di kanan judul dengan ukuran proporsional */}
+          <QualityBadge 
+            sampleRate={item.sampleRate} 
+            codec={item.codec} 
+            isHiRes={item.isHiRes} 
+          />
         </View>
 
-        <Text
-          style={[styles.songArtist, { color: colors.text.secondary }]}
-          numberOfLines={1}
-        >
-          {item.artist} <Text style={{ color: colors.text.tertiary }}>•</Text> {item.album || "Unknown Album"}
-        </Text>
+        <View style={styles.bottomRow}>
+          <Text style={[styles.subText, { color: colors.text.secondary }]} numberOfLines={1}>
+            {item.artist} <Text style={{opacity: 0.5}}>•</Text> {item.album}
+          </Text>
+        </View>
+        
+        {/* Technical Data Row - Sangat disukai Audiophile */}
+        <View style={styles.techRow}>
+          <Text style={[styles.techInfo, { color: colors.text.tertiary }]}>
+            {item.codec?.toUpperCase()}  |  {item.bitDepth ? `${item.bitDepth}bit` : '16bit'}  |  {Math.round(item.sampleRate / 1000)}kHz
+          </Text>
+        </View>
       </View>
 
-      {/* Actions Section */}
-      <View style={styles.rightActions}>
-        <TouchableOpacity
-          onPress={handleFavoritePress}
-          style={styles.favoriteBtn}
-          hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+      {/* 3. Right Action Section */}
+      <View style={styles.actions}>
+        <TouchableOpacity 
+          onPress={() => onToggleFavorite(item.id)}
+          style={styles.iconButton}
         >
           <Heart
-            size={20}
+            size={18}
             color={isFavorite ? colors.status.error : colors.text.tertiary}
-            strokeWidth={isFavorite ? 0 : 2.5}
             fill={isFavorite ? colors.status.error : "transparent"}
+            strokeWidth={isFavorite ? 0 : 2}
           />
         </TouchableOpacity>
-
-        <Text style={[styles.durationText, { color: colors.text.tertiary }]}>
-          {formatTime(item.duration || 0)}
+        
+        <Text style={[styles.duration, { color: colors.text.tertiary }]}>
+          {formatTime(item.duration)}
         </Text>
       </View>
     </TouchableOpacity>
   );
-}, (prevProps, nextProps) => {
+}, (prev, next) => {
   return (
-    prevProps.item.id === nextProps.item.id &&
-    prevProps.isNowPlaying === nextProps.isNowPlaying &&
-    prevProps.isFavorite === nextProps.isFavorite &&
-    prevProps.colors === nextProps.colors
+    prev.item.id === next.item.id &&
+    prev.isNowPlaying === next.isNowPlaying &&
+    prev.isFavorite === next.isFavorite &&
+    prev.colors.primary[500] === next.colors.primary[500]
   );
 });
 
 const styles = StyleSheet.create({
-  songCard: {
-    flexDirection: "row",
-    alignItems: "center",
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12, // Tambah sedikit dari 8 atau 10
     paddingHorizontal: 16,
-    height: 72,
+    borderRadius: 12,
+    marginVertical: 2, // Beri jarak antar baris agar tidak menempel
   },
-  artworkPlaceholder: {
-    width: 52,
-    height: 52,
-    borderRadius: 8,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  songInfo: {
+  textContainer: {
     flex: 1,
-    marginHorizontal: 14,
-  },
-  titleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: 'space-between',
-  },
-  songTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    flex: 1,
-    marginRight: 4,
-  },
-  songArtist: {
-    fontSize: 13,
-    marginTop: 1,
-  },
-  rightActions: {
-    alignItems: "flex-end",
+    marginLeft: 14,
     justifyContent: 'center',
-    height: '100%',
   },
-  favoriteBtn: {
-    padding: 4,
+  title: {
+    fontSize: 15,
+    fontWeight: '600', // Gunakan 600 untuk kesan semi-bold yang bersih
+    marginBottom: 2,
   },
-  durationText: {
-    fontSize: 10,
-    fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
-    marginTop: 2,
+  subtitle: {
+    fontSize: 12,
+    opacity: 0.6,
+    letterSpacing: 0.3,
   },
-}); 
+  // Tambahkan indikator resolusi (Hi-Res/Lossless) jika ada
+  badge: {
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    borderWidth: 0.5,
+    marginRight: 6,
+  }
+});

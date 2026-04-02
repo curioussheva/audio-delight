@@ -1,4 +1,3 @@
-// src/features/library/components/FileTypeList.tsx
 import React, { memo, useState, useMemo, useCallback } from "react";
 import {
   View,
@@ -8,247 +7,102 @@ import {
   StyleSheet,
   Platform,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { 
+  Binary, 
+  FileAudio, 
+  ChevronRight, 
+  ChevronLeft, 
+  Play, 
+  Activity, 
+  Heart,
+  Music2
+} from "lucide-react-native";
 import { useTheme } from "@/context/ThemeContext";
 import type { MediaTrack } from "../store/libraryStore";
 import { formatTime } from "@/shared/utils/time";
 import QualityBadge from "@/shared/components/ui/QualityBadge";
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-interface FileTypeItem {
-  codec: string;
-  count: number;
-}
-
-interface FileTypeListProps {
-  fileTypes: FileTypeItem[];
-  tracks: MediaTrack[];
-  currentTrackId?: string;
-  favoriteIds?: Set<string>;
-  onSongPress: (track: MediaTrack, queue: MediaTrack[]) => void;
-  onToggleFavorite?: (id: string) => void;
-}
-
-// ── Codec metadata ────────────────────────────────────────────────────────────
-// Warna dan label per format audio — audiophile-aware
-const CODEC_META: Record<string, { color: string; bg: string; label: string; isHiRes: boolean }> = {
-  FLAC:  { color: "#3b82f6", bg: "#3b82f618", label: "FLAC",        isHiRes: true  },
-  WAV:   { color: "#8b5cf6", bg: "#8b5cf618", label: "WAV",         isHiRes: true  },
-  AIFF:  { color: "#8b5cf6", bg: "#8b5cf618", label: "AIFF",        isHiRes: true  },
-  DSD:   { color: "#f59e0b", bg: "#f59e0b18", label: "DSD",         isHiRes: true  },
-  DSDF:  { color: "#f59e0b", bg: "#f59e0b18", label: "DSF",         isHiRes: true  },
-  DSF:   { color: "#f59e0b", bg: "#f59e0b18", label: "DSF",         isHiRes: true  },
-  DFF:   { color: "#f59e0b", bg: "#f59e0b18", label: "DFF",         isHiRes: true  },
-  ALAC:  { color: "#14b8a6", bg: "#14b8a618", label: "ALAC",        isHiRes: true  },
-  APE:   { color: "#06b6d4", bg: "#06b6d418", label: "APE",         isHiRes: true  },
-  MP3:   { color: "#6b7280", bg: "#6b728018", label: "MP3",         isHiRes: false },
-  AAC:   { color: "#6b7280", bg: "#6b728018", label: "AAC",         isHiRes: false },
-  OGG:   { color: "#6b7280", bg: "#6b728018", label: "OGG",         isHiRes: false },
-  OPUS:  { color: "#6b7280", bg: "#6b728018", label: "OPUS",        isHiRes: false },
-  M4A:   { color: "#6b7280", bg: "#6b728018", label: "M4A",         isHiRes: false },
-  WMA:   { color: "#6b7280", bg: "#6b728018", label: "WMA",         isHiRes: false },
+// ── Codec Metadata (Pristine Mapping) ─────────────────────────────────────────
+const CODEC_CONFIG: Record<string, { color: string; label: string; isHiRes: boolean }> = {
+  FLAC:  { color: "#3b82f6", label: "FLAC",    isHiRes: true  },
+  WAV:   { color: "#8b5cf6", label: "WAV",     isHiRes: true  },
+  DSD:   { color: "#f59e0b", label: "DSD",     isHiRes: true  },
+  DSF:   { color: "#f59e0b", label: "DSF",     isHiRes: true  },
+  ALAC:  { color: "#14b8a6", label: "ALAC",    isHiRes: true  },
+  MP3:   { color: "#94a3b8", label: "MP3",     isHiRes: false },
+  AAC:   { color: "#94a3b8", label: "AAC",     isHiRes: false },
 };
 
-const getCodecMeta = (codec: string) => {
-  const key = codec.toUpperCase().replace(/\./g, "");
-  return CODEC_META[key] ?? { color: "#9ca3af", bg: "#9ca3af18", label: codec.toUpperCase(), isHiRes: false };
+const getMeta = (codec: string) => {
+  const key = codec?.toUpperCase().replace(/\./g, "") || "???";
+  return CODEC_CONFIG[key] ?? { color: "#64748b", label: key, isHiRes: false };
 };
 
-// ── FileTypeRow ───────────────────────────────────────────────────────────────
-const FileTypeRow = memo(({ item, onPress, colors, spacing }: {
-  item: FileTypeItem;
-  onPress: (item: FileTypeItem) => void;
-  colors: any;
-  spacing: any;
-}) => {
-  const meta = useMemo(() => getCodecMeta(item.codec), [item.codec]);
-
+// ── FileTypeRow (Main List) ───────────────────────────────────────────────────
+const FileTypeRow = memo(({ item, onPress, colors }: any) => {
+  const meta = useMemo(() => getMeta(item.codec), [item.codec]);
+  
   const handlePress = useCallback(() => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onPress(item);
   }, [item, onPress]);
 
   return (
-    <TouchableOpacity
-      onPress={handlePress}
-      activeOpacity={0.6}
-      style={[styles.row, { paddingHorizontal: spacing.md }]}
-    >
-      {/* Codec badge box */}
-      <View style={[styles.codecBox, { backgroundColor: meta.bg, borderColor: meta.color + "40", borderWidth: 1 }]}>
-        <Text style={[styles.codecText, { color: meta.color }]}>{meta.label}</Text>
-        {meta.isHiRes && (
-          <Text style={[styles.hiresTag, { color: meta.color }]}>HI-RES</Text>
-        )}
+    <TouchableOpacity onPress={handlePress} activeOpacity={0.7} style={styles.formatRow}>
+      <View style={[styles.codecBadge, { backgroundColor: `${meta.color}15`, borderColor: `${meta.color}40` }]}>
+        <Text style={[styles.codecLabel, { color: meta.color }]}>{meta.label}</Text>
+        {meta.isHiRes && <Activity size={10} color={meta.color} strokeWidth={3} />}
       </View>
-
-      {/* Info */}
-      <View style={styles.info}>
-        <Text style={[styles.name, { color: colors.text.primary }]}>
-          {meta.label}
-          {meta.isHiRes && (
-            <Text style={[styles.hiresInline, { color: meta.color }]}> · Lossless</Text>
-          )}
+      
+      <View style={styles.formatInfo}>
+        <Text style={[styles.formatTitle, { color: colors.text.primary }]}>
+          {meta.label} Audio {meta.isHiRes ? "• Lossless" : ""}
         </Text>
-        <Text style={[styles.meta, { color: colors.text.secondary }]}>
-          {item.count} lagu
+        <Text style={[styles.formatMeta, { color: colors.text.tertiary }]}>
+          {item.count} Tracks Collected
         </Text>
       </View>
 
-      <Ionicons name="chevron-forward" size={16} color={colors.text.disabled} />
+      <ChevronRight size={18} color={colors.text.disabled} />
     </TouchableOpacity>
-  );
-}, (prev, next) =>
-  prev.item.codec === next.item.codec &&
-  prev.item.count === next.item.count &&
-  prev.colors === next.colors
-);
-
-// ── FileTypeSongRow ───────────────────────────────────────────────────────────
-const FileTypeSongRow = memo(({ track, isNowPlaying, isFavorite, onPress, onToggleFavorite, colors }: {
-  track: MediaTrack;
-  isNowPlaying: boolean;
-  isFavorite: boolean;
-  onPress: () => void;
-  onToggleFavorite?: () => void;
-  colors: any;
-}) => {
-  const handlePress = useCallback(() => {
-    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onPress();
-  }, [onPress]);
-
-  const handleFav = useCallback(() => {
-    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    onToggleFavorite?.();
-  }, [onToggleFavorite]);
-
-  return (
-    <TouchableOpacity
-      onPress={handlePress}
-      activeOpacity={0.6}
-      style={[styles.songRow, isNowPlaying && { backgroundColor: colors.background.tertiary }]}
-    >
-      <View style={[
-        styles.songIcon,
-        { backgroundColor: isNowPlaying ? `${colors.primary[500]}20` : colors.background.secondary },
-      ]}>
-        <Ionicons
-          name={isNowPlaying ? "stats-chart" : "musical-note"}
-          size={18}
-          color={isNowPlaying ? colors.primary[500] : colors.text.tertiary}
-        />
-      </View>
-
-      <View style={styles.songInfo}>
-        <View style={styles.titleRow}>
-          <Text
-            style={[styles.songTitle, { color: isNowPlaying ? colors.primary[500] : colors.text.primary }]}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-          >
-            {track.title}
-          </Text>
-          {(track.sampleRate || track.codec) && (
-            <QualityBadge sampleRate={track.sampleRate} codec={track.codec} />
-          )}
-        </View>
-        <Text style={[styles.songSub, { color: colors.text.secondary }]} numberOfLines={1}>
-          {track.artist || "Unknown Artist"}
-          {track.album ? ` · ${track.album}` : ""}
-        </Text>
-      </View>
-
-      <View style={styles.rightActions}>
-        {onToggleFavorite && (
-          <TouchableOpacity onPress={handleFav} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-            <Ionicons
-              name={isFavorite ? "heart" : "heart-outline"}
-              size={18}
-              color={isFavorite ? colors.status.error : colors.text.tertiary}
-            />
-          </TouchableOpacity>
-        )}
-        <Text style={[styles.duration, {
-          color: colors.text.disabled,
-          fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
-        }]}>
-          {formatTime(track.duration || 0)}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
-}, (prev, next) =>
-  prev.track.id === next.track.id &&
-  prev.isNowPlaying === next.isNowPlaying &&
-  prev.isFavorite === next.isFavorite &&
-  prev.colors === next.colors
-);
-
-// ── FileTypeDetailHeader ──────────────────────────────────────────────────────
-const FileTypeDetailHeader = memo(({ fileType, songCount, totalDuration, onBack, onPlayAll, colors, spacing }: {
-  fileType: FileTypeItem;
-  songCount: number;
-  totalDuration: number;
-  onBack: () => void;
-  onPlayAll: () => void;
-  colors: any;
-  spacing: any;
-}) => {
-  const meta = useMemo(() => getCodecMeta(fileType.codec), [fileType.codec]);
-
-  return (
-    <View style={{ backgroundColor: colors.background.secondary }}>
-      <TouchableOpacity
-        onPress={onBack}
-        style={[styles.backRow, { paddingHorizontal: spacing.md, paddingVertical: spacing.sm }]}
-      >
-        <Ionicons name="chevron-back" size={18} color={colors.primary[500]} />
-        <Text style={[styles.backLabel, { color: colors.primary[500] }]}>Format</Text>
-      </TouchableOpacity>
-
-      <View style={[styles.detailHeader, { paddingHorizontal: spacing.md, paddingBottom: spacing.md }]}>
-        {/* Large codec badge */}
-        <View style={[styles.detailCodecBox, { backgroundColor: meta.bg, borderColor: meta.color + "60", borderWidth: 1.5 }]}>
-          <Text style={[styles.detailCodecText, { color: meta.color }]}>{meta.label}</Text>
-        </View>
-        <View style={styles.detailInfo}>
-          <View style={styles.detailNameRow}>
-            <Text style={[styles.detailName, { color: colors.text.primary }]}>
-              {meta.label}
-            </Text>
-            {meta.isHiRes && (
-              <View style={[styles.losslessBadge, { backgroundColor: meta.bg, borderColor: meta.color + "60", borderWidth: 1 }]}>
-                <Text style={[styles.losslessText, { color: meta.color }]}>LOSSLESS</Text>
-              </View>
-            )}
-          </View>
-          <Text style={[styles.detailMeta, { color: colors.text.disabled }]}>
-            {songCount} lagu · {formatTime(totalDuration)}
-          </Text>
-        </View>
-      </View>
-
-      <TouchableOpacity
-        onPress={onPlayAll}
-        style={[styles.playAllBtn, {
-          backgroundColor: colors.primary[500],
-          marginHorizontal: spacing.md,
-          marginBottom: spacing.md,
-        }]}
-      >
-        <Ionicons name="play" size={16} color="#fff" />
-        <Text style={styles.playAllLabel}>Putar Semua</Text>
-      </TouchableOpacity>
-
-      <View style={[styles.divider, { backgroundColor: colors.background.tertiary }]} />
-    </View>
   );
 });
 
-// ── FileTypeList ──────────────────────────────────────────────────────────────
-export const FileTypeList: React.FC<FileTypeListProps> = ({
+// ── FileTypeSongRow (Inside Detail) ───────────────────────────────────────────
+const FileTypeSongRow = memo(({ track, isNowPlaying, isFavorite, onPress, onToggleFavorite, colors }: any) => (
+  <TouchableOpacity
+    onPress={onPress}
+    activeOpacity={0.7}
+    style={[styles.songRow, isNowPlaying && { backgroundColor: `${colors.primary[500]}10` }]}
+  >
+    <View style={styles.songLeading}>
+      <Music2 size={18} color={isNowPlaying ? colors.primary[500] : colors.text.disabled} />
+    </View>
+
+    <View style={styles.songMain}>
+      <View style={styles.songTitleRow}>
+        <Text style={[styles.songTitle, { color: isNowPlaying ? colors.primary[500] : colors.text.primary }]} numberOfLines={1}>
+          {track.title}
+        </Text>
+        <QualityBadge sampleRate={track.sampleRate} codec={track.codec} />
+      </View>
+      <Text style={[styles.songSub, { color: colors.text.tertiary }]}>
+        {track.artist} • {track.sampleRate ? `${Math.round(track.sampleRate/1000)}kHz` : '44.1kHz'}
+      </Text>
+    </View>
+
+    <View style={styles.songTrailing}>
+       <TouchableOpacity onPress={onToggleFavorite} style={{ padding: 4 }}>
+          <Heart size={16} color={isFavorite ? colors.status.error : colors.text.disabled} fill={isFavorite ? colors.status.error : 'transparent'} />
+       </TouchableOpacity>
+       <Text style={[styles.duration, { color: colors.text.disabled }]}>{formatTime(track.duration)}</Text>
+    </View>
+  </TouchableOpacity>
+));
+
+// ── FileTypeList Main Component ──────────────────────────────────────────────
+export const FileTypeList: React.FC<any> = ({
   fileTypes,
   tracks,
   currentTrackId,
@@ -257,155 +111,118 @@ export const FileTypeList: React.FC<FileTypeListProps> = ({
   onToggleFavorite,
 }) => {
   const { theme } = useTheme();
-  const { colors, spacing } = theme;
-
-  const [selectedFileType, setSelectedFileType] = useState<FileTypeItem | null>(null);
+  const { colors } = theme;
+  const [selectedType, setSelectedType] = useState<any | null>(null);
 
   const filteredSongs = useMemo(() => {
-    if (!selectedFileType) return [];
-    return (tracks ?? []).filter(
-      (t) => (t.codec || "Unknown").toUpperCase() === selectedFileType.codec.toUpperCase()
-    );
-  }, [tracks, selectedFileType]);
+    if (!selectedType) return [];
+    return (tracks ?? []).filter(t => (t.codec || "").toUpperCase() === selectedType.codec.toUpperCase());
+  }, [tracks, selectedType]);
 
-  const totalDuration = useMemo(
-    () => filteredSongs.reduce((acc, t) => acc + (t.duration || 0), 0),
-    [filteredSongs]
-  );
-
-  const handleFileTypePress = useCallback((ft: FileTypeItem) => setSelectedFileType(ft), []);
-  const handleBack = useCallback(() => setSelectedFileType(null), []);
-  const handlePlayAll = useCallback(() => {
-    if (filteredSongs.length > 0) onSongPress(filteredSongs[0], filteredSongs);
-  }, [filteredSongs, onSongPress]);
-  const handleSongPress = useCallback(
-    (track: MediaTrack) => onSongPress(track, filteredSongs),
-    [filteredSongs, onSongPress]
-  );
-
-  // ── Format list ───────────────────────────────────────────────────────────────
-  if (!selectedFileType) {
-    if (!fileTypes.length) {
-      return (
-        <View style={[styles.empty, { backgroundColor: colors.background.primary }]}>
-          <Ionicons name="document-outline" size={52} color={colors.text.disabled} />
-          <Text style={[styles.emptyText, { color: colors.text.secondary }]}>Belum ada format</Text>
-          <Text style={[styles.emptySubText, { color: colors.text.disabled }]}>
-            Scan library terlebih dahulu
-          </Text>
-        </View>
-      );
-    }
-
+  if (!selectedType) {
     return (
       <FlatList
         data={fileTypes}
         keyExtractor={(item) => item.codec}
-        renderItem={({ item }) => (
-          <FileTypeRow item={item} onPress={handleFileTypePress} colors={colors} spacing={spacing} />
-        )}
-        contentContainerStyle={{ paddingVertical: spacing.xs, paddingBottom: 120 }}
-        showsVerticalScrollIndicator={false}
-        ItemSeparatorComponent={() => (
-          <View style={[styles.separator, { backgroundColor: colors.background.tertiary, marginLeft: 76 }]} />
-        )}
+        renderItem={({ item }) => <FileTypeRow item={item} onPress={setSelectedType} colors={colors} />}
+        contentContainerStyle={{ paddingBottom: 120, paddingTop: 10 }}
       />
     );
   }
 
-  // ── Format detail ─────────────────────────────────────────────────────────────
+  const meta = getMeta(selectedType.codec);
+
   return (
-    <FlatList
-      data={filteredSongs}
-      keyExtractor={(item) => item.id}
-      ListHeaderComponent={
-        <FileTypeDetailHeader
-          fileType={selectedFileType}
-          songCount={filteredSongs.length}
-          totalDuration={totalDuration}
-          onBack={handleBack}
-          onPlayAll={handlePlayAll}
-          colors={colors}
-          spacing={spacing}
-        />
-      }
-      renderItem={({ item }) => (
-        <FileTypeSongRow
-          track={item}
-          isNowPlaying={item.id === currentTrackId}
-          isFavorite={favoriteIds.has(item.id)}
-          onPress={() => handleSongPress(item)}
-          onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(item.id) : undefined}
-          colors={colors}
-        />
-      )}
-      contentContainerStyle={{ paddingBottom: 120 }}
-      showsVerticalScrollIndicator={false}
-      initialNumToRender={15}
-      maxToRenderPerBatch={10}
-      windowSize={5}
-      removeClippedSubviews
-    />
+    <View style={[styles.container, { backgroundColor: colors.background.primary }]}>
+      <View style={[styles.header, { backgroundColor: colors.background.secondary }]}>
+        <TouchableOpacity onPress={() => setSelectedType(null)} style={styles.backBtn}>
+          <ChevronLeft size={24} color={colors.primary[500]} />
+          <Text style={[styles.backText, { color: colors.primary[500] }]}>Formats</Text>
+        </TouchableOpacity>
+
+        <View style={styles.hero}>
+          <View style={[styles.largeBadge, { backgroundColor: `${meta.color}15`, borderColor: `${meta.color}40` }]}>
+            <Binary size={42} color={meta.color} strokeWidth={1.5} />
+          </View>
+          <View style={styles.heroContent}>
+            <Text style={[styles.heroTitle, { color: colors.text.primary }]}>{meta.label} Archive</Text>
+            <Text style={[styles.heroSub, { color: colors.text.tertiary }]}>
+              {filteredSongs.length} high-fidelity tracks found in this format.
+            </Text>
+          </View>
+        </View>
+
+        <TouchableOpacity 
+          style={[styles.playAllBtn, { backgroundColor: colors.primary[500] }]}
+          onPress={() => onSongPress(filteredSongs[0], filteredSongs)}
+        >
+          <Play size={18} color="#fff" fill="#fff" />
+          <Text style={styles.playAllText}>Play All {meta.label}</Text>
+        </TouchableOpacity>
+      </View>
+
+      <FlatList
+        data={filteredSongs}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <FileTypeSongRow
+            track={item}
+            isNowPlaying={item.id === currentTrackId}
+            isFavorite={favoriteIds.has(item.id)}
+            onPress={() => onSongPress(item, filteredSongs)}
+            onToggleFavorite={() => onToggleFavorite?.(item.id)}
+            colors={colors}
+          />
+        )}
+        contentContainerStyle={{ paddingBottom: 150 }}
+      />
+    </View>
   );
 };
 
-// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  // Format row
-  row: { flexDirection: "row", alignItems: "center", height: 68, gap: 14 },
-  codecBox: {
-    width: 62,
-    height: 46,
-    borderRadius: 8,
-    justifyContent: "center",
-    alignItems: "center",
-    flexShrink: 0,
-    gap: 2,
+  container: { flex: 1 },
+  formatRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20 },
+  codecBadge: {
+    width: 64,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 2
   },
-  codecText: { fontSize: 13, fontWeight: "800", letterSpacing: 0.5 },
-  hiresTag: { fontSize: 8, fontWeight: "700", letterSpacing: 0.5 },
-  hiresInline: { fontSize: 13 },
-  info: { flex: 1 },
-  name: { fontSize: 15, fontWeight: "600", marginBottom: 2 },
-  meta: { fontSize: 12 },
-  separator: { height: StyleSheet.hairlineWidth },
+  codecLabel: { fontSize: 14, fontWeight: '900', letterSpacing: 0.5 },
+  formatInfo: { flex: 1, marginLeft: 16 },
+  formatTitle: { fontSize: 15, fontWeight: '600' },
+  formatMeta: { fontSize: 11, marginTop: 4, fontWeight: '500' },
 
-  // Empty
-  empty: { flex: 1, justifyContent: "center", alignItems: "center", gap: 8 },
-  emptyText: { fontSize: 16, fontWeight: "600" },
-  emptySubText: { fontSize: 13 },
-
-  // Detail header
-  backRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  backLabel: { fontSize: 14, fontWeight: "600" },
-  detailHeader: { flexDirection: "row", gap: 16, alignItems: "center" },
-  detailCodecBox: {
-    width: 88,
-    height: 88,
+  header: { paddingBottom: 24, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 },
+  backBtn: { flexDirection: 'row', alignItems: 'center', padding: 16, paddingTop: Platform.OS === 'ios' ? 50 : 16 },
+  backText: { fontSize: 16, fontWeight: '600', marginLeft: 4 },
+  hero: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, gap: 20 },
+  largeBadge: { width: 84, height: 84, borderRadius: 24, borderWidth: 1.5, justifyContent: 'center', alignItems: 'center' },
+  heroContent: { flex: 1 },
+  heroTitle: { fontSize: 24, fontWeight: '800' },
+  heroSub: { fontSize: 12, marginTop: 6, lineHeight: 18 },
+  playAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 24,
+    marginTop: 24,
+    height: 52,
     borderRadius: 16,
-    justifyContent: "center",
-    alignItems: "center",
-    flexShrink: 0,
+    gap: 8
   },
-  detailCodecText: { fontSize: 22, fontWeight: "900", letterSpacing: 1 },
-  detailInfo: { flex: 1, gap: 6 },
-  detailNameRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  detailName: { fontSize: 22, fontWeight: "800" },
-  losslessBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  losslessText: { fontSize: 9, fontWeight: "800", letterSpacing: 0.8 },
-  detailMeta: { fontSize: 13 },
-  playAllBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, borderRadius: 8 },
-  playAllLabel: { color: "#fff", fontWeight: "700", fontSize: 14 },
-  divider: { height: 1 },
+  playAllText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 
-  // Song rows
-  songRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, height: 64 },
-  songIcon: { width: 40, height: 40, borderRadius: 8, justifyContent: "center", alignItems: "center" },
-  songInfo: { flex: 1, marginHorizontal: 12 },
-  titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  songTitle: { fontSize: 15, fontWeight: "600", flex: 1, marginRight: 4 },
-  songSub: { fontSize: 12, marginTop: 1 },
-  rightActions: { alignItems: "flex-end", gap: 4 },
-  duration: { fontSize: 10 },
+  songRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 20 },
+  songLeading: { width: 32 },
+  songMain: { flex: 1, paddingRight: 10 },
+  songTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  songTitle: { fontSize: 15, fontWeight: '600', flexShrink: 1 },
+  songSub: { fontSize: 11, marginTop: 2 },
+  songTrailing: { alignItems: 'flex-end', gap: 4 },
+  duration: { fontSize: 10, opacity: 0.6, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
 });
- 

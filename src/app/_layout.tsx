@@ -87,8 +87,8 @@ export default function RootLayout() {
             />
           </Stack>
 
-          {/* Floating Player harus di luar Stack agar selalu muncul */}
-          <FloatingPlayer />
+          {/* Floating Player harus di luar Stack agar selalu muncul
+          <FloatingPlayer />  */}
 
           <AudioPropertyToast />
         </SafeAreaProvider>

@@ -1,8 +1,8 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, Pressable, Platform } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import { useIsFocused } from "@react-navigation/native";   // ← Tambahkan ini
+import { useIsFocused } from "@react-navigation/native";
 
 import Animated, {
   useAnimatedStyle,
@@ -12,16 +12,11 @@ import Animated, {
   runOnJS,
 } from "react-native-reanimated";
 import { GestureDetector, Gesture } from "react-native-gesture-handler";
+import { LinearGradient } from "expo-linear-gradient"; // ← Import Gradient
+import ImageColors from "react-native-image-colors"; // ← Import Image Colors
 
 // Lucide Icons
-import {
-  Play,
-  Pause,
-  SkipBack,
-  SkipForward,
-  Repeat,
-  Shuffle,
-} from "lucide-react-native";
+import { Play, Pause, SkipBack, SkipForward, Repeat, Shuffle } from "lucide-react-native";
 
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useTheme } from "@/context/ThemeContext";
@@ -33,22 +28,37 @@ export default function FloatingPlayer() {
   const { colors, shadows } = theme;
   const router = useRouter();
 
-  const isFocused = useIsFocused();   // ← Cek apakah sedang di tab Library
+  const isFocused = useIsFocused();
 
   const {
-    currentSong,
-    isPlaying,
-    togglePlay,
-    position,
-    duration,
-    playNext,
-    playPrevious,
-    shuffle,
-    repeat,
-    toggleShuffle,
-    toggleRepeat,
+    currentSong, isPlaying, togglePlay, position, duration,
+    playNext, playPrevious, shuffle, repeat, toggleShuffle, toggleRepeat,
   } = usePlayerStore();
 
+  // ── State untuk Warna Latar Dinamis ──
+  // Kita set defaultnya transparan agar menyatu dengan background awal
+  const [dominantColor, setDominantColor] = useState<string>("transparent");
+
+  // ── Ekstrak Warna Dominan ──
+  useEffect(() => {
+    if (currentSong?.artwork) {
+      ImageColors.getColors(currentSong.artwork, {
+        fallback: "transparent",
+        cache: true,
+        key: currentSong.artwork,
+      }).then((result: any) => {
+        if (Platform.OS === "android") {
+          setDominantColor(result.average || result.dominant || "transparent");
+        } else {
+          setDominantColor(result.background || "transparent");
+        }
+      });
+    } else {
+      setDominantColor("transparent");
+    }
+  }, [currentSong?.artwork]);
+
+  // ── Gesture & Animasi ──
   const translateX = useSharedValue(0);
 
   const swipeGesture = Gesture.Pan()
@@ -70,14 +80,9 @@ export default function FloatingPlayer() {
     opacity: withTiming(translateX.value === 0 ? 1 : 0.75),
   }));
 
-  // Hanya muncul jika ada lagu DAN sedang di tab Library
-  if (!currentSong || !isFocused) {
-    return null;
-  }
+  if (!currentSong || !isFocused) return null;
 
-  const artworkSource = currentSong.artwork
-    ? { uri: currentSong.artwork }
-    : PLACEHOLDER;
+  const artworkSource = currentSong.artwork ? { uri: currentSong.artwork } : PLACEHOLDER;
 
   return (
     <View style={s.outer}>
@@ -87,12 +92,24 @@ export default function FloatingPlayer() {
             s.wrapper,
             {
               backgroundColor: colors.background.elevated,
-              borderColor: colors.border.light,
+              borderColor: colors.border?.light || "#ffffff20",
               ...shadows.xl,
             },
             animatedContainer,
           ]}
         >
+          {/* ── Dynamic Horizontal Gradient Background ── */}
+          {/* Kita overlay gradien di belakang konten dengan opacity 30%-40% 
+              agar warna teks (putih/hitam) tidak 'bertabrakan' dengan warna cerah album art */}
+          {dominantColor !== "transparent" && (
+            <LinearGradient
+              colors={[dominantColor, colors.background.elevated]}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 0.8, y: 0.5 }} // Gradien horizontal dari kiri memudar ke kanan
+              style={[StyleSheet.absoluteFillObject, { opacity: 0.35 }]} 
+            />
+          )}
+
           {/* Accent line */}
           <View style={[s.accentLine, { backgroundColor: colors.primary[500] }]} />
 
@@ -122,15 +139,27 @@ export default function FloatingPlayer() {
               <Text style={[s.title, { color: colors.text.primary }]} numberOfLines={1}>
                 {currentSong.title}
               </Text>
+
+              {/* META ROW */}
               <View style={s.metaRow}>
                 {currentSong.bitDepth && currentSong.bitDepth > 16 && (
                   <View style={[s.hiResBadge, { borderColor: colors.status.warning }]}>
                     <Text style={[s.hiResText, { color: colors.status.warning }]}>HI-RES</Text>
                   </View>
                 )}
+
                 <Text style={[s.artist, { color: colors.text.secondary }]} numberOfLines={1}>
                   {currentSong.artist}
                 </Text>
+
+                {currentSong.album && (
+                  <>
+                    <Text style={s.separator}>•</Text>
+                    <Text style={[s.artist, { color: colors.text.secondary }]} numberOfLines={1}>
+                      {currentSong.album}
+                    </Text>
+                  </>
+                )}
               </View>
             </Pressable>
 
@@ -183,7 +212,7 @@ const s = StyleSheet.create({
     bottom: Platform.OS === "ios" ? 100 : 85,
     left: 12,
     right: 12,
-    zIndex: 1000,
+    zIndex: 100,
   },
   wrapper: {
     borderRadius: 16,
@@ -220,8 +249,17 @@ const s = StyleSheet.create({
     alignItems: "center",
     gap: 5,
     marginTop: 2,
+    flexWrap: "wrap",
   },
-  artist: { fontSize: 12, flexShrink: 1 },
+  artist: { 
+    fontSize: 12, 
+    flexShrink: 1 
+  },
+  separator: {
+    color: "#888",                    // ← Hardcode dulu (aman)
+    marginHorizontal: 4,
+    fontSize: 12,
+  },
   hiResBadge: {
     borderWidth: 1,
     paddingHorizontal: 4,
@@ -253,4 +291,4 @@ const s = StyleSheet.create({
     bottom: -2,
     alignSelf: "center",
   },
-}); 
+});  

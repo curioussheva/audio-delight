@@ -1,169 +1,241 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  ActivityIndicator,
   StatusBar,
   Animated,
   Easing,
   Platform,
+  Dimensions,
 } from "react-native";
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
+import Reanimated, { 
+  useSharedValue, 
+  useAnimatedStyle, 
+  withRepeat, 
+  withTiming, 
+  withSequence,
+  withDelay
+} from "react-native-reanimated";
+
+const { width, height } = Dimensions.get("window");
+const AnimatedExpoImage = Animated.createAnimatedComponent(Image);
 
 const COLORS = {
-  background: "#040B13",
+  bgGradient: ["#08121D", "#040B13", "#020509"], // Gradient kedalaman
   accent: "#00D4AA",
   textPrimary: "#FFFFFF",
   textSecondary: "#A0B0C0",
-  credit: "#5A6B7E",
+  credit: "#3A4B5E",
 };
 
-const LOGO_SOURCE = require("../../../../assets/images/splash.png");
+const BOOT_SEQUENCE = [
+  "Mounting High-Res Audio Engine...",
+  "Optimizing Bit-Perfect Path...",
+  "Loading Pristine Soundstage...",
+  "System Ready."
+];
+
+// Komponen Waveform Sederhana
+const WaveformBar = ({ index }: { index: number }) => {
+  const heightValue = useSharedValue(10);
+  
+  useEffect(() => {
+    heightValue.value = withDelay(
+      index * 100,
+      withRepeat(
+        withSequence(
+          withTiming(30 + Math.random() * 20, { duration: 500 }),
+          withTiming(10, { duration: 500 })
+        ),
+        -1,
+        true
+      )
+    );
+  }, []);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    height: heightValue.value,
+  }));
+
+  return (
+    <Reanimated.View 
+      style={[
+        { width: 3, backgroundColor: COLORS.accent, borderRadius: 2, marginHorizontal: 2 },
+        animatedStyle
+      ]} 
+    />
+  );
+};
 
 export default function LoadingScreen() {
+  const [loadingText, setLoadingText] = useState(BOOT_SEQUENCE[0]);
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.88)).current;
-  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const logoScale = useRef(new Animated.Value(0.9)).current;
 
   useEffect(() => {
-    // Fade + Scale masuk (sedikit lebih lambat dan elegan)
+    // Entrance Animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 1200,           // lebih halus
-        easing: Easing.out(Easing.quad),
+        duration: 1500,
         useNativeDriver: true,
       }),
-      Animated.spring(scaleAnim, {
+      Animated.spring(logoScale, {
         toValue: 1,
-        friction: 12,
-        tension: 45,
+        friction: 8,
         useNativeDriver: true,
       }),
     ]).start();
 
-    // Rotasi logo yang sangat lembut (bisa dinikmati selama loading)
-    Animated.loop(
-      Animated.timing(rotateAnim, {
-        toValue: 1,
-        duration: 18000,          // 32 detik sekali putaran (sangat slow)
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
+    // Boot Text Logic
+    let step = 0;
+    const interval = setInterval(() => {
+      step += 1;
+      if (step < BOOT_SEQUENCE.length) setLoadingText(BOOT_SEQUENCE[step]);
+    }, 1000);
+
+    return () => clearInterval(interval);
   }, []);
 
   return (
-    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      
+      {/* Background Fullscreen Gradient */}
+      <LinearGradient
+        colors={COLORS.bgGradient}
+        style={StyleSheet.absoluteFill}
+      />
 
-      <View style={styles.content}>
-        {/* Logo Area */}
-        <View style={styles.logoContainer}>
-          <Animated.Image
-            source={LOGO_SOURCE}
-            style={[
-              styles.logo,
-              {
-                transform: [
-                  { scale: scaleAnim },
-                  {
-                    rotate: rotateAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ["0deg", "7deg"],
-                    }),
-                  },
-                ],
-              },
-            ]}
+      <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+        
+        {/* Logo Section dengan Aura Glow */}
+        <View style={styles.logoWrapper}>
+          <View style={styles.glowCircle} />
+          <AnimatedExpoImage
+            source={require("../../../../assets/images/splash.png")}
+            style={[styles.logo, { transform: [{ scale: logoScale }] }]}
             contentFit="contain"
-            transition={800}
           />
         </View>
 
-        {/* Loading Indicator */}
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator
-            size={Platform.OS === "ios" ? "large" : 52}
-            color={COLORS.accent}
-          />
-          <Text style={styles.loadingText}>Initializing Pure Sound Experience...</Text>
+        {/* Custom Audio Waveform Loader */}
+        <View style={styles.loaderArea}>
+          <View style={styles.waveformContainer}>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <WaveformBar key={i} index={i} />
+            ))}
+          </View>
+          <Text style={styles.loadingText}>{loadingText}</Text>
         </View>
 
-        {/* Brand Text */}
+        {/* Branding Section */}
         <View style={styles.brandContainer}>
           <Text style={styles.pristineText}>PRISTINE</Text>
-          <Text style={styles.audioText}>AUDIO</Text>
+          <View style={styles.audioBadge}>
+            <Text style={styles.audioText}>ULTRA HD AUDIO</Text>
+          </View>
         </View>
 
-        {/* Credit */}
-        <Text style={styles.creditText}>
-          Proudly Presented by Curious Sheva
-        </Text>
-      </View>
-    </Animated.View>
+        {/* Bottom Credit */}
+        <View style={styles.footer}>
+          <Text style={styles.creditText}>HANDCRAFTED BY CURIOUS SHEVA</Text>
+          <View style={[styles.line, { backgroundColor: COLORS.accent }]} />
+        </View>
+
+      </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
   },
   content: {
     flex: 1,
-    justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 40,
+    justifyContent: "center",
   },
-  logoContainer: {
-    marginBottom: 80,
+  logoWrapper: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 60,
   },
   logo: {
-    width: 290,
-    height: 165,
-    shadowColor: "#00D4AA",
-    shadowOffset: { width: 0, height: 15 },
-    shadowOpacity: 0.5,
-    shadowRadius: 30,
-    elevation: 25,
+    width: width * 0.7,
+    height: 180,
   },
-  loadingContainer: {
+  glowCircle: {
+    position: "absolute",
+    width: 200,
+    height: 100,
+    backgroundColor: COLORS.accent,
+    borderRadius: 100,
+    opacity: 0.1,
+    filter: Platform.OS === 'ios' ? 'blur(40px)' : undefined, // Blur hanya support iOS di style standar
+  },
+  loaderArea: {
     alignItems: "center",
-    marginBottom: 70,
+    height: 100,
+  },
+  waveformContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    height: 40,
+    marginBottom: 10,
   },
   loadingText: {
-    marginTop: 20,
     color: COLORS.textSecondary,
-    fontSize: 15.5,
-    letterSpacing: 1.3,
-    fontWeight: "500",
-    textAlign: "center",
+    fontSize: 12,
+    letterSpacing: 2,
+    fontFamily: Platform.OS === 'ios' ? "Menlo" : "monospace",
+    opacity: 0.8,
   },
   brandContainer: {
+    marginTop: 40,
     alignItems: "center",
   },
   pristineText: {
-    fontSize: 46,
-    fontWeight: "900",
     color: COLORS.textPrimary,
-    letterSpacing: 8,
-    textAlign: "center",
+    fontSize: 48,
+    fontWeight: "900",
+    letterSpacing: 12,
+  },
+  audioBadge: {
+    marginTop: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: COLORS.accent,
+    borderRadius: 4,
   },
   audioText: {
-    fontSize: 18.5,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-    letterSpacing: 9.5,
-    marginTop: -8,
+    color: COLORS.accent,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 4,
+  },
+  footer: {
+    position: "absolute",
+    bottom: 50,
+    alignItems: "center",
   },
   creditText: {
-    position: "absolute",
-    bottom: 60,
     color: COLORS.credit,
-    fontSize: 13,
-    fontWeight: "500",
-    letterSpacing: 1,
+    fontSize: 10,
+    letterSpacing: 3,
+    fontWeight: "700",
   },
+  line: {
+    height: 2,
+    width: 20,
+    marginTop: 8,
+    borderRadius: 1,
+    opacity: 0.5,
+  }
 });
+ 
