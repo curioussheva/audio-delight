@@ -32,7 +32,7 @@ export default function DrawerLayout() {
           drawerIcon: ({ color }) => <Music size={22} color={color} />,
         }}
       />
-      
+
       <Drawer.Screen
         name="analyzer"
         options={{
@@ -40,7 +40,7 @@ export default function DrawerLayout() {
           drawerIcon: ({ color }) => <Activity size={22} color={color} />,
         }}
       />
-      
+
       <Drawer.Screen
         name="settings"
         options={{
@@ -48,7 +48,7 @@ export default function DrawerLayout() {
           drawerIcon: ({ color }) => <Settings size={22} color={color} />,
         }}
       />
-      
+
       <Drawer.Screen
         name="about"
         options={{
@@ -58,4 +58,4 @@ export default function DrawerLayout() {
       />
     </Drawer>
   );
-} 
+}

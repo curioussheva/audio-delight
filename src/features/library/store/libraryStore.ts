@@ -11,7 +11,7 @@ export interface MediaTrack {
   album: string;
   genre: string;
   duration: number;
-  fileSize?: number; 
+  fileSize?: number;
   sampleRate?: number;
   bitDepth?: number;
   codec: string;
@@ -20,7 +20,14 @@ export interface MediaTrack {
   modificationTime?: number;
 }
 
-export type LibraryTab = "song" | "album" | "artist" | "genre" | "folder" | "playlist" | "filetype";
+export type LibraryTab =
+  | "song"
+  | "album"
+  | "artist"
+  | "genre"
+  | "folder"
+  | "playlist"
+  | "filetype";
 
 interface ScanStatus {
   isScanning: boolean;
@@ -29,7 +36,7 @@ interface ScanStatus {
   scanned: number;
   lastScanAt: number | null;
   error: string | null;
-  autoScanEnabled: boolean;   // ← tambah ini
+  autoScanEnabled: boolean; // ← tambah ini
 }
 
 interface LibraryState {
@@ -46,7 +53,7 @@ interface LibraryState {
 const DEFAULT_SCAN: ScanStatus = {
   isScanning: false,
   progress: 0,
-//  currentFile: undefined,
+  //  currentFile: undefined,
   total: 0,
   scanned: 0,
   lastScanAt: null,
@@ -60,7 +67,7 @@ export const useLibraryStore = create<LibraryState>()(
       tracks: [],
       activeTab: "song",
 
-      scanStatus: DEFAULT_SCAN,                    // ← Fixed: use DEFAULT_SCAN
+      scanStatus: DEFAULT_SCAN, // ← Fixed: use DEFAULT_SCAN
 
       setTracks: (tracks) => set({ tracks }),
 
@@ -77,16 +84,16 @@ export const useLibraryStore = create<LibraryState>()(
         })),
 
       setScanning: (isScanning, scanned, total) =>
-  set((state) => ({
-    scanStatus: {
-      ...state.scanStatus,
-      isScanning,
-      scanned,
-      ...(total !== undefined ? { total } : {}),
-      // Set lastScanAt saat scan selesai
-      ...(!isScanning && scanned > 0 ? { lastScanAt: Date.now() } : {}),
-    },
-  })), 
+        set((state) => ({
+          scanStatus: {
+            ...state.scanStatus,
+            isScanning,
+            scanned,
+            ...(total !== undefined ? { total } : {}),
+            // Set lastScanAt saat scan selesai
+            ...(!isScanning && scanned > 0 ? { lastScanAt: Date.now() } : {}),
+          },
+        })),
 
       clearLibrary: () => set({ tracks: [], scanStatus: DEFAULT_SCAN }),
     }),
@@ -95,18 +102,21 @@ export const useLibraryStore = create<LibraryState>()(
       name: "@pristineaudio/library",
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
-  activeTab: state.activeTab,
-  autoScanEnabled: state.scanStatus.autoScanEnabled,
-}),
-    }
-  )
+        activeTab: state.activeTab,
+        autoScanEnabled: state.scanStatus.autoScanEnabled,
+      }),
+    },
+  ),
 );
 
 // ── Optimized Selectors
 
 export const selectAlbums = (tracks: MediaTrack[]) => {
   if (!tracks?.length) return [];
-  const map = new Map<string, { name: string; artist: string; artwork?: string; count: number }>();
+  const map = new Map<
+    string,
+    { name: string; artist: string; artwork?: string; count: number }
+  >();
 
   for (const t of tracks) {
     // ✅ Fixed: template literal yang benar
@@ -126,10 +136,13 @@ export const selectAlbums = (tracks: MediaTrack[]) => {
   }
 
   return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-}; 
+};
 
 export const selectArtists = (tracks: MediaTrack[]) => {
-  const map = new Map<string, { name: string; albumCount: number; trackCount: number }>();
+  const map = new Map<
+    string,
+    { name: string; albumCount: number; trackCount: number }
+  >();
 
   for (const t of tracks) {
     const artistName = t.artist || "Unknown Artist";
@@ -146,7 +159,7 @@ export const selectArtists = (tracks: MediaTrack[]) => {
   }
 
   return Array.from(map.values())
-    .map(a => ({
+    .map((a) => ({
       name: a.name,
       trackCount: a.trackCount,
       albumCount: a.albumCount,
@@ -163,13 +176,13 @@ export const selectFolders = (tracks: MediaTrack[]) => {
   return Array.from(map.entries())
     .map(([path, count]) => {
       // Lebih aman split untuk SAF path
-      const parts = path.split(/[/|%2F]/); 
+      const parts = path.split(/[/|%2F]/);
       return { path, name: parts.pop() || "Root", count };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 };
- 
- export const selectGenres = (tracks: MediaTrack[]) => {
+
+export const selectGenres = (tracks: MediaTrack[]) => {
   const map = new Map<string, number>();
   for (let i = 0; i < tracks.length; i++) {
     const g = tracks[i].genre || "Unknown";
@@ -189,4 +202,4 @@ export const selectFileTypes = (tracks: MediaTrack[]) => {
   return Array.from(map.entries())
     .map(([codec, count]) => ({ codec, count }))
     .sort((a, b) => b.count - a.count);
-}; 
+};

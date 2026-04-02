@@ -72,6 +72,10 @@ export const MIDNIGHT_BLUE: Theme = {
       800: "#0D1523",
       900: "#080E17",
     },
+    secondary: {
+      // Tambahkan secondary
+      500: "#8B5CF6",
+    },
     background: {
       primary: "#0B1424",
       secondary: "#121C30",
@@ -85,6 +89,9 @@ export const MIDNIGHT_BLUE: Theme = {
       tertiary: "#9AA8B9",
       disabled: "#4A5568",
       inverse: "#0B1424",
+    },
+    accent: {
+      primary: "#F59E0B",
     },
     status: {
       success: "#10B981",
@@ -125,6 +132,7 @@ export const CHARCOAL_BLACK: Theme = {
       800: "#060606",
       900: "#030303",
     },
+    secondary: { 500: "#71717A" },
     background: {
       primary: "#000000",
       secondary: "#0A0A0A",
@@ -139,6 +147,7 @@ export const CHARCOAL_BLACK: Theme = {
       disabled: "#404040",
       inverse: "#000000",
     },
+    accent: { primary: "#E4E4E7" },
     status: {
       success: "#10B981",
       warning: "#F59E0B",

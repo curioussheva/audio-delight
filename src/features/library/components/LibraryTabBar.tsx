@@ -25,13 +25,13 @@ import type { LibraryTab } from "../store/libraryStore";
 
 // ── Tab Configuration ────────────────────────────────────────────────────────
 export const TABS: { id: LibraryTab; label: string; icon: any }[] = [
-  { id: "song",     label: "Songs",     icon: Music2 },
-  { id: "album",    label: "Albums",    icon: Disc3 },
-  { id: "artist",   label: "Artists",   icon: Mic2 },
-  { id: "genre",    label: "Genres",    icon: LayoutGrid },
-  { id: "folder",   label: "Folders",   icon: FolderArchive },
+  { id: "song", label: "Songs", icon: Music2 },
+  { id: "album", label: "Albums", icon: Disc3 },
+  { id: "artist", label: "Artists", icon: Mic2 },
+  { id: "genre", label: "Genres", icon: LayoutGrid },
+  { id: "folder", label: "Folders", icon: FolderArchive },
   { id: "playlist", label: "Playlists", icon: ListMusic },
-  { id: "filetype", label: "Formats",   icon: Binary },
+  { id: "filetype", label: "Formats", icon: Binary },
 ];
 
 interface Props {
@@ -56,32 +56,64 @@ export const LibraryTabBar: React.FC<Props> = ({
   const { colors } = theme;
   const scrollRef = useRef<ScrollView>(null);
 
-  const handleTabPress = useCallback((tabId: LibraryTab) => {
-    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onTabChange(tabId);
-  }, [onTabChange]);
+  const handleTabPress = useCallback(
+    (tabId: LibraryTab) => {
+      if (Platform.OS !== "web")
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      onTabChange(tabId);
+    },
+    [onTabChange],
+  );
 
   const handleRefresh = useCallback(() => {
-    if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    if (Platform.OS !== "web")
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     onRefresh();
   }, [onRefresh]);
 
-  const progressPercent = scanTotal > 0 ? Math.floor((scanProgress / scanTotal) * 100) : 0;
+  const progressPercent =
+    scanTotal > 0 ? Math.floor((scanProgress / scanTotal) * 100) : 0;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background.primary }]}>
+    <View
+      style={[styles.container, { backgroundColor: colors.background.primary }]}
+    >
       {/* Scan Status Pill (Hanya muncul saat scanning) */}
       {isScanning && (
-        <View style={[styles.scanOverlay, { backgroundColor: colors.background.secondary }]}>
+        <View
+          style={[
+            styles.scanOverlay,
+            { backgroundColor: colors.background.secondary },
+          ]}
+        >
           <View style={styles.scanInfo}>
-            <ActivityIndicator size="small" color={colors.primary[500]} style={{ transform: [{ scale: 0.8 }] }} />
+            <ActivityIndicator
+              size="small"
+              color={colors.primary[500]}
+              style={{ transform: [{ scale: 0.8 }] }}
+            />
             <Text style={[styles.scanText, { color: colors.text.secondary }]}>
-              {scanTotal > 0 ? `Indexing: ${scanProgress}/${scanTotal}` : "Analyzing Storage..."}
+              {scanTotal > 0
+                ? `Indexing: ${scanProgress}/${scanTotal}`
+                : "Analyzing Storage..."}
             </Text>
           </View>
           {scanTotal > 0 && (
-            <View style={[styles.progressTrack, { backgroundColor: colors.background.tertiary }]}>
-              <View style={[styles.progressFill, { backgroundColor: colors.primary[500], width: `${progressPercent}%` }]} />
+            <View
+              style={[
+                styles.progressTrack,
+                { backgroundColor: colors.background.tertiary },
+              ]}
+            >
+              <View
+                style={[
+                  styles.progressFill,
+                  {
+                    backgroundColor: colors.primary[500],
+                    width: `${progressPercent}%`,
+                  },
+                ]}
+              />
             </View>
           )}
         </View>
@@ -106,20 +138,24 @@ export const LibraryTabBar: React.FC<Props> = ({
               style={[
                 styles.tabPill,
                 {
-                  backgroundColor: isActive ? colors.primary[500] : `${colors.background.tertiary}80`,
-                  borderColor: isActive ? colors.primary[500] : colors.background.tertiary,
+                  backgroundColor: isActive
+                    ? colors.primary[500]
+                    : `${colors.background.tertiary}80`,
+                  borderColor: isActive
+                    ? colors.primary[500]
+                    : colors.background.tertiary,
                 },
               ]}
             >
-              <Icon 
-                size={16} 
-                color={isActive ? "#fff" : colors.text.tertiary} 
-                strokeWidth={isActive ? 2.5 : 2} 
+              <Icon
+                size={16}
+                color={isActive ? "#fff" : colors.text.tertiary}
+                strokeWidth={isActive ? 2.5 : 2}
               />
               <Text
                 style={[
                   styles.tabLabel,
-                  { color: isActive ? "#fff" : colors.text.secondary }
+                  { color: isActive ? "#fff" : colors.text.secondary },
                 ]}
               >
                 {tab.label}
@@ -132,7 +168,10 @@ export const LibraryTabBar: React.FC<Props> = ({
         <TouchableOpacity
           onPress={handleRefresh}
           disabled={isScanning}
-          style={[styles.refreshBtn, { backgroundColor: `${colors.background.tertiary}80` }]}
+          style={[
+            styles.refreshBtn,
+            { backgroundColor: `${colors.background.tertiary}80` },
+          ]}
         >
           <RotateCw
             size={16}
@@ -149,12 +188,12 @@ const styles = StyleSheet.create({
   container: {
     paddingTop: 8,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.05)',
+    borderBottomColor: "rgba(0,0,0,0.05)",
   },
   scrollContent: {
     paddingHorizontal: 20,
     paddingBottom: 16,
-    alignItems: 'center',
+    alignItems: "center",
     gap: 8,
   },
   // Scan UI
@@ -164,18 +203,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5 },
-      android: { elevation: 2 }
-    })
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 5,
+      },
+      android: { elevation: 2 },
+    }),
   },
-  scanInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  scanText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
-  progressTrack: { height: 4, width: 80, borderRadius: 2, overflow: 'hidden' },
-  progressFill: { height: '100%', borderRadius: 2 },
+  scanInfo: { flexDirection: "row", alignItems: "center", gap: 8 },
+  scanText: { fontSize: 11, fontWeight: "700", letterSpacing: 0.2 },
+  progressTrack: { height: 4, width: 80, borderRadius: 2, overflow: "hidden" },
+  progressFill: { height: "100%", borderRadius: 2 },
 
   // Tab Pills
   tabPill: {
@@ -198,7 +242,6 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     justifyContent: "center",
     alignItems: "center",
-    marginLeft: 4
+    marginLeft: 4,
   },
 });
- 

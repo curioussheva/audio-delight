@@ -88,7 +88,12 @@ const SectionHeader: React.FC<SectionHeaderProps> = ({
     >
       <View style={styles.row}>
         {icon}
-        <Text style={[styles.sectionTitle, { color: colors.text.primary, marginLeft: spacing.sm }]}>
+        <Text
+          style={[
+            styles.sectionTitle,
+            { color: colors.text.primary, marginLeft: spacing.sm },
+          ]}
+        >
           {title}
         </Text>
       </View>
@@ -181,9 +186,10 @@ export default function SettingsScreen() {
         {
           text: "Reset",
           style: "destructive",
-          onPress: () => Alert.alert("Sukses", "Semua pengaturan telah direset"),
+          onPress: () =>
+            Alert.alert("Sukses", "Semua pengaturan telah direset"),
         },
-      ]
+      ],
     );
   };
 
@@ -192,7 +198,9 @@ export default function SettingsScreen() {
   const renderTampilan = () => (
     <Section colors={colors} spacing={spacing}>
       <SectionHeader
-        icon={<Palette size={24} color={colors.primary[500]} strokeWidth={2.2} />}
+        icon={
+          <Palette size={24} color={colors.primary[500]} strokeWidth={2.2} />
+        }
         title="Tampilan"
         colors={colors}
         spacing={spacing}
@@ -213,7 +221,9 @@ export default function SettingsScreen() {
       >
         <View style={styles.row}>
           <Brush size={20} color={colors.text.secondary} strokeWidth={2.2} />
-          <Text style={{ color: colors.text.primary, marginLeft: spacing.sm }}>Tema</Text>
+          <Text style={{ color: colors.text.primary, marginLeft: spacing.sm }}>
+            Tema
+          </Text>
         </View>
         <View style={styles.row}>
           <View
@@ -222,10 +232,16 @@ export default function SettingsScreen() {
               { backgroundColor: colors.primary[500], marginRight: spacing.xs },
             ]}
           />
-          <Text style={{ color: colors.text.secondary, marginRight: spacing.xs }}>
+          <Text
+            style={{ color: colors.text.secondary, marginRight: spacing.xs }}
+          >
             {theme.name}
           </Text>
-          <ChevronRight size={20} color={colors.text.secondary} strokeWidth={2.5} />
+          <ChevronRight
+            size={20}
+            color={colors.text.secondary}
+            strokeWidth={2.5}
+          />
         </View>
       </TouchableOpacity>
 
@@ -249,7 +265,10 @@ export default function SettingsScreen() {
         <Switch
           value={isDarkMode}
           onValueChange={toggleTheme}
-          trackColor={{ false: colors.background.tertiary, true: colors.primary[500] }}
+          trackColor={{
+            false: colors.background.tertiary,
+            true: colors.primary[500],
+          }}
           thumbColor={isDarkMode ? colors.text.primary : colors.text.secondary}
         />
       </View>
@@ -268,7 +287,12 @@ export default function SettingsScreen() {
         onPress={() => setShowDacSettings((v) => !v)}
         rightSlot={
           currentDAC ? (
-            <View style={[styles.statusDot, { backgroundColor: colors.status.success }]} />
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: colors.status.success },
+              ]}
+            />
           ) : null
         }
       />
@@ -276,8 +300,18 @@ export default function SettingsScreen() {
       {showDacSettings && (
         <View style={{ padding: spacing.md }}>
           {error && (
-            <View style={[styles.alertBox, { backgroundColor: colors.status.error + "20", borderColor: colors.status.error }]}>
-              <Text style={{ color: colors.status.error, fontSize: 12 }}>Error: {error}</Text>
+            <View
+              style={[
+                styles.alertBox,
+                {
+                  backgroundColor: colors.status.error + "20",
+                  borderColor: colors.status.error,
+                },
+              ]}
+            >
+              <Text style={{ color: colors.status.error, fontSize: 12 }}>
+                Error: {error}
+              </Text>
             </View>
           )}
 
@@ -285,7 +319,13 @@ export default function SettingsScreen() {
           <TouchableOpacity
             onPress={handleScanDAC}
             disabled={loading}
-            style={[styles.pill, { backgroundColor: colors.primary[500], marginBottom: spacing.md }]}
+            style={[
+              styles.pill,
+              {
+                backgroundColor: colors.primary[500],
+                marginBottom: spacing.md,
+              },
+            ]}
           >
             <Text style={{ color: colors.background.primary, fontSize: 12 }}>
               {loading ? "Scanning..." : "Scan USB DAC"}
@@ -295,7 +335,13 @@ export default function SettingsScreen() {
           {/* Daftar DAC */}
           {dacs.length > 0 && (
             <View style={{ marginBottom: spacing.md }}>
-              <Text style={{ color: colors.text.secondary, fontSize: 12, marginBottom: spacing.xs }}>
+              <Text
+                style={{
+                  color: colors.text.secondary,
+                  fontSize: 12,
+                  marginBottom: spacing.xs,
+                }}
+              >
                 Device Tersedia:
               </Text>
               {dacs.map((dac) => (
@@ -304,17 +350,29 @@ export default function SettingsScreen() {
                   onPress={() => selectDAC(dac.id)}
                   style={[
                     styles.dacItem,
-                    currentDAC?.id === dac.id && { backgroundColor: colors.primary[500] + "25" },
+                    currentDAC?.id === dac.id && {
+                      backgroundColor: colors.primary[500] + "25",
+                    },
                   ]}
                 >
                   <View style={{ flex: 1 }}>
-                    <Text style={{ color: colors.text.primary, fontWeight: "600" }}>{dac.name}</Text>
-                    <Text style={{ color: colors.text.secondary, fontSize: 11 }}>
+                    <Text
+                      style={{ color: colors.text.primary, fontWeight: "600" }}
+                    >
+                      {dac.name}
+                    </Text>
+                    <Text
+                      style={{ color: colors.text.secondary, fontSize: 11 }}
+                    >
                       {dac.id} • {dac.channelCount} Channels
                     </Text>
                   </View>
                   {currentDAC?.id === dac.id && (
-                    <CheckCircle size={22} color={colors.primary[500]} strokeWidth={2.5} />
+                    <CheckCircle
+                      size={22}
+                      color={colors.primary[500]}
+                      strokeWidth={2.5}
+                    />
                   )}
                 </TouchableOpacity>
               ))}
@@ -325,19 +383,31 @@ export default function SettingsScreen() {
           {currentDAC && (
             <>
               <SettingRow colors={colors} spacing={spacing}>
-                <Text style={{ color: colors.text.primary }}>Exclusive Mode</Text>
+                <Text style={{ color: colors.text.primary }}>
+                  Exclusive Mode
+                </Text>
                 <Switch
                   value={isExclusiveMode}
                   onValueChange={toggleExclusiveMode}
                   disabled={loading}
-                  trackColor={{ false: colors.background.tertiary, true: colors.primary[500] }}
+                  trackColor={{
+                    false: colors.background.tertiary,
+                    true: colors.primary[500],
+                  }}
                   thumbColor={isExclusiveMode ? colors.text.primary : "#f4f3f4"}
                 />
               </SettingRow>
 
               {/* Sample Rate Selector */}
               <View style={{ marginTop: spacing.sm }}>
-                <Text style={{ color: colors.text.secondary, marginBottom: spacing.xs }}>Sample Rate</Text>
+                <Text
+                  style={{
+                    color: colors.text.secondary,
+                    marginBottom: spacing.xs,
+                  }}
+                >
+                  Sample Rate
+                </Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View style={{ flexDirection: "row", gap: spacing.xs }}>
                     {currentDAC.sampleRates?.map((rate) => (
@@ -346,10 +416,23 @@ export default function SettingsScreen() {
                         onPress={() => setSampleRate(rate)}
                         style={[
                           styles.pill,
-                          { backgroundColor: config?.sampleRate === rate ? colors.primary[500] : colors.background.tertiary },
+                          {
+                            backgroundColor:
+                              config?.sampleRate === rate
+                                ? colors.primary[500]
+                                : colors.background.tertiary,
+                          },
                         ]}
                       >
-                        <Text style={{ color: config?.sampleRate === rate ? colors.background.primary : colors.text.primary, fontSize: 12 }}>
+                        <Text
+                          style={{
+                            color:
+                              config?.sampleRate === rate
+                                ? colors.background.primary
+                                : colors.text.primary,
+                            fontSize: 12,
+                          }}
+                        >
                           {rate / 1000}kHz
                         </Text>
                       </TouchableOpacity>
@@ -380,12 +463,16 @@ export default function SettingsScreen() {
         <View style={{ padding: spacing.md }}>
           <SettingRow colors={colors} spacing={spacing}>
             <Text style={{ color: colors.text.primary }}>Default EQ</Text>
-            <Text style={{ color: colors.primary[500] }}>{defaultEQ || "Flat"}</Text>
+            <Text style={{ color: colors.primary[500] }}>
+              {defaultEQ || "Flat"}
+            </Text>
           </SettingRow>
 
           <SettingRow colors={colors} spacing={spacing}>
             <Text style={{ color: colors.text.primary }}>Playback Speed</Text>
-            <Text style={{ color: colors.primary[500] }}>{playbackSpeed || 1.0}x</Text>
+            <Text style={{ color: colors.primary[500] }}>
+              {playbackSpeed || 1.0}x
+            </Text>
           </SettingRow>
         </View>
       )}
@@ -407,12 +494,23 @@ export default function SettingsScreen() {
       {showAbout && (
         <View style={{ padding: spacing.md }}>
           <View style={{ alignItems: "center", marginBottom: spacing.md }}>
-            <Text style={[styles.appName, { color: colors.primary[500] }]}>PristineAudio</Text>
-            <Text style={{ color: colors.text.secondary, fontSize: 12 }}>Version 1.0.0 (Build 2026)</Text>
+            <Text style={[styles.appName, { color: colors.primary[500] }]}>
+              PristineAudio
+            </Text>
+            <Text style={{ color: colors.text.secondary, fontSize: 12 }}>
+              Version 1.0.0 (Build 2026)
+            </Text>
           </View>
 
-          <View style={[styles.infoBox, { backgroundColor: colors.background.tertiary }]}>
-            <Text style={{ color: colors.text.primary, marginBottom: spacing.xs }}>
+          <View
+            style={[
+              styles.infoBox,
+              { backgroundColor: colors.background.tertiary },
+            ]}
+          >
+            <Text
+              style={{ color: colors.text.primary, marginBottom: spacing.xs }}
+            >
               High-Fidelity Audio Player for Audiophiles
             </Text>
           </View>
@@ -426,10 +524,18 @@ export default function SettingsScreen() {
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background.primary }]}
-      contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xxl }}
+      contentContainerStyle={{
+        padding: 16, // fallback manual
+        paddingBottom: 48,
+      }}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={[styles.screenTitle, { color: colors.text.primary, marginBottom: spacing.md }]}>
+      <Text
+        style={[
+          styles.screenTitle,
+          { color: colors.text.primary, marginBottom: spacing.md },
+        ]}
+      >
         Settings
       </Text>
 
@@ -449,11 +555,19 @@ export default function SettingsScreen() {
           },
         ]}
       >
-        <RefreshCw size={20} color={colors.status.error} strokeWidth={2.5} style={{ marginRight: 8 }} />
+        <RefreshCw
+          size={20}
+          color={colors.status.error}
+          strokeWidth={2.5}
+          style={{ marginRight: 8 }}
+        />
         <Text style={{ color: colors.status.error }}>Reset All Settings</Text>
       </TouchableOpacity>
 
-      <ThemePicker visible={showThemePicker} onClose={() => setShowThemePicker(false)} />
+      <ThemePicker
+        visible={showThemePicker}
+        onClose={() => setShowThemePicker(false)}
+      />
     </ScrollView>
   );
 }
@@ -490,4 +604,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   appName: { fontSize: 28, fontWeight: "700", marginBottom: 4 },
+  // Tambahkan di StyleSheet:
+  alertBox: {
+    padding: 12,
+    borderRadius: 8,
+    marginVertical: 8,
+  },
+  dacItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+  },
 });

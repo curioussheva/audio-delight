@@ -31,7 +31,7 @@ const SQLiteService = {
     isEnriched  INTEGER DEFAULT 0,   -- ← baru: 0=basic, 1=fully enriched
     lastSeenAt  INTEGER DEFAULT 0    -- ← baru: timestamp terakhir file terdeteksi
   );
-`); 
+`);
 
       // Tabel Pendukung: Playlists & Relations
       db.execute(`
@@ -54,9 +54,15 @@ const SQLiteService = {
       `);
 
       // Optimasi: Indexing (Penting untuk library musik besar)
-      db.execute(`CREATE INDEX IF NOT EXISTS idx_songs_folder ON songs(folder);`);
-      db.execute(`CREATE INDEX IF NOT EXISTS idx_songs_artist ON songs(artist);`);
-      db.execute(`CREATE INDEX IF NOT EXISTS idx_songs_album  ON songs(album);`);
+      db.execute(
+        `CREATE INDEX IF NOT EXISTS idx_songs_folder ON songs(folder);`,
+      );
+      db.execute(
+        `CREATE INDEX IF NOT EXISTS idx_songs_artist ON songs(artist);`,
+      );
+      db.execute(
+        `CREATE INDEX IF NOT EXISTS idx_songs_album  ON songs(album);`,
+      );
       db.execute(`CREATE INDEX IF NOT EXISTS idx_songs_uri    ON songs(uri);`);
 
       console.log("✅ [SQLite] Pristine Database System Initialized");
@@ -87,4 +93,3 @@ const runMigrations = () => {
 runMigrations();
 
 export default SQLiteService;
- 

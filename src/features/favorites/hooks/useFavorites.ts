@@ -33,7 +33,9 @@ export const useFavorites = (allSongs: Song[] = []) => {
   // Sync favoriteSongs jika allSongs berubah (lagu baru di-scan)
   useEffect(() => {
     if (favoriteIds.length > 0 && allSongs.length > 0) {
-      setFavoriteSongs(allSongs.filter((song) => favoriteIds.includes(song.id)));
+      setFavoriteSongs(
+        allSongs.filter((song) => favoriteIds.includes(song.id)),
+      );
     }
   }, [allSongs, favoriteIds]);
 
@@ -72,4 +74,4 @@ export const useFavorites = (allSongs: Song[] = []) => {
     isFavorite,
     refresh: loadFavorites,
   };
-}; 
+};

@@ -50,33 +50,30 @@ class FavoritesService {
    * Dioptimasi dengan JOIN langsung ke tabel songs
    */
   async getFavoriteSongs(): Promise<Song[]> {
-  const result = db.execute("SELECT * FROM songs WHERE isFavorite = 1");
-  const rows = result.rows?._array || [];
+    const result = db.execute("SELECT * FROM songs WHERE isFavorite = 1");
+    const rows = result.rows?._array || [];
 
-  // Gunakan .map() untuk mengubah array baris database menjadi array Song
-  return rows.map((row: any) => ({
-    id: row.id,
-    title: row.title,
-    artist: row.artist || "Unknown Artist",
-    album: row.album || "Unknown Album",
-    uri: row.uri,
-    duration: row.duration || 0,
-    artwork: row.artwork,
-    codec: row.codec || "Unknown",
-    sampleRate: row.sampleRate || 44100,
-    bitDepth: row.bitDepth || 16,
-    bitrate: row.bitrate || 320,
-    isHiRes: row.isHiRes === 1,
-    dateAdded: row.dateAdded,
-    genre: row.genre || "Unknown",
-    folder: row.folder || "Unknown",
-    filename: row.filename || "Unknown",
-    playCount: row.playCount || 0,
-  })) as Song[]; 
-}
-
+    // Gunakan .map() untuk mengubah array baris database menjadi array Song
+    return rows.map((row: any) => ({
+      id: row.id,
+      title: row.title,
+      artist: row.artist || "Unknown Artist",
+      album: row.album || "Unknown Album",
+      uri: row.uri,
+      duration: row.duration || 0,
+      artwork: row.artwork,
+      codec: row.codec || "Unknown",
+      sampleRate: row.sampleRate || 44100,
+      bitDepth: row.bitDepth || 16,
+      bitrate: row.bitrate || 320,
+      isHiRes: row.isHiRes === 1,
+      dateAdded: row.dateAdded,
+      genre: row.genre || "Unknown",
+      folder: row.folder || "Unknown",
+      filename: row.filename || "Unknown",
+      playCount: row.playCount || 0,
+    })) as Song[];
+  }
 }
 
 export default new FavoritesService();
- 
- 

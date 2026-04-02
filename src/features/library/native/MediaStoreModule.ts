@@ -1,4 +1,4 @@
-import { NativeModules } from 'react-native';
+import { NativeModules } from "react-native";
 
 const { MediaStoreModule } = NativeModules;
 
@@ -13,7 +13,7 @@ export interface NativeSong {
   folder: string;
   codec: string;
   mimeType: string;
-  duration: number;     // detik
+  duration: number; // detik
   dateAdded: number;
   fileSize: number;
   year: number;

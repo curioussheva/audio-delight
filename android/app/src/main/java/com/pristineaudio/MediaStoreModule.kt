@@ -5,12 +5,47 @@ import android.database.Cursor
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
+import android.media.MediaMetadataRetriever
 import com.facebook.react.bridge.*
 
 class MediaStoreModule(private val reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
     override fun getName() = "MediaStoreModule"
+    
+    private fun getAudioTechnicalInfo(uriString: String): WritableMap {
+    val info = Arguments.createMap()
+    val retriever = MediaMetadataRetriever()
+    try {
+        retriever.setDataSource(reactContext, Uri.parse(uriString))
+        
+        // 1. Bitrate (dalam bps, kita konversi ke kbps)
+        val bitrate = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)
+        info.putInt("bitrate", (bitrate?.toInt() ?: 0) / 1000)
+
+        // 2. Samplerate & Bitdepth (Hanya tersedia di API 31+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val sr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_SAMPLERATE)
+            val bd = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITS_PER_SAMPLE)
+            info.putInt("sampleRate", sr?.toInt() ?: 44100)
+            info.putInt("bitDepth", bd?.toInt() ?: 16)
+        } else {
+            // Untuk API di bawah 31, kita beri nilai default atau 0
+            // karena MediaMetadataRetriever standar tidak mendukungnya secara native
+            info.putInt("sampleRate", 0) 
+            info.putInt("bitDepth", 0)
+        }
+    } catch (e: Exception) {
+        // Fallback jika gagal baca
+        info.putInt("bitrate", 0)
+        info.putInt("sampleRate", 0)
+        info.putInt("bitDepth", 0)
+    } finally {
+        retriever.release()
+    }
+    return info
+}
+
 
     @ReactMethod
     fun queryAudioFiles(promise: Promise) {
@@ -78,6 +113,8 @@ class MediaStoreModule(private val reactContext: ReactApplicationContext) :
                     val contentUri = ContentUris.withAppendedId(
                         MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id
                     ).toString()
+                    
+                    val techInfo = getAudioTechnicalInfo(contentUri)
 
                     val artworkUri = ContentUris.withAppendedId(
                         Uri.parse("content://media/external/audio/albumart"), albumId
@@ -144,6 +181,9 @@ class MediaStoreModule(private val reactContext: ReactApplicationContext) :
                         putInt("year",          c.getInt(yearCol))
                         putInt("trackNumber",   c.getInt(trackCol) % 1000)
                         putInt("discNumber",    c.getInt(trackCol) / 1000)
+                        putInt("bitrate", techInfo.getInt("bitrate"))
+                        putInt("sampleRate", techInfo.getInt("sampleRate"))
+                        putInt("bitDepth", techInfo.getInt("bitDepth"))
                     }
 
                     result.pushMap(song)

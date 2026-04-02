@@ -1,8 +1,7 @@
 // Favorites Feature Exports
 
 // api
-export * from './api/service';
+export * from "./api/service";
 
 // hooks
-export * from './hooks/useFavorites';
-
+export * from "./hooks/useFavorites";

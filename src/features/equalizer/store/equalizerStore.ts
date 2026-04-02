@@ -15,19 +15,52 @@ export const useEqualizerStore = create<EqualizerStore>()(
       isEQEnabled: false,
       customPresets: [],
 
+      // Tambahkan State Baru
+      bassStrength: 0, // 0 - 1000
+      reverbPreset: 0, // 0 - 6 (None, SmallRoom, MediumRoom, LargeRoom, etc)
+      virtualizerLevel: 0, // 0 - 1000 (Sound Stage / Spacial)
+
+      // Action untuk Bass Boost
+      setBassBoost: async (strength: number) => {
+        set({ bassStrength: strength });
+        if (get().isEQEnabled) {
+          // Panggil ke engine
+          await (audioEngine as any).setBassBoost?.(strength);
+        }
+      },
+
+      // Action untuk Sound Stage (Virtualizer)
+      setVirtualizer: async (level: number) => {
+        set({ virtualizerLevel: level });
+        if (get().isEQEnabled) {
+          await (audioEngine as any).setVirtualizer?.(level);
+        }
+      },
+
+      // Action untuk Reverb
+      setReverb: async (preset: number) => {
+        set({ reverbPreset: preset });
+        if (get().isEQEnabled) {
+          await (audioEngine as any).setReverbPreset?.(preset);
+        }
+      },
+
+      // Update setEQEnabled agar mengaktifkan semua efek sekaligus
       setEQEnabled: async (enabled: boolean) => {
         set({ isEQEnabled: enabled });
+        const state = get();
 
-        if (!enabled) {
-          // PERBAIKAN 2: Gunakan audioEngine (huruf kecil)
-          // Asumsi: Kita mengirim array 0 sekaligus lebih efisien jika bridge mendukung
-          for (let i = 0; i < 10; i++) {
-            await (audioEngine as any).setEqBand?.(i, 0);
-          }
-        } else {
-          get().bands.forEach((band) =>
-            (audioEngine as any).setEqBand?.(band.id, band.gain),
+        if (enabled) {
+          // Terapkan semua efek yang tersimpan
+          state.bands.forEach((b) =>
+            (audioEngine as any).setEqBand?.(b.id, b.gain),
           );
+          await (audioEngine as any).setBassBoost?.(state.bassStrength);
+          await (audioEngine as any).setVirtualizer?.(state.virtualizerLevel);
+          await (audioEngine as any).setReverbPreset?.(state.reverbPreset);
+        } else {
+          // Lepas semua efek (Bypass)
+          await (audioEngine as any).releaseAllFX?.();
         }
       },
 

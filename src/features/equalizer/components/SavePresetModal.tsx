@@ -1,11 +1,5 @@
 import React, { useState } from "react";
-import {
-  Modal,
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-} from "react-native";
+import { Modal, View, Text, TextInput, StyleSheet } from "react-native";
 import { useTheme } from "@/context/ThemeContext";
 
 interface Props {

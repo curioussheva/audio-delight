@@ -11,20 +11,20 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import Reanimated, { 
-  useSharedValue, 
-  useAnimatedStyle, 
-  withRepeat, 
-  withTiming, 
+import Reanimated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
   withSequence,
-  withDelay
+  withDelay,
 } from "react-native-reanimated";
 
 const { width, height } = Dimensions.get("window");
 const AnimatedExpoImage = Animated.createAnimatedComponent(Image);
 
 const COLORS = {
-  bgGradient: ["#08121D", "#040B13", "#020509"], // Gradient kedalaman
+  bgGradient: ["#000000", "#1a1a1a"] as const,
   accent: "#00D4AA",
   textPrimary: "#FFFFFF",
   textSecondary: "#A0B0C0",
@@ -35,24 +35,24 @@ const BOOT_SEQUENCE = [
   "Mounting High-Res Audio Engine...",
   "Optimizing Bit-Perfect Path...",
   "Loading Pristine Soundstage...",
-  "System Ready."
+  "System Ready.",
 ];
 
 // Komponen Waveform Sederhana
 const WaveformBar = ({ index }: { index: number }) => {
   const heightValue = useSharedValue(10);
-  
+
   useEffect(() => {
     heightValue.value = withDelay(
       index * 100,
       withRepeat(
         withSequence(
           withTiming(30 + Math.random() * 20, { duration: 500 }),
-          withTiming(10, { duration: 500 })
+          withTiming(10, { duration: 500 }),
         ),
         -1,
-        true
-      )
+        true,
+      ),
     );
   }, []);
 
@@ -61,11 +61,16 @@ const WaveformBar = ({ index }: { index: number }) => {
   }));
 
   return (
-    <Reanimated.View 
+    <Reanimated.View
       style={[
-        { width: 3, backgroundColor: COLORS.accent, borderRadius: 2, marginHorizontal: 2 },
-        animatedStyle
-      ]} 
+        {
+          width: 3,
+          backgroundColor: COLORS.accent,
+          borderRadius: 2,
+          marginHorizontal: 2,
+        },
+        animatedStyle,
+      ]}
     />
   );
 };
@@ -102,8 +107,12 @@ export default function LoadingScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-      
+      <StatusBar
+        barStyle="light-content"
+        translucent
+        backgroundColor="transparent"
+      />
+
       {/* Background Fullscreen Gradient */}
       <LinearGradient
         colors={COLORS.bgGradient}
@@ -111,12 +120,11 @@ export default function LoadingScreen() {
       />
 
       <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-        
         {/* Logo Section dengan Aura Glow */}
         <View style={styles.logoWrapper}>
           <View style={styles.glowCircle} />
           <AnimatedExpoImage
-            source={require("../../../../assets/images/splash.png")}
+            source={require("../../../../assets/images/icon.png")}
             style={[styles.logo, { transform: [{ scale: logoScale }] }]}
             contentFit="contain"
           />
@@ -145,7 +153,6 @@ export default function LoadingScreen() {
           <Text style={styles.creditText}>HANDCRAFTED BY CURIOUS SHEVA</Text>
           <View style={[styles.line, { backgroundColor: COLORS.accent }]} />
         </View>
-
       </Animated.View>
     </View>
   );
@@ -176,7 +183,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.accent,
     borderRadius: 100,
     opacity: 0.1,
-    filter: Platform.OS === 'ios' ? 'blur(40px)' : undefined, // Blur hanya support iOS di style standar
+    filter: Platform.OS === "ios" ? "blur(40px)" : undefined, // Blur hanya support iOS di style standar
   },
   loaderArea: {
     alignItems: "center",
@@ -192,7 +199,7 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontSize: 12,
     letterSpacing: 2,
-    fontFamily: Platform.OS === 'ios' ? "Menlo" : "monospace",
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     opacity: 0.8,
   },
   brandContainer: {
@@ -236,6 +243,5 @@ const styles = StyleSheet.create({
     marginTop: 8,
     borderRadius: 1,
     opacity: 0.5,
-  }
+  },
 });
- 

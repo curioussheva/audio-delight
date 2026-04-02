@@ -2,7 +2,6 @@ import { NativeModules } from "react-native";
 import { EqualizerBand } from "@/shared/types/dsp";
 import NativeDSPModule from "@/features/visualizer/native/DSPModule";
 
-
 const { USBDACModule } = NativeModules;
 
 export class DSPPipeline {

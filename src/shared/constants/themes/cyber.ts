@@ -19,6 +19,7 @@ export const NEON_CYBER: Theme = {
       800: "#0084FF",
       900: "#0060FF",
     },
+    secondary: { 500: "#FF00FF" },
     background: {
       primary: "#0D0B1A",
       secondary: "#1A1730",
@@ -33,6 +34,7 @@ export const NEON_CYBER: Theme = {
       disabled: "#4A4A6A",
       inverse: "#0D0B1A",
     },
+    accent: { primary: "#FF00FF" },
     status: {
       success: "#00FF00",
       warning: "#FFFF00",
@@ -72,6 +74,7 @@ export const SUNSET_ORANGE: Theme = {
       800: "#D84315",
       900: "#BF360C",
     },
+    secondary: { 500: "#FF4500" },
     background: {
       primary: "#1A0F0A",
       secondary: "#2A1A12",
@@ -86,6 +89,7 @@ export const SUNSET_ORANGE: Theme = {
       disabled: "#8B6F5A",
       inverse: "#1A0F0A",
     },
+    accent: { primary: "#FFD700" },
     status: {
       success: "#10B981",
       warning: "#F59E0B",

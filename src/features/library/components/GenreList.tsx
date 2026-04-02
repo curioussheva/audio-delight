@@ -53,175 +53,260 @@ const genreColor = (name: string) => {
 };
 
 // ── GenreRow ──────────────────────────────────────────────────────────────────
-const GenreRow = memo(({ item, onPress, colors, spacing }: {
-  item: GenreItem;
-  onPress: (item: GenreItem) => void;
-  colors: any;
-  spacing: any;
-}) => {
-  const color = useMemo(() => genreColor(item.name), [item.name]);
+const GenreRow = memo(
+  ({
+    item,
+    onPress,
+    colors,
+    spacing,
+  }: {
+    item: GenreItem;
+    onPress: (item: GenreItem) => void;
+    colors: any;
+    spacing: any;
+  }) => {
+    const color = useMemo(() => genreColor(item.name), [item.name]);
 
-  const handlePress = useCallback(() => {
-    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onPress(item);
-  }, [item, onPress]);
+    const handlePress = useCallback(() => {
+      if (Platform.OS !== "web")
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      onPress(item);
+    }, [item, onPress]);
 
-  return (
-    <TouchableOpacity
-      onPress={handlePress}
-      activeOpacity={0.6}
-      style={[styles.row, { paddingHorizontal: spacing.md }]}
-    >
-      <View style={[styles.iconBox, { backgroundColor: color.bg }]}>
-        <Ionicons name="musical-notes" size={22} color={color.icon} />
-      </View>
-      <View style={styles.info}>
-        <Text style={[styles.name, { color: colors.text.primary }]} numberOfLines={1}>
-          {item.name}
-        </Text>
-        <Text style={[styles.meta, { color: colors.text.secondary }]}>
-          {item.count} lagu
-        </Text>
-      </View>
-      <Ionicons name="chevron-forward" size={16} color={colors.text.disabled} />
-    </TouchableOpacity>
-  );
-}, (prev, next) =>
-  prev.item.name === next.item.name &&
-  prev.item.count === next.item.count &&
-  prev.colors === next.colors
+    return (
+      <TouchableOpacity
+        onPress={handlePress}
+        activeOpacity={0.6}
+        style={[styles.row, { paddingHorizontal: spacing.md }]}
+      >
+        <View style={[styles.iconBox, { backgroundColor: color.bg }]}>
+          <Ionicons name="musical-notes" size={22} color={color.icon} />
+        </View>
+        <View style={styles.info}>
+          <Text
+            style={[styles.name, { color: colors.text.primary }]}
+            numberOfLines={1}
+          >
+            {item.name}
+          </Text>
+          <Text style={[styles.meta, { color: colors.text.secondary }]}>
+            {item.count} lagu
+          </Text>
+        </View>
+        <Ionicons
+          name="chevron-forward"
+          size={16}
+          color={colors.text.disabled}
+        />
+      </TouchableOpacity>
+    );
+  },
+  (prev, next) =>
+    prev.item.name === next.item.name &&
+    prev.item.count === next.item.count &&
+    prev.colors === next.colors,
 );
 
 // ── GenreSongRow ──────────────────────────────────────────────────────────────
-const GenreSongRow = memo(({ track, isNowPlaying, isFavorite, onPress, onToggleFavorite, colors }: {
-  track: MediaTrack;
-  isNowPlaying: boolean;
-  isFavorite: boolean;
-  onPress: () => void;
-  onToggleFavorite?: () => void;
-  colors: any;
-}) => {
-  const handlePress = useCallback(() => {
-    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onPress();
-  }, [onPress]);
+const GenreSongRow = memo(
+  ({
+    track,
+    isNowPlaying,
+    isFavorite,
+    onPress,
+    onToggleFavorite,
+    colors,
+  }: {
+    track: MediaTrack;
+    isNowPlaying: boolean;
+    isFavorite: boolean;
+    onPress: () => void;
+    onToggleFavorite?: () => void;
+    colors: any;
+  }) => {
+    const handlePress = useCallback(() => {
+      if (Platform.OS !== "web")
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      onPress();
+    }, [onPress]);
 
-  const handleFav = useCallback(() => {
-    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    onToggleFavorite?.();
-  }, [onToggleFavorite]);
+    const handleFav = useCallback(() => {
+      if (Platform.OS !== "web")
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      onToggleFavorite?.();
+    }, [onToggleFavorite]);
 
-  return (
-    <TouchableOpacity
-      onPress={handlePress}
-      activeOpacity={0.6}
-      style={[styles.songRow, isNowPlaying && { backgroundColor: colors.background.tertiary }]}
-    >
-      <View style={[
-        styles.songIcon,
-        { backgroundColor: isNowPlaying ? `${colors.primary[500]}20` : colors.background.secondary },
-      ]}>
-        <Ionicons
-          name={isNowPlaying ? "stats-chart" : "musical-note"}
-          size={18}
-          color={isNowPlaying ? colors.primary[500] : colors.text.tertiary}
-        />
-      </View>
-
-      <View style={styles.songInfo}>
-        <View style={styles.titleRow}>
-          <Text
-            style={[styles.songTitle, { color: isNowPlaying ? colors.primary[500] : colors.text.primary }]}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-          >
-            {track.title}
-          </Text>
-          {(track.sampleRate || track.codec) && (
-            <QualityBadge sampleRate={track.sampleRate} codec={track.codec} />
-          )}
+    return (
+      <TouchableOpacity
+        onPress={handlePress}
+        activeOpacity={0.6}
+        style={[
+          styles.songRow,
+          isNowPlaying && { backgroundColor: colors.background.tertiary },
+        ]}
+      >
+        <View
+          style={[
+            styles.songIcon,
+            {
+              backgroundColor: isNowPlaying
+                ? `${colors.primary[500]}20`
+                : colors.background.secondary,
+            },
+          ]}
+        >
+          <Ionicons
+            name={isNowPlaying ? "stats-chart" : "musical-note"}
+            size={18}
+            color={isNowPlaying ? colors.primary[500] : colors.text.tertiary}
+          />
         </View>
-        <Text style={[styles.songSub, { color: colors.text.secondary }]} numberOfLines={1}>
-          {track.artist || "Unknown Artist"}
-          {track.album ? ` · ${track.album}` : ""}
-        </Text>
-      </View>
 
-      <View style={styles.rightActions}>
-        {onToggleFavorite && (
-          <TouchableOpacity onPress={handleFav} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-            <Ionicons
-              name={isFavorite ? "heart" : "heart-outline"}
-              size={18}
-              color={isFavorite ? colors.status.error : colors.text.tertiary}
-            />
-          </TouchableOpacity>
-        )}
-        <Text style={[styles.duration, {
-          color: colors.text.disabled,
-          fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
-        }]}>
-          {formatTime(track.duration || 0)}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
-}, (prev, next) =>
-  prev.track.id === next.track.id &&
-  prev.isNowPlaying === next.isNowPlaying &&
-  prev.isFavorite === next.isFavorite &&
-  prev.colors === next.colors
+        <View style={styles.songInfo}>
+          <View style={styles.titleRow}>
+            <Text
+              style={[
+                styles.songTitle,
+                {
+                  color: isNowPlaying
+                    ? colors.primary[500]
+                    : colors.text.primary,
+                },
+              ]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {track.title}
+            </Text>
+            {(track.sampleRate || track.codec) && (
+              <QualityBadge sampleRate={track.sampleRate} codec={track.codec} />
+            )}
+          </View>
+          <Text
+            style={[styles.songSub, { color: colors.text.secondary }]}
+            numberOfLines={1}
+          >
+            {track.artist || "Unknown Artist"}
+            {track.album ? ` · ${track.album}` : ""}
+          </Text>
+        </View>
+
+        <View style={styles.rightActions}>
+          {onToggleFavorite && (
+            <TouchableOpacity
+              onPress={handleFav}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <Ionicons
+                name={isFavorite ? "heart" : "heart-outline"}
+                size={18}
+                color={isFavorite ? colors.status.error : colors.text.tertiary}
+              />
+            </TouchableOpacity>
+          )}
+          <Text
+            style={[
+              styles.duration,
+              {
+                color: colors.text.disabled,
+                fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
+              },
+            ]}
+          >
+            {formatTime(track.duration || 0)}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  },
+  (prev, next) =>
+    prev.track.id === next.track.id &&
+    prev.isNowPlaying === next.isNowPlaying &&
+    prev.isFavorite === next.isFavorite &&
+    prev.colors === next.colors,
 );
 
 // ── GenreDetailHeader ─────────────────────────────────────────────────────────
-const GenreDetailHeader = memo(({ genre, songCount, totalDuration, color, onBack, onPlayAll, colors, spacing }: {
-  genre: GenreItem;
-  songCount: number;
-  totalDuration: number;
-  color: { bg: string; icon: string };
-  onBack: () => void;
-  onPlayAll: () => void;
-  colors: any;
-  spacing: any;
-}) => (
-  <View style={{ backgroundColor: colors.background.secondary }}>
-    <TouchableOpacity
-      onPress={onBack}
-      style={[styles.backRow, { paddingHorizontal: spacing.md, paddingVertical: spacing.sm }]}
-    >
-      <Ionicons name="chevron-back" size={18} color={colors.primary[500]} />
-      <Text style={[styles.backLabel, { color: colors.primary[500] }]}>Genres</Text>
-    </TouchableOpacity>
+const GenreDetailHeader = memo(
+  ({
+    genre,
+    songCount,
+    totalDuration,
+    color,
+    onBack,
+    onPlayAll,
+    colors,
+    spacing,
+  }: {
+    genre: GenreItem;
+    songCount: number;
+    totalDuration: number;
+    color: { bg: string; icon: string };
+    onBack: () => void;
+    onPlayAll: () => void;
+    colors: any;
+    spacing: any;
+  }) => (
+    <View style={{ backgroundColor: colors.background.secondary }}>
+      <TouchableOpacity
+        onPress={onBack}
+        style={[
+          styles.backRow,
+          { paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+        ]}
+      >
+        <Ionicons name="chevron-back" size={18} color={colors.primary[500]} />
+        <Text style={[styles.backLabel, { color: colors.primary[500] }]}>
+          Genres
+        </Text>
+      </TouchableOpacity>
 
-    <View style={[styles.detailHeader, { paddingHorizontal: spacing.md, paddingBottom: spacing.md }]}>
-      <View style={[styles.detailIconBox, { backgroundColor: color.bg }]}>
-        <Ionicons name="musical-notes" size={44} color={color.icon} />
+      <View
+        style={[
+          styles.detailHeader,
+          { paddingHorizontal: spacing.md, paddingBottom: spacing.md },
+        ]}
+      >
+        <View style={[styles.detailIconBox, { backgroundColor: color.bg }]}>
+          <Ionicons name="musical-notes" size={44} color={color.icon} />
+        </View>
+        <View style={styles.detailInfo}>
+          <Text
+            style={[styles.detailName, { color: colors.text.primary }]}
+            numberOfLines={2}
+          >
+            {genre.name}
+          </Text>
+          <Text style={[styles.detailMeta, { color: colors.text.disabled }]}>
+            {songCount} lagu · {formatTime(totalDuration)}
+          </Text>
+        </View>
       </View>
-      <View style={styles.detailInfo}>
-        <Text style={[styles.detailName, { color: colors.text.primary }]} numberOfLines={2}>
-          {genre.name}
-        </Text>
-        <Text style={[styles.detailMeta, { color: colors.text.disabled }]}>
-          {songCount} lagu · {formatTime(totalDuration)}
-        </Text>
-      </View>
+
+      <TouchableOpacity
+        onPress={onPlayAll}
+        style={[
+          styles.playAllBtn,
+          {
+            backgroundColor: colors.primary[500],
+            marginHorizontal: spacing.md,
+            marginBottom: spacing.md,
+          },
+        ]}
+      >
+        <Ionicons name="play" size={16} color="#fff" />
+        <Text style={styles.playAllLabel}>Putar Semua</Text>
+      </TouchableOpacity>
+
+      <View
+        style={[
+          styles.divider,
+          { backgroundColor: colors.background.tertiary },
+        ]}
+      />
     </View>
-
-    <TouchableOpacity
-      onPress={onPlayAll}
-      style={[styles.playAllBtn, {
-        backgroundColor: colors.primary[500],
-        marginHorizontal: spacing.md,
-        marginBottom: spacing.md,
-      }]}
-    >
-      <Ionicons name="play" size={16} color="#fff" />
-      <Text style={styles.playAllLabel}>Putar Semua</Text>
-    </TouchableOpacity>
-
-    <View style={[styles.divider, { backgroundColor: colors.background.tertiary }]} />
-  </View>
-));
+  ),
+);
 
 // ── GenreList ─────────────────────────────────────────────────────────────────
 export const GenreList: React.FC<GenreListProps> = ({
@@ -240,37 +325,48 @@ export const GenreList: React.FC<GenreListProps> = ({
   const filteredSongs = useMemo(() => {
     if (!selectedGenre) return [];
     return (tracks ?? []).filter(
-      (t) => (t.genre || "Unknown") === selectedGenre.name
+      (t) => (t.genre || "Unknown") === selectedGenre.name,
     );
   }, [tracks, selectedGenre]);
 
   const totalDuration = useMemo(
     () => filteredSongs.reduce((acc, t) => acc + (t.duration || 0), 0),
-    [filteredSongs]
+    [filteredSongs],
   );
 
   const selectedColor = useMemo(
     () => (selectedGenre ? genreColor(selectedGenre.name) : GENRE_COLORS[0]),
-    [selectedGenre]
+    [selectedGenre],
   );
 
-  const handleGenrePress = useCallback((genre: GenreItem) => setSelectedGenre(genre), []);
+  const handleGenrePress = useCallback(
+    (genre: GenreItem) => setSelectedGenre(genre),
+    [],
+  );
   const handleBack = useCallback(() => setSelectedGenre(null), []);
   const handlePlayAll = useCallback(() => {
     if (filteredSongs.length > 0) onSongPress(filteredSongs[0], filteredSongs);
   }, [filteredSongs, onSongPress]);
   const handleSongPress = useCallback(
     (track: MediaTrack) => onSongPress(track, filteredSongs),
-    [filteredSongs, onSongPress]
+    [filteredSongs, onSongPress],
   );
 
   // ── Genre list ────────────────────────────────────────────────────────────────
   if (!selectedGenre) {
     if (!genres.length) {
       return (
-        <View style={[styles.empty, { backgroundColor: colors.background.primary }]}>
-          <Ionicons name="grid-outline" size={52} color={colors.text.disabled} />
-          <Text style={[styles.emptyText, { color: colors.text.secondary }]}>Belum ada genre</Text>
+        <View
+          style={[styles.empty, { backgroundColor: colors.background.primary }]}
+        >
+          <Ionicons
+            name="grid-outline"
+            size={52}
+            color={colors.text.disabled}
+          />
+          <Text style={[styles.emptyText, { color: colors.text.secondary }]}>
+            Belum ada genre
+          </Text>
           <Text style={[styles.emptySubText, { color: colors.text.disabled }]}>
             Scan library terlebih dahulu
           </Text>
@@ -284,16 +380,29 @@ export const GenreList: React.FC<GenreListProps> = ({
         data={genres}
         keyExtractor={(item) => item.name}
         renderItem={({ item }) => (
-          <GenreRow item={item} onPress={handleGenrePress} colors={colors} spacing={spacing} />
+          <GenreRow
+            item={item}
+            onPress={handleGenrePress}
+            colors={colors}
+            spacing={spacing}
+          />
         )}
-        contentContainerStyle={{ paddingVertical: spacing.xs, paddingBottom: 120 }}
+        contentContainerStyle={{
+          paddingVertical: spacing.xs,
+          paddingBottom: 120,
+        }}
         showsVerticalScrollIndicator={false}
         initialNumToRender={20}
         maxToRenderPerBatch={10}
         windowSize={5}
         removeClippedSubviews
         ItemSeparatorComponent={() => (
-          <View style={[styles.separator, { backgroundColor: colors.background.tertiary, marginLeft: 72 }]} />
+          <View
+            style={[
+              styles.separator,
+              { backgroundColor: colors.background.tertiary, marginLeft: 72 },
+            ]}
+          />
         )}
       />
     );
@@ -323,7 +432,9 @@ export const GenreList: React.FC<GenreListProps> = ({
           isNowPlaying={item.id === currentTrackId}
           isFavorite={favoriteIds.has(item.id)}
           onPress={() => handleSongPress(item)}
-          onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(item.id) : undefined}
+          onToggleFavorite={
+            onToggleFavorite ? () => onToggleFavorite(item.id) : undefined
+          }
           colors={colors}
         />
       )}
@@ -340,7 +451,14 @@ export const GenreList: React.FC<GenreListProps> = ({
 // ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", height: 64, gap: 14 },
-  iconBox: { width: 46, height: 46, borderRadius: 12, justifyContent: "center", alignItems: "center", flexShrink: 0 },
+  iconBox: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    flexShrink: 0,
+  },
   info: { flex: 1 },
   name: { fontSize: 15, fontWeight: "600", marginBottom: 2 },
   meta: { fontSize: 12 },
@@ -351,20 +469,48 @@ const styles = StyleSheet.create({
   backRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   backLabel: { fontSize: 14, fontWeight: "600" },
   detailHeader: { flexDirection: "row", gap: 16, alignItems: "center" },
-  detailIconBox: { width: 88, height: 88, borderRadius: 20, justifyContent: "center", alignItems: "center", flexShrink: 0 },
+  detailIconBox: {
+    width: 88,
+    height: 88,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    flexShrink: 0,
+  },
   detailInfo: { flex: 1, gap: 6 },
   detailName: { fontSize: 20, fontWeight: "700", lineHeight: 24 },
   detailMeta: { fontSize: 13 },
-  playAllBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, borderRadius: 8 },
+  playAllBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
   playAllLabel: { color: "#fff", fontWeight: "700", fontSize: 14 },
   divider: { height: 1 },
-  songRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, height: 64 },
-  songIcon: { width: 40, height: 40, borderRadius: 8, justifyContent: "center", alignItems: "center" },
+  songRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    height: 64,
+  },
+  songIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   songInfo: { flex: 1, marginHorizontal: 12 },
-  titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   songTitle: { fontSize: 15, fontWeight: "600", flex: 1, marginRight: 4 },
   songSub: { fontSize: 12, marginTop: 1 },
   rightActions: { alignItems: "flex-end", gap: 4 },
   duration: { fontSize: 10 },
 });
- 

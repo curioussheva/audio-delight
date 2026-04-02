@@ -36,8 +36,12 @@ class PlaylistService {
       );
     `);
 
-    db.execute(`CREATE INDEX IF NOT EXISTS idx_playlist_songs_playlistId ON playlist_songs(playlistId);`);
-    db.execute(`CREATE INDEX IF NOT EXISTS idx_playlist_songs_songId ON playlist_songs(songId);`);
+    db.execute(
+      `CREATE INDEX IF NOT EXISTS idx_playlist_songs_playlistId ON playlist_songs(playlistId);`,
+    );
+    db.execute(
+      `CREATE INDEX IF NOT EXISTS idx_playlist_songs_songId ON playlist_songs(songId);`,
+    );
   }
 
   // ===== METHOD DASAR =====
@@ -91,7 +95,9 @@ class PlaylistService {
         [playlist.id],
       );
 
-      const songs = (songResult.rows?._array || []).map((row) => this.mapRowToSong(row));
+      const songs = (songResult.rows?._array || []).map((row) =>
+        this.mapRowToSong(row),
+      );
       playlist.songs = songs;
       playlist.songIds = songs.map((s) => s.id);
       playlist.duration = songs.reduce((sum, s) => sum + s.duration, 0);
@@ -114,7 +120,9 @@ class PlaylistService {
       [id],
     );
 
-    const songs = (songResult.rows?._array || []).map((row) => this.mapRowToSong(row));
+    const songs = (songResult.rows?._array || []).map((row) =>
+      this.mapRowToSong(row),
+    );
     playlist.songs = songs;
     playlist.songIds = songs.map((s) => s.id);
     playlist.duration = songs.reduce((sum, s) => sum + s.duration, 0);
@@ -145,8 +153,14 @@ class PlaylistService {
 
   async removeFromPlaylist(playlistId: string, songId: string) {
     db.transaction((tx) => {
-      tx.execute("DELETE FROM playlist_songs WHERE playlistId = ? AND songId = ?", [playlistId, songId]);
-      tx.execute("UPDATE playlists SET songCount = songCount - 1, updatedAt = ? WHERE id = ?", [Date.now(), playlistId]);
+      tx.execute(
+        "DELETE FROM playlist_songs WHERE playlistId = ? AND songId = ?",
+        [playlistId, songId],
+      );
+      tx.execute(
+        "UPDATE playlists SET songCount = songCount - 1, updatedAt = ? WHERE id = ?",
+        [Date.now(), playlistId],
+      );
     });
   }
 
@@ -172,7 +186,10 @@ class PlaylistService {
     values.push(id);
 
     if (updates.length > 1) {
-      db.execute(`UPDATE playlists SET ${updates.join(", ")} WHERE id = ?`, values);
+      db.execute(
+        `UPDATE playlists SET ${updates.join(", ")} WHERE id = ?`,
+        values,
+      );
     }
   }
 
@@ -187,13 +204,29 @@ class PlaylistService {
         trackNumber, discNumber, rating, playCount, lastPlayed
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        song.id, song.title, song.artist || "Unknown Artist", song.album || "Unknown Album", 
-        song.duration, song.uri, song.artwork || null,
-        song.codec, song.sampleRate, song.bitDepth || null, song.bitrate || null, song.isHiRes ? 1 : 0,
-        song.dateAdded || Date.now(), song.dateModified || null, song.year || null, song.genre || "Unknown", 
-        song.folder || "Unknown", song.filename || "Unknown",
-        song.trackNumber || null, song.discNumber || null,
-        song.rating || 0, song.playCount || 0, song.lastPlayed || null,
+        song.id,
+        song.title,
+        song.artist || "Unknown Artist",
+        song.album || "Unknown Album",
+        song.duration,
+        song.uri,
+        song.artwork || null,
+        song.codec,
+        song.sampleRate,
+        song.bitDepth || null,
+        song.bitrate || null,
+        song.isHiRes ? 1 : 0,
+        song.dateAdded || Date.now(),
+        song.dateModified || null,
+        song.year || null,
+        song.genre || "Unknown",
+        song.folder || "Unknown",
+        song.filename || "Unknown",
+        song.trackNumber || null,
+        song.discNumber || null,
+        song.rating || 0,
+        song.playCount || 0,
+        song.lastPlayed || null,
       ],
     );
   }
@@ -209,14 +242,30 @@ class PlaylistService {
             trackNumber, discNumber, rating, playCount, lastPlayed
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
-            song.id, song.title, song.artist || "Unknown Artist", song.album || "Unknown Album", 
-            song.duration, song.uri, song.artwork || null,
-            song.codec, song.sampleRate, song.bitDepth || null, song.bitrate || null, song.isHiRes ? 1 : 0,
-            song.dateAdded || Date.now(), song.dateModified || null, song.year || null, song.genre || "Unknown", 
-            song.folder || "Unknown", song.filename || "Unknown",
-            song.trackNumber || null, song.discNumber || null,
-            song.rating || 0, song.playCount || 0, song.lastPlayed || null,
-          ]
+            song.id,
+            song.title,
+            song.artist || "Unknown Artist",
+            song.album || "Unknown Album",
+            song.duration,
+            song.uri,
+            song.artwork || null,
+            song.codec,
+            song.sampleRate,
+            song.bitDepth || null,
+            song.bitrate || null,
+            song.isHiRes ? 1 : 0,
+            song.dateAdded || Date.now(),
+            song.dateModified || null,
+            song.year || null,
+            song.genre || "Unknown",
+            song.folder || "Unknown",
+            song.filename || "Unknown",
+            song.trackNumber || null,
+            song.discNumber || null,
+            song.rating || 0,
+            song.playCount || 0,
+            song.lastPlayed || null,
+          ],
         );
       }
     });
@@ -241,7 +290,10 @@ class PlaylistService {
   }
 
   async updatePlayCount(songId: string): Promise<void> {
-    db.execute(`UPDATE songs SET playCount = playCount + 1, lastPlayed = ? WHERE id = ?`, [Date.now(), songId]);
+    db.execute(
+      `UPDATE songs SET playCount = playCount + 1, lastPlayed = ? WHERE id = ?`,
+      [Date.now(), songId],
+    );
   }
 
   async updateRating(songId: string, rating: number): Promise<void> {
@@ -328,12 +380,15 @@ class PlaylistService {
     let filtered = allSongs;
 
     if (criteria.minBitrate) {
-      filtered = filtered.filter((s) => (s.bitrate || 0) >= criteria.minBitrate!);
+      filtered = filtered.filter(
+        (s) => (s.bitrate || 0) >= criteria.minBitrate!,
+      );
     }
 
     if (criteria.isLossless !== undefined) {
       filtered = filtered.filter(
-        (s) => (s.bitrate || 0) > 800 || s.codec === "FLAC" || s.codec === "ALAC",
+        (s) =>
+          (s.bitrate || 0) > 800 || s.codec === "FLAC" || s.codec === "ALAC",
       );
     }
 
@@ -342,7 +397,9 @@ class PlaylistService {
     }
 
     if (criteria.minPlayCount) {
-      filtered = filtered.filter((s) => (s.playCount || 0) >= criteria.minPlayCount!);
+      filtered = filtered.filter(
+        (s) => (s.playCount || 0) >= criteria.minPlayCount!,
+      );
     }
 
     if (criteria.fromYear) {
@@ -381,17 +438,22 @@ class PlaylistService {
   }
 
   async getMostPlayed(limit: number = 10): Promise<Song[]> {
-    const result = db.execute("SELECT * FROM songs ORDER BY playCount DESC, lastPlayed DESC LIMIT ?", [limit]);
+    const result = db.execute(
+      "SELECT * FROM songs ORDER BY playCount DESC, lastPlayed DESC LIMIT ?",
+      [limit],
+    );
     const rows = result.rows?._array || [];
     return rows.map((row) => this.mapRowToSong(row));
   }
 
   async getRecentlyAdded(limit: number = 20): Promise<Song[]> {
-    const result = db.execute("SELECT * FROM songs ORDER BY dateAdded DESC LIMIT ?", [limit]);
+    const result = db.execute(
+      "SELECT * FROM songs ORDER BY dateAdded DESC LIMIT ?",
+      [limit],
+    );
     const rows = result.rows?._array || [];
     return rows.map((row) => this.mapRowToSong(row));
   }
 }
 
 export default new PlaylistService();
- 

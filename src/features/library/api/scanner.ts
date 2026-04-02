@@ -2,7 +2,6 @@ import { db } from "@/shared/lib/sqlite";
 import { Song } from "@/shared/types/audio";
 
 export class LibraryScanner {
-
   // ── ID Generation ──────────────────────────────────────────
   private static uriToId(uri: string): string {
     let hash = 5381;
@@ -66,29 +65,33 @@ export class LibraryScanner {
         -- playCount dan isFavorite TIDAK diupdate ──`,
       [
         id,
-        track.title    || track.filename.replace(/\.[^/.]+$/, ""),
-        track.artist   || "Unknown Artist",
-        track.album    || "Unknown Album",
-        track.genre    || "Unknown Genre",
-        track.folder   || "Music",
+        track.title || track.filename.replace(/\.[^/.]+$/, ""),
+        track.artist || "Unknown Artist",
+        track.album || "Unknown Album",
+        track.genre || "Unknown Genre",
+        track.folder || "Music",
         track.filename,
         track.uri,
-        track.artwork  ?? null,
+        track.artwork ?? null,
         track.duration ?? 0,
         track.sampleRate ?? null,
-        track.bitDepth   ?? null,
-        track.codec    || track.filename.split('.').pop()?.toUpperCase() || "UNKNOWN",
-        track.bitrate  ?? null,
+        track.bitDepth ?? null,
+        track.codec ||
+          track.filename.split(".").pop()?.toUpperCase() ||
+          "UNKNOWN",
+        track.bitrate ?? null,
         track.fileSize ?? 0,
         track.isEnriched ? 1 : 0,
         track.dateAdded ?? now,
         now, // lastSeenAt selalu update
-      ]
+      ],
     );
   }
 
   // ── Queries ────────────────────────────────────────────────
-  static async getLibrarySongs(options: { searchQuery?: string } = {}): Promise<Song[]> {
+  static async getLibrarySongs(
+    options: { searchQuery?: string } = {},
+  ): Promise<Song[]> {
     try {
       const { searchQuery = "" } = options;
       let query = "SELECT * FROM songs";
@@ -113,7 +116,7 @@ export class LibraryScanner {
     try {
       const result = db.execute("SELECT uri FROM songs");
       const rows: { uri: string }[] = result.rows?._array ?? [];
-      return new Set(rows.map(r => r.uri));
+      return new Set(rows.map((r) => r.uri));
     } catch {
       return new Set();
     }
@@ -122,11 +125,8 @@ export class LibraryScanner {
   /** Tandai file yang tidak terdeteksi lagi — untuk ScanDiffEngine */
   static markAsDeleted(uris: string[]): void {
     if (uris.length === 0) return;
-    const placeholders = uris.map(() => '?').join(', ');
-    db.execute(
-      `DELETE FROM songs WHERE uri IN (${placeholders})`,
-      uris
-    );
+    const placeholders = uris.map(() => "?").join(", ");
+    db.execute(`DELETE FROM songs WHERE uri IN (${placeholders})`, uris);
     console.log(`🗑️ [LibraryScanner] Removed ${uris.length} deleted tracks`);
   }
 
@@ -140,7 +140,7 @@ export class LibraryScanner {
     try {
       const result = db.execute(
         "SELECT * FROM songs WHERE isEnriched = 0 LIMIT ?",
-        [limit]
+        [limit],
       );
       return result.rows?._array ?? [];
     } catch {
@@ -152,32 +152,50 @@ export class LibraryScanner {
     db.execute("DELETE FROM songs;");
     console.log("🧹 Library cleared");
   }
-  
-  static updateEnrichment(uri: string, data: {
-  sampleRate?: number;
-  bitDepth?: number;
-  artwork?: string;
-  title?: string;    // ← tambah
-  artist?: string;   // ← tambah
-  album?: string;    // ← tambah
-}): void {
-  // Build dynamic SET clause
-  const sets: string[] = ['isEnriched = 1', 'lastSeenAt = ?'];
-  const params: any[]  = [Date.now()];
 
-  if (data.sampleRate !== undefined) { sets.push('sampleRate = ?'); params.push(data.sampleRate ?? null); }
-  if (data.bitDepth   !== undefined) { sets.push('bitDepth = ?');   params.push(data.bitDepth   ?? null); }
-  if (data.artwork    !== undefined) { sets.push('artwork = ?');     params.push(data.artwork    ?? null); }
-  // Hanya update jika ada nilai dari ID3 tag
-  if (data.title  && data.title.trim()  !== '') { sets.push('title = ?');  params.push(data.title.trim());  }
-  if (data.artist && data.artist.trim() !== '') { sets.push('artist = ?'); params.push(data.artist.trim()); }
-  if (data.album  && data.album.trim()  !== '') { sets.push('album = ?');  params.push(data.album.trim());  }
+  static updateEnrichment(
+    uri: string,
+    data: {
+      sampleRate?: number;
+      bitDepth?: number;
+      artwork?: string;
+      title?: string; // ← tambah
+      artist?: string; // ← tambah
+      album?: string; // ← tambah
+    },
+  ): void {
+    // Build dynamic SET clause
+    const sets: string[] = ["isEnriched = 1", "lastSeenAt = ?"];
+    const params: any[] = [Date.now()];
 
-  params.push(uri); // WHERE clause
+    if (data.sampleRate !== undefined) {
+      sets.push("sampleRate = ?");
+      params.push(data.sampleRate ?? null);
+    }
+    if (data.bitDepth !== undefined) {
+      sets.push("bitDepth = ?");
+      params.push(data.bitDepth ?? null);
+    }
+    if (data.artwork !== undefined) {
+      sets.push("artwork = ?");
+      params.push(data.artwork ?? null);
+    }
+    // Hanya update jika ada nilai dari ID3 tag
+    if (data.title && data.title.trim() !== "") {
+      sets.push("title = ?");
+      params.push(data.title.trim());
+    }
+    if (data.artist && data.artist.trim() !== "") {
+      sets.push("artist = ?");
+      params.push(data.artist.trim());
+    }
+    if (data.album && data.album.trim() !== "") {
+      sets.push("album = ?");
+      params.push(data.album.trim());
+    }
 
-  db.execute(
-    `UPDATE songs SET ${sets.join(', ')} WHERE uri = ?`,
-    params
-  );
+    params.push(uri); // WHERE clause
+
+    db.execute(`UPDATE songs SET ${sets.join(", ")} WHERE uri = ?`, params);
+  }
 }
-}  

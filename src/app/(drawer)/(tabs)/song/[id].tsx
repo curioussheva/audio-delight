@@ -10,11 +10,7 @@ import {
 import { useLocalSearchParams, router } from "expo-router";
 
 // ← Import Lucide Icons
-import {
-  ArrowLeft,
-  Heart,
-  Play,
-} from "lucide-react-native";
+import { ArrowLeft, Heart, Play } from "lucide-react-native";
 
 import { useTheme } from "@/context/ThemeContext";
 import { useLibrary } from "@/features/library/hooks/useLibrary";
@@ -93,7 +89,7 @@ export default function SongDetailScreen() {
           <Heart
             size={24}
             color={favorite ? colors.status.error : colors.text.primary}
-            strokeWidth={favorite ? 0 : 2.5}   // filled jika favorite
+            strokeWidth={favorite ? 0 : 2.5} // filled jika favorite
             fill={favorite ? colors.status.error : "transparent"}
           />
         </TouchableOpacity>
@@ -253,4 +249,4 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   playButtonText: { fontWeight: "900", fontSize: 16, letterSpacing: 1 },
-}); 
+});

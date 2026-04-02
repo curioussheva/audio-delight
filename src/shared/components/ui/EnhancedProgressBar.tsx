@@ -1,10 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, {
-  useSharedValue,
-  runOnJS,
-} from "react-native-reanimated";
+import Animated, { useSharedValue, runOnJS } from "react-native-reanimated";
 import { useTheme } from "@/context/ThemeContext";
 import { usePlayerStore } from "@/features/player/store/playerStore"; // Tambahkan ini
 import { formatTime } from "@/shared/utils/time";

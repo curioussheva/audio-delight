@@ -10,6 +10,10 @@ class NativeVisualizerBridge(reactContext: ReactApplicationContext) : ReactConte
     private val context = reactContext
 
     override fun getName(): String = "NativeVisualizerBridge"
+    override fun invalidate() {
+    stopVisualizer()
+    super.invalidate()
+}
 
     @ReactMethod
     fun startVisualizer(audioSessionId: Int, promise: Promise) {

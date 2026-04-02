@@ -35,7 +35,9 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
   centerArt,
   showCenterArt = false,
 }) => {
-const freqData = useSharedValue<number[]>(Array.from({ length: barCount }, () => 0));
+  const freqData = useSharedValue<number[]>(
+    Array.from({ length: barCount }, () => 0),
+  );
 
   const prevProcessedData = useSharedValue<number[]>(
     Array.from({ length: barCount }, () => 0),

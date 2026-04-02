@@ -8,7 +8,9 @@ interface PlaybackSpeedProps {
   onClose: () => void;
 }
 
-export const PlaybackSpeed: React.FC<PlaybackSpeedProps> = ({ onClose: _onClose }) => {
+export const PlaybackSpeed: React.FC<PlaybackSpeedProps> = ({
+  onClose: _onClose,
+}) => {
   const { theme } = useTheme();
   const { colors, spacing } = theme;
   const [speed, setSpeed] = useState(1.0);

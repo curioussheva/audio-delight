@@ -3,10 +3,10 @@ import React, { useState, useEffect } from "react";
 import { Stack, usePathname } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import * as SplashScreen from 'expo-splash-screen';
+import * as SplashScreen from "expo-splash-screen";
 
 import { ThemeProvider } from "@/context/ThemeContext";
-import LoadingScreen from '@/shared/components/ui/LoadingScreen';
+import LoadingScreen from "@/shared/components/ui/LoadingScreen";
 import { AudioPropertyToast } from "@/features/player/components/AudioPropertyToast";
 import FloatingPlayer from "@/features/player/components/FloatingPlayer";
 
@@ -15,8 +15,8 @@ import { useTrackPlayerHandler } from "@/features/player/hooks/useTrackPlayerHan
 import { audioEngine } from "@/features/player/api/engine";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { playbackService } from "@/features/player/api/playback";
-import { BackgroundScanTask } from '@/features/library/services/BackgroundScanTask';
-import { useLibraryStore } from '@/features/library/store/libraryStore';
+import { BackgroundScanTask } from "@/features/library/services/BackgroundScanTask";
+import { useLibraryStore } from "@/features/library/store/libraryStore";
 
 TrackPlayer.registerPlaybackService(() => playbackService);
 SplashScreen.preventAutoHideAsync();
@@ -25,8 +25,8 @@ export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
 
   const initStore = usePlayerStore((state) => state.initStore);
-  const autoScanEnabled = useLibraryStore(s => s.scanStatus.autoScanEnabled);
-  
+  const autoScanEnabled = useLibraryStore((s) => s.scanStatus.autoScanEnabled);
+
   const pathname = usePathname();
   const isPlayerOpen = pathname.startsWith("/player");
 
@@ -45,18 +45,19 @@ export default function RootLayout() {
       try {
         // Inisialisasi yang diperlukan
         await Promise.all([
-          audioEngine.initialize().catch(() => console.warn("Audio init deferred")),
+          audioEngine
+            .initialize()
+            .catch(() => console.warn("Audio init deferred")),
           initStore(),
         ]);
 
         // ★★★ Minimum loading time (agar LoadingScreen terlihat jelas) ★★★
-        await new Promise(resolve => setTimeout(resolve, 2400)); // 2.4 detik
-
+        await new Promise((resolve) => setTimeout(resolve, 2400)); // 2.4 detik
       } catch (error) {
         console.error("App initialization failed:", error);
       } finally {
         setIsReady(true);
-        await SplashScreen.hideAsync();   // Hide native splash
+        await SplashScreen.hideAsync(); // Hide native splash
       }
     };
 
@@ -95,4 +96,4 @@ export default function RootLayout() {
       </ThemeProvider>
     </GestureHandlerRootView>
   );
-} 
+}

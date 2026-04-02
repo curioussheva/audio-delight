@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import Slider from "@react-native-community/slider";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { useSafePadding } from '@/shared/hooks/useSafePadding';
+import { useSafePadding } from "@/shared/hooks/useSafePadding";
 
 import { useTheme } from "@/context/ThemeContext";
 import { usePlayerStore } from "@/features/player/store/playerStore";
@@ -19,10 +19,10 @@ import { SpectrumAnalyzer } from "@/features/visualizer/components/SpectrumAnaly
 
 // Lucide Icons
 import {
-  Activity,      // untuk analytics / speedometer
+  Activity, // untuk analytics / speedometer
   Settings,
-  Gauge,         // untuk speedometer
-  X,             // untuk close button di modal
+  Gauge, // untuk speedometer
+  X, // untuk close button di modal
 } from "lucide-react-native";
 
 const { width, height } = Dimensions.get("window");
@@ -138,7 +138,8 @@ export default function VisualizerScreen() {
         >
           <Text
             style={{
-              color: mode === m ? colors.background.primary : colors.text.secondary,
+              color:
+                mode === m ? colors.background.primary : colors.text.secondary,
               fontWeight: mode === m ? "600" : "400",
             }}
           >
@@ -322,11 +323,7 @@ export default function VisualizerScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity onPress={() => setShowSettings(true)}>
-            <Settings
-              size={24}
-              color={colors.text.primary}
-              strokeWidth={2.5}
-            />
+            <Settings size={24} color={colors.text.primary} strokeWidth={2.5} />
           </TouchableOpacity>
         </View>
       </View>
@@ -410,7 +407,9 @@ export default function VisualizerScreen() {
 
             {/* Mode Selector */}
             <View style={{ marginBottom: spacing.lg }}>
-              <Text style={[styles.settingLabel, { color: colors.text.secondary }]}>
+              <Text
+                style={[styles.settingLabel, { color: colors.text.secondary }]}
+              >
                 Mode
               </Text>
               {renderModeSelector()}
@@ -418,7 +417,9 @@ export default function VisualizerScreen() {
 
             {/* Color Theme */}
             <View style={{ marginBottom: spacing.lg }}>
-              <Text style={[styles.settingLabel, { color: colors.text.secondary }]}>
+              <Text
+                style={[styles.settingLabel, { color: colors.text.secondary }]}
+              >
                 Color Theme
               </Text>
               {renderColorSelector()}
@@ -426,8 +427,18 @@ export default function VisualizerScreen() {
 
             {/* Sensitivity */}
             <View style={{ marginBottom: spacing.lg }}>
-              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                <Text style={[styles.settingLabel, { color: colors.text.secondary }]}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                }}
+              >
+                <Text
+                  style={[
+                    styles.settingLabel,
+                    { color: colors.text.secondary },
+                  ]}
+                >
                   Sensitivity
                 </Text>
                 <Text style={{ color: colors.primary[500] }}>
@@ -455,7 +466,9 @@ export default function VisualizerScreen() {
               ]}
               onPress={resetToDefault}
             >
-              <Text style={{ color: colors.text.primary }}>Reset to Default</Text>
+              <Text style={{ color: colors.text.primary }}>
+                Reset to Default
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -536,4 +549,4 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 14,
   },
-}); 
+});

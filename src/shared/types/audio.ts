@@ -16,13 +16,13 @@ export interface Song {
   filename: string;
   uri: string;
   artwork?: string;
-  duration: number;      // Dalam DETIK
+  duration: number; // Dalam DETIK
 
   codec: string;
   sampleRate: number;
   bitDepth?: number;
   bitrate?: number;
-  isHiRes?: boolean;     // ← optional, belum selalu ada di DB
+  isHiRes?: boolean; // ← optional, belum selalu ada di DB
 
   dateAdded: number;
   dateModified?: number;
@@ -36,14 +36,14 @@ export interface Song {
   lastPlayed?: number;
 
   // DB fields
-  isEnriched?: number;   // ← tambah, 0 atau 1 dari SQLite
-  lastSeenAt?: number;   // ← tambah, dari migration
-} 
+  isEnriched?: number; // ← tambah, 0 atau 1 dari SQLite
+  lastSeenAt?: number; // ← tambah, dari migration
+}
 
 export interface Playlist {
   id: string;
   name: string;
-  songs: string[];       // Array of Song IDs
+  songs: string[]; // Array of Song IDs
   createdAt: number;
   updatedAt: number;
 }
@@ -51,11 +51,11 @@ export interface Playlist {
 export interface PlaybackState {
   isPlaying: boolean;
   isLoading: boolean;
-  position: number;      // Dalam detik (float)
+  position: number; // Dalam detik (float)
   duration: number;
   buffered: number;
   volume: number;
-  rate: number;          // Playback speed (0.5x - 2.0x)
+  rate: number; // Playback speed (0.5x - 2.0x)
 }
 
 export interface Queue {
@@ -80,4 +80,3 @@ export interface MusicAnalysisResult {
   confidence: number;
   metadata: Partial<Song>;
 }
- 

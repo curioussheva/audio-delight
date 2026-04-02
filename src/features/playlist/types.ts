@@ -1,7 +1,6 @@
 // src/features/playlist/types.ts
 import { Song } from "@/shared/types/audio";
 
-
 export interface Playlist {
   id: string;
   name: string;

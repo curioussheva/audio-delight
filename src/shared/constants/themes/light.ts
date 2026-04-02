@@ -19,6 +19,7 @@ export const LIGHT_GRAY: Theme = {
       800: "#172A45",
       900: "#0C1A2D",
     },
+    secondary: { 500: "#7C3AED" },
     background: {
       primary: "#F8FAFC",
       secondary: "#F1F5F9",
@@ -33,6 +34,7 @@ export const LIGHT_GRAY: Theme = {
       disabled: "#94A3B8",
       inverse: "#FFFFFF",
     },
+    accent: { primary: "#F59E0B" },
     status: {
       success: "#10B981",
       warning: "#F59E0B",
@@ -101,6 +103,7 @@ export const PURE_WHITE: Theme = {
       800: "#1E3A8A",
       900: "#172554",
     },
+    secondary: { 500: "#7C3AED" },
     background: {
       primary: "#FFFFFF",
       secondary: "#FAFAFA",
@@ -115,6 +118,7 @@ export const PURE_WHITE: Theme = {
       disabled: "#A3A3A3",
       inverse: "#FFFFFF",
     },
+    accent: { primary: "#EAB308" },
     status: {
       success: "#10B981",
       warning: "#F59E0B",

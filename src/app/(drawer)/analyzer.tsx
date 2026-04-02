@@ -26,8 +26,7 @@ export default function FLACAnalyzerScreen() {
       <View style={styles.card}>
         <Text style={styles.label}>Stream Authenticity</Text>
         <Text style={styles.value}>
-          {currentSong?.sampleRate &&
-          currentSong.sampleRate > 48000
+          {currentSong?.sampleRate && currentSong.sampleRate > 48000
             ? "High-Resolution Verified"
             : "Standard Resolution"}
         </Text>
@@ -37,9 +36,7 @@ export default function FLACAnalyzerScreen() {
         <View style={styles.row}>
           <View>
             <Text style={styles.subLabel}>Container</Text>
-            <Text style={styles.subValue}>
-              {currentSong?.codec || "FLAC"}
-            </Text>
+            <Text style={styles.subValue}>{currentSong?.codec || "FLAC"}</Text>
           </View>
           <View>
             <Text style={styles.subLabel}>Bit Depth</Text>

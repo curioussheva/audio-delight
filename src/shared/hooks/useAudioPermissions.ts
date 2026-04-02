@@ -26,4 +26,4 @@ export const useAudioPermissions = () => {
   };
 
   return { hasPermission, requestPermission };
-}; 
+};

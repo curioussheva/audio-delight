@@ -1,7 +1,7 @@
 import { useProgress } from "react-native-track-player";
 
 export const useAudioProgress = (updateInterval = 250) => {
-  // Masukkan updateInterval ke dalam useProgress agar 
+  // Masukkan updateInterval ke dalam useProgress agar
   // UI Slider bergerak mulus (misal: tiap 250ms bukan 1000ms)
   const { position, duration, buffered } = useProgress(updateInterval);
 
@@ -18,4 +18,3 @@ export const useAudioProgress = (updateInterval = 250) => {
     remaining: Math.max(0, durationSafe - positionSafe),
   };
 };
- 

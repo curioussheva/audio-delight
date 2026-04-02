@@ -1,14 +1,16 @@
+// src/shared/contexts/ThemeContext.tsx
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useColorScheme } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Theme, ThemeId } from "@/constants/themes/types";
+
+import { Theme, ThemeId } from "@/shared/constants/themes/types";
 import {
-  DEFAULT_THEME,
+  ALL_THEMES,
   getThemeById,
   getRandomTheme,
   THEMES_LIST,
-  ALL_THEMES,
-} from "@/constants/themes";
+  DEFAULT_THEME,
+} from "@/shared/constants/theme";
 
 interface ThemeContextType {
   theme: Theme;
@@ -25,43 +27,44 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const THEME_STORAGE_KEY = "@pristineaudio/theme_id";
 
-const FALLBACK_DARK: ThemeId = "deep-navy";
-const FALLBACK_LIGHT: ThemeId = "light-gray";
-
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const systemColorScheme = useColorScheme();
-  const [themeId, setThemeId] = useState<ThemeId>(FALLBACK_DARK);
+
+  const [themeId, setThemeId] = useState<ThemeId>("deep-navy");
   const [theme, setThemeObj] = useState<Theme>(DEFAULT_THEME);
 
   useEffect(() => {
     const loadTheme = async () => {
       try {
-        const saved = await AsyncStorage.getItem(THEME_STORAGE_KEY) as ThemeId | null;
+        const saved = (await AsyncStorage.getItem(
+          THEME_STORAGE_KEY,
+        )) as ThemeId | null;
 
         if (saved && saved in ALL_THEMES) {
           setThemeId(saved);
           setThemeObj(getThemeById(saved));
         } else {
-          const defaultId = systemColorScheme === "dark" ? FALLBACK_DARK : FALLBACK_LIGHT;
+          const defaultId: ThemeId =
+            systemColorScheme === "light" ? "light-elegant" : "deep-navy";
           setThemeId(defaultId);
           setThemeObj(getThemeById(defaultId));
         }
       } catch (error) {
         console.error("Failed to load theme:", error);
+        setThemeId("deep-navy");
+        setThemeObj(DEFAULT_THEME);
       }
     };
     loadTheme();
-  }, []);
+  }, [systemColorScheme]);
 
   const setTheme = async (newThemeId: ThemeId) => {
-    const safeId = newThemeId in ALL_THEMES ? newThemeId : FALLBACK_DARK;
-    if (safeId !== newThemeId) {
-      console.warn(`Theme "${newThemeId}" not found, falling back to default`);
-    }
+    const safeId = newThemeId in ALL_THEMES ? newThemeId : "deep-navy";
     setThemeId(safeId);
     setThemeObj(getThemeById(safeId));
+
     try {
       await AsyncStorage.setItem(THEME_STORAGE_KEY, safeId);
     } catch (error) {
@@ -70,17 +73,19 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const toggleTheme = () => {
-    setTheme(theme.isDark ? FALLBACK_LIGHT : FALLBACK_DARK);
+    const newId: ThemeId = theme.isDark ? "light-elegant" : "deep-navy";
+    setTheme(newId);
   };
 
   const nextTheme = () => {
     const currentIndex = THEMES_LIST.findIndex((t) => t.id === themeId);
-    const next = THEMES_LIST[(currentIndex + 1) % THEMES_LIST.length];
-    setTheme(next.id as ThemeId);
+    const nextIndex = (currentIndex + 1) % THEMES_LIST.length;
+    setTheme(THEMES_LIST[nextIndex].id as ThemeId);
   };
 
   const randomTheme = async () => {
-    await setTheme(getRandomTheme().id as ThemeId);
+    const random = getRandomTheme();
+    await setTheme(random.id as ThemeId);
   };
 
   return (

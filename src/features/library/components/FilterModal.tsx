@@ -1,5 +1,5 @@
 // components/library/FilterModal.tsx
-import React from 'react';
+import React from "react";
 import {
   Modal,
   View,
@@ -7,10 +7,10 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
-import { SORT_GROUPS, FILTER_GROUPS } from '@/constants/libraryOptions';
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import { SORT_GROUPS, FILTER_GROUPS } from "@/constants/libraryOptions";
 
 interface FilterModalProps {
   visible: boolean;
@@ -42,7 +42,12 @@ export const FilterModal: React.FC<FilterModalProps> = ({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
       <View style={styles.overlay}>
         <View
           style={[
@@ -51,12 +56,12 @@ export const FilterModal: React.FC<FilterModalProps> = ({
           ]}
         >
           <View style={styles.handle} />
-          
+
           <Text style={[styles.title, { color: colors.text.primary }]}>
             Sort & Filter
           </Text>
 
-          <ScrollView 
+          <ScrollView
             style={styles.scrollView}
             showsVerticalScrollIndicator={false}
           >
@@ -98,9 +103,9 @@ export const FilterModal: React.FC<FilterModalProps> = ({
   );
 };
 
-const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ 
-  title, 
-  children 
+const Section: React.FC<{ title: string; children: React.ReactNode }> = ({
+  title,
+  children,
 }) => (
   <View style={styles.section}>
     <Text style={styles.sectionTitle}>{title}</Text>
@@ -124,7 +129,7 @@ const OptionRow: React.FC<{
         styles.optionText,
         {
           color: selected ? colors.primary[500] : colors.text.primary,
-          fontWeight: selected ? '600' : '400',
+          fontWeight: selected ? "600" : "400",
         },
       ]}
     >
@@ -148,21 +153,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 34,
-    maxHeight: '80%',
+    maxHeight: "80%",
   },
   handle: {
     width: 40,
     height: 4,
-    backgroundColor: '#444',
+    backgroundColor: "#444",
     borderRadius: 2,
-    alignSelf: 'center',
+    alignSelf: "center",
     marginBottom: 16,
   },
-  title: { 
-    fontSize: 20, 
-    fontWeight: "800", 
+  title: {
+    fontSize: 20,
+    fontWeight: "800",
     marginBottom: 20,
-    textAlign: 'center',
+    textAlign: "center",
   },
   scrollView: {
     maxHeight: 400,
@@ -176,12 +181,12 @@ const styles = StyleSheet.create({
     color: "#888",
     marginBottom: 12,
     letterSpacing: 1,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   optionsContainer: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    backgroundColor: "rgba(255,255,255,0.03)",
     borderRadius: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   optionRow: {
     flexDirection: "row",
@@ -190,9 +195,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
+    borderBottomColor: "rgba(255,255,255,0.05)",
   },
-  optionText: { 
+  optionText: {
     fontSize: 16,
   },
   applyBtn: {
@@ -202,10 +207,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 20,
   },
-  applyBtnText: { 
-    fontWeight: "800", 
+  applyBtnText: {
+    fontWeight: "800",
     fontSize: 16,
-    color: '#000',
+    color: "#000",
     letterSpacing: 0.5,
   },
 });

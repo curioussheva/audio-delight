@@ -15,6 +15,10 @@ export const useEqualizer = () => {
     applyPreset,
     saveCustomPreset,
     deleteCustomPreset,
+    bassStrength,
+    virtualizerLevel,
+    setBassBoost,
+    setVirtualizer,
   } = useEqualizerStore();
 
   // Helper untuk mengecek apakah DSP boleh dimodifikasi
@@ -52,5 +56,9 @@ export const useEqualizer = () => {
     applyPreset: handleApplyPreset,
     savePreset: saveCustomPreset,
     deletePreset: deleteCustomPreset,
+    bassStrength,
+    virtualizerLevel,
+    setBassBoost,
+    setVirtualizer,
   };
 };

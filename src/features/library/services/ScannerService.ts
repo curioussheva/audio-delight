@@ -1,21 +1,32 @@
-import * as Notifications from 'expo-notifications';
-import * as FileSystem from 'expo-file-system';
-import { Platform } from 'react-native';
-import { useLibraryStore } from '../store/libraryStore';
-import { LibraryScanner } from '../api/scanner';
-
+import * as Notifications from "expo-notifications";
+import * as FileSystem from "expo-file-system";
+import { Platform } from "react-native";
+import { useLibraryStore } from "../store/libraryStore";
+import { LibraryScanner } from "../api/scanner";
 
 let isScanning = false;
 let shouldCancel = false;
 
-const SUPPORTED_EXTENSIONS = ['.mp3', '.flac', '.m4a', '.wav', '.aac', '.ogg', '.opus', '.dsf', '.dsd'];
+const SUPPORTED_EXTENSIONS = [
+  ".mp3",
+  ".flac",
+  ".m4a",
+  ".wav",
+  ".aac",
+  ".ogg",
+  ".opus",
+  ".dsf",
+  ".dsd",
+];
 const SAF = FileSystem.StorageAccessFramework;
 
 export class ScannerService {
-
   static async scanWithProgress(
     directoryUri: string,
-    options?: { onProgress?: (current: number, total: number) => void; onComplete?: () => void; }
+    options?: {
+      onProgress?: (current: number, total: number) => void;
+      onComplete?: () => void;
+    },
   ): Promise<void> {
     if (isScanning) return;
 
@@ -25,7 +36,8 @@ export class ScannerService {
     const { setScanning } = useLibraryStore.getState();
 
     try {
-      if (Platform.OS === 'android') await ScannerService.setupNotificationChannel();
+      if (Platform.OS === "android")
+        await ScannerService.setupNotificationChannel();
       setScanning(true, 0);
 
       // ── FASE 1: Kumpulkan semua file URI ──
@@ -36,7 +48,9 @@ export class ScannerService {
       await ScannerService.collectFiles(directoryUri, allFiles, visited);
 
       const total = allFiles.length;
-      console.log(`📋 [ScannerService] Found ${total} audio files. Starting processing...`);
+      console.log(
+        `📋 [ScannerService] Found ${total} audio files. Starting processing...`,
+      );
 
       if (total === 0) {
         await ScannerService.showCompleteNotification(0);
@@ -48,7 +62,7 @@ export class ScannerService {
       let processed = 0;
 
       for (const { uri: fileUri, filename } of allFiles) {
-        if (shouldCancel) throw new Error('SCAN_CANCELLED');
+        if (shouldCancel) throw new Error("SCAN_CANCELLED");
 
         // Ambil metadata via react-native-metadata-retriever (support SAF URI native)
         let meta: Awaited<ReturnType<typeof getMetadata>> | null = null;
@@ -57,7 +71,9 @@ export class ScannerService {
         try {
           meta = await getMetadata(fileUri, MetadataPresets.standard);
         } catch {
-          console.warn(`[Scanner] Metadata failed for ${filename}, using filename fallback`);
+          console.warn(
+            `[Scanner] Metadata failed for ${filename}, using filename fallback`,
+          );
         }
 
         // Artwork diambil terpisah — bisa null, tidak blocking
@@ -68,11 +84,13 @@ export class ScannerService {
         }
 
         // Derive codec dari ekstensi filename
-        const codec = filename.split('.').pop()?.toUpperCase() ?? 'UNKNOWN';
+        const codec = filename.split(".").pop()?.toUpperCase() ?? "UNKNOWN";
 
         // Derive folder dari directoryUri
-        const folderParts = directoryUri.split('%2F');
-        const folder = decodeURIComponent(folderParts[folderParts.length - 1] ?? directoryUri);
+        const folderParts = directoryUri.split("%2F");
+        const folder = decodeURIComponent(
+          folderParts[folderParts.length - 1] ?? directoryUri,
+        );
 
         // Simpan ke DB
         try {
@@ -83,15 +101,15 @@ export class ScannerService {
             title: meta?.title || filename.replace(/\.[^/.]+$/, ""),
             artist: meta?.artist || "Unknown Artist",
             album: meta?.album || "Unknown Album",
-            genre: "Unknown Genre",           // metadata-retriever belum expose genre, enrichment nanti
+            genre: "Unknown Genre", // metadata-retriever belum expose genre, enrichment nanti
             folder,
-            fileSize: 0,                      // akan diisi ScanDiffEngine nanti
+            fileSize: 0, // akan diisi ScanDiffEngine nanti
             duration: Math.floor((meta?.duration ?? 0) / 1000), // ms → detik
-            sampleRate: 0,                    // tidak tersedia di MetadataPresets.standard
-            bitDepth: 0,                      // akan diisi enrichment layer
+            sampleRate: 0, // tidak tersedia di MetadataPresets.standard
+            bitDepth: 0, // akan diisi enrichment layer
             codec,
             artwork: artwork ?? undefined,
-            isEnriched: false,                // flag untuk enrichment pipeline
+            isEnriched: false, // flag untuk enrichment pipeline
             dateAdded: Date.now(),
           });
         } catch (dbErr) {
@@ -104,18 +122,20 @@ export class ScannerService {
 
         if (processed % 20 === 0) {
           await ScannerService.updateNotification(
-            `Memindai ${processed} / ${total} lagu...`, processed
+            `Memindai ${processed} / ${total} lagu...`,
+            processed,
           );
         }
       }
 
       await ScannerService.showCompleteNotification(processed);
       options?.onComplete?.();
-
     } catch (error: any) {
-      if (error.message !== 'SCAN_CANCELLED') {
-        console.error('[ScannerService] Critical Scan Error:', error);
-        await ScannerService.showErrorNotification(error.message || String(error));
+      if (error.message !== "SCAN_CANCELLED") {
+        console.error("[ScannerService] Critical Scan Error:", error);
+        await ScannerService.showErrorNotification(
+          error.message || String(error),
+        );
       }
     } finally {
       isScanning = false;
@@ -126,7 +146,7 @@ export class ScannerService {
   private static async collectFiles(
     uri: string,
     result: Array<{ uri: string; filename: string }>,
-    visited: Set<string>
+    visited: Set<string>,
   ): Promise<void> {
     if (!SAF || visited.has(uri)) return;
     visited.add(uri);
@@ -142,16 +162,18 @@ export class ScannerService {
 
     for (const entryUri of entries) {
       if (shouldCancel) return;
-      if (!entryUri || typeof entryUri !== 'string') continue;
+      if (!entryUri || typeof entryUri !== "string") continue;
       if (visited.has(entryUri)) continue;
 
-      const isAudio = SUPPORTED_EXTENSIONS.some(ext =>
-        entryUri.toLowerCase().endsWith(ext)
+      const isAudio = SUPPORTED_EXTENSIONS.some((ext) =>
+        entryUri.toLowerCase().endsWith(ext),
       );
 
       if (isAudio) {
-        const parts = entryUri.split('/');
-        const filename = decodeURIComponent(parts[parts.length - 1] || "Unknown");
+        const parts = entryUri.split("/");
+        const filename = decodeURIComponent(
+          parts[parts.length - 1] || "Unknown",
+        );
         result.push({ uri: entryUri, filename });
         visited.add(entryUri);
       } else {
@@ -163,39 +185,45 @@ export class ScannerService {
   // ── Notifications ──
 
   private static async setupNotificationChannel(): Promise<void> {
-    if (Platform.OS !== 'android') return;
-    await Notifications.setNotificationChannelAsync('media-scanner', {
-      name: 'Media Scanner',
+    if (Platform.OS !== "android") return;
+    await Notifications.setNotificationChannelAsync("media-scanner", {
+      name: "Media Scanner",
       importance: Notifications.AndroidImportance.LOW,
       sound: undefined,
     });
   }
 
-  private static async updateNotification(body: string, _count: number): Promise<void> {
-    if (Platform.OS !== 'android') return;
+  private static async updateNotification(
+    body: string,
+    _count: number,
+  ): Promise<void> {
+    if (Platform.OS !== "android") return;
     try {
       await Notifications.scheduleNotificationAsync({
-        identifier: 'scanning-notif',
-        content: { title: 'Pristine Audio: Scanning', body, sticky: true },
+        identifier: "scanning-notif",
+        content: { title: "Pristine Audio: Scanning", body, sticky: true },
         trigger: null,
       });
     } catch (e) {
-      console.warn('Update notif failed', e);
+      console.warn("Update notif failed", e);
     }
   }
 
   private static async showCompleteNotification(count: number): Promise<void> {
-    if (Platform.OS !== 'android') return;
-    await Notifications.dismissNotificationAsync('scanning-notif');
+    if (Platform.OS !== "android") return;
+    await Notifications.dismissNotificationAsync("scanning-notif");
     await Notifications.scheduleNotificationAsync({
-      content: { title: 'Scan Selesai', body: `${count} lagu berhasil ditambahkan ke Library.` },
+      content: {
+        title: "Scan Selesai",
+        body: `${count} lagu berhasil ditambahkan ke Library.`,
+      },
       trigger: null,
     });
   }
 
   private static async showErrorNotification(message: string): Promise<void> {
     await Notifications.scheduleNotificationAsync({
-      content: { title: 'Scan Gagal', body: message },
+      content: { title: "Scan Gagal", body: message },
       trigger: null,
     });
   }
@@ -205,4 +233,4 @@ export class ScannerService {
     isScanning = false;
     Notifications.dismissAllNotificationsAsync();
   }
-} 
+}

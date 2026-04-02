@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { View, Text, StyleSheet, Pressable, Platform } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
@@ -12,11 +12,16 @@ import Animated, {
   runOnJS,
 } from "react-native-reanimated";
 import { GestureDetector, Gesture } from "react-native-gesture-handler";
-import { LinearGradient } from "expo-linear-gradient"; // ← Import Gradient
-import ImageColors from "react-native-image-colors"; // ← Import Image Colors
 
 // Lucide Icons
-import { Play, Pause, SkipBack, SkipForward, Repeat, Shuffle } from "lucide-react-native";
+import {
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  Repeat,
+  Shuffle,
+} from "lucide-react-native";
 
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useTheme } from "@/context/ThemeContext";
@@ -31,39 +36,26 @@ export default function FloatingPlayer() {
   const isFocused = useIsFocused();
 
   const {
-    currentSong, isPlaying, togglePlay, position, duration,
-    playNext, playPrevious, shuffle, repeat, toggleShuffle, toggleRepeat,
+    currentSong,
+    isPlaying,
+    togglePlay,
+    position,
+    duration,
+    playNext,
+    playPrevious,
+    shuffle,
+    repeat,
+    toggleShuffle,
+    toggleRepeat,
   } = usePlayerStore();
 
-  // ── State untuk Warna Latar Dinamis ──
-  // Kita set defaultnya transparan agar menyatu dengan background awal
-  const [dominantColor, setDominantColor] = useState<string>("transparent");
-
-  // ── Ekstrak Warna Dominan ──
-  useEffect(() => {
-    if (currentSong?.artwork) {
-      ImageColors.getColors(currentSong.artwork, {
-        fallback: "transparent",
-        cache: true,
-        key: currentSong.artwork,
-      }).then((result: any) => {
-        if (Platform.OS === "android") {
-          setDominantColor(result.average || result.dominant || "transparent");
-        } else {
-          setDominantColor(result.background || "transparent");
-        }
-      });
-    } else {
-      setDominantColor("transparent");
-    }
-  }, [currentSong?.artwork]);
-
-  // ── Gesture & Animasi ──
   const translateX = useSharedValue(0);
 
   const swipeGesture = Gesture.Pan()
     .activeOffsetX([-15, 15])
-    .onUpdate((e) => { translateX.value = e.translationX; })
+    .onUpdate((e) => {
+      translateX.value = e.translationX;
+    })
     .onEnd((e) => {
       if (e.translationX > 80) runOnJS(playPrevious)();
       else if (e.translationX < -80) runOnJS(playNext)();
@@ -80,9 +72,14 @@ export default function FloatingPlayer() {
     opacity: withTiming(translateX.value === 0 ? 1 : 0.75),
   }));
 
-  if (!currentSong || !isFocused) return null;
+  // Hanya muncul di Library tab + ada lagu yang diputar
+  if (!currentSong || !isFocused) {
+    return null;
+  }
 
-  const artworkSource = currentSong.artwork ? { uri: currentSong.artwork } : PLACEHOLDER;
+  const artworkSource = currentSong.artwork
+    ? { uri: currentSong.artwork }
+    : PLACEHOLDER;
 
   return (
     <View style={s.outer}>
@@ -98,23 +95,18 @@ export default function FloatingPlayer() {
             animatedContainer,
           ]}
         >
-          {/* ── Dynamic Horizontal Gradient Background ── */}
-          {/* Kita overlay gradien di belakang konten dengan opacity 30%-40% 
-              agar warna teks (putih/hitam) tidak 'bertabrakan' dengan warna cerah album art */}
-          {dominantColor !== "transparent" && (
-            <LinearGradient
-              colors={[dominantColor, colors.background.elevated]}
-              start={{ x: 0, y: 0.5 }}
-              end={{ x: 0.8, y: 0.5 }} // Gradien horizontal dari kiri memudar ke kanan
-              style={[StyleSheet.absoluteFillObject, { opacity: 0.35 }]} 
-            />
-          )}
-
           {/* Accent line */}
-          <View style={[s.accentLine, { backgroundColor: colors.primary[500] }]} />
+          <View
+            style={[s.accentLine, { backgroundColor: colors.primary[500] }]}
+          />
 
           {/* Progress bar */}
-          <View style={[s.progressBg, { backgroundColor: colors.background.tertiary }]}>
+          <View
+            style={[
+              s.progressBg,
+              { backgroundColor: colors.background.tertiary },
+            ]}
+          >
             <Animated.View
               style={[
                 s.progressFill,
@@ -129,33 +121,57 @@ export default function FloatingPlayer() {
             <Pressable onPress={() => router.push("/player" as any)}>
               <Image
                 source={artworkSource}
-                style={[s.artwork, { backgroundColor: colors.background.tertiary }]}
+                style={[
+                  s.artwork,
+                  { backgroundColor: colors.background.tertiary },
+                ]}
                 contentFit="cover"
                 transition={300}
               />
             </Pressable>
 
-            <Pressable style={s.info} onPress={() => router.push("/player" as any)}>
-              <Text style={[s.title, { color: colors.text.primary }]} numberOfLines={1}>
+            <Pressable
+              style={s.info}
+              onPress={() => router.push("/player" as any)}
+            >
+              <Text
+                style={[s.title, { color: colors.text.primary }]}
+                numberOfLines={1}
+              >
                 {currentSong.title}
               </Text>
 
-              {/* META ROW */}
+              {/* META ROW - SUDAH DIPERBAIKI */}
               <View style={s.metaRow}>
                 {currentSong.bitDepth && currentSong.bitDepth > 16 && (
-                  <View style={[s.hiResBadge, { borderColor: colors.status.warning }]}>
-                    <Text style={[s.hiResText, { color: colors.status.warning }]}>HI-RES</Text>
+                  <View
+                    style={[
+                      s.hiResBadge,
+                      { borderColor: colors.status.warning },
+                    ]}
+                  >
+                    <Text
+                      style={[s.hiResText, { color: colors.status.warning }]}
+                    >
+                      HI-RES
+                    </Text>
                   </View>
                 )}
 
-                <Text style={[s.artist, { color: colors.text.secondary }]} numberOfLines={1}>
+                <Text
+                  style={[s.artist, { color: colors.text.secondary }]}
+                  numberOfLines={1}
+                >
                   {currentSong.artist}
                 </Text>
 
                 {currentSong.album && (
                   <>
                     <Text style={s.separator}>•</Text>
-                    <Text style={[s.artist, { color: colors.text.secondary }]} numberOfLines={1}>
+                    <Text
+                      style={[s.artist, { color: colors.text.secondary }]}
+                      numberOfLines={1}
+                    >
                       {currentSong.album}
                     </Text>
                   </>
@@ -166,11 +182,19 @@ export default function FloatingPlayer() {
             {/* Controls */}
             <View style={s.controls}>
               <Pressable onPress={toggleShuffle} hitSlop={8}>
-                <Shuffle size={18} color={shuffle ? colors.primary[400] : colors.text.tertiary} strokeWidth={2.5} />
+                <Shuffle
+                  size={18}
+                  color={shuffle ? colors.primary[400] : colors.text.tertiary}
+                  strokeWidth={2.5}
+                />
               </Pressable>
 
               <Pressable onPress={playPrevious} hitSlop={8}>
-                <SkipBack size={20} color={colors.text.secondary} strokeWidth={2.5} />
+                <SkipBack
+                  size={20}
+                  color={colors.text.secondary}
+                  strokeWidth={2.5}
+                />
               </Pressable>
 
               <Pressable
@@ -178,24 +202,50 @@ export default function FloatingPlayer() {
                 style={[s.playBtn, { backgroundColor: colors.primary[500] }]}
               >
                 {isPlaying ? (
-                  <Pause size={20} color={colors.text.inverse} strokeWidth={3} />
+                  <Pause
+                    size={20}
+                    color={colors.text.inverse}
+                    strokeWidth={3}
+                  />
                 ) : (
-                  <Play size={20} color={colors.text.inverse} strokeWidth={3} style={{ marginLeft: 2 }} />
+                  <Play
+                    size={20}
+                    color={colors.text.inverse}
+                    strokeWidth={3}
+                    style={{ marginLeft: 2 }}
+                  />
                 )}
               </Pressable>
 
               <Pressable onPress={playNext} hitSlop={8}>
-                <SkipForward size={20} color={colors.text.secondary} strokeWidth={2.5} />
+                <SkipForward
+                  size={20}
+                  color={colors.text.secondary}
+                  strokeWidth={2.5}
+                />
               </Pressable>
 
-              <Pressable onPress={toggleRepeat} hitSlop={8} style={{ position: "relative" }}>
+              <Pressable
+                onPress={toggleRepeat}
+                hitSlop={8}
+                style={{ position: "relative" }}
+              >
                 <Repeat
                   size={18}
-                  color={repeat !== "off" ? colors.primary[400] : colors.text.tertiary}
+                  color={
+                    repeat !== "off"
+                      ? colors.primary[400]
+                      : colors.text.tertiary
+                  }
                   strokeWidth={2.5}
                 />
                 {repeat === "track" && (
-                  <View style={[s.repeatOneDot, { backgroundColor: colors.primary[400] }]} />
+                  <View
+                    style={[
+                      s.repeatOneDot,
+                      { backgroundColor: colors.primary[400] },
+                    ]}
+                  />
                 )}
               </Pressable>
             </View>
@@ -208,11 +258,11 @@ export default function FloatingPlayer() {
 
 const s = StyleSheet.create({
   outer: {
-    position: "absolute",
+    position: "relative",
     bottom: Platform.OS === "ios" ? 100 : 85,
     left: 12,
     right: 12,
-    zIndex: 100,
+    zIndex: 1000,
   },
   wrapper: {
     borderRadius: 16,
@@ -251,12 +301,12 @@ const s = StyleSheet.create({
     marginTop: 2,
     flexWrap: "wrap",
   },
-  artist: { 
-    fontSize: 12, 
-    flexShrink: 1 
+  artist: {
+    fontSize: 12,
+    flexShrink: 1,
   },
   separator: {
-    color: "#888",                    // ← Hardcode dulu (aman)
+    color: "#888", // ← Hardcode dulu (aman)
     marginHorizontal: 4,
     fontSize: 12,
   },
@@ -291,4 +341,4 @@ const s = StyleSheet.create({
     bottom: -2,
     alignSelf: "center",
   },
-});  
+});

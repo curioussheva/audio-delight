@@ -1,11 +1,6 @@
 // Di src/components/audio/QueueManager.tsx
 import React, { useState } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-} from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import DraggableFlatList from "react-native-draggable-flatlist";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@/context/ThemeContext";
@@ -24,8 +19,7 @@ export const QueueManager: React.FC<QueueManagerProps> = ({
 }) => {
   const { theme } = useTheme();
   const { colors, spacing } = theme;
-  const { queue, currentSong, setQueue } =
-    usePlayerStore();
+  const { queue, currentSong, setQueue } = usePlayerStore();
   const [expanded, setExpanded] = useState(false);
 
   if (!visible) return null;

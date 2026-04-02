@@ -29,25 +29,53 @@ interface ModeCardProps {
   colors: any;
 }
 
-const ModeCard = ({ mode, isSelected, onSelect, title, description, icon, tags, colors }: ModeCardProps) => (
+const ModeCard = ({
+  mode,
+  isSelected,
+  onSelect,
+  title,
+  description,
+  icon,
+  tags,
+  colors,
+}: ModeCardProps) => (
   <TouchableOpacity
     activeOpacity={0.7}
     style={[
       styles.modeCard,
-      { backgroundColor: isSelected ? colors.primary[500] + "15" : "transparent" },
+      {
+        backgroundColor: isSelected
+          ? colors.primary[500] + "15"
+          : "transparent",
+      },
       isSelected && { borderColor: colors.primary[500] },
     ]}
     onPress={() => onSelect(mode)}
   >
-    <View style={[styles.iconCircle, { backgroundColor: colors.primary[500] + "33" }]}>
+    <View
+      style={[
+        styles.iconCircle,
+        { backgroundColor: colors.primary[500] + "33" },
+      ]}
+    >
       <Ionicons name={icon} size={30} color={colors.primary[500]} />
     </View>
     <View style={styles.cardContent}>
-      <Text style={[styles.cardTitle, { color: colors.text.primary }]}>{title}</Text>
-      <Text style={[styles.cardDescription, { color: colors.text.secondary }]}>{description}</Text>
+      <Text style={[styles.cardTitle, { color: colors.text.primary }]}>
+        {title}
+      </Text>
+      <Text style={[styles.cardDescription, { color: colors.text.secondary }]}>
+        {description}
+      </Text>
       <View style={styles.tagRow}>
         {tags.map((tag) => (
-          <Text key={tag} style={[styles.tag, { borderColor: colors.primary[500], color: colors.primary[500] }]}>
+          <Text
+            key={tag}
+            style={[
+              styles.tag,
+              { borderColor: colors.primary[500], color: colors.primary[500] },
+            ]}
+          >
             {tag}
           </Text>
         ))}
@@ -57,7 +85,7 @@ const ModeCard = ({ mode, isSelected, onSelect, title, description, icon, tags, 
 );
 
 export default function OnboardingScreen() {
-  const insets = useSafeAreaInsets();        // ← Sudah benar diimport
+  const insets = useSafeAreaInsets(); // ← Sudah benar diimport
   const { theme } = useTheme();
   const { colors } = theme;
   const router = useRouter();
@@ -91,7 +119,6 @@ export default function OnboardingScreen() {
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace("/library");
-
     } catch (error) {
       console.error("❌ [Onboarding] Error:", error);
       Alert.alert("Error", "Gagal menyelesaikan pengaturan.");
@@ -108,7 +135,7 @@ export default function OnboardingScreen() {
         {
           backgroundColor: colors.background.primary,
           paddingTop: insets.top,
-          paddingBottom: insets.bottom + 24,   // ← Penting agar tombol tidak nabrak home indicator
+          paddingBottom: insets.bottom + 24, // ← Penting agar tombol tidak nabrak home indicator
           paddingLeft: insets.left,
           paddingRight: insets.right,
         },
@@ -120,8 +147,12 @@ export default function OnboardingScreen() {
           style={styles.logo}
           contentFit="contain"
         />
-        <Text style={[styles.welcomeText, { color: colors.text.primary }]}>PristineAudio</Text>
-        <View style={[styles.divider, { backgroundColor: colors.primary[500] }]} />
+        <Text style={[styles.welcomeText, { color: colors.text.primary }]}>
+          PristineAudio
+        </Text>
+        <View
+          style={[styles.divider, { backgroundColor: colors.primary[500] }]}
+        />
       </View>
 
       <View style={styles.optionsContainer}>
@@ -153,12 +184,21 @@ export default function OnboardingScreen() {
           disabled={!selectedMode || isSubmitting}
           style={[
             styles.nextButton,
-            { backgroundColor: selectedMode ? colors.primary[500] : colors.background.secondary },
-            !selectedMode && { opacity: 0.5 }
+            {
+              backgroundColor: selectedMode
+                ? colors.primary[500]
+                : colors.background.secondary,
+            },
+            !selectedMode && { opacity: 0.5 },
           ]}
           onPress={handleFinish}
         >
-          <Text style={[styles.nextButtonText, { color: selectedMode ? "#000" : colors.text.secondary }]}>
+          <Text
+            style={[
+              styles.nextButtonText,
+              { color: selectedMode ? "#000" : colors.text.secondary },
+            ]}
+          >
             {isSubmitting ? "Processing..." : "Continue"}
           </Text>
         </TouchableOpacity>
@@ -183,16 +223,39 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
     ...Platform.select({
       android: { elevation: 2 },
-      ios: { shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10 }
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+      },
     }),
   },
-  iconCircle: { width: 52, height: 52, borderRadius: 20, justifyContent: "center", alignItems: "center" },
+  iconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   cardContent: { flex: 1, marginLeft: 16 },
   cardTitle: { fontSize: 18, fontWeight: "700", marginBottom: 4 },
   cardDescription: { fontSize: 13, lineHeight: 18, opacity: 0.7 },
   tagRow: { flexDirection: "row", marginTop: 12, gap: 8 },
-  tag: { fontSize: 9, fontWeight: "800", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1 },
+  tag: {
+    fontSize: 9,
+    fontWeight: "800",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
   footer: { paddingHorizontal: 24, paddingBottom: 20 },
-  nextButton: { height: 58, borderRadius: 20, justifyContent: "center", alignItems: "center" },
+  nextButton: {
+    height: 58,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   nextButtonText: { fontSize: 16, fontWeight: "700" },
-}); 
+});

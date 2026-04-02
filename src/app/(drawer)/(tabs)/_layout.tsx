@@ -13,7 +13,7 @@ export default function TabsLayout() {
   const { colors } = theme;
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
-  
+
   // LOGIKA BARU:
   // Cek apakah user sedang di tab library
   // pathname biasanya bernilai "/library" atau "/" tergantung index route Anda
@@ -55,21 +55,27 @@ export default function TabsLayout() {
           name="library"
           options={{
             title: "Library",
-            tabBarIcon: ({ color }) => <Library size={26} color={color} strokeWidth={2.2} />,
+            tabBarIcon: ({ color }) => (
+              <Library size={26} color={color} strokeWidth={2.2} />
+            ),
           }}
         />
         <Tabs.Screen
           name="equalizer"
           options={{
             title: "DSP",
-            tabBarIcon: ({ color }) => <SlidersHorizontal size={26} color={color} strokeWidth={2.2} />,
+            tabBarIcon: ({ color }) => (
+              <SlidersHorizontal size={26} color={color} strokeWidth={2.2} />
+            ),
           }}
         />
         <Tabs.Screen
           name="visualizer"
           options={{
             title: "Live",
-            tabBarIcon: ({ color }) => <Activity size={26} color={color} strokeWidth={2.5} />,
+            tabBarIcon: ({ color }) => (
+              <Activity size={26} color={color} strokeWidth={2.5} />
+            ),
           }}
         />
         <Tabs.Screen name="song/[id]" options={{ href: null }} />
@@ -77,22 +83,22 @@ export default function TabsLayout() {
 
       {/* MODIFIKASI DISINI: FloatingPlayer hanya render jika di Library & Player Utama sedang tutup */}
       {!isPlayerOpen && isLibraryTab && (
-  <View 
-    style={[
-      styles.floatingContainer, 
-      { 
-        bottom: TAB_BAR_HEIGHT + 12, // Naikkan sedikit dari TabBar
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.4,
-        shadowRadius: 12,
-        elevation: 10,
-      }
-    ]}
-  >
-    <FloatingPlayer />
-  </View>
-)}
+        <View
+          style={[
+            styles.floatingContainer,
+            {
+              bottom: TAB_BAR_HEIGHT + 12, // Naikkan sedikit dari TabBar
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: 0.4,
+              shadowRadius: 12,
+              elevation: 10,
+            },
+          ]}
+        >
+          <FloatingPlayer />
+        </View>
+      )}
     </View>
   );
 }

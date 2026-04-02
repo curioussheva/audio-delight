@@ -7,17 +7,17 @@ import {
   TouchableOpacity,
 } from "react-native";
 
+// Ganti baris 10
+import Slider from "@react-native-community/slider";
+// Bukan: import { Slider } from "..."
+
 // Lucide Icons
-import {
-  Plus,
-  ShieldCheck,
-  Lock,
-} from "lucide-react-native";
+import { Plus, ShieldCheck, Lock, Compass, Speaker } from "lucide-react-native";
 
 // Hooks
 import { useTheme } from "@/context/ThemeContext";
 import { useEqualizer } from "@/features/equalizer/hooks/useEqualizer";
-import { useSafePadding } from '@/shared/hooks/useSafePadding';
+import { useSafePadding } from "@/shared/hooks/useSafePadding";
 
 // UI Components
 import { EqualizerBand } from "@/features/equalizer/components/Band";
@@ -28,6 +28,7 @@ import { SavePresetModal } from "@/features/equalizer/components/SavePresetModal
 export default function EqualizerScreen() {
   const safePadding = useSafePadding();
   const { theme } = useTheme();
+  const { colors } = theme;
   const {
     currentBands,
     activePresetId,
@@ -35,7 +36,11 @@ export default function EqualizerScreen() {
     updateBandGain,
     applyPreset,
     savePreset,
+    setBassBoost,
+    setVirtualizer,
     isDSPDisabled,
+    bassStrength,
+    virtualizerLevel,
   } = useEqualizer();
 
   const [modalVisible, setModalVisible] = useState(false);
@@ -48,7 +53,7 @@ export default function EqualizerScreen() {
           flex: 1,
           backgroundColor: theme.colors.background.primary,
           paddingTop: safePadding.paddingTop,
-          paddingBottom: safePadding.paddingBottom + 40,   // ekstra ruang untuk sliders + floating
+          paddingBottom: safePadding.paddingBottom + 40, // ekstra ruang untuk sliders + floating
           paddingLeft: safePadding.paddingLeft,
           paddingRight: safePadding.paddingRight,
         },
@@ -83,6 +88,76 @@ export default function EqualizerScreen() {
         <View style={styles.graphContainer}>
           <FrequencyGraph bands={currentBands} />
         </View>
+        {/* SECTION BARU: DSP Effects (Bass & Sound Stage) */}
+        <View style={styles.effectsRow}>
+          {/* Bass Boost Card */}
+          <View
+            style={[
+              styles.effectCard,
+              { backgroundColor: theme.colors.background.secondary },
+            ]}
+          >
+            <View style={styles.effectHeader}>
+              <Speaker size={18} color={theme.colors.primary[500]} />
+              <Text
+                style={[
+                  styles.effectLabel,
+                  { color: theme.colors.text.primary },
+                ]}
+              >
+                Bass Boost
+              </Text>
+            </View>
+            <Slider
+              disabled={isDSPDisabled}
+              value={bassStrength}
+              minimumValue={0}
+              maximumValue={1000}
+              onSlidingComplete={(val) =>
+                setBassBoost(Array.isArray(val) ? val[0] : val)
+              }
+              thumbTintColor={theme.colors.primary[500]}
+              minimumTrackTintColor={theme.colors.primary[500]}
+            />
+            <Text style={styles.effectValue}>
+              {Math.round(bassStrength / 10)}%
+            </Text>
+          </View>
+
+          {/* Sound Stage / Virtualizer Card */}
+          <View
+            style={[
+              styles.effectCard,
+              { backgroundColor: theme.colors.background.secondary },
+            ]}
+          >
+            <View style={styles.effectHeader}>
+              <Compass size={18} color={theme.colors.accent.blue} />
+              <Text
+                style={[
+                  styles.effectLabel,
+                  { color: theme.colors.text.primary },
+                ]}
+              >
+                Sound Stage
+              </Text>
+            </View>
+            <Slider
+              disabled={isDSPDisabled}
+              value={virtualizerLevel}
+              minimumValue={0}
+              maximumValue={1000}
+              onSlidingComplete={(val) =>
+                setVirtualizer(Array.isArray(val) ? val[0] : val)
+              }
+              thumbTintColor={theme.colors.accent.blue[500]}
+              minimumTrackTintColor={theme.colors.secondary[500]}
+            />
+            <Text style={styles.effectValue}>
+              {Math.round(virtualizerLevel / 10)}%
+            </Text>
+          </View>
+        </View>
 
         {/* Preset Selector */}
         <View style={styles.presetSection}>
@@ -98,7 +173,11 @@ export default function EqualizerScreen() {
                 { borderColor: theme.colors.primary[500] },
               ]}
             >
-              <Plus size={20} color={theme.colors.primary[500]} strokeWidth={3} />
+              <Plus
+                size={20}
+                color={theme.colors.primary[500]}
+                strokeWidth={3}
+              />
             </TouchableOpacity>
 
             {allPresets.map((preset) => (
@@ -122,7 +201,11 @@ export default function EqualizerScreen() {
         >
           {isDSPDisabled ? (
             <View style={styles.disabledOverlay}>
-              <Lock size={40} color={theme.colors.text.tertiary} strokeWidth={2} />
+              <Lock
+                size={40}
+                color={theme.colors.text.tertiary}
+                strokeWidth={2}
+              />
               <Text
                 style={[
                   styles.disabledText,
@@ -223,4 +306,24 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontSize: 14,
   },
-}); 
+  effectsRow: {
+    flexDirection: "row",
+    paddingHorizontal: 20,
+    gap: 12,
+    marginBottom: 20,
+  },
+  effectCard: {
+    flex: 1,
+    borderRadius: 20,
+    padding: 15,
+    alignItems: "center",
+  },
+  effectHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 10,
+  },
+  effectLabel: { fontSize: 12, fontWeight: "700" },
+  effectValue: { fontSize: 10, color: "#888", marginTop: 5 },
+});

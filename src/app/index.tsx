@@ -24,7 +24,9 @@ export default function Index() {
     };
 
     checkOnboarding();
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   if (hasOnboarded === null) {
@@ -61,4 +63,4 @@ const styles = StyleSheet.create({
   errorText: {
     color: "red",
   },
-}); 
+});
