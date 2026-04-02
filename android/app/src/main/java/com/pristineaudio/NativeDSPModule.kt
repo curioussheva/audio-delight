@@ -145,18 +145,17 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
         }
     }
 
-    override fun invalidate() {
+        override fun invalidate() {
         try {
-            releaseAllFX(object : Promise {
-                override fun resolve(value: Any?) {}
-                override fun reject(code: String?, message: String?) {}
-                override fun reject(code: String?, throwable: Throwable?) {}
-                override fun reject(code: String?, message: String?, throwable: Throwable?) {}
-                override fun reject(throwable: Throwable?) {}
-            })
+            equalizer?.release(); equalizer = null
+            bassBoost?.release(); bassBoost = null
+            presetReverb?.release(); presetReverb = null
+            virtualizer?.release(); virtualizer = null
+            currentSessionId = -1
         } catch (e: Exception) {
-            // silent fail on invalidate
+            android.util.Log.e("NativeDSPModule", "Cleanup failed: ${e.message}")
         }
         super.invalidate()
     }
-} 
+
+}  
