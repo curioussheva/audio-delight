@@ -10,42 +10,41 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     private var bassBoost: BassBoost? = null
     private var presetReverb: PresetReverb? = null
     private var equalizer: Equalizer? = null
-    private var virtualizer: Virtualizer? = null // Penambahan Sound Stage
+    private var virtualizer: Virtualizer? = null
     private var currentSessionId: Int = -1
 
     override fun getName(): String = "NativeDSPModule"
 
-    // --- Equalizer ---
+    // ==================== EQUALIZER ====================
     @ReactMethod
     fun setEqualizer(band: Int, level: Int, audioSessionId: Int, promise: Promise) {
         try {
             ensureEqualizer(audioSessionId)
-            // Konversi dB ke mB (milliBels) sudah dilakukan di sisi JS (gains * 100)
             equalizer?.setBandLevel(band.toShort(), level.toShort())
             promise.resolve(true)
         } catch (e: Exception) {
-            promise.reject("EQ_ERROR", e.message)
+            promise.reject("EQ_ERROR", e.message ?: "Unknown equalizer error", e)
         }
     }
-    
+
     @ReactMethod
     fun setFullEqualizer(gains: ReadableArray, audioSessionId: Int, promise: Promise) {
-    try {
-        ensureEqualizer(audioSessionId)
-        val eq = equalizer!!
-        val bandsToApply = if (gains.size() < eq.numberOfBands.toInt()) gains.size() else eq.numberOfBands.toInt()
-        
-        for (i in 0 until bandsToApply) {
-            val level = (gains.getDouble(i)).toInt().toShort()
-            eq.setBandLevel(i.toShort(), level)
+        try {
+            ensureEqualizer(audioSessionId)
+            val eq = equalizer!!
+            val bandsToApply = minOf(gains.size(), eq.numberOfBands.toInt())
+
+            for (i in 0 until bandsToApply) {
+                val level = gains.getDouble(i).toInt().toShort()
+                eq.setBandLevel(i.toShort(), level)
+            }
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("EQ_ERROR", e.message ?: "Failed to set full equalizer", e)
         }
-        promise.resolve(true)
-    } catch (e: Exception) {
-        promise.reject("EQ_ERROR", e.message)
     }
-}
- 
-    // --- Bass Boost ---
+
+    // ==================== BASS BOOST ====================
     @ReactMethod
     fun setBassBoost(strength: Int, audioSessionId: Int, promise: Promise) {
         try {
@@ -54,11 +53,11 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
             if (strength > 0) bassBoost?.setStrength(strength.toShort())
             promise.resolve(true)
         } catch (e: Exception) {
-            promise.reject("BASS_ERROR", e.message)
+            promise.reject("BASS_ERROR", e.message ?: "Bass boost error", e)
         }
     }
 
-    // --- Virtualizer (Sound Stage) ---
+    // ==================== VIRTUALIZER (Sound Stage) ====================
     @ReactMethod
     fun setVirtualizer(strength: Int, audioSessionId: Int, promise: Promise) {
         try {
@@ -67,11 +66,11 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
             if (strength > 0) virtualizer?.setStrength(strength.toShort())
             promise.resolve(true)
         } catch (e: Exception) {
-            promise.reject("VIRT_ERROR", e.message)
+            promise.reject("VIRT_ERROR", e.message ?: "Virtualizer error", e)
         }
     }
 
-    // --- Reverb ---
+    // ==================== REVERB ====================
     @ReactMethod
     fun setReverbPreset(preset: Int, audioSessionId: Int, promise: Promise) {
         try {
@@ -80,11 +79,11 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
             if (preset > 0) presetReverb?.preset = preset.toShort()
             promise.resolve(true)
         } catch (e: Exception) {
-            promise.reject("REVERB_ERROR", e.message)
+            promise.reject("REVERB_ERROR", e.message ?: "Reverb error", e)
         }
     }
 
-    // --- Helper for Lazy Loading ---
+    // ==================== HELPER FUNCTIONS ====================
     private fun ensureEqualizer(id: Int) {
         if (equalizer == null || currentSessionId != id) {
             equalizer?.release()
@@ -127,7 +126,7 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
             currentSessionId = -1
             promise.resolve(true)
         } catch (e: Exception) {
-            promise.reject("RELEASE_ERROR", e.message)
+            promise.reject("RELEASE_ERROR", e.message ?: "Failed to release FX", e)
         }
     }
 
@@ -142,18 +141,22 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
             }
             promise.resolve(enabled)
         } catch (e: Exception) {
-            promise.reject("DSP_ERROR", e.message)
+            promise.reject("DSP_ERROR", e.message ?: "Exclusive mode error", e)
         }
     }
 
     override fun invalidate() {
-        releaseAllFX(null as? Promise ?: object : Promise {
-            override fun resolve(value: Any?) {}
-            override fun reject(code: String, message: String?) {}
-            override fun reject(code: String, throwable: Throwable?) {}
-            override fun reject(code: String, message: String?, throwable: Throwable?) {}
-            override fun reject(throwable: Throwable?) {}
-        })
+        try {
+            releaseAllFX(object : Promise {
+                override fun resolve(value: Any?) {}
+                override fun reject(code: String?, message: String?) {}
+                override fun reject(code: String?, throwable: Throwable?) {}
+                override fun reject(code: String?, message: String?, throwable: Throwable?) {}
+                override fun reject(throwable: Throwable?) {}
+            })
+        } catch (e: Exception) {
+            // silent fail on invalidate
+        }
         super.invalidate()
     }
-}
+} 
