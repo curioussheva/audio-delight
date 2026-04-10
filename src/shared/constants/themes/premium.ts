@@ -45,8 +45,7 @@ export const GOLDEN_HOUR: Theme = {
       heavy: "#2A201A",
     },
     gradient: {
-      start: "#D4A373",
-      end: "#1A1410",
+      primary: ["#D4A373", "#B8860B"],
     },
   },
   spacing: BASE_SPACING,
@@ -98,8 +97,7 @@ export const ROSE_GOLD: Theme = {
       heavy: "#2F2424",
     },
     gradient: {
-      start: "#E6B0B0",
-      end: "#1F1A1A",
+      primary: ["#D4A373", "#B8860B"],
     },
   },
   spacing: BASE_SPACING,

@@ -1,31 +1,38 @@
 import { NativeModules } from "react-native";
 import { EqualizerBand } from "@/shared/types/dsp";
-import NativeDSPModule from "@/features/visualizer/native/DSPModule";
+import NativeDSPModule from "@/features/visualizer/native/NativeDSPModule";
+import USBDACService from "@/features/hardware/api/USBDACModule"; // ← TAMBAH
 
 const { USBDACModule } = NativeModules;
 
 export class DSPPipeline {
   private static currentMode: "bit-perfect" | "dsp" = "dsp";
+  private static currentDACId: string | null = null; // ← TAMBAH untuk simpan DAC ID
 
-  /**
-   * Mengatur mode global berdasarkan pilihan di Onboarding
-   */
+  // ← TAMBAH setter agar bisa di-set dari hook/store saat DAC terdeteksi
+  static setCurrentDACId(dacId: string | null) {
+    this.currentDACId = dacId;
+  }
+
   static async setProcessingMode(mode: "bit-perfect" | "dsp") {
     this.currentMode = mode;
 
     if (mode === "bit-perfect") {
-      // Matikan semua pemrosesan software untuk jalur murni
-      await NativeDSPModule.toggleExclusiveMode(true);
+      // BEFORE: await NativeDSPModule.toggleExclusiveMode(true);
+      // AFTER:
+      if (this.currentDACId) {
+        await USBDACService.setExclusiveMode(this.currentDACId, true);
+      }
       await NativeDSPModule.releaseAllFX();
     } else {
-      // Aktifkan kembali mixer Android untuk mengizinkan DSP
-      await NativeDSPModule.toggleExclusiveMode(false);
+      // BEFORE: await NativeDSPModule.toggleExclusiveMode(false);
+      // AFTER:
+      if (this.currentDACId) {
+        await USBDACService.setExclusiveMode(this.currentDACId, false);
+      }
     }
   }
 
-  /**
-   * Update EQ, Bass Boost, dan Reverb secara bersamaan
-   */
   static async applyDSP(
     bands: EqualizerBand[],
     bassStrength: number,
@@ -35,14 +42,9 @@ export class DSPPipeline {
     if (this.currentMode === "bit-perfect" || sessionId <= 0) return;
 
     try {
-      // 1. Update Equalizer Bands
       const gains = bands.map((b) => b.gain);
-      await USBDACModule.setEqualizerGains(gains, sessionId);
-
-      // 2. Update Bass Boost
+      await NativeDSPModule.setFullEqualizer(gains, sessionId); // ← ganti USBDACModule
       await NativeDSPModule.setBassBoost(bassStrength, sessionId);
-
-      // 3. Update Reverb
       await NativeDSPModule.setReverbPreset(reverbPreset, sessionId);
     } catch (e) {
       console.error("DSP Pipeline Error:", e);

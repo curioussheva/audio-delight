@@ -1,5 +1,4 @@
-// src/features/library/components/ArtistList.tsx
-import React, { memo, useState, useMemo, useCallback } from "react";
+import React, { memo, useState, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,326 +6,156 @@ import {
   FlatList,
   StyleSheet,
   Platform,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
-import { useTheme } from "@/context/ThemeContext";
+import { useRouter } from "expo-router";
+import {
+  ChevronLeft,
+  Play,
+  Heart,
+  User,
+  AudioLines,
+  RefreshCw,
+  ChevronRight,
+  Info, // Import icon Info
+} from "lucide-react-native";
+
+import { useTheme } from "@/shared/context/ThemeContext";
 import type { MediaTrack } from "../store/libraryStore";
 import { formatTime } from "@/shared/utils/time";
 import QualityBadge from "@/shared/components/ui/QualityBadge";
+import OnlineMetadataService from "../services/OnlineMetadataService";
+import { useSettingsStore } from "@/features/settings/store/settingsStore"; // Import store
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-interface ArtistItem {
-  name: string;
-  trackCount: number;
-  albumCount: number;
-}
+// ── Artist Row ───────────────────────────────────────────────────
+const ArtistRow = memo(({ item, onPress, colors, enableOnlineImage }: any) => {
+  const [usableUri, setUsableUri] = useState<string | null>(item.artwork || null);
+  const [isLoading, setIsLoading] = useState(false);
 
-interface ArtistListProps {
-  /** Pre-computed artists dari selectArtists() di parent */
-  artists: ArtistItem[];
-  /** Raw tracks — untuk filter lagu per artist */
-  tracks: MediaTrack[];
-  currentTrackId?: string;
-  favoriteIds?: Set<string>;
-  onSongPress: (track: MediaTrack, queue: MediaTrack[]) => void;
-  onToggleFavorite?: (id: string) => void;
-}
+  useEffect(() => {
+    let isMounted = true;
+    if (item.artwork) return;
 
-// ── ArtistRow ─────────────────────────────────────────────────────────────────
-interface ArtistRowProps {
-  item: ArtistItem;
-  onPress: (item: ArtistItem) => void;
-  colors: any;
-  spacing: any;
-}
-
-const ArtistRow = memo(
-  ({ item, onPress, colors, spacing }: ArtistRowProps) => {
-    const handlePress = useCallback(() => {
-      if (Platform.OS !== "web")
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      onPress(item);
-    }, [item, onPress]);
-
-    // Generate warna avatar dari nama artist (konsisten per nama)
-    const avatarColor = useMemo(() => {
-      const palette = [
-        "#6366f1",
-        "#8b5cf6",
-        "#ec4899",
-        "#f43f5e",
-        "#f97316",
-        "#eab308",
-        "#22c55e",
-        "#14b8a6",
-        "#3b82f6",
-        "#06b6d4",
-      ];
-      let hash = 0;
-      for (let i = 0; i < item.name.length; i++) {
-        hash = item.name.charCodeAt(i) + ((hash << 5) - hash);
+    const fetchOnlineImage = async () => {
+      // Hanya fetch jika pengaturan aktif
+      if (enableOnlineImage) {
+        setIsLoading(true);
+        try {
+          const result = await OnlineMetadataService.getArtistEnrichment(item.name);
+          if (isMounted && result.imageUrl) {
+            setUsableUri(result.imageUrl);
+          }
+        } catch (e) {
+          console.warn(`[ArtistList] Image fetch failed for ${item.name}:`, e);
+        } finally {
+          if (isMounted) setIsLoading(false);
+        }
       }
-      return palette[Math.abs(hash) % palette.length];
-    }, [item.name]);
+    };
 
-    const initials = useMemo(() => {
-      const words = item.name.trim().split(/\s+/);
-      if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-      return (words[0][0] + words[words.length - 1][0]).toUpperCase();
-    }, [item.name]);
+    fetchOnlineImage();
+    return () => { isMounted = false; };
+  }, [item.name, item.artwork, enableOnlineImage]);
 
-    return (
-      <TouchableOpacity
-        onPress={handlePress}
-        activeOpacity={0.6}
-        style={[styles.row, { paddingHorizontal: spacing.md }]}
-      >
-        {/* Avatar */}
-        <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
-          <Text style={styles.avatarText}>{initials}</Text>
-        </View>
-
-        {/* Info */}
-        <View style={styles.info}>
-          <Text
-            style={[styles.name, { color: colors.text.primary }]}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-          >
-            {item.name}
-          </Text>
-          <Text style={[styles.meta, { color: colors.text.secondary }]}>
-            {item.trackCount} lagu
-            {item.albumCount > 0 ? ` · ${item.albumCount} album` : ""}
-          </Text>
-        </View>
-
-        {/* Chevron */}
-        <Ionicons
-          name="chevron-forward"
-          size={16}
-          color={colors.text.disabled}
-        />
-      </TouchableOpacity>
-    );
-  },
-  (prev, next) =>
-    prev.item.name === next.item.name &&
-    prev.item.trackCount === next.item.trackCount &&
-    prev.colors === next.colors,
-);
-
-// ── ArtistSongRow ─────────────────────────────────────────────────────────────
-interface ArtistSongRowProps {
-  track: MediaTrack;
-  isNowPlaying: boolean;
-  isFavorite: boolean;
-  onPress: () => void;
-  onToggleFavorite?: () => void;
-  colors: any;
-}
-
-const ArtistSongRow = memo(
-  ({
-    track,
-    isNowPlaying,
-    isFavorite,
-    onPress,
-    onToggleFavorite,
-    colors,
-  }: ArtistSongRowProps) => {
-    const handlePress = useCallback(() => {
-      if (Platform.OS !== "web")
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      onPress();
-    }, [onPress]);
-
-    const handleFav = useCallback(() => {
-      if (Platform.OS !== "web")
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      onToggleFavorite?.();
-    }, [onToggleFavorite]);
-
-    return (
-      <TouchableOpacity
-        onPress={handlePress}
-        activeOpacity={0.6}
-        style={[
-          styles.songRow,
-          isNowPlaying && { backgroundColor: colors.background.tertiary },
-        ]}
-      >
-        <View
-          style={[
-            styles.songIcon,
-            {
-              backgroundColor: isNowPlaying
-                ? `${colors.primary[500]}20`
-                : colors.background.secondary,
-            },
-          ]}
-        >
-          <Ionicons
-            name={isNowPlaying ? "stats-chart" : "musical-note"}
-            size={18}
-            color={isNowPlaying ? colors.primary[500] : colors.text.tertiary}
+  return (
+    <TouchableOpacity
+      onPress={() => onPress({ ...item, resolvedArtwork: usableUri })}
+      activeOpacity={0.7}
+      style={styles.artistRow}
+    >
+      <View style={styles.avatarContainer}>
+        {isLoading ? (
+          <ActivityIndicator size="small" color={colors.primary[500]} />
+        ) : usableUri ? (
+          <Image
+            source={{ uri: usableUri }}
+            style={styles.avatarImage}
+            contentFit="cover"
+            transition={200}
+            cachePolicy="memory-disk"
           />
+        ) : (
+          <View style={[styles.avatarFallback, { backgroundColor: colors.background.tertiary }]}>
+            <User size={28} color={colors.text.disabled} />
+          </View>
+        )}
+      </View>
+
+      <View style={styles.artistInfo}>
+        <Text style={[styles.artistName, { color: colors.text.primary }]} numberOfLines={1}>
+          {item.name}
+        </Text>
+        <Text style={[styles.artistMeta, { color: colors.text.tertiary }]}>
+          {item.trackCount} lagu • {item.albumCount} album
+        </Text>
+      </View>
+
+      <ChevronRight size={18} color={colors.background.tertiary} />
+    </TouchableOpacity>
+  );
+});
+
+// ── Artist Song Row (Detail Item) ─────────────────────────────────────────────
+const ArtistSongRow = memo(({ track, isNowPlaying, isFavorite, onPress, onToggleFavorite, colors }: any) => {
+    const router = useRouter();
+
+    const handleLongPress = () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.push({ pathname: "/song/[id]", params: { id: track.id } });
+    };
+
+    return (
+      <TouchableOpacity
+        onPress={onPress}
+        onLongPress={handleLongPress}
+        activeOpacity={0.7}
+        style={[styles.songRow, isNowPlaying && { backgroundColor: `${colors.primary[500]}15` }]}
+      >
+        <View style={styles.songLeading}>
+          {isNowPlaying ? (
+            <AudioLines size={18} color={colors.primary[500]} />
+          ) : (
+            <User size={16} color={colors.text.disabled} />
+          )}
         </View>
 
-        <View style={styles.songInfo}>
-          <View style={styles.titleRow}>
+        <View style={styles.songMain}>
+          <View style={styles.songTitleRow}>
             <Text
-              style={[
-                styles.songTitle,
-                {
-                  color: isNowPlaying
-                    ? colors.primary[500]
-                    : colors.text.primary,
-                },
-              ]}
+              style={[styles.songTitle, { color: isNowPlaying ? colors.primary[500] : colors.text.primary }]}
               numberOfLines={1}
-              ellipsizeMode="tail"
             >
               {track.title}
             </Text>
-            {(track.sampleRate || track.codec) && (
-              <QualityBadge sampleRate={track.sampleRate} codec={track.codec} />
-            )}
+            <QualityBadge sampleRate={track.sampleRate} codec={track.codec} />
           </View>
-          <Text
-            style={[styles.songAlbum, { color: colors.text.secondary }]}
-            numberOfLines={1}
-          >
+          <Text style={[styles.songAlbum, { color: colors.text.tertiary }]} numberOfLines={1}>
             {track.album || "Unknown Album"}
           </Text>
         </View>
 
-        <View style={styles.rightActions}>
-          {onToggleFavorite && (
-            <TouchableOpacity
-              onPress={handleFav}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            >
-              <Ionicons
-                name={isFavorite ? "heart" : "heart-outline"}
-                size={18}
-                color={isFavorite ? colors.status.error : colors.text.tertiary}
-              />
-            </TouchableOpacity>
-          )}
-          <Text
-            style={[
-              styles.duration,
-              {
-                color: colors.text.disabled,
-                fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
-              },
-            ]}
-          >
-            {formatTime(track.duration || 0)}
+        <View style={styles.songTrailing}>
+          <TouchableOpacity onPress={onToggleFavorite} style={styles.favBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Heart
+              size={18}
+              color={isFavorite ? colors.status.error : colors.text.disabled}
+              fill={isFavorite ? colors.status.error : "transparent"}
+            />
+          </TouchableOpacity>
+          <Text style={[styles.duration, { color: colors.text.disabled }]}>
+            {formatTime(track.duration)}
           </Text>
         </View>
       </TouchableOpacity>
     );
-  },
-  (prev, next) =>
-    prev.track.id === next.track.id &&
-    prev.isNowPlaying === next.isNowPlaying &&
-    prev.isFavorite === next.isFavorite &&
-    prev.colors === next.colors,
+  }
 );
 
-// ── ArtistDetailHeader ────────────────────────────────────────────────────────
-interface ArtistDetailHeaderProps {
-  artist: ArtistItem;
-  songCount: number;
-  totalDuration: number;
-  avatarColor: string;
-  initials: string;
-  onBack: () => void;
-  onPlayAll: () => void;
-  colors: any;
-  spacing: any;
-}
-
-const ArtistDetailHeader = memo(
-  ({
-    artist,
-    songCount,
-    totalDuration,
-    avatarColor,
-    initials,
-    onBack,
-    onPlayAll,
-    colors,
-    spacing,
-  }: ArtistDetailHeaderProps) => (
-    <View style={{ backgroundColor: colors.background.secondary }}>
-      <TouchableOpacity
-        onPress={onBack}
-        style={[
-          styles.backRow,
-          { paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-        ]}
-      >
-        <Ionicons name="chevron-back" size={18} color={colors.primary[500]} />
-        <Text style={[styles.backLabel, { color: colors.primary[500] }]}>
-          Artists
-        </Text>
-      </TouchableOpacity>
-
-      <View
-        style={[
-          styles.detailHeader,
-          { paddingHorizontal: spacing.md, paddingBottom: spacing.md },
-        ]}
-      >
-        {/* Large avatar */}
-        <View style={[styles.detailAvatar, { backgroundColor: avatarColor }]}>
-          <Text style={styles.detailAvatarText}>{initials}</Text>
-        </View>
-        <View style={styles.detailInfo}>
-          <Text
-            style={[styles.detailName, { color: colors.text.primary }]}
-            numberOfLines={2}
-          >
-            {artist.name}
-          </Text>
-          <Text style={[styles.detailMeta, { color: colors.text.disabled }]}>
-            {songCount} lagu · {formatTime(totalDuration)}
-          </Text>
-        </View>
-      </View>
-
-      <TouchableOpacity
-        onPress={onPlayAll}
-        style={[
-          styles.playAllBtn,
-          {
-            backgroundColor: colors.primary[500],
-            marginHorizontal: spacing.md,
-            marginBottom: spacing.md,
-          },
-        ]}
-      >
-        <Ionicons name="play" size={16} color="#fff" />
-        <Text style={styles.playAllLabel}>Putar Semua</Text>
-      </TouchableOpacity>
-
-      <View
-        style={[
-          styles.divider,
-          { backgroundColor: colors.background.tertiary },
-        ]}
-      />
-    </View>
-  ),
-);
-
-// ── ArtistList ────────────────────────────────────────────────────────────────
-export const ArtistList: React.FC<ArtistListProps> = ({
-  artists,
+// ── Main ArtistList ──────────────────────────────────────────────────────────
+export const ArtistList: React.FC<any> = ({
   tracks,
   currentTrackId,
   favoriteIds = new Set(),
@@ -335,245 +164,232 @@ export const ArtistList: React.FC<ArtistListProps> = ({
 }) => {
   const { theme } = useTheme();
   const { colors, spacing } = theme;
+  const [selectedArtist, setSelectedArtist] = useState<any>(null);
 
-  const [selectedArtist, setSelectedArtist] = useState<ArtistItem | null>(null);
+  // Ambil state dari Settings Store
+  const { enableOnlineArtistImage } = useSettingsStore();
 
-  const filteredSongs = useMemo(() => {
-    if (!selectedArtist) return [];
-    return (tracks ?? []).filter(
-      (t) => (t.artist || "Unknown Artist") === selectedArtist.name,
-    );
-  }, [tracks, selectedArtist]);
-
-  const totalDuration = useMemo(
-    () => filteredSongs.reduce((acc, t) => acc + (t.duration || 0), 0),
-    [filteredSongs],
-  );
-
-  // Avatar props untuk detail header (harus konsisten dengan row)
-  const detailAvatarColor = useMemo(() => {
-    if (!selectedArtist) return "#6366f1";
-    const palette = [
-      "#6366f1",
-      "#8b5cf6",
-      "#ec4899",
-      "#f43f5e",
-      "#f97316",
-      "#eab308",
-      "#22c55e",
-      "#14b8a6",
-      "#3b82f6",
-      "#06b6d4",
-    ];
-    let hash = 0;
-    for (let i = 0; i < selectedArtist.name.length; i++) {
-      hash = selectedArtist.name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return palette[Math.abs(hash) % palette.length];
-  }, [selectedArtist]);
-
-  const detailInitials = useMemo(() => {
-    if (!selectedArtist) return "";
-    const words = selectedArtist.name.trim().split(/\s+/);
-    if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-    return (words[0][0] + words[words.length - 1][0]).toUpperCase();
-  }, [selectedArtist]);
-
-  const handleArtistPress = useCallback((artist: ArtistItem) => {
-    setSelectedArtist(artist);
-  }, []);
-
-  const handleBack = useCallback(() => {
-    setSelectedArtist(null);
-  }, []);
-
-  const handlePlayAll = useCallback(() => {
-    if (filteredSongs.length > 0) onSongPress(filteredSongs[0], filteredSongs);
-  }, [filteredSongs, onSongPress]);
-
-  const handleSongPress = useCallback(
-    (track: MediaTrack) => onSongPress(track, filteredSongs),
-    [filteredSongs, onSongPress],
-  );
-
-  // ── Render: Artist list ───────────────────────────────────────────────────────
-  if (!selectedArtist) {
-    if (!artists.length) {
-      return (
-        <View
-          style={[styles.empty, { backgroundColor: colors.background.primary }]}
-        >
-          <Ionicons
-            name="person-outline"
-            size={52}
-            color={colors.text.disabled}
-          />
-          <Text style={[styles.emptyText, { color: colors.text.secondary }]}>
-            Belum ada artist
-          </Text>
-          <Text style={[styles.emptySubText, { color: colors.text.disabled }]}>
-            Scan library terlebih dahulu
-          </Text>
-        </View>
+  const handleScanMetadata = () => {
+    if (!enableOnlineArtistImage) {
+      // Feedback Haptic Error jika mencoba menekan saat disabled
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert(
+        "Fitur Dinonaktifkan",
+        "Pencarian metadata online saat ini mati. Silakan aktifkan 'Online Artist Metadata' di menu Settings > Library untuk menggunakan fitur ini.",
+        [{ text: "Mengerti" }]
       );
+      return;
     }
+
+    // Jika Aktif: Jalankan Notifikasi & Logic
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Alert.alert(
+      "Metadata Scan",
+      "Pencarian foto dan bio artis sedang diproses di latar belakang via MusicBrainz.",
+      [{ text: "OK" }]
+    );
+    
+    // Logic batch scan kamu...
+    // OnlineMetadataService.enhanceMultipleArtists(enrichedArtists.map(a => a.name))
+  };
+
+  const enrichedArtists = useMemo(() => {
+    const map = new Map<string, any>();
+    tracks.forEach((track: MediaTrack) => {
+      const name = track.artist || "Unknown Artist";
+      if (!map.has(name)) {
+        map.set(name, {
+          name,
+          trackCount: 0,
+          albums: new Set(),
+          artwork: track.artwork,
+        });
+      }
+      const entry = map.get(name);
+      entry.trackCount += 1;
+      if (track.album) entry.albums.add(track.album);
+    });
+
+    return Array.from(map.values())
+      .map((a) => ({ ...a, albumCount: a.albums.size }))
+      .sort((a, b) => {
+        if (a.name === "Unknown Artist") return 1;
+        if (b.name === "Unknown Artist") return -1;
+        return a.name.localeCompare(b.name);
+      });
+  }, [tracks]);
+
+  // Render detail view (jika artis dipilih)
+  if (selectedArtist) {
+    const filteredSongs = tracks
+      .filter((t: MediaTrack) => (t.artist || "Unknown Artist") === selectedArtist.name)
+      .sort((a: any, b: any) => (a.album === b.album ? (a.trackNumber || 0) - (b.trackNumber || 0) : (a.album || "").localeCompare(b.album || "")));
+    
+    const heroImage = selectedArtist.resolvedArtwork || selectedArtist.artwork;
 
     return (
-      <FlatList
-        key="artist-list"
-        data={artists}
-        keyExtractor={(item) => item.name}
-        renderItem={({ item }) => (
-          <ArtistRow
-            item={item}
-            onPress={handleArtistPress}
-            colors={colors}
-            spacing={spacing}
-          />
-        )}
-        contentContainerStyle={{
-          paddingVertical: spacing.xs,
-          paddingBottom: 120,
-        }}
-        showsVerticalScrollIndicator={false}
-        initialNumToRender={15}
-        maxToRenderPerBatch={10}
-        windowSize={5}
-        removeClippedSubviews
-        ItemSeparatorComponent={() => (
-          <View
-            style={[
-              styles.separator,
-              { backgroundColor: colors.background.tertiary, marginLeft: 76 },
-            ]}
-          />
-        )}
-      />
+      <View style={[styles.detailContainer, { backgroundColor: colors.background.primary }]}>
+        <View style={[styles.navBar, { paddingTop: Platform.OS === "ios" ? 50 : 20 }]}>
+          <TouchableOpacity onPress={() => setSelectedArtist(null)} style={styles.backBtn}>
+            <ChevronLeft size={30} color={colors.text.primary} />
+          </TouchableOpacity>
+        </View>
+        <FlatList
+          data={filteredSongs}
+          keyExtractor={(item) => item.id}
+          ListHeaderComponent={
+            <View style={styles.headerHero}>
+               <View style={styles.avatarLargeContainer}>
+                {heroImage ? (
+                  <Image source={{ uri: heroImage }} style={styles.avatarLarge} contentFit="cover" transition={300} />
+                ) : (
+                  <View style={[styles.avatarLargeFallback, { backgroundColor: colors.background.tertiary }]}>
+                    <User size={60} color={colors.text.disabled} />
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.headerTitle, { color: colors.text.primary }]}>{selectedArtist.name}</Text>
+              <View style={styles.actionRow}>
+                <TouchableOpacity
+                  style={[styles.playBtn, { backgroundColor: colors.primary[500] }]}
+                  onPress={() => onSongPress(filteredSongs[0], filteredSongs)}
+                >
+                  <Play size={20} color="#FFF" fill="#FFF" />
+                  <Text style={styles.playBtnText}>PLAY ALL</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          }
+          renderItem={({ item }) => (
+            <ArtistSongRow
+              track={item}
+              isNowPlaying={item.id === currentTrackId}
+              isFavorite={favoriteIds.has(item.id)}
+              onPress={() => onSongPress(item, filteredSongs)}
+              onToggleFavorite={() => onToggleFavorite?.(item.id)}
+              colors={colors}
+            />
+          )}
+          contentContainerStyle={{ paddingBottom: 100 }}
+        />
+      </View>
     );
   }
 
-  // ── Render: Artist detail ─────────────────────────────────────────────────────
+  // Render main list
   return (
-    <FlatList
-      key="artist-detail"
-      data={filteredSongs}
-      keyExtractor={(item) => item.id}
-      ListHeaderComponent={
-        <ArtistDetailHeader
-          artist={selectedArtist}
-          songCount={filteredSongs.length}
-          totalDuration={totalDuration}
-          avatarColor={detailAvatarColor}
-          initials={detailInitials}
-          onBack={handleBack}
-          onPlayAll={handlePlayAll}
-          colors={colors}
-          spacing={spacing}
-        />
-      }
-      renderItem={({ item }) => (
-        <ArtistSongRow
-          track={item}
-          isNowPlaying={item.id === currentTrackId}
-          isFavorite={favoriteIds.has(item.id)}
-          onPress={() => handleSongPress(item)}
-          onToggleFavorite={
-            onToggleFavorite ? () => onToggleFavorite(item.id) : undefined
+    <View style={{ flex: 1 }}>
+      {/* Header Scan yang dinamis */}
+      <TouchableOpacity
+        activeOpacity={0.7}
+        style={[
+          styles.scanHeader, 
+          { 
+            backgroundColor: enableOnlineArtistImage ? `${colors.primary[500]}15` : colors.background.tertiary,
+            opacity: enableOnlineArtistImage ? 1 : 0.7 
           }
-          colors={colors}
+        ]}
+        onPress={handleScanMetadata}
+      >
+        <RefreshCw 
+          size={16} 
+          color={enableOnlineArtistImage ? colors.primary[500] : colors.text.disabled} 
         />
+        <Text style={[
+          styles.scanText, 
+          { color: enableOnlineArtistImage ? colors.primary[500] : colors.text.disabled }
+        ]}>
+          {enableOnlineArtistImage ? "Scan Artist Metadata" : "Metadata Scan Disabled"}
+        </Text>
+      </TouchableOpacity>
+
+      {/* Info Box jika disabled */}
+      {!enableOnlineArtistImage && (
+        <View style={[styles.infoBox, { backgroundColor: `${colors.background.tertiary}50`, marginHorizontal: 16 }]}>
+          <Info size={14} color={colors.text.tertiary} />
+          <Text style={[styles.infoText, { color: colors.text.tertiary }]}>
+            Aktifkan "Online Artist Metadata" di pengaturan untuk mengunduh foto artis secara otomatis.
+          </Text>
+        </View>
       )}
-      contentContainerStyle={{ paddingBottom: 120 }}
-      showsVerticalScrollIndicator={false}
-      initialNumToRender={15}
-      maxToRenderPerBatch={10}
-      windowSize={5}
-      removeClippedSubviews
-    />
+
+      <FlatList
+        data={enrichedArtists}
+        keyExtractor={(item) => item.name}
+        contentContainerStyle={styles.listContent}
+        renderItem={({ item }) => (
+          <ArtistRow
+            item={item}
+            onPress={setSelectedArtist}
+            colors={colors}
+            enableOnlineImage={enableOnlineArtistImage}
+          />
+        )}
+        ItemSeparatorComponent={() => (
+          <View style={[styles.separator, { backgroundColor: colors.background.tertiary }]} />
+        )}
+      />
+    </View>
   );
 };
 
-// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  // Artist row
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    height: 68,
-    gap: 14,
-  },
-  avatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    justifyContent: "center",
-    alignItems: "center",
-    flexShrink: 0,
-  },
-  avatarText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  info: { flex: 1 },
-  name: { fontSize: 15, fontWeight: "600", marginBottom: 2 },
-  meta: { fontSize: 12 },
-  separator: { height: StyleSheet.hairlineWidth },
+  listContent: { paddingHorizontal: 16, paddingBottom: 100 },
+  artistRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12 },
+  avatarContainer: { width: 50, height: 50, borderRadius: 25, overflow: "hidden", justifyContent: "center", alignItems: "center" },
+  avatarImage: { width: "100%", height: "100%" },
+  avatarFallback: { width: "100%", height: "100%", justifyContent: "center", alignItems: "center" },
+  artistInfo: { flex: 1, marginLeft: 16 },
+  artistName: { fontSize: 16, fontWeight: "700" },
+  artistMeta: { fontSize: 12, marginTop: 2 },
+  separator: { height: 1, marginLeft: 66 },
+  detailContainer: { flex: 1 },
+  navBar: { paddingHorizontal: 8, zIndex: 10 },
+  backBtn: { width: 44, height: 44, justifyContent: "center", alignItems: "center" },
+  headerHero: { alignItems: "center", padding: 20 },
+  avatarLargeContainer: { width: 160, height: 160, borderRadius: 80, overflow: "hidden", marginBottom: 20, elevation: 10, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5 },
+  avatarLarge: { width: "100%", height: "100%" },
+  avatarLargeFallback: { width: "100%", height: "100%", justifyContent: "center", alignItems: "center" },
+  headerTitle: { fontSize: 26, fontWeight: "800", textAlign: "center" },
+  headerMeta: { fontSize: 13, marginTop: 6, letterSpacing: 1 },
+  actionRow: { marginTop: 25, width: "100%", paddingHorizontal: 20 },
+  playBtn: { height: 52, borderRadius: 26, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 10 },
+  playBtnText: { color: "#FFF", fontWeight: "800", letterSpacing: 1 },
 
-  // Empty
-  empty: { flex: 1, justifyContent: "center", alignItems: "center", gap: 8 },
-  emptyText: { fontSize: 16, fontWeight: "600" },
-  emptySubText: { fontSize: 13 },
-
-  // Detail header
-  backRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  backLabel: { fontSize: 14, fontWeight: "600" },
-  detailHeader: { flexDirection: "row", gap: 16, alignItems: "center" },
-  detailAvatar: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    justifyContent: "center",
-    alignItems: "center",
-    flexShrink: 0,
+  songRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, paddingHorizontal: 20 },
+  songLeading: { width: 30 },
+  songMain: { flex: 1, marginLeft: 10, marginRight: 10 },
+  songTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  songTitle: { fontSize: 15, fontWeight: "600", flex: 1 },
+  songAlbum: { fontSize: 12, marginTop: 4 },
+  songTrailing: { alignItems: "flex-end" },
+  favBtn: { padding: 5 },
+  duration: { fontSize: 11, marginTop: 4, opacity: 0.6 },
+  scanHeader: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "center", 
+    marginHorizontal: 16, 
+    marginTop: 16, 
+    padding: 12, 
+    borderRadius: 12, 
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'transparent'
   },
-  detailAvatarText: { color: "#fff", fontSize: 28, fontWeight: "700" },
-  detailInfo: { flex: 1, gap: 6 },
-  detailName: { fontSize: 20, fontWeight: "700", lineHeight: 24 },
-  detailMeta: { fontSize: 13 },
-  playAllBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
+  scanText: { fontWeight: "700", fontSize: 13 },
+  infoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
     borderRadius: 8,
+    marginTop: 8,
+    gap: 8
   },
-  playAllLabel: { color: "#fff", fontWeight: "700", fontSize: 14 },
-  divider: { height: 1 },
-
-  // Song rows
-  songRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    height: 64,
-  },
-  songIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  songInfo: { flex: 1, marginHorizontal: 12 },
-  titleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  songTitle: { fontSize: 15, fontWeight: "600", flex: 1, marginRight: 4 },
-  songAlbum: { fontSize: 12, marginTop: 1 },
-  rightActions: { alignItems: "flex-end", gap: 4 },
-  duration: { fontSize: 10 },
+  infoText: { fontSize: 11, flex: 1, lineHeight: 14 },
+  
 });
+
+
+
+

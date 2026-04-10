@@ -1,3 +1,4 @@
+// shared/components/ui/LoadingScreen.tsx
 import React, { useEffect, useRef, useState } from "react";
 import {
   View,
@@ -5,7 +6,6 @@ import {
   StyleSheet,
   StatusBar,
   Animated,
-  Easing,
   Platform,
   Dimensions,
 } from "react-native";
@@ -18,17 +18,15 @@ import Reanimated, {
   withTiming,
   withSequence,
   withDelay,
+  cancelAnimation,
 } from "react-native-reanimated";
 
-const { width, height } = Dimensions.get("window");
-const AnimatedExpoImage = Animated.createAnimatedComponent(Image);
+const { width } = Dimensions.get("window");
 
 const COLORS = {
   bgGradient: ["#000000", "#1a1a1a"] as const,
   accent: "#00D4AA",
-  textPrimary: "#FFFFFF",
   textSecondary: "#A0B0C0",
-  credit: "#3A4B5E",
 };
 
 const BOOT_SEQUENCE = [
@@ -38,109 +36,126 @@ const BOOT_SEQUENCE = [
   "System Ready.",
 ];
 
-// Komponen Waveform Sederhana
-const WaveformBar = ({ index }: { index: number }) => {
+// Waveform Bar Component
+const WaveformBar = ({ index, isExiting }: { index: number; isExiting: boolean }) => {
   const heightValue = useSharedValue(10);
 
   useEffect(() => {
+    if (isExiting) {
+      cancelAnimation(heightValue);
+      heightValue.value = withTiming(0, { duration: 300 });
+      return;
+    }
+
     heightValue.value = withDelay(
-      index * 100,
+      index * 80,
       withRepeat(
         withSequence(
-          withTiming(30 + Math.random() * 20, { duration: 500 }),
-          withTiming(10, { duration: 500 }),
+          withTiming(25 + Math.random() * 15, { duration: 400 }),
+          withTiming(8, { duration: 400 }),
         ),
         -1,
         true,
       ),
     );
-  }, []);
+
+    return () => cancelAnimation(heightValue);
+  }, [isExiting]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     height: heightValue.value,
+    opacity: heightValue.value > 0 ? 1 : 0,
   }));
 
   return (
     <Reanimated.View
       style={[
-        {
-          width: 3,
-          backgroundColor: COLORS.accent,
-          borderRadius: 2,
-          marginHorizontal: 2,
-        },
+        styles.waveformBar,
+        { backgroundColor: COLORS.accent },
         animatedStyle,
       ]}
     />
   );
 };
 
-export default function LoadingScreen() {
+interface LoadingScreenProps {
+  onLoadingComplete?: () => void;
+}
+
+export default function LoadingScreen({ onLoadingComplete }: LoadingScreenProps) {
   const [loadingText, setLoadingText] = useState(BOOT_SEQUENCE[0]);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const logoScale = useRef(new Animated.Value(0.9)).current;
+  const [isExiting, setIsExiting] = useState(false);
+  
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const slideUpAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Entrance Animation
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 1500,
-        useNativeDriver: true,
-      }),
-      Animated.spring(logoScale, {
-        toValue: 1,
-        friction: 8,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    // Boot Text Logic
+    // Boot text sequence - faster timing
     let step = 0;
     const interval = setInterval(() => {
       step += 1;
-      if (step < BOOT_SEQUENCE.length) setLoadingText(BOOT_SEQUENCE[step]);
-    }, 1000);
+      if (step < BOOT_SEQUENCE.length) {
+        setLoadingText(BOOT_SEQUENCE[step]);
+        
+        // Trigger exit animation on last step
+        if (step === BOOT_SEQUENCE.length - 1) {
+          setTimeout(() => {
+            setIsExiting(true);
+            Animated.parallel([
+              Animated.timing(fadeAnim, {
+                toValue: 0,
+                duration: 700,
+                useNativeDriver: true,
+              }),
+              Animated.timing(slideUpAnim, {
+                toValue: -50,
+                duration: 700,
+                useNativeDriver: true,
+              }),
+            ]).start(() => {
+              onLoadingComplete?.();
+            });
+          }, 900);
+        }
+      }
+    }, 900); // Reduced from 2400ms
 
     return () => clearInterval(interval);
-  }, []);
+  }, [onLoadingComplete]);
+
+  const containerStyle = {
+    opacity: fadeAnim,
+    transform: [{ translateY: slideUpAnim }],
+  };
 
   return (
-    <View style={styles.container}>
-      <StatusBar
-        barStyle="light-content"
-        translucent
-        backgroundColor="transparent"
-      />
+    <Animated.View style={[styles.container, containerStyle]}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      
+      <LinearGradient colors={COLORS.bgGradient} style={StyleSheet.absoluteFill} />
 
-      {/* Background Fullscreen Gradient */}
-      <LinearGradient
-        colors={COLORS.bgGradient}
-        style={StyleSheet.absoluteFill}
-      />
-
-      <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-        {/* Logo Section dengan Aura Glow */}
+      <View style={styles.content}>
+        {/* Logo */}
         <View style={styles.logoWrapper}>
-          <View style={styles.glowCircle} />
-          <AnimatedExpoImage
+          <Image
             source={require("../../../../assets/images/icon.png")}
-            style={[styles.logo, { transform: [{ scale: logoScale }] }]}
+            style={styles.logo}
             contentFit="contain"
+            transition={200}
           />
         </View>
 
-        {/* Custom Audio Waveform Loader */}
+        {/* Waveform */}
         <View style={styles.loaderArea}>
           <View style={styles.waveformContainer}>
-            {[1, 2, 3, 4, 5].map((i) => (
-              <WaveformBar key={i} index={i} />
+            {[0, 1, 2, 3, 4].map((i) => (
+              <WaveformBar key={i} index={i} isExiting={isExiting} />
             ))}
           </View>
           <Text style={styles.loadingText}>{loadingText}</Text>
         </View>
 
-        {/* Branding Section */}
+        {/* Branding */}
         <View style={styles.brandContainer}>
           <Text style={styles.pristineText}>PRISTINE</Text>
           <View style={styles.audioBadge}>
@@ -148,19 +163,20 @@ export default function LoadingScreen() {
           </View>
         </View>
 
-        {/* Bottom Credit */}
+        {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.creditText}>HANDCRAFTED BY CURIOUS SHEVA</Text>
+          <Text style={styles.creditText}>HANDCRAFTED BY CuriousSheva</Text>
           <View style={[styles.line, { backgroundColor: COLORS.accent }]} />
         </View>
-      </Animated.View>
-    </View>
+      </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#000',
   },
   content: {
     flex: 1,
@@ -168,54 +184,47 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   logoWrapper: {
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 60,
+    marginBottom: 40,
   },
   logo: {
-    width: width * 0.7,
-    height: 180,
-  },
-  glowCircle: {
-    position: "absolute",
-    width: 200,
-    height: 100,
-    backgroundColor: COLORS.accent,
-    borderRadius: 100,
-    opacity: 0.1,
-    filter: Platform.OS === "ios" ? "blur(40px)" : undefined, // Blur hanya support iOS di style standar
+    width: width * 0.5,
+    height: 120,
   },
   loaderArea: {
     alignItems: "center",
-    height: 100,
+    height: 80,
   },
   waveformContainer: {
     flexDirection: "row",
     alignItems: "center",
     height: 40,
-    marginBottom: 10,
+    marginBottom: 12,
+  },
+  waveformBar: {
+    width: 3,
+    borderRadius: 2,
+    marginHorizontal: 2,
   },
   loadingText: {
     color: COLORS.textSecondary,
     fontSize: 12,
     letterSpacing: 2,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-    opacity: 0.8,
   },
   brandContainer: {
     marginTop: 40,
     alignItems: "center",
   },
   pristineText: {
-    color: COLORS.textPrimary,
-    fontSize: 48,
+    color: "#FFFFFF",
+    fontSize: 42,
     fontWeight: "900",
-    letterSpacing: 12,
+    letterSpacing: 10,
   },
   audioBadge: {
-    marginTop: 5,
+    marginTop: 8,
     paddingHorizontal: 12,
-    paddingVertical: 2,
+    paddingVertical: 4,
     borderWidth: 1,
     borderColor: COLORS.accent,
     borderRadius: 4,
@@ -232,7 +241,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   creditText: {
-    color: COLORS.credit,
+    color: "#3A4B5E",
     fontSize: 10,
     letterSpacing: 3,
     fontWeight: "700",
@@ -245,3 +254,4 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
 });
+ 

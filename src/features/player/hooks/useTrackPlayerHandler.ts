@@ -1,89 +1,314 @@
-import { useEffect } from "react";
+// src/features/player/hooks/useTrackPlayerHandler.ts
+
+import { useEffect, useRef } from "react";
 import TrackPlayer, {
   Event,
-  State,
   useTrackPlayerEvents,
+  Capability,
+  State,
 } from "react-native-track-player";
-import { usePlayerStore } from "@/features/player/store/playerStore";
+import { usePlayerStore } from "../store/playerStore";
+import { Song } from "@/shared/types/audio";
+import { LibraryScanner } from "@/features/library/api/scanner";
 
-const events = [
-  Event.PlaybackActiveTrackChanged,
-  Event.PlaybackState,
-  Event.PlaybackError,
-];
+// Helper untuk konversi URI
+const normalizeUri = (uri: string): string => {
+  if (!uri) return "";
+  if (uri.startsWith("http://") || uri.startsWith("https://")) return uri;
+  if (uri.startsWith("content://")) return uri;
+  if (uri.startsWith("file://")) return uri;
+  return `file://${uri}`;
+};
+
+// Helper untuk validasi URI
+const isValidUri = (uri: string): boolean => {
+  return !!(
+    uri &&
+    (uri.startsWith("http") ||
+      uri.startsWith("content://") ||
+      uri.startsWith("file://"))
+  );
+};
 
 export const useTrackPlayerHandler = () => {
-  const { setDuration, setCurrentSong, queue } = usePlayerStore();
+  const {
+    currentSong,
+    setCurrentSong,
+    setIsPlaying,
+    setPosition,
+    setDuration,
+  } = usePlayerStore();
 
-  useTrackPlayerEvents(events, async (event: any) => {
-    // 1. Perubahan Lagu
-    if (event.type === Event.PlaybackActiveTrackChanged) {
-      usePlayerStore.setState({ position: 0 });
-      if (event.track) {
-        const activeSong = queue.find((s) => s.id === event.track?.id);
-        if (activeSong) {
-          setCurrentSong(activeSong);
-          setDuration(activeSong.duration);
-        }
-      }
-    }
+  const errorCountRef = useRef(0);
+  const lastErrorTimeRef = useRef(0);
+  const isInitializedRef = useRef(false);
 
-    // 2. Perubahan Status
-    if (event.type === Event.PlaybackState) {
-      const playing = event.state === State.Playing;
-      usePlayerStore.setState({ isPlaying: playing });
-    }
-
-    // 3. Error — dengan detail URI untuk debug
-    if (event.type === Event.PlaybackError) {
-      console.error("[TrackPlayer] Playback error:", event.message);
-      console.error("[TrackPlayer] Error code:", event.code);
-
-      try {
-        const track = await TrackPlayer.getActiveTrack();
-        console.error("[TrackPlayer] Failed URI:", track?.url);
-        console.error(
-          "[TrackPlayer] URI type:",
-          track?.url?.startsWith("content://media")
-            ? "MediaStore"
-            : track?.url?.startsWith("content://com.android")
-              ? "SAF"
-              : track?.url?.startsWith("file://")
-                ? "file"
-                : "unknown",
-        );
-      } catch (e) {
-        console.error("[TrackPlayer] Could not get active track:", e);
-      }
-
-      // Auto-skip ke lagu berikutnya jika source error
-      // agar tidak stuck di lagu yang gagal
-      try {
-        const state = await TrackPlayer.getPlaybackState();
-        if (state.state !== State.Playing) {
-          console.warn("[TrackPlayer] Attempting skip to next after error...");
-          await TrackPlayer.skipToNext();
-        }
-      } catch {
-        // Tidak ada lagu berikutnya atau queue kosong
-      }
-    }
-  });
-
-  // Update progress setiap 500ms
+  // Setup TrackPlayer
   useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        const state = await TrackPlayer.getPlaybackState();
-        if (state.state === State.Playing) {
-          const pos = await TrackPlayer.getPosition(); // sudah detik
-          usePlayerStore.setState({ position: pos });
-        }
-      } catch {
-        // Player belum siap, skip
-      }
-    }, 500);
+    const setup = async () => {
+      if (isInitializedRef.current) return;
 
-    return () => clearInterval(interval);
+      try {
+        await TrackPlayer.setupPlayer();
+        await TrackPlayer.updateOptions({
+          capabilities: [
+            Capability.Play,
+            Capability.Pause,
+            Capability.SkipToNext,
+            Capability.SkipToPrevious,
+            Capability.Stop,
+            Capability.SeekTo,
+          ],
+          compactCapabilities: [
+            Capability.Play,
+            Capability.Pause,
+            Capability.SkipToNext,
+            Capability.SkipToPrevious,
+          ],
+        });
+        isInitializedRef.current = true;
+        console.log("[TrackPlayer] Setup complete");
+      } catch (error) {
+        console.error("[TrackPlayer] Setup failed:", error);
+      }
+    };
+
+    setup();
   }, []);
+
+  // Handle track player events
+  useTrackPlayerEvents(
+    [
+      Event.PlaybackState,
+      Event.PlaybackError,
+      Event.PlaybackQueueEnded,
+      Event.PlaybackProgressUpdated,
+    ],
+    async (event) => {
+      switch (event.type) {
+        case Event.PlaybackError:
+          const now = Date.now();
+          if (now - lastErrorTimeRef.current > 5000) {
+            lastErrorTimeRef.current = now;
+            errorCountRef.current = 0;
+          }
+
+          errorCountRef.current++;
+
+          if (errorCountRef.current <= 3) {
+            const track = await TrackPlayer.getActiveTrack();
+            console.warn("[TrackPlayer] Playback error:", {
+              uri: track?.url,
+              error: event.message,
+              attempt: errorCountRef.current,
+            });
+          }
+
+          if (errorCountRef.current < 3) {
+            setTimeout(() => {
+              TrackPlayer.skipToNext();
+            }, 1000);
+          }
+          break;
+
+        case Event.PlaybackState:
+          try {
+            const playbackState = await TrackPlayer.getPlaybackState();
+            const state = playbackState?.state;
+
+            const isPlaying = state === State.Playing;
+            setIsPlaying(isPlaying);
+
+            if (isPlaying) {
+              const position = await TrackPlayer.getPosition();
+              const duration = await TrackPlayer.getDuration();
+              setPosition(position);
+              setDuration(duration);
+            }
+          } catch (error) {
+            console.warn("[TrackPlayer] Failed to get playback state:", error);
+          }
+          break;
+
+        case Event.PlaybackProgressUpdated:
+          try {
+            const position = await TrackPlayer.getPosition();
+            setPosition(position);
+          } catch (error) {
+            // Silent fail
+          }
+          break;
+
+        case Event.PlaybackQueueEnded:
+          console.log("[TrackPlayer] Queue ended");
+          break;
+      }
+    },
+  );
+
+  // Play song dengan auto-fix untuk missing URI
+  const playSong = async (
+    song: Song,
+    queueSongs?: Song[],
+  ): Promise<boolean> => {
+    // Validasi song object
+    if (!song || !song.id) {
+      console.error("[TrackPlayer] Cannot play song: invalid song object");
+      return false;
+    }
+
+    let targetSong = song;
+
+    // Coba perbaiki jika URI missing
+    if (!targetSong.uri) {
+      console.log(
+        `[TrackPlayer] Missing URI for ${targetSong.title}, attempting to fix...`,
+      );
+      try {
+        const freshSong = await LibraryScanner.getSongById(targetSong.id);
+        if (freshSong && freshSong.uri) {
+          targetSong = freshSong;
+          console.log(
+            `[TrackPlayer] Fixed missing URI: ${targetSong.uri.substring(0, 50)}...`,
+          );
+        } else {
+          console.error(
+            `[TrackPlayer] Cannot fix missing URI for ${targetSong.title}`,
+          );
+          return false;
+        }
+      } catch (error) {
+        console.error(
+          "[TrackPlayer] Failed to fetch song from database:",
+          error,
+        );
+        return false;
+      }
+    }
+
+    const normalizedUri = normalizeUri(targetSong.uri);
+
+    if (!isValidUri(normalizedUri)) {
+      console.error(`[TrackPlayer] Invalid URI format: ${normalizedUri}`);
+      return false;
+    }
+
+    try {
+      errorCountRef.current = 0;
+
+      const playQueue = queueSongs || [targetSong];
+      const tracks = playQueue.map((s) => ({
+        id: s.id,
+        url: normalizeUri(s.uri),
+        title: s.title || "Unknown Title",
+        artist: s.artist || "Unknown Artist",
+        album: s.album || "Unknown Album",
+        artwork: s.artwork,
+        duration: s.duration || 0,
+      }));
+
+      const validTracks = tracks.filter((t) => t.url && isValidUri(t.url));
+      if (validTracks.length === 0) {
+        console.error("[TrackPlayer] No valid tracks to play");
+        return false;
+      }
+
+      const currentIndex = validTracks.findIndex((t) => t.id === targetSong.id);
+
+      await TrackPlayer.reset();
+      await TrackPlayer.add(validTracks);
+
+      if (currentIndex >= 0) {
+        await TrackPlayer.skip(currentIndex);
+      } else {
+        await TrackPlayer.skip(0);
+      }
+
+      await TrackPlayer.play();
+
+      setCurrentSong(targetSong);
+      console.log(`[TrackPlayer] Playing: ${targetSong.title}`);
+      return true;
+    } catch (error) {
+      console.error("[TrackPlayer] Failed to play song:", error);
+      return false;
+    }
+  };
+
+  const togglePlay = async () => {
+    try {
+      const playbackState = await TrackPlayer.getPlaybackState();
+      const state = playbackState?.state;
+
+      if (state === State.Playing) {
+        await TrackPlayer.pause();
+      } else if (state === State.Paused || state === State.Ready) {
+        await TrackPlayer.play();
+      } else {
+        // Jika tidak ada track yang sedang dimainkan, coba play current song
+        const { currentSong: storeSong } = usePlayerStore.getState();
+        if (storeSong) {
+          await playSong(storeSong);
+        }
+      }
+    } catch (error) {
+      console.error("[TrackPlayer] Toggle play failed:", error);
+    }
+  };
+
+  const seek = async (position: number) => {
+    try {
+      await TrackPlayer.seekTo(position);
+    } catch (error) {
+      console.error("[TrackPlayer] Seek failed:", error);
+    }
+  };
+
+  const playNext = async () => {
+    try {
+      const queue = await TrackPlayer.getQueue();
+      const currentTrack = await TrackPlayer.getActiveTrack();
+      const currentIndex = queue.findIndex((t) => t.id === currentTrack?.id);
+
+      if (currentIndex < queue.length - 1) {
+        await TrackPlayer.skipToNext();
+      } else {
+        // End of queue, maybe loop or stop
+        console.log("[TrackPlayer] End of queue");
+      }
+    } catch (error) {
+      console.error("[TrackPlayer] Skip to next failed:", error);
+    }
+  };
+
+  const playPrevious = async () => {
+    try {
+      const position = await TrackPlayer.getPosition();
+      if (position > 3) {
+        await TrackPlayer.seekTo(0);
+      } else {
+        await TrackPlayer.skipToPrevious();
+      }
+    } catch (error) {
+      console.error("[TrackPlayer] Skip to previous failed:", error);
+    }
+  };
+
+  const getPlaybackState = async () => {
+    try {
+      return await TrackPlayer.getPlaybackState();
+    } catch (error) {
+      console.error("[TrackPlayer] Get playback state failed:", error);
+      return null;
+    }
+  };
+
+  return {
+    playSong,
+    togglePlay,
+    seek,
+    playNext,
+    playPrevious,
+    getPlaybackState,
+  };
 };

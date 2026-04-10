@@ -1,82 +1,174 @@
-import { getAudioMetadata } from "@missingcore/audio-metadata";
+/**
+ * MetadataExtractor.ts - Versi Final dengan Artwork Handling yang Lebih Baik
+ */
+
+import { MediaStore, NativeSong } from "@/features/library/native/MediaStoreModule";
 import { Song } from "@/shared/types/audio";
 
-// TypeScript Fix: Pastikan array ini sesuai dengan ekspektasi library
-const TAGS = [
-  "name",
-  "artist",
-  "albumArtist",
-  "album",
-  "artwork",
-  "year",
-  "track",
-] as any; // Gunakan any jika library memiliki definisi tipe yang kaku/berbeda
-
-const uriToId = (uri: string): string => {
-  let hash = 5381;
-  for (let i = 0; i < uri.length; i++) {
-    hash = (hash * 33) ^ uri.charCodeAt(i);
-  }
-  return (hash >>> 0).toString(36);
-};
-
 class MetadataExtractor {
-  async extract(uri: string): Promise<Partial<Song>> {
-    // FIX: Tangani pemisah folder untuk Content URI (SAF)
-    const decodedUri = decodeURIComponent(uri);
-    const filename =
-      decodedUri.split("/").pop()?.split(":").pop() ?? "Unknown File";
-
-    const ext = filename.split(".").pop()?.toUpperCase() ?? "UNKNOWN";
-    const titleFromFile = filename.replace(/\.[^/.]+$/, "");
-    const isHiRes = ["FLAC", "WAV", "DSF", "DFF", "ALAC"].includes(ext);
-
+  
+  /**
+   * Extract metadata satu lagu
+   */
+  async extract(uri: string): Promise<Partial<Song> | null> {
     try {
-      // Library @missingcore/audio-metadata biasanya mendukung content:// di Android
-      const result = (await getAudioMetadata(uri, TAGS)) as any;
-      const m = result.metadata || {};
+      if (!uri) return null;
 
-      return {
-        id: uriToId(uri),
-        uri,
-        title: m.name || titleFromFile,
-        artist: m.artist || m.albumArtist || "Unknown Artist",
-        album: m.album || "Unknown Album",
-        genre: "Unknown", // Tetap "Unknown" karena library v1.3.0 belum support
-        artwork: m.artwork ?? undefined,
-        duration: 0,
+      const nativeSong = await this.findSongByUri(uri);
+      if (!nativeSong) return null;
 
-        codec: result.fileType?.toUpperCase() ?? ext,
-        sampleRate: isHiRes ? 96000 : 44100,
-        bitDepth: isHiRes ? 24 : 16,
-        bitrate: ext === "FLAC" ? 1411 : 320,
-
-        dateAdded: Date.now(),
-      };
+      return this.convertNativeToSong(nativeSong);
+      
     } catch (error) {
-      console.warn(
-        `[Metadata] Gagal extract ${filename}, menggunakan fallback.`,
-        error,
-      );
-      return {
-        id: uriToId(uri),
-        uri,
-        title: titleFromFile,
-        artist: "Unknown Artist",
-        album: "Unknown Album",
-        genre: "Unknown",
-        artwork: undefined,
-        duration: 0,
+      console.error(`[MetadataExtractor] Extract failed for ${uri}:`, error);
+      return null;
+    }
+  }
 
-        codec: ext,
-        sampleRate: isHiRes ? 96000 : 44100,
-        bitDepth: isHiRes ? 24 : 16,
-        bitrate: ext === "FLAC" ? 1411 : 320,
+  /**
+   * Extract semua lagu (Full Scan)
+   */
+  async extractAll(onProgress?: (current: number, total: number) => void): Promise<Partial<Song>[]> {
+    try {
+      console.log("[MetadataExtractor] Starting batch extractAll...");
 
-        dateAdded: Date.now(),
-      };
+      const nativeSongs = await MediaStore.queryAudioFiles();
+      const total = nativeSongs.length;
+      const results: Partial<Song>[] = [];
+
+      for (let i = 0; i < total; i++) {
+        const native = nativeSongs[i];
+        if (!native?.uri) continue;
+
+        const song = this.convertNativeToSong(native);
+        if (song.uri) {
+          results.push(song);
+        }
+
+        onProgress?.(i + 1, total);
+      }
+
+      console.log(`[MetadataExtractor] Successfully extracted ${results.length} songs from ${total} files`);
+      return results;
+
+    } catch (error) {
+      console.error("[MetadataExtractor] Batch extractAll failed:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Konversi utama dengan fokus pada Artwork
+   */
+  private convertNativeToSong(native: NativeSong): Partial<Song> {
+    const safeUri = native.uri || `content://media/external/audio/media/${native.id}`;
+
+    // === Artwork Priority (Ini yang paling penting) ===
+    const artwork = this.extractBestArtwork(native);
+
+    return {
+      id: native.id?.toString() || this.uriToId(safeUri),
+      uri: safeUri,
+      filename: native.filename || "",
+      
+      title: native.title?.trim() || this.parseTitleFromFilename(native.filename || ""),
+      artist: native.artist?.trim() || "Unknown Artist",
+      album: native.album?.trim() || "Unknown Album",
+      genre: native.genre?.trim() || "Unknown",
+      
+      folder: native.folder?.trim() || this.extractFolder(safeUri),
+      
+      // Artwork yang sudah di-normalisasi
+      artwork: artwork || undefined,
+
+      duration: Math.floor(native.duration || 0),
+      codec: native.codec || this.extractCodecFromFilename(native.filename || ""),
+      sampleRate: native.sampleRate || 0,
+      bitDepth: native.bitDepth || 0,
+      bitrate: native.bitrate || 0,
+      fileSize: native.fileSize || 0,
+      year: native.year || 0,
+      trackNumber: native.trackNumber || 0,
+      discNumber: native.discNumber || 0,
+
+      isEnriched: false,
+      dateAdded: native.dateAdded || Date.now(),
+      isHiRes: (native.sampleRate || 0) > 48000 || (native.bitDepth || 0) > 16,
+    };
+  }
+
+  /**
+   * Extract Best Artwork - Logic yang lebih kuat
+   */
+  private extractBestArtwork(native: NativeSong): string | null {
+    // Priority 1: artworkUri (dari MediaStore)
+    if (native.artworkUri?.trim()) {
+      return native.artworkUri;
+    }
+
+    // Priority 2: albumArt / thumbnail (beberapa versi MediaStore)
+    if ((native as any).albumArt?.trim()) {
+      return (native as any).albumArt;
+    }
+    if ((native as any).thumbnail?.trim()) {
+      return (native as any).thumbnail;
+    }
+
+    // Priority 3: Bisa ditambahkan di masa depan embedded artwork via FFmpeg / custom native module
+    // Untuk sekarang kita return null dulu
+
+    return null;
+  }
+
+  // === Utility Methods (tidak berubah banyak) ===
+
+  private parseTitleFromFilename(filename: string): string {
+    if (!filename) return "Unknown Title";
+    return filename
+      .replace(/\.[^/.]+$/, "")
+      .replace(/\s*\([^)]*\)\s*$/, "")
+      .replace(/\s*\[[^\]]*\]\s*$/, "")
+      .trim() || "Unknown Title";
+  }
+
+  private extractCodecFromFilename(filename: string): string {
+    const ext = filename.split('.').pop()?.toUpperCase() || "";
+    const codecMap: Record<string, string> = {
+      'MP3': 'MP3', 'FLAC': 'FLAC', 'WAV': 'WAV', 'M4A': 'AAC',
+      'AAC': 'AAC', 'OGG': 'OGG', 'OPUS': 'OPUS', 'DSF': 'DSD',
+      'ALAC': 'ALAC', 'APE': 'APE',
+    };
+    return codecMap[ext] || ext || "UNKNOWN";
+  }
+
+  private extractFolder(uri: string): string {
+    try {
+      const parts = uri.split(/[/\\]/);
+      for (let i = parts.length - 2; i >= 0; i--) {
+        if (parts[i] && !parts[i].includes('.')) return parts[i];
+      }
+      return "Music";
+    } catch {
+      return "Music";
+    }
+  }
+
+  private uriToId(uri: string): string {
+    let hash = 5381;
+    for (let i = 0; i < uri.length; i++) {
+      hash = (hash * 33) ^ uri.charCodeAt(i);
+    }
+    return (hash >>> 0).toString(36);
+  }
+
+  private async findSongByUri(uri: string): Promise<NativeSong | null> {
+    try {
+      const allSongs = await MediaStore.queryAudioFiles();
+      return allSongs.find(song => song.uri === uri) || null;
+    } catch {
+      return null;
     }
   }
 }
 
-export default new MetadataExtractor();
+export default new MetadataExtractor(); 

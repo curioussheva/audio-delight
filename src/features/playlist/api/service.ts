@@ -327,6 +327,9 @@ class PlaylistService {
       rating: row.rating || 0,
       playCount: row.playCount || 0,
       lastPlayed: row.lastPlayed,
+      isEnriched: false,
+      lastSeenAt: Date.now(),
+      isFavorite: false,
     };
   }
 

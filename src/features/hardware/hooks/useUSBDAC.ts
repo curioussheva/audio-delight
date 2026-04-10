@@ -1,14 +1,30 @@
-// src/hooks/useUSBDAC.ts
+// src/features/hardware/hooks/useUSBDAC.ts
 import { useState, useEffect, useCallback } from "react";
-import { NativeModules, Platform } from "react-native";
-import { DACInfo, DACConfig } from "@/shared/types/dac";
+import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import USBDACService from "@/features/hardware/api/usb"; // Import service kita
+import USBDACService, {
+  DACInfo,
+  DACConfig,
+  ExclusiveModeResult,
+} from "../api/USBDACModule";
 
-const { USBDACModule } = NativeModules;
 const STORAGE_KEY = "@pristineaudio/dac_config";
 
-export const useUSBDAC = () => {
+export interface UseUSBDACReturn {
+  dacs: DACInfo[];
+  currentDAC: DACInfo | null;
+  isExclusiveMode: boolean;
+  loading: boolean;
+  config: DACConfig | null;
+  error: string | null;
+  scanDACs: () => Promise<void>;
+  selectDAC: (dacId: string) => Promise<void>;
+  toggleExclusiveMode: () => Promise<boolean>;
+  setSampleRate: (rate: number | "auto") => Promise<boolean>;
+  checkExclusiveMode: () => Promise<boolean>;
+}
+
+export const useUSBDAC = (): UseUSBDACReturn => {
   const [dacs, setDacs] = useState<DACInfo[]>([]);
   const [currentDAC, setCurrentDAC] = useState<DACInfo | null>(null);
   const [isExclusiveMode, setIsExclusiveMode] = useState(false);
@@ -16,15 +32,13 @@ export const useUSBDAC = () => {
   const [config, setConfig] = useState<DACConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // 1. Integrasi dengan USBDACService Listener
+  // Load saved config dan subscribe ke events
   useEffect(() => {
     loadSavedConfig();
 
-    // Subscribe ke perubahan hardware dari Service
     const unsubscribe = USBDACService.addListener((dac) => {
       if (dac) {
         setCurrentDAC(dac);
-        // Jika DAC dicolok dan kita punya config tersimpan untuk ID ini, aktifkan
         if (config?.dacId === dac.id && config.exclusiveMode) {
           activateExclusiveMode(dac.id);
         }
@@ -34,12 +48,19 @@ export const useUSBDAC = () => {
       }
     });
 
+    const unsubExclusive = USBDACService.addExclusiveModeListener((active) => {
+      setIsExclusiveMode(active);
+    });
+
     if (Platform.OS === "android") {
       scanDACs();
     }
 
-    return () => unsubscribe();
-  }, [config?.dacId]); // Re-run jika config ID berubah
+    return () => {
+      unsubscribe();
+      unsubExclusive();
+    };
+  }, [config?.dacId]);
 
   const loadSavedConfig = async () => {
     try {
@@ -47,10 +68,7 @@ export const useUSBDAC = () => {
       if (saved) {
         const parsed = JSON.parse(saved);
         setConfig(parsed);
-        if (parsed.exclusiveMode) {
-          // Cek apakah mode exclusive masih aktif
-          checkExclusiveMode();
-        }
+        checkExclusiveMode();
       }
     } catch (error) {
       console.error("Failed to load DAC config:", error);
@@ -67,14 +85,9 @@ export const useUSBDAC = () => {
   };
 
   const scanDACs = useCallback(async () => {
-    if (!USBDACModule) {
-      setError("USBDACModule not available");
-      return;
-    }
-
     setLoading(true);
     try {
-      const detected = await USBDACService.detectDACs(); // Gunakan service agar logic parsing seragam
+      const detected = await USBDACService.detectDACs();
       setDacs(detected);
 
       if (detected.length === 1 && !currentDAC) {
@@ -93,33 +106,32 @@ export const useUSBDAC = () => {
       const selected = dacs.find((d) => d.id === dacId);
       if (!selected) return;
 
-      // 2. Default Config yang lebih Audiophile-focused
+      const recommended = await USBDACService.getRecommendedSettings(dacId);
+
       const newConfig: DACConfig = {
         dacId,
-        exclusiveMode: true,
-        sampleRate: "auto",
-        bitDepth: selected.bitDepths.includes(32) ? 32 : 24,
-        bufferSize: 512, // Buffer sedikit lebih besar untuk stabilitas Hi-Res
-        dsdMode: selected.capabilities.dsdNative
-          ? "native"
-          : selected.capabilities.dsdDoP
-            ? "dop"
-            : "off",
-        mqaMode: selected.capabilities.mqaRenderer ? "renderer" : "off",
+        exclusiveMode: recommended.exclusiveModeRecommended,
+        sampleRate: recommended.sampleRate,
+        bitDepth: recommended.bitDepth as 16 | 24 | 32,
+        bufferSize: recommended.bufferSize,
+        dsdMode: recommended.dsdMode as "native" | "dop" | "off",
+        mqaMode: "off",
         volumeControl: "hardware",
       };
 
       await saveConfig(newConfig);
       setCurrentDAC(selected);
-      await activateExclusiveMode(dacId);
+
+      if (newConfig.exclusiveMode) {
+        await activateExclusiveMode(dacId);
+      }
     },
     [dacs],
   );
 
   const checkExclusiveMode = useCallback(async () => {
-    if (!USBDACModule) return false;
     try {
-      const active = await USBDACModule.isExclusiveModeActive();
+      const active = await USBDACService.isExclusiveModeActive();
       setIsExclusiveMode(active);
       return active;
     } catch {
@@ -128,28 +140,22 @@ export const useUSBDAC = () => {
   }, []);
 
   const activateExclusiveMode = useCallback(
-    async (dacId: string) => {
-      if (!USBDACModule) return false;
-
+    async (dacId: string): Promise<boolean> => {
       setLoading(true);
       setError(null);
       try {
-        const result = await USBDACModule.setExclusiveMode(dacId, true);
+        const result = await USBDACService.setExclusiveMode(dacId, true);
 
-        if (result?.success) {
+        if (result.success) {
           setIsExclusiveMode(true);
-
-          // Update config
           if (config) {
             await saveConfig({ ...config, exclusiveMode: true });
           }
-
           return true;
         }
         return false;
       } catch (error: any) {
         setError(error.message);
-        console.error("Failed to activate exclusive mode:", error);
         return false;
       } finally {
         setLoading(false);
@@ -158,45 +164,38 @@ export const useUSBDAC = () => {
     [config],
   );
 
-  const deactivateExclusiveMode = useCallback(async () => {
-    if (!USBDACModule || !currentDAC) return false;
+  const deactivateExclusiveMode = useCallback(async (): Promise<boolean> => {
+    if (!currentDAC) return false;
 
     setLoading(true);
     setError(null);
     try {
-      const result = await USBDACModule.setExclusiveMode(currentDAC.id, false);
+      const result = await USBDACService.setExclusiveMode(currentDAC.id, false);
 
-      if (result?.success) {
+      if (result.success) {
         setIsExclusiveMode(false);
-
-        // Update config
         if (config) {
           await saveConfig({ ...config, exclusiveMode: false });
         }
-
         return true;
       }
       return false;
     } catch (error: any) {
       setError(error.message);
-      console.error("Failed to deactivate exclusive mode:", error);
       return false;
     } finally {
       setLoading(false);
     }
   }, [currentDAC, config]);
 
-  const toggleExclusiveMode = useCallback(async () => {
+  const toggleExclusiveMode = useCallback(async (): Promise<boolean> => {
     if (!currentDAC) {
       setError("No DAC selected");
       return false;
     }
-
-    if (isExclusiveMode) {
-      return await deactivateExclusiveMode();
-    } else {
-      return await activateExclusiveMode(currentDAC.id);
-    }
+    return isExclusiveMode
+      ? await deactivateExclusiveMode()
+      : await activateExclusiveMode(currentDAC.id);
   }, [
     currentDAC,
     isExclusiveMode,
@@ -204,29 +203,19 @@ export const useUSBDAC = () => {
     deactivateExclusiveMode,
   ]);
 
-  // Set sample rate
   const setSampleRate = useCallback(
-    async (rate: number | "auto") => {
+    async (rate: number | "auto"): Promise<boolean> => {
       if (!config || !currentDAC) return false;
 
-      // Jika 'auto', biarkan sistem yang menentukan
       if (rate !== "auto") {
-        // Cek apakah sample rate didukung
         if (!currentDAC.sampleRates?.includes(rate)) {
           setError(`Sample rate ${rate}Hz not supported by DAC`);
           return false;
         }
       }
 
-      const newConfig = {
-        ...config,
-        sampleRate: rate,
-      };
-
+      const newConfig = { ...config, sampleRate: rate };
       await saveConfig(newConfig);
-
-      // Di sini kita perlu memberi tahu TrackPlayer untuk mengubah sample rate
-      // Ini akan diimplementasikan nanti
 
       return true;
     },
@@ -237,7 +226,6 @@ export const useUSBDAC = () => {
     dacs,
     currentDAC,
     isExclusiveMode,
-    outputMode: isExclusiveMode ? "exclusive" : "system",
     loading,
     config,
     error,

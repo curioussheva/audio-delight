@@ -4,7 +4,11 @@ import type {
   ThemeId,
   ThemeSpacing,
   ThemeShadows,
+  ThemeTypography,
 } from "./themes/types";
+
+import { BASE_TYPOGRAPHY } from "./themes/base";
+
 import { LIGHT_GRAY, PURE_WHITE } from "./themes/light";
 import { MIDNIGHT_BLUE, CHARCOAL_BLACK } from "./themes/dark";
 import { FOREST_GREEN, OCEAN_WAVE } from "./themes/nature";
@@ -88,6 +92,9 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
         error: "#EF4444",
         info: "#3B82F6",
       },
+      warning: {
+        500: "#F59E0B",
+      },
       border: { medium: "#334155", light: "#1F2A3A" },
     },
     spacing: SPACING,
@@ -95,6 +102,7 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
       ...BASE_SHADOWS,
       xl: { ...BASE_SHADOWS.xl!, shadowColor: "#00D4AA", shadowOpacity: 0.3 },
     },
+    typography: BASE_TYPOGRAPHY,
   },
 
   obsidian: {
@@ -130,10 +138,14 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
         error: "#F87171",
         info: "#22D3EE",
       },
+      warning: {
+        500: "#F59E0B",
+      },
       border: { medium: "#404040", light: "#252525" },
     },
     spacing: SPACING,
     shadows: BASE_SHADOWS,
+    typography: BASE_TYPOGRAPHY,
   },
 
   "light-elegant": {
@@ -169,10 +181,14 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
         error: "#EF4444",
         info: "#2563EB",
       },
+      warning: {
+        500: "#F59E0B",
+      },
       border: { medium: "#E2E8F0", light: "#F1F5F9" },
     },
     spacing: SPACING,
     shadows: BASE_SHADOWS,
+    typography: BASE_TYPOGRAPHY,
   },
 
   "light-silver": {
@@ -208,10 +224,14 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
         error: "#EF4444",
         info: "#0EA5E9",
       },
+      warning: {
+        500: "#F59E0B",
+      },
       border: { medium: "#D4D4D8", light: "#E4E4E7" },
     },
     spacing: SPACING,
     shadows: BASE_SHADOWS,
+    typography: BASE_TYPOGRAPHY,
   },
 
   "light-gray": LIGHT_GRAY,

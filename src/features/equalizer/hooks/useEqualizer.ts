@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
 import { ALL_PRESETS } from "@/features/equalizer/constants/presets";
@@ -6,30 +6,40 @@ import { ALL_PRESETS } from "@/features/equalizer/constants/presets";
 export const useEqualizer = () => {
   const { audioMode } = usePlayerStore();
 
-  // Ambil state dan action dari equalizerStore
   const {
     bands,
     activePresetId,
     customPresets,
+    isEQEnabled,
+    bassStrength,
+    virtualizerLevel,
+    reverbPreset,
+
+    // Actions dari store
     setBandGain,
     applyPreset,
     saveCustomPreset,
     deleteCustomPreset,
-    bassStrength,
-    virtualizerLevel,
     setBassBoost,
     setVirtualizer,
+    setReverb,
+    toggleEQ, // ← WAJIB diambil dari store
   } = useEqualizerStore();
 
-  // Helper untuk mengecek apakah DSP boleh dimodifikasi
   const isDSPDisabled = audioMode === "bit-perfect";
+
+  // Toggle EQ (untuk Switch)
+  const handleToggleEQ = useCallback(() => {
+    if (isDSPDisabled) {
+      console.warn("⚠️ DSP is locked in Bit-Perfect mode");
+      return;
+    }
+    toggleEQ(); // ← Sekarang aman
+  }, [isDSPDisabled, toggleEQ]);
 
   const updateBandGain = useCallback(
     (index: number, gain: number) => {
-      // Blokir jika mode Bit-Perfect aktif
       if (isDSPDisabled) return;
-
-      // Panggil store (store sudah otomatis memanggil AudioEngine)
       setBandGain(index, gain);
     },
     [isDSPDisabled, setBandGain],
@@ -38,27 +48,59 @@ export const useEqualizer = () => {
   const handleApplyPreset = useCallback(
     (presetId: string) => {
       if (isDSPDisabled) return;
-
       applyPreset(presetId);
     },
     [isDSPDisabled, applyPreset],
   );
 
-  // Gabungkan preset bawaan dan preset buatan user untuk ditampilkan di UI
-  const availablePresets = [...ALL_PRESETS, ...customPresets];
+  const handleSetBass = useCallback(
+    (val: number) => {
+      if (isDSPDisabled) return;
+      setBassBoost(val);
+    },
+    [isDSPDisabled, setBassBoost],
+  );
+
+  const handleSetVirtualizer = useCallback(
+    (val: number) => {
+      if (isDSPDisabled) return;
+      setVirtualizer(val);
+    },
+    [isDSPDisabled, setVirtualizer],
+  );
+
+  const handleSetReverb = useCallback(
+    (presetIdx: number) => {
+      if (isDSPDisabled) return;
+      setReverb(presetIdx);
+    },
+    [isDSPDisabled, setReverb],
+  );
+
+  const allPresets = useMemo(
+    () => [...ALL_PRESETS, ...customPresets],
+    [customPresets],
+  );
 
   return {
+    // States
+    isEQEnabled,
     isDSPDisabled,
     currentBands: bands,
     activePresetId,
-    allPresets: availablePresets,
+    allPresets,
+    bassStrength,
+    virtualizerLevel,
+    reverbPreset,
+
+    // Actions
+    toggleEQ: handleToggleEQ, // ← Ini yang dipakai di Screen
     updateBandGain,
     applyPreset: handleApplyPreset,
     savePreset: saveCustomPreset,
     deletePreset: deleteCustomPreset,
-    bassStrength,
-    virtualizerLevel,
-    setBassBoost,
-    setVirtualizer,
+    setBassBoost: handleSetBass,
+    setVirtualizer: handleSetVirtualizer,
+    setReverb: handleSetReverb,
   };
 };

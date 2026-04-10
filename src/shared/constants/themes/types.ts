@@ -2,11 +2,28 @@
 
 export interface ThemeColors {
   primary: {
+    50?: string;
+    100?: string;
+    200?: string;
+    300?: string;
+    400?: string;
     500: string;
     600?: string;
+    700?: string;
+    800?: string;
+    900?: string;
   };
   secondary?: {
+    50?: string;
+    100?: string;
+    200?: string;
+    300?: string;
+    400?: string;
     500: string;
+    600?: string;
+    700?: string;
+    800?: string;
+    900?: string;
   };
   background: {
     primary: string;
@@ -32,16 +49,24 @@ export interface ThemeColors {
     secondary?: string;
   };
   status: {
-    success?: string;
+    success: string;
     warning?: string;
     error: string;
     info?: string;
   };
+  warning?: Record<number, string>;
   border: {
     medium: string;
     light?: string;
     primary?: string;
-    heavy?: string; // Tambahkan heavy untuk tema cyber
+    heavy?: string;
+  };
+  // FIX: Tambahkan properti gradient karena dipanggil di cyber.ts, dark.ts, dll.
+  gradient?: {
+    primary: string[];
+    secondary?: string[];
+    surface?: string[];
+    accent?: string[];
   };
 }
 
@@ -64,8 +89,16 @@ export interface ThemeTypography {
     normal: number;
     loose: number;
   };
-  h1?: { fontSize: number; fontWeight: string; lineHeight: number }; // Tambahkan untuk base.ts
+  h1?: { fontSize: number; fontWeight: string; lineHeight: number };
   h2?: { fontSize: number; fontWeight: string; lineHeight: number };
+  h3?: { fontSize: number; fontWeight: string; lineHeight: number };
+  h4?: { fontSize: number; fontWeight: string; lineHeight: number };
+  // Use body1/body2 for more granular control
+  body1?: { fontSize: number; fontWeight: string; lineHeight: number };
+  body2?: { fontSize: number; fontWeight: string; lineHeight: number };
+  caption?: { fontSize: number; fontWeight: string; lineHeight: number };
+  button?: { fontSize: number; fontWeight: string; lineHeight: number };
+  // Keep body as alias/optional for backward compatibility if needed
   body?: { fontSize: number; lineHeight: number };
 }
 
@@ -87,6 +120,7 @@ export interface ThemeShadows {
   xl?: object;
 }
 
+// Tambahkan ID tema baru jika ada yang belum terdaftar agar tidak error di objek tema
 export type ThemeId =
   | "deep-navy"
   | "obsidian"
@@ -106,9 +140,10 @@ export type ThemeId =
 export interface Theme {
   id: ThemeId;
   name: string;
+  description?: string; // ✅ Add this (optional)
   isDark: boolean;
   colors: ThemeColors;
-  typography?: ThemeTypography;
-  spacing?: ThemeSpacing;
-  shadows?: ThemeShadows;
+  typography: ThemeTypography;
+  spacing: ThemeSpacing;
+  shadows: ThemeShadows;
 }

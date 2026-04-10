@@ -20,9 +20,6 @@ export default function DrawerLayout() {
         drawerInactiveTintColor: colors.text.secondary,
 
         // ← Tambahkan ini untuk membantu safe area di dalam Drawer + Tabs
-        sceneContainerStyle: {
-          backgroundColor: colors.background.primary,
-        },
       }}
     >
       <Drawer.Screen
@@ -32,15 +29,15 @@ export default function DrawerLayout() {
           drawerIcon: ({ color }) => <Music size={22} color={color} />,
         }}
       />
-
-      <Drawer.Screen
+      {/*
+    //  <Drawer.Screen
         name="analyzer"
         options={{
           title: "FLAC Analyzer",
           drawerIcon: ({ color }) => <Activity size={22} color={color} />,
         }}
       />
-
+*/}
       <Drawer.Screen
         name="settings"
         options={{

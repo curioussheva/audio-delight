@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import {
   audioAnalyzer,
   AnalysisResult,
@@ -8,12 +8,15 @@ import {
   visualizerEmitter,
   startVisualizer,
   stopVisualizer,
+  subscribeToFft, // Gunakan helper yang sudah dibuat
+  FftData,
 } from "@/features/visualizer/native/VisualizerBridge";
 
 interface UseAudioAnalyzerReturn {
   isAnalyzing: boolean;
   analysisError: string | null;
   spectrumData: number[];
+  isVisualizerActive: boolean; // ✅ TAMBAH: Status visualizer
   analyzeSingle: (
     song: Song,
     options?: { force?: boolean },
@@ -22,10 +25,13 @@ interface UseAudioAnalyzerReturn {
     songs: Song[],
     options?: { force?: boolean },
   ) => Promise<AnalysisResult[]>;
-  startLiveVisualizer: (sessionId: number) => Promise<void>;
+  startLiveVisualizer: (sessionId: number) => Promise<boolean>; // ✅ Return boolean
+  stopLiveVisualizer: () => void; // ✅ TAMBAH: Stop function
   getAnalysis: (songId: string) => AnalysisResult | undefined;
   clearResults: () => void;
 }
+
+const EMPTY_SPECTRUM = new Array(128).fill(0); // ✅ Konstanta untuk reset
 
 export const useAudioAnalyzer = (): UseAudioAnalyzerReturn => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -33,42 +39,83 @@ export const useAudioAnalyzer = (): UseAudioAnalyzerReturn => {
   const [results, setResults] = useState<Map<string, AnalysisResult>>(
     new Map(),
   );
-  const [spectrumData, setSpectrumData] = useState<number[]>([]);
+  const [spectrumData, setSpectrumData] = useState<number[]>(EMPTY_SPECTRUM);
+  const [isVisualizerActive, setIsVisualizerActive] = useState(false); // ✅ Track status
 
-  // ─── Live Visualizer Listener ───────────────────────────────────────
-  useEffect(() => {
-    if (!visualizerEmitter) return;
+  // ✅ GUNAKAN REF untuk tracking cleanup dan session
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+  const currentSessionRef = useRef<number | null>(null);
 
-    const subscription = visualizerEmitter.addListener(
-      "onFftData",
-      (data: number[]) => {
-        setSpectrumData(data);
-      },
-    );
-
-    // Cleanup on unmount
-    return () => {
-      subscription.remove();
-      stopVisualizer();
-    };
+  // ─── Cleanup Function ───────────────────────────────────────────────
+  const cleanupVisualizer = useCallback(() => {
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current();
+      unsubscribeRef.current = null;
+    }
+    stopVisualizer();
+    setSpectrumData(EMPTY_SPECTRUM);
+    setIsVisualizerActive(false);
+    currentSessionRef.current = null;
   }, []);
+
+  // ✅ CLEANUP SAAT UNMOUNT
+  useEffect(() => {
+    return () => {
+      cleanupVisualizer();
+    };
+  }, [cleanupVisualizer]);
 
   // ─── Live Visualizer Control ────────────────────────────────────────
   const startLiveVisualizer = useCallback(
-    async (sessionId: number): Promise<void> => {
+    async (sessionId: number): Promise<boolean> => {
+      // ✅ VALIDASI
       if (!sessionId || sessionId <= 0) {
-        console.warn("[useAudioAnalyzer] Invalid session ID for visualizer");
-        return;
+        console.warn("[useAudioAnalyzer] Invalid session ID:", sessionId);
+        return false;
       }
 
+      // ✅ PREVENT DOUBLE START - cleanup existing dulu
+      if (currentSessionRef.current === sessionId) {
+        console.log(
+          "[useAudioAnalyzer] Visualizer already active for session",
+          sessionId,
+        );
+        return true; // Sudah aktif untuk session ini
+      }
+
+      cleanupVisualizer();
+
       try {
-        await startVisualizer(sessionId);
+        // ✅ SUBSCRIBE DULU sebelum start (tidak miss data awal)
+        unsubscribeRef.current = subscribeToFft((data: FftData) => {
+          setSpectrumData(data);
+        });
+
+        const success = await startVisualizer(sessionId);
+
+        if (success) {
+          currentSessionRef.current = sessionId;
+          setIsVisualizerActive(true);
+          return true;
+        } else {
+          // Start failed, cleanup subscription
+          cleanupVisualizer();
+          return false;
+        }
       } catch (err) {
         console.error("[useAudioAnalyzer] Failed to start visualizer:", err);
+        cleanupVisualizer();
+        return false;
       }
     },
-    [],
+    [cleanupVisualizer],
   );
+
+  // ✅ TAMBAH: Stop function yang bisa dipanggil consumer
+  const stopLiveVisualizer = useCallback(() => {
+    console.log("[useAudioAnalyzer] Stopping visualizer");
+    cleanupVisualizer();
+  }, [cleanupVisualizer]);
 
   // ─── Static File Analysis ───────────────────────────────────────────
   const analyzeSingle = useCallback(
@@ -81,7 +128,6 @@ export const useAudioAnalyzer = (): UseAudioAnalyzerReturn => {
         return null;
       }
 
-      // Skip if already analyzed and not forced
       if (!force && results.has(song.id)) {
         return results.get(song.id)!;
       }
@@ -123,15 +169,14 @@ export const useAudioAnalyzer = (): UseAudioAnalyzerReturn => {
       setAnalysisError(null);
 
       try {
-        // Filter out already analyzed songs unless force=true
         const songsToAnalyze = force
           ? songs
           : songs.filter((s) => !results.has(s.id));
 
         if (songsToAnalyze.length === 0) {
           return songs
-            .map((s) => results.get(s.id)!)
-            .filter(Boolean) as AnalysisResult[];
+            .map((s) => results.get(s.id))
+            .filter((r): r is AnalysisResult => r !== undefined);
         }
 
         const batchResults = await audioAnalyzer.batchAnalyze(songsToAnalyze);
@@ -142,12 +187,15 @@ export const useAudioAnalyzer = (): UseAudioAnalyzerReturn => {
           return next;
         });
 
-        // Return results for all requested songs (including cached ones)
-        return songs.map(
-          (song) =>
-            results.get(song.id) ||
-            batchResults.find((r) => r.songId === song.id)!,
-        );
+        // ✅ FIX: Return semua hasil (cached + baru)
+        return songs
+          .map((song) => {
+            const cached = results.get(song.id);
+            if (cached) return cached;
+            const fresh = batchResults.find((r) => r.songId === song.id);
+            return fresh!;
+          })
+          .filter((r): r is AnalysisResult => r !== undefined);
       } catch (err: any) {
         const message = err?.message || "Batch analysis failed";
         setAnalysisError(message);
@@ -176,9 +224,11 @@ export const useAudioAnalyzer = (): UseAudioAnalyzerReturn => {
       isAnalyzing,
       analysisError,
       spectrumData,
+      isVisualizerActive, // ✅ Export status
       analyzeSingle,
       analyzeBatch,
       startLiveVisualizer,
+      stopLiveVisualizer, // ✅ Export stop function
       getAnalysis,
       clearResults,
     }),
@@ -186,9 +236,11 @@ export const useAudioAnalyzer = (): UseAudioAnalyzerReturn => {
       isAnalyzing,
       analysisError,
       spectrumData,
+      isVisualizerActive,
       analyzeSingle,
       analyzeBatch,
       startLiveVisualizer,
+      stopLiveVisualizer,
       getAnalysis,
       clearResults,
     ],

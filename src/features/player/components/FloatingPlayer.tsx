@@ -143,7 +143,8 @@ export default function FloatingPlayer() {
 
               {/* META ROW - SUDAH DIPERBAIKI */}
               <View style={s.metaRow}>
-                {currentSong.bitDepth && currentSong.bitDepth > 16 && (
+                {/* HI-RES Badge */}
+                {currentSong?.bitDepth > 16 && (
                   <View
                     style={[
                       s.hiResBadge,
@@ -158,24 +159,13 @@ export default function FloatingPlayer() {
                   </View>
                 )}
 
+                {/* Artist */}
                 <Text
                   style={[s.artist, { color: colors.text.secondary }]}
                   numberOfLines={1}
                 >
-                  {currentSong.artist}
+                  {currentSong?.artist || "Unknown Artist"}
                 </Text>
-
-                {currentSong.album && (
-                  <>
-                    <Text style={s.separator}>•</Text>
-                    <Text
-                      style={[s.artist, { color: colors.text.secondary }]}
-                      numberOfLines={1}
-                    >
-                      {currentSong.album}
-                    </Text>
-                  </>
-                )}
               </View>
             </Pressable>
 
@@ -299,16 +289,16 @@ const s = StyleSheet.create({
     alignItems: "center",
     gap: 5,
     marginTop: 2,
-    flexWrap: "wrap",
+    flexWrap: "wrap", // penting agar tidak overflow
+  },
+  separator: {
+    color: "#888",
+    marginHorizontal: 4,
+    fontSize: 12,
   },
   artist: {
     fontSize: 12,
     flexShrink: 1,
-  },
-  separator: {
-    color: "#888", // ← Hardcode dulu (aman)
-    marginHorizontal: 4,
-    fontSize: 12,
   },
   hiResBadge: {
     borderWidth: 1,

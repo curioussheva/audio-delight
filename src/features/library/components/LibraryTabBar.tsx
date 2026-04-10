@@ -21,7 +21,7 @@ import {
 } from "lucide-react-native";
 
 import { useTheme } from "@/context/ThemeContext";
-import type { LibraryTab } from "../store/libraryStore";
+import type { LibraryTab } from "../types/scan";
 
 // ── Tab Configuration ────────────────────────────────────────────────────────
 export const TABS: { id: LibraryTab; label: string; icon: any }[] = [
@@ -37,21 +37,28 @@ export const TABS: { id: LibraryTab; label: string; icon: any }[] = [
 interface Props {
   activeTab: LibraryTab;
   onTabChange: (tab: LibraryTab) => void;
-  isScanning: boolean;
   scanProgress: number;
-  scanTotal?: number;
-  onRefresh: () => void;
+  scanTotal: number;
+  isScanning: boolean;
+  isEnriching?: boolean;
+  enrichProgress?: number;
+  enrichTotal?: number;
   trackCount: number;
+  onRefresh?: () => void;
 }
 
-export const LibraryTabBar: React.FC<Props> = ({
+export const LibraryTabBar = ({
   activeTab,
   onTabChange,
-  isScanning,
   scanProgress,
-  scanTotal = 0,
+  scanTotal,
+  isScanning,
+  isEnriching = false,
+  enrichProgress = 0,
+  enrichTotal = 0,
+  trackCount,
   onRefresh,
-}) => {
+}: Props) => {
   const { theme } = useTheme();
   const { colors } = theme;
   const scrollRef = useRef<ScrollView>(null);
@@ -79,26 +86,36 @@ export const LibraryTabBar: React.FC<Props> = ({
       style={[styles.container, { backgroundColor: colors.background.primary }]}
     >
       {/* Scan Status Pill (Hanya muncul saat scanning) */}
-      {isScanning && (
+      {(isScanning || isEnriching) && (
         <View
           style={[
             styles.scanOverlay,
             { backgroundColor: colors.background.secondary },
           ]}
         >
-          <View style={styles.scanInfo}>
-            <ActivityIndicator
-              size="small"
-              color={colors.primary[500]}
-              style={{ transform: [{ scale: 0.8 }] }}
-            />
-            <Text style={[styles.scanText, { color: colors.text.secondary }]}>
-              {scanTotal > 0
-                ? `Indexing: ${scanProgress}/${scanTotal}`
-                : "Analyzing Storage..."}
-            </Text>
-          </View>
-          {scanTotal > 0 && (
+          {/* Scan progress */}
+          {isScanning && (
+            <View style={styles.progressRow}>
+              <ActivityIndicator
+                size="small"
+                color={colors.primary[500]}
+                style={{ transform: [{ scale: 0.8 }] }}
+              />
+              <Text style={[styles.scanText, { color: colors.text.secondary }]}>
+                {scanTotal > 0
+                  ? `Scanning ${scanProgress} / ${scanTotal} files`
+                  : "Discovering files..."}
+              </Text>
+              {scanTotal > 0 && (
+                <Text style={[styles.pctText, { color: colors.primary[500] }]}>
+                  {Math.floor((scanProgress / scanTotal) * 100)}%
+                </Text>
+              )}
+            </View>
+          )}
+
+          {/* Progress bar scan */}
+          {isScanning && scanTotal > 0 && (
             <View
               style={[
                 styles.progressTrack,
@@ -110,7 +127,53 @@ export const LibraryTabBar: React.FC<Props> = ({
                   styles.progressFill,
                   {
                     backgroundColor: colors.primary[500],
-                    width: `${progressPercent}%`,
+                    width: `${Math.floor((scanProgress / scanTotal) * 100)}%`,
+                  },
+                ]}
+              />
+            </View>
+          )}
+
+          {/* Enrichment progress */}
+          {isEnriching && (
+            <View style={[styles.progressRow, isScanning && { marginTop: 8 }]}>
+              <ActivityIndicator
+                size="small"
+                color={colors.accent?.purple ?? "#8B5CF6"}
+                style={{ transform: [{ scale: 0.8 }] }}
+              />
+              <Text style={[styles.scanText, { color: colors.text.secondary }]}>
+                {enrichTotal > 0
+                  ? `Enriching ${enrichProgress} / ${enrichTotal} tracks`
+                  : "Reading audio metadata..."}
+              </Text>
+              {enrichTotal > 0 && (
+                <Text
+                  style={[
+                    styles.pctText,
+                    { color: colors.accent?.purple ?? "#8B5CF6" },
+                  ]}
+                >
+                  {Math.floor(((enrichProgress ?? 0) / enrichTotal) * 100)}%
+                </Text>
+              )}
+            </View>
+          )}
+
+          {/* Progress bar enrich */}
+          {isEnriching && (enrichTotal ?? 0) > 0 && (
+            <View
+              style={[
+                styles.progressTrack,
+                { backgroundColor: colors.background.tertiary, marginTop: 4 },
+              ]}
+            >
+              <View
+                style={[
+                  styles.progressFill,
+                  {
+                    backgroundColor: colors.accent?.purple ?? "#8B5CF6",
+                    width: `${Math.floor(((enrichProgress ?? 0) / (enrichTotal ?? 1)) * 100)}%`,
                   },
                 ]}
               />
@@ -243,5 +306,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginLeft: 4,
+  },
+  progressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  pctText: {
+    fontSize: 11,
+    fontWeight: "800",
+    marginLeft: "auto",
   },
 });

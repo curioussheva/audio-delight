@@ -1,3 +1,4 @@
+// src/features/library/components/AlbumGrid.tsx
 import React, { memo, useState, useMemo, useCallback } from "react";
 import {
   View,
@@ -8,85 +9,170 @@ import {
   Dimensions,
   Platform,
 } from "react-native";
+import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
 import {
-  Library,
   ChevronLeft,
   Play,
   Shuffle,
   Heart,
-  Music2,
   Disc3,
   AudioLines,
 } from "lucide-react-native";
-import { useTheme } from "@/context/ThemeContext";
+
+import { useTheme } from "@/shared/context/ThemeContext";
 import type { MediaTrack } from "../store/libraryStore";
 import { formatTime } from "@/shared/utils/time";
 import QualityBadge from "@/shared/components/ui/QualityBadge";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const COLS = 2;
-const H_PAD = 20; // Padding lebih luas untuk kesan premium
+const H_PAD = 20;
 const TILE_GAP = 16;
 const TILE_SIZE = (SCREEN_WIDTH - H_PAD * 2 - TILE_GAP) / COLS;
 
-// ── AlbumTile ─────────────────────────────────────────────────────────────────
-const AlbumTile = memo(({ item, onPress, colors }: any) => {
-  const handlePress = useCallback(() => {
-    if (Platform.OS !== "web")
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onPress(item);
-  }, [item, onPress]);
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-  return (
-    <TouchableOpacity
-      onPress={handlePress}
-      activeOpacity={0.8}
-      style={styles.tile}
-    >
-      <View
-        style={[
-          styles.artworkContainer,
-          { backgroundColor: colors.background.secondary },
-        ]}
+interface Album {
+  id: string;
+  name: string;
+  artist: string;
+  artwork?: string | null;
+  count: number;
+  duration: number;
+}
+
+interface AlbumGridProps {
+  tracks: MediaTrack[];
+  currentTrackId?: string;
+  onSongPress: (track: MediaTrack, queue: MediaTrack[]) => void;
+  onToggleFavorite?: (songId: string) => Promise<boolean>;
+  isFavorite?: (songId: string) => boolean;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const getGroupedAlbums = (tracks: MediaTrack[]): Album[] => {
+  if (!tracks?.length) return [];
+
+  const map = new Map<string, Album>();
+
+  tracks.forEach((track) => {
+    const key = `${track.album || "Unknown Album"}__${track.artist || "Unknown Artist"}`;
+
+    if (!map.has(key)) {
+      map.set(key, {
+        id: key,
+        name: track.album || "Unknown Album",
+        artist: track.artist || "Unknown Artist",
+        artwork: track.artwork || null,
+        count: 1,
+        duration: track.duration || 0,
+      });
+    } else {
+      const entry = map.get(key)!;
+      entry.count += 1;
+      entry.duration += track.duration || 0;
+      // Ambil artwork dari track lain dalam album jika belum ada
+      if (!entry.artwork && track.artwork) entry.artwork = track.artwork;
+    }
+  });
+
+  return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+};
+
+const shuffleArray = <T,>(arr: T[]): T[] => {
+  const result = [...arr];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+};
+
+// ─── AlbumTile ────────────────────────────────────────────────────────────────
+
+const AlbumTile = memo(
+  ({
+    item,
+    onPress,
+    colors,
+  }: {
+    item: Album;
+    onPress: (album: Album) => void;
+    colors: any;
+  }) => {
+    const [imgError, setImgError] = useState(false);
+    const showImage = !!item.artwork && !imgError;
+
+    const handlePress = useCallback(() => {
+      if (Platform.OS !== "web")
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      onPress(item);
+    }, [item, onPress]);
+
+    return (
+      <TouchableOpacity
+        onPress={handlePress}
+        activeOpacity={0.8}
+        style={styles.tile}
       >
-        <Disc3
-          size={TILE_SIZE * 0.3}
-          color={colors.text.disabled}
-          strokeWidth={1.2}
-        />
-        {/* Badge jumlah lagu di pojok artwork */}
         <View
           style={[
-            styles.countBadge,
-            { backgroundColor: colors.background.tertiary },
+            styles.artworkContainer,
+            { backgroundColor: colors.background.secondary },
           ]}
         >
-          <Text style={[styles.countText, { color: colors.text.secondary }]}>
-            {item.count}
+          {showImage ? (
+            <Image
+              source={{ uri: item.artwork! }}
+              style={StyleSheet.absoluteFillObject}
+              contentFit="cover"
+              transition={250}
+              cachePolicy="memory-disk"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <Disc3
+              size={TILE_SIZE * 0.38}
+              color={colors.text.disabled}
+              strokeWidth={1.1}
+            />
+          )}
+
+          <View
+            style={[
+              styles.countBadge,
+              { backgroundColor: colors.background.tertiary },
+            ]}
+          >
+            <Text style={[styles.countText, { color: colors.text.secondary }]}>
+              {item.count}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.tileMeta}>
+          <Text
+            style={[styles.tileName, { color: colors.text.primary }]}
+            numberOfLines={1}
+          >
+            {item.name}
+          </Text>
+          <Text
+            style={[styles.tileArtist, { color: colors.text.secondary }]}
+            numberOfLines={1}
+          >
+            {item.artist}
           </Text>
         </View>
-      </View>
+      </TouchableOpacity>
+    );
+  }
+);
 
-      <View style={styles.tileMeta}>
-        <Text
-          style={[styles.tileName, { color: colors.text.primary }]}
-          numberOfLines={1}
-        >
-          {item.name}
-        </Text>
-        <Text
-          style={[styles.tileArtist, { color: colors.text.secondary }]}
-          numberOfLines={1}
-        >
-          {item.artist}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
-});
+// ─── AlbumSongRow ─────────────────────────────────────────────────────────────
 
-// ── AlbumSongRow ──────────────────────────────────────────────────────────────
 const AlbumSongRow = memo(
   ({
     track,
@@ -95,7 +181,38 @@ const AlbumSongRow = memo(
     onPress,
     onToggleFavorite,
     colors,
-  }: any) => {
+  }: {
+    track: MediaTrack;
+    isNowPlaying: boolean;
+    isFavorite: boolean;
+    onPress: () => void;
+    onToggleFavorite?: (songId: string) => Promise<boolean>;
+    colors: any;
+  }) => {
+    // Optimistic update: langsung flip visual, rollback kalau gagal
+    const [localFav, setLocalFav] = useState(isFavorite);
+
+    // Sync kalau prop berubah dari luar (misal re-scan)
+    React.useEffect(() => {
+      setLocalFav(isFavorite);
+    }, [isFavorite]);
+
+    const handleFavPress = useCallback(async () => {
+      if (!onToggleFavorite) return;
+      if (Platform.OS !== "web")
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+      const optimistic = !localFav;
+      setLocalFav(optimistic); // langsung update UI
+
+      try {
+        const result = await onToggleFavorite(track.id);
+        setLocalFav(result); // sync dengan hasil sebenarnya
+      } catch {
+        setLocalFav(!optimistic); // rollback kalau gagal
+      }
+    }, [localFav, onToggleFavorite, track.id]);
+
     return (
       <TouchableOpacity
         onPress={onPress}
@@ -105,16 +222,18 @@ const AlbumSongRow = memo(
           isNowPlaying && { backgroundColor: `${colors.primary[500]}10` },
         ]}
       >
+        {/* Leading: track number / now playing indicator */}
         <View style={styles.songLeading}>
           {isNowPlaying ? (
             <AudioLines size={18} color={colors.primary[500]} />
           ) : (
             <Text style={[styles.trackNum, { color: colors.text.disabled }]}>
-              {track.trackNumber || "-"}
+              {track.trackNumber || "–"}
             </Text>
           )}
         </View>
 
+        {/* Main: title + quality */}
         <View style={styles.songMain}>
           <View style={styles.songTitleRow}>
             <Text
@@ -130,19 +249,31 @@ const AlbumSongRow = memo(
             >
               {track.title}
             </Text>
-            <QualityBadge sampleRate={track.sampleRate} codec={track.codec} />
+            <QualityBadge
+              sampleRate={track.sampleRate}
+              codec={track.codec}
+            />
           </View>
           <Text style={[styles.songSub, { color: colors.text.tertiary }]}>
-            {track.bitDepth || 16}bit • {Math.round(track.sampleRate / 1000)}kHz
+            {track.bitDepth > 0 ? track.bitDepth : 16}bit •{" "}
+            {track.sampleRate > 0
+              ? (track.sampleRate / 1000).toFixed(1)
+              : "44.1"}
+            kHz
           </Text>
         </View>
 
+        {/* Trailing: heart + duration */}
         <View style={styles.songTrailing}>
-          <TouchableOpacity onPress={onToggleFavorite} style={styles.favBtn}>
+          <TouchableOpacity
+            onPress={handleFavPress}
+            style={styles.favBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
             <Heart
               size={16}
-              color={isFavorite ? colors.status.error : colors.text.disabled}
-              fill={isFavorite ? colors.status.error : "transparent"}
+              color={localFav ? colors.status.error : colors.text.disabled}
+              fill={localFav ? colors.status.error : "transparent"}
             />
           </TouchableOpacity>
           <Text style={[styles.duration, { color: colors.text.disabled }]}>
@@ -151,49 +282,85 @@ const AlbumSongRow = memo(
         </View>
       </TouchableOpacity>
     );
-  },
+  }
 );
 
-// ── AlbumGrid Component ───────────────────────────────────────────────────────
-export const AlbumGrid: React.FC<any> = ({
-  albums,
-  tracks,
+// ─── AlbumGrid ────────────────────────────────────────────────────────────────
+
+export const AlbumGrid: React.FC<AlbumGridProps> = ({
+  tracks = [],
   currentTrackId,
-  favoriteIds = new Set(),
   onSongPress,
   onToggleFavorite,
+  isFavorite = () => false,
 }) => {
   const { theme } = useTheme();
-  const { colors, spacing } = theme;
-  const [selectedAlbum, setSelectedAlbum] = useState<any | null>(null);
+  const { colors } = theme;
+
+  const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
+  const [heroImgError, setHeroImgError] = useState(false);
+
+  const albums = useMemo(() => getGroupedAlbums(tracks), [tracks]);
+
+  const handleSelectAlbum = useCallback((album: Album) => {
+    setHeroImgError(false);
+    setSelectedAlbum(album);
+  }, []);
 
   const filteredSongs = useMemo(() => {
     if (!selectedAlbum) return [];
-    return (tracks ?? []).filter(
-      (t: any) =>
-        t.album === selectedAlbum.name && t.artist === selectedAlbum.artist,
-    );
+    return tracks
+      .filter(
+        (t) =>
+          (t.album || "Unknown Album") === selectedAlbum.name &&
+          (t.artist || "Unknown Artist") === selectedAlbum.artist
+      )
+      .sort((a, b) => (a.trackNumber || 0) - (b.trackNumber || 0));
   }, [tracks, selectedAlbum]);
 
   const totalDuration = useMemo(
-    () => filteredSongs.reduce((acc, t: any) => acc + (t.duration || 0), 0),
-    [filteredSongs],
+    () => filteredSongs.reduce((acc, t) => acc + (t.duration || 0), 0),
+    [filteredSongs]
   );
 
+  const handlePlayAlbum = useCallback(() => {
+    if (filteredSongs.length > 0) onSongPress(filteredSongs[0], filteredSongs);
+  }, [onSongPress, filteredSongs]);
+
+  const handleShuffleAlbum = useCallback(() => {
+    const shuffled = shuffleArray(filteredSongs);
+    if (shuffled.length > 0) onSongPress(shuffled[0], shuffled);
+  }, [onSongPress, filteredSongs]);
+
+  // ── Grid View ──
   if (!selectedAlbum) {
     return (
       <FlatList
         data={albums}
         numColumns={COLS}
-        keyExtractor={(item) => `${item.name}-${item.artist}`}
+        keyExtractor={(item) => item.id}
         columnWrapperStyle={styles.gridRow}
         contentContainerStyle={[styles.gridContent, { paddingBottom: 120 }]}
         renderItem={({ item }) => (
-          <AlbumTile item={item} onPress={setSelectedAlbum} colors={colors} />
+          <AlbumTile item={item} onPress={handleSelectAlbum} colors={colors} />
         )}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Disc3 size={48} color={colors.text.disabled} strokeWidth={1} />
+            <Text style={[styles.emptyText, { color: colors.text.disabled }]}>
+              No albums found
+            </Text>
+            <Text style={[styles.emptySubText, { color: colors.text.disabled }]}>
+              {tracks.length} tracks loaded
+            </Text>
+          </View>
+        }
       />
     );
   }
+
+  // ── Detail View ──
+  const showHeroImage = !!selectedAlbum.artwork && !heroImgError;
 
   return (
     <View
@@ -202,23 +369,27 @@ export const AlbumGrid: React.FC<any> = ({
         { backgroundColor: colors.background.primary },
       ]}
     >
-      {/* Custom Header Area */}
       <View
-        style={[styles.navBar, { paddingTop: Platform.OS === "ios" ? 50 : 20 }]}
+        style={[
+          styles.navBar,
+          { paddingTop: Platform.OS === "ios" ? 50 : 20 },
+        ]}
       >
         <TouchableOpacity
           onPress={() => setSelectedAlbum(null)}
           style={styles.backBtn}
         >
-          <ChevronLeft size={24} color={colors.text.primary} />
+          <ChevronLeft size={28} color={colors.text.primary} />
         </TouchableOpacity>
       </View>
 
       <FlatList
         data={filteredSongs}
         keyExtractor={(item) => item.id}
+        contentContainerStyle={{ paddingBottom: 150 }}
         ListHeaderComponent={
           <View style={styles.headerHero}>
+            {/* Hero artwork */}
             <View
               style={[
                 styles.largeArtwork,
@@ -228,8 +399,24 @@ export const AlbumGrid: React.FC<any> = ({
                 },
               ]}
             >
-              <Disc3 size={80} color={colors.text.disabled} strokeWidth={1} />
+              {showHeroImage ? (
+                <Image
+                  source={{ uri: selectedAlbum.artwork! }}
+                  style={StyleSheet.absoluteFillObject}
+                  contentFit="cover"
+                  transition={300}
+                  onError={() => setHeroImgError(true)}
+                />
+              ) : (
+                <Disc3
+                  size={80}
+                  color={colors.text.disabled}
+                  strokeWidth={1}
+                />
+              )}
             </View>
+
+            {/* Album info */}
             <View style={styles.headerTextContent}>
               <Text
                 style={[styles.headerTitle, { color: colors.text.primary }]}
@@ -248,13 +435,14 @@ export const AlbumGrid: React.FC<any> = ({
               </Text>
             </View>
 
+            {/* Action buttons */}
             <View style={styles.actionRow}>
               <TouchableOpacity
                 style={[
                   styles.mainBtn,
                   { backgroundColor: colors.primary[500] },
                 ]}
-                onPress={() => onSongPress(filteredSongs[0], filteredSongs)}
+                onPress={handlePlayAlbum}
               >
                 <Play size={18} color="#fff" fill="#fff" />
                 <Text style={styles.mainBtnText}>Play</Text>
@@ -265,9 +453,7 @@ export const AlbumGrid: React.FC<any> = ({
                   styles.secondaryBtn,
                   { backgroundColor: colors.background.tertiary },
                 ]}
-                onPress={() => {
-                  /* Shuffle Logic */
-                }}
+                onPress={handleShuffleAlbum}
               >
                 <Shuffle size={18} color={colors.text.primary} />
               </TouchableOpacity>
@@ -278,21 +464,27 @@ export const AlbumGrid: React.FC<any> = ({
           <AlbumSongRow
             track={item}
             isNowPlaying={item.id === currentTrackId}
-            isFavorite={favoriteIds.has(item.id)}
+            isFavorite={isFavorite(item.id)}
             onPress={() => onSongPress(item, filteredSongs)}
-            onToggleFavorite={() => onToggleFavorite?.(item.id)}
+            onToggleFavorite={onToggleFavorite}
             colors={colors}
           />
         )}
-        contentContainerStyle={{ paddingBottom: 150 }}
       />
     </View>
   );
 };
 
+export default AlbumGrid;
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
+  // Grid
   gridContent: { paddingHorizontal: H_PAD, paddingTop: 10 },
   gridRow: { justifyContent: "space-between", marginBottom: TILE_GAP },
+
+  // Tile
   tile: { width: TILE_SIZE },
   artworkContainer: {
     width: TILE_SIZE,
@@ -300,6 +492,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
+    overflow: "hidden",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.05)",
   },
@@ -316,16 +509,35 @@ const styles = StyleSheet.create({
   tileName: { fontSize: 14, fontWeight: "700" },
   tileArtist: { fontSize: 12, marginTop: 2, opacity: 0.7 },
 
+  // Empty state
+  emptyContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 80,
+    gap: 8,
+  },
+  emptyText: { fontSize: 16, fontWeight: "600" },
+  emptySubText: { fontSize: 12, opacity: 0.6 },
+
+  // Detail container
   detailContainer: { flex: 1 },
   navBar: { paddingHorizontal: 16, marginBottom: 10 },
   backBtn: { width: 40, height: 40, justifyContent: "center" },
-  headerHero: { alignItems: "center", paddingHorizontal: 24, marginBottom: 24 },
+
+  // Hero header
+  headerHero: {
+    alignItems: "center",
+    paddingHorizontal: 24,
+    marginBottom: 24,
+  },
   largeArtwork: {
     width: 180,
     height: 180,
     borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
+    overflow: "hidden",
     elevation: 10,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.3,
@@ -342,6 +554,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
 
+  // Action buttons
   actionRow: { flexDirection: "row", gap: 12, width: "100%" },
   mainBtn: {
     flex: 1,
@@ -361,6 +574,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
+  // Song row
   songRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -381,3 +595,4 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
 });
+ 

@@ -1,7 +1,7 @@
 // Hardware Feature Exports
 
 // api
-export * from "./api/usb";
+export * from "./api/USBDACModule";
 
 // hooks
 export * from "./hooks/useUSBDAC";

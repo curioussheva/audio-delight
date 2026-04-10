@@ -1,5 +1,5 @@
 import React from "react";
-import { TouchableOpacity, Text, StyleSheet } from "react-native";
+import { TouchableOpacity, Text, StyleSheet, View } from "react-native";
 import { useTheme } from "@/context/ThemeContext";
 
 interface PresetChipProps {
@@ -17,33 +17,53 @@ export const PresetChip: React.FC<PresetChipProps> = ({
 }) => {
   const { theme } = useTheme();
 
+  const handlePress = () => {
+    if (!disabled) {
+      console.log(`🎯 [PresetChip] Switched to: ${label}`);
+      onPress();
+    }
+  };
+
   return (
     <TouchableOpacity
-      onPress={onPress}
+      onPress={handlePress}
+      activeOpacity={0.7}
       disabled={disabled}
       style={[
         styles.chip,
-        { backgroundColor: theme.colors.background.secondary },
-        // PERBAIKAN: Gunakan spread operator (...) untuk menggabungkan objek style
-        isActive && {
-          backgroundColor: theme.colors.primary[500],
-          // Tambahkan efek glow untuk kesan premium
-          shadowColor: theme.colors.primary[500],
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 8,
-          elevation: 5,
+        {
+          backgroundColor:
+            theme.colors.background.elevated ||
+            theme.colors.background.secondary,
+          borderColor: theme.colors.border.light,
+          borderWidth: 1,
+          opacity: disabled ? 0.4 : 1, // Visual feedback saat Bit-Perfect aktif
         },
+        isActive &&
+          !disabled && {
+            backgroundColor: theme.colors.primary[500],
+            borderColor: theme.colors.primary[500],
+            // Efek Glow Cyberpunk
+            shadowColor: theme.colors.primary[500],
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.5,
+            shadowRadius: 10,
+            elevation: 8,
+          },
       ]}
     >
       <Text
         style={[
           styles.text,
           { color: theme.colors.text.secondary },
-          isActive && { color: "#000", fontWeight: "bold" },
+          isActive &&
+            !disabled && {
+              color: theme.colors.background.primary, // Kontras tinggi saat aktif
+              fontWeight: "900",
+            },
         ]}
       >
-        {label}
+        {label.toUpperCase()}
       </Text>
     </TouchableOpacity>
   );
@@ -51,17 +71,16 @@ export const PresetChip: React.FC<PresetChipProps> = ({
 
 const styles = StyleSheet.create({
   chip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 6,
+    borderRadius: 12, // Dibuat sedikit lebih kotak (squircle) agar terlihat pro
     marginRight: 10,
-    height: 36,
+    height: 38,
     justifyContent: "center",
-    // Penting untuk shadow di iOS
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    alignItems: "center",
   },
-  text: { fontSize: 13, letterSpacing: 0.5 },
+  text: {
+    fontSize: 11,
+    letterSpacing: 1.2, // Spasi antar huruf untuk gaya industrial
+  },
 });

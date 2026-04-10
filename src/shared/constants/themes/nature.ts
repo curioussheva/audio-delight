@@ -45,8 +45,7 @@ export const FOREST_GREEN: Theme = {
       heavy: "#1A2F17",
     },
     gradient: {
-      start: "#2D5A27",
-      end: "#0F1F0D",
+      primary: ["#2D5A27", "#1A3A16"],
     },
   },
   spacing: BASE_SPACING,
@@ -97,10 +96,7 @@ export const OCEAN_WAVE: Theme = {
       medium: "#194055",
       heavy: "#122F40",
     },
-    gradient: {
-      start: "#1A4B77",
-      end: "#0B1E2B",
-    },
+    gradient: { primary: ["#1A4B77", "#0B1E2B"] },
   },
   spacing: BASE_SPACING,
   typography: BASE_TYPOGRAPHY,

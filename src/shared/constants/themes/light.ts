@@ -13,7 +13,7 @@ export const LIGHT_GRAY: Theme = {
       200: "#99BDE0",
       300: "#70A0D0",
       400: "#528AC0",
-      500: "#3A6EA5", // Soft blue
+      500: "#3A6EA5",
       600: "#2E5785",
       700: "#234065",
       800: "#172A45",
@@ -46,9 +46,9 @@ export const LIGHT_GRAY: Theme = {
       medium: "#CBD5E1",
       heavy: "#94A3B8",
     },
+    // ✅ FIXED: Array format
     gradient: {
-      start: "#F8FAFC",
-      end: "#E2E8F0",
+      primary: ["#F8FAFC", "#E2E8F0"],
     },
   },
   spacing: BASE_SPACING,
@@ -97,7 +97,7 @@ export const PURE_WHITE: Theme = {
       200: "#B8D1FF",
       300: "#97BCFF",
       400: "#76A7FF",
-      500: "#2563EB", // Bright blue
+      500: "#2563EB",
       600: "#1D4ED8",
       700: "#1E40AF",
       800: "#1E3A8A",
@@ -130,9 +130,9 @@ export const PURE_WHITE: Theme = {
       medium: "#D4D4D4",
       heavy: "#A3A3A3",
     },
+    // ✅ FIXED: Array format
     gradient: {
-      start: "#FFFFFF",
-      end: "#F5F5F5",
+      primary: ["#FFFFFF", "#F5F5F5"],
     },
   },
   spacing: BASE_SPACING,

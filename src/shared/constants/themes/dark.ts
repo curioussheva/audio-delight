@@ -13,7 +13,7 @@ export const DEEP_NAVY: Theme = {
       200: "#99BDE0",
       300: "#70A0D0",
       400: "#528AC0",
-      500: "#0A2472", // Navy utama
+      500: "#0A2472",
       600: "#082060",
       700: "#061B4D",
       800: "#04163A",
@@ -44,9 +44,9 @@ export const DEEP_NAVY: Theme = {
       medium: "#1F2A3A",
       heavy: "#141E33",
     },
+    // ✅ FIXED: Array format
     gradient: {
-      start: "#0A2472",
-      end: "#0A1628",
+      primary: ["#0A2472", "#0A1628"],
     },
   },
   spacing: BASE_SPACING,
@@ -66,14 +66,13 @@ export const MIDNIGHT_BLUE: Theme = {
       200: "#8AA8FF",
       300: "#5C88FF",
       400: "#3A6EFF",
-      500: "#1B2A4A", // Midnight blue
+      500: "#1B2A4A",
       600: "#16233D",
       700: "#121C30",
       800: "#0D1523",
       900: "#080E17",
     },
     secondary: {
-      // Tambahkan secondary
       500: "#8B5CF6",
     },
     background: {
@@ -104,9 +103,9 @@ export const MIDNIGHT_BLUE: Theme = {
       medium: "#1A2540",
       heavy: "#121C30",
     },
+    // ✅ FIXED: Array format
     gradient: {
-      start: "#1B2A4A",
-      end: "#0B1424",
+      primary: ["#1B2A4A", "#0B1424"],
     },
   },
   spacing: BASE_SPACING,
@@ -126,7 +125,7 @@ export const CHARCOAL_BLACK: Theme = {
       200: "#909090",
       300: "#686868",
       400: "#484848",
-      500: "#121212", // True black
+      500: "#121212",
       600: "#0E0E0E",
       700: "#0A0A0A",
       800: "#060606",
@@ -159,9 +158,9 @@ export const CHARCOAL_BLACK: Theme = {
       medium: "#121212",
       heavy: "#0A0A0A",
     },
+    // ✅ FIXED: Array format
     gradient: {
-      start: "#121212",
-      end: "#000000",
+      primary: ["#121212", "#000000"],
     },
   },
   spacing: BASE_SPACING,

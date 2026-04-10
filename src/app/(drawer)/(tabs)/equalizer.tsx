@@ -1,329 +1,333 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  Switch,
   TouchableOpacity,
+  Dimensions,
+  FlatList,
+  ScrollView,
 } from "react-native";
-
-// Ganti baris 10
-import Slider from "@react-native-community/slider";
-// Bukan: import { Slider } from "..."
-
-// Lucide Icons
-import { Plus, ShieldCheck, Lock, Compass, Speaker } from "lucide-react-native";
-
-// Hooks
 import { useTheme } from "@/context/ThemeContext";
 import { useEqualizer } from "@/features/equalizer/hooks/useEqualizer";
-import { useSafePadding } from "@/shared/hooks/useSafePadding";
-
-// UI Components
-import { EqualizerBand } from "@/features/equalizer/components/Band";
 import { FrequencyGraph } from "@/features/equalizer/components/Graph";
+import { EqualizerBand } from "@/features/equalizer/components/Band";
+import { ControlKnob } from "@/features/equalizer/components/ControlKnob";
 import { PresetChip } from "@/features/equalizer/components/PresetChip";
 import { SavePresetModal } from "@/features/equalizer/components/SavePresetModal";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Save, ShieldAlert, Zap } from "lucide-react-native";
+import {
+  GestureHandlerRootView,
+  ScrollView as GestureScrollView,
+} from "react-native-gesture-handler";
+
+const { width } = Dimensions.get("window");
 
 export default function EqualizerScreen() {
-  const safePadding = useSafePadding();
   const { theme } = useTheme();
-  const { colors } = theme;
-  const {
-    currentBands,
-    activePresetId,
-    allPresets,
-    updateBandGain,
-    applyPreset,
-    savePreset,
-    setBassBoost,
-    setVirtualizer,
-    isDSPDisabled,
-    bassStrength,
-    virtualizerLevel,
-  } = useEqualizer();
+  const eq = useEqualizer();
+  const [isModalVisible, setModalVisible] = useState(false);
 
-  const [modalVisible, setModalVisible] = useState(false);
+  // Refs untuk scroll views
+  const verticalScrollRef = useRef<ScrollView>(null);
+  const horizontalScrollRef = useRef<ScrollView>(null);
+
+  const getReverbLabel = (index: number) => {
+    const labels = [
+      "None",
+      "Small",
+      "Medium",
+      "Large",
+      "Room",
+      "Studio",
+      "Plate",
+    ];
+    return labels[index] || "None";
+  };
+
+  const handleToggleEQ = (value: boolean) => {
+    if (eq.isDSPDisabled) return;
+    eq.toggleEQ();
+  };
+
+  // Handler untuk mencegah gesture conflict
+  const handleSliderTouchStart = () => {
+    // Disable scroll vertikal saat slider disentuh
+    verticalScrollRef.current?.setNativeProps({ scrollEnabled: false });
+  };
+
+  const handleSliderTouchEnd = () => {
+    // Enable scroll vertikal setelah slider selesai
+    setTimeout(() => {
+      verticalScrollRef.current?.setNativeProps({ scrollEnabled: true });
+    }, 100);
+  };
 
   return (
-    <View
+    <SafeAreaView
       style={[
         styles.container,
-        {
-          flex: 1,
-          backgroundColor: theme.colors.background.primary,
-          paddingTop: safePadding.paddingTop,
-          paddingBottom: safePadding.paddingBottom + 40, // ekstra ruang untuk sliders + floating
-          paddingLeft: safePadding.paddingLeft,
-          paddingRight: safePadding.paddingRight,
-        },
+        { backgroundColor: theme.colors.background.primary },
       ]}
     >
-      {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={[styles.title, { color: theme.colors.text.primary }]}>
-            Equalizer
-          </Text>
-          <Text
-            style={[styles.subtitle, { color: theme.colors.text.secondary }]}
-          >
-            10-Band Precision Engine
-          </Text>
-        </View>
-
-        {isDSPDisabled && (
-          <View style={styles.bitPerfectBadge}>
-            <ShieldCheck size={16} color="#D4AF37" strokeWidth={2.5} />
-            <Text style={styles.bitPerfectText}>Bit-Perfect Active</Text>
-          </View>
-        )}
-      </View>
-
       <ScrollView
+        ref={verticalScrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        scrollEventThrottle={16}
       >
-        {/* Visualisasi Kurva */}
-        <View style={styles.graphContainer}>
-          <FrequencyGraph bands={currentBands} />
-        </View>
-        {/* SECTION BARU: DSP Effects (Bass & Sound Stage) */}
-        <View style={styles.effectsRow}>
-          {/* Bass Boost Card */}
-          <View
-            style={[
-              styles.effectCard,
-              { backgroundColor: theme.colors.background.secondary },
-            ]}
-          >
-            <View style={styles.effectHeader}>
-              <Speaker size={18} color={theme.colors.primary[500]} />
+        {/* HEADER */}
+        <View style={styles.header}>
+          <View>
+            <Text style={[styles.title, { color: theme.colors.text.primary }]}>
+              Precision DSP
+            </Text>
+            <View style={styles.statusRow}>
+              <Zap
+                size={12}
+                color={
+                  eq.isEQEnabled && !eq.isDSPDisabled
+                    ? theme.colors.primary[500]
+                    : "#666"
+                }
+              />
               <Text
                 style={[
-                  styles.effectLabel,
-                  { color: theme.colors.text.primary },
+                  styles.subtitle,
+                  {
+                    color:
+                      eq.isEQEnabled && !eq.isDSPDisabled
+                        ? theme.colors.primary[500]
+                        : "#666",
+                  },
                 ]}
               >
-                Bass Boost
+                {eq.isDSPDisabled
+                  ? "BIT-PERFECT BYPASS"
+                  : eq.isEQEnabled
+                    ? "ENGINE ACTIVE"
+                    : "ENGINE STANDBY"}
               </Text>
             </View>
-            <Slider
-              disabled={isDSPDisabled}
-              value={bassStrength}
-              minimumValue={0}
-              maximumValue={1000}
-              onSlidingComplete={(val) =>
-                setBassBoost(Array.isArray(val) ? val[0] : val)
-              }
-              thumbTintColor={theme.colors.primary[500]}
-              minimumTrackTintColor={theme.colors.primary[500]}
-            />
-            <Text style={styles.effectValue}>
-              {Math.round(bassStrength / 10)}%
-            </Text>
           </View>
 
-          {/* Sound Stage / Virtualizer Card */}
-          <View
-            style={[
-              styles.effectCard,
-              { backgroundColor: theme.colors.background.secondary },
-            ]}
-          >
-            <View style={styles.effectHeader}>
-              <Compass size={18} color={theme.colors.accent.blue} />
-              <Text
-                style={[
-                  styles.effectLabel,
-                  { color: theme.colors.text.primary },
-                ]}
-              >
-                Sound Stage
-              </Text>
-            </View>
-            <Slider
-              disabled={isDSPDisabled}
-              value={virtualizerLevel}
-              minimumValue={0}
-              maximumValue={1000}
-              onSlidingComplete={(val) =>
-                setVirtualizer(Array.isArray(val) ? val[0] : val)
-              }
-              thumbTintColor={theme.colors.accent.blue[500]}
-              minimumTrackTintColor={theme.colors.secondary[500]}
-            />
-            <Text style={styles.effectValue}>
-              {Math.round(virtualizerLevel / 10)}%
-            </Text>
-          </View>
+          <Switch
+            value={eq.isEQEnabled && !eq.isDSPDisabled}
+            onValueChange={handleToggleEQ}
+            disabled={eq.isDSPDisabled}
+            trackColor={{
+              false: "#333",
+              true: theme.colors.primary[500] + "88",
+            }}
+            thumbColor={
+              eq.isEQEnabled && !eq.isDSPDisabled
+                ? theme.colors.primary[500]
+                : "#999"
+            }
+          />
         </View>
 
-        {/* Preset Selector */}
-        <View style={styles.presetSection}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chipScroll}
-          >
-            <TouchableOpacity
-              onPress={() => setModalVisible(true)}
-              style={[
-                styles.saveAction,
-                { borderColor: theme.colors.primary[500] },
-              ]}
-            >
-              <Plus
-                size={20}
-                color={theme.colors.primary[500]}
-                strokeWidth={3}
-              />
-            </TouchableOpacity>
-
-            {allPresets.map((preset) => (
-              <PresetChip
-                key={preset.id}
-                label={preset.name}
-                isActive={activePresetId === preset.id}
-                onPress={() => applyPreset(preset.id)}
-                disabled={isDSPDisabled}
-              />
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Sliders */}
+        {/* GRAPH SECTION - tetap sama */}
         <View
           style={[
-            styles.slidersCard,
+            styles.graphCard,
             { backgroundColor: theme.colors.background.secondary },
           ]}
         >
-          {isDSPDisabled ? (
-            <View style={styles.disabledOverlay}>
-              <Lock
-                size={40}
-                color={theme.colors.text.tertiary}
-                strokeWidth={2}
-              />
-              <Text
-                style={[
-                  styles.disabledText,
-                  { color: theme.colors.text.secondary },
-                ]}
-              >
-                DSP dinonaktifkan untuk menjaga kualitas Bit-Perfect
-              </Text>
+          <FrequencyGraph
+            bands={eq.currentBands}
+            width={width - 60}
+            height={140}
+          />
+          {eq.isDSPDisabled && (
+            <View style={styles.lockOverlay}>
+              <ShieldAlert color="#D4AF37" size={32} />
+              <Text style={styles.lockText}>DSP LOCKED</Text>
             </View>
-          ) : (
-            currentBands.map((band, index) => (
-              <EqualizerBand
-                key={band.id}
-                frequency={band.frequency}
-                gain={band.gain}
-                onValueChange={(val: number) => updateBandGain(index, val)}
-              />
-            ))
           )}
         </View>
 
-        {/* Spacer */}
-        <View style={{ height: 120 }} />
+        {/* MASTER KNOBS */}
+        <View style={styles.knobRow}>
+          <ControlKnob
+            label="BASS"
+            value={eq.bassStrength}
+            onChange={eq.setBassBoost}
+            color="#FF3D00"
+            disabled={!eq.isEQEnabled || eq.isDSPDisabled}
+          />
+          <ControlKnob
+            label="STAGE"
+            value={eq.virtualizerLevel}
+            onChange={eq.setVirtualizer}
+            color="#00E5FF"
+            disabled={!eq.isEQEnabled || eq.isDSPDisabled}
+          />
+          <View style={styles.reverbContainer}>
+            <ControlKnob
+              label="REVERB"
+              value={eq.reverbPreset * 166}
+              onChange={(v) => eq.setReverb(Math.round(v / 166))}
+              color="#AA00FF"
+              disabled={!eq.isEQEnabled || eq.isDSPDisabled}
+            />
+            <Text style={styles.reverbValue}>
+              {getReverbLabel(eq.reverbPreset)}
+            </Text>
+          </View>
+        </View>
+
+        {/* PRESET SELECTOR */}
+        <View style={styles.sectionHeader}>
+          <Text
+            style={[
+              styles.sectionTitle,
+              { color: theme.colors.text.secondary },
+            ]}
+          >
+            SOUND PROFILES
+          </Text>
+          <TouchableOpacity
+            onPress={() => setModalVisible(true)}
+            disabled={!eq.isEQEnabled || eq.isDSPDisabled}
+          >
+            <Save size={18} color={theme.colors.primary[500]} />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView
+          ref={horizontalScrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.presetScroll}
+        >
+          {eq.allPresets.map((preset) => (
+            <PresetChip
+              key={preset.id}
+              label={preset.name}
+              isActive={eq.activePresetId === preset.id}
+              onPress={() => eq.applyPreset(preset.id)}
+              disabled={!eq.isEQEnabled || eq.isDSPDisabled}
+            />
+          ))}
+        </ScrollView>
+
+        {/* MIXER SLIDERS - PERBAIKAN UTAMA */}
+        <View
+          style={[
+            styles.mixerBoard,
+            { backgroundColor: theme.colors.background.secondary },
+          ]}
+        >
+          <FlatList
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            data={eq.currentBands}
+            keyExtractor={(_, index) => index.toString()}
+            renderItem={({ item, index }) => (
+              <EqualizerBand
+                frequency={item.frequency}
+                gain={item.gain}
+                onValueChange={(v) => eq.updateBandGain(index, v)}
+                disabled={!eq.isEQEnabled || eq.isDSPDisabled}
+                color={theme.colors.primary[500]}
+                onTouchStart={handleSliderTouchStart}
+                onTouchEnd={handleSliderTouchEnd}
+              />
+            )}
+            contentContainerStyle={styles.slidersRow}
+            decelerationRate="fast"
+            snapToInterval={70}
+            snapToAlignment="center"
+          />
+        </View>
       </ScrollView>
 
-      {/* Modal */}
       <SavePresetModal
-        visible={modalVisible}
-        onClose={() => setModalVisible(false)}
+        visible={isModalVisible}
         onSave={(name) => {
-          savePreset(name);
+          eq.savePreset(name);
           setModalVisible(false);
         }}
+        onClose={() => setModalVisible(false)}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  scrollContent: { paddingBottom: 20 },
   header: {
-    paddingHorizontal: 20,
-    paddingVertical: 15,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-  },
-  title: { fontSize: 28, fontWeight: "800" },
-  subtitle: { fontSize: 13, marginTop: 2 },
-  scrollContent: { paddingBottom: 40 },
-  graphContainer: {
-    alignItems: "center",
-    marginVertical: 20,
-    paddingHorizontal: 10,
-  },
-  presetSection: { marginBottom: 25 },
-  chipScroll: { paddingLeft: 20, paddingRight: 10, alignItems: "center" },
-  saveAction: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  slidersCard: {
-    marginHorizontal: 20,
-    borderRadius: 24,
-    padding: 20,
-    minHeight: 400,
-  },
-  bitPerfectBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(212, 175, 55, 0.1)",
-    paddingHorizontal: 10,
+    paddingHorizontal: 15,
     paddingVertical: 5,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(212, 175, 55, 0.3)",
   },
-  bitPerfectText: {
-    color: "#D4AF37",
-    fontSize: 11,
-    fontWeight: "700",
+  title: { fontSize: 20, fontWeight: "900", letterSpacing: -0.5 },
+  statusRow: { flexDirection: "row", alignItems: "center", marginTop: 4 },
+  subtitle: {
+    fontSize: 8,
+    fontWeight: "bold",
     marginLeft: 5,
+    letterSpacing: 1,
   },
-  disabledOverlay: {
-    flex: 1,
+  graphCard: {
+    marginHorizontal: 10,
+    borderRadius: 24,
+    padding: 5,
+    height: 140,
     justifyContent: "center",
     alignItems: "center",
-    padding: 40,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
   },
-  disabledText: {
-    textAlign: "center",
-    marginTop: 15,
-    lineHeight: 20,
-    fontSize: 14,
-  },
-  effectsRow: {
-    flexDirection: "row",
-    paddingHorizontal: 20,
-    gap: 12,
-    marginBottom: 20,
-  },
-  effectCard: {
-    flex: 1,
-    borderRadius: 20,
-    padding: 15,
+  lockOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.8)",
+    justifyContent: "center",
     alignItems: "center",
   },
-  effectHeader: {
+  lockText: {
+    color: "#D4AF37",
+    fontWeight: "900",
+    marginTop: 10,
+    fontSize: 12,
+  },
+  knobRow: {
     flexDirection: "row",
+    justifyContent: "space-evenly",
+    marginVertical: 10,
+    paddingHorizontal: 10,
+  },
+  reverbContainer: { alignItems: "center" },
+  reverbValue: {
+    color: "#AA00FF",
+    fontSize: 9,
+    fontWeight: "bold",
+    marginTop: -5,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 6,
+    paddingHorizontal: 10,
     marginBottom: 10,
   },
-  effectLabel: { fontSize: 12, fontWeight: "700" },
-  effectValue: { fontSize: 10, color: "#888", marginTop: 5 },
+  sectionTitle: { fontSize: 11, fontWeight: "bold", letterSpacing: 1.5 },
+  presetScroll: { paddingLeft: 20, marginBottom: 20 },
+  mixerBoard: {
+    marginHorizontal: 5,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 5,
+  },
+  slidersRow: {
+    paddingHorizontal: 10,
+    alignItems: "flex-end",
+  },
 });

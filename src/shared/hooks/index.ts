@@ -1,1 +1,1 @@
-// shared/hooks exports
+// src/shared/hooks/index.ts

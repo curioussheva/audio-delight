@@ -22,13 +22,23 @@ import {
   ChevronRight,
   CheckCircle,
   RefreshCw,
+  Globe, 
+  Wifi, 
+  Database
 } from "lucide-react-native";
+import * as Haptics from "expo-haptics";
 
 import { useTheme } from "@/context/ThemeContext";
 import { useUSBDAC } from "@/features/hardware/hooks/useUSBDAC";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { ThemePicker } from "@/shared/components/ui/ThemePicker";
 import type { Theme } from "@/constants/themes/types";
+import {
+  selectArtists
+} from "@/features/library/store/selectors";
+import { useSettingsStore } from "@/features/settings/store/settingsStore";
+import OnlineMetadataService from "@/features/library/services/OnlineMetadataService";
+
 
 // ─── Reusable Sub Components ────────────────────────────────────────────────
 
@@ -145,11 +155,21 @@ const SettingRow: React.FC<SettingRowProps> = ({
 export default function SettingsScreen() {
   const { theme, isDarkMode, toggleTheme } = useTheme();
   const { colors, spacing } = theme;
-
+  
+  const { 
+    enableOnlineArtistImage, 
+    setEnableOnlineArtistImage, 
+    downloadOnlyOnWiFi, 
+    setDownloadOnlyOnWiFi 
+  } = useSettingsStore();
+  
+   // --- 2. EXISTING STATES ---
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [showDacSettings, setShowDacSettings] = useState(false);
   const [showAudioSettings, setShowAudioSettings] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  const [showLibrarySettings, setShowLibrarySettings] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
 
   const {
     dacs,
@@ -164,7 +184,14 @@ export default function SettingsScreen() {
     setSampleRate,
   } = useUSBDAC();
 
-  const { playbackSpeed, defaultEQ } = usePlayerStore();
+  const { 
+  playbackSpeed, 
+  defaultEQ, 
+  audioMode,    // <--- Add this
+  setAudioMode  // <--- Add this
+} = usePlayerStore();
+
+  const isExclusive = audioMode === "bit-perfect";
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
 
@@ -175,6 +202,35 @@ export default function SettingsScreen() {
     } catch {
       Alert.alert("Error", "Gagal scan USB DAC");
     }
+  };
+  
+  const handleToggle = (setter: (v: boolean) => void, value: boolean) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setter(value);
+  };
+
+  const handleClearCache = async () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    Alert.alert(
+      "Bersihkan Cache",
+      "Foto artis yang sudah diunduh akan dihapus. Lanjutkan?",
+      [
+        { text: "Batal", style: "cancel" },
+        { 
+          text: "Bersihkan", 
+          style: "destructive", 
+          onPress: async () => {
+            setIsClearing(true);
+            const success = await OnlineMetadataService.clearArtistCache(); 
+            setIsClearing(false);
+            if (success) {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              Alert.alert("Sukses", "Cache telah dibersihkan.");
+            }
+          } 
+        }
+      ]
+    );
   };
 
   const handleResetAll = () => {
@@ -364,7 +420,7 @@ export default function SettingsScreen() {
                     <Text
                       style={{ color: colors.text.secondary, fontSize: 11 }}
                     >
-                      {dac.id} • {dac.channelCount} Channels
+                      {dac.id} • {dac.channelCounts} Channels
                     </Text>
                   </View>
                   {currentDAC?.id === dac.id && (
@@ -387,15 +443,18 @@ export default function SettingsScreen() {
                   Exclusive Mode
                 </Text>
                 <Switch
-                  value={isExclusiveMode}
-                  onValueChange={toggleExclusiveMode}
-                  disabled={loading}
-                  trackColor={{
-                    false: colors.background.tertiary,
-                    true: colors.primary[500],
-                  }}
-                  thumbColor={isExclusiveMode ? colors.text.primary : "#f4f3f4"}
-                />
+  value={isExclusive}
+  onValueChange={(value) => {
+    // This updates the Zustand store, which then triggers the engine
+    setAudioMode(value ? "bit-perfect" : "dsp");
+  }}
+  trackColor={{
+    false: colors.background.tertiary,
+    true: colors.primary[500],
+  }}
+  thumbColor={isExclusive ? colors.text.primary : colors.text.secondary}
+/>
+
               </SettingRow>
 
               {/* Sample Rate Selector */}
@@ -478,6 +537,71 @@ export default function SettingsScreen() {
       )}
     </Section>
   );
+  
+  const renderLibrary = () => (
+    <Section colors={colors} spacing={spacing}>
+      <SectionHeader
+        icon={<Database size={24} color={colors.primary[500]} strokeWidth={2.2} />}
+        title="Library & Metadata"
+        colors={colors}
+        spacing={spacing}
+        collapsible
+        expanded={showLibrarySettings}
+        onPress={() => setShowLibrarySettings(!showLibrarySettings)}
+      />
+
+      {showLibrarySettings && (
+        <View style={{ paddingBottom: spacing.sm }}>
+          <SettingRow colors={colors} spacing={spacing} bordered={false}>
+            <View style={{ flex: 1, marginRight: spacing.md }}>
+              <Text style={{ color: colors.text.primary, fontWeight: "600" }}>
+                Online Artist Metadata
+              </Text>
+              <Text style={{ color: colors.text.tertiary, fontSize: 11, marginTop: 2 }}>
+                Otomatis cari foto artis via MusicBrainz.
+              </Text>
+            </View>
+            <Switch
+              value={enableOnlineArtistImage}
+              onValueChange={(v) => handleToggle(setEnableOnlineArtistImage, v)}
+              trackColor={{ false: colors.background.tertiary, true: colors.primary[500] }}
+            />
+          </SettingRow>
+
+          <SettingRow colors={colors} spacing={spacing}>
+            <View style={{ flex: 1, marginRight: spacing.md }}>
+              <Text style={{ color: colors.text.primary, fontWeight: "600" }}>
+                Hanya lewat Wi-Fi
+              </Text>
+              <Text style={{ color: colors.text.tertiary, fontSize: 11, marginTop: 2 }}>
+                Mencegah penggunaan kuota seluler untuk gambar.
+              </Text>
+            </View>
+            <Switch
+              value={downloadOnlyOnWiFi}
+              onValueChange={(v) => handleToggle(setDownloadOnlyOnWiFi, v)}
+              disabled={!enableOnlineArtistImage}
+              trackColor={{ false: colors.background.tertiary, true: colors.primary[500] }}
+            />
+          </SettingRow>
+          
+          <TouchableOpacity 
+            style={{ padding: spacing.md, alignItems: 'center' }}
+            onPress={handleClearCache}
+            disabled={isClearing}
+          >
+            {isClearing ? (
+              <ActivityIndicator size="small" color={colors.primary[500]} />
+            ) : (
+              <Text style={{ color: colors.status.error, fontSize: 13, fontWeight: "700" }}>
+                Kosongkan Cache Gambar Artis
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
+    </Section>
+  );
 
   const renderAbout = () => (
     <Section colors={colors} spacing={spacing}>
@@ -542,6 +666,7 @@ export default function SettingsScreen() {
       {renderTampilan()}
       {renderDAC()}
       {renderAudio()}
+      {renderLibrary()}
       {renderAbout()}
 
       <TouchableOpacity

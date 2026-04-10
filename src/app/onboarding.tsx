@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Platform,
   Alert,
+  BackHandler,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -14,7 +15,7 @@ import { useTheme } from "@/context/ThemeContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
-import NativeDSPModule from "@/features/visualizer/native/DSPModule";
+import { DSPPipeline } from "@/features/visualizer/api/DSPPipeline";
 
 type AudioMode = "bit-perfect" | "dsp";
 
@@ -47,8 +48,8 @@ const ModeCard = ({
         backgroundColor: isSelected
           ? colors.primary[500] + "15"
           : "transparent",
+        borderColor: isSelected ? colors.primary[500] : "transparent",
       },
-      isSelected && { borderColor: colors.primary[500] },
     ]}
     onPress={() => onSelect(mode)}
   >
@@ -85,12 +86,27 @@ const ModeCard = ({
 );
 
 export default function OnboardingScreen() {
-  const insets = useSafeAreaInsets(); // ← Sudah benar diimport
+  const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { colors } = theme;
   const router = useRouter();
   const [selectedMode, setSelectedMode] = useState<AudioMode | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Prevent back button during submission
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener(
+      "hardwareBackPress",
+      () => {
+        if (isSubmitting) {
+          return true; // Prevent back button during submission
+        }
+        return false;
+      },
+    );
+
+    return () => backHandler.remove();
+  }, [isSubmitting]);
 
   const handleSelectMode = (mode: AudioMode) => {
     console.log(`🔘 [Onboarding] Mode dipilih: ${mode}`);
@@ -104,27 +120,33 @@ export default function OnboardingScreen() {
     setIsSubmitting(true);
 
     try {
-      await Promise.all([
-        AsyncStorage.setItem("audio_mode_preference", selectedMode),
-        AsyncStorage.setItem("has_onboarded", "true"),
-      ]);
+      console.log(`[Onboarding] Finishing with mode: ${selectedMode}`);
 
-      if (NativeDSPModule) {
-        const isBitPerfect = selectedMode === "bit-perfect";
-        await NativeDSPModule.toggleExclusiveMode?.(isBitPerfect);
-        if (isBitPerfect) {
-          await NativeDSPModule.releaseAllFX?.();
-        }
-      }
+      // Save preferences
+      await AsyncStorage.setItem("audio_mode_preference", selectedMode);
+      await AsyncStorage.setItem("has_onboarded", "true");
 
+      // Set DSP processing mode
+      await DSPPipeline.setProcessingMode(selectedMode);
+
+      // Success haptic feedback
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.replace("/library");
+
+      // Small delay for better UX
+      setTimeout(() => {
+        router.replace("/(drawer)/(tabs)/library");
+      }, 100);
     } catch (error) {
       console.error("❌ [Onboarding] Error:", error);
-      Alert.alert("Error", "Gagal menyelesaikan pengaturan.");
+      Alert.alert(
+        "Setup Error",
+        "Failed to complete setup. Please try again.",
+        [{ text: "OK", onPress: () => setIsSubmitting(false) }],
+      );
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
-      setIsSubmitting(false);
+      // Don't reset isSubmitting if navigation succeeded
+      // setIsSubmitting(false);
     }
   };
 
@@ -135,7 +157,7 @@ export default function OnboardingScreen() {
         {
           backgroundColor: colors.background.primary,
           paddingTop: insets.top,
-          paddingBottom: insets.bottom + 24, // ← Penting agar tombol tidak nabrak home indicator
+          paddingBottom: insets.bottom + 24,
           paddingLeft: insets.left,
           paddingRight: insets.right,
         },
@@ -143,7 +165,7 @@ export default function OnboardingScreen() {
     >
       <View style={styles.header}>
         <Image
-          source={require("../../assets/images/logo.png")}
+          source={require("../../assets/images/icon.png")}
           style={styles.logo}
           contentFit="contain"
         />
@@ -153,6 +175,9 @@ export default function OnboardingScreen() {
         <View
           style={[styles.divider, { backgroundColor: colors.primary[500] }]}
         />
+        <Text style={[styles.subtitle, { color: colors.text.secondary }]}>
+          Choose Your Audio Experience
+        </Text>
       </View>
 
       <View style={styles.optionsContainer}>
@@ -185,23 +210,34 @@ export default function OnboardingScreen() {
           style={[
             styles.nextButton,
             {
-              backgroundColor: selectedMode
-                ? colors.primary[500]
-                : colors.background.secondary,
+              backgroundColor:
+                selectedMode && !isSubmitting
+                  ? colors.primary[500]
+                  : colors.background.secondary,
             },
-            !selectedMode && { opacity: 0.5 },
           ]}
           onPress={handleFinish}
         >
           <Text
             style={[
               styles.nextButtonText,
-              { color: selectedMode ? "#000" : colors.text.secondary },
+              {
+                color:
+                  selectedMode && !isSubmitting
+                    ? "#000"
+                    : colors.text.secondary,
+              },
             ]}
           >
-            {isSubmitting ? "Processing..." : "Continue"}
+            {isSubmitting ? "Setting up..." : "Continue"}
           </Text>
         </TouchableOpacity>
+
+        {!selectedMode && (
+          <Text style={[styles.hintText, { color: colors.text.tertiary }]}>
+            Select a mode to continue
+          </Text>
+        )}
       </View>
     </View>
   );
@@ -212,7 +248,13 @@ const styles = StyleSheet.create({
   header: { alignItems: "center", marginTop: 40, marginBottom: 30 },
   logo: { width: 100, height: 100, marginBottom: 15 },
   welcomeText: { fontSize: 26, fontWeight: "800", letterSpacing: -0.5 },
-  divider: { height: 3, width: 40, borderRadius: 2, marginTop: 8 },
+  subtitle: {
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: "center",
+    paddingHorizontal: 40,
+  },
+  divider: { height: 3, width: 40, borderRadius: 2, marginTop: 12 },
   optionsContainer: { flex: 1, paddingHorizontal: 24, gap: 16 },
   modeCard: {
     padding: 20,
@@ -220,7 +262,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1.5,
-    borderColor: "transparent",
     ...Platform.select({
       android: { elevation: 2 },
       ios: {
@@ -250,12 +291,14 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 1,
   },
-  footer: { paddingHorizontal: 24, paddingBottom: 20 },
+  footer: { paddingHorizontal: 24, paddingBottom: 20, alignItems: "center" },
   nextButton: {
     height: 58,
     borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
+    width: "100%",
   },
   nextButtonText: { fontSize: 16, fontWeight: "700" },
+  hintText: { fontSize: 12, marginTop: 12, textAlign: "center" },
 });

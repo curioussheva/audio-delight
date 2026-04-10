@@ -6,13 +6,13 @@ import { Song } from "@/shared/types/audio";
 interface UseOptimizedLibraryOptions {
   searchQuery: string;
   filterBy: string;
-  sortBy: string;
+  sortBy?: string;
 }
 
 export const useOptimizedLibrary = ({
   searchQuery,
   filterBy,
-  sortBy,
+  sortBy = "title-asc",
 }: UseOptimizedLibraryOptions) => {
   const { songs, loading, reload } = useLibrary();
   const { isFavorite, toggleFavorite, favoriteSongs } = useFavorites();

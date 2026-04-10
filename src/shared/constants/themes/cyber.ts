@@ -13,7 +13,7 @@ export const NEON_CYBER: Theme = {
       200: "#F48CFF",
       300: "#F060FF",
       400: "#EC34FF",
-      500: "#00F0FF", // Cyan neon
+      500: "#00F0FF",
       600: "#00CCFF",
       700: "#00A8FF",
       800: "#0084FF",
@@ -46,9 +46,9 @@ export const NEON_CYBER: Theme = {
       medium: "#FF00FF",
       heavy: "#FFFF00",
     },
+    // ✅ FIXED: Array format instead of { start, end }
     gradient: {
-      start: "#00F0FF",
-      end: "#FF00FF",
+      primary: ["#00F0FF", "#FF00FF"],
     },
   },
   spacing: BASE_SPACING,
@@ -68,7 +68,7 @@ export const SUNSET_ORANGE: Theme = {
       200: "#FFCC80",
       300: "#FFB74D",
       400: "#FFA726",
-      500: "#FF6B35", // Sunset orange
+      500: "#FF6B35",
       600: "#F4511E",
       700: "#E64A19",
       800: "#D84315",
@@ -101,9 +101,9 @@ export const SUNSET_ORANGE: Theme = {
       medium: "#3A251A",
       heavy: "#2A1A12",
     },
+    // ✅ FIXED: Array format
     gradient: {
-      start: "#FF6B35",
-      end: "#1A0F0A",
+      primary: ["#FF6B35", "#1A0F0A"],
     },
   },
   spacing: BASE_SPACING,

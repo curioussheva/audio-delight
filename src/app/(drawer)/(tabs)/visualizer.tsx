@@ -1,3 +1,5 @@
+// src/app/visualizer.tsx (atau lokasi sesuai routing)
+
 import React, { useState, useEffect, useRef } from "react";
 import {
   View,
@@ -15,15 +17,11 @@ import { useSafePadding } from "@/shared/hooks/useSafePadding";
 
 import { useTheme } from "@/context/ThemeContext";
 import { usePlayerStore } from "@/features/player/store/playerStore";
+import { useUSBDAC } from "@/features/hardware/hooks/useUSBDAC"; // ✅ TAMBAH
 import { SpectrumAnalyzer } from "@/features/visualizer/components/SpectrumAnalyzer";
-
-// Lucide Icons
-import {
-  Activity, // untuk analytics / speedometer
-  Settings,
-  Gauge, // untuk speedometer
-  X, // untuk close button di modal
-} from "lucide-react-native";
+import USBDACService from "@/features/hardware/api/USBDACModule";
+// Icons
+import { Activity, Settings, Gauge, X } from "lucide-react-native";
 
 const { width, height } = Dimensions.get("window");
 
@@ -49,6 +47,13 @@ export default function VisualizerScreen() {
   const { theme } = useTheme();
   const { colors, spacing } = theme;
 
+  // ✅ TAMBAH: Get audio session ID dari DAC
+  const { currentDAC } = useUSBDAC();
+
+  const audioSessionId = 0; // Global audio output session
+
+  const { currentSong, isPlaying } = usePlayerStore();
+
   // State
   const [mode, setMode] = useState<VisualizerMode>("bars");
   const [sensitivity, setSensitivity] = useState(0.5);
@@ -61,9 +66,6 @@ export default function VisualizerScreen() {
   // Refs
   const frameCount = useRef(0);
   const lastTime = useRef(Date.now());
-
-  // Player state
-  const { currentSong, isPlaying } = usePlayerStore();
 
   // FPS Counter
   useEffect(() => {
@@ -80,6 +82,20 @@ export default function VisualizerScreen() {
 
     return () => clearInterval(interval);
   }, [isListening]);
+
+  // ✅ TAMBAH: Track frame count untuk FPS
+  useEffect(() => {
+    if (!isPlaying) return;
+
+    let rafId: number;
+    const countFrame = () => {
+      frameCount.current++;
+      rafId = requestAnimationFrame(countFrame);
+    };
+    rafId = requestAnimationFrame(countFrame);
+
+    return () => cancelAnimationFrame(rafId);
+  }, [isPlaying]);
 
   // Toggle fullscreen dengan double tap
   const doubleTapRef = useRef(0);
@@ -99,12 +115,16 @@ export default function VisualizerScreen() {
 
   const toggleFpsMonitor = () => {
     setIsListening(!isListening);
+    if (isListening) {
+      setFps(0);
+    }
   };
 
   const resetToDefault = () => {
     setMode("bars");
     setSensitivity(0.5);
     setColorTheme("default");
+    setIsFullscreen(false);
     Alert.alert("✅", "Visualizer reset ke default");
   };
 
@@ -114,7 +134,6 @@ export default function VisualizerScreen() {
       style={[
         styles.modeSelector,
         {
-          flexDirection: "row",
           backgroundColor: colors.background.secondary,
           borderRadius: 25,
           padding: spacing.xs,
@@ -127,7 +146,6 @@ export default function VisualizerScreen() {
           style={[
             styles.modeButton,
             {
-              flex: 1,
               paddingVertical: spacing.sm,
               alignItems: "center",
               borderRadius: 20,
@@ -193,9 +211,6 @@ export default function VisualizerScreen() {
                   styles.colorDot,
                   {
                     backgroundColor: COLOR_PRESETS[key].primary,
-                    width: 12,
-                    height: 12,
-                    borderRadius: 6,
                   },
                 ]}
               />
@@ -227,8 +242,10 @@ export default function VisualizerScreen() {
           onPress={handleDoubleTap}
           style={styles.visualizerContainer}
         >
+          {/* ✅ TAMBAH: audioSessionId wajib untuk visualizer */}
           <SpectrumAnalyzer
             isPlaying={isPlaying}
+            audioSessionId={audioSessionId} // ✅ CRITICAL
             width={isFullscreen ? width : width - 40}
             height={isFullscreen ? height / 2 : 250}
             mode={mode}
@@ -281,10 +298,25 @@ export default function VisualizerScreen() {
           >
             Putar lagu untuk melihat visualizer
           </Text>
+          {audioSessionId === 0 && (
+            <Text
+              style={{
+                color: colors.text.tertiary,
+                fontSize: 12,
+                marginTop: spacing.md,
+                textAlign: "center",
+              }}
+            >
+              (Hubungkan DAC untuk visualizer)
+            </Text>
+          )}
         </View>
       </View>
     );
   }
+
+  // ✅ TAMBAH: Warning kalau tidak ada audio session
+  const showSessionWarning = audioSessionId === 0 && isPlaying;
 
   return (
     <GestureHandlerRootView
@@ -328,6 +360,24 @@ export default function VisualizerScreen() {
         </View>
       </View>
 
+      {/* Session Warning */}
+      {showSessionWarning && (
+        <View
+          style={{
+            backgroundColor: colors.warning?.[500] || "#F59E0B",
+            padding: spacing.sm,
+            marginHorizontal: spacing.lg,
+            borderRadius: 8,
+            marginBottom: spacing.md,
+          }}
+        >
+          <Text style={{ color: "#000", fontSize: 12, textAlign: "center" }}>
+            Visualizer memerlukan audio session. Restart track atau reconnect
+            DAC.
+          </Text>
+        </View>
+      )}
+
       {/* Main Visualizer + Song Info */}
       <View style={[styles.mainContent, { flex: 1 }]}>
         {renderVisualizer()}
@@ -345,6 +395,20 @@ export default function VisualizerScreen() {
           >
             {currentSong.artist}
           </Text>
+
+          {/* ✅ TAMBAH: DAC Info */}
+          {currentDAC && (
+            <Text
+              style={{
+                color: colors.text.tertiary,
+                fontSize: 11,
+                marginTop: 4,
+              }}
+            >
+              {currentDAC.hardware.productName} •{" "}
+              {audioSessionId > 0 ? "Active" : "Inactive"}
+            </Text>
+          )}
         </View>
       </View>
 
@@ -458,6 +522,32 @@ export default function VisualizerScreen() {
               />
             </View>
 
+            {/* Audio Session Info */}
+            <View
+              style={{
+                backgroundColor: colors.background.secondary,
+                padding: spacing.md,
+                borderRadius: 8,
+                marginBottom: spacing.md,
+              }}
+            >
+              <Text style={{ color: colors.text.secondary, fontSize: 12 }}>
+                Audio Session:{" "}
+                {isPlaying ? "Global Mix (Active)" : "Not Playing"}
+              </Text>
+              {currentDAC && (
+                <Text
+                  style={{
+                    color: colors.text.tertiary,
+                    fontSize: 11,
+                    marginTop: 2,
+                  }}
+                >
+                  DAC: {currentDAC.hardware.productName}
+                </Text>
+              )}
+            </View>
+
             {/* Reset & Fullscreen */}
             <TouchableOpacity
               style={[
@@ -492,7 +582,7 @@ export default function VisualizerScreen() {
   );
 }
 
-// Styles tetap sama
+// Styles
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
@@ -504,13 +594,13 @@ const styles = StyleSheet.create({
   mainContent: { flex: 1 },
   visualizerWrapper: { position: "relative" },
   visualizerContainer: { alignItems: "center" },
-  modeSelector: { flexDirection: "row", borderRadius: 25 },
-  modeButton: { flex: 1, alignItems: "center" },
+  modeSelector: { flexDirection: "row" },
+  modeButton: { flex: 1 },
   colorButton: { borderRadius: 20 },
   colorDot: { width: 12, height: 12, borderRadius: 6 },
-  songInfo: { alignItems: "center" },
+  songInfo: { alignItems: "center", marginTop: 20 },
   songTitle: { fontSize: 18, fontWeight: "600" },
-  songArtist: { fontSize: 14 },
+  songArtist: { fontSize: 14, marginTop: 4 },
   centerContainer: {
     flex: 1,
     justifyContent: "center",
@@ -522,8 +612,8 @@ const styles = StyleSheet.create({
     top: 8,
     right: 8,
     backgroundColor: "rgba(0,0,0,0.5)",
-    paddingHorizontal: 4,
-    paddingVertical: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 4,
   },
   modalOverlay: { flex: 1, justifyContent: "flex-end" },
@@ -537,7 +627,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   modalTitle: { fontSize: 20, fontWeight: "700" },
-  settingLabel: { fontSize: 14 },
+  settingLabel: { fontSize: 14, marginBottom: 8 },
   resetButton: {
     borderRadius: 8,
     alignItems: "center",

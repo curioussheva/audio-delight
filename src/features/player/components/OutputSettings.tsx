@@ -21,7 +21,7 @@ export const OutputSettings: React.FC = () => {
       <View style={styles.header}>
         <Text style={styles.dacName}>{currentDAC.name}</Text>
         <Text style={styles.manufacturer}>
-          {currentDAC.manufacturer || "Unknown Manufacturer"}
+          {currentDAC.hardware.manufacturer || "Unknown Manufacturer"}
         </Text>
       </View>
 

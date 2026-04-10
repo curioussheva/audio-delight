@@ -278,7 +278,7 @@ export default function DevDBManager({ onClose }: { onClose: () => void }) {
           s.header,
           {
             backgroundColor: colors.background.secondary,
-            borderBottomColor: colors.border?.primary ?? "#333",
+            borderBottomColor: "#333",
           },
         ]}
       >
@@ -450,7 +450,7 @@ export default function DevDBManager({ onClose }: { onClose: () => void }) {
                       <Ionicons
                         name="trash-outline"
                         size={14}
-                        color={colors.error ?? "#f87171"}
+                        color={colors.status.error}
                       />
                     </TouchableOpacity>
 

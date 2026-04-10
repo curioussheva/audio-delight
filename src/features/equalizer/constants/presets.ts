@@ -1,13 +1,21 @@
 // src/constants/equalizerPresets.ts
 import { Preset, EqualizerBand, BandType } from "@/features/equalizer/types";
 
-// 1. Definisikan Base Value
+/**
+ * 1. Definisi Frekuensi Standar (ISO Standard)
+ * Digunakan sebagai label di atas vertical sliders.
+ */
 export const EQ_FREQUENCIES = [
   32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000,
 ];
 
+/**
+ * Tipe Band untuk Native Engine
+ * Lowshelf untuk bass paling ujung, Highshelf untuk ujung treble,
+ * sisanya Peaking untuk kontrol frekuensi tengah yang presisi.
+ */
 export const EQ_BAND_TYPES: BandType[] = [
-  "lowshelf",
+  "lowshelf", // 32Hz
   "peaking",
   "peaking",
   "peaking",
@@ -16,12 +24,15 @@ export const EQ_BAND_TYPES: BandType[] = [
   "peaking",
   "peaking",
   "peaking",
-  "highshelf",
+  "highshelf", // 16kHz
 ];
 
 export const DEFAULT_Q = 1.414;
 
-// 2. Fungsi Helper untuk memastikan tipe data selalu konsisten
+/**
+ * 2. Helper: makeBands
+ * Mengonversi array gain mentah menjadi objek EqualizerBand yang valid.
+ */
 export const makeBands = (gains: number[]): EqualizerBand[] => {
   return EQ_FREQUENCIES.map((freq, i) => ({
     id: i,
@@ -32,7 +43,10 @@ export const makeBands = (gains: number[]): EqualizerBand[] => {
   }));
 };
 
-// 3. Gabungkan semua Preset ke dalam SATU array
+/**
+ * 3. ALL_PRESETS
+ * Daftar preset standar untuk berbagai genre dan skenario penggunaan.
+ */
 export const ALL_PRESETS: Preset[] = [
   {
     id: "flat",
@@ -41,7 +55,6 @@ export const ALL_PRESETS: Preset[] = [
     isPremium: false,
     bands: makeBands([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
   },
-  // --- TAMBAHAN REQUESTED ---
   {
     id: "clarity",
     name: "Clarity",
@@ -63,18 +76,17 @@ export const ALL_PRESETS: Preset[] = [
     isPremium: false,
     bands: makeBands([5, 3, 1, 0, 0, 0, 1, 2, 4, 5]),
   },
-  // --- STANDAR FAMILIAR ---
   {
     id: "bass-boost",
     name: "Bass Boost",
-    description: "Deep punchy bass.",
+    description: "Deep punchy bass untuk pecinta low-end.",
     isPremium: false,
     bands: makeBands([6, 5, 3, 0, 0, 0, 0, 0, 0, 0]),
   },
   {
     id: "rock",
     name: "Rock",
-    description: "V-Shape klasik bertenaga.",
+    description: "V-Shape klasik bertenaga untuk gitar elektrik.",
     isPremium: false,
     bands: makeBands([4, 3, 1, -1, -2, -1, 1, 2, 3, 4]),
   },
@@ -95,14 +107,14 @@ export const ALL_PRESETS: Preset[] = [
   {
     id: "classical",
     name: "Classical",
-    description: "Luas dan natural untuk orkestra.",
+    description: "Luas dan natural untuk orkestra megah.",
     isPremium: false,
     bands: makeBands([0, 0, 0, 0, 0, 0, 1, 3, 4, 3]),
   },
   {
     id: "dance",
     name: "Dance",
-    description: "Aggressive bass untuk EDM.",
+    description: "Aggressive bass dan tajam untuk EDM.",
     isPremium: false,
     bands: makeBands([6, 4, 2, 0, -1, -2, 0, 1, 3, 5]),
   },
@@ -116,14 +128,14 @@ export const ALL_PRESETS: Preset[] = [
   {
     id: "electronic",
     name: "Electronic",
-    description: "Tuning modern untuk synth & bass.",
+    description: "Tuning modern untuk synth & bass digital.",
     isPremium: false,
     bands: makeBands([4, 3, 1, 0, 0, 1, 1, 2, 4, 5]),
   },
   {
     id: "acoustic",
     name: "Acoustic",
-    description: "Detail instrumen kayu dan string.",
+    description: "Detail instrumen kayu dan string yang jernih.",
     isPremium: false,
     bands: makeBands([2, 2, 1, 0, 1, 1, 2, 3, 3, 2]),
   },
