@@ -40,14 +40,14 @@ TrackPlayer.registerPlaybackService(() => playbackService);
 SplashScreen.preventAutoHideAsync();
 
 // App initialization states
-type AppInitState = 
+type AppState = 
   | "initializing"    // First load, show LoadingScreen
   | "loading"         // LoadingScreen visible, init running
   | "ready"           // Init done, fade to app
   | "error";          // Init failed
 
 export default function RootLayout() {
-  const [appState, setAppState] = useState<AppInitState>("initializing");
+  const [appState, setAppState] = useState<AppState>("initializing");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   // Animation values for content fade in
@@ -156,10 +156,10 @@ export default function RootLayout() {
       // Fade in content
       Animated.timing(contentOpacity, {
         toValue: 1,
-        duration: 400,
+        duration: 600,
         useNativeDriver: true,
       }).start();
-    }, 100);
+    }, 400);
   }, [contentOpacity]);
 
   // --- Start Initialization ---
