@@ -4,6 +4,7 @@ import { GestureDetector, Gesture } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
+  SharedValue,           // ✅ import langsung, bukan Animated.SharedValue
   interpolate,
   runOnJS,
   withSpring,
@@ -18,6 +19,72 @@ interface KnobProps {
   disabled?: boolean;
 }
 
+// Tick angles tetap (tidak perlu dihitung ulang tiap render)
+const TICK_ANGLES = [-135, -90, -45, 0, 45, 90, 135];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Parse hex color ke komponen RGB.
+ * Dipanggil di JS thread (render), hasilnya di-pass sebagai plain number
+ * ke worklet — sehingga tidak perlu string parsing di dalam useAnimatedStyle.
+ */
+const parseHexToRGB = (hex: string): { r: number; g: number; b: number } => {
+  const cleanHex = hex.replace("#", "");
+  return {
+    r: parseInt(cleanHex.substring(0, 2), 16),
+    g: parseInt(cleanHex.substring(2, 4), 16),
+    b: parseInt(cleanHex.substring(4, 6), 16),
+  };
+};
+
+/** Tetap tersedia untuk penggunaan di JS thread (render biasa) */
+const hexToRGBA = (hex: string, opacity: number): string => {
+  const { r, g, b } = parseHexToRGB(hex);
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+};
+
+// ─── AnimatedTick ─────────────────────────────────────────────────────────────
+// Menerima RGB sebagai angka — tidak ada string parsing di dalam worklet
+const AnimatedTick = ({
+  angle,
+  rotation,
+  colorR,
+  colorG,
+  colorB,
+  disabled,
+}: {
+  angle: number;
+  rotation: SharedValue<number>;  // ✅ SharedValue langsung, bukan Animated.SharedValue
+  colorR: number;
+  colorG: number;
+  colorB: number;
+  disabled?: boolean;
+}) => {
+  const animStyle = useAnimatedStyle(() => {
+    "worklet";
+    if (disabled) return { backgroundColor: "rgba(255,255,255,0.05)" };
+    const diff = Math.abs(rotation.value - angle);
+    // Bangun string rgba langsung dari number — aman di worklet
+    const bg =
+      diff < 15
+        ? `rgba(${colorR},${colorG},${colorB},0.8)`
+        : "rgba(255,255,255,0.1)";
+    return { backgroundColor: bg };
+  });
+
+  return (
+    <Animated.View
+      style={[
+        styles.tick,
+        { transform: [{ rotate: `${angle}deg` }] },
+        animStyle,
+      ]}
+    />
+  );
+};
+
+// ─── ControlKnob ──────────────────────────────────────────────────────────────
 export const ControlKnob = ({
   label,
   value,
@@ -25,27 +92,26 @@ export const ControlKnob = ({
   color,
   disabled,
 }: KnobProps) => {
-  // Range rotasi: -135° (min) ke 135° (max)
   const MIN_ROT = -135;
   const MAX_ROT = 135;
 
-  // 1. Validasi awal: pastikan value tidak NaN/undefined
   const safeInitialValue = isNaN(value)
     ? 0
     : Math.min(1000, Math.max(0, value));
 
-  // 2. Shared Value untuk rotasi derajat
+  // Parse hex sekali di JS thread — hasilnya di-pass ke worklet sebagai number
+  const rgb = parseHexToRGB(color);
+
   const rotation = useSharedValue(
     interpolate(safeInitialValue, [0, 1000], [MIN_ROT, MAX_ROT]),
   );
-
-  // 3. Untuk tracking gesture
   const startRotation = useSharedValue(0);
   const isGesturing = useSharedValue(false);
 
-  // 4. EFFECT: Sinkronisasi saat Preset berubah dari luar
+  // Sync saat preset berubah dari luar
   useEffect(() => {
-    if (!isNaN(value) && !isGesturing.value) {
+    if (!isNaN(value)) {
+      // ✅ Tidak baca .value di sini — hanya tulis
       const newRot = interpolate(value, [0, 1000], [MIN_ROT, MAX_ROT]);
       rotation.value = withSpring(newRot, {
         damping: 18,
@@ -55,20 +121,7 @@ export const ControlKnob = ({
     }
   }, [value]);
 
-  // Helper function untuk konversi warna ke RGBA
-  const hexToRGBA = (hex: string, opacity: number) => {
-    // Hapus '#' jika ada
-    const cleanHex = hex.replace("#", "");
-
-    // Parse RGB
-    const r = parseInt(cleanHex.substring(0, 2), 16);
-    const g = parseInt(cleanHex.substring(2, 4), 16);
-    const b = parseInt(cleanHex.substring(4, 6), 16);
-
-    return `rgba(${r}, ${g}, ${b}, ${opacity})`;
-  };
-
-  // 5. Gesture Handler
+  // Gesture Handler
   const gesture = Gesture.Pan()
     .enabled(!disabled)
     .onStart(() => {
@@ -83,8 +136,7 @@ export const ControlKnob = ({
       rotation.value = newRot;
 
       const newValue = interpolate(newRot, [MIN_ROT, MAX_ROT], [0, 1000]);
-      const roundedValue = Math.round(newValue);
-      runOnJS(onChange)(roundedValue);
+      runOnJS(onChange)(Math.round(newValue));
     })
     .onEnd(() => {
       isGesturing.value = false;
@@ -92,26 +144,18 @@ export const ControlKnob = ({
       const snappedValue = Math.round(
         interpolate(currentRot, [MIN_ROT, MAX_ROT], [0, 1000]),
       );
-      if (
-        Math.abs(
-          snappedValue - interpolate(currentRot, [MIN_ROT, MAX_ROT], [0, 1000]),
-        ) > 5
-      ) {
-        const snappedRot = interpolate(
-          snappedValue,
-          [0, 1000],
-          [MIN_ROT, MAX_ROT],
-        );
-        rotation.value = withSpring(snappedRot, {
-          damping: 20,
-          stiffness: 150,
-        });
+      const diff = Math.abs(
+        snappedValue - interpolate(currentRot, [MIN_ROT, MAX_ROT], [0, 1000]),
+      );
+      if (diff > 5) {
+        const snappedRot = interpolate(snappedValue, [0, 1000], [MIN_ROT, MAX_ROT]);
+        rotation.value = withSpring(snappedRot, { damping: 20, stiffness: 150 });
         runOnJS(onChange)(snappedValue);
       }
     });
 
-  // 6. Animated Styles
-  const animatedStyle = useAnimatedStyle(() => ({
+  // Animated styles
+  const animatedKnobStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${rotation.value}deg` }],
   }));
 
@@ -120,32 +164,19 @@ export const ControlKnob = ({
     transform: [{ scale: withTiming(disabled ? 0.95 : 1, { duration: 200 }) }],
   }));
 
-  // 7. Format display value
+  // Nilai display — murni dari prop, tidak perlu shared value
   const displayValue = !isNaN(value) ? Math.round(value / 10) : 0;
 
-  // 8. Warna dinamis berdasarkan nilai (menggunakan RGBA)
   const getDynamicColor = () => {
     if (disabled) return "#444";
-    const intensity = displayValue / 100;
     if (displayValue > 70) return color;
     if (displayValue > 30) return hexToRGBA(color, 0.8);
     return hexToRGBA(color, 0.6);
   };
 
-  // 9. Border color dengan opacity menggunakan RGBA
   const getBorderColor = () => {
     if (disabled) return "rgba(68, 68, 68, 0.3)";
     return hexToRGBA(color, 0.3);
-  };
-
-  // 10. Tick color dinamis
-  const getTickColor = (tickRot: number) => {
-    if (disabled) return "rgba(255,255,255,0.05)";
-    const diff = Math.abs(rotation.value - tickRot);
-    if (diff < 15) {
-      return hexToRGBA(color, 0.8);
-    }
-    return "rgba(255,255,255,0.1)";
   };
 
   return (
@@ -162,24 +193,19 @@ export const ControlKnob = ({
             containerStyle,
           ]}
         >
-          {/* Tick marks around knob */}
+          {/* Tick marks — setiap tick punya animated style sendiri */}
           <View style={styles.tickMarks}>
-            {[-135, -90, -45, 0, 45, 90, 135].map((angle, idx) => {
-              // eslint-disable-next-line react-hooks/rules-of-hooks
-              const tickColor = getTickColor(angle);
-              return (
-                <View
-                  key={idx}
-                  style={[
-                    styles.tick,
-                    {
-                      transform: [{ rotate: `${angle}deg` }],
-                      backgroundColor: tickColor,
-                    },
-                  ]}
-                />
-              );
-            })}
+            {TICK_ANGLES.map((angle) => (
+              <AnimatedTick
+                key={angle}
+                angle={angle}
+                rotation={rotation}
+                colorR={rgb.r}
+                colorG={rgb.g}
+                colorB={rgb.b}
+                disabled={disabled}
+              />
+            ))}
           </View>
 
           {/* Center dot */}
@@ -188,7 +214,7 @@ export const ControlKnob = ({
           />
 
           {/* Knob pointer */}
-          <Animated.View style={[styles.knobInner, animatedStyle]}>
+          <Animated.View style={[styles.knobInner, animatedKnobStyle]}>
             <View
               style={[styles.pointer, { backgroundColor: getDynamicColor() }]}
             />
@@ -200,7 +226,6 @@ export const ControlKnob = ({
         {displayValue}%
       </Text>
 
-      {/* Min/Max labels */}
       <View style={styles.rangeLabels}>
         <Text style={[styles.rangeText, { color: disabled ? "#333" : "#666" }]}>
           MIN
@@ -303,3 +328,4 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 });
+ 

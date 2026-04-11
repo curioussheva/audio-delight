@@ -3,8 +3,10 @@ import { NativeModules } from "react-native";
 export interface NativeDSPInterface {
   // Equalizer
   setEqBand(bandIndex: number, gain: number, sessionId?: number): Promise<void>;
+  setFullEqualizer(gains: number[], sessionId: number): Promise<boolean>;
+  setBandLevel(band: number, level: number, sessionId: number): Promise<void>;
 
-  // Efek Bass & Virtualizer (Ini yang tadi bikin error)
+  // Bass & Virtualizer
   setBassBoost(strength: number, sessionId?: number): Promise<void>;
   setVirtualizer(level: number, sessionId?: number): Promise<void>;
 
@@ -13,9 +15,12 @@ export interface NativeDSPInterface {
 
   // Management
   releaseAllFX(sessionId?: number): Promise<void>;
-  getAudioSessionId(): Promise<number>; // Penting untuk Android
+  reset(): Promise<void>;
+
+  // Session ID
+  getAudioSessionId(): Promise<number>;
+  getActiveAudioSessionId(): Promise<number>;
 }
 
-// Casting agar modul native dikenali sebagai interface di atas
 export const NativeDSPModule =
-  NativeModules.PristineDSPModule as NativeDSPInterface;
+  NativeModules.NativeDSPModule as NativeDSPInterface;

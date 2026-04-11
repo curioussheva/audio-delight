@@ -323,27 +323,29 @@ export default function FLACAnalyzerScreen() {
 
       {/* 5. DAC & HARDWARE STATUS */}
       {currentDAC && (
-        <View style={[styles.card, { backgroundColor: colors.background.secondary }]}>
-          <View style={styles.cardHeader}>
-            <Cpu size={16} color={colors.primary[500]} />
-            <Text style={[styles.label, { color: colors.primary[500] }]}>
-              DAC OUTPUT
-            </Text>
-          </View>
-          <InfoRow label="Device" value={currentDAC.hardware.productName} colors={colors} />
-          <InfoRow
-            label="Mode"
-            value={isExclusiveMode ? "Bit-Perfect (Direct)" : "System Mixer"}
-            colors={colors}
-          />
-          <InfoRow
-            label="Output Rate"
-            value={`${((currentDAC.currentSampleRate ?? 0) / 1000).toFixed(1)} kHz`}
-            colors={colors}
-          />
-        </View>
-      )}
-
+       <View style={[styles.card, { backgroundColor: colors.background.secondary }]}>
+    <View style={styles.cardHeader}>
+      <Cpu size={16} color={colors.primary[500]} />
+      <Text style={[styles.label, { color: colors.primary[500] }]}>
+        DAC OUTPUT
+      </Text>
+    </View>
+    {/* Ganti .hardware.productName menjadi .name */}
+    <InfoRow label="Device" value={currentDAC.name} colors={colors} />
+    <InfoRow label="Manufacturer" value={currentDAC.manufacturer} colors={colors} />
+    <InfoRow
+      label="Mode"
+      value={isExclusiveMode ? "Bit-Perfect (Direct)" : "System Mixer"}
+      colors={colors}
+    />
+    <InfoRow
+      label="Output Rate"
+      value={`${((currentDAC.currentSampleRate ?? 0) / 1000).toFixed(1)} kHz`}
+      colors={colors}
+    />
+  </View>
+       )}
+       
       {/* 6. ARTIST BIOGRAPHY */}
       <View style={[styles.card, { backgroundColor: colors.background.secondary }]}>
         {/* Header + Fetch Button */}

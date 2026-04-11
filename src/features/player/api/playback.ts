@@ -1,6 +1,6 @@
 // src/features/player/api/playback.ts
 
-import TrackPlayer, { Event, State } from "react-native-track-player"; // ✅ State sebagai value, bukan type-only
+import TrackPlayer, { Event, State } from "react-native-track-player";
 
 import { NativeDSPModule } from "@/features/equalizer/api/nativeInterface";
 // (sesuaikan path ke file interface di atas)
@@ -30,21 +30,19 @@ const SESSION_ID_RETRY_DELAY_MS = 300;
  * Retries up to SESSION_ID_MAX_RETRIES times with a short delay between attempts,
  * because the session may not be ready immediately after a track change.
  */
+ 
 const getAudioSessionId = async (): Promise<number | null> => {
   if (Platform.OS !== "android") return null;
 
   for (let attempt = 1; attempt <= SESSION_ID_MAX_RETRIES; attempt++) {
     try {
-      const trackPlayer = TrackPlayer as any;
-
-      if (typeof trackPlayer.getAudioSessionId === "function") {
-        const id = await trackPlayer.getAudioSessionId();
-        if (id && id > 0) return id;
-      }
-
-      if (typeof NativeDSPModule?.getAudioSessionId === "function") {
-        const id = await NativeDSPModule.getAudioSessionId();
-        if (id && id > 0) return id;
+      // Tanya AudioManager langsung — paling reliable
+      if (typeof NativeDSPModule?.getActiveAudioSessionId === "function") {
+        const id = await NativeDSPModule.getActiveAudioSessionId();
+        if (id && id > 0) {
+          console.log(`[DSP] Got session ID from AudioManager: ${id}`);
+          return id;
+        }
       }
     } catch (error) {
       console.warn(`[DSP] getAudioSessionId attempt ${attempt} failed:`, error);
@@ -55,7 +53,6 @@ const getAudioSessionId = async (): Promise<number | null> => {
     }
   }
 
-  // Only warn once after all retries exhausted
   console.warn("[DSP] Could not obtain audio session ID after retries");
   return null;
 };
@@ -291,8 +288,7 @@ export const dspHelpers = {
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
-
-const stateToString = (state: State): string => {
+const stateToString = (state: number): string => {
   switch (state) {
     case State.Playing:   // ✅
       return "playing";

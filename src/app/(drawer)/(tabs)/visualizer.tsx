@@ -405,7 +405,7 @@ export default function VisualizerScreen() {
                 marginTop: 4,
               }}
             >
-              {currentDAC.hardware.productName} •{" "}
+              {currentDAC.name} •{" "}
               {audioSessionId > 0 ? "Active" : "Inactive"}
             </Text>
           )}
@@ -543,7 +543,7 @@ export default function VisualizerScreen() {
                     marginTop: 2,
                   }}
                 >
-                  DAC: {currentDAC.hardware.productName}
+                  DAC: {currentDAC.name}
                 </Text>
               )}
             </View>

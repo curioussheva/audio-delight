@@ -10,7 +10,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SplashScreen from "expo-splash-screen";
 import { 
-  AppState, 
+  AppState as RNAppState,  // ✅ alias untuk React Native AppState
   Platform, 
   View, 
   Text, 
@@ -36,21 +36,21 @@ import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
 // Register playback service
 TrackPlayer.registerPlaybackService(() => playbackService);
 
-// Prevent splash screen from auto-hiding - we'll control it manually
+// Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
 
-// App initialization states
-type AppState = 
-  | "initializing"    // First load, show LoadingScreen
-  | "loading"         // LoadingScreen visible, init running
-  | "ready"           // Init done, fade to app
-  | "error";          // Init failed
+// Local type untuk app initialization state — nama berbeda dari RNAppState
+type AppInitState = 
+  | "initializing"
+  | "loading"
+  | "ready"
+  | "error";
 
 export default function RootLayout() {
-  const [appState, setAppState] = useState<AppState>("initializing");
+  // ✅ Pakai AppInitState, bukan AppState
+  const [appState, setAppState] = useState<AppInitState>("initializing");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
-  // Animation values for content fade in
   const contentOpacity = useRef(new Animated.Value(0)).current;
   
   const initStore = usePlayerStore((state) => state.initStore);
@@ -61,11 +61,11 @@ export default function RootLayout() {
   const segments = useSegments();
   const isPlayerOpen = pathname?.startsWith("/player");
   
-  // Refs to prevent multiple initializations
   const hasInitialized = useRef(false);
-  const appStateSubscription = useRef<ReturnType<typeof AppState.addEventListener> | null>(null);
+  // ✅ Pakai RNAppState untuk addEventListener
+  const appStateSubscription = useRef<ReturnType<typeof RNAppState.addEventListener> | null>(null);
 
-  // --- Master Audio Sync (Prevent Require Cycle) ---
+  // --- Master Audio Sync ---
   useEffect(() => {
     const unsub = usePlayerStore.subscribe((state) => {
       if (state.audioMode === "bit-perfect") {
@@ -93,7 +93,8 @@ export default function RootLayout() {
 
   // --- App State Listener (Resume Playback) ---
   useEffect(() => {
-    appStateSubscription.current = AppState.addEventListener("change", (nextAppState) => {
+    // ✅ Pakai RNAppState
+    appStateSubscription.current = RNAppState.addEventListener("change", (nextAppState) => {
       if (nextAppState === "active") {
         const { isPlaying, currentSong } = usePlayerStore.getState();
         if (isPlaying && currentSong) {
@@ -112,19 +113,15 @@ export default function RootLayout() {
     try {
       console.log("[App] Starting initialization...");
       
-      // Initialize audio engine (non-blocking)
       audioEngine.initialize().catch((err) => 
         console.warn("[App] Audio engine init warning:", err.message)
       );
 
-      // Initialize player store
       await initStore();
 
-      // Load EQ settings
       const eqStore = useEqualizerStore.getState();
       await eqStore.setEQEnabled(eqStore.isEQEnabled);
 
-      // Restore audio mode preference
       const savedMode = await AsyncStorage.getItem("audio_mode_preference");
       if (savedMode && (savedMode === "bit-perfect" || savedMode === "dsp")) {
         await setAudioMode(savedMode);
@@ -144,16 +141,11 @@ export default function RootLayout() {
   const handleLoadingComplete = useCallback(() => {
     console.log("[App] LoadingScreen complete, transitioning to app...");
     
-    // Hide native splash screen first
-    SplashScreen.hideAsync().catch(() => {
-      // Ignore errors
-    });
+    SplashScreen.hideAsync().catch(() => {});
 
-    // Small delay to ensure SplashScreen is fully hidden
     setTimeout(() => {
       setAppState("ready");
       
-      // Fade in content
       Animated.timing(contentOpacity, {
         toValue: 1,
         duration: 600,
@@ -167,13 +159,9 @@ export default function RootLayout() {
     if (hasInitialized.current) return;
     hasInitialized.current = true;
 
-    // Start initialization immediately
     performInitialization().then(() => {
-      // Don't transition yet - wait for LoadingScreen to finish its animation
       setAppState("loading");
-    }).catch(() => {
-      // Error already handled in performInitialization
-    });
+    }).catch(() => {});
   }, [performInitialization]);
 
   // --- Retry Handler ---
@@ -182,7 +170,6 @@ export default function RootLayout() {
     setAppState("initializing");
     hasInitialized.current = false;
     
-    // Small delay before retry
     setTimeout(() => {
       performInitialization().then(() => {
         setAppState("loading");
@@ -251,7 +238,7 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000', // Ensure black background always
+    backgroundColor: '#000',
   },
   contentContainer: {
     flex: 1,

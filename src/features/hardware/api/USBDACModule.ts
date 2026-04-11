@@ -1,3 +1,4 @@
+// src/features/hardware/api/USBDACModule.ts
 import { NativeModules, NativeEventEmitter, Platform } from "react-native";
 
 // ============================================================================
@@ -13,6 +14,7 @@ export interface DACCapabilities {
 export interface DACInfo {
   id: string;
   name: string;
+  manufacturer?: string;
   type: string;
   sampleRates: number[];
   channelCounts: number[];
