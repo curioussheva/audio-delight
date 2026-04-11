@@ -51,18 +51,25 @@ class NativeDSPModule(reactContext: ReactApplicationContext) :
  * Query AudioManager untuk mendapatkan active audio session ID
  * dari stream yang sedang playing — tidak bergantung pada effects.
  */
-   @ReactMethod
-   fun getActiveAudioSessionId(promise: Promise) {
+    @ReactMethod
+    fun getActiveAudioSessionId(promise: Promise) {
     try {
         val am = reactApplicationContext
             .getSystemService(Context.AUDIO_SERVICE) as AudioManager
         
         // API 26+: query active playback sessions
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            val configs = am.getActivePlaybackConfigurations()
+            val configs = am.activePlaybackConfigurations // Menggunakan properti akses langsung
+            
+            // Kita tentukan tipe datanya secara eksplisit (AudioPlaybackConfiguration)
+            // untuk menghindari kesalahan inferensi pada compiler Kotlin terbaru.
             val sessionId = configs
-                .mapNotNull { it.audioSessionId.takeIf { id -> id > 0 } }
+                .mapNotNull { config -> 
+                    val id = config.audioSessionId
+                    if (id > 0) id else null 
+                }
                 .firstOrNull() ?: -1
+                
             promise.resolve(sessionId)
         } else {
             // Fallback API < 26: kembalikan -1, JS akan skip

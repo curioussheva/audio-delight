@@ -2,17 +2,22 @@
   "expo": {
     "name": "PristineAudio",
     "slug": "pristine-audio",
-    "version": "1.0.0",
+    "version": "1.0.37",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "pristineaudio",
     "userInterfaceStyle": "automatic",
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.pristineaudio.app",
       "infoPlist": {
-        "UIBackgroundModes": ["audio", "fetch"]
+        "UIBackgroundModes": [
+          "audio",
+          "fetch"
+        ]
       }
     },
     "android": {
@@ -34,7 +39,12 @@
         "android.permission.INTERNET",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
-        "MANAGE_EXTERNAL_STORAGE"
+        "MANAGE_EXTERNAL_STORAGE",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.ACCESS_MEDIA_LOCATION",
+        "android.permission.READ_MEDIA_VIDEO"
       ],
       "intentFilters": [
         {
@@ -100,6 +110,14 @@
       "typedRoutes": false,
       "tsconfigPaths": true
     },
-    "owner": "curioussheva"
+    "owner": "curioussheva",
+    "extra": {
+      "router": {
+        "sitemap": false
+      },
+      "eas": {
+        "projectId": "62e1e6e9-9171-497b-b0f1-832a6d3e1424"
+      }
+    }
   }
-} 
+}
