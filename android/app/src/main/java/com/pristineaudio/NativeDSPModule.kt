@@ -57,22 +57,16 @@ class NativeDSPModule(reactContext: ReactApplicationContext) :
         val am = reactApplicationContext
             .getSystemService(Context.AUDIO_SERVICE) as AudioManager
         
-        // API 26+: query active playback sessions
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            val configs = am.activePlaybackConfigurations // Menggunakan properti akses langsung
-            
-            // Kita tentukan tipe datanya secara eksplisit (AudioPlaybackConfiguration)
-            // untuk menghindari kesalahan inferensi pada compiler Kotlin terbaru.
+            val configs = am.getActivePlaybackConfigurations()
             val sessionId = configs
-                .mapNotNull { config -> 
-                    val id = config.audioSessionId
-                    if (id > 0) id else null 
+                .mapNotNull { config ->
+                    val id = config.getAudioSessionId()  // ✅ method, bukan property
+                    if (id > 0) id else null
                 }
                 .firstOrNull() ?: -1
-                
             promise.resolve(sessionId)
         } else {
-            // Fallback API < 26: kembalikan -1, JS akan skip
             promise.resolve(-1)
         }
     } catch (e: Exception) {
