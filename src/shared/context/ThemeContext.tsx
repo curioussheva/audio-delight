@@ -32,7 +32,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const systemColorScheme = useColorScheme();
 
-  const [themeId, setThemeId] = useState<ThemeId>("obsidian");
+  const [themeId, setThemeId] = useState<ThemeId>("midnight-blue");
   const [theme, setThemeObj] = useState<Theme>(DEFAULT_THEME);
 
   useEffect(() => {
@@ -47,13 +47,13 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
           setThemeObj(getThemeById(saved));
         } else {
           const defaultId: ThemeId =
-            systemColorScheme === "light" ? "light-elegant" : "obsidian";
+            systemColorScheme === "light" ? "light-elegant" : "midnight-blue";
           setThemeId(defaultId);
           setThemeObj(getThemeById(defaultId));
         }
       } catch (error) {
         console.error("Failed to load theme:", error);
-        setThemeId("obsidian");
+        setThemeId("midnight-blue");
         setThemeObj(DEFAULT_THEME);
       }
     };
@@ -61,7 +61,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [systemColorScheme]);
 
   const setTheme = async (newThemeId: ThemeId) => {
-    const safeId = newThemeId in ALL_THEMES ? newThemeId : "obsidian";
+    const safeId = newThemeId in ALL_THEMES ? newThemeId : "midnight-blue";
     setThemeId(safeId);
     setThemeObj(getThemeById(safeId));
 
@@ -73,7 +73,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const toggleTheme = () => {
-    const newId: ThemeId = theme.isDark ? "light-elegant" : "obsidian";
+    const newId: ThemeId = theme.isDark ? "light-elegant" : "midnight-blue";
     setTheme(newId);
   };
 

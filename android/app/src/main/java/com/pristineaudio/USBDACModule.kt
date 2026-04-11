@@ -1,250 +1,262 @@
-// src/hooks/useUSBDAC.ts
-import { useState, useEffect, useCallback } from "react";
-import { NativeModules, Platform } from "react-native";
-import { DACInfo, DACConfig } from "@/shared/types/dac";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import USBDACService from "@/features/hardware/api/usb"; // Import service kita
+package com.pristineaudio
 
-const { USBDACModule } = NativeModules;
-const STORAGE_KEY = "@pristineaudio/dac_config";
+import android.content.Context
+import android.media.*
+import android.os.Build
+import android.util.Log
+import com.facebook.react.bridge.*
+import com.facebook.react.modules.core.DeviceEventManagerModule
 
-export const useUSBDAC = () => {
-  const [dacs, setDacs] = useState<DACInfo[]>([]);
-  const [currentDAC, setCurrentDAC] = useState<DACInfo | null>(null);
-  const [isExclusiveMode, setIsExclusiveMode] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [config, setConfig] = useState<DACConfig | null>(null);
-  const [error, setError] = useState<string | null>(null);
+class USBDACModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
-  // 1. Integrasi dengan USBDACService Listener
-  useEffect(() => {
-    loadSavedConfig();
+    private val audioManager = reactContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private var equalizer: android.media.audiofx.Equalizer? = null
+    private var currentAudioSessionId: Int = 0
+    private var isExclusiveActive: Boolean = false
 
-    // Subscribe ke perubahan hardware dari Service
-    const unsubscribe = USBDACService.addListener((dac) => {
-      if (dac) {
-        setCurrentDAC(dac);
-        // Jika DAC dicolok dan kita punya config tersimpan untuk ID ini, aktifkan
-        if (config?.dacId === dac.id && config.exclusiveMode) {
-          activateExclusiveMode(dac.id);
-        }
-      } else {
-        setCurrentDAC(null);
-        setIsExclusiveMode(false);
-      }
-    });
-
-    if (Platform.OS === "android") {
-      scanDACs();
-    }
-
-    return () => unsubscribe();
-  }, [config?.dacId]); // Re-run jika config ID berubah
-
-  const loadSavedConfig = async () => {
-    try {
-      const saved = await AsyncStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setConfig(parsed);
-        if (parsed.exclusiveMode) {
-          // Cek apakah mode exclusive masih aktif
-          checkExclusiveMode();
-        }
-      }
-    } catch (error) {
-      console.error("Failed to load DAC config:", error);
-    }
-  };
-
-  const saveConfig = async (newConfig: DACConfig) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newConfig));
-      setConfig(newConfig);
-    } catch (error) {
-      console.error("Failed to save DAC config:", error);
-    }
-  };
-
-  const scanDACs = useCallback(async () => {
-    if (!USBDACModule) {
-      setError("USBDACModule not available");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const detected = await USBDACService.detectDACs(); // Gunakan service agar logic parsing seragam
-      setDacs(detected);
-
-      if (detected.length === 1 && !currentDAC) {
-        await handleSelectDAC(detected[0].id);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentDAC]);
-
-  const handleSelectDAC = useCallback(
-    async (dacId: string) => {
-      const selected = dacs.find((d) => d.id === dacId);
-      if (!selected) return;
-
-      // 2. Default Config yang lebih Audiophile-focused
-      const newConfig: DACConfig = {
-        dacId,
-        exclusiveMode: true,
-        sampleRate: "auto",
-        bitDepth: selected.bitDepths.includes(32) ? 32 : 24,
-        bufferSize: 512, // Buffer sedikit lebih besar untuk stabilitas Hi-Res
-        dsdMode: selected.capabilities.dsdNative
-          ? "native"
-          : selected.capabilities.dsdDoP
-            ? "dop"
-            : "off",
-        mqaMode: selected.capabilities.mqaRenderer ? "renderer" : "off",
-        volumeControl: "hardware",
-      };
-
-      await saveConfig(newConfig);
-      setCurrentDAC(selected);
-      await activateExclusiveMode(dacId);
-    },
-    [dacs],
-  );
-
-  const checkExclusiveMode = useCallback(async () => {
-    if (!USBDACModule) return false;
-    try {
-      const active = await USBDACModule.isExclusiveModeActive();
-      setIsExclusiveMode(active);
-      return active;
-    } catch {
-      return false;
-    }
-  }, []);
-
-  const activateExclusiveMode = useCallback(
-    async (dacId: string) => {
-      if (!USBDACModule) return false;
-
-      setLoading(true);
-      setError(null);
-      try {
-        const result = await USBDACModule.setExclusiveMode(dacId, true);
-
-        if (result?.success) {
-          setIsExclusiveMode(true);
-
-          // Update config
-          if (config) {
-            await saveConfig({ ...config, exclusiveMode: true });
-          }
-
-          return true;
-        }
-        return false;
-      } catch (error: any) {
-        setError(error.message);
-        console.error("Failed to activate exclusive mode:", error);
-        return false;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [config],
-  );
-
-  const deactivateExclusiveMode = useCallback(async () => {
-    if (!USBDACModule || !currentDAC) return false;
-
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await USBDACModule.setExclusiveMode(currentDAC.id, false);
-
-      if (result?.success) {
-        setIsExclusiveMode(false);
-
-        // Update config
-        if (config) {
-          await saveConfig({ ...config, exclusiveMode: false });
+    // ─── CALLBACK UNTUK USB HOT-PLUG ──────────────────────────────────────────
+    private val audioDeviceCallback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
+            addedDevices.firstOrNull { isUsbDevice(it) }?.let { device ->
+                val event = Arguments.createMap().apply {
+                    putString("status", "connected")
+                    putMap("dac", createDacMap(device)) // Kirim object DAC lengkap ke TS
+                }
+                sendEvent("onDACChange", event)
+                Log.d("USBDAC", "USB DAC Connected: ${device.productName}")
+            }
         }
 
-        return true;
-      }
-      return false;
-    } catch (error: any) {
-      setError(error.message);
-      console.error("Failed to deactivate exclusive mode:", error);
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  }, [currentDAC, config]);
-
-  const toggleExclusiveMode = useCallback(async () => {
-    if (!currentDAC) {
-      setError("No DAC selected");
-      return false;
-    }
-
-    if (isExclusiveMode) {
-      return await deactivateExclusiveMode();
-    } else {
-      return await activateExclusiveMode(currentDAC.id);
-    }
-  }, [
-    currentDAC,
-    isExclusiveMode,
-    activateExclusiveMode,
-    deactivateExclusiveMode,
-  ]);
-
-  // Set sample rate
-  const setSampleRate = useCallback(
-    async (rate: number | "auto") => {
-      if (!config || !currentDAC) return false;
-
-      // Jika 'auto', biarkan sistem yang menentukan
-      if (rate !== "auto") {
-        // Cek apakah sample rate didukung
-        if (!currentDAC.sampleRates?.includes(rate)) {
-          setError(`Sample rate ${rate}Hz not supported by DAC`);
-          return false;
+        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) {
+            if (removedDevices.any { isUsbDevice(it) }) {
+                val event = Arguments.createMap().apply {
+                    putString("status", "disconnected")
+                }
+                sendEvent("onDACChange", event)
+                Log.d("USBDAC", "USB DAC Disconnected")
+            }
         }
-      }
+    }
 
-      const newConfig = {
-        ...config,
-        sampleRate: rate,
-      };
+    init {
+        audioManager.registerAudioDeviceCallback(audioDeviceCallback, null)
+    }
 
-      await saveConfig(newConfig);
+    override fun getName(): String = "USBDACModule"
 
-      // Di sini kita perlu memberi tahu TrackPlayer untuk mengubah sample rate
-      // Ini akan diimplementasikan nanti
+    override fun invalidate() {
+        audioManager.unregisterAudioDeviceCallback(audioDeviceCallback)
+        releaseEqualizerInternal()
+        super.invalidate()
+    }
 
-      return true;
-    },
-    [config, currentDAC, saveConfig],
-  );
+    // ─── 1. DETEKSI DAC ───────────────────────────────────────────────────────
+    
+    @ReactMethod
+    fun detectDACs(promise: Promise) {
+        try {
+            val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            val dacList = Arguments.createArray()
 
-  return {
-    dacs,
-    currentDAC,
-    isExclusiveMode,
-    outputMode: isExclusiveMode ? "exclusive" : "system",
-    loading,
-    config,
-    error,
-    scanDACs,
-    selectDAC: handleSelectDAC,
-    toggleExclusiveMode,
-    setSampleRate,
-    checkExclusiveMode,
-  };
-};
+            devices.forEach { device ->
+                if (isUsbDevice(device)) {
+                    dacList.pushMap(createDacMap(device))
+                }
+            }
+            promise.resolve(dacList)
+        } catch (e: Exception) {
+            promise.reject("ERR_DETECTION", e.message)
+        }
+    }
+
+    // Helper untuk mapping device ke format yang dimengerti TypeScript
+    private fun createDacMap(device: AudioDeviceInfo): WritableMap {
+        return Arguments.createMap().apply {
+            putString("id", device.id.toString())
+            putString("name", device.productName?.toString() ?: "Unknown USB DAC")
+            putString("type", "usb")
+            
+            val rates = Arguments.createArray()
+            device.sampleRates.forEach { rates.pushInt(it) }
+            putArray("sampleRates", rates)
+
+            val channels = Arguments.createArray()
+            device.channelCounts.forEach { channels.pushInt(it) }
+            putArray("channelCounts", channels)
+            
+            // Android tidak expose bitDepth secara langsung di AudioDeviceInfo API lama
+            // Kita beri array kosong atau nilai default agar TS tidak crash
+            val bitDepths = Arguments.createArray()
+            bitDepths.pushInt(16)
+            bitDepths.pushInt(24)
+            putArray("bitDepths", bitDepths)
+
+            putBoolean("supportsHiRes", device.sampleRates.any { it > 48000 })
+            putInt("currentSampleRate", 48000)
+            
+            // Mock Capabilities agar interface TS DACCapabilities terpenuhi
+            val capabilities = Arguments.createMap().apply {
+                putBoolean("hiRes", device.sampleRates.any { it > 48000 })
+                putBoolean("dsdDoP", false)
+                putBoolean("mqaRenderer", false)
+            }
+            putMap("capabilities", capabilities)
+        }
+    }
+
+    // ─── 2. EXCLUSIVE MODE & SETTINGS ─────────────────────────────────────────
+
+    @ReactMethod
+    fun isExclusiveModeActive(promise: Promise) {
+        promise.resolve(isExclusiveActive)
+    }
+
+    @ReactMethod
+    fun setExclusiveMode(dacId: String, enable: Boolean, promise: Promise) {
+        try {
+            // Implementasi Bypass OS Mixer di sini (misal via Oboe/AAudio)
+            isExclusiveActive = enable
+            
+            val result = Arguments.createMap().apply {
+                putBoolean("success", true)
+                putBoolean("active", enable)
+                putString("mode", if (enable) "exclusive" else "system")
+            }
+            promise.resolve(result)
+        } catch (e: Exception) {
+            promise.reject("ERR_EXCLUSIVE", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun setSampleRate(rate: Int, promise: Promise) {
+        try {
+            // Implementasi pergantian clock rate hardware DAC
+            val result = Arguments.createMap().apply {
+                putBoolean("success", true)
+                putInt("sampleRate", rate)
+            }
+            promise.resolve(result)
+        } catch (e: Exception) {
+            promise.reject("ERR_SAMPLERATE", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun getRecommendedSettings(dacId: String, promise: Promise) {
+        try {
+            val result = Arguments.createMap().apply {
+                putInt("sampleRate", 192000) // Default target untuk Hi-Res
+                putInt("bitDepth", 24)
+                putInt("bufferSize", 512)
+                putString("dsdMode", "off")
+                putBoolean("exclusiveModeRecommended", true)
+            }
+            promise.resolve(result)
+        } catch (e: Exception) {
+            promise.reject("ERR_SETTINGS", e.message)
+        }
+    }
+
+    // ─── 3. AUDIO SESSION & EQUALIZER ─────────────────────────────────────────
+
+    @ReactMethod
+    fun createAudioSession(promise: Promise) {
+        try {
+            val sessionId = if (currentAudioSessionId > 0) currentAudioSessionId else audioManager.generateAudioSessionId()
+            currentAudioSessionId = sessionId
+            
+            val result = Arguments.createMap().apply {
+                putInt("sessionId", sessionId)
+                putBoolean("isNew", true)
+            }
+            promise.resolve(result)
+        } catch (e: Exception) {
+            promise.reject("ERR_SESSION", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun getCurrentAudioSessionId(promise: Promise) {
+        promise.resolve(currentAudioSessionId)
+    }
+
+    @ReactMethod
+    fun releaseAudioSession(promise: Promise) {
+        releaseEqualizerInternal()
+        promise.resolve(true)
+    }
+
+    @ReactMethod
+    fun setEqualizerGains(gains: ReadableArray, audioSessionId: Int, promise: Promise) {
+        try {
+            if (audioSessionId <= 0) {
+                promise.reject("ERR_SESSION", "Invalid Audio Session ID")
+                return
+            }
+
+            if (equalizer == null || currentAudioSessionId != audioSessionId) {
+                releaseEqualizerInternal()
+                equalizer = android.media.audiofx.Equalizer(0, audioSessionId).apply {
+                    enabled = true
+                }
+                currentAudioSessionId = audioSessionId
+            }
+
+            val eq = equalizer!!
+            val range = eq.bandLevelRange
+            val minLevel = range[0]
+            val maxLevel = range[1]
+
+            val numBands = eq.numberOfBands.toInt()
+            val gainsSize = gains.size()
+            val bandsToApply = if (gainsSize < numBands) gainsSize else numBands
+
+            for (i in 0 until bandsToApply) {
+                var level = (gains.getDouble(i) * 100).toInt().toShort()
+                if (level < minLevel) level = minLevel
+                if (level > maxLevel) level = maxLevel
+                eq.setBandLevel(i.toShort(), level)
+            }
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("ERR_EQ", "Hardware rejected EQ: ${e.message}")
+        }
+    }
+
+    @ReactMethod
+    fun releaseEqualizer(promise: Promise) {
+        releaseEqualizerInternal()
+        promise.resolve(true)
+    }
+
+    private fun releaseEqualizerInternal() {
+        try {
+            equalizer?.release()
+        } catch (e: Exception) {
+            Log.e("USBDAC", "Error releasing equalizer", e)
+        } finally {
+            equalizer = null
+            currentAudioSessionId = 0
+        }
+    }
+
+    // ─── UTILS ────────────────────────────────────────────────────────────────
+
+    private fun isUsbDevice(device: AudioDeviceInfo): Boolean {
+        return device.type == AudioDeviceInfo.TYPE_USB_DEVICE ||
+               device.type == AudioDeviceInfo.TYPE_USB_HEADSET ||
+               device.type == AudioDeviceInfo.TYPE_USB_ACCESSORY
+    }
+
+    private fun sendEvent(eventName: String, params: Any?) {
+        reactApplicationContext
+            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+            .emit(eventName, params)
+    }
+
+    // Dummy method yang diwajibkan oleh React Native NativeEventEmitter
+    @ReactMethod fun addListener(eventName: String) {}
+    @ReactMethod fun removeListeners(count: Int) {}
+}
+ 

@@ -70,7 +70,7 @@ TaskManager.defineTask(TASK_NAME, async () => {
 
 // ── Public API ─────────────────────────────────────────────────
 export const BackgroundScanTask = {
-  async register(intervalMinutes = 30): Promise<boolean> {
+  async register(intervalMinutes = 60): Promise<boolean> {
     if (Platform.OS !== "android") {
       console.log("[BackgroundTask] Only supported on Android");
       return false;

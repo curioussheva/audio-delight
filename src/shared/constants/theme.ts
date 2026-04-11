@@ -247,7 +247,7 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
 };
 
 export const getThemeById = (id: ThemeId): Theme =>
-  ALL_THEMES[id] || ALL_THEMES["deep-navy"];
+  ALL_THEMES[id] || ALL_THEMES["midnight-blue"];
 
 export const getRandomTheme = (): Theme => {
   const keys = Object.keys(ALL_THEMES) as ThemeId[];
@@ -255,7 +255,7 @@ export const getRandomTheme = (): Theme => {
 };
 
 export const THEMES_LIST = Object.values(ALL_THEMES);
-export const DEFAULT_THEME = ALL_THEMES["deep-navy"];
+export const DEFAULT_THEME = ALL_THEMES["midnight-blue"];
 
 export const THEME_CATEGORIES = {
   light: ["light-gray", "pure-white", "light-elegant", "light-silver"],
