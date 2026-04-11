@@ -1,8 +1,8 @@
+// src/features/player/components/FloatingPlayer.tsx
 import React from "react";
-import { View, Text, StyleSheet, Pressable, Platform } from "react-native";
+import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import { useIsFocused } from "@react-navigation/native";
 
 import Animated, {
   useAnimatedStyle,
@@ -13,7 +13,6 @@ import Animated, {
 } from "react-native-reanimated";
 import { GestureDetector, Gesture } from "react-native-gesture-handler";
 
-// Lucide Icons
 import {
   Play,
   Pause,
@@ -24,7 +23,7 @@ import {
 } from "lucide-react-native";
 
 import { usePlayerStore } from "@/features/player/store/playerStore";
-import { useTheme } from "@/context/ThemeContext";
+import { useTheme } from "@/shared/context/ThemeContext";
 
 const PLACEHOLDER = require("../../../../assets/images/icon.png");
 
@@ -32,8 +31,6 @@ export default function FloatingPlayer() {
   const { theme } = useTheme();
   const { colors, shadows } = theme;
   const router = useRouter();
-
-  const isFocused = useIsFocused();
 
   const {
     currentSong,
@@ -68,192 +65,139 @@ export default function FloatingPlayer() {
   });
 
   const animatedContainer = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
-    opacity: withTiming(translateX.value === 0 ? 1 : 0.75),
+    transform: [{ translateX: withSpring(translateX.value, { damping: 20 }) }],
+    opacity: withTiming(Math.abs(translateX.value) > 20 ? 0.75 : 1),
   }));
 
-  // Hanya muncul di Library tab + ada lagu yang diputar
-  if (!currentSong || !isFocused) {
-    return null;
-  }
+  // ✅ Hanya sembunyikan kalau tidak ada lagu — isFocused DIHAPUS
+  //    TabsLayout yang handle visibility per tab
+  if (!currentSong) return null;
 
   const artworkSource = currentSong.artwork
     ? { uri: currentSong.artwork }
     : PLACEHOLDER;
 
   return (
-    <View style={s.outer}>
-      <GestureDetector gesture={swipeGesture}>
-        <Animated.View
-          style={[
-            s.wrapper,
-            {
-              backgroundColor: colors.background.elevated,
-              borderColor: colors.border?.light || "#ffffff20",
-              ...shadows.xl,
-            },
-            animatedContainer,
-          ]}
-        >
-          {/* Accent line */}
-          <View
-            style={[s.accentLine, { backgroundColor: colors.primary[500] }]}
-          />
+    // ✅ outer TIDAK punya position absolute / bottom — TabsLayout yang atur
+    <GestureDetector gesture={swipeGesture}>
+      <Animated.View
+        style={[
+          s.wrapper,
+          {
+            backgroundColor: colors.background.elevated,
+            borderColor: colors.border?.light || "#ffffff20",
+            ...shadows?.xl,
+          },
+          animatedContainer,
+        ]}
+      >
+        {/* Accent line */}
+        <View style={[s.accentLine, { backgroundColor: colors.primary[500] }]} />
 
-          {/* Progress bar */}
-          <View
+        {/* Progress bar */}
+        <View style={[s.progressBg, { backgroundColor: colors.background.tertiary }]}>
+          <Animated.View
             style={[
-              s.progressBg,
-              { backgroundColor: colors.background.tertiary },
+              s.progressFill,
+              { backgroundColor: colors.primary[400] },
+              animatedProgress,
             ]}
-          >
-            <Animated.View
-              style={[
-                s.progressFill,
-                { backgroundColor: colors.primary[400] },
-                animatedProgress,
-              ]}
-            />
-          </View>
+          />
+        </View>
 
-          {/* Content */}
-          <View style={s.content}>
-            <Pressable onPress={() => router.push("/player" as any)}>
-              <Image
-                source={artworkSource}
-                style={[
-                  s.artwork,
-                  { backgroundColor: colors.background.tertiary },
-                ]}
-                contentFit="cover"
-                transition={300}
+        {/* Content */}
+        <View style={s.content}>
+          {/* Artwork */}
+          <Pressable onPress={() => router.push("/player" as any)}>
+            <Image
+              source={artworkSource}
+              style={[s.artwork, { backgroundColor: colors.background.tertiary }]}
+              contentFit="cover"
+              transition={300}
+            />
+          </Pressable>
+
+          {/* Info */}
+          <Pressable style={s.info} onPress={() => router.push("/player" as any)}>
+            <Text
+              style={[s.title, { color: colors.text.primary }]}
+              numberOfLines={1}
+            >
+              {currentSong.title}
+            </Text>
+
+            <View style={s.metaRow}>
+              {currentSong.bitDepth > 16 && (
+                <View style={[s.hiResBadge, { borderColor: colors.status.warning }]}>
+                  <Text style={[s.hiResText, { color: colors.status.warning }]}>
+                    HI-RES
+                  </Text>
+                </View>
+              )}
+              <Text
+                style={[s.artist, { color: colors.text.secondary }]}
+                numberOfLines={1}
+              >
+                {currentSong.artist || "Unknown Artist"}
+              </Text>
+            </View>
+          </Pressable>
+
+          {/* Controls */}
+          <View style={s.controls}>
+            <Pressable onPress={toggleShuffle} hitSlop={8}>
+              <Shuffle
+                size={18}
+                color={shuffle ? colors.primary[400] : colors.text.tertiary}
+                strokeWidth={2.5}
               />
             </Pressable>
 
-            <Pressable
-              style={s.info}
-              onPress={() => router.push("/player" as any)}
-            >
-              <Text
-                style={[s.title, { color: colors.text.primary }]}
-                numberOfLines={1}
-              >
-                {currentSong.title}
-              </Text>
-
-              {/* META ROW - SUDAH DIPERBAIKI */}
-              <View style={s.metaRow}>
-                {/* HI-RES Badge */}
-                {currentSong?.bitDepth > 16 && (
-                  <View
-                    style={[
-                      s.hiResBadge,
-                      { borderColor: colors.status.warning },
-                    ]}
-                  >
-                    <Text
-                      style={[s.hiResText, { color: colors.status.warning }]}
-                    >
-                      HI-RES
-                    </Text>
-                  </View>
-                )}
-
-                {/* Artist */}
-                <Text
-                  style={[s.artist, { color: colors.text.secondary }]}
-                  numberOfLines={1}
-                >
-                  {currentSong?.artist || "Unknown Artist"}
-                </Text>
-              </View>
+            <Pressable onPress={playPrevious} hitSlop={8}>
+              <SkipBack size={20} color={colors.text.secondary} strokeWidth={2.5} />
             </Pressable>
 
-            {/* Controls */}
-            <View style={s.controls}>
-              <Pressable onPress={toggleShuffle} hitSlop={8}>
-                <Shuffle
-                  size={18}
-                  color={shuffle ? colors.primary[400] : colors.text.tertiary}
-                  strokeWidth={2.5}
-                />
-              </Pressable>
-
-              <Pressable onPress={playPrevious} hitSlop={8}>
-                <SkipBack
+            <Pressable
+              onPress={togglePlay}
+              style={[s.playBtn, { backgroundColor: colors.primary[500] }]}
+            >
+              {isPlaying ? (
+                <Pause size={20} color={colors.text.inverse} strokeWidth={3} />
+              ) : (
+                <Play
                   size={20}
-                  color={colors.text.secondary}
-                  strokeWidth={2.5}
+                  color={colors.text.inverse}
+                  strokeWidth={3}
+                  style={{ marginLeft: 2 }}
                 />
-              </Pressable>
+              )}
+            </Pressable>
 
-              <Pressable
-                onPress={togglePlay}
-                style={[s.playBtn, { backgroundColor: colors.primary[500] }]}
-              >
-                {isPlaying ? (
-                  <Pause
-                    size={20}
-                    color={colors.text.inverse}
-                    strokeWidth={3}
-                  />
-                ) : (
-                  <Play
-                    size={20}
-                    color={colors.text.inverse}
-                    strokeWidth={3}
-                    style={{ marginLeft: 2 }}
-                  />
-                )}
-              </Pressable>
+            <Pressable onPress={playNext} hitSlop={8}>
+              <SkipForward size={20} color={colors.text.secondary} strokeWidth={2.5} />
+            </Pressable>
 
-              <Pressable onPress={playNext} hitSlop={8}>
-                <SkipForward
-                  size={20}
-                  color={colors.text.secondary}
-                  strokeWidth={2.5}
+            <Pressable onPress={toggleRepeat} hitSlop={8} style={{ position: "relative" }}>
+              <Repeat
+                size={18}
+                color={repeat !== "off" ? colors.primary[400] : colors.text.tertiary}
+                strokeWidth={2.5}
+              />
+              {repeat === "track" && (
+                <View
+                  style={[s.repeatOneDot, { backgroundColor: colors.primary[400] }]}
                 />
-              </Pressable>
-
-              <Pressable
-                onPress={toggleRepeat}
-                hitSlop={8}
-                style={{ position: "relative" }}
-              >
-                <Repeat
-                  size={18}
-                  color={
-                    repeat !== "off"
-                      ? colors.primary[400]
-                      : colors.text.tertiary
-                  }
-                  strokeWidth={2.5}
-                />
-                {repeat === "track" && (
-                  <View
-                    style={[
-                      s.repeatOneDot,
-                      { backgroundColor: colors.primary[400] },
-                    ]}
-                  />
-                )}
-              </Pressable>
-            </View>
+              )}
+            </Pressable>
           </View>
-        </Animated.View>
-      </GestureDetector>
-    </View>
+        </View>
+      </Animated.View>
+    </GestureDetector>
   );
 }
 
 const s = StyleSheet.create({
-  outer: {
-    position: "relative",
-    bottom: Platform.OS === "ios" ? 100 : 85,
-    left: 12,
-    right: 12,
-    zIndex: 1000,
-  },
+  // ✅ wrapper langsung — tidak ada outer dengan position absolute
   wrapper: {
     borderRadius: 16,
     borderWidth: 1,
@@ -289,12 +233,6 @@ const s = StyleSheet.create({
     alignItems: "center",
     gap: 5,
     marginTop: 2,
-    flexWrap: "wrap", // penting agar tidak overflow
-  },
-  separator: {
-    color: "#888",
-    marginHorizontal: 4,
-    fontSize: 12,
   },
   artist: {
     fontSize: 12,
@@ -332,3 +270,4 @@ const s = StyleSheet.create({
     alignSelf: "center",
   },
 });
+ 

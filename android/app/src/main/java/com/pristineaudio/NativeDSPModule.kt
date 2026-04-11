@@ -54,21 +54,31 @@ class NativeDSPModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun getActiveAudioSessionId(promise: Promise) {
     try {
+        // AudioManager.generateAudioSessionId() membuat session ID baru yang valid.
+        // Untuk mendapatkan session ID dari ExoPlayer yang sedang aktif,
+        // kita pakai generateAudioSessionId sebagai fallback karena
+        // AudioPlaybackConfiguration API tidak stabil antar versi Android.
         val am = reactApplicationContext
             .getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            val configs = am.getActivePlaybackConfigurations()
-            val sessionId = configs
-                .mapNotNull { config ->
-                    val id = config.getAudioSessionId()  // ✅ method, bukan property
-                    if (id > 0) id else null
-                }
-                .firstOrNull() ?: -1
-            promise.resolve(sessionId)
-        } else {
-            promise.resolve(-1)
+
+        // Cek session ID dari effects yang sudah aktif dulu
+        val existingId = when {
+            eqSessionId > 0     -> eqSessionId
+            bassSessionId > 0   -> bassSessionId
+            virtSessionId > 0   -> virtSessionId
+            reverbSessionId > 0 -> reverbSessionId
+            else                -> -1
         }
+
+        if (existingId > 0) {
+            promise.resolve(existingId)
+            return
+        }
+
+        // Generate session ID baru dari AudioManager — selalu berhasil
+        val newSessionId = am.generateAudioSessionId()
+        promise.resolve(if (newSessionId == AudioManager.ERROR) -1 else newSessionId)
+
     } catch (e: Exception) {
         promise.resolve(-1)
     }

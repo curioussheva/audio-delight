@@ -1,4 +1,5 @@
-import React, { memo } from "react";
+// src/features/library/components/SongListItem.tsx
+import React, { memo, useState } from "react";
 import {
   TouchableOpacity,
   View,
@@ -6,15 +7,12 @@ import {
   StyleSheet,
   Platform,
 } from "react-native";
+import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
 import { Song } from "@/shared/types/audio";
 import { formatTime } from "@/shared/utils/time";
-
-// Komponen internal UI Anda
 import QualityBadge from "@/shared/components/ui/QualityBadge";
-
-// Icons - Menggunakan Music2 dan AudioLines untuk kesan lebih "Pro"
-import { Music2, AudioLines, Heart, MoreVertical } from "lucide-react-native";
+import { Music2, AudioLines, Heart } from "lucide-react-native";
 
 interface SongListItemProps {
   item: Song;
@@ -23,8 +21,53 @@ interface SongListItemProps {
   colors: any;
   onPress: (song: Song) => void;
   onToggleFavorite: (id: string) => void;
-  onMorePress?: (song: Song) => void; // Tambahan untuk menu context
+  onMorePress?: (song: Song) => void;
 }
+
+// ─── Artwork Thumbnail ────────────────────────────────────────────────────────
+
+const ArtworkThumb = memo(({
+  uri,
+  isNowPlaying,
+  colors,
+}: {
+  uri?: string | null;
+  isNowPlaying: boolean;
+  colors: any;
+}) => {
+  const [imgError, setImgError] = useState(false);
+  const showImage = !!uri && !imgError && !isNowPlaying;
+
+  if (isNowPlaying) {
+    return (
+      <View style={[styles.artworkContainer, { backgroundColor: colors.primary[500] }]}>
+        <AudioLines size={20} color={colors.background.primary} strokeWidth={2.5} />
+      </View>
+    );
+  }
+
+  if (showImage) {
+    return (
+      <View style={styles.artworkContainer}>
+        <Image
+          source={{ uri }}
+          style={StyleSheet.absoluteFillObject}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          onError={() => setImgError(true)}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.artworkContainer, { backgroundColor: colors.background.secondary }]}>
+      <Music2 size={20} color={colors.text.tertiary} strokeWidth={1.5} />
+    </View>
+  );
+});
+
+// ─── SongListItem ─────────────────────────────────────────────────────────────
 
 export const SongListItem = memo(
   ({
@@ -47,51 +90,31 @@ export const SongListItem = memo(
       <TouchableOpacity
         style={[
           styles.container,
-          isNowPlaying && { backgroundColor: `${colors.primary[500]}10` }, // Soft highlight
+          isNowPlaying && { backgroundColor: `${colors.primary[500]}10` },
         ]}
         onPress={handlePress}
         activeOpacity={0.7}
       >
-        {/* 1. Artwork / Status Indicator */}
-        <View
-          style={[
-            styles.artworkContainer,
-            {
-              backgroundColor: isNowPlaying
-                ? colors.primary[500]
-                : colors.background.secondary,
-            },
-          ]}
-        >
-          {isNowPlaying ? (
-            <AudioLines
-              size={20}
-              color={colors.background.primary}
-              strokeWidth={2.5}
-            />
-          ) : (
-            <Music2 size={20} color={colors.text.tertiary} strokeWidth={1.5} />
-          )}
-        </View>
+        {/* 1. Artwork / Now Playing Indicator */}
+        <ArtworkThumb
+          uri={item.artwork}
+          isNowPlaying={isNowPlaying}
+          colors={colors}
+        />
 
-        {/* 2. Main Info Section */}
+        {/* 2. Main Info — 3 baris */}
         <View style={styles.infoContent}>
+          {/* Baris 1: Title + QualityBadge */}
           <View style={styles.topRow}>
             <Text
               style={[
                 styles.title,
-                {
-                  color: isNowPlaying
-                    ? colors.primary[500]
-                    : colors.text.primary,
-                },
+                { color: isNowPlaying ? colors.primary[500] : colors.text.primary },
               ]}
               numberOfLines={1}
             >
               {item.title || item.filename}
             </Text>
-
-            {/* Badge diletakkan di kanan judul dengan ukuran proporsional */}
             <QualityBadge
               sampleRate={item.sampleRate}
               codec={item.codec}
@@ -99,39 +122,43 @@ export const SongListItem = memo(
             />
           </View>
 
-          <View style={styles.bottomRow}>
-            <Text
-              style={[styles.subText, { color: colors.text.secondary }]}
-              numberOfLines={1}
-            >
-              {item.artist} <Text style={{ opacity: 0.5 }}>•</Text> {item.album}
-            </Text>
-          </View>
+          {/* Baris 2: Artist • Album */}
+          <Text
+            style={[styles.subText, { color: colors.text.secondary }]}
+            numberOfLines={1}
+          >
+            {item.artist}
+            <Text style={{ opacity: 0.4 }}> • </Text>
+            {item.album}
+          </Text>
 
-          {/* Technical Data Row - Sangat disukai Audiophile */}
-          <View style={styles.techRow}>
-            <Text style={[styles.techInfo, { color: colors.text.tertiary }]}>
-              {item.codec?.toUpperCase()} |{" "}
-              {item.bitDepth ? `${item.bitDepth}bit` : "16bit"} |{" "}
-              {Math.round(item.sampleRate / 1000)}kHz
-            </Text>
-          </View>
+          {/* Baris 3: Technical info */}
+          <Text style={[styles.techInfo, { color: colors.text.tertiary }]}>
+            {item.codec?.toUpperCase()}
+            {" | "}
+            {item.bitDepth > 0 ? item.bitDepth : 16}bit
+            {" | "}
+            {item.sampleRate > 0
+              ? (item.sampleRate / 1000).toFixed(1)
+              : "44.1"}
+            kHz
+          </Text>
         </View>
 
-        {/* 3. Right Action Section */}
+        {/* 3. Right Section — rata atas */}
         <View style={styles.actions}>
           <TouchableOpacity
             onPress={() => onToggleFavorite(item.id)}
             style={styles.iconButton}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Heart
-              size={18}
+              size={17}
               color={isFavorite ? colors.status.error : colors.text.tertiary}
               fill={isFavorite ? colors.status.error : "transparent"}
               strokeWidth={isFavorite ? 0 : 2}
             />
           </TouchableOpacity>
-
           <Text style={[styles.duration, { color: colors.text.tertiary }]}>
             {formatTime(item.duration)}
           </Text>
@@ -139,89 +166,76 @@ export const SongListItem = memo(
       </TouchableOpacity>
     );
   },
-  (prev, next) => {
-    return (
-      prev.item.id === next.item.id &&
-      prev.isNowPlaying === next.isNowPlaying &&
-      prev.isFavorite === next.isFavorite &&
-      prev.colors.primary[500] === next.colors.primary[500]
-    );
-  },
+  // Custom equality — cegah re-render yang tidak perlu
+  (prev, next) =>
+    prev.item.id === next.item.id &&
+    prev.item.artwork === next.item.artwork &&
+    prev.isNowPlaying === next.isNowPlaying &&
+    prev.isFavorite === next.isFavorite &&
+    prev.colors.primary[500] === next.colors.primary[500],
 );
 
 const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12, // Tambah sedikit dari 8 atau 10
+    alignItems: "flex-start",   // ← seluruh row rata atas
+    paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 12,
-    marginVertical: 2, // Beri jarak antar baris agar tidak menempel
+    marginVertical: 2,
   },
-  textContainer: {
-    flex: 1,
-    marginLeft: 14,
-    justifyContent: "center",
-  },
-  title: {
-    fontSize: 15,
-    fontWeight: "600", // Gunakan 600 untuk kesan semi-bold yang bersih
-    marginBottom: 2,
-  },
-  subtitle: {
-    fontSize: 12,
-    opacity: 0.6,
-    letterSpacing: 0.3,
-  },
-  // Tambahkan indikator resolusi (Hi-Res/Lossless) jika ada
-  badge: {
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 3,
-    borderWidth: 0.5,
-    marginRight: 6,
-  },
-  // Di bagian StyleSheet, tambahkan:
+
+  // Artwork
   artworkContainer: {
     width: 48,
     height: 48,
     borderRadius: 8,
     overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,               // sedikit offset agar sejajar dengan baris 1 teks
   },
+
+  // Info area
   infoContent: {
     flex: 1,
     marginLeft: 12,
+    gap: 3,
   },
   topRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  bottomRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 4,
+  title: {
+    fontSize: 15,
+    fontWeight: "600",
+    flexShrink: 1,
+    marginRight: 6,
   },
   subText: {
     fontSize: 12,
-    flex: 1,
-  },
-  techRow: {
-    flexDirection: "row",
-    marginTop: 2,
   },
   techInfo: {
     fontSize: 10,
+    letterSpacing: 0.2,
   },
+
+  // Right actions — rata atas
   actions: {
-    flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",     // ← rata atas, bukan center
+    justifyContent: "flex-start",
+    marginLeft: 8,
+    paddingTop: 2,
+    gap: 6,
   },
   iconButton: {
-    padding: 8,
+    padding: 2,
   },
   duration: {
-    fontSize: 12,
-    marginLeft: 8,
+    fontSize: 11,
+    fontVariant: ["tabular-nums"],
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
 });
+ 
