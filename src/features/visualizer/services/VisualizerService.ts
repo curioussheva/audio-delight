@@ -1,39 +1,46 @@
 // src/features/visualizer/services/VisualizerService.ts
-import { NativeModules, NativeEventEmitter, Platform } from "react-native";
+import { NativeModules, NativeEventEmitter } from "react-native";
 
 const { NativeVisualizerBridge } = NativeModules;
-const visualizerEmitter = NativeVisualizerBridge
-  ? new NativeEventEmitter(NativeVisualizerBridge)
-  : null;
+const visualizerEmitter = NativeVisualizerBridge ? new NativeEventEmitter(NativeVisualizerBridge) : null;
 
 class VisualizerService {
   private subscription: any = null;
 
   initialize(callback: (data: number[]) => void): boolean {
     if (!visualizerEmitter) return false;
+    
+    // Bersihkan listener lama sebelum buat baru
+    this.stop(); 
 
-    this.subscription = visualizerEmitter.addListener("onFftData", callback);
+    this.subscription = visualizerEmitter.addListener("onFftData", (data) => {
+      if (data && Array.isArray(data)) {
+        callback(data);
+      }
+    });
     return true;
   }
 
   async start(sessionId: number): Promise<boolean> {
     if (!NativeVisualizerBridge) return false;
     try {
-      // Session 0 = global audio output (semua app)
-      // Session spesifik = hanya audio dari session itu
       return await NativeVisualizerBridge.startVisualizer(sessionId);
-    } catch {
+    } catch (e) {
+      console.error("Failed to start visualizer", e);
       return false;
     }
   }
 
   stop(): void {
+    if (this.subscription) {
+      this.subscription.remove();
+      this.subscription = null;
+    }
     if (NativeVisualizerBridge) {
       NativeVisualizerBridge.stopVisualizer();
     }
-    this.subscription?.remove();
   }
 }
 
 export const visualizerService = new VisualizerService();
-export default visualizerService;
+ 

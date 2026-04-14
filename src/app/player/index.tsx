@@ -10,7 +10,6 @@ import {
   ScrollView,
 } from "react-native";
 import { Image } from "expo-image";
-import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
@@ -19,7 +18,6 @@ import { useAudioProgress } from "@/features/player/hooks/useAudioProgress";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { formatTime } from "@/shared/utils/time";
 import Slider from "@react-native-community/slider";
-import { FullLyricsView } from "@/features/player/components/FullLyricsView";
 import { SleepTimerModal } from "@/features/player/components/SleepTimerModal";
 import { useTheme } from "@/context/ThemeContext";
 import { useSafePadding } from "@/shared/hooks/useSafePadding";
@@ -32,7 +30,6 @@ import {
   SkipBack,
   SkipForward,
   Repeat,
-  Music,
   Play,
   Pause,
   Heart,
@@ -40,14 +37,14 @@ import {
   Mic2,
   Volume2,
   Sparkles,
-  Info, // Tambahkan icon Info
+  Info,
 } from "lucide-react-native";
 
-const { width, height } = Dimensions.get("window");
+const { width } = Dimensions.get("window");
 
 export default function PlayerScreen() {
   const { theme } = useTheme();
-  const { colors } = theme;
+  const { colors, isDark } = theme;
   const safePadding = useSafePadding();
   const router = useRouter();
 
@@ -118,7 +115,6 @@ export default function PlayerScreen() {
   const handleOpenDetail = () => {
     if (currentSong?.id) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      // Arahkan ke song-detail dengan ID lagu yang sedang diputar
       router.push({
         pathname: "/(drawer)/song/[id]",
         params: { id: currentSong.id },
@@ -128,11 +124,37 @@ export default function PlayerScreen() {
 
   if (!currentSong) return null;
 
+  // Helper untuk warna dinamis
+  const goldColor = colors.accent?.primary || colors.primary[500] || "#D4AF37";
+  const primaryColor = colors.primary[500];
+  const textPrimary = colors.text.primary;
+  const textSecondary = colors.text.secondary;
+  const textTertiary = colors.text.tertiary;
+  const backgroundColor = colors.background.primary;
+  const backgroundSecondary = colors.background.secondary;
+  const backgroundElevated = colors.background.elevated;
+  const borderColor = colors.border?.light || colors.background.tertiary;
+  const successColor = colors.status.success;
+  const errorColor = colors.status.error;
+
+  // Gradient colors - sesuaikan untuk light/dark mode
+  const gradientColors = colors.gradient?.primary || [
+    backgroundColor,
+    isDark ? "#000000" : colors.background.secondary,
+  ];
+
+  // Warna untuk bottom utilities bar
+  const bottomBarColor = isDark 
+    ? "rgba(255,255,255,0.05)" 
+    : "rgba(0,0,0,0.03)";
+
+  // Warna ikon default untuk light mode (gunakan textSecondary agar lebih terlihat)
+  const iconColorDefault = isDark ? textTertiary : textSecondary;
+
   return (
-    <View style={styles.container}>
-      {/* Background Gradient */}
+    <View style={[styles.container, { backgroundColor }]}>
       <LinearGradient
-        colors={["#1a1a1a", "#0a0a0a", "#000000"]}
+        colors={gradientColors as [string, string, ...string[]]}
         locations={[0, 0.5, 1]}
         style={StyleSheet.absoluteFill}
       />
@@ -148,28 +170,29 @@ export default function PlayerScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* REVISED HEADER */}
+        {/* HEADER */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.headerBtn}
             onPress={() => router.back()}
           >
-            <ChevronDown size={28} color="#FFF" />
+            <ChevronDown size={28} color={textPrimary} />
           </TouchableOpacity>
 
           <View style={styles.headerTitle}>
-            <Text style={styles.nowPlayingText}>NOW PLAYING</Text>
+            <Text style={[styles.nowPlayingText, { color: textTertiary }]}>
+              NOW PLAYING
+            </Text>
             <View style={styles.audioModeBadge}>
-              <Sparkles size={12} color="#D4AF37" />
-              <Text style={styles.audioModeText}>
+              <Sparkles size={12} color={goldColor} />
+              <Text style={[styles.audioModeText, { color: goldColor }]}>
                 {audioMode?.toUpperCase() || "STANDARD"}
               </Text>
             </View>
           </View>
 
-          {/* Tombol Info Baru untuk akses Song Detail */}
           <TouchableOpacity style={styles.headerBtn} onPress={handleOpenDetail}>
-            <Info size={24} color="#FFF" strokeWidth={2} />
+            <Info size={24} color={textPrimary} strokeWidth={2} />
           </TouchableOpacity>
         </View>
 
@@ -180,6 +203,7 @@ export default function PlayerScreen() {
               style={[
                 styles.artworkContainer,
                 { transform: [{ scale: artworkScale }] },
+                theme.shadows.xl,
               ]}
             >
               <Image
@@ -199,18 +223,24 @@ export default function PlayerScreen() {
         {/* SONG INFO & LIKE BTN */}
         <View style={styles.songInfoContainer}>
           <View style={styles.songTextWrapper}>
-            <Text style={styles.songTitle} numberOfLines={1}>
+            <Text
+              style={[styles.songTitle, { color: textPrimary }]}
+              numberOfLines={1}
+            >
               {currentSong.title}
             </Text>
-            <Text style={styles.artistName} numberOfLines={1}>
+            <Text
+              style={[styles.artistName, { color: textSecondary }]}
+              numberOfLines={1}
+            >
               {currentSong.artist}
             </Text>
           </View>
           <TouchableOpacity onPress={handleLike} style={styles.likeBtn}>
             <Heart
               size={28}
-              color={isLiked ? colors.status.error : "rgba(255,255,255,0.3)"}
-              fill={isLiked ? colors.status.error : "transparent"}
+              color={isLiked ? errorColor : textTertiary}
+              fill={isLiked ? errorColor : "transparent"}
             />
           </TouchableOpacity>
         </View>
@@ -223,14 +253,17 @@ export default function PlayerScreen() {
             maximumValue={duration}
             value={position}
             onSlidingComplete={seek}
-            minimumTrackTintColor="#FFF"
-            maximumTrackTintColor="rgba(255,255,255,0.2)"
-            thumbTintColor="#FFF"
-            //    thumbStyle={styles.thumb}
+            minimumTrackTintColor={primaryColor}
+            maximumTrackTintColor={borderColor}
+            thumbTintColor={primaryColor}
           />
           <View style={styles.timeRow}>
-            <Text style={styles.timeText}>{formatTime(position)}</Text>
-            <Text style={styles.timeText}>{formatTime(duration)}</Text>
+            <Text style={[styles.timeText, { color: textTertiary }]}>
+              {formatTime(position)}
+            </Text>
+            <Text style={[styles.timeText, { color: textTertiary }]}>
+              {formatTime(duration)}
+            </Text>
           </View>
         </View>
 
@@ -239,7 +272,7 @@ export default function PlayerScreen() {
           <TouchableOpacity onPress={toggleShuffle} style={styles.controlBtn}>
             <Shuffle
               size={22}
-              color={shuffle ? "#FFF" : "rgba(255,255,255,0.4)"}
+              color={shuffle ? primaryColor : iconColorDefault}
               strokeWidth={2}
             />
           </TouchableOpacity>
@@ -248,16 +281,22 @@ export default function PlayerScreen() {
             onPress={() => handleSkip(playPrevious)}
             style={styles.controlBtn}
           >
-            <SkipBack size={32} color="#FFF" strokeWidth={2} />
+            <SkipBack size={32} color={textPrimary} strokeWidth={2} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.playBtn} onPress={handlePlayPause}>
+          <TouchableOpacity
+            style={[
+              styles.playBtn,
+              { backgroundColor: primaryColor },
+            ]}
+            onPress={handlePlayPause}
+          >
             {isPlaying ? (
-              <Pause size={32} color="#000" strokeWidth={2.5} />
+              <Pause size={32} color={isDark ? "#000" : "#FFF"} strokeWidth={2.5} />
             ) : (
               <Play
                 size={32}
-                color="#000"
+                color={isDark ? "#000" : "#FFF"}
                 strokeWidth={2.5}
                 style={{ marginLeft: 2 }}
               />
@@ -268,13 +307,13 @@ export default function PlayerScreen() {
             onPress={() => handleSkip(playNext)}
             style={styles.controlBtn}
           >
-            <SkipForward size={32} color="#FFF" strokeWidth={2} />
+            <SkipForward size={32} color={textPrimary} strokeWidth={2} />
           </TouchableOpacity>
 
           <TouchableOpacity onPress={toggleRepeat} style={styles.controlBtn}>
             <Repeat
               size={22}
-              color={repeat !== "off" ? "#FFF" : "rgba(255,255,255,0.4)"}
+              color={repeat !== "off" ? primaryColor : iconColorDefault}
               strokeWidth={2}
             />
           </TouchableOpacity>
@@ -283,46 +322,47 @@ export default function PlayerScreen() {
         {/* Audio Info */}
         <View style={styles.audioInfo}>
           <View style={styles.audioBadge}>
-            <Mic2 size={14} color="rgba(255,255,255,0.6)" strokeWidth={2} />
-            <Text style={styles.audioText}>
+            <Mic2 size={14} color={textTertiary} strokeWidth={2} />
+            <Text style={[styles.audioText, { color: textTertiary }]}>
               {((currentSong.sampleRate || 0) / 1000).toFixed(0)} kHz
             </Text>
           </View>
-          <View style={styles.audioDot} />
+          <View style={[styles.audioDot, { backgroundColor: borderColor }]} />
           <View style={styles.audioBadge}>
-            <Volume2 size={14} color="rgba(255,255,255,0.6)" strokeWidth={2} />
-            <Text style={styles.audioText}>
+            <Volume2 size={14} color={textTertiary} strokeWidth={2} />
+            <Text style={[styles.audioText, { color: textTertiary }]}>
               {currentSong.bitDepth || 0} bit
             </Text>
           </View>
-          <View style={styles.audioDot} />
+          <View style={[styles.audioDot, { backgroundColor: borderColor }]} />
           <View style={styles.audioBadge}>
-            <ListMusic
-              size={14}
-              color="rgba(255,255,255,0.6)"
-              strokeWidth={2}
-            />
-            <Text style={styles.audioText}>
+            <ListMusic size={14} color={textTertiary} strokeWidth={2} />
+            <Text style={[styles.audioText, { color: textTertiary }]}>
               {currentSong.codec?.toUpperCase() || "MP3"}
             </Text>
           </View>
         </View>
 
         {/* BOTTOM UTILITY BAR */}
-        <View style={styles.bottomUtilities}>
+        <View
+          style={[
+            styles.bottomUtilities,
+            { backgroundColor: isDark ? backgroundSecondary : bottomBarColor },
+          ]}
+        >
           <TouchableOpacity onPress={() => setIsTimerVisible(true)}>
-            <Clock size={20} color="rgba(255,255,255,0.6)" />
+            <Clock size={20} color={iconColorDefault} />
           </TouchableOpacity>
 
           <TouchableOpacity onPress={() => setShowLyrics(!showLyrics)}>
             <Mic2
               size={20}
-              color={showLyrics ? colors.primary[500] : "rgba(255,255,255,0.6)"}
+              color={showLyrics ? primaryColor : iconColorDefault}
             />
           </TouchableOpacity>
 
           <TouchableOpacity onPress={() => router.push("/(drawer)/analyzer")}>
-            <Sparkles size={20} color="rgba(255,255,255,0.6)" />
+            <Sparkles size={20} color={iconColorDefault} />
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -339,7 +379,6 @@ export default function PlayerScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000",
   },
   scrollView: {
     flex: 1,
@@ -360,9 +399,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  headerTitle: { alignItems: "center" },
+  headerTitle: {
+    alignItems: "center",
+  },
   nowPlayingText: {
-    color: "rgba(255,255,255,0.4)",
     fontSize: 10,
     letterSpacing: 3,
     fontWeight: "800",
@@ -377,11 +417,10 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800",
     letterSpacing: 1,
-    color: "#D4AF37",
   },
   artworkSection: {
     alignItems: "center",
-    marginTop: 20, // Memberi jarak dari header
+    marginTop: 20,
     marginBottom: 30,
   },
   artworkContainer: {
@@ -389,32 +428,19 @@ const styles = StyleSheet.create({
     height: width - 100,
     borderRadius: 16,
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 10,
   },
   artwork: {
     width: "100%",
     height: "100%",
   },
-  songInfo: {
-    alignItems: "center",
-    marginBottom: 30,
-  },
   songTitle: {
-    color: "#FFF",
     fontSize: 24,
     fontWeight: "700",
-    textAlign: "center",
     marginBottom: 8,
   },
   artistName: {
-    color: "rgba(255,255,255,0.7)",
     fontSize: 16,
     fontWeight: "500",
-    textAlign: "center",
   },
   progressSection: {
     marginBottom: 30,
@@ -423,16 +449,6 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 40,
   },
-  thumb: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "#FFF",
-    shadowColor: "#FFF",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
-  },
   timeRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -440,7 +456,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   timeText: {
-    color: "rgba(255,255,255,0.5)",
     fontSize: 12,
     fontWeight: "500",
     fontVariant: ["tabular-nums"],
@@ -459,14 +474,8 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: "#FFF",
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#FFF",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 5,
   },
   audioInfo: {
     flexDirection: "row",
@@ -481,7 +490,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   audioText: {
-    color: "rgba(255,255,255,0.6)",
     fontSize: 12,
     fontWeight: "500",
   },
@@ -489,22 +497,7 @@ const styles = StyleSheet.create({
     width: 3,
     height: 3,
     borderRadius: 1.5,
-    backgroundColor: "rgba(255,255,255,0.3)",
   },
-  actionButtons: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 40,
-    marginBottom: 20,
-  },
-  actionBtn: {
-    padding: 8,
-  },
-  headerBtnSmall: { padding: 8, borderRadius: 20 },
-  iconBlur: { width: 40, height: 40, borderRadius: 8 },
-  emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-  emptyTitle: { fontSize: 18, fontWeight: "600" },
-  emptySubtitle: { fontSize: 14, opacity: 0.7 },
   songInfoContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -525,7 +518,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 10,
     paddingVertical: 15,
-    backgroundColor: "rgba(255,255,255,0.05)",
     borderRadius: 20,
   },
-});
+}); 

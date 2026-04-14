@@ -1,26 +1,22 @@
+// src/features/equalizer/api/nativeInterface.ts
 import { NativeModules } from "react-native";
 
 export interface NativeDSPInterface {
-  // Equalizer
-  setEqBand(bandIndex: number, gain: number, sessionId?: number): Promise<void>;
+  setEqBand(bandIndex: number, gain: number, sessionId?: number): Promise<boolean>;
   setFullEqualizer(gains: number[], sessionId: number): Promise<boolean>;
-  setBandLevel(band: number, level: number, sessionId: number): Promise<void>;
+  setBandLevel(band: number, level: number, sessionId: number): Promise<boolean>;
 
-  // Bass & Virtualizer
-  setBassBoost(strength: number, sessionId?: number): Promise<void>;
-  setVirtualizer(level: number, sessionId?: number): Promise<void>;
+  setBassBoost(strength: number, sessionId?: number): Promise<boolean>;
+  setVirtualizer(level: number, sessionId?: number): Promise<boolean>;
+  setReverbPreset(presetIndex: number, sessionId?: number): Promise<boolean>;
 
-  // Reverb
-  setReverbPreset(presetIndex: number, sessionId?: number): Promise<void>;
+  releaseAllFX(sessionId?: number): Promise<boolean>;
+  reset(): Promise<boolean>;
 
-  // Management
-  releaseAllFX(sessionId?: number): Promise<void>;
-  reset(): Promise<void>;
-
-  // Session ID
   getAudioSessionId(): Promise<number>;
   getActiveAudioSessionId(): Promise<number>;
 }
+
 
 export const NativeDSPModule =
   NativeModules.NativeDSPModule as NativeDSPInterface;

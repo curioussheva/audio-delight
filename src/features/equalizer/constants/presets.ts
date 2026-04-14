@@ -50,7 +50,7 @@ export const makeBands = (gains: number[]): EqualizerBand[] => {
 export const ALL_PRESETS: Preset[] = [
   {
     id: "flat",
-    name: "Normal",
+    name: "Flat",
     description: "Output murni tanpa perubahan fasa.",
     isPremium: false,
     bands: makeBands([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),

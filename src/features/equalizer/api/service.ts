@@ -20,6 +20,10 @@ class EqualizerService {
       return;
     }
 
+    // TUNGGU SEBENTAR: Beri waktu bagi Android Audio Framework untuk
+    // membersihkan state Session ID sebelumnya dan menyiapkan AudioTrack baru.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
     try {
       console.log(`🎛️ [EQ Service] Syncing DSP to Session: ${sessionId}`);
 

@@ -3,69 +3,67 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 import { EqualizerStore, Preset } from "@/features/equalizer/types";
 import { ALL_PRESETS, makeBands } from "../constants/presets";
-import { NativeModules, Platform } from "react-native";
 import { audioEngine } from "@/features/player/api/engine";
+import { NativeDSPModule } from "@/features/equalizer/api/nativeInterface";
 
-// Gunakan NativeDSPModule yang sudah kita buat di Kotlin
-const { NativeDSPModule } = NativeModules;
+// ─────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────
 
-// Helper untuk mendapatkan audio session ID dengan aman
 const getCurrentSessionId = async (): Promise<number> => {
   try {
-    // Coba dari audioEngine
-    const sessionId = await (audioEngine as any).getAudioSessionId?.();
-    if (sessionId && sessionId !== -1) return sessionId;
-
-    // Coba dari TrackPlayer
+    // 1. Coba ambil langsung dari TrackPlayer (Paling Akurat untuk RNTP)
     const TrackPlayer = require("react-native-track-player").default;
-    const playerSessionId = await (TrackPlayer as any).getAudioSessionId?.();
-    if (playerSessionId && playerSessionId !== -1) return playerSessionId;
+    const playerSessionId = await TrackPlayer.getAudioSessionId();
+    
+    if (playerSessionId && playerSessionId !== 0 && playerSessionId !== -1) {
+      console.log(`[EQ Store] Found Real Session ID from RNTP: ${playerSessionId}`);
+      return playerSessionId;
+    }
 
-    return -1;
+    // 2. Fallback ke AudioManager (ID yang kamu dapat 11753 tadi)
+    const sessionId = await (audioEngine as any).getAudioSessionId?.();
+    return sessionId || -1;
   } catch (error) {
-    console.warn("[EQ Store] Failed to get session ID:", error);
     return -1;
   }
 };
 
-// Helper untuk apply semua efek ke native
-const applyAllEffectsToNative = async (
-  bands: Array<{ gain: number }>,
-  bassStrength: number,
-  virtualizerLevel: number,
-  reverbPreset: number,
-  sessionId: number,
-) => {
-  if (!NativeDSPModule || sessionId === -1) return false;
+
+// Helper untuk apply semua efek ke native dengan individual try-catch
+const applyAllEffectsToNative = async (state: any) => {
+  const { bands, isEQEnabled, audioSessionId } = state;
+
+  if (!NativeDSPModule || !isEQEnabled) return false;
+
+  // Gunakan ID yang sudah ada di state (yang dikirim dari playback.ts)
+  // Jangan panggil TrackPlayer.getAudioSessionId() karena tidak tersedia
+  let finalSessionId = audioSessionId;
+
+  if (finalSessionId <= 0) {
+    // Fallback terakhir: minta ke NativeModule kita untuk cari ID yang aktif
+    finalSessionId = await NativeDSPModule.getActiveAudioSessionId();
+  }
+
+  if (finalSessionId <= 0) return false;
 
   try {
-    const gains = bands.map((b) => Math.min(12, Math.max(-12, b.gain)));
-
-    // Apply semua efek dalam batch
-    if (NativeDSPModule.setFullEqualizer) {
-      await NativeDSPModule.setFullEqualizer(gains, sessionId);
-    }
-
-    if (NativeDSPModule.setBassBoost) {
-      await NativeDSPModule.setBassBoost(bassStrength, sessionId);
-    }
-
-    if (NativeDSPModule.setVirtualizer) {
-      await NativeDSPModule.setVirtualizer(virtualizerLevel, sessionId);
-    }
-
-    if (NativeDSPModule.setReverbPreset) {
-      await NativeDSPModule.setReverbPreset(reverbPreset, sessionId);
-    }
-
-    return true;
-  } catch (error) {
-    console.error("[EQ Store] Failed to apply effects:", error);
-    return false;
+    // Ingat: Di Java, gains ini harus dikali 100
+    const gains = bands.map((b: any) => b.gain);
+    await NativeDSPModule.setFullEqualizer(gains, finalSessionId);
+    console.log(`[DSP] Applied to Session: ${finalSessionId}`);
+  } catch (e) {
+    console.error("[EQ Store] Failed to apply:", e);
   }
+  return true;
 };
+
+// ─────────────────────────────────────────────
+// Store Implementation
+// ─────────────────────────────────────────────
 
 export const useEqualizerStore = create<EqualizerStore>()(
   persist(
@@ -74,6 +72,9 @@ export const useEqualizerStore = create<EqualizerStore>()(
       bands: makeBands([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
       activePresetId: "flat",
       isEQEnabled: false,
+      isBassEnabled: true,
+      isVirtualizerEnabled: true,
+      isReverbEnabled: true,
       customPresets: [],
       bassStrength: 0,
       reverbPreset: 0,
@@ -85,10 +86,8 @@ export const useEqualizerStore = create<EqualizerStore>()(
 
       initialize: async () => {
         if (get().isInitialized) return;
-
         console.log("[EQ Store] Initializing...");
 
-        // Only on Android
         if (Platform.OS !== "android") {
           set({ isInitialized: true });
           return;
@@ -98,23 +97,18 @@ export const useEqualizerStore = create<EqualizerStore>()(
           const sessionId = await getCurrentSessionId();
           set({ audioSessionId: sessionId, isInitialized: true });
 
-          // If EQ was enabled, re-apply
           if (get().isEQEnabled && sessionId !== -1) {
-            await get().setEQEnabled(true);
+            await applyAllEffectsToNative(get());
           }
         } catch (error) {
-          console.error("[EQ Store] Initialization failed:", error);
           set({ isInitialized: true });
         }
       },
 
       setAudioSessionId: (id: number) => {
-        console.log(`[EQ Store] Audio session ID set to: ${id}`);
         set({ audioSessionId: id });
-
-        // Jika EQ aktif, langsung apply ke session baru ini
         if (get().isEQEnabled && id !== -1) {
-          get().setEQEnabled(true);
+          applyAllEffectsToNative(get());
         }
       },
 
@@ -124,197 +118,121 @@ export const useEqualizerStore = create<EqualizerStore>()(
       },
 
       setEQEnabled: async (enabled: boolean) => {
-        const {
-          bands,
-          bassStrength,
-          virtualizerLevel,
-          reverbPreset,
-          audioSessionId,
-        } = get();
-
-        console.log(`[EQ Store] Setting EQ enabled: ${enabled}`);
         set({ isEQEnabled: enabled });
-
-        if (enabled && audioSessionId !== -1 && NativeDSPModule) {
-          console.log("🎛️ [EQ Store] Engaged on Session:", audioSessionId);
-          await applyAllEffectsToNative(
-            bands,
-            bassStrength,
-            virtualizerLevel,
-            reverbPreset,
-            audioSessionId,
-          );
-        } else if (!enabled) {
-          console.log("🔌 [EQ Store] Bypass");
-          if (NativeDSPModule?.releaseAllFX) {
-            await NativeDSPModule.releaseAllFX();
-          }
+        if (enabled && get().audioSessionId !== -1) {
+          await applyAllEffectsToNative(get());
+        } else if (!enabled && NativeDSPModule?.releaseAllFX) {
+          await NativeDSPModule.releaseAllFX();
         }
       },
 
+      // --- Individual Switch Actions ---
+
+      setBassEnabled: async (enabled: boolean) => {
+        set({ isBassEnabled: enabled });
+        const { isEQEnabled, audioSessionId, bassStrength } = get();
+        if (isEQEnabled && audioSessionId !== -1) {
+          await NativeDSPModule.setBassBoost(enabled ? bassStrength : 0, audioSessionId);
+        }
+      },
+
+      setVirtualizerEnabled: async (enabled: boolean) => {
+        set({ isVirtualizerEnabled: enabled });
+        const { isEQEnabled, audioSessionId, virtualizerLevel } = get();
+        if (isEQEnabled && audioSessionId !== -1) {
+          await NativeDSPModule.setVirtualizer(enabled ? virtualizerLevel : 0, audioSessionId);
+        }
+      },
+
+      setReverbEnabled: async (enabled: boolean) => {
+        set({ isReverbEnabled: enabled });
+        const { isEQEnabled, audioSessionId, reverbPreset } = get();
+        if (isEQEnabled && audioSessionId !== -1) {
+          await NativeDSPModule.setReverbPreset(enabled ? reverbPreset : 0, audioSessionId);
+        }
+      },
+
+      // --- Value Adjustment Actions ---
+
       setBassBoost: async (strength: number) => {
-        const { isEQEnabled, audioSessionId } = get();
-        const clampedStrength = Math.min(100, Math.max(0, strength));
-
-        set({ bassStrength: clampedStrength });
-
-        if (
-          isEQEnabled &&
-          audioSessionId !== -1 &&
-          NativeDSPModule?.setBassBoost
-        ) {
-          await NativeDSPModule.setBassBoost(clampedStrength, audioSessionId);
+        const clamped = Math.min(1000, Math.max(0, strength));
+        set({ bassStrength: clamped });
+        const { isEQEnabled, isBassEnabled, audioSessionId } = get();
+        if (isEQEnabled && isBassEnabled && audioSessionId !== -1) {
+          await NativeDSPModule.setBassBoost(clamped, audioSessionId);
         }
       },
 
       setVirtualizer: async (level: number) => {
-        const { isEQEnabled, audioSessionId } = get();
-        const clampedLevel = Math.min(100, Math.max(0, level));
-
-        set({ virtualizerLevel: clampedLevel });
-
-        if (
-          isEQEnabled &&
-          audioSessionId !== -1 &&
-          NativeDSPModule?.setVirtualizer
-        ) {
-          await NativeDSPModule.setVirtualizer(clampedLevel, audioSessionId);
+        const clamped = Math.min(1000, Math.max(0, level));
+        set({ virtualizerLevel: clamped });
+        const { isEQEnabled, isVirtualizerEnabled, audioSessionId } = get();
+        if (isEQEnabled && isVirtualizerEnabled && audioSessionId !== -1) {
+          await NativeDSPModule.setVirtualizer(clamped, audioSessionId);
         }
       },
 
       setReverb: async (preset: number) => {
-        const { isEQEnabled, audioSessionId } = get();
-        const clampedPreset = Math.min(6, Math.max(0, preset));
-
-        set({ reverbPreset: clampedPreset });
-
-        if (
-          isEQEnabled &&
-          audioSessionId !== -1 &&
-          NativeDSPModule?.setReverbPreset
-        ) {
-          await NativeDSPModule.setReverbPreset(clampedPreset, audioSessionId);
+        const clamped = Math.min(6, Math.max(0, preset));
+        set({ reverbPreset: clamped });
+        const { isEQEnabled, isReverbEnabled, audioSessionId } = get();
+        if (isEQEnabled && isReverbEnabled && audioSessionId !== -1) {
+          await NativeDSPModule.setReverbPreset(clamped, audioSessionId);
         }
       },
 
       setBandGain: (index: number, gain: number) => {
-        const { bands, isEQEnabled, audioSessionId } = get();
         const clampedGain = Math.min(12, Math.max(-12, gain));
-        const newBands = bands.map((b, i) =>
-          i === index ? { ...b, gain: clampedGain } : b,
-        );
-
+        const newBands = get().bands.map((b, i) => i === index ? { ...b, gain: clampedGain } : b);
         set({ bands: newBands, activePresetId: "custom" });
 
-        if (isEQEnabled && audioSessionId !== -1 && NativeDSPModule) {
-          // Kirim perubahan band spesifik ke native
-          if (NativeDSPModule.setEqualizer) {
-            NativeDSPModule.setEqualizer(index, clampedGain, audioSessionId);
-          }
+        if (get().isEQEnabled && get().audioSessionId !== -1 && NativeDSPModule?.setEqBand) {
+          NativeDSPModule.setEqBand(index, clampedGain, get().audioSessionId);
         }
       },
 
-      // Method untuk update multiple bands sekaligus
       setBandsGain: async (gains: number[]) => {
-        const { isEQEnabled, audioSessionId, bands } = get();
-        const newBands = bands.map((b, i) => ({
+        const newBands = get().bands.map((b, i) => ({
           ...b,
-          gain: Math.min(
-            12,
-            Math.max(-12, gains[i] !== undefined ? gains[i] : b.gain),
-          ),
+          gain: Math.min(12, Math.max(-12, gains[i] ?? b.gain)),
         }));
-
         set({ bands: newBands, activePresetId: "custom" });
 
-        if (isEQEnabled && audioSessionId !== -1 && NativeDSPModule) {
-          const clampedGains = gains.map((g) => Math.min(12, Math.max(-12, g)));
-          if (NativeDSPModule.setFullEqualizer) {
-            await NativeDSPModule.setFullEqualizer(
-              clampedGains,
-              audioSessionId,
-            );
-          }
+        if (get().isEQEnabled && get().audioSessionId !== -1 && NativeDSPModule?.setFullEqualizer) {
+          await NativeDSPModule.setFullEqualizer(gains, get().audioSessionId);
         }
       },
 
       applyPreset: (presetId: string) => {
-        const preset =
-          ALL_PRESETS.find((p) => p.id === presetId) ||
-          get().customPresets.find((p) => p.id === presetId);
-
+        const preset = ALL_PRESETS.find((p) => p.id === presetId) || get().customPresets.find((p) => p.id === presetId);
         if (preset) {
           const newBands = preset.bands.map((b) => ({ ...b }));
           set({ activePresetId: presetId, bands: newBands });
-
-          const { isEQEnabled, audioSessionId } = get();
-          if (
-            isEQEnabled &&
-            audioSessionId !== -1 &&
-            NativeDSPModule?.setFullEqualizer
-          ) {
-            const gains = newBands.map((b) => b.gain);
-            NativeDSPModule.setFullEqualizer(gains, audioSessionId);
+          if (get().isEQEnabled && get().audioSessionId !== -1) {
+            applyAllEffectsToNative(get());
           }
         }
       },
 
       saveCustomPreset: (name: string) => {
-        const { bands, customPresets } = get();
-        const newPreset: Preset = {
-          id: `custom_${Date.now()}`,
-          name,
-          isCustom: true,
-          bands: JSON.parse(JSON.stringify(bands)),
-        };
-
-        set({
-          customPresets: [...customPresets, newPreset],
-          activePresetId: newPreset.id,
-        });
-
-        console.log(`[EQ Store] Saved custom preset: ${name}`);
+        const newPreset: Preset = { id: `custom_${Date.now()}`, name, isCustom: true, bands: JSON.parse(JSON.stringify(get().bands)) };
+        set({ customPresets: [...get().customPresets, newPreset], activePresetId: newPreset.id });
       },
 
       deleteCustomPreset: (id: string) => {
         const filtered = get().customPresets.filter((p) => p.id !== id);
         set({ customPresets: filtered });
-
-        if (get().activePresetId === id) {
-          get().applyPreset("flat");
-        }
-
-        console.log(`[EQ Store] Deleted custom preset: ${id}`);
+        if (get().activePresetId === id) get().applyPreset("flat");
       },
 
       resetToDefault: async () => {
-        const defaultBands = makeBands([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-        set({
-          bands: defaultBands,
-          activePresetId: "flat",
-          bassStrength: 0,
-          virtualizerLevel: 0,
-          reverbPreset: 0,
+        set({ 
+          bands: makeBands([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), 
+          activePresetId: "flat", bassStrength: 0, virtualizerLevel: 0, reverbPreset: 0 
         });
-
-        const { isEQEnabled, audioSessionId } = get();
-        if (isEQEnabled && audioSessionId !== -1 && NativeDSPModule) {
-          const gains = defaultBands.map((b) => b.gain);
-          if (NativeDSPModule.setFullEqualizer) {
-            await NativeDSPModule.setFullEqualizer(gains, audioSessionId);
-          }
-          if (NativeDSPModule.setBassBoost) {
-            await NativeDSPModule.setBassBoost(0, audioSessionId);
-          }
-          if (NativeDSPModule.setVirtualizer) {
-            await NativeDSPModule.setVirtualizer(0, audioSessionId);
-          }
-          if (NativeDSPModule.setReverbPreset) {
-            await NativeDSPModule.setReverbPreset(0, audioSessionId);
-          }
+        if (get().isEQEnabled && get().audioSessionId !== -1) {
+          await applyAllEffectsToNative(get());
         }
-
-        console.log("[EQ Store] Reset to default");
       },
     }),
     {
@@ -328,24 +246,14 @@ export const useEqualizerStore = create<EqualizerStore>()(
         virtualizerLevel: state.virtualizerLevel,
         reverbPreset: state.reverbPreset,
         isEQEnabled: state.isEQEnabled,
+        isBassEnabled: state.isBassEnabled,
+        isVirtualizerEnabled: state.isVirtualizerEnabled,
+        isReverbEnabled: state.isReverbEnabled,
       }),
-      onRehydrateStorage: () => {
-        console.log("[EQ Store] Hydrating from storage...");
-        return (state, error) => {
-          if (error) {
-            console.error("[EQ Store] Hydration error:", error);
-          } else if (state) {
-            console.log("[EQ Store] Hydration complete");
-          }
-        };
-      },
-    },
+    }
   ),
 );
 
-// Auto-initialize on store creation
 if (Platform.OS === "android") {
-  setTimeout(() => {
-    useEqualizerStore.getState().initialize();
-  }, 1000);
+  setTimeout(() => { useEqualizerStore.getState().initialize(); }, 1000);
 }

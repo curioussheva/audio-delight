@@ -1,23 +1,16 @@
 // src/features/player/api/playback.ts
 
 import TrackPlayer, { Event, State } from "react-native-track-player";
-
 import { NativeDSPModule } from "@/features/equalizer/api/nativeInterface";
-// (sesuaikan path ke file interface di atas)
 import { Platform } from "react-native";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
 import { usePlayerStore } from "@/features/player/store/playerStore";
-
 
 // ─────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────
 
-/** How long to wait after track change before requesting audio session ID.
- *  Android audio focus handoff typically takes 200–400 ms. */
 const DSP_INIT_DELAY_MS = 600;
-
-/** How many times to retry getAudioSessionId before giving up. */
 const SESSION_ID_MAX_RETRIES = 3;
 const SESSION_ID_RETRY_DELAY_MS = 300;
 
@@ -25,18 +18,11 @@ const SESSION_ID_RETRY_DELAY_MS = 300;
 // Audio Session ID
 // ─────────────────────────────────────────────
 
-/**
- * Try to obtain the Android audio session ID.
- * Retries up to SESSION_ID_MAX_RETRIES times with a short delay between attempts,
- * because the session may not be ready immediately after a track change.
- */
- 
 const getAudioSessionId = async (): Promise<number | null> => {
   if (Platform.OS !== "android") return null;
 
   for (let attempt = 1; attempt <= SESSION_ID_MAX_RETRIES; attempt++) {
     try {
-      // Tanya AudioManager langsung — paling reliable
       if (typeof NativeDSPModule?.getActiveAudioSessionId === "function") {
         const id = await NativeDSPModule.getActiveAudioSessionId();
         if (id && id > 0) {
@@ -47,10 +33,7 @@ const getAudioSessionId = async (): Promise<number | null> => {
     } catch (error) {
       console.warn(`[DSP] getAudioSessionId attempt ${attempt} failed:`, error);
     }
-
-    if (attempt < SESSION_ID_MAX_RETRIES) {
-      await sleep(SESSION_ID_RETRY_DELAY_MS);
-    }
+    if (attempt < SESSION_ID_MAX_RETRIES) await sleep(SESSION_ID_RETRY_DELAY_MS);
   }
 
   console.warn("[DSP] Could not obtain audio session ID after retries");
@@ -74,10 +57,36 @@ const applyAllEffects = async (sessionId: number): Promise<void> => {
     return;
   }
 
+  // ✅ Sync session ID ke equalizerStore
+  if (eq.audioSessionId !== sessionId) {
+    useEqualizerStore.getState().setAudioSessionId(sessionId);
+  }
+
   console.log(`[DSP] Applying effects → session ${sessionId}`);
   const errors: string[] = [];
 
-  // 1. Bass Boost
+  // Gunakan await satu per satu untuk menghindari tabrakan engine (Error -3)
+
+  // 1. EQ Bands — gains dalam millibels (dB × 100) untuk Android Equalizer API
+  if (eq.bands?.length > 0) {
+    try {
+      const gainsMillibels = eq.bands.map((b) =>
+        Math.round(Math.min(12, Math.max(-12, b.gain)) * 100),
+      );
+
+      if (NativeDSPModule.setFullEqualizer) {
+        await NativeDSPModule.setFullEqualizer(gainsMillibels, sessionId);
+      } else if (NativeDSPModule.setBandLevel) {
+        for (let i = 0; i < gainsMillibels.length; i++) {
+          await NativeDSPModule.setBandLevel(i, gainsMillibels[i], sessionId);
+        }
+      }
+    } catch (e) {
+      errors.push(`Equalizer: ${e}`);
+    }
+  }
+
+  // 2. Bass Boost
   if ((eq.bassStrength ?? 0) > 0) {
     try {
       await NativeDSPModule.setBassBoost(eq.bassStrength, sessionId);
@@ -86,7 +95,7 @@ const applyAllEffects = async (sessionId: number): Promise<void> => {
     }
   }
 
-  // 2. Virtualizer
+  // 3. Virtualizer
   if ((eq.virtualizerLevel ?? 0) > 0 && NativeDSPModule.setVirtualizer) {
     try {
       await NativeDSPModule.setVirtualizer(eq.virtualizerLevel, sessionId);
@@ -95,32 +104,16 @@ const applyAllEffects = async (sessionId: number): Promise<void> => {
     }
   }
 
-  // 3. Reverb
+  // 4. Reverb — Perbaikan variabel preset & sid
   if ((eq.reverbPreset ?? 0) > 0) {
     try {
-      await NativeDSPModule.setReverbPreset(eq.reverbPreset, sessionId);
-    } catch (e) {
-      errors.push(`Reverb: ${e}`);
-    }
-  }
-
-  // 4. EQ Bands
-  if (eq.bands?.length > 0) {
-    try {
-      // Clamp to ±12 dB, scale to native integer (millibels ×100)
-      const gains = eq.bands.map((b) =>
-        Math.round(Math.min(12, Math.max(-12, b.gain)) * 100),
-      );
-
-      if (NativeDSPModule.setFullEqualizer) {
-        await NativeDSPModule.setFullEqualizer(gains, sessionId);
-      } else if (NativeDSPModule.setBandLevel) {
-        for (let i = 0; i < gains.length; i++) {
-          await NativeDSPModule.setBandLevel(i, gains[i], sessionId);
-        }
+      // Pastikan return type di nativeInterface.ts adalah Promise<boolean>
+      const ok = await NativeDSPModule.setReverbPreset(eq.reverbPreset, sessionId);
+      if (!ok) {
+        console.log("[DSP] Reverb not supported or failed to initialize");
       }
     } catch (e) {
-      errors.push(`Equalizer: ${e}`);
+      errors.push(`Reverb: ${e}`);
     }
   }
 
@@ -143,10 +136,9 @@ const releaseAllEffects = async (): Promise<void> => {
 };
 
 // ─────────────────────────────────────────────
-// DSP Session Init (called once per track, on State.Playing)
+// DSP Session Init
 // ─────────────────────────────────────────────
 
-/** Guard to prevent double-applying DSP within the same track play event. */
 let lastDspTrackIndex: number | null = null;
 
 const initDspForTrack = async (trackIndex: number | undefined): Promise<void> => {
@@ -167,26 +159,22 @@ const initDspForTrack = async (trackIndex: number | undefined): Promise<void> =>
 export const playbackService = async function () {
   console.log("[PlaybackService] Initializing...");
 
-  // ── Track changed ──────────────────────────────────────────────────────────
-  // Store the incoming track index so PlaybackState.Playing can use it.
   let pendingTrackIndex: number | undefined;
 
-  TrackPlayer.addEventListener(
-    Event.PlaybackActiveTrackChanged,
-    (event) => {
-      console.log("[PlaybackService] Active track changed", event.index);
-      pendingTrackIndex = event.index;
+  TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (event) => {
+    console.log("[PlaybackService] Active track changed", event.index);
+    pendingTrackIndex = event.index;
 
-      // Sync currentSong in PlayerStore
-      if (event.track) {
-        const { queue } = usePlayerStore.getState();
-        const song = queue.find((s) => String(s.id) === String(event.track?.id));
-        if (song) usePlayerStore.getState().setCurrentSong(song);
-      }
-    },
-  );
+    // Reset track index agar DSP bisa di-init ulang untuk lagu yang sama jika perlu
+    if (event.index === undefined) lastDspTrackIndex = null;
 
-  // ── Playback state ─────────────────────────────────────────────────────────
+    if (event.track) {
+      const { queue } = usePlayerStore.getState();
+      const song = queue.find((s) => String(s.id) === String(event.track?.id));
+      if (song) usePlayerStore.getState().setCurrentSong(song);
+    }
+  });
+
   TrackPlayer.addEventListener(Event.PlaybackState, async (event) => {
     const stateLabel = stateToString(event.state);
     console.log(`[PlaybackService] Playback state: ${stateLabel}`);
@@ -194,45 +182,34 @@ export const playbackService = async function () {
     const player = usePlayerStore.getState();
 
     switch (event.state) {
-      case State.Playing: // ✅
+      case State.Playing:
         player.setIsPlaying(true);
         if (Platform.OS === "android") {
-          setTimeout(() => initDspForTrack(pendingTrackIndex), DSP_INIT_DELAY_MS);
+          // Gunakan delay yang cukup agar AudioTrack di Native benar-benar 'Ready'
+          setTimeout(() => {
+            initDspForTrack(pendingTrackIndex).catch(err => 
+              console.error("[DSP] Init Error:", err)
+            );
+          }, DSP_INIT_DELAY_MS);
         }
         break;
-
-      case State.Paused:  // ✅
-      case State.Stopped: // ✅
+      case State.Paused:
+      case State.Stopped:
         player.setIsPlaying(false);
         break;
-
-      case State.Error:   // ✅
+      case State.Error:
         console.error("[PlaybackService] Playback error state");
         player.setIsPlaying(false);
         break;
-
       default:
         break;
     }
   });
 
-  // ── Remote controls ────────────────────────────────────────────────────────
-  TrackPlayer.addEventListener(Event.RemotePlay, () => {
-    TrackPlayer.play();
-  });
-
-  TrackPlayer.addEventListener(Event.RemotePause, () => {
-    TrackPlayer.pause();
-  });
-
-  TrackPlayer.addEventListener(Event.RemoteNext, () => {
-    // Route through PlayerStore so shuffle/repeat logic is respected
-    usePlayerStore.getState().playNext();
-  });
-
-  TrackPlayer.addEventListener(Event.RemotePrevious, () => {
-    usePlayerStore.getState().playPrevious();
-  });
+  TrackPlayer.addEventListener(Event.RemotePlay, () => TrackPlayer.play());
+  TrackPlayer.addEventListener(Event.RemotePause, () => TrackPlayer.pause());
+  TrackPlayer.addEventListener(Event.RemoteNext, () => usePlayerStore.getState().playNext());
+  TrackPlayer.addEventListener(Event.RemotePrevious, () => usePlayerStore.getState().playPrevious());
 
   TrackPlayer.addEventListener(Event.RemoteSeek, async (event) => {
     await TrackPlayer.seekTo(event.position);
@@ -250,19 +227,13 @@ export const playbackService = async function () {
     }
   });
 
-  // ── Queue ended ────────────────────────────────────────────────────────────
   TrackPlayer.addEventListener(Event.PlaybackQueueEnded, async () => {
     console.log("[PlaybackService] Queue ended");
     const { repeat, playNext } = usePlayerStore.getState();
-    if (repeat === "all") {
-      await playNext();
-    } else {
-      usePlayerStore.getState().setIsPlaying(false);
-    }
+    if (repeat === "all") await playNext();
+    else usePlayerStore.getState().setIsPlaying(false);
   });
 
-  // ── Progress sync ──────────────────────────────────────────────────────────
-  // Sync position/duration from TrackPlayer to store at ~1 Hz
   TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, (event) => {
     const { setPosition, setDuration } = usePlayerStore.getState();
     setPosition(event.position);
@@ -272,42 +243,21 @@ export const playbackService = async function () {
   console.log("[PlaybackService] Registered with Full DSP Sync");
 };
 
-// ─────────────────────────────────────────────
-// Exports
-// ─────────────────────────────────────────────
-
-export const dspHelpers = {
-  applyAllEffects,
-  releaseAllEffects,
-  getAudioSessionId,
-};
-
-// ─────────────────────────────────────────────
-// Utilities
-// ─────────────────────────────────────────────
+export const dspHelpers = { applyAllEffects, releaseAllEffects, getAudioSessionId };
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
+
 const stateToString = (state: number): string => {
   switch (state) {
-    case State.Playing:   // ✅
-      return "playing";
-    case State.Paused:
-      return "paused";
-    case State.Stopped:
-      return "stopped";
-    case State.Buffering:
-      return "buffering";
-    case State.Loading:
-      return "loading";
-    case State.Ready:
-      return "ready";
-    case State.Error:
-      return "error";
-    case State.None:
-      return "none";
-    default:
-      return `unknown (${state})`;
+    case State.Playing:   return "playing";
+    case State.Paused:    return "paused";
+    case State.Stopped:   return "stopped";
+    case State.Buffering: return "buffering";
+    case State.Loading:   return "loading";
+    case State.Ready:     return "ready";
+    case State.Error:     return "error";
+    case State.None:      return "none";
+    default:              return `unknown (${state})`;
   }
-};
- 
+}; 

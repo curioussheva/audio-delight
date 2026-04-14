@@ -101,18 +101,21 @@ class NativeDSPModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun setFullEqualizer(gains: ReadableArray, audioSessionId: Int, promise: Promise) {
-        try {
-            ensureEqualizer(audioSessionId)
-            val eq = equalizer ?: throw IllegalStateException("Equalizer not initialised")
-            val bandsToApply = minOf(gains.size(), eq.numberOfBands.toInt())
-            for (i in 0 until bandsToApply) {
-                eq.setBandLevel(i.toShort(), gains.getDouble(i).toInt().toShort())
-            }
-            promise.resolve(true)
-        } catch (e: Exception) {
-            promise.reject("EQ_ERROR", e.message ?: "Failed to set full equalizer", e)
+    try {
+        ensureEqualizer(audioSessionId)
+        val eq = equalizer ?: throw IllegalStateException("EQ not init")
+        
+        // Loop semua band yang dikirim dari JS
+        for (i in 0 until gains.size()) {
+            // JS kirim 12, Android butuh 1200 (milliBel)
+            val level = (gains.getDouble(i) * 100).toInt().toShort()
+            eq.setBandLevel(i.toShort(), level)
         }
+        promise.resolve(true)
+    } catch (e: Exception) {
+        promise.reject("EQ_ERROR", e.message)
     }
+}
 
     // Alias used by JS fallback path
     @ReactMethod
@@ -218,42 +221,85 @@ class NativeDSPModule(reactContext: ReactApplicationContext) :
     // ─────────────────────────────────────────────
 
     private fun ensureEqualizer(id: Int) {
-        if (equalizer == null || eqSessionId != id) {
-            equalizer?.release()
-            equalizer = Equalizer(0, id).apply { enabled = true }
-            eqSessionId = id
+    if (id <= 0 && id != 0) return // Izinkan 0 untuk global test
+    if (equalizer != null && eqSessionId == id) return
+
+    try {
+        equalizer?.release()
+        // Parameter pertama: Priority (kita set 1000)
+        // Parameter kedua: AudioSession
+        equalizer = Equalizer(1000, id).apply { 
+            enabled = true 
         }
+        eqSessionId = id
+        android.util.Log.d("NativeDSP", "EQ Initialized on Session $id with Priority 1000")
+    } catch (e: Exception) {
+        eqSessionId = -1
+        android.util.Log.e("NativeDSPModule", "Failed to init EQ: ${e.message}")
     }
+}
 
     private fun ensureBassBoost(id: Int) {
-        if (bassBoost == null || bassSessionId != id) {
+        if (id <= 0) return
+        if (bassBoost != null && bassSessionId == id) return
+
+        try {
             bassBoost?.release()
+            bassBoost = null
             bassBoost = BassBoost(0, id).apply { enabled = true }
             bassSessionId = id
+        } catch (e: Exception) {
+            bassSessionId = -1
+            android.util.Log.e("NativeDSPModule", "Failed to init Bass: ${e.message}")
         }
     }
 
     private fun ensureVirtualizer(id: Int) {
-        if (virtualizer == null || virtSessionId != id) {
+        if (id <= 0) return
+        if (virtualizer != null && virtSessionId == id) return
+
+        try {
             virtualizer?.release()
+            virtualizer = null
             virtualizer = Virtualizer(0, id).apply { enabled = true }
             virtSessionId = id
+        } catch (e: Exception) {
+            virtSessionId = -1
+            android.util.Log.e("NativeDSPModule", "Failed to init Virtualizer: ${e.message}")
         }
     }
 
     private fun ensureReverb(id: Int) {
-        if (presetReverb == null || reverbSessionId != id) {
-            presetReverb?.release()
-            presetReverb = PresetReverb(0, id).apply { enabled = true }
-            reverbSessionId = id
+    if (id <= 0) return
+    if (presetReverb != null && reverbSessionId == id) return
+
+    try {
+        presetReverb?.release()
+        presetReverb = null
+        // Gunakan try-catch sangat spesifik di sini
+        presetReverb = PresetReverb(0, id).apply { 
+            enabled = true 
         }
+        reverbSessionId = id
+    } catch (e: Exception) {
+        reverbSessionId = -1
+        presetReverb = null // Pastikan null agar tidak dipanggil lagi
+        android.util.Log.e("NativeDSP", "Reverb not supported on this device/session")
     }
+}
 
     private fun releaseAll() {
-        equalizer?.release();   equalizer = null;   eqSessionId = -1
-        bassBoost?.release();   bassBoost = null;   bassSessionId = -1
-        virtualizer?.release(); virtualizer = null; virtSessionId = -1
-        presetReverb?.release(); presetReverb = null; reverbSessionId = -1
+        try { equalizer?.release() } catch (e: Exception) {}
+        equalizer = null; eqSessionId = -1
+
+        try { bassBoost?.release() } catch (e: Exception) {}
+        bassBoost = null; bassSessionId = -1
+
+        try { virtualizer?.release() } catch (e: Exception) {}
+        virtualizer = null; virtSessionId = -1
+
+        try { presetReverb?.release() } catch (e: Exception) {}
+        presetReverb = null; reverbSessionId = -1
     }
 
     override fun invalidate() {

@@ -1,18 +1,20 @@
+// src/features/equalizer/types.ts
+
 export type BandType = "peaking" | "lowshelf" | "highshelf";
 
 /**
  * Struktur data untuk satu pita frekuensi (Band)
  */
 export interface EqualizerBand {
-  id: number; // Indeks 0-9 untuk 10-band
-  frequency: number; // Hz (32, 64, dst)
-  gain: number; // -12.0 s/d 12.0 dB
-  q: number; // Quality factor (lebar pita filter)
-  type: BandType; // Karakteristik filter
+  id: number;
+  frequency: number;
+  gain: number;
+  q: number;
+  type: BandType;
 }
 
 /**
- * Struktur data untuk satu Preset (Bawaan atau Custom)
+ * Struktur data untuk satu Preset
  */
 export interface Preset {
   id: string;
@@ -21,45 +23,58 @@ export interface Preset {
   isPremium?: boolean;
   isCustom?: boolean;
   bands: EqualizerBand[];
-  // Parameter opsional untuk efek tambahan dalam satu preset
   bassBoost?: number;
   virtualizer?: number;
   reverb?: number;
 }
 
 /**
- * Definisi State dan Action untuk Zustand Store
- */
+ * Definisi Store yang sinkron dengan implementasi store.ts
+ */ 
 export interface EqualizerStore {
-  // State
+  // --- State ---
   bands: EqualizerBand[];
   activePresetId: string;
   isEQEnabled: boolean;
+  isBassEnabled: boolean;
+  isVirtualizerEnabled: boolean;
+  isReverbEnabled: boolean;
   customPresets: Preset[];
   bassStrength: number;
   virtualizerLevel: number;
   reverbPreset: number;
   audioSessionId: number;
   isInitialized: boolean;
-  initialize: () => void | Promise<void>;
 
-  // Actions (Fungsi Pengubah State)
+  // --- Actions ---
+  initialize: () => Promise<void>;
   setAudioSessionId: (id: number) => void;
+  
+  // Master Switch
   setEQEnabled: (enabled: boolean) => Promise<void>;
-  toggleEQ: () => Promise<void>; // Tambahkan ini
+  toggleEQ: () => Promise<void>;
+  
+  // Individual Switches
+  setBassEnabled: (enabled: boolean) => Promise<void>; 
+  setVirtualizerEnabled: (enabled: boolean) => Promise<void>;
+  setReverbEnabled: (enabled: boolean) => Promise<void>; 
+  
+  // Value Adjustments
   setBassBoost: (strength: number) => Promise<void>;
   setVirtualizer: (level: number) => Promise<void>;
   setReverb: (preset: number) => Promise<void>;
-
-  applyPreset: (presetId: string) => void;
   setBandGain: (index: number, gain: number) => void;
+  setBandsGain: (gains: number[]) => Promise<void>; // Ditambahkan untuk Full EQ Apply
+  
+  // Preset Management
+  applyPreset: (presetId: string) => void;
   saveCustomPreset: (name: string) => void;
   deleteCustomPreset: (id: string) => void;
-  repeatPreset?: "off" | "all" | "track";
+  resetToDefault: () => Promise<void>;
 }
 
 /**
- * State Ringkas untuk dikonsumsi Hook useEqualizer
+ * State Ringkas untuk dikonsumsi Hook atau Component
  */
 export interface EqualizerState {
   currentBands: EqualizerBand[];
@@ -67,19 +82,8 @@ export interface EqualizerState {
   virtualizerLevel: number;
   reverbPreset: number;
   activePresetId: string;
-  isDSPDisabled: boolean; // Flag untuk proteksi Bit-Perfect
-}
-
-export interface NativeDSPInterface {
-  setEqualizer(
-    band: number,
-    level: number,
-    audioSessionId: number,
-  ): Promise<boolean>;
-  setFullEqualizer(gains: number[], audioSessionId: number): Promise<boolean>;
-  setBassBoost(strength: number, audioSessionId: number): Promise<boolean>;
-  setVirtualizer(strength: number, sessionId: number): Promise<boolean>;
-  setReverbPreset(preset: number, audioSessionId: number): Promise<boolean>;
-  releaseAllFX(): Promise<boolean>;
-  toggleExclusiveMode(enabled: boolean): Promise<boolean>;
+  isEQEnabled: boolean;
+  isBassEnabled: boolean;
+  isVirtualizerEnabled: boolean;
+  isReverbEnabled: boolean;
 }

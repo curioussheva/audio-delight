@@ -136,6 +136,7 @@ export type ThemeId =
   | "rose-gold"
   | "neon-cyber"
   | "sunset-orange";
+  | "emerald-noir";
 
 export interface Theme {
   id: ThemeId;

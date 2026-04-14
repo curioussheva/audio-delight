@@ -1,21 +1,15 @@
 /**
- * UnifiedScanService
- * Central service for all scan operations (Auto, Manual, and Enrichment)
- * Aligned with new flat LibraryState
+ * src/features/library/services/UnifiedScanService.ts
  */
 
-import {
-  quickDiff,
-  runMediaStoreDiff,
-  processSongWithMetadata,
-  removeSongs,
-} from "./ScanDiffEngine";
+// ✅ Import ScanDiffEngine sebagai object — quickDiff dan runMediaStoreDiff
+//    adalah methods, bukan named exports
+import { ScanDiffEngine } from "./ScanDiffEngine";
 import { MetadataEnricher } from "./MetadataEnricher";
 import { useLibraryStore } from "../store/libraryStore";
 import { ScanResult, ScanProgress, EnrichmentLevel } from "../types/scan";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
-import type { EnrichmentProgress } from "../types/scan";
 
 export class UnifiedScanService {
   private static isRunning = false;
@@ -23,7 +17,7 @@ export class UnifiedScanService {
   private static currentMode: "auto" | "manual" | null = null;
 
   /**
-   * 🔥 AUTO SCAN - Lightweight scan for background/app launch (Level 1)
+   * AUTO SCAN - Lightweight scan for background/app launch (Level 1)
    */
   static async autoScan(): Promise<ScanResult> {
     if (this.isRunning) {
@@ -47,7 +41,8 @@ export class UnifiedScanService {
 
       store.startAutoScan();
 
-      const diffResult = await quickDiff();
+      // ✅ ScanDiffEngine.quickDiff() — bukan quickDiff() langsung
+      const diffResult = await ScanDiffEngine.quickDiff();
 
       if (Platform.OS === "android") {
         await this.showScanNotification(
@@ -59,7 +54,6 @@ export class UnifiedScanService {
 
       store.finishAutoScan();
 
-      // Queue new songs for Level 2 enrichment
       if (diffResult.newSongs?.length > 0) {
         await MetadataEnricher.queueSongs(
           diffResult.newSongs.map((s) => ({
@@ -105,7 +99,7 @@ export class UnifiedScanService {
   }
 
   /**
-   * 👤 MANUAL SCAN - Full scan with progress feedback (Level 2)
+   * MANUAL SCAN - Full scan with progress feedback (Level 2)
    */
   static async manualScan(
     onProgress?: (progress: ScanProgress) => void,
@@ -132,35 +126,15 @@ export class UnifiedScanService {
         message: "Scanning device...",
       });
 
-      const diffResult = await runMediaStoreDiff((current, total) => {
-        onProgress?.({
-          phase: "discover",
-          current,
-          total,
-          message: `Found ${current} of ${total} files...`,
-        });
-      });
-
-      const changes = [...diffResult.newSongs, ...diffResult.updatedSongs];
-      const totalChanges = changes.length;
-
-      for (let i = 0; i < changes.length; i++) {
-        if (this.abortController?.signal.aborted) break;
-
-        const song = changes[i];
+      // ✅ ScanDiffEngine.runMediaStoreDiff() — bukan runMediaStoreDiff() langsung
+      const diffResult = await ScanDiffEngine.runMediaStoreDiff((current, total) => {
         onProgress?.({
           phase: "process",
-          current: i + 1,
-          total: totalChanges,
-          message: `Processing ${song.filename || "file"}...`,
+          current,
+          total,
+          message: `Processing file ${current} of ${total}...`,
         });
-
-        await processSongWithMetadata(song);
-      }
-
-      if (diffResult.deletedUris?.length > 0) {
-        await removeSongs(diffResult.deletedUris);
-      }
+      });
 
       store.finishManualScan();
 
@@ -187,7 +161,7 @@ export class UnifiedScanService {
   }
 
   /**
-   * ✨ METADATA ENRICHMENT (Level 2)
+   * METADATA ENRICHMENT (Level 2)
    */
   static async enrichMetadata(
     options: {
@@ -214,31 +188,26 @@ export class UnifiedScanService {
       return { processed: 0, success: 0, failed: 0 };
     }
 
-    console.log(
-      `✨ [UnifiedScan] Starting enrichment for ${targetIds.length} songs...`,
-    );
+    console.log(`✨ [UnifiedScan] Starting enrichment for ${targetIds.length} songs...`);
 
     this.isRunning = true;
     this.currentMode = "auto";
 
     try {
-      store.startEnrichment(2, targetIds.length); // level 2, total
+      store.startEnrichment(2, targetIds.length);
 
       const result = await MetadataEnricher.enrichBatch(
         targetIds,
         (current, total, songInfo) => {
-          // Update store dengan object lengkap sesuai EnrichmentProgress
           store.updateEnrichmentProgress?.({
             level: 2 as EnrichmentLevel,
             current,
             total,
             currentSong: songInfo?.title,
             currentArtist: songInfo?.artist,
-            success: current, // approximasi sementara
+            success: current,
             failed: 0,
           });
-
-          // Forward ke callback user
           options.onProgress?.(current, total, songInfo);
         },
       );
@@ -294,7 +263,6 @@ export class UnifiedScanService {
 
   private static async setupNotificationChannel(): Promise<void> {
     if (Platform.OS !== "android") return;
-
     try {
       await Notifications.setNotificationChannelAsync("media-scanner", {
         name: "Media Scanner",
@@ -304,10 +272,7 @@ export class UnifiedScanService {
         enableVibrate: false,
       });
     } catch (error) {
-      console.warn(
-        "[UnifiedScan] Failed to setup notification channel:",
-        error,
-      );
+      console.warn("[UnifiedScan] Failed to setup notification channel:", error);
     }
   }
 
@@ -317,21 +282,20 @@ export class UnifiedScanService {
     total: number,
   ): Promise<void> {
     if (Platform.OS !== "android") return;
-
     try {
       const progress = total > 0 ? Math.round((current / total) * 100) : 0;
       await Notifications.scheduleNotificationAsync({
         identifier: "auto-scan",
         content: {
           title: "Pristine Audio",
-          body: `( {body} ( ){progress}%)`,
+          body: `${body} (${progress}%)`,
           sticky: true,
           priority: Notifications.AndroidNotificationPriority.LOW,
         },
         trigger: null,
       });
-    } catch (e) {
-      // Silent fail for notifications
+    } catch {
+      // Silent fail
     }
   }
 
@@ -349,3 +313,4 @@ export class UnifiedScanService {
     };
   }
 }
+ 

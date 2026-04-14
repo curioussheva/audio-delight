@@ -10,7 +10,16 @@ import type {
 import { BASE_TYPOGRAPHY } from "./themes/base";
 
 import { LIGHT_GRAY, PURE_WHITE } from "./themes/light";
-import { MIDNIGHT_BLUE, CHARCOAL_BLACK } from "./themes/dark";
+import {
+  MIDNIGHT_BLUE,
+  CHARCOAL_BLACK,
+  EMERALD_NOIR,
+  COZY_METALLIC,
+  BLUE_JEANS,
+  VINYL_NOIR,
+  AGED_WHISKEY,
+  GRAPHITE_SLATE,
+} from "./themes/dark";
 import { FOREST_GREEN, OCEAN_WAVE } from "./themes/nature";
 import { GOLDEN_HOUR, ROSE_GOLD } from "./themes/premium";
 import { NEON_CYBER, SUNSET_ORANGE } from "./themes/cyber";
@@ -234,6 +243,7 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
     typography: BASE_TYPOGRAPHY,
   },
 
+  // Imported themes
   "light-gray": LIGHT_GRAY,
   "pure-white": PURE_WHITE,
   "midnight-blue": MIDNIGHT_BLUE,
@@ -244,6 +254,14 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
   "rose-gold": ROSE_GOLD,
   "neon-cyber": NEON_CYBER,
   "sunset-orange": SUNSET_ORANGE,
+  "emerald-noir": EMERALD_NOIR,
+
+  // ✨ TEMA BARU
+  "cozy-metallic": COZY_METALLIC,
+  "blue-jeans": BLUE_JEANS,
+  "vinyl-noir": VINYL_NOIR,
+  "aged-whiskey": AGED_WHISKEY,
+  "graphite-slate": GRAPHITE_SLATE,
 };
 
 export const getThemeById = (id: ThemeId): Theme =>
@@ -255,7 +273,7 @@ export const getRandomTheme = (): Theme => {
 };
 
 export const THEMES_LIST = Object.values(ALL_THEMES);
-export const DEFAULT_THEME = ALL_THEMES["midnight-blue"];
+export const DEFAULT_THEME = ALL_THEMES["emerald-noir"]; // Diperbarui ke emerald-noir
 
 export const THEME_CATEGORIES = {
   light: ["light-gray", "pure-white", "light-elegant", "light-silver"],
@@ -266,6 +284,12 @@ export const THEME_CATEGORIES = {
     "charcoal-black",
     "neon-cyber",
     "sunset-orange",
+    "emerald-noir",
+    "cozy-metallic",    // ✨ Baru
+    "blue-jeans",       // ✨ Baru
+    "vinyl-noir",       // ✨ Baru
+    "aged-whiskey",     // ✨ Baru
+    "graphite-slate",   // ✨ Baru
   ],
   nature: ["forest-green", "ocean-wave"],
   premium: ["golden-hour", "rose-gold"],

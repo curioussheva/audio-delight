@@ -1,3 +1,4 @@
+// src/shared/components/ThemePicker.tsx
 import React from "react";
 import {
   View,
@@ -11,24 +12,25 @@ import {
 
 // Lucide Icons
 import {
-  X, // close
-  Shuffle, // random theme
+  X,
+  Shuffle,
+  Check,
 } from "lucide-react-native";
 
 import { useTheme } from "@/shared/context/ThemeContext";
-import { THEME_CATEGORIES } from "@/shared/constants/theme";
+import { ALL_THEMES, THEME_CATEGORIES } from "@/shared/constants/theme";
 import type { Theme } from "@/shared/constants/themes/types";
 
 const { width } = Dimensions.get("window");
 const COLUMN_WIDTH = (width - 64) / 3;
+const CARD_WIDTH = COLUMN_WIDTH - 8;
 
-// Hanya gunakan kategori yang ada di THEME_CATEGORIES
+// Kategori yang tersedia
 const CATEGORIES: { label: string; key: keyof typeof THEME_CATEGORIES }[] = [
   { label: "🌙 Dark", key: "dark" },
   { label: "☀️ Light", key: "light" },
   { label: "💎 Premium", key: "premium" },
   { label: "🌿 Nature", key: "nature" },
-  // Hapus "cyber" karena tidak ada di THEME_CATEGORIES
 ];
 
 export const ThemePicker: React.FC<{
@@ -38,102 +40,116 @@ export const ThemePicker: React.FC<{
   const { theme, themeId, setTheme, randomTheme } = useTheme();
   const { colors, spacing } = theme;
 
-  const renderThemeCard = (themeIdOrTheme: string | Theme) => {
-    // Handle jika yang diterima adalah string ID atau Theme object
-    const t =
-      typeof themeIdOrTheme === "string"
-        ? (THEME_CATEGORIES as any)[
-            Object.keys(THEME_CATEGORIES).find((key) =>
-              (THEME_CATEGORIES as any)[key].includes(themeIdOrTheme),
-            )
-          ]?.find((id: string) => id === themeIdOrTheme)
-        : themeIdOrTheme;
+  // Helper untuk mendapatkan tema dari ID
+  const getThemeFromId = (id: string): Theme | undefined => {
+    return ALL_THEMES[id as keyof typeof ALL_THEMES];
+  };
 
-    if (!t) return null;
-
+  // Render satu kartu tema
+  const renderThemeCard = (t: Theme) => {
     const isSelected = t.id === themeId;
 
     return (
       <TouchableOpacity
         key={t.id}
-        onPress={() => setTheme(t.id)}
-        style={{
-          width: COLUMN_WIDTH,
-          marginBottom: spacing?.md || 16,
-          alignItems: "center",
+        onPress={() => {
+          setTheme(t.id);
+          // Optional: haptic feedback
         }}
+        style={[
+          styles.cardContainer,
+          { marginBottom: spacing.md },
+        ]}
+        activeOpacity={0.7}
       >
         <View
-          style={{
-            width: COLUMN_WIDTH - (spacing?.md || 16),
-            height: 80,
-            backgroundColor: t.colors.background.primary,
-            borderRadius: 12,
-            borderWidth: 2,
-            borderColor: isSelected
-              ? t.colors.primary[500]
-              : t.colors.border?.medium || "#334155",
-            overflow: "hidden",
-            padding: spacing?.xs || 4,
-          }}
+          style={[
+            styles.cardPreview,
+            {
+              backgroundColor: t.colors.background.primary,
+              borderColor: isSelected
+                ? t.colors.primary[500]
+                : colors.border?.medium || "transparent",
+            },
+          ]}
         >
+          {/* Preview bar - Primary color */}
           <View
-            style={{
-              height: 8,
-              width: "60%",
-              backgroundColor: t.colors.primary[500],
-              borderRadius: 4,
-              marginBottom: spacing?.xs || 4,
-            }}
+            style={[
+              styles.previewBar,
+              {
+                backgroundColor: t.colors.primary[500],
+                marginBottom: spacing.xs,
+              },
+            ]}
+          />
+          
+          {/* Preview text lines */}
+          <View
+            style={[
+              styles.previewLine,
+              {
+                backgroundColor: t.colors.text.secondary,
+                marginBottom: spacing.xs,
+                width: "70%",
+              },
+            ]}
           />
           <View
-            style={{
-              height: 4,
-              width: "40%",
-              backgroundColor: t.colors.text.secondary,
-              borderRadius: 2,
-              marginBottom: spacing?.xs || 4,
-            }}
+            style={[
+              styles.previewLine,
+              {
+                backgroundColor: t.colors.text.tertiary,
+                marginBottom: spacing.sm,
+                width: "40%",
+              },
+            ]}
           />
-          <View style={{ flexDirection: "row", gap: 4 }}>
+
+          {/* Color dots */}
+          <View style={styles.colorDots}>
             {[
               t.colors.primary[500],
-              t.colors.primary[500],
-              t.colors.primary[500],
+              t.colors.status?.success || "#10B981",
+              t.colors.accent?.primary || t.colors.primary[300],
             ].map((bg, i) => (
               <View
                 key={i}
-                style={{
-                  width: 10,
-                  height: 10,
-                  backgroundColor: bg,
-                  borderRadius: 2,
-                }}
+                style={[
+                  styles.colorDot,
+                  { backgroundColor: bg },
+                ]}
               />
             ))}
           </View>
+
+          {/* Selected indicator */}
+          {isSelected && (
+            <View
+              style={[
+                styles.selectedBadge,
+                { backgroundColor: t.colors.primary[500] },
+              ]}
+            >
+              <Check size={10} color="#FFF" strokeWidth={3} />
+            </View>
+          )}
         </View>
 
         <Text
-          style={{
-            color: isSelected ? colors.primary[500] : colors.text.secondary,
-            fontSize: 12,
-            marginTop: spacing?.xs || 4,
-            fontWeight: isSelected ? "600" : "400",
-          }}
+          style={[
+            styles.cardTitle,
+            {
+              color: isSelected ? colors.primary[500] : colors.text.secondary,
+              marginTop: spacing.xs,
+            },
+          ]}
+          numberOfLines={1}
         >
           {t.name}
         </Text>
       </TouchableOpacity>
     );
-  };
-
-  // Helper untuk mendapatkan theme object dari ID
-  const getThemeById = (id: string): Theme | null => {
-    // Ini perlu diimport dari theme constants
-    // Untuk sementara, kita asumsikan ada function getThemeById
-    // Atau kita bisa menggunakan ALL_THEMES jika diimport
-    return null;
   };
 
   return (
@@ -142,6 +158,7 @@ export const ThemePicker: React.FC<{
       transparent
       animationType="slide"
       onRequestClose={onClose}
+      statusBarTranslucent
     >
       <View style={styles.overlay}>
         <View
@@ -155,8 +172,9 @@ export const ThemePicker: React.FC<{
             style={[
               styles.header,
               {
-                borderBottomColor: colors.border?.medium || "#334155",
-                padding: spacing?.lg || 24,
+                borderBottomColor: colors.border?.medium || colors.background.tertiary,
+                paddingHorizontal: spacing.lg,
+                paddingVertical: spacing.md,
               },
             ]}
           >
@@ -164,7 +182,11 @@ export const ThemePicker: React.FC<{
               Pilih Tema
             </Text>
 
-            <TouchableOpacity onPress={onClose} hitSlop={8}>
+            <TouchableOpacity
+              onPress={onClose}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={styles.closeButton}
+            >
               <X size={24} color={colors.text.secondary} strokeWidth={2.5} />
             </TouchableOpacity>
           </View>
@@ -172,36 +194,40 @@ export const ThemePicker: React.FC<{
           {/* Konten Tema per Kategori */}
           <ScrollView
             style={styles.scroll}
-            contentContainerStyle={{ paddingBottom: spacing?.lg || 24 }}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: spacing.lg },
+            ]}
             showsVerticalScrollIndicator={false}
           >
-            {CATEGORIES.map(({ label, key }) => (
-              <View key={key}>
-                <Text
-                  style={[
-                    styles.categoryTitle,
-                    {
-                      color: colors.text.secondary,
-                      marginHorizontal: spacing?.lg || 24,
-                    },
-                  ]}
-                >
-                  {label}
-                </Text>
-                <View
-                  style={[
-                    styles.grid,
-                    { paddingHorizontal: spacing?.lg || 24 },
-                  ]}
-                >
-                  {THEME_CATEGORIES[key].map((themeId) => {
-                    // Kita perlu mengakses theme object dari themeId
-                    // Cara termudah: import ALL_THEMES
-                    return null; // Temporary
-                  })}
+            {CATEGORIES.map(({ label, key }) => {
+              const themeIds = THEME_CATEGORIES[key];
+              const themes = themeIds
+                .map((id) => getThemeFromId(id))
+                .filter((t): t is Theme => t !== undefined);
+
+              if (themes.length === 0) return null;
+
+              return (
+                <View key={key} style={styles.categorySection}>
+                  <Text
+                    style={[
+                      styles.categoryTitle,
+                      {
+                        color: colors.text.secondary,
+                        marginHorizontal: spacing.lg,
+                      },
+                    ]}
+                  >
+                    {label}
+                  </Text>
+                  
+                  <View style={[styles.grid, { paddingHorizontal: spacing.lg }]}>
+                    {themes.map(renderThemeCard)}
+                  </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </ScrollView>
 
           {/* Footer - Random Theme */}
@@ -209,26 +235,27 @@ export const ThemePicker: React.FC<{
             style={[
               styles.footer,
               {
-                borderTopColor: colors.border?.medium || "#334155",
-                padding: spacing?.lg || 24,
+                borderTopColor: colors.border?.medium || colors.background.tertiary,
+                paddingVertical: spacing.md,
+                paddingHorizontal: spacing.lg,
               },
             ]}
           >
             <TouchableOpacity
-              onPress={randomTheme}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: spacing?.sm || 8,
+              onPress={() => {
+                randomTheme();
+                // Optional: haptic feedback
               }}
+              style={styles.randomButton}
+              activeOpacity={0.7}
             >
               <Shuffle
                 size={20}
                 color={colors.primary[500]}
                 strokeWidth={2.5}
               />
-              <Text style={{ color: colors.primary[500], fontWeight: "600" }}>
-                Random Theme
+              <Text style={[styles.randomText, { color: colors.primary[500] }]}>
+                Acak Tema
               </Text>
             </TouchableOpacity>
           </View>
@@ -242,39 +269,112 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
   },
   container: {
-    height: "80%",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    height: "75%",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: "hidden",
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   title: {
     fontSize: 20,
     fontWeight: "700",
+    letterSpacing: -0.5,
+  },
+  closeButton: {
+    padding: 4,
   },
   scroll: {
     flex: 1,
   },
+  scrollContent: {
+    paddingTop: 8,
+  },
+  categorySection: {
+    marginBottom: 8,
+  },
   categoryTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
-    marginTop: 16,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 20,
     marginBottom: 12,
   },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    justifyContent: "flex-start",
+  },
+  cardContainer: {
+    width: CARD_WIDTH,
+    marginRight: 12,
+    alignItems: "center",
+  },
+  cardPreview: {
+    width: "100%",
+    aspectRatio: 1,
+    borderRadius: 14,
+    borderWidth: 2.5,
+    overflow: "hidden",
+    padding: 8,
+    position: "relative",
+  },
+  previewBar: {
+    height: 8,
+    width: "60%",
+    borderRadius: 4,
+  },
+  previewLine: {
+    height: 4,
+    borderRadius: 2,
+  },
+  colorDots: {
+    flexDirection: "row",
+    gap: 6,
+    marginTop: "auto",
+  },
+  colorDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 4,
+  },
+  selectedBadge: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  cardTitle: {
+    fontSize: 12,
+    fontWeight: "500",
+    textAlign: "center",
+    width: "100%",
   },
   footer: {
-    borderTopWidth: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
     alignItems: "center",
+  },
+  randomButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 4,
+  },
+  randomText: {
+    fontSize: 15,
+    fontWeight: "600",
   },
 }); 

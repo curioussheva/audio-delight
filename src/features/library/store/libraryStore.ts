@@ -8,13 +8,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ScanStoreState,
   ScanStoreActions,
-  ScanProgress,
-  EnrichmentProgress,
-  EnrichmentLevel,
-  ScanResult,
   LibraryTab,
 } from "../types/scan";
 
+// Definisi MediaTrack tetap sama seperti kode Anda...
 export interface MediaTrack {
   id: string;
   uri: string;
@@ -51,12 +48,19 @@ export interface MediaTrack {
   artist_image_url?: string;
 } 
 
+/**
+ * FIX 1: Update LibraryState Interface
+ * Tambahkan isAutoScanEnabled dan toggleAutoScanEnabled agar dikenali TS
+ */
 type LibraryState = ScanStoreState &
   ScanStoreActions & {
     tracks: MediaTrack[];
     activeTab: LibraryTab;
     selectedTracks: string[];
     searchQuery: string;
+    
+    // Properti Baru
+    isAutoScanEnabled: boolean;
 
     // --- Actions ---
     setTracks: (tracks: MediaTrack[]) => void;
@@ -64,13 +68,10 @@ type LibraryState = ScanStoreState &
     setSearchQuery: (query: string) => void;
     setSelectedTracks: (ids: string[]) => void;
     
-    /** * Memperbarui metadata lagu secara spesifik (digunakan untuk Sync MusicBrainz)
-     */
-    updateTrack: (trackId: string, updatedData: Partial<MediaTrack>) => void;
+    // Perbaikan nama agar sinkron dengan Settings.tsx
+    toggleAutoScanEnabled: () => void;
     
-    /**
-     * Toggle status favorit lagu
-     */
+    updateTrack: (trackId: string, updatedData: Partial<MediaTrack>) => void;
     toggleFavorite: (trackId: string) => void;
     
     clearLibrary: () => void;
@@ -107,6 +108,9 @@ export const useLibraryStore = create<LibraryState>()(
       lastEnrichmentAt: null,
       unenrichedCount: 0,
       pendingArtistImages: 0,
+      
+      // Default Value
+      isAutoScanEnabled: true,
 
       // --- 2. CORE ACTIONS ---
       setTracks: (tracks) => set({ 
@@ -115,15 +119,17 @@ export const useLibraryStore = create<LibraryState>()(
       }),
 
       setActiveTab: (activeTab) => set({ activeTab }),
-      
       setSearchQuery: (searchQuery) => set({ searchQuery }),
-
       setSelectedTracks: (selectedTracks) => set({ selectedTracks }),
-
+      
       /**
-       * ACTION BARU: updateTrack
-       * Digunakan oleh SongDetailScreen untuk update UI instan setelah Sync
+       * FIX 2: Implementasi toggleAutoScanEnabled
+       * Nama fungsi ini sekarang sinkron dengan settings.tsx
        */
+      toggleAutoScanEnabled: () => set((state) => ({ 
+        isAutoScanEnabled: !state.isAutoScanEnabled 
+      })),
+
       updateTrack: (trackId, updatedData) => 
         set((state) => {
           const newTracks = state.tracks.map((t) => 
@@ -131,14 +137,10 @@ export const useLibraryStore = create<LibraryState>()(
           );
           return {
             tracks: newTracks,
-            // Recalculate unenriched count jika status enrichment berubah
             unenrichedCount: newTracks.filter(t => !t.isEnriched).length
           };
         }),
 
-      /**
-       * ACTION BARU: toggleFavorite
-       */
       toggleFavorite: (trackId) =>
         set((state) => ({
           tracks: state.tracks.map((t) =>
@@ -146,7 +148,7 @@ export const useLibraryStore = create<LibraryState>()(
           ),
         })),
 
-      // --- 3. SCAN & ENRICHMENT ACTIONS ---
+      // --- 3. SCAN & ENRICHMENT ACTIONS (Implementation dari ScanStoreActions) ---
       startAutoScan: () =>
         set({
           isAutoScanning: true,
@@ -204,12 +206,7 @@ export const useLibraryStore = create<LibraryState>()(
         set((state) => {
           const updated = state.tracks.map((track) =>
             track.id === trackId
-              ? {
-                  ...track,
-                  ...metadata,
-                  isEnriched: true,
-                  enrichedAt: Date.now(),
-                }
+              ? { ...track, ...metadata, isEnriched: true, enrichedAt: Date.now() }
               : track,
           );
           return {
@@ -230,17 +227,17 @@ export const useLibraryStore = create<LibraryState>()(
         }),
 
       // --- 4. COMPUTED GETTERS ---
+      // Karena kita menggunakan getter, TypeScript terkadang butuh 'as any' 
+      // atau dipindahkan ke selector jika performa melambat.
       get hasPendingEnrichment() {
-        const state = get();
-        return (state.unenrichedCount || 0) > 0 || (state.enrichmentQueueSize || 0) > 0;
+        return (get().unenrichedCount || 0) > 0 || (get().enrichmentQueueSize || 0) > 0;
       },
-
+      
       get scanStatus() {
-        const state = get();
         return {
-          isScanning: state.isAutoScanning || state.isManualScanning,
-          lastScanAt: state.lastScanAt,
-          autoScanEnabled: true,
+          isScanning: get().isAutoScanning || get().isManualScanning,
+          lastScanAt: get().lastScanAt,
+          autoScanEnabled: get().isAutoScanEnabled,
         };
       },
 
@@ -257,8 +254,9 @@ export const useLibraryStore = create<LibraryState>()(
         lastScanAt: state.lastScanAt,
         lastEnrichmentAt: state.lastEnrichmentAt,
         unenrichedCount: state.unenrichedCount,
+        isAutoScanEnabled: state.isAutoScanEnabled,
       }),
     },
   ),
 );
-
+ 

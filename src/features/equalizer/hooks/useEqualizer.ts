@@ -11,11 +11,15 @@ export const useEqualizer = () => {
     activePresetId,
     customPresets,
     isEQEnabled,
+    // ✅ Ambil state baru dari store
+    isBassEnabled,
+    isVirtualizerEnabled,
+    isReverbEnabled,
+    
     bassStrength,
     virtualizerLevel,
     reverbPreset,
 
-    // Actions dari store
     setBandGain,
     applyPreset,
     saveCustomPreset,
@@ -23,19 +27,38 @@ export const useEqualizer = () => {
     setBassBoost,
     setVirtualizer,
     setReverb,
-    toggleEQ, // ← WAJIB diambil dari store
+    toggleEQ,
+    // ✅ Ambil setters baru dari store
+    setBassEnabled,
+    setVirtualizerEnabled,
+    setReverbEnabled,
+    resetToDefault,
   } = useEqualizerStore();
 
   const isDSPDisabled = audioMode === "bit-perfect";
 
-  // Toggle EQ (untuk Switch)
+  // --- Wrapper Actions dengan Guard Bit-Perfect ---
+
   const handleToggleEQ = useCallback(() => {
-    if (isDSPDisabled) {
-      console.warn("⚠️ DSP is locked in Bit-Perfect mode");
-      return;
-    }
-    toggleEQ(); // ← Sekarang aman
+    if (isDSPDisabled) return;
+    toggleEQ();
   }, [isDSPDisabled, toggleEQ]);
+
+  // ✅ Wrapper untuk individual switches
+  const handleSetBassEnabled = useCallback((val: boolean) => {
+    if (isDSPDisabled) return;
+    setBassEnabled(val);
+  }, [isDSPDisabled, setBassEnabled]);
+
+  const handleSetVirtualizerEnabled = useCallback((val: boolean) => {
+    if (isDSPDisabled) return;
+    setVirtualizerEnabled(val);
+  }, [isDSPDisabled, setVirtualizerEnabled]);
+
+  const handleSetReverbEnabled = useCallback((val: boolean) => {
+    if (isDSPDisabled) return;
+    setReverbEnabled(val);
+  }, [isDSPDisabled, setReverbEnabled]);
 
   const updateBandGain = useCallback(
     (index: number, gain: number) => {
@@ -77,6 +100,11 @@ export const useEqualizer = () => {
     [isDSPDisabled, setReverb],
   );
 
+  const handleResetToDefault = useCallback(() => {
+    if (isDSPDisabled) return;
+    resetToDefault();
+  }, [isDSPDisabled, resetToDefault]);
+
   const allPresets = useMemo(
     () => [...ALL_PRESETS, ...customPresets],
     [customPresets],
@@ -85,6 +113,9 @@ export const useEqualizer = () => {
   return {
     // States
     isEQEnabled,
+    isBassEnabled,          // ✅ Expose ke UI
+    isVirtualizerEnabled,   // ✅ Expose ke UI
+    isReverbEnabled,        // ✅ Expose ke UI
     isDSPDisabled,
     currentBands: bands,
     activePresetId,
@@ -94,7 +125,10 @@ export const useEqualizer = () => {
     reverbPreset,
 
     // Actions
-    toggleEQ: handleToggleEQ, // ← Ini yang dipakai di Screen
+    toggleEQ: handleToggleEQ,
+    setBassEnabled: handleSetBassEnabled,               // ✅ Expose ke UI
+    setVirtualizerEnabled: handleSetVirtualizerEnabled, // ✅ Expose ke UI
+    setReverbEnabled: handleSetReverbEnabled,           // ✅ Expose ke UI
     updateBandGain,
     applyPreset: handleApplyPreset,
     savePreset: saveCustomPreset,
@@ -102,5 +136,7 @@ export const useEqualizer = () => {
     setBassBoost: handleSetBass,
     setVirtualizer: handleSetVirtualizer,
     setReverb: handleSetReverb,
+    resetToDefault: handleResetToDefault,
   };
 };
+ 

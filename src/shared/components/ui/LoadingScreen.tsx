@@ -104,21 +104,21 @@ export default function LoadingScreen({ onLoadingComplete }: LoadingScreenProps)
             Animated.parallel([
               Animated.timing(fadeAnim, {
                 toValue: 0,
-                duration: 700,
+                duration: 500,
                 useNativeDriver: true,
               }),
               Animated.timing(slideUpAnim, {
                 toValue: -50,
-                duration: 700,
+                duration: 500,
                 useNativeDriver: true,
               }),
             ]).start(() => {
               onLoadingComplete?.();
             });
-          }, 900);
+          }, 700);
         }
       }
-    }, 900); // Reduced from 2400ms
+    }, 1000); // Reduced from 2400ms
 
     return () => clearInterval(interval);
   }, [onLoadingComplete]);

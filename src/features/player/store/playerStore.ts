@@ -4,6 +4,7 @@ import TrackPlayer from "react-native-track-player";
 import { audioEngine } from "@/features/player/api/engine";
 import { Song } from "@/shared/types/audio";
 import { LibraryScanner } from "@/features/library/api/scanner";
+import { SongQueries } from "@/shared/lib/sqlite"; // ✅ untuk incrementPlayCount
 
 // ─────────────────────────────────────────────
 // Types
@@ -16,6 +17,29 @@ export interface LyricLine {
 
 export type RepeatMode = "off" | "all" | "track";
 export type AudioMode = "bit-perfect" | "dsp";
+
+// ─────────────────────────────────────────────
+// AsyncStorage keys
+// ─────────────────────────────────────────────
+
+const KEYS = {
+  SPEED:        "playback_speed",
+  EQ:           "default_eq",
+  MODE:         "audio_mode_preference",
+  LAST_SONG_ID: "last_song_id",       // ✅ hanya ID, bukan full object
+  LAST_QUEUE_IDS: "last_queue_ids",   // ✅ JSON array of IDs
+  LAST_POSITION: "last_position",     // ✅ posisi dalam detik
+} as const;
+
+// Throttle position save — jangan write AsyncStorage tiap detik
+let _positionSaveTimer: ReturnType<typeof setTimeout> | null = null;
+const savePositionThrottled = (position: number) => {
+  if (_positionSaveTimer) return;
+  _positionSaveTimer = setTimeout(() => {
+    AsyncStorage.setItem(KEYS.LAST_POSITION, position.toString()).catch(() => {});
+    _positionSaveTimer = null;
+  }, 5_000); // simpan setiap 5 detik maksimal
+};
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -45,9 +69,7 @@ const songToTrack = (s: Song) => ({
 });
 
 const recoverUri = async (song: Song): Promise<Song> => {
-  console.log(
-    `[Player] Missing URI for "${song.title}", trying to recover from DB...`,
-  );
+  console.log(`[Player] Missing URI for "${song.title}", trying to recover from DB...`);
   try {
     const freshSong = await LibraryScanner.getSongById(song.id);
     if (freshSong?.uri) {
@@ -62,10 +84,6 @@ const recoverUri = async (song: Song): Promise<Song> => {
   return { ...song, uri: fallbackUri };
 };
 
-/**
- * Returns how many tracks are currently loaded in the TrackPlayer queue.
- * Used to detect a stale/reset queue before attempting skip.
- */
 const getTrackPlayerQueueSize = async (): Promise<number> => {
   try {
     const queue = await TrackPlayer.getQueue();
@@ -75,33 +93,51 @@ const getTrackPlayerQueueSize = async (): Promise<number> => {
   }
 };
 
+/**
+ * Query DB untuk ambil Song objects berdasarkan array of IDs.
+ * Hasilnya di-sort sesuai urutan IDs (preserve queue order).
+ */
+const getSongsByIds = (ids: string[]): Song[] => {
+  if (!ids.length) return [];
+  try {
+    const placeholders = ids.map(() => "?").join(", ");
+    const result = LibraryScanner.db?.execute(
+      `SELECT * FROM songs WHERE id IN (${placeholders}) AND uri IS NOT NULL`,
+      ids,
+    );
+    const rows: Song[] = result?.rows?._array ?? [];
+
+    // Preserve original queue order
+    const map = new Map(rows.map((s) => [s.id, s]));
+    return ids.map((id) => map.get(id)).filter(Boolean) as Song[];
+  } catch (e) {
+    console.warn("[Player] getSongsByIds failed:", e);
+    return [];
+  }
+};
+
 // ─────────────────────────────────────────────
 // State interface
 // ─────────────────────────────────────────────
 
 export interface PlayerState {
-  // Playback
   currentSong: Song | null;
   queue: Song[];
   isPlaying: boolean;
   position: number;
   duration: number;
-  // Settings
   shuffle: boolean;
   repeat: RepeatMode;
   playbackSpeed: number;
   defaultEQ: string;
   audioMode: AudioMode;
-  // Misc
   lyrics: LyricLine[];
   sleepTimerEnd: number | null;
   playError: string | null;
-  // UI visibility
   isMainPlayerOpen: boolean;
   isVisualizerOpen: boolean;
   isDrawerOpen: boolean;
 
-  // Actions
   initStore: () => Promise<void>;
   playSong: (song: Song, newQueue?: Song[]) => Promise<boolean>;
   skipToIndex: (index: number) => Promise<void>;
@@ -116,14 +152,12 @@ export interface PlayerState {
   setDefaultEQ: (eq: string) => Promise<void>;
   setAudioMode: (mode: AudioMode) => Promise<void>;
   setSleepTimer: (minutes: number | null) => void;
-  // Setters (for PlaybackService sync)
   setCurrentSong: (song: Song | null) => void;
   setQueue: (songs: Song[]) => void;
   setPosition: (position: number) => void;
   setDuration: (duration: number) => void;
   setLyrics: (lyrics: LyricLine[]) => void;
   clearPlayError: () => void;
-  // UI
   setMainPlayerOpen: (open: boolean) => void;
   setVisualizerOpen: (open: boolean) => void;
   setDrawerOpen: (open: boolean) => void;
@@ -136,7 +170,6 @@ export interface PlayerState {
 // ─────────────────────────────────────────────
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
-  // ── Initial state ──────────────────────────
   currentSong: null,
   queue: [],
   isPlaying: false,
@@ -145,7 +178,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   shuffle: false,
   repeat: "off",
   playbackSpeed: 1.0,
-  defaultEQ: "Flat",
+  defaultEQ: "flat",
   audioMode: "dsp",
   lyrics: [],
   sleepTimerEnd: null,
@@ -154,41 +187,73 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isVisualizerOpen: false,
   isDrawerOpen: false,
 
-  // ── initStore ──────────────────────────────
+  // ── initStore ──────────────────────────────────────────────────────────────
   initStore: async () => {
     try {
-      const [speed, eq, mode, savedQueue, lastSong] = await Promise.all([
-        AsyncStorage.getItem("playback_speed"),
-        AsyncStorage.getItem("default_eq"),
-        AsyncStorage.getItem("audio_mode_preference"),
-        AsyncStorage.getItem("last_queue"),
-        AsyncStorage.getItem("last_song"),
-      ]);
+      const [speed, eq, mode, lastSongId, lastQueueIdsRaw, lastPositionRaw] =
+        await Promise.all([
+          AsyncStorage.getItem(KEYS.SPEED),
+          AsyncStorage.getItem(KEYS.EQ),
+          AsyncStorage.getItem(KEYS.MODE),
+          AsyncStorage.getItem(KEYS.LAST_SONG_ID),   // ✅ hanya ID
+          AsyncStorage.getItem(KEYS.LAST_QUEUE_IDS), // ✅ JSON array of IDs
+          AsyncStorage.getItem(KEYS.LAST_POSITION),
+        ]);
 
+      // Restore settings ke store dulu
       set({
         ...(speed ? { playbackSpeed: parseFloat(speed) } : {}),
-        ...(eq ? { defaultEQ: eq } : {}),
-        ...(mode ? { audioMode: mode as AudioMode } : {}),
-        ...(lastSong
-          ? { currentSong: safeJsonParse<Song | null>(lastSong, null) }
-          : {}),
-        ...(savedQueue
-          ? { queue: safeJsonParse<Song[]>(savedQueue, []) }
-          : {}),
+        ...(eq    ? { defaultEQ: eq } : {}),
+        ...(mode  ? { audioMode: mode as AudioMode } : {}),
       });
+
+      // ── Restore queue dari DB (URI selalu fresh) ──────────────────────────
+      const queueIds: string[] = safeJsonParse<string[]>(lastQueueIdsRaw ?? "", []);
+      const lastPosition = lastPositionRaw ? parseFloat(lastPositionRaw) : 0;
+
+      if (queueIds.length > 0 && lastSongId) {
+        // Query DB — bukan dari AsyncStorage yang bisa stale
+        const restoredQueue = getSongsByIds(queueIds);
+
+        if (restoredQueue.length > 0) {
+          const currentSong =
+            restoredQueue.find((s) => s.id === lastSongId) ?? restoredQueue[0];
+
+          set({ queue: restoredQueue, currentSong, position: lastPosition });
+
+          // ── Restore ke TrackPlayer (silent, tanpa autoplay) ──────────────
+          try {
+            const tracks = restoredQueue.map(songToTrack).filter((t) => !!t.url);
+            if (tracks.length > 0) {
+              await TrackPlayer.reset();
+              await TrackPlayer.add(tracks);
+
+              const songIndex = restoredQueue.findIndex((s) => s.id === currentSong.id);
+              if (songIndex >= 0) {
+                await TrackPlayer.skip(songIndex);
+              }
+
+              // Restore posisi — user harus tap play sendiri
+              if (lastPosition > 0) {
+                await TrackPlayer.seekTo(lastPosition);
+              }
+
+              console.log(
+                `[Player] Restored ${tracks.length} tracks to queue | Last: "${currentSong.title}" @ ${lastPosition.toFixed(0)}s`,
+              );
+            }
+          } catch (e) {
+            console.warn("[Player] TrackPlayer queue restore failed:", e);
+            // Non-fatal — playSong akan handle reload saat user tap play
+          }
+        }
+      }
     } catch (e) {
       console.error("[Player] Failed to init PlayerStore:", e);
     }
   },
 
-  // ── playSong ───────────────────────────────
-  //
-  // Decision tree:
-  //   newQueue provided          → always reset TP queue + load newQueue
-  //   newQueue omitted
-  //     TP queue size matches    → plain skip (fast path, no reset)
-  //     TP queue is stale/empty  → silently reload store queue, then skip
-  //
+  // ── playSong ───────────────────────────────────────────────────────────────
   playSong: async (song: Song, newQueue?: Song[]): Promise<boolean> => {
     if (!song?.id) {
       console.error("[Player] playSong: invalid song object");
@@ -196,25 +261,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       return false;
     }
 
-    // ── 1. Duplicate guard ─────────────────────────────────────────────────
     const state = get();
     if (state.currentSong?.id === song.id && state.isPlaying) {
       console.log(`[Player] Already playing "${song.title}", skipping`);
       return true;
     }
 
-    // ── 2. URI recovery ────────────────────────────────────────────────────
     let playableSong: Song = song.uri ? { ...song } : await recoverUri(song);
 
     console.log(
       `▶️ [Player] playSong: "${playableSong.title}" | URI: ${
-        playableSong.uri
-          ? playableSong.uri.substring(0, 60) + "..."
-          : "NO URI"
+        playableSong.uri ? playableSong.uri.substring(0, 60) + "..." : "NO URI"
       }`,
     );
 
-    // ── 3. Resolve target queue ────────────────────────────────────────────
     const targetQueue = newQueue ?? state.queue;
     if (targetQueue.length === 0) {
       console.error("[Player] playSong: queue is empty");
@@ -225,10 +285,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const songIndex = targetQueue.findIndex((s) => s.id === playableSong.id);
     const skipIndex = songIndex !== -1 ? songIndex : 0;
 
-    // ── 4. Determine whether TP queue needs to be (re)loaded ───────────────
-    //   Force reload if:
-    //     a) Caller explicitly passed newQueue, OR
-    //     b) TrackPlayer queue is empty/stale (e.g. after an external reset)
     const tpQueueSize = await getTrackPlayerQueueSize();
     const needsReload = !!newQueue || tpQueueSize !== targetQueue.length;
 
@@ -238,7 +294,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       );
     }
 
-    // ── 5. Execute playback ────────────────────────────────────────────────
     try {
       if (needsReload) {
         await TrackPlayer.reset();
@@ -248,18 +303,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         console.log(`[Player] Added ${tracks.length} tracks to queue`);
 
         if (newQueue) {
-          AsyncStorage.setItem(
-            "last_queue",
-            JSON.stringify(targetQueue),
-          ).catch(() => {});
+          // ✅ Simpan IDs saja, bukan full Song objects
+          const queueIds = targetQueue.map((s) => s.id);
+          AsyncStorage.setItem(KEYS.LAST_QUEUE_IDS, JSON.stringify(queueIds)).catch(() => {});
         }
       }
 
-      // Single skip → single PlaybackActiveTrackChanged event
       await TrackPlayer.skip(skipIndex);
       await TrackPlayer.play();
 
-      // ── 6. Commit state AFTER successful play ────────────────────────────
       set({
         currentSong: playableSong,
         queue: targetQueue,
@@ -272,9 +324,17 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         `✅ [Player] Playing: "${playableSong.title}" | Queue: ${targetQueue.length} tracks`,
       );
 
-      AsyncStorage.setItem("last_song", JSON.stringify(playableSong)).catch(
-        () => {},
-      );
+      // ✅ Simpan last_song_id (bukan full object)
+      AsyncStorage.setItem(KEYS.LAST_SONG_ID, playableSong.id).catch(() => {});
+      // Reset posisi saat lagu baru
+      AsyncStorage.setItem(KEYS.LAST_POSITION, "0").catch(() => {});
+
+      // ✅ Catat ke recent_plays DB
+      try {
+        SongQueries.incrementPlayCount(playableSong.id, 0);
+      } catch {
+        // Non-fatal
+      }
 
       return true;
     } catch (error: any) {
@@ -284,9 +344,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
   },
 
-  // ── skipToIndex ────────────────────────────
-  // Skip to index in store queue. Reuse playSong so stale-queue
-  // detection runs automatically.
+  // ── skipToIndex ────────────────────────────────────────────────────────────
   skipToIndex: async (index: number) => {
     const { queue } = get();
     const song = queue[index];
@@ -294,48 +352,40 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       console.warn(`[Player] skipToIndex: no song at index ${index}`);
       return;
     }
-    // newQueue = undefined → fast-path skip if TP queue is still healthy
     await get().playSong(song);
   },
 
-  // ── playNext ───────────────────────────────
+  // ── playNext ───────────────────────────────────────────────────────────────
   playNext: async () => {
     const { queue, currentSong, repeat } = get();
     if (!queue.length) return;
-
     const idx = queue.findIndex((s) => s.id === currentSong?.id);
     let nextIndex = idx + 1;
-
     if (nextIndex >= queue.length) {
       if (repeat === "all") nextIndex = 0;
       else return;
     }
-
     await get().skipToIndex(nextIndex);
   },
 
-  // ── playPrevious ───────────────────────────
+  // ── playPrevious ───────────────────────────────────────────────────────────
   playPrevious: async () => {
     const { queue, currentSong, position, repeat } = get();
     if (!queue.length) return;
-
     if (position > 3) {
       await get().seek(0);
       return;
     }
-
     const idx = queue.findIndex((s) => s.id === currentSong?.id);
     let prevIndex = idx - 1;
-
     if (prevIndex < 0) {
       if (repeat === "all") prevIndex = queue.length - 1;
       else return;
     }
-
     await get().skipToIndex(prevIndex);
   },
 
-  // ── setIsPlaying ───────────────────────────
+  // ── setIsPlaying ───────────────────────────────────────────────────────────
   setIsPlaying: async (isPlaying) => {
     try {
       if (isPlaying) await TrackPlayer.play();
@@ -350,7 +400,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     await get().setIsPlaying(!get().isPlaying);
   },
 
-  // ── seek ───────────────────────────────────
+  // ── seek ───────────────────────────────────────────────────────────────────
   seek: async (pos) => {
     try {
       await TrackPlayer.seekTo(pos);
@@ -360,39 +410,37 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
   },
 
-  // ── toggleShuffle / toggleRepeat ──────────
+  // ── toggleShuffle / toggleRepeat ──────────────────────────────────────────
   toggleShuffle: () => set((s) => ({ shuffle: !s.shuffle })),
 
   toggleRepeat: () => {
     const map: Record<RepeatMode, RepeatMode> = {
-      off: "all",
-      all: "track",
-      track: "off",
+      off: "all", all: "track", track: "off",
     };
     set((s) => ({ repeat: map[s.repeat] }));
   },
 
-  // ── setPlaybackSpeed ───────────────────────
+  // ── setPlaybackSpeed ───────────────────────────────────────────────────────
   setPlaybackSpeed: async (speed) => {
     try {
       await TrackPlayer.setRate(speed);
       set({ playbackSpeed: speed });
-      await AsyncStorage.setItem("playback_speed", speed.toString());
+      await AsyncStorage.setItem(KEYS.SPEED, speed.toString());
     } catch (error) {
       console.error("[Player] Failed to set playback speed:", error);
     }
   },
 
-  // ── setDefaultEQ ──────────────────────────
+  // ── setDefaultEQ ──────────────────────────────────────────────────────────
   setDefaultEQ: async (eq) => {
     set({ defaultEQ: eq });
-    await AsyncStorage.setItem("default_eq", eq);
+    await AsyncStorage.setItem(KEYS.EQ, eq);
   },
 
-  // ── setAudioMode ──────────────────────────
+  // ── setAudioMode ──────────────────────────────────────────────────────────
   setAudioMode: async (mode) => {
     try {
-      await AsyncStorage.setItem("audio_mode_preference", mode);
+      await AsyncStorage.setItem(KEYS.MODE, mode);
       await audioEngine.toggleExclusiveMode(mode === "bit-perfect");
       set({ audioMode: mode });
       console.log(
@@ -405,12 +453,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
   },
 
-  // ── setSleepTimer ─────────────────────────
+  // ── setSleepTimer ─────────────────────────────────────────────────────────
   setSleepTimer: (minutes) => {
-    if (minutes === null) {
-      set({ sleepTimerEnd: null });
-      return;
-    }
+    if (minutes === null) { set({ sleepTimerEnd: null }); return; }
     const endTime = Date.now() + minutes * 60_000;
     set({ sleepTimerEnd: endTime });
     setTimeout(() => {
@@ -421,26 +466,30 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }, minutes * 60_000);
   },
 
-  // ── Simple setters ─────────────────────────
+  // ── Simple setters ────────────────────────────────────────────────────────
   setCurrentSong: (song) => set({ currentSong: song }),
   setQueue: (songs) => set({ queue: songs }),
-  setPosition: (position) => set({ position }),
-  setDuration: (duration) => set({ duration }),
-  setLyrics: (lyrics) => set({ lyrics }),
-  clearPlayError: () => set({ playError: null }),
 
-  // ── UI visibility ──────────────────────────
-  setMainPlayerOpen: (open) => set({ isMainPlayerOpen: open }),
-  setVisualizerOpen: (open) => set({ isVisualizerOpen: open }),
-  setDrawerOpen: (open) => set({ isDrawerOpen: open }),
-  toggleMainPlayer: () =>
-    set((s) => ({ isMainPlayerOpen: !s.isMainPlayerOpen })),
-  resetFloatingPlayerVisibility: () =>
-    set({
-      isMainPlayerOpen: false,
-      isVisualizerOpen: false,
-      isDrawerOpen: false,
-    }),
+  // ✅ setPosition — throttle save ke AsyncStorage
+  setPosition: (position) => {
+    set({ position });
+    savePositionThrottled(position);
+  },
+
+  setDuration:   (duration) => set({ duration }),
+  setLyrics:     (lyrics)   => set({ lyrics }),
+  clearPlayError: ()        => set({ playError: null }),
+
+  // ── UI visibility ─────────────────────────────────────────────────────────
+  setMainPlayerOpen:  (open) => set({ isMainPlayerOpen: open }),
+  setVisualizerOpen:  (open) => set({ isVisualizerOpen: open }),
+  setDrawerOpen:      (open) => set({ isDrawerOpen: open }),
+  toggleMainPlayer:   ()     => set((s) => ({ isMainPlayerOpen: !s.isMainPlayerOpen })),
+  resetFloatingPlayerVisibility: () => set({
+    isMainPlayerOpen: false,
+    isVisualizerOpen: false,
+    isDrawerOpen: false,
+  }),
 }));
 
 // ─────────────────────────────────────────────
