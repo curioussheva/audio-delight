@@ -182,16 +182,19 @@ export const useEqualizerStore = create<EqualizerStore>()(
       },
 
       setBandGain: (index: number, gain: number) => {
-        const clampedGain = Math.min(12, Math.max(-12, gain));
-        const newBands = get().bands.map((b, i) => i === index ? { ...b, gain: clampedGain } : b);
-        set({ bands: newBands, activePresetId: "custom" });
+  const clampedGain = Math.min(12, Math.max(-12, gain));
+  const newBands = get().bands.map((b, i) => i === index ? { ...b, gain: clampedGain } : b);
+  set({ bands: newBands, activePresetId: "custom" });
 
-        if (get().isEQEnabled && get().audioSessionId !== -1 && NativeDSPModule?.setEqBand) {
-          NativeDSPModule.setEqBand(index, clampedGain, get().audioSessionId);
-        }
-      },
-
-      setBandsGain: async (gains: number[]) => {
+  const { isEQEnabled, audioSessionId } = get();
+  if (isEQEnabled && audioSessionId !== -1 && NativeDSPModule?.setEqualizer) {
+    // Kotlin setEqualizer tidak konversi, jadi kita konversi di sini
+    const millibels = Math.round(clampedGain * 100);
+    NativeDSPModule.setEqualizer(index, millibels, audioSessionId);
+  }
+},
+ 
+       setBandsGain: async (gains: number[]) => {
         const newBands = get().bands.map((b, i) => ({
           ...b,
           gain: Math.min(12, Math.max(-12, gains[i] ?? b.gain)),

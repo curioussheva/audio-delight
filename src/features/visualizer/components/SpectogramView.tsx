@@ -84,10 +84,10 @@ export const SpectogramView = React.memo(
     const [grid, setGrid] = useState<number[][]>(() =>
       Array.from({ length: maxRows }, () => new Array(bins).fill(0))
     );
-    
+
     const gridRef = useRef<number[][]>(grid);
     const isServiceStarted = useRef(false);
-    
+
     // Debug state untuk menampilkan max FFT
     const [debugMax, setDebugMax] = useState(0);
     const [debugSamples, setDebugSamples] = useState("");
@@ -99,21 +99,21 @@ export const SpectogramView = React.memo(
 
     const handleFFTData = (fftData: number[]) => {
       if (!fftData || fftData.length === 0) return;
-      
+
       const maxVal = Math.max(...fftData);
       const samples = fftData.slice(0, 5).map(v => v.toFixed(3)).join(', ');
       setDebugMax(maxVal);
       setDebugSamples(samples);
-      
+
       // Log setiap 20 frame agar tidak spam
       if (Math.random() < 0.05) {
         console.log(`[SpectogramView] FFT max: ${maxVal.toFixed(4)}, samples: ${samples}`);
       }
-      
+
       // Resample ke jumlah bin
       const resampled = new Array(bins).fill(0);
       const step = fftData.length / bins;
-      
+
       for (let i = 0; i < bins; i++) {
         const start = Math.floor(i * step);
         const end = Math.floor((i + 1) * step);
@@ -127,7 +127,7 @@ export const SpectogramView = React.memo(
         value = Math.min(1.0, value * sensitivity);
         resampled[i] = value;
       }
-      
+
       // Update grid: shift rows up, add new row at bottom
       setGrid(prevGrid => {
         const newGrid = [...prevGrid.slice(1), resampled];
@@ -168,15 +168,15 @@ export const SpectogramView = React.memo(
     const rects = useMemo(() => {
       const threshold = 0.005;
       const elements: JSX.Element[] = [];
-      
+
       for (let row = 0; row < maxRows; row++) {
         for (let col = 0; col < bins; col++) {
           const amp = grid[row][col];
           if (amp < threshold) continue;
-          
+
           const colorIndex = Math.min(255, Math.floor(amp * 256));
           const color = colorCache[colorIndex];
-          
+
           elements.push(
             <Rect
               key={`${row}-${col}`}
@@ -202,13 +202,13 @@ export const SpectogramView = React.memo(
             <View style={[styles.liveIndicator, isPlaying && styles.active]} />
           </View>
         )}
-        
+
         <View style={[styles.canvasContainer, { width, height }]}>
           <Canvas style={{ width, height }}>
             <Rect x={0} y={0} width={width} height={height} color="#0A0A0F" />
             <Group>{rects}</Group>
           </Canvas>
-          
+
           {/* Debug overlay di development */}
           {__DEV__ && (
             <View style={styles.debugOverlay}>
@@ -220,7 +220,7 @@ export const SpectogramView = React.memo(
               </Text>
             </View>
           )}
-          
+
           {!hasData && isPlaying && (
             <View style={styles.placeholder}>
               <ActivityIndicator size="small" color="#38BDF8" />
@@ -228,7 +228,7 @@ export const SpectogramView = React.memo(
             </View>
           )}
         </View>
-        
+
         {showLabels && (
           <View style={styles.footer}>
             <View style={styles.frequencyLabels}>
@@ -333,4 +333,4 @@ const styles = StyleSheet.create({
     flex: 1,
     height: "100%",
   },
-});
+}); 

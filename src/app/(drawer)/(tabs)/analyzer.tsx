@@ -11,8 +11,9 @@ import {
   TouchableOpacity,
   Alert,
 } from "react-native";
-import { Image } from "expo-image"; // Konsisten dengan [id].tsx
+import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from '@react-navigation/native';
 import {
   RefreshCw,
   FileAudio,
@@ -23,11 +24,11 @@ import {
   Music,
   WifiOff,
 } from "lucide-react-native";
+import { NativeModules } from "react-native";
 
 // Hooks & Store
 import { useTheme } from "@/shared/context/ThemeContext";
 import { usePlayerStore } from "@/features/player/store/playerStore";
-import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
 import { useUSBDAC } from "@/features/hardware/hooks/useUSBDAC";
 
 // Logic & Services
@@ -42,36 +43,63 @@ import OnlineMetadataService from "@/features/library/services/OnlineMetadataSer
 
 const { width: screenWidth } = Dimensions.get("window");
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 type EnrichState = "idle" | "loading" | "success" | "error";
 
-// ─── Screen ───────────────────────────────────────────────────────────────────
-
-export default function FLACAnalyzerScreen() {
+export default function AnalyzerScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { colors } = theme;
 
+  // ✅ Ambil langsung dari playerStore (reaktif)
   const currentSong = usePlayerStore((state) => state.currentSong);
-//  const audioSessionId = useEqualizerStore((state) => state.audioSessionId);
-const audioSessionId = usePlayerStore((state) => state.audioSessionId);
+  const isPlaying = usePlayerStore((state) => state.isPlaying);
+  const audioSessionId = usePlayerStore((state) => state.audioSessionId);
+  const setAudioSessionId = usePlayerStore((state) => state.setAudioSessionId);
   const { isExclusiveMode, currentDAC } = useUSBDAC();
 
-  // ── Local State ────────────────────────────────────────────────────────────
-
-  const [bitDepthAnalysis, setBitDepthAnalysis] =
-    useState<BitDepthAnalysis | null>(null);
+  // Local state
+  const [bitDepthAnalysis, setBitDepthAnalysis] = useState<BitDepthAnalysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-
-  // Artist enrichment state
   const [artistImageUrl, setArtistImageUrl] = useState<string | null>(null);
   const [artistBio, setArtistBio] = useState<string | null>(null);
   const [enrichState, setEnrichState] = useState<EnrichState>("idle");
   const [enrichSource, setEnrichSource] = useState<"db" | "musicbrainz" | null>(null);
 
-  // ── Effect: Load dari DB saat lagu berubah ─────────────────────────────────
+  // ✅ State untuk fallback visualizer
+  const [waitingForSession, setWaitingForSession] = useState(false);
 
+  // ─── Effects ──────────────────────────────────────────────────────────────
+
+  // Reset waiting timer saat session ID berubah
+  useEffect(() => {
+    if (audioSessionId && audioSessionId > 0) {
+      setWaitingForSession(false);
+    } else if (isPlaying) {
+      // Tampilkan waiting setelah 2 detik
+      const timer = setTimeout(() => setWaitingForSession(true), 2000);
+      return () => clearTimeout(timer);
+    } else {
+      setWaitingForSession(false);
+    }
+  }, [audioSessionId, isPlaying]);
+
+useFocusEffect(
+  useCallback(() => {
+    // Jika session ID kosong, coba minta native untuk mengirim ulang
+    if (!audioSessionId) {
+      // Panggil method native untuk mendapatkan session ID aktif
+      NativeModules.NativeDSPModule?.getActiveAudioSessionId()
+        .then((id: number) => {
+          if (id > 0) {
+            setAudioSessionId(id);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [audioSessionId])
+);
+
+  // Load artist metadata dari DB
   useEffect(() => {
     if (!currentSong?.id) {
       setArtistImageUrl(null);
@@ -87,7 +115,6 @@ const audioSessionId = usePlayerStore((state) => state.audioSessionId);
           `SELECT artist_image_url, artist_bio FROM songs WHERE id = ? LIMIT 1`,
           [currentSong.id]
         );
-        // react-native-quick-sqlite: gunakan item() bukan akses index langsung
         const row = result.rows?.item?.(0);
         if (row?.artist_image_url || row?.artist_bio) {
           setArtistImageUrl(row.artist_image_url ?? null);
@@ -106,8 +133,7 @@ const audioSessionId = usePlayerStore((state) => state.audioSessionId);
     loadFromDB();
   }, [currentSong?.id]);
 
-  // ── Effect: Bit-Depth Analysis ─────────────────────────────────────────────
-
+  // Bit-depth analysis
   useEffect(() => {
     if (!currentSong) {
       setBitDepthAnalysis(null);
@@ -129,18 +155,12 @@ const audioSessionId = usePlayerStore((state) => state.audioSessionId);
     runAnalysis();
   }, [currentSong?.id]);
 
-  // ── Handler: Fetch Online Metadata ────────────────────────────────────────
+  // ─── Handlers ──────────────────────────────────────────────────────────────
 
   const doFetch = useCallback(async (artistName: string) => {
     setEnrichState("loading");
     try {
-      // OnlineMetadataService sudah handle:
-      // 1. Cek artist_cache SQLite (TTL 7 hari)
-      // 2. Fetch MusicBrainz + Wikipedia jika cache miss/expired
-      // 3. Simpan ke artist_cache + update kolom di tabel songs
-      const enrichment =
-        await OnlineMetadataService.getArtistEnrichment(artistName);
-
+      const enrichment = await OnlineMetadataService.getArtistEnrichment(artistName);
       if (enrichment.source === "fallback") {
         setEnrichState("error");
         Alert.alert(
@@ -156,19 +176,14 @@ const audioSessionId = usePlayerStore((state) => state.audioSessionId);
       setEnrichState("success");
     } catch {
       setEnrichState("error");
-      Alert.alert(
-        "Gagal Mengambil Data",
-        "Periksa koneksi internet dan coba lagi."
-      );
+      Alert.alert("Gagal Mengambil Data", "Periksa koneksi internet dan coba lagi.");
     }
   }, []);
 
   const handleFetchOnlineMetadata = useCallback(async () => {
     if (!currentSong?.artist || enrichState === "loading") return;
-
     const artistName = currentSong.artist;
 
-    // Jika data MusicBrainz sudah ada, tawarkan refresh
     if (enrichSource === "musicbrainz") {
       Alert.alert(
         "Perbarui Data?",
@@ -181,10 +196,10 @@ const audioSessionId = usePlayerStore((state) => state.audioSessionId);
       return;
     }
 
-    doFetch(artistName);
+    await doFetch(artistName);
   }, [currentSong?.artist, enrichState, enrichSource, doFetch]);
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
+  // ─── Helpers ───────────────────────────────────────────────────────────────
 
   const getReadablePath = (path?: string): string => {
     if (!path) return "Unknown";
@@ -194,17 +209,15 @@ const audioSessionId = usePlayerStore((state) => state.audioSessionId);
   };
 
   const getQualityStatus = () => {
-    if (isAnalyzing)
-      return { text: "ANALYZING...", color: colors.text.tertiary };
+    if (isAnalyzing) return { text: "ANALYZING...", color: colors.text.tertiary };
     if (bitDepthAnalysis?.isFake)
       return { text: "UPSCALE DETECTED ⚠️", color: colors.status.error };
     return { text: "STUDIO MASTER AUTHENTIC", color: colors.status.success };
   };
 
-  const bitrateDisplay =
-    currentSong?.bitrate && currentSong.bitrate > 0
-      ? `${Math.round(currentSong.bitrate / 1000)} kbps`
-      : "VBR";
+  const bitrateDisplay = currentSong?.bitrate
+    ? `${Math.round(currentSong.bitrate / 1000)} kbps`
+    : "VBR";
 
   const sampleRateDisplay = currentSong?.sampleRate
     ? `${(currentSong.sampleRate / 1000).toFixed(1)} kHz`
@@ -212,7 +225,7 @@ const audioSessionId = usePlayerStore((state) => state.audioSessionId);
 
   const status = getQualityStatus();
 
-  // ── Render: Empty State ────────────────────────────────────────────────────
+  // ─── Render ─────────────────────────────────────────────────────────────────
 
   if (!currentSong) {
     return (
@@ -224,8 +237,6 @@ const audioSessionId = usePlayerStore((state) => state.audioSessionId);
       </View>
     );
   }
-
-  // ── Render: Main ───────────────────────────────────────────────────────────
 
   return (
     <ScrollView
@@ -241,40 +252,35 @@ const audioSessionId = usePlayerStore((state) => state.audioSessionId);
         Audio Deep Analysis
       </Text>
 
-      {/* 1. LIVE SPECTRUM VISUALIZER */}
-      <View style={[styles.card, { backgroundColor: colors.background.secondary }]}>
-  <View style={styles.cardHeader}>
-    <Mic2 size={16} color={colors.primary[500]} />
-    <Text style={[styles.label, { color: colors.primary[500] }]}>
-      LIVE SPECTRUM
+      {/* 1. LIVE SPECTRUM */}
+      {audioSessionId && audioSessionId > 0 ? (
+  <SpectrumAnalyzer
+    key={`spectrum-${audioSessionId}`}
+    width={screenWidth - 72}
+    height={160}
+    mode="bars"
+    barCount={42}
+    isPlaying={isPlaying}
+    audioSessionId={audioSessionId}
+    sensitivity={1.5}
+    color={colors.primary[500]}
+    centerArt={currentSong?.artwork}
+    showCenterArt={true}
+  /> 
+) : (
+  <View style={styles.visualizerPlaceholder}>
+    <ActivityIndicator color={colors.primary[500]} />
+    <Text style={{ color: colors.text.tertiary, marginTop: 12 }}>
+      {waitingForSession
+        ? "Menunggu audio session..."
+        : "Mempersiapkan visualizer..."}
+    </Text>
+    <Text style={{ color: colors.text.disabled, fontSize: 12, marginTop: 4 }}>
+      Session ID: {audioSessionId || "none"}
     </Text>
   </View>
+)}
 
-  {audioSessionId && audioSessionId > 0 ? (
-    <SpectrumAnalyzer
-      width={screenWidth - 72}
-      height={160}
-      mode="bars"
-      barCount={42}
-      isPlaying={!!currentSong}
-      audioSessionId={audioSessionId}
-      sensitivity={1.5}
-      color={colors.primary[500]}
-      centerArt={currentSong?.artwork}
-      showCenterArt={true}
-    />
-  ) : (
-    <View style={styles.visualizerPlaceholder}>
-      <ActivityIndicator color={colors.primary[500]} />
-      <Text style={{ color: colors.text.tertiary, marginTop: 12 }}>
-        Waiting for audio signal...
-      </Text>
-      <Text style={{ color: colors.text.disabled, fontSize: 12, marginTop: 4 }}>
-        Session ID: {audioSessionId || "none"}
-      </Text>
-    </View>
-  )}
-</View>
       {/* 2. AUTHENTICITY STATUS */}
       <View style={[styles.card, { backgroundColor: colors.background.secondary }]}>
         <Text style={[styles.label, { color: colors.primary[500] }]}>
@@ -285,8 +291,8 @@ const audioSessionId = usePlayerStore((state) => state.audioSessionId);
         </Text>
         {bitDepthAnalysis?.isFake && (
           <Text style={[styles.warningText, { color: colors.status.error }]}>
-            File declares {bitDepthAnalysis.declaredDepth}-bit, but real data
-            is {bitDepthAnalysis.realDepth}-bit.
+            File declares {bitDepthAnalysis.declaredDepth}-bit, but real data is{" "}
+            {bitDepthAnalysis.realDepth}-bit.
           </Text>
         )}
       </View>
@@ -327,34 +333,32 @@ const audioSessionId = usePlayerStore((state) => state.audioSessionId);
         <InfoRow label="Size" value={formatFileSize(currentSong.fileSize ?? 0)} colors={colors} />
       </View>
 
-      {/* 5. DAC & HARDWARE STATUS */}
+      {/* 5. DAC & HARDWARE */}
       {currentDAC && (
-       <View style={[styles.card, { backgroundColor: colors.background.secondary }]}>
-    <View style={styles.cardHeader}>
-      <Cpu size={16} color={colors.primary[500]} />
-      <Text style={[styles.label, { color: colors.primary[500] }]}>
-        DAC OUTPUT
-      </Text>
-    </View>
-    {/* Ganti .hardware.productName menjadi .name */}
-    <InfoRow label="Device" value={currentDAC.name} colors={colors} />
-    <InfoRow label="Manufacturer" value={currentDAC.manufacturer} colors={colors} />
-    <InfoRow
-      label="Mode"
-      value={isExclusiveMode ? "Bit-Perfect (Direct)" : "System Mixer"}
-      colors={colors}
-    />
-    <InfoRow
-      label="Output Rate"
-      value={`${((currentDAC.currentSampleRate ?? 0) / 1000).toFixed(1)} kHz`}
-      colors={colors}
-    />
-  </View>
-       )}
-       
+        <View style={[styles.card, { backgroundColor: colors.background.secondary }]}>
+          <View style={styles.cardHeader}>
+            <Cpu size={16} color={colors.primary[500]} />
+            <Text style={[styles.label, { color: colors.primary[500] }]}>
+              DAC OUTPUT
+            </Text>
+          </View>
+          <InfoRow label="Device" value={currentDAC.name} colors={colors} />
+          <InfoRow label="Manufacturer" value={currentDAC.manufacturer} colors={colors} />
+          <InfoRow
+            label="Mode"
+            value={isExclusiveMode ? "Bit-Perfect (Direct)" : "System Mixer"}
+            colors={colors}
+          />
+          <InfoRow
+            label="Output Rate"
+            value={`${((currentDAC.currentSampleRate ?? 0) / 1000).toFixed(1)} kHz`}
+            colors={colors}
+          />
+        </View>
+      )}
+
       {/* 6. ARTIST BIOGRAPHY */}
       <View style={[styles.card, { backgroundColor: colors.background.secondary }]}>
-        {/* Header + Fetch Button */}
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
             <Text style={[styles.label, { color: colors.primary[500] }]}>
@@ -362,9 +366,7 @@ const audioSessionId = usePlayerStore((state) => state.audioSessionId);
             </Text>
             {enrichSource && (
               <Text style={[styles.sourceTag, { color: colors.text.disabled }]}>
-                {enrichSource === "db"
-                  ? "dari cache lokal"
-                  : "MusicBrainz + Wikipedia"}
+                {enrichSource === "db" ? "dari cache lokal" : "MusicBrainz + Wikipedia"}
               </Text>
             )}
           </View>
@@ -381,7 +383,6 @@ const audioSessionId = usePlayerStore((state) => state.audioSessionId);
           </TouchableOpacity>
         </View>
 
-        {/* Artist Image — expo-image + absoluteFill icon fallback */}
         <View style={styles.artistImageWrapper}>
           <View
             style={[
@@ -406,7 +407,6 @@ const audioSessionId = usePlayerStore((state) => state.audioSessionId);
           )}
         </View>
 
-        {/* Bio Text / Error State */}
         {enrichState === "error" ? (
           <View style={styles.errorState}>
             <WifiOff size={20} color={colors.status.error} />
@@ -420,8 +420,7 @@ const audioSessionId = usePlayerStore((state) => state.audioSessionId);
           </Text>
         ) : (
           <Text style={[styles.bioText, { color: colors.text.disabled }]}>
-            Belum ada biografi. Tekan tombol refresh untuk mengambil data dari
-            MusicBrainz.
+            Belum ada biografi. Tekan tombol refresh untuk mengambil data dari MusicBrainz.
           </Text>
         )}
       </View>
@@ -429,20 +428,11 @@ const audioSessionId = usePlayerStore((state) => state.audioSessionId);
   );
 }
 
-// ─── Sub-Components ───────────────────────────────────────────────────────────
+// ─── Sub-components ─────────────────────────────────────────────────────────
 
-interface InfoRowProps {
-  label: string;
-  value?: string;
-  colors: any;
-  isPath?: boolean;
-}
-
-const InfoRow = ({ label, value, colors, isPath }: InfoRowProps) => (
+const InfoRow = ({ label, value, colors, isPath }: any) => (
   <View style={[styles.infoRow, { borderBottomColor: colors.border.light }]}>
-    <Text style={[styles.infoLabel, { color: colors.text.tertiary }]}>
-      {label}
-    </Text>
+    <Text style={[styles.infoLabel, { color: colors.text.tertiary }]}>{label}</Text>
     <Text
       style={[styles.infoValue, { color: colors.text.primary }]}
       numberOfLines={isPath ? 2 : 1}
@@ -453,28 +443,13 @@ const InfoRow = ({ label, value, colors, isPath }: InfoRowProps) => (
   </View>
 );
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ─── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 40,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "900",
-    marginBottom: 24,
-    letterSpacing: -0.5,
-  },
-  emptyText: {
-    textAlign: "center",
-    marginTop: 20,
-    fontSize: 16,
-    lineHeight: 24,
-  },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 40 },
+  title: { fontSize: 28, fontWeight: "900", marginBottom: 24, letterSpacing: -0.5 },
+  emptyText: { textAlign: "center", marginTop: 20, fontSize: 16, lineHeight: 24 },
   card: {
     padding: 20,
     borderRadius: 24,
@@ -485,18 +460,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 12,
   },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 15,
-  },
-  label: {
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-  },
+  cardHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 15 },
+  label: { fontSize: 11, fontWeight: "800", letterSpacing: 1.2, textTransform: "uppercase" },
   statusValue: { fontSize: 20, fontWeight: "800", marginVertical: 4 },
   warningText: { fontSize: 12, fontWeight: "600", marginTop: 8 },
   infoRow: {
@@ -508,28 +473,15 @@ const styles = StyleSheet.create({
   infoLabel: { fontSize: 13, fontWeight: "500", flex: 0.4 },
   infoValue: { fontSize: 14, fontWeight: "600", flex: 0.6, textAlign: "right" },
   divider: { height: 1, marginVertical: 8, opacity: 0.3 },
-  visualizerPlaceholder: {
-    height: 160,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  visualizerPlaceholder: { height: 160, justifyContent: "center", alignItems: "center" },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
     marginBottom: 15,
   },
-  sourceTag: {
-    fontSize: 10,
-    marginTop: 2,
-    fontStyle: "italic",
-  },
-  miniBtn: {
-    padding: 8,
-    borderRadius: 10,
-    minWidth: 32,
-    alignItems: "center",
-  },
+  sourceTag: { fontSize: 10, marginTop: 2, fontStyle: "italic" },
+  miniBtn: { padding: 8, borderRadius: 10, minWidth: 32, alignItems: "center" },
   artistImageWrapper: {
     width: "100%",
     height: 220,
@@ -537,17 +489,9 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginBottom: 16,
   },
-  artistImage: {
-    width: "100%",
-    height: "100%",
-  },
+  artistImage: { width: "100%", height: "100%" },
   bioText: { fontSize: 14, lineHeight: 22, textAlign: "justify" },
-  errorState: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 8,
-  },
+  errorState: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8 },
   errorText: { fontSize: 13, fontWeight: "600", flex: 1 },
-});
- 
+}); 
+

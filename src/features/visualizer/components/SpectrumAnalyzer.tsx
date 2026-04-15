@@ -87,17 +87,17 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
         if (newData && newData.length > 0) {
           const maxVal = Math.max(...newData);
           runOnJS(setDebugMax)(maxVal);
-          
+
           if (maxVal > 0.01) {
             runOnJS(setHasRealData)(true);
           } else if (frameCount.current > 10 && maxVal <= 0.01) {
             runOnJS(setHasRealData)(false);
           }
-          
+
           freqData.value = [...newData];
         }
       });
-      
+
       if (success) {
         isServiceInitialized.current = true;
         console.log("[SpectrumAnalyzer] Service initialized");
@@ -142,7 +142,7 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
   const processedData = useDerivedValue(() => {
     const raw = freqData.value;
     const useDummy = !hasRealData && isPlaying;
-    
+
     if (useDummy) {
       const dummy = new Array(barCount).fill(0);
       const phase = dummyPhase.value;
@@ -227,7 +227,7 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
           </Path>
         </Group>
       </Canvas>
-      
+
       {__DEV__ && (
         <View style={styles.debugOverlay}>
           <Text style={styles.debugText}>
@@ -258,4 +258,4 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontFamily: 'monospace',
   },
-});
+}); 

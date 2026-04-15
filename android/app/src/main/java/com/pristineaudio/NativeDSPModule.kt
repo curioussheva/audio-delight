@@ -216,6 +216,25 @@ class NativeDSPModule(reactContext: ReactApplicationContext) :
         }
     }
 
+
+    @ReactMethod
+    fun setFullEqualizer(gains: ReadableArray, audioSessionId: Int, promise: Promise) {
+    try {
+        ensureEqualizer(audioSessionId)
+        val eq = equalizer ?: throw IllegalStateException("EQ not init")
+        val numBands = eq.numberOfBands.toInt()
+        
+        for (i in 0 until minOf(gains.size(), numBands)) {
+            val level = (gains.getDouble(i) * 100).toInt().toShort()
+            android.util.Log.d("NativeDSP", "Band $i → ${gains.getDouble(i)} dB = $level mB")
+            eq.setBandLevel(i.toShort(), level)
+        }
+        promise.resolve(true)
+    } catch (e: Exception) {
+        android.util.Log.e("NativeDSP", "setFullEqualizer failed: ${e.message}")
+        promise.reject("EQ_ERROR", e.message)
+    }
+}
     // ─────────────────────────────────────────────
     // Private helpers
     // ─────────────────────────────────────────────

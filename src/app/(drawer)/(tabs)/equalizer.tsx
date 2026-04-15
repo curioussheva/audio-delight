@@ -9,381 +9,307 @@ import {
   FlatList,
   ScrollView,
   Alert,
+  LayoutAnimation,
+  Platform,
+  UIManager,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { 
+  Save, ShieldAlert, Zap, RotateCcw, 
+  Eye, EyeOff, Settings2, Layers, ChevronRight 
+} from "lucide-react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+
 import { useTheme } from "@/context/ThemeContext";
 import { useEqualizer } from "@/features/equalizer/hooks/useEqualizer";
 import { FrequencyGraph } from "@/features/equalizer/components/Graph";
 import { EqualizerBand } from "@/features/equalizer/components/Band";
-import { ControlKnob } from "@/features/equalizer/components/ControlKnob";
+import { HorizontalSlider } from "@/features/equalizer/components/HorizontalSlider"; 
 import { PresetChip } from "@/features/equalizer/components/PresetChip";
 import { SavePresetModal } from "@/features/equalizer/components/SavePresetModal";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Save, ShieldAlert, Zap, RotateCcw } from "lucide-react-native";
-import {
-  GestureHandlerRootView,
-} from "react-native-gesture-handler";
-
 import { LIST_BOTTOM_PADDING } from "@/app/(drawer)/(tabs)/_layout";
 
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 const { width } = Dimensions.get("window");
+const REVERB_LABELS = ["None", "Small Room", "Medium Room", "Large Room", "Medium Hall", "Large Hall", "Plate"];
 
-const REVERB_LABELS = ["None", "Small", "Medium", "Large", "Room", "Studio", "Plate"];
+// ─── MINI COMPONENTS ─────────────────────────────────────────────────────
 
-// Komponen kecil untuk switch individual
 const MiniSwitch = ({ value, onValueChange, disabled, color, label }: any) => (
   <View style={styles.miniSwitchContainer}>
+    <Text style={[styles.miniSwitchLabel, { color: value && !disabled ? color : "#666" }]}>
+      {label}
+    </Text>
     <Switch
       value={value}
       onValueChange={onValueChange}
       disabled={disabled}
-      trackColor={{ false: "#333", true: color + "88" }}
-      thumbColor={value && !disabled ? color : "#999"}
-      style={{ transform: [{ scaleX: 0.7 }, { scaleY: 0.7 }] }}
+      trackColor={{ false: "#222", true: color + "44" }}
+      thumbColor={value && !disabled ? color : "#444"}
+      style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
     />
-    <Text style={[styles.miniSwitchLabel, { color: value && !disabled ? color : "#666" }]}>
-      {label}
-    </Text>
   </View>
 );
+
+// ─── MAIN SCREEN ─────────────────────────────────────────────────────────
 
 export default function EqualizerScreen() {
   const { theme } = useTheme();
   const eq = useEqualizer();
   const [isModalVisible, setModalVisible] = useState(false);
+  
+  const [visibleSections, setVisibleSections] = useState({
+    graph: true,
+    effects: true,
+    mixer: true,
+  });
 
-  const verticalScrollRef = useRef<ScrollView>(null);
-
-  const handleToggleEQ = () => {
-    if (eq.isDSPDisabled) return;
-    eq.toggleEQ();
-  };
-
-  const handleSliderTouchStart = () => {
-    verticalScrollRef.current?.setNativeProps({ scrollEnabled: false });
-  };
-
-  const handleSliderTouchEnd = () => {
-    setTimeout(() => {
-      verticalScrollRef.current?.setNativeProps({ scrollEnabled: true });
-    }, 100);
+  const toggleSection = (section: keyof typeof visibleSections) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setVisibleSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
   const handleReset = () => {
-    Alert.alert("Reset DSP", "Reset semua ke posisi netral?", [
-      { text: "Batal", style: "cancel" },
-      {
-        text: "Reset",
-        style: "destructive",
-        onPress: () => eq.resetToDefault(),
-      },
+    Alert.alert("Reset DSP", "Kembalikan ke pengaturan netral?", [
+      { text: "Batal" },
+      { text: "Reset", style: "destructive", onPress: () => eq.resetToDefault() }
     ]);
   };
 
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: theme.colors.background.primary }]}
-    >
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <ScrollView
-          ref={verticalScrollRef}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: LIST_BOTTOM_PADDING }]}
-          scrollEventThrottle={16}
-        >
-          {/* ── HEADER ─────────────────────────────────────────────────────── */}
+        
+        {/* UI TOGGLES */}
+        <View style={styles.viewControls}>
+           <TouchableOpacity onPress={() => toggleSection('graph')} style={styles.viewBtn}>
+             {visibleSections.graph ? <Eye size={12} color={theme.colors.primary[500]} /> : <EyeOff size={12} color="#444" />}
+             <Text style={[styles.viewBtnText, { color: visibleSections.graph ? "#FFF" : "#444" }]}>GRAPH</Text>
+           </TouchableOpacity>
+           <TouchableOpacity onPress={() => toggleSection('effects')} style={styles.viewBtn}>
+             {visibleSections.effects ? <Zap size={12} color="#00E5FF" /> : <EyeOff size={12} color="#444" />}
+             <Text style={[styles.viewBtnText, { color: visibleSections.effects ? "#FFF" : "#444" }]}>EFFECTS</Text>
+           </TouchableOpacity>
+           <TouchableOpacity onPress={() => toggleSection('mixer')} style={styles.viewBtn}>
+             {visibleSections.mixer ? <Settings2 size={12} color="#AA00FF" /> : <EyeOff size={12} color="#444" />}
+             <Text style={[styles.viewBtnText, { color: visibleSections.mixer ? "#FFF" : "#444" }]}>MIXER</Text>
+           </TouchableOpacity>
+        </View>
+
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: LIST_BOTTOM_PADDING }}>
+          
+          {/* HEADER */}
           <View style={styles.header}>
             <View>
-              <Text style={[styles.title, { color: theme.colors.text.primary }]}>
-                Precision DSP
-              </Text>
-              <View style={styles.statusRow}>
-                <Zap
-                  size={12}
-                  color={eq.isEQEnabled && !eq.isDSPDisabled ? theme.colors.primary[500] : "#666"}
-                />
-                <Text
-                  style={[
-                    styles.subtitle,
-                    { color: eq.isEQEnabled && !eq.isDSPDisabled ? theme.colors.primary[500] : "#666" },
-                  ]}
-                >
-                  {eq.isDSPDisabled
-                    ? "BIT-PERFECT BYPASS"
-                    : eq.isEQEnabled
-                      ? "ENGINE ACTIVE"
-                      : "ENGINE STANDBY"}
-                </Text>
-              </View>
+              <Text style={[styles.title, { color: theme.colors.text.primary }]}>Precision DSP</Text>
+              <Text style={styles.subtitle}>ENGINE: {eq.isEQEnabled ? 'ACTIVE' : 'BYPASS'}</Text>
             </View>
-
-            <View style={styles.headerActions}>
-              <TouchableOpacity
-                onPress={handleReset}
-                disabled={eq.isDSPDisabled}
-                style={styles.resetBtn}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <RotateCcw
-                  size={16}
-                  color={eq.isDSPDisabled ? "#444" : theme.colors.text.secondary}
-                  strokeWidth={2}
-                />
-              </TouchableOpacity>
-
-              <Switch
-                value={eq.isEQEnabled && !eq.isDSPDisabled}
-                onValueChange={handleToggleEQ}
-                disabled={eq.isDSPDisabled}
-                trackColor={{ false: "#333", true: theme.colors.primary[500] + "88" }}
-                thumbColor={
-                  eq.isEQEnabled && !eq.isDSPDisabled ? theme.colors.primary[500] : "#999"
-                }
-              />
-            </View>
-          </View>
-
-          {/* ── GRAPH ──────────────────────────────────────────────────────── */}
-          <View
-            style={[
-              styles.graphCard,
-              { backgroundColor: theme.colors.background.secondary },
-            ]}
-          >
-            <FrequencyGraph bands={eq.currentBands} width={width - 60} height={140} />
-            {eq.isDSPDisabled && (
-              <View style={styles.lockOverlay}>
-                <ShieldAlert color="#D4AF37" size={32} />
-                <Text style={styles.lockText}>DSP LOCKED</Text>
-              </View>
-            )}
-          </View>
-
-          {/* ── MASTER KNOBS WITH SWITCHES ─────────────────────────────────── */}
-          <View style={styles.knobBoard}>
-            {/* Bass Control */}
-            <View style={styles.knobColumn}>
-              <MiniSwitch
-                label="BASS"
-                value={eq.isBassEnabled}
-                onValueChange={eq.setBassEnabled}
-                disabled={!eq.isEQEnabled || eq.isDSPDisabled}
-                color="#FF3D00"
-              />
-              <ControlKnob
-                label="" // Label dipindah ke switch
-                value={eq.bassStrength}
-                onChange={eq.setBassBoost}
-                color="#FF3D00"
-                disabled={!eq.isEQEnabled || !eq.isBassEnabled || eq.isDSPDisabled}
-              />
-            </View>
-
-            {/* Virtualizer Control */}
-            <View style={styles.knobColumn}>
-              <MiniSwitch
-                label="STAGE"
-                value={eq.isVirtualizerEnabled}
-                onValueChange={eq.setVirtualizerEnabled}
-                disabled={!eq.isEQEnabled || eq.isDSPDisabled}
-                color="#00E5FF"
-              />
-              <ControlKnob
-                label=""
-                value={eq.virtualizerLevel}
-                onChange={eq.setVirtualizer}
-                color="#00E5FF"
-                disabled={!eq.isEQEnabled || !eq.isVirtualizerEnabled || eq.isDSPDisabled}
-              />
-            </View>
-
-            {/* Reverb Control */}
-            <View style={styles.knobColumn}>
-              <MiniSwitch
-                label="REVERB"
-                value={eq.isReverbEnabled}
-                onValueChange={eq.setReverbEnabled}
-                disabled={!eq.isEQEnabled || eq.isDSPDisabled}
-                color="#AA00FF"
-              />
-              <ControlKnob
-                label=""
-                value={eq.reverbPreset * 166}
-                onChange={(v) => eq.setReverb(Math.round(v / 166))}
-                color="#AA00FF"
-                disabled={!eq.isEQEnabled || !eq.isReverbEnabled || eq.isDSPDisabled}
-              />
-              <Text style={[styles.reverbValue, { opacity: eq.isReverbEnabled ? 1 : 0.5 }]}>
-                {REVERB_LABELS[eq.reverbPreset] ?? "None"}
-              </Text>
-            </View>
-          </View>
-
-          {/* ── PRESET SELECTOR ────────────────────────────────────────────── */}
-          {/* ... (Bagian Preset tetap sama) */}
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text.secondary }]}>
-              SOUND PROFILES
-            </Text>
-            <TouchableOpacity
-              onPress={() => setModalVisible(true)}
-              disabled={!eq.isEQEnabled || eq.isDSPDisabled}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Save size={18} color={theme.colors.primary[500]} />
+            <TouchableOpacity onPress={handleReset} style={styles.resetBtn}>
+              <RotateCcw size={18} color="#666" />
             </TouchableOpacity>
           </View>
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.presetScroll}
-          >
-            {eq.allPresets.map((preset) => (
-              <PresetChip
-                key={preset.id}
-                label={preset.name}
-                isActive={eq.activePresetId === preset.id}
-                onPress={() => eq.applyPreset(preset.id)}
-                disabled={!eq.isEQEnabled || eq.isDSPDisabled}
-              />
+          {/* 1. GRAPH SECTION */}
+          {visibleSections.graph && (
+            <View style={styles.graphCard}>
+              <FrequencyGraph bands={eq.currentBands} width={width - 40} height={140} />
+            </View>
+          )}
+
+          {/* 2. EFFECTS SECTION (SLIDERS & REVERB) */}
+          {visibleSections.effects && (
+            <View style={styles.effectsSection}>
+              
+              {/* BASS SLIDER */}
+              <View style={styles.effectItem}>
+                <MiniSwitch label="BASS BOOST" value={eq.isBassEnabled} onValueChange={eq.setBassEnabled} color="#FF3D00" />
+                <HorizontalSlider
+                  label="INTENSITY"
+                  value={eq.bassStrength}
+                  onChange={eq.setBassBoost}
+                  color="#FF3D00"
+                  disabled={!eq.isBassEnabled}
+                />
+              </View>
+
+              {/* VIRTUALIZER SLIDER */}
+              <View style={styles.effectItem}>
+                <MiniSwitch label="STAGE VIRTUALIZER" value={eq.isVirtualizerEnabled} onValueChange={eq.setVirtualizerEnabled} color="#00E5FF" />
+                <HorizontalSlider
+                  label="WIDTH"
+                  value={eq.virtualizerLevel}
+                  onChange={eq.setVirtualizer}
+                  color="#00E5FF"
+                  disabled={!eq.isVirtualizerEnabled}
+                />
+              </View>
+
+              {/* REVERB PRESET SELECTOR (MODERN BOX STYLE) */}
+              <View style={styles.effectItem}>
+                <MiniSwitch label="ENVIRONMENT REVERB" value={eq.isReverbEnabled} onValueChange={eq.setReverbEnabled} color="#AA00FF" />
+                <TouchableOpacity 
+                  style={[styles.reverbBox, !eq.isReverbEnabled && { opacity: 0.3 }]}
+                  disabled={!eq.isReverbEnabled}
+                  onPress={() => {
+                    const next = (eq.reverbPreset + 1) % REVERB_LABELS.length;
+                    eq.setReverb(next);
+                  }}
+                >
+                  <Text style={styles.reverbLabel}>ENVIRONMENT</Text>
+                  <View style={styles.reverbValueRow}>
+                    <Text style={[styles.reverbValue, { color: "#AA00FF" }]}>
+                      {REVERB_LABELS[eq.reverbPreset]}
+                    </Text>
+                    <ChevronRight size={16} color="#AA00FF" />
+                  </View>
+                </TouchableOpacity>
+              </View>
+
+            </View>
+          )}
+
+          {/* 3. PRESETS */}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>SOUND PROFILES</Text>
+            <TouchableOpacity onPress={() => setModalVisible(true)}>
+              <Save size={18} color={theme.colors.primary[500]} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.presetScroll}>
+            {eq.allPresets.map(p => (
+              <PresetChip key={p.id} label={p.name} isActive={eq.activePresetId === p.id} onPress={() => eq.applyPreset(p.id)} />
             ))}
           </ScrollView>
 
-          {/* ── MIXER SLIDERS ──────────────────────────────────────────────── */}
-          {/* ... (Bagian Mixer tetap sama) */}
-          <View
-            style={[
-              styles.mixerBoard,
-              { backgroundColor: theme.colors.background.secondary },
-            ]}
-          >
-            <FlatList
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              data={eq.currentBands}
-              keyExtractor={(_, index) => index.toString()}
-              renderItem={({ item, index }) => (
-                <EqualizerBand
-                  frequency={item.frequency}
-                  gain={item.gain}
-                  onValueChange={(v) => eq.updateBandGain(index, v)}
-                  disabled={!eq.isEQEnabled || eq.isDSPDisabled}
-                  color={theme.colors.primary[500]}
-                  onTouchStart={handleSliderTouchStart}
-                  onTouchEnd={handleSliderTouchEnd}
-                />
-              )}
-              contentContainerStyle={styles.slidersRow}
-              decelerationRate="fast"
-              snapToInterval={70}
-              snapToAlignment="center"
-              scrollEnabled={true}
-              nestedScrollEnabled={true}
-            />
-          </View>
+          {/* 4. MIXER SECTION */}
+          {visibleSections.mixer && (
+            <View style={styles.mixerBoard}>
+<FlatList
+  horizontal
+  showsHorizontalScrollIndicator={false}
+  data={eq.currentBands}
+  keyExtractor={(item) => item.frequency.toString()}
+  renderItem={({ item, index }) => (
+    <EqualizerBand
+      frequency={item.frequency}
+      gain={item.gain}
+      onValueChange={(v) => eq.updateBandGain(index, v)}
+      color={theme.colors.primary[500]}
+      disabled={!eq.isEQEnabled}
+    />
+  )}
+  contentContainerStyle={{ paddingHorizontal: 10 }}
+  // Penting: agar tidak bentrok dengan scroll utama
+  directionalLockEnabled={true}
+  onScrollEndDrag={() => { /* optional logic */ }}
+/>
+
+            </View>
+          )}
+
         </ScrollView>
       </GestureHandlerRootView>
-
-      <SavePresetModal
-        visible={isModalVisible}
-        onSave={(name) => {
-          eq.savePreset(name);
-          setModalVisible(false);
-        }}
-        onClose={() => setModalVisible(false)}
-      />
+      <SavePresetModal visible={isModalVisible} onSave={(n) => { eq.savePreset(n); setModalVisible(false); }} onClose={() => setModalVisible(false)} />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  // ... (Styles lain tetap sama)
   container: { flex: 1 },
-  scrollContent: { paddingTop: 4 },
+  viewControls: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 12,
+    backgroundColor: '#050505',
+    borderBottomWidth: 1,
+    borderBottomColor: '#111',
+  },
+  viewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: '#111',
+  },
+  viewBtnText: { fontSize: 8, fontWeight: '900', letterSpacing: 1 },
   header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 15,
-    paddingVertical: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 20,
+    alignItems: 'center',
   },
-  title: { fontSize: 20, fontWeight: "900", letterSpacing: -0.5 },
-  statusRow: { flexDirection: "row", alignItems: "center", marginTop: 4 },
-  subtitle: { fontSize: 8, fontWeight: "bold", marginLeft: 5, letterSpacing: 1 },
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  resetBtn: {
-    padding: 4,
-  },
+  title: { fontSize: 24, fontWeight: '900' },
+  subtitle: { fontSize: 8, color: '#666', fontWeight: 'bold', letterSpacing: 1 },
+  resetBtn: { padding: 8 },
   graphCard: {
-    marginHorizontal: 10,
+    height: 160,
+    backgroundColor: '#0A0A0A',
+    marginHorizontal: 15,
     borderRadius: 24,
-    padding: 5,
-    height: 140,
-    justifyContent: "center",
-    alignItems: "center",
-    overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
+    borderColor: '#111',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
   },
-  lockOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.8)",
-    justifyContent: "center",
-    alignItems: "center",
+  effectsSection: {
+    paddingHorizontal: 15,
+    gap: 15,
+    marginBottom: 25,
   },
-  lockText: { color: "#D4AF37", fontWeight: "900", marginTop: 10, fontSize: 12 },
-
-  // --- Style Baru untuk Knobs & Switch ---
-  knobBoard: {
-    flexDirection: "row",
-    justifyContent: "space-evenly",
-    marginVertical: 15, // Disesuaikan agar pas
-    paddingHorizontal: 5,
-  },
-  knobColumn: {
-    alignItems: "center",
-    justifyContent: "flex-end",
+  effectItem: {
+    backgroundColor: '#0A0A0A',
+    paddingVertical: 15,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#111',
   },
   miniSwitchContainer: {
-    alignItems: "center",
-    marginBottom: -5, // Merapatkan jarak antara switch dan knob
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 5,
   },
-  miniSwitchLabel: {
-    fontSize: 9,
-    fontWeight: "bold",
-    letterSpacing: 0.5,
-    marginTop: -2,
+  miniSwitchLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
+  
+  // Reverb Specific Style
+  reverbBox: {
+    marginHorizontal: 20,
+    marginTop: 10,
+    padding: 15,
+    backgroundColor: '#050505',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1A1A1A',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  reverbValue: { 
-    color: "#AA00FF", 
-    fontSize: 9, 
-    fontWeight: "bold", 
-    marginTop: -5 
-  },
-  // ----------------------------------------
+  reverbLabel: { color: '#444', fontSize: 9, fontWeight: 'bold' },
+  reverbValueRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  reverbValue: { fontSize: 13, fontWeight: '900' },
 
   sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    marginBottom: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginBottom: 15,
   },
-  sectionTitle: { fontSize: 11, fontWeight: "bold", letterSpacing: 1.5 },
-  presetScroll: { paddingLeft: 20, marginBottom: 20 },
+  sectionTitle: { fontSize: 10, fontWeight: '900', color: '#666', letterSpacing: 1.5 },
+  presetScroll: { paddingLeft: 20, marginBottom: 30 },
   mixerBoard: {
-    marginHorizontal: 5,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 5,
-  },
-  slidersRow: {
-    paddingHorizontal: 10,
-    alignItems: "flex-end",
-  },
+    backgroundColor: '#0A0A0A',
+    marginHorizontal: 15,
+    borderRadius: 24,
+    paddingVertical: 20,
+    marginBottom: 40,
+  }
 });
  

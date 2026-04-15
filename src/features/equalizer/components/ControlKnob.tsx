@@ -4,7 +4,7 @@ import { GestureDetector, Gesture } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
-  SharedValue,           // ✅ import langsung, bukan Animated.SharedValue
+  SharedValue,
   interpolate,
   runOnJS,
   withSpring,
@@ -13,23 +13,19 @@ import Animated, {
 
 interface KnobProps {
   label: string;
-  value: number; // Nilai mentah 0 - 1000
+  value: number; // 0 - 1000
   onChange: (val: number) => void;
   color: string;
   disabled?: boolean;
 }
 
-// Tick angles tetap (tidak perlu dihitung ulang tiap render)
 const TICK_ANGLES = [-135, -90, -45, 0, 45, 90, 135];
+const KNOB_SIZE = 120; // Ukuran diperbesar
+const OUTER_SIZE = 140; 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * Parse hex color ke komponen RGB.
- * Dipanggil di JS thread (render), hasilnya di-pass sebagai plain number
- * ke worklet — sehingga tidak perlu string parsing di dalam useAnimatedStyle.
- */
-const parseHexToRGB = (hex: string): { r: number; g: number; b: number } => {
+const parseHexToRGB = (hex: string) => {
   const cleanHex = hex.replace("#", "");
   return {
     r: parseInt(cleanHex.substring(0, 2), 16),
@@ -38,53 +34,46 @@ const parseHexToRGB = (hex: string): { r: number; g: number; b: number } => {
   };
 };
 
-/** Tetap tersedia untuk penggunaan di JS thread (render biasa) */
 const hexToRGBA = (hex: string, opacity: number): string => {
   const { r, g, b } = parseHexToRGB(hex);
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
 };
 
 // ─── AnimatedTick ─────────────────────────────────────────────────────────────
-// Menerima RGB sebagai angka — tidak ada string parsing di dalam worklet
+
 const AnimatedTick = ({
   angle,
   rotation,
-  colorR,
-  colorG,
-  colorB,
+  rgb,
   disabled,
 }: {
   angle: number;
-  rotation: SharedValue<number>;  // ✅ SharedValue langsung, bukan Animated.SharedValue
-  colorR: number;
-  colorG: number;
-  colorB: number;
+  rotation: SharedValue<number>;
+  rgb: { r: number; g: number; b: number };
   disabled?: boolean;
 }) => {
   const animStyle = useAnimatedStyle(() => {
-    "worklet";
     if (disabled) return { backgroundColor: "rgba(255,255,255,0.05)" };
     const diff = Math.abs(rotation.value - angle);
-    // Bangun string rgba langsung dari number — aman di worklet
-    const bg =
-      diff < 15
-        ? `rgba(${colorR},${colorG},${colorB},0.8)`
-        : "rgba(255,255,255,0.1)";
-    return { backgroundColor: bg };
+    const isActive = diff < 20; // Threshold cahaya tick
+    
+    return {
+      backgroundColor: isActive 
+        ? `rgba(${rgb.r},${rgb.g},${rgb.b},0.9)` 
+        : "rgba(255,255,255,0.1)",
+      transform: [
+        { rotate: `${angle}deg` },
+        { translateY: isActive ? -2 : 0 }, // Efek sedikit "pop" saat aktif
+      ],
+      height: isActive ? 14 : 10,
+    };
   });
 
-  return (
-    <Animated.View
-      style={[
-        styles.tick,
-        { transform: [{ rotate: `${angle}deg` }] },
-        animStyle,
-      ]}
-    />
-  );
+  return <Animated.View style={[styles.tick, animStyle]} />;
 };
 
-// ─── ControlKnob ──────────────────────────────────────────────────────────────
+// ─── Main ControlKnob ─────────────────────────────────────────────────────────
+
 export const ControlKnob = ({
   label,
   value,
@@ -95,144 +84,93 @@ export const ControlKnob = ({
   const MIN_ROT = -135;
   const MAX_ROT = 135;
 
-  const safeInitialValue = isNaN(value)
-    ? 0
-    : Math.min(1000, Math.max(0, value));
-
-  // Parse hex sekali di JS thread — hasilnya di-pass ke worklet sebagai number
   const rgb = parseHexToRGB(color);
-
-  const rotation = useSharedValue(
-    interpolate(safeInitialValue, [0, 1000], [MIN_ROT, MAX_ROT]),
-  );
+  const rotation = useSharedValue(interpolate(value || 0, [0, 1000], [MIN_ROT, MAX_ROT]));
   const startRotation = useSharedValue(0);
-  const isGesturing = useSharedValue(false);
 
-  // Sync saat preset berubah dari luar
+  // Sync saat value prop berubah (misal dari preset)
   useEffect(() => {
     if (!isNaN(value)) {
-      // ✅ Tidak baca .value di sini — hanya tulis
       const newRot = interpolate(value, [0, 1000], [MIN_ROT, MAX_ROT]);
-      rotation.value = withSpring(newRot, {
-        damping: 18,
-        stiffness: 120,
-        mass: 0.5,
-      });
+      rotation.value = withSpring(newRot, { damping: 15, stiffness: 100 });
     }
   }, [value]);
 
-  // Gesture Handler
   const gesture = Gesture.Pan()
     .enabled(!disabled)
     .onStart(() => {
-      isGesturing.value = true;
       startRotation.value = rotation.value;
     })
     .onUpdate((e) => {
-      const sensitivity = 0.6;
-      let delta = e.translationY * sensitivity + e.translationX * 0.3;
+      // Sensitivitas disesuaikan untuk knob besar
+      const sensitivity = 0.5;
+      let delta = e.translationY * sensitivity;
       let newRot = startRotation.value - delta;
+      
       newRot = Math.min(MAX_ROT, Math.max(MIN_ROT, newRot));
       rotation.value = newRot;
 
       const newValue = interpolate(newRot, [MIN_ROT, MAX_ROT], [0, 1000]);
       runOnJS(onChange)(Math.round(newValue));
-    })
-    .onEnd(() => {
-      isGesturing.value = false;
-      const currentRot = rotation.value;
-      const snappedValue = Math.round(
-        interpolate(currentRot, [MIN_ROT, MAX_ROT], [0, 1000]),
-      );
-      const diff = Math.abs(
-        snappedValue - interpolate(currentRot, [MIN_ROT, MAX_ROT], [0, 1000]),
-      );
-      if (diff > 5) {
-        const snappedRot = interpolate(snappedValue, [0, 1000], [MIN_ROT, MAX_ROT]);
-        rotation.value = withSpring(snappedRot, { damping: 20, stiffness: 150 });
-        runOnJS(onChange)(snappedValue);
-      }
     });
 
-  // Animated styles
   const animatedKnobStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${rotation.value}deg` }],
   }));
 
   const containerStyle = useAnimatedStyle(() => ({
-    opacity: withTiming(disabled ? 0.4 : 1, { duration: 200 }),
-    transform: [{ scale: withTiming(disabled ? 0.95 : 1, { duration: 200 }) }],
+    opacity: withTiming(disabled ? 0.4 : 1),
+    transform: [{ scale: withTiming(disabled ? 0.92 : 1) }],
   }));
 
-  // Nilai display — murni dari prop, tidak perlu shared value
   const displayValue = !isNaN(value) ? Math.round(value / 10) : 0;
 
-  const getDynamicColor = () => {
-    if (disabled) return "#444";
-    if (displayValue > 70) return color;
-    if (displayValue > 30) return hexToRGBA(color, 0.8);
-    return hexToRGBA(color, 0.6);
-  };
-
-  const getBorderColor = () => {
-    if (disabled) return "rgba(68, 68, 68, 0.3)";
-    return hexToRGBA(color, 0.3);
-  };
-
   return (
-    <View style={styles.container}>
-      <Text style={[styles.label, { color: disabled ? "#444" : "#888" }]}>
+    <View style={[styles.container, { width: OUTER_SIZE }]}>
+      <Text style={[styles.label, { color: disabled ? "#444" : "#AAA" }]}>
         {label}
       </Text>
 
       <GestureDetector gesture={gesture}>
-        <Animated.View
-          style={[
-            styles.knobOuter,
-            { borderColor: getBorderColor() },
-            containerStyle,
-          ]}
-        >
-          {/* Tick marks — setiap tick punya animated style sendiri */}
-          <View style={styles.tickMarks}>
-            {TICK_ANGLES.map((angle) => (
-              <AnimatedTick
-                key={angle}
-                angle={angle}
-                rotation={rotation}
-                colorR={rgb.r}
-                colorG={rgb.g}
-                colorB={rgb.b}
-                disabled={disabled}
-              />
-            ))}
+        <Animated.View style={[styles.knobWrapper, containerStyle]}>
+          {/* Ring Luar (Glow effect) */}
+          <View style={[styles.knobOuter, { borderColor: hexToRGBA(color, 0.2) }]}>
+            
+            {/* Tick Marks */}
+            <View style={styles.tickMarksContainer}>
+              {TICK_ANGLES.map((angle) => (
+                <AnimatedTick
+                  key={angle}
+                  angle={angle}
+                  rotation={rotation}
+                  rgb={rgb}
+                  disabled={disabled}
+                />
+              ))}
+            </View>
+
+            {/* Titik Tengah Indikator */}
+            <View style={[styles.centerDot, { backgroundColor: color }]} />
+
+            {/* Bagian Knob yang Berputar */}
+            <Animated.View style={[styles.knobSurface, animatedKnobStyle]}>
+              <View style={[styles.pointer, { backgroundColor: color }]}>
+                {/* Efek Cahaya di Pointer */}
+                <View style={[styles.pointerGlow, { backgroundColor: color }]} />
+              </View>
+            </Animated.View>
           </View>
-
-          {/* Center dot */}
-          <View
-            style={[styles.centerDot, { backgroundColor: getDynamicColor() }]}
-          />
-
-          {/* Knob pointer */}
-          <Animated.View style={[styles.knobInner, animatedKnobStyle]}>
-            <View
-              style={[styles.pointer, { backgroundColor: getDynamicColor() }]}
-            />
-          </Animated.View>
         </Animated.View>
       </GestureDetector>
 
-      <Text style={[styles.valueText, { color: getDynamicColor() }]}>
-        {displayValue}%
-      </Text>
-
-      <View style={styles.rangeLabels}>
-        <Text style={[styles.rangeText, { color: disabled ? "#333" : "#666" }]}>
-          MIN
+      <View style={styles.infoContainer}>
+        <Text style={[styles.valueText, { color: disabled ? "#444" : color }]}>
+          {displayValue}%
         </Text>
-        <Text style={[styles.rangeText, { color: disabled ? "#333" : "#666" }]}>
-          MAX
-        </Text>
+        <View style={styles.rangeRow}>
+          <Text style={styles.rangeLabel}>0</Text>
+          <Text style={styles.rangeLabel}>100</Text>
+        </View>
       </View>
     </View>
   );
@@ -241,91 +179,96 @@ export const ControlKnob = ({
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
-    marginHorizontal: 8,
-    width: 80,
+    marginHorizontal: 10,
   },
   label: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "900",
-    marginBottom: 8,
-    letterSpacing: 1.5,
+    marginBottom: 15,
+    letterSpacing: 2.5,
     textTransform: "uppercase",
   },
+  knobWrapper: {
+    width: KNOB_SIZE,
+    height: KNOB_SIZE,
+  },
   knobOuter: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    borderWidth: 2.5,
-    backgroundColor: "#0A0A0A",
+    width: KNOB_SIZE,
+    height: KNOB_SIZE,
+    borderRadius: KNOB_SIZE / 2,
+    borderWidth: 3,
+    backgroundColor: "#050505",
     justifyContent: "center",
     alignItems: "center",
+    // Shadow Mewah
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 6,
-    elevation: 8,
-    position: "relative",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.8,
+    shadowRadius: 15,
+    elevation: 15,
   },
-  tickMarks: {
+  tickMarksContainer: {
     position: "absolute",
-    width: "90%",
-    height: "90%",
-    borderRadius: 35,
+    width: "100%",
+    height: "100%",
     justifyContent: "center",
     alignItems: "center",
   },
   tick: {
     position: "absolute",
-    width: 2,
-    height: 8,
-    borderRadius: 1,
-    top: -2,
-    left: "50%",
-    marginLeft: -1,
+    width: 3,
+    borderRadius: 2,
+    top: -5, // Mengambang sedikit di atas ring
   },
   centerDot: {
     position: "absolute",
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#FFF",
-    opacity: 0.8,
-    zIndex: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    zIndex: 10,
+    opacity: 0.9,
   },
-  knobInner: {
+  knobSurface: {
     width: "100%",
     height: "100%",
     alignItems: "center",
-    justifyContent: "flex-start",
-    paddingTop: 8,
+    paddingTop: 10,
   },
   pointer: {
-    width: 3.5,
-    height: 20,
-    borderRadius: 2,
-    shadowColor: "#FFF",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
+    width: 5,
+    height: 35,
+    borderRadius: 3,
+    zIndex: 5,
+  },
+  pointerGlow: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 3,
+    opacity: 0.4,
+    transform: [{ scale: 1.5 }],
+  },
+  infoContainer: {
+    alignItems: "center",
+    marginTop: 15,
   },
   valueText: {
-    fontSize: 13,
-    marginTop: 10,
-    fontWeight: "800",
+    fontSize: 22, // Ukuran angka diperbesar
+    fontWeight: "900",
     fontVariant: ["tabular-nums"],
-    letterSpacing: 0.5,
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
-  rangeLabels: {
+  rangeRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    width: "100%",
-    marginTop: 4,
-    paddingHorizontal: 8,
+    width: 60,
+    marginTop: 2,
   },
-  rangeText: {
-    fontSize: 7,
-    fontWeight: "700",
-    letterSpacing: 0.5,
+  rangeLabel: {
+    fontSize: 8,
+    color: "#444",
+    fontWeight: "bold",
   },
 });
  
