@@ -82,21 +82,17 @@ export default function AnalyzerScreen() {
       setWaitingForSession(false);
     }
   }, [audioSessionId, isPlaying]);
-
 useFocusEffect(
   useCallback(() => {
-    // Jika session ID kosong, coba minta native untuk mengirim ulang
-    if (!audioSessionId) {
-      // Panggil method native untuk mendapatkan session ID aktif
-      NativeModules.NativeDSPModule?.getActiveAudioSessionId()
-        .then((id: number) => {
-          if (id > 0) {
-            setAudioSessionId(id);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [audioSessionId])
+    // Selalu cek saat focus, tapi jangan re-create callback saat session berubah
+    NativeModules.NativeDSPModule?.getActiveAudioSessionId?.()
+      ?.then((id: number) => {
+        if (id > 0 && id !== audioSessionId) {
+          setAudioSessionId(id);
+        }
+      })
+      ?.catch(() => {});
+  }, []) // deps kosong — hanya run saat focus
 );
 
   // Load artist metadata dari DB

@@ -1,5 +1,5 @@
 // src/features/visualizer/components/SpectrumAnalyzer.tsx
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import { View, StyleSheet, Dimensions, Text } from "react-native";
 import {
   Canvas,
@@ -12,6 +12,7 @@ import {
   useSharedValue,
   useDerivedValue,
   useAnimatedReaction,
+  runOnUI,
   runOnJS,
   withTiming,
   Easing,
@@ -35,7 +36,6 @@ export interface SpectrumAnalyzerProps {
   showCenterArt?: boolean;
 }
 
-// ✅ KONSTANTA - pastikan didefinisikan di sini
 const DEFAULT_BAR_COUNT = 48;
 const MAX_BAR_COUNT = 128;
 const MIN_BAR_COUNT = 16;
@@ -51,62 +51,68 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
   isPlaying,
   audioSessionId,
 }) => {
-  // ✅ Gunakan konstanta yang sudah didefinisikan
   const barCount = Math.max(MIN_BAR_COUNT, Math.min(MAX_BAR_COUNT, rawBarCount));
 
-  const freqData = useSharedValue<number[]>(Array(MAX_BAR_COUNT).fill(0.1));
-  const prevData = useSharedValue<number[]>(Array(barCount).fill(0.1));
-  const dummyPhase = useSharedValue(0);
+  const freqData    = useSharedValue<number[]>(Array(MAX_BAR_COUNT).fill(0.1));
+  const prevData    = useSharedValue<number[]>(Array(barCount).fill(0.1));
+  const dummyPhase  = useSharedValue(0);
+
+  // FIX: hasRealData dan isPlayingSV sebagai SharedValue agar bisa dibaca worklet
+  const hasRealData  = useSharedValue(false);
+  const isPlayingSV  = useSharedValue(isPlaying);
 
   const isServiceInitialized = useRef(false);
-  const isStarted = useRef(false);
-  const lastSessionId = useRef<number | null>(null);
-  const frameCount = useRef(0);
+  const isStarted            = useRef(false);
+  const lastSessionId        = useRef<number | null>(null);
+  const frameCount           = useRef(0);
 
-  const [debugMax, setDebugMax] = useState(0);
-  const [hasRealData, setHasRealData] = useState(false);
-
-  // Animasi dummy ketika tidak ada data real
+  // Sync isPlaying prop → SharedValue
   useEffect(() => {
-    if (!hasRealData && isPlaying) {
-      const interval = setInterval(() => {
-        dummyPhase.value = withTiming(dummyPhase.value + 0.5, {
-          duration: 100,
-          easing: Easing.linear,
-        });
-      }, 100);
-      return () => clearInterval(interval);
-    }
-  }, [hasRealData, isPlaying, dummyPhase]);
+    isPlayingSV.value = isPlaying;
+  }, [isPlaying]);
+
+  // Animasi dummy saat tidak ada data real
+  useEffect(() => {
+    if (!isPlaying) return;
+    const interval = setInterval(() => {
+      dummyPhase.value = withTiming(dummyPhase.value + 0.5, {
+        duration: 100,
+        easing: Easing.linear,
+      });
+    }, 100);
+    return () => clearInterval(interval);
+  }, [isPlaying]);
 
   // Inisialisasi service sekali
   useEffect(() => {
-    if (!isServiceInitialized.current) {
-      const success = visualizerService.initialize((newData: number[]) => {
-        frameCount.current++;
-        if (newData && newData.length > 0) {
-          const maxVal = Math.max(...newData);
-          runOnJS(setDebugMax)(maxVal);
+    if (isServiceInitialized.current) return;
 
-          if (maxVal > 0.01) {
-            runOnJS(setHasRealData)(true);
-          } else if (frameCount.current > 10 && maxVal <= 0.01) {
-            runOnJS(setHasRealData)(false);
-          }
+    const success = visualizerService.initialize((newData: number[]) => {
+      // Dipanggil dari JS thread — set SharedValue via runOnUI
+      if (!newData || newData.length === 0) return;
 
-          freqData.value = [...newData];
+      frameCount.current++;
+      const maxVal = Math.max(...newData);
+
+      const sv = freqData;
+      const hrSV = hasRealData;
+      runOnUI(() => {
+        "worklet";
+        sv.value = newData;
+        if (maxVal > 0.01) {
+          hrSV.value = true;
+        } else if (frameCount.current > 10) {
+          hrSV.value = false;
         }
-      });
+      })();
+    });
 
-      if (success) {
-        isServiceInitialized.current = true;
-        console.log("[SpectrumAnalyzer] Service initialized");
-      }
+    if (success) {
+      isServiceInitialized.current = true;
+      console.log("[SpectrumAnalyzer] Service initialized");
     }
 
-    return () => {
-      // Jangan stop global service di sini
-    };
+    return () => {};
   }, []);
 
   // Start/Stop berdasarkan isPlaying dan audioSessionId
@@ -122,7 +128,7 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
         isStarted.current = true;
         lastSessionId.current = audioSessionId;
         frameCount.current = 0;
-        runOnJS(setHasRealData)(false);
+        runOnUI(() => { "worklet"; hasRealData.value = false; })();
       }
     } else {
       if (isStarted.current) {
@@ -130,24 +136,26 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
         visualizerService.stop();
         isStarted.current = false;
         lastSessionId.current = null;
-        freqData.value = Array(MAX_BAR_COUNT).fill(0.1);
-        prevData.value = Array(barCount).fill(0.1);
-        runOnJS(setDebugMax)(0);
-        runOnJS(setHasRealData)(false);
+        runOnUI(() => {
+          "worklet";
+          freqData.value = Array(MAX_BAR_COUNT).fill(0.1);
+          prevData.value = Array(barCount).fill(0.1);
+          hasRealData.value = false;
+        })();
       }
     }
   }, [isPlaying, audioSessionId, barCount]);
 
-  // Processed data
+  // Processed data — semua SharedValue, aman di worklet
   const processedData = useDerivedValue(() => {
-    const raw = freqData.value;
-    const useDummy = !hasRealData && isPlaying;
+    const raw      = freqData.value;
+    const useDummy = !hasRealData.value && isPlayingSV.value;
 
     if (useDummy) {
       const dummy = new Array(barCount).fill(0);
       const phase = dummyPhase.value;
       for (let i = 0; i < barCount; i++) {
-        const t = i / (barCount - 1);
+        const t   = i / (barCount - 1);
         const val = 0.3 + 0.5 * (
           Math.sin(phase * 2 + t * 10) * 0.5 +
           Math.sin(phase * 0.5 + t * 20) * 0.3 +
@@ -160,17 +168,16 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
 
     if (!raw || raw.length === 0) return Array(barCount).fill(0.1);
 
-    const result = new Array(barCount).fill(0);
+    const result  = new Array(barCount).fill(0);
     const falloff = 0.85;
 
     for (let i = 0; i < barCount; i++) {
-      const t = i / (barCount - 1);
-      const logT = Math.pow(t, 1.2);
+      const t        = i / (barCount - 1);
+      const logT     = Math.pow(t, 1.2);
       const startIdx = Math.floor(logT * (raw.length - 1));
-      const endIdx = Math.min(raw.length - 1, startIdx + 8);
+      const endIdx   = Math.min(raw.length - 1, startIdx + 8);
 
-      let sum = 0;
-      let count = 0;
+      let sum = 0, count = 0;
       for (let j = startIdx; j <= endIdx && j < raw.length; j++) {
         sum += raw[j] || 0;
         count++;
@@ -187,7 +194,7 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
     }
 
     return result;
-  }, [freqData, barCount, sensitivity, hasRealData, isPlaying, dummyPhase]);
+  });
 
   useAnimatedReaction(
     () => processedData.value,
@@ -199,20 +206,24 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
   const visualizerPath = useDerivedValue(() => {
     const data = processedData.value;
     const path = Skia.Path.Make();
-
-    const gap = 3;
+    const gap  = 3;
     const barWidth = (width - (barCount - 1) * gap) / barCount;
 
     data.forEach((amp, i) => {
       const barHeight = Math.max(4, amp * height * 0.85);
-      const x = i * (barWidth + gap);
-      const y = height - barHeight;
+      const x    = i * (barWidth + gap);
+      const y    = height - barHeight;
       const rect = Skia.XYWHRect(x, y, barWidth, barHeight);
       path.addRRect(Skia.RRectXY(rect, 4, 4));
     });
 
     return path;
-  }, [processedData, width, height, barCount]);
+  });
+
+  // Debug value untuk display (JS side) — derived dari SharedValue
+  const debugMaxSV = useDerivedValue(() =>
+    freqData.value.reduce((a, b) => Math.max(a, b), 0)
+  );
 
   return (
     <View style={[styles.container, { width, height, backgroundColor }]}>
@@ -220,8 +231,9 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
         <Group>
           <Path
             path={visualizerPath}
-            color={hasRealData ? color : `${color}80`}
+            color={color}
             style="fill"
+            opacity={hasRealData.value ? 1 : 0.5}
           >
             <BlurMask blur={2} style="solid" />
           </Path>
@@ -231,7 +243,7 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
       {__DEV__ && (
         <View style={styles.debugOverlay}>
           <Text style={styles.debugText}>
-            FFT Max: {debugMax.toFixed(3)} | Real: {hasRealData ? 'Y' : 'N'}
+            FFT Max: {debugMaxSV.value.toFixed(3)} | Real: {hasRealData.value ? "Y" : "N"}
           </Text>
         </View>
       )}
@@ -246,16 +258,17 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   debugOverlay: {
-    position: 'absolute',
+    position: "absolute",
     top: 4,
     left: 4,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: "rgba(0,0,0,0.5)",
     padding: 2,
     borderRadius: 2,
   },
   debugText: {
-    color: '#0f0',
+    color: "#0f0",
     fontSize: 8,
-    fontFamily: 'monospace',
+    fontFamily: "monospace",
   },
-}); 
+});
+ 

@@ -4,6 +4,7 @@ import TrackPlayer, { Event, State } from "react-native-track-player";
 import { NativeModules, Platform } from "react-native";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
 import { usePlayerStore } from "@/features/player/store/playerStore";
+import { visualizerService } from "@/features/visualizer/services/VisualizerService";
 
 const { NativeDSPModule } = NativeModules;
 
@@ -47,18 +48,20 @@ const getAudioSessionId = async (): Promise<number | null> => {
 // ─────────────────────────────────────────────
 // DSP Effects
 // ─────────────────────────────────────────────
+
 const applyAllEffects = async (sessionId: number): Promise<void> => {
   if (!NativeDSPModule) return;
+
+  // FIX 1: setAudioSessionId SELALU dipanggil, tidak tergantung EQ enabled
+  // Visualizer butuh session ID meski EQ mati
+  usePlayerStore.getState().setAudioSessionId(sessionId);
 
   const eq = useEqualizerStore.getState();
 
   if (!eq.isEQEnabled) {
-    console.log("[DSP] EQ disabled, skipping effects");
+    console.log("[DSP] EQ disabled, session ID set but skipping effects");
     return;
   }
-
-  // ← TAMBAHKAN BARIS INI (PENTING!)
-  usePlayerStore.getState().setAudioSessionId(sessionId);
 
   console.log(`[DSP] Applying effects → session ${sessionId}`);
 
@@ -67,15 +70,19 @@ const applyAllEffects = async (sessionId: number): Promise<void> => {
   // 1. EQ Bands
   if (eq.bands?.length > 0) {
     try {
-      const gainsMillibels = eq.bands.map((b) =>
-        Math.round(Math.min(12, Math.max(-12, b.gain)) * 100)
+      // FIX 2: Kirim dB mentah (-12..+12), Kotlin yang konversi ke millibels (* 100)
+      // JANGAN konversi di sini — NativeDSPModule.kt sudah handle konversi
+      const gains = eq.bands.map((b) =>
+        Math.min(12, Math.max(-12, b.gain))
       );
 
       if (NativeDSPModule.setFullEqualizer) {
-        await NativeDSPModule.setFullEqualizer(gainsMillibels, sessionId);
+        await NativeDSPModule.setFullEqualizer(gains, sessionId);
       } else if (NativeDSPModule.setBandLevel) {
-        for (let i = 0; i < gainsMillibels.length; i++) {
-          await NativeDSPModule.setBandLevel(i, gainsMillibels[i], sessionId);
+        for (let i = 0; i < gains.length; i++) {
+          // setBandLevel di Kotlin tidak konversi — kirim millibels manual
+          const millibels = Math.round(gains[i] * 100);
+          await NativeDSPModule.setBandLevel(i, millibels, sessionId);
         }
       }
     } catch (e) {
@@ -129,7 +136,7 @@ const releaseAllEffects = async (): Promise<void> => {
 };
 
 // ─────────────────────────────────────────────
-// DSP Session Init
+// DSP + Visualizer Session Init
 // ─────────────────────────────────────────────
 
 let lastDspTrackIndex: number | null = null;
@@ -142,7 +149,14 @@ const initDspForTrack = async (trackIndex: number | undefined): Promise<void> =>
   if (!sessionId) return;
 
   console.log(`[DSP] Session ID: ${sessionId} (track index: ${trackIndex})`);
-  await applyAllEffects(sessionId);
+
+  // FIX 3: Start visualizer dengan session ID yang sama, paralel dengan DSP
+  await Promise.all([
+    applyAllEffects(sessionId),
+    visualizerService.start(sessionId).catch((e) =>
+      console.warn("[Visualizer] Start failed:", e)
+    ),
+  ]);
 };
 
 // ─────────────────────────────────────────────
@@ -184,13 +198,20 @@ export const playbackService = async function () {
         break;
 
       case State.Paused:
+        player.setIsPlaying(false);
+        visualizerService.pause();
+        break;
+
       case State.Stopped:
         player.setIsPlaying(false);
+        visualizerService.stop();
+        usePlayerStore.getState().setAudioSessionId(null);
         break;
 
       case State.Error:
         console.error("[PlaybackService] Playback error state");
         player.setIsPlaying(false);
+        visualizerService.stop();
         break;
 
       default:
@@ -214,7 +235,9 @@ export const playbackService = async function () {
     try {
       await TrackPlayer.reset();
       await releaseAllEffects();
+      visualizerService.stop();
       usePlayerStore.getState().setIsPlaying(false);
+      usePlayerStore.getState().setAudioSessionId(null);
     } catch (error) {
       console.error("[Remote] Stop error:", error);
     }
@@ -224,7 +247,10 @@ export const playbackService = async function () {
     console.log("[PlaybackService] Queue ended");
     const { repeat, playNext } = usePlayerStore.getState();
     if (repeat === "all") await playNext();
-    else usePlayerStore.getState().setIsPlaying(false);
+    else {
+      usePlayerStore.getState().setIsPlaying(false);
+      visualizerService.stop();
+    }
   });
 
   TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, (event) => {
@@ -233,7 +259,7 @@ export const playbackService = async function () {
     if (event.duration > 0) setDuration(event.duration);
   });
 
-  console.log("[PlaybackService] Registered with Full DSP Sync");
+  console.log("[PlaybackService] Registered with Full DSP + Visualizer Sync");
 };
 
 // ─────────────────────────────────────────────
@@ -265,4 +291,5 @@ const stateToString = (state: number): string => {
     case State.None:      return "none";
     default:              return `unknown (${state})`;
   }
-}; 
+};
+ 
