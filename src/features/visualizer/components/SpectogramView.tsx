@@ -1,224 +1,336 @@
 // src/features/visualizer/components/SpectogramView.tsx
-import React, { useEffect, useRef, memo, useCallback, useState } from "react";
-import { View, StyleSheet, Dimensions, Text } from "react-native";
+import React, { useEffect, useRef, useState, useMemo } from "react";
+import {
+  View,
+  StyleSheet,
+  Dimensions,
+  Text,
+  ActivityIndicator,
+} from "react-native";
 import {
   Canvas,
   Rect,
-  Skia,
   Group,
-  useCanvasRef,
 } from "@shopify/react-native-skia";
-import { useSharedValue } from "react-native-reanimated";
 import { visualizerService } from "@/features/visualizer/services/VisualizerService";
 
 interface SpectogramViewProps {
   width?: number;
   height?: number;
   isPlaying: boolean;
-  audioSessionId: number;
+  audioSessionId?: number;
+  bins?: number;
+  maxRows?: number;
+  colorScheme?: "classic" | "thermal" | "grayscale";
+  sensitivity?: number;
+  showLabels?: boolean;
 }
 
-const MAX_ROWS = 35;
-const BINS = 48;
-const LISTENER_ID = 42; // unique id for this component's listener
+const DEFAULT_BINS = 64;
+const DEFAULT_MAX_ROWS = 40;
 
-const createEmptyGrid = (): number[][] =>
-  Array.from({ length: MAX_ROWS }, () => new Array(BINS).fill(0));
+// Palet warna (sama seperti sebelumnya)
+const generateColorCache = (steps: number = 256, scheme: "classic" | "thermal" | "grayscale" = "classic"): string[] => {
+  const cache: string[] = new Array(steps);
+  if (scheme === "grayscale") {
+    for (let i = 0; i < steps; i++) {
+      const v = Math.floor((i / (steps - 1)) * 255);
+      cache[i] = `rgb(${v}, ${v}, ${v})`;
+    }
+  } else if (scheme === "thermal") {
+    for (let i = 0; i < steps; i++) {
+      const t = i / (steps - 1);
+      let r, g, b;
+      if (t < 0.33) {
+        r = 0; g = Math.floor(t * 3 * 255); b = 255;
+      } else if (t < 0.66) {
+        r = Math.floor((t - 0.33) * 3 * 255); g = 255; b = 255 - Math.floor((t - 0.33) * 3 * 255);
+      } else {
+        r = 255; g = 255 - Math.floor((t - 0.66) * 3 * 128); b = 0;
+      }
+      cache[i] = `rgb(${r}, ${g}, ${b})`;
+    }
+  } else {
+    for (let i = 0; i < steps; i++) {
+      const t = i / (steps - 1);
+      let r, g, b;
+      if (t < 0.25) {
+        r = 0; g = Math.floor((t / 0.25) * 255); b = 255;
+      } else if (t < 0.5) {
+        r = 0; g = 255; b = 255 - Math.floor(((t - 0.25) / 0.25) * 255);
+      } else if (t < 0.75) {
+        r = Math.floor(((t - 0.5) / 0.25) * 255); g = 255; b = 0;
+      } else {
+        r = 255; g = 255 - Math.floor(((t - 0.75) / 0.25) * 128); b = 0;
+      }
+      cache[i] = `rgb(${r}, ${g}, ${b})`;
+    }
+  }
+  return cache;
+};
 
-export const SpectogramView = memo(
+export const SpectogramView = React.memo(
   ({
     width = Dimensions.get("window").width - 40,
-    height = 180,
+    height = 200,
     isPlaying,
     audioSessionId,
+    bins = DEFAULT_BINS,
+    maxRows = DEFAULT_MAX_ROWS,
+    colorScheme = "classic",
+    sensitivity = 2.0,
+    showLabels = true,
   }: SpectogramViewProps) => {
-    const canvasRef = useCanvasRef();
-    const gridData = useSharedValue<number[][]>(createEmptyGrid());
-    // Use state to drive re-renders for declarative Skia
-    const [drawData, setDrawData] = useState<number[][]>(createEmptyGrid());
+    const [grid, setGrid] = useState<number[][]>(() =>
+      Array.from({ length: maxRows }, () => new Array(bins).fill(0))
+    );
+    
+    const gridRef = useRef<number[][]>(grid);
+    const isServiceStarted = useRef(false);
+    
+    // Debug state untuk menampilkan max FFT
+    const [debugMax, setDebugMax] = useState(0);
+    const [debugSamples, setDebugSamples] = useState("");
 
-    const cellWidth = width / BINS;
-    const cellHeight = height / MAX_ROWS;
-    const colorCache = useRef<ColorCache>(buildColorCache());
+    const colorCache = useMemo(() => generateColorCache(256, colorScheme), [colorScheme]);
+
+    const cellWidth = width / bins;
+    const cellHeight = height / maxRows;
+
+    const handleFFTData = (fftData: number[]) => {
+      if (!fftData || fftData.length === 0) return;
+      
+      const maxVal = Math.max(...fftData);
+      const samples = fftData.slice(0, 5).map(v => v.toFixed(3)).join(', ');
+      setDebugMax(maxVal);
+      setDebugSamples(samples);
+      
+      // Log setiap 20 frame agar tidak spam
+      if (Math.random() < 0.05) {
+        console.log(`[SpectogramView] FFT max: ${maxVal.toFixed(4)}, samples: ${samples}`);
+      }
+      
+      // Resample ke jumlah bin
+      const resampled = new Array(bins).fill(0);
+      const step = fftData.length / bins;
+      
+      for (let i = 0; i < bins; i++) {
+        const start = Math.floor(i * step);
+        const end = Math.floor((i + 1) * step);
+        let sum = 0;
+        let count = 0;
+        for (let j = start; j < end && j < fftData.length; j++) {
+          sum += fftData[j];
+          count++;
+        }
+        let value = count > 0 ? sum / count : 0;
+        value = Math.min(1.0, value * sensitivity);
+        resampled[i] = value;
+      }
+      
+      // Update grid: shift rows up, add new row at bottom
+      setGrid(prevGrid => {
+        const newGrid = [...prevGrid.slice(1), resampled];
+        gridRef.current = newGrid;
+        return newGrid;
+      });
+    };
 
     useEffect(() => {
-      if (!isPlaying) {
-        const empty = createEmptyGrid();
-        gridData.value = empty;
-        setDrawData(empty);
+      if (!isPlaying || !audioSessionId || audioSessionId <= 0) {
+        const emptyGrid = Array.from({ length: maxRows }, () => new Array(bins).fill(0));
+        setGrid(emptyGrid);
+        gridRef.current = emptyGrid;
+        setDebugMax(0);
+        if (isServiceStarted.current) {
+          visualizerService.stop();
+          isServiceStarted.current = false;
+        }
         return;
       }
 
-      const initialized = visualizerService.initialize((newData) => {
-        gridData.value = newData as unknown as number[][];
-        setDrawData(newData as unknown as number[][]);
-      });
-
+      const initialized = visualizerService.initialize(handleFFTData);
       if (!initialized) {
-        console.warn(
-          "[SpectogramView] Failed to initialize visualizer service",
-        );
+        console.warn("[SpectogramView] Failed to initialize visualizer");
         return;
       }
 
-      visualizerService.start(0);
+      visualizerService.start(audioSessionId);
+      isServiceStarted.current = true;
+
       return () => {
         visualizerService.stop();
+        isServiceStarted.current = false;
       };
-    }, [isPlaying, audioSessionId]);
+    }, [isPlaying, audioSessionId, bins, maxRows, sensitivity]);
+
+    // Render rects dengan threshold rendah (0.005) agar data kecil terlihat
+    const rects = useMemo(() => {
+      const threshold = 0.005;
+      const elements: JSX.Element[] = [];
+      
+      for (let row = 0; row < maxRows; row++) {
+        for (let col = 0; col < bins; col++) {
+          const amp = grid[row][col];
+          if (amp < threshold) continue;
+          
+          const colorIndex = Math.min(255, Math.floor(amp * 256));
+          const color = colorCache[colorIndex];
+          
+          elements.push(
+            <Rect
+              key={`${row}-${col}`}
+              x={col * cellWidth}
+              y={row * cellHeight}
+              width={cellWidth + 0.5}
+              height={cellHeight + 0.5}
+              color={color}
+            />
+          );
+        }
+      }
+      return elements;
+    }, [grid, cellWidth, cellHeight, maxRows, bins, colorCache]);
+
+    const hasData = grid.some(row => row.some(amp => amp > 0.01));
 
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>LIVE SPECTROGRAM</Text>
-          <View style={[styles.liveIndicator, !isPlaying && styles.inactive]} />
-        </View>
-
-        <Canvas ref={canvasRef} style={{ width, height }}>
-          <Rect x={0} y={0} width={width} height={height} color="#020617" />
-          <Group>
-            {drawData.flatMap((row, t) =>
-              row.map((amp, f) => {
-                if (amp < 0.05) return null;
-                const color = colorCache.current.getColorString(amp);
-                return (
-                  <Rect
-                    key={`${t}-${f}`}
-                    x={f * cellWidth}
-                    y={t * cellHeight}
-                    width={cellWidth + 0.4}
-                    height={cellHeight + 0.4}
-                    color={color}
-                  />
-                );
-              }),
-            )}
-          </Group>
-        </Canvas>
-
-        <View style={styles.footer}>
-          <View style={styles.labels}>
-            <Text style={styles.label}>20Hz</Text>
-            <Text style={styles.label}>
-              {((BINS / 2) * (22050 / BINS)) >> 0}Hz
-            </Text>
-            <Text style={styles.label}>22kHz</Text>
+      <View style={[styles.container, { width }]}>
+        {showLabels && (
+          <View style={styles.header}>
+            <Text style={styles.title}>SPECTROGRAM</Text>
+            <View style={[styles.liveIndicator, isPlaying && styles.active]} />
           </View>
-          <View style={styles.gradientBar}>
-            <View
-              style={[styles.gradientSegment, { backgroundColor: "#0000FF" }]}
-            />
-            <View
-              style={[styles.gradientSegment, { backgroundColor: "#00FF00" }]}
-            />
-            <View
-              style={[styles.gradientSegment, { backgroundColor: "#FFFF00" }]}
-            />
-            <View
-              style={[styles.gradientSegment, { backgroundColor: "#FF0000" }]}
-            />
-          </View>
+        )}
+        
+        <View style={[styles.canvasContainer, { width, height }]}>
+          <Canvas style={{ width, height }}>
+            <Rect x={0} y={0} width={width} height={height} color="#0A0A0F" />
+            <Group>{rects}</Group>
+          </Canvas>
+          
+          {/* Debug overlay di development */}
+          {__DEV__ && (
+            <View style={styles.debugOverlay}>
+              <Text style={styles.debugText}>
+                Max: {debugMax.toFixed(4)} | HasData: {hasData ? 'Y' : 'N'}
+              </Text>
+              <Text style={styles.debugText} numberOfLines={1}>
+                {debugSamples}
+              </Text>
+            </View>
+          )}
+          
+          {!hasData && isPlaying && (
+            <View style={styles.placeholder}>
+              <ActivityIndicator size="small" color="#38BDF8" />
+              <Text style={styles.placeholderText}>Waiting for audio...</Text>
+            </View>
+          )}
         </View>
+        
+        {showLabels && (
+          <View style={styles.footer}>
+            <View style={styles.frequencyLabels}>
+              <Text style={styles.label}>20 Hz</Text>
+              <Text style={styles.label}>2 kHz</Text>
+              <Text style={styles.label}>20 kHz</Text>
+            </View>
+            <View style={styles.colorBar}>
+              {[0, 64, 128, 192, 255].map(idx => (
+                <View key={idx} style={[styles.colorSegment, { backgroundColor: colorCache[idx] }]} />
+              ))}
+            </View>
+          </View>
+        )}
       </View>
     );
-  },
+  }
 );
-
-// ============================================================================
-// Color Cache
-// ============================================================================
-
-class ColorCache {
-  private cache: string[]; // CSS strings for declarative Skia
-
-  constructor(steps: number = 256) {
-    this.cache = new Array(steps);
-    for (let i = 0; i < steps; i++) {
-      this.cache[i] = this.calculateColor(i / (steps - 1));
-    }
-  }
-
-  private calculateColor(t: number): string {
-    if (t < 0.25) {
-      const g = Math.floor((t / 0.25) * 255);
-      return `rgb(0, ${g}, 255)`;
-    } else if (t < 0.5) {
-      const b = 255 - Math.floor(((t - 0.25) / 0.25) * 255);
-      return `rgb(0, 255, ${b})`;
-    } else if (t < 0.75) {
-      const r = Math.floor(((t - 0.5) / 0.25) * 255);
-      return `rgb(${r}, 255, 0)`;
-    } else {
-      const g = 255 - Math.floor(((t - 0.75) / 0.25) * 255);
-      return `rgb(255, ${g}, 0)`;
-    }
-  }
-
-  getColorString(amplitude: number): string {
-    const index = Math.min(
-      this.cache.length - 1,
-      Math.max(0, Math.floor(amplitude * this.cache.length)),
-    );
-    return this.cache[index];
-  }
-}
-
-const buildColorCache = () => new ColorCache(256);
-
-// ============================================================================
-// Styles
-// ============================================================================
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: "#020617",
-    borderRadius: 16,
-    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#0A0A0F",
+    padding: 8,
     borderWidth: 1,
     borderColor: "#1E293B",
-    elevation: 4,
   },
   header: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 10,
+    alignItems: "center",
+    marginBottom: 6,
   },
   title: {
-    color: "#38BDF8",
+    color: "#94A3B8",
     fontSize: 10,
-    fontWeight: "bold",
-    letterSpacing: 1.5,
+    fontWeight: "600",
+    letterSpacing: 1,
   },
   liveIndicator: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#475569",
+  },
+  active: {
     backgroundColor: "#EF4444",
   },
-  inactive: {
-    backgroundColor: "#475569",
+  canvasContainer: {
+    position: "relative",
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  debugOverlay: {
+    position: "absolute",
+    top: 4,
+    left: 4,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    padding: 4,
+    borderRadius: 4,
+  },
+  debugText: {
+    color: "#0f0",
+    fontSize: 8,
+    fontFamily: "monospace",
+  },
+  placeholder: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(10,10,15,0.7)",
+  },
+  placeholderText: {
+    color: "#94A3B8",
+    fontSize: 12,
+    marginTop: 8,
   },
   footer: {
     marginTop: 8,
   },
-  labels: {
+  frequencyLabels: {
     flexDirection: "row",
     justifyContent: "space-between",
+    marginBottom: 4,
   },
   label: {
     color: "#475569",
     fontSize: 9,
-    fontWeight: "700",
+    fontWeight: "500",
   },
-  gradientBar: {
+  colorBar: {
     height: 4,
-    marginTop: 4,
     borderRadius: 2,
     flexDirection: "row",
     overflow: "hidden",
   },
-  gradientSegment: {
+  colorSegment: {
     flex: 1,
+    height: "100%",
   },
 });

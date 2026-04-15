@@ -129,30 +129,56 @@ class NativeVisualizerBridge(reactContext: ReactApplicationContext) :
      * Output: 128 nilai float 0.0–1.0, log-scaled untuk persepsi natural.
      */
     private fun sendFftToJs(fft: ByteArray) {
-        val data = Arguments.createArray()
-
-        for (i in 0 until NUM_BINS) {
-            val rIndex = (i + 1) * 2
-            if (rIndex + 1 >= fft.size) break
-
-            val re = fft[rIndex].toDouble()
-            val im = fft[rIndex + 1].toDouble()
-
-            // Magnitude dari komponen kompleks
-            val magnitude = Math.sqrt(re * re + im * im)
-
-            // Normalize ke 0.0–1.0
-            val normalized = (magnitude / 128.0).coerceIn(0.0, 1.0)
-
-            // Log scaling untuk kompensasi sensitivitas telinga manusia
-            // log10(1 + 9x) memberikan kurva yang natural secara perseptual
-            val db = if (normalized > 0) Math.log10(1.0 + 9.0 * normalized) else 0.0
-
-            data.pushDouble(db)
-        }
-
-        reactContext
-            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-            .emit(EVENT_FFT_DATA, data)
+    val data = Arguments.createArray()
+    
+    // Hitung magnitude untuk setiap bin yang diinginkan
+    val magnitudes = DoubleArray(NUM_BINS)
+    var maxMag = 0.0
+    
+    // Mulai dari indeks 2 untuk melewatkan DC component (opsional, bisa disesuaikan)
+    // Format FFT Android: [0]=DC real, [1]=DC imag? Sebenarnya dokumentasi menyebutkan
+    // index 0 adalah DC (real), index 1 adalah Nyquist (real), lalu berpasangan real/imaginer.
+    // Untuk keamanan, kita ambil semua bin mulai dari indeks 2.
+    for (i in 0 until NUM_BINS) {
+        // Setiap bin frekuensi membutuhkan 2 byte: real dan imaginer
+        val baseIdx = 2 + i * 2
+        if (baseIdx + 1 >= fft.size) break
+        
+        // Konversi byte ke unsigned integer (0-255)
+        val re = fft[baseIdx].toInt() and 0xFF
+        val im = fft[baseIdx + 1].toInt() and 0xFF
+        
+        // Magnitude = sqrt(re^2 + im^2)
+        val mag = Math.sqrt((re * re + im * im).toDouble())
+        magnitudes[i] = mag
+        if (mag > maxMag) maxMag = mag
     }
-} 
+    
+    // Log maksimum untuk debugging (setiap ~20 frame agar tidak spam)
+    if (System.currentTimeMillis() % 20 == 0L) {
+        Log.d(TAG, "FFT max magnitude: $maxMag, sample[0]=${magnitudes[0]}")
+    }
+    
+    // Normalisasi dan scaling
+    if (maxMag > 0.0) {
+        for (i in 0 until NUM_BINS) {
+            val normalized = (magnitudes[i] / maxMag).coerceIn(0.0, 1.0)
+            // Skala logaritmik untuk persepsi pendengaran manusia
+            // log10(1 + 9*x) memberikan rentang yang baik
+            val scaled = Math.log10(1.0 + 9.0 * normalized)
+            data.pushDouble(scaled)
+        }
+    } else {
+        // Jika semua magnitude nol, kirim array nol
+        for (i in 0 until NUM_BINS) {
+            data.pushDouble(0.0)
+        }
+    }
+    
+    // Kirim event ke JavaScript
+    reactContext
+        .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+        .emit(EVENT_FFT_DATA, data)
+}
+}
+

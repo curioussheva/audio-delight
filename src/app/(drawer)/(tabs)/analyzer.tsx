@@ -54,7 +54,8 @@ export default function FLACAnalyzerScreen() {
   const { colors } = theme;
 
   const currentSong = usePlayerStore((state) => state.currentSong);
-  const audioSessionId = useEqualizerStore((state) => state.audioSessionId);
+//  const audioSessionId = useEqualizerStore((state) => state.audioSessionId);
+const audioSessionId = usePlayerStore((state) => state.audioSessionId);
   const { isExclusiveMode, currentDAC } = useUSBDAC();
 
   // ── Local State ────────────────────────────────────────────────────────────
@@ -242,33 +243,38 @@ export default function FLACAnalyzerScreen() {
 
       {/* 1. LIVE SPECTRUM VISUALIZER */}
       <View style={[styles.card, { backgroundColor: colors.background.secondary }]}>
-        <View style={styles.cardHeader}>
-          <Mic2 size={16} color={colors.primary[500]} />
-          <Text style={[styles.label, { color: colors.primary[500] }]}>
-            LIVE SPECTRUM
-          </Text>
-        </View>
-        {audioSessionId > 0 ? (
-          <SpectrumAnalyzer
-            width={screenWidth - 72}
-            height={160}
-            mode="bars"
-            barCount={42}
-            isPlaying={true}
-            audioSessionId={audioSessionId}
-            sensitivity={1.5}
-            color={colors.primary[500]}
-          />
-        ) : (
-          <View style={styles.visualizerPlaceholder}>
-            <ActivityIndicator color={colors.primary[500]} />
-            <Text style={{ color: colors.text.tertiary, marginTop: 10 }}>
-              Waiting for audio signal...
-            </Text>
-          </View>
-        )}
-      </View>
+  <View style={styles.cardHeader}>
+    <Mic2 size={16} color={colors.primary[500]} />
+    <Text style={[styles.label, { color: colors.primary[500] }]}>
+      LIVE SPECTRUM
+    </Text>
+  </View>
 
+  {audioSessionId && audioSessionId > 0 ? (
+    <SpectrumAnalyzer
+      width={screenWidth - 72}
+      height={160}
+      mode="bars"
+      barCount={42}
+      isPlaying={!!currentSong}
+      audioSessionId={audioSessionId}
+      sensitivity={1.5}
+      color={colors.primary[500]}
+      centerArt={currentSong?.artwork}
+      showCenterArt={true}
+    />
+  ) : (
+    <View style={styles.visualizerPlaceholder}>
+      <ActivityIndicator color={colors.primary[500]} />
+      <Text style={{ color: colors.text.tertiary, marginTop: 12 }}>
+        Waiting for audio signal...
+      </Text>
+      <Text style={{ color: colors.text.disabled, fontSize: 12, marginTop: 4 }}>
+        Session ID: {audioSessionId || "none"}
+      </Text>
+    </View>
+  )}
+</View>
       {/* 2. AUTHENTICITY STATUS */}
       <View style={[styles.card, { backgroundColor: colors.background.secondary }]}>
         <Text style={[styles.label, { color: colors.primary[500] }]}>

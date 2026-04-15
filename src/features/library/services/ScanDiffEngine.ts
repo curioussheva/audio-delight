@@ -79,6 +79,10 @@ async function saveBasicSongInfo(song: NativeSong): Promise<void> {
   const finalUri = song.uri || `content://media/external/audio/media/${song.id}`;
   const isHiRes = (song.sampleRate || 0) > 48000 || (song.bitDepth || 0) > 16;
 
+  // ✅ SOLUSI: Bangun URI artwork secara mandiri jika native.artworkUri kosong
+  const artworkUri = song.artworkUri || 
+    (song.albumId ? `content://media/external/audio/albums/${song.albumId}/albumart` : null);
+
   const basicData = {
     id: song.id,
     uri: finalUri,
@@ -88,6 +92,7 @@ async function saveBasicSongInfo(song: NativeSong): Promise<void> {
     album: song.album || "Unknown Album",
     genre: song.genre || "Unknown Genre",
     folder: song.folder || _extractFolder(finalUri),
+    artwork: artworkUri, // ✅ TAMBAHKAN INI
     duration: Math.floor(song.duration || 0),
     codec: song.codec || _getCodecFromFilename(song.filename || ""),
     sampleRate: song.sampleRate || 0,
@@ -99,6 +104,7 @@ async function saveBasicSongInfo(song: NativeSong): Promise<void> {
 
   await LibraryScanner.saveToDatabase(basicData);
 }
+
 
 async function processQuickDiff(nativeSongs: NativeSong[]): Promise<QuickDiffResult> {
   const currentUris = new Set(nativeSongs.map(s => s.uri).filter(Boolean));
@@ -203,6 +209,4 @@ export const ScanDiffEngine = {
     }
   }
 };
-
-
 

@@ -22,6 +22,9 @@ import { SleepTimerModal } from "@/features/player/components/SleepTimerModal";
 import { useTheme } from "@/context/ThemeContext";
 import { useSafePadding } from "@/shared/hooks/useSafePadding";
 
+// ✅ Import SpectogramView (bukan SpectrumAnalyzer)
+import { SpectogramView } from "@/features/visualizer/components/SpectogramView";
+
 // Lucide Icons
 import {
   ChevronDown,
@@ -66,6 +69,7 @@ export default function PlayerScreen() {
     toggleShuffle,
     toggleRepeat,
     audioMode,
+    audioSessionId, // ✅ Diperlukan untuk SpectogramView
   } = usePlayerStore();
 
   const artworkScale = useRef(new Animated.Value(1)).current;
@@ -124,7 +128,7 @@ export default function PlayerScreen() {
 
   if (!currentSong) return null;
 
-  // Helper untuk warna dinamis
+  // Helper warna dinamis
   const goldColor = colors.accent?.primary || colors.primary[500] || "#D4AF37";
   const primaryColor = colors.primary[500];
   const textPrimary = colors.text.primary;
@@ -132,23 +136,18 @@ export default function PlayerScreen() {
   const textTertiary = colors.text.tertiary;
   const backgroundColor = colors.background.primary;
   const backgroundSecondary = colors.background.secondary;
-  const backgroundElevated = colors.background.elevated;
   const borderColor = colors.border?.light || colors.background.tertiary;
-  const successColor = colors.status.success;
   const errorColor = colors.status.error;
 
-  // Gradient colors - sesuaikan untuk light/dark mode
   const gradientColors = colors.gradient?.primary || [
     backgroundColor,
     isDark ? "#000000" : colors.background.secondary,
   ];
 
-  // Warna untuk bottom utilities bar
-  const bottomBarColor = isDark 
-    ? "rgba(255,255,255,0.05)" 
+  const bottomBarColor = isDark
+    ? "rgba(255,255,255,0.05)"
     : "rgba(0,0,0,0.03)";
 
-  // Warna ikon default untuk light mode (gunakan textSecondary agar lebih terlihat)
   const iconColorDefault = isDark ? textTertiary : textSecondary;
 
   return (
@@ -245,6 +244,19 @@ export default function PlayerScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* ✅ SPECTOGRAM VIEW */}
+        <SpectogramView
+  width={width - 48}
+  height={120}
+  isPlaying={isPlaying}
+  audioSessionId={audioSessionId}
+  bins={64}
+  maxRows={30}
+  colorScheme="classic"
+  sensitivity={2.0}
+  showLabels={false} // bisa dimatikan untuk tampilan minimal
+/>
+
         {/* Progress Section */}
         <View style={styles.progressSection}>
           <Slider
@@ -285,10 +297,7 @@ export default function PlayerScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[
-              styles.playBtn,
-              { backgroundColor: primaryColor },
-            ]}
+            style={[styles.playBtn, { backgroundColor: primaryColor }]}
             onPress={handlePlayPause}
           >
             {isPlaying ? (
@@ -442,8 +451,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
   },
+  // ✅ Style untuk spectogram
+  spectogramWrapper: {
+    alignItems: "center",
+    marginBottom: 24,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
   progressSection: {
-    marginBottom: 30,
+    marginBottom: 20,
   },
   slider: {
     width: "100%",
@@ -502,7 +518,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 30,
+    marginBottom: 20,
     width: "100%",
   },
   songTextWrapper: {
@@ -520,4 +536,4 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     borderRadius: 20,
   },
-}); 
+});

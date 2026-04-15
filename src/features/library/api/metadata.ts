@@ -101,24 +101,19 @@ class MetadataExtractor {
    * Extract Best Artwork - Logic yang lebih kuat
    */
   private extractBestArtwork(native: NativeSong): string | null {
-    // Priority 1: artworkUri (dari MediaStore)
-    if (native.artworkUri?.trim()) {
-      return native.artworkUri;
-    }
+  // Priority 1: Field artworkUri asli
+  if (native.artworkUri?.trim()) return native.artworkUri;
 
-    // Priority 2: albumArt / thumbnail (beberapa versi MediaStore)
-    if ((native as any).albumArt?.trim()) {
-      return (native as any).albumArt;
-    }
-    if ((native as any).thumbnail?.trim()) {
-      return (native as any).thumbnail;
-    }
+  // Priority 2: Field albumArt/thumbnail
+  if ((native as any).albumArt?.trim()) return (native as any).albumArt;
 
-    // Priority 3: Bisa ditambahkan di masa depan embedded artwork via FFmpeg / custom native module
-    // Untuk sekarang kita return null dulu
-
-    return null;
+  // Priority 3: ✅ GENERATE URI dari Album ID (Standard Android)
+  if (native.albumId) {
+    return `content://media/external/audio/albums/${native.albumId}/albumart`;
   }
+
+  return null;
+}
 
   // === Utility Methods (tidak berubah banyak) ===
 
@@ -172,3 +167,4 @@ class MetadataExtractor {
 }
 
 export default new MetadataExtractor(); 
+
