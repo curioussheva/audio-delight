@@ -1,4 +1,4 @@
-package com.pristineaudio.app
+package com.pristineaudio
 
 import com.facebook.react.bridge.*
 import android.util.Log
