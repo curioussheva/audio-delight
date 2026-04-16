@@ -13,7 +13,7 @@ class USBDACPackage : ReactPackage {
         NativeDSPModule(reactContext),
         NativeVisualizerBridge(reactContext),
         MediaStoreModule(reactContext)
-        OboeAudioProcessor(reactContext)
+       // OboeAudioProcessor(reactContext)
     )
 }
 
