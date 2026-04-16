@@ -98,6 +98,12 @@ dependencies {
     // PRISTINE AUDIO ENGINE: Oboe Library
     implementation 'com.google.oboe:oboe:1.9.0'
 
+    // MEDIA3 EXOPLAYER - Required for AudioProcessor
+    def media3Version = "1.6.1"
+    implementation "androidx.media3:media3-common:$media3Version"
+    implementation "androidx.media3:media3-exoplayer:$media3Version"
+    implementation "androidx.media3:media3-decoder:$media3Version"
+
     // JS Engine (Hermes/JSC)
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
