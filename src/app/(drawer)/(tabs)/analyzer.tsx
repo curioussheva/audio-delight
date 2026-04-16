@@ -13,7 +13,6 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useFocusEffect } from '@react-navigation/native';
 import {
   RefreshCw,
   FileAudio,
@@ -24,7 +23,6 @@ import {
   Music,
   WifiOff,
 } from "lucide-react-native";
-import { NativeModules } from "react-native";
 
 // Hooks & Store
 import { useTheme } from "@/shared/context/ThemeContext";
@@ -50,11 +48,10 @@ export default function AnalyzerScreen() {
   const { theme } = useTheme();
   const { colors } = theme;
 
-  // ✅ Ambil langsung dari playerStore (reaktif)
+  // Reaktif dari playerStore — session ID diset oleh playback.ts, bukan di sini
   const currentSong = usePlayerStore((state) => state.currentSong);
   const isPlaying = usePlayerStore((state) => state.isPlaying);
   const audioSessionId = usePlayerStore((state) => state.audioSessionId);
-  const setAudioSessionId = usePlayerStore((state) => state.setAudioSessionId);
   const { isExclusiveMode, currentDAC } = useUSBDAC();
 
   // Local state
@@ -64,36 +61,21 @@ export default function AnalyzerScreen() {
   const [artistBio, setArtistBio] = useState<string | null>(null);
   const [enrichState, setEnrichState] = useState<EnrichState>("idle");
   const [enrichSource, setEnrichSource] = useState<"db" | "musicbrainz" | null>(null);
-
-  // ✅ State untuk fallback visualizer
   const [waitingForSession, setWaitingForSession] = useState(false);
 
   // ─── Effects ──────────────────────────────────────────────────────────────
 
-  // Reset waiting timer saat session ID berubah
+  // Waiting indicator — tampilkan setelah 2 detik jika playing tapi belum ada session
   useEffect(() => {
     if (audioSessionId && audioSessionId > 0) {
       setWaitingForSession(false);
     } else if (isPlaying) {
-      // Tampilkan waiting setelah 2 detik
       const timer = setTimeout(() => setWaitingForSession(true), 2000);
       return () => clearTimeout(timer);
     } else {
       setWaitingForSession(false);
     }
   }, [audioSessionId, isPlaying]);
-useFocusEffect(
-  useCallback(() => {
-    // Selalu cek saat focus, tapi jangan re-create callback saat session berubah
-    NativeModules.NativeDSPModule?.getActiveAudioSessionId?.()
-      ?.then((id: number) => {
-        if (id > 0 && id !== audioSessionId) {
-          setAudioSessionId(id);
-        }
-      })
-      ?.catch(() => {});
-  }, []) // deps kosong — hanya run saat focus
-);
 
   // Load artist metadata dari DB
   useEffect(() => {
@@ -226,9 +208,9 @@ useFocusEffect(
   if (!currentSong) {
     return (
       <View style={[styles.center, { backgroundColor: colors.background.primary }]}>
-        <BarChart3 size={64} color={colors.text.disabled} />
-        <Text style={[styles.emptyText, { color: colors.text.secondary }]}>
-          Putar lagu untuk memulai analisa mendalam
+        <Music size={48} color={colors.text.disabled} />
+        <Text style={[styles.emptyText, { color: colors.text.tertiary }]}>
+          Putar lagu untuk melihat analisis audio
         </Text>
       </View>
     );
@@ -238,44 +220,59 @@ useFocusEffect(
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background.primary }]}
       contentContainerStyle={{
-        paddingTop: insets.top + 20,
-        paddingBottom: insets.bottom + 40,
+        paddingTop: insets.top + 16,
         paddingHorizontal: 16,
+        paddingBottom: insets.bottom + 80,
       }}
-      showsVerticalScrollIndicator={false}
     >
       <Text style={[styles.title, { color: colors.text.primary }]}>
-        Audio Deep Analysis
+        Audio Analyzer
       </Text>
 
-      {/* 1. LIVE SPECTRUM */}
+      {/* 1. SPECTRUM VISUALIZER */}
       {audioSessionId && audioSessionId > 0 ? (
-  <SpectrumAnalyzer
-    key={`spectrum-${audioSessionId}`}
-    width={screenWidth - 72}
-    height={160}
-    mode="bars"
-    barCount={42}
-    isPlaying={isPlaying}
-    audioSessionId={audioSessionId}
-    sensitivity={1.5}
-    color={colors.primary[500]}
-    centerArt={currentSong?.artwork}
-    showCenterArt={true}
-  /> 
-) : (
-  <View style={styles.visualizerPlaceholder}>
-    <ActivityIndicator color={colors.primary[500]} />
-    <Text style={{ color: colors.text.tertiary, marginTop: 12 }}>
-      {waitingForSession
-        ? "Menunggu audio session..."
-        : "Mempersiapkan visualizer..."}
-    </Text>
-    <Text style={{ color: colors.text.disabled, fontSize: 12, marginTop: 4 }}>
-      Session ID: {audioSessionId || "none"}
-    </Text>
-  </View>
-)}
+        <View style={[styles.card, { backgroundColor: colors.background.secondary, padding: 16 }]}>
+          <View style={[styles.cardHeader, { marginBottom: 12 }]}>
+            <BarChart3 size={16} color={colors.primary[500]} />
+            <Text style={[styles.label, { color: colors.primary[500] }]}>
+              SPECTRUM ANALYZER
+            </Text>
+          </View>
+          <SpectrumAnalyzer
+            width={screenWidth - 64}
+            height={160}
+            mode="bars"
+            barCount={48}
+            color={colors.primary[500]}
+            backgroundColor="transparent"
+            sensitivity={2.2}
+            isPlaying={isPlaying}
+            audioSessionId={audioSessionId}
+          />
+        </View>
+      ) : (
+        <View style={[styles.card, { backgroundColor: colors.background.secondary }]}>
+          <View style={styles.visualizerPlaceholder}>
+            {isPlaying ? (
+              <>
+                <ActivityIndicator color={colors.primary[500]} />
+                <Text style={{ color: colors.text.tertiary, marginTop: 12 }}>
+                  {waitingForSession
+                    ? "Menunggu audio session..."
+                    : "Mempersiapkan visualizer..."}
+                </Text>
+                <Text style={{ color: colors.text.disabled, fontSize: 12, marginTop: 4 }}>
+                  Session ID: {audioSessionId || "none"}
+                </Text>
+              </>
+            ) : (
+              <Text style={{ color: colors.text.disabled, fontSize: 13 }}>
+                Putar lagu untuk melihat spektrum
+              </Text>
+            )}
+          </View>
+        </View>
+      )}
 
       {/* 2. AUTHENTICITY STATUS */}
       <View style={[styles.card, { backgroundColor: colors.background.secondary }]}>
@@ -489,5 +486,5 @@ const styles = StyleSheet.create({
   bioText: { fontSize: 14, lineHeight: 22, textAlign: "justify" },
   errorState: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8 },
   errorText: { fontSize: 13, fontWeight: "600", flex: 1 },
-}); 
-
+});
+ 

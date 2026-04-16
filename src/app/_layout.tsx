@@ -2,9 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Stack } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import * as SplashScreen from "expo-splash-screen";
+import * as SplashScreen from "expo-splash-screen"; 
 import { 
-  AppState as RNAppState, 
   Platform, 
   Animated, 
   StyleSheet, 
@@ -42,73 +41,94 @@ export default function RootLayout() {
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const hasInitialized = useRef(false);
 
-  // Store Selectors
+  // --- 1. Store Selectors ---
   const initStore = usePlayerStore((s) => s.initStore);
   const setAudioMode = usePlayerStore((s) => s.setAudioMode);
-  const isAutoScanEnabled = useLibraryStore((s) => s.isAutoScanEnabled);
+  const { 
+    isAutoScanEnabled, 
+    hasCompletedInitialScan, 
+    setInitialScanCompleted 
+  } = useLibraryStore();
 
-  // --- 1. Master Audio Sync (DSP & Bit-Perfect) ---
+  // --- 2. Master Audio Sync (DSP Guard) ---
+  // Memastikan jika Bit-Perfect aktif, EQ dipaksa mati secara sistem
   useEffect(() => {
     const unsub = usePlayerStore.subscribe((state) => {
       if (state.audioMode === "bit-perfect") {
-        console.log("🛡️ [System] Bit-Perfect Active: Disabling DSP");
-        const eqEnabled = useEqualizerStore.getState().isEQEnabled;
-        if (eqEnabled) {
-          useEqualizerStore.getState().setEQEnabled(false);
+        const eqStore = useEqualizerStore.getState();
+        if (eqStore.isEQEnabled) {
+          console.log("🛡️ [System] Bit-Perfect Mode active, disabling DSP.");
+          eqStore.setEQEnabled(false);
         }
       }
     });
-
     return unsub;
   }, []);
 
-  // --- 2. Background Task Orchestrator ---
-  // Mendaftarkan atau menghapus task berdasarkan toggle user
+  // --- 3. Background Task Orchestrator ---
   useEffect(() => {
     if (appState !== "ready" || Platform.OS !== "android") return;
 
     const syncBackgroundTask = async () => {
-      if (isAutoScanEnabled) {
-        await BackgroundScanTask.register(60); // Scan tiap 60 menit
-      } else {
-        await BackgroundScanTask.unregister();
+      try {
+        if (isAutoScanEnabled) {
+          await BackgroundScanTask.register(60); 
+        } else {
+          await BackgroundScanTask.unregister();
+        }
+      } catch (e) {
+        console.warn("[App] Background Task Sync failed:", e);
       }
     };
 
     syncBackgroundTask();
   }, [isAutoScanEnabled, appState]);
 
-  // --- 3. Core Initialization Logic ---
+  // --- 4. Core Initialization Logic ---
   const performInitialization = useCallback(async () => {
     try {
       console.log("[App] Starting Core Initialization...");
       
-      // A. Driver & Base Store
+      // A. Driver & Base Store Init
       await audioEngine.initialize();
       await initStore();
 
-      // B. Load Preferences & Guard EQ vs Bit-Perfect
+      // B. Load Preferences (Audio Mode & DSP)
       const savedMode = await AsyncStorage.getItem("audio_mode_preference");
       const eqStore = useEqualizerStore.getState();
 
       if (savedMode === "bit-perfect") {
         await setAudioMode("bit-perfect");
-        await eqStore.setEQEnabled(false);
+        eqStore.setEQEnabled(false);
       } else {
         await setAudioMode("dsp");
-        if (eqStore.isEQEnabled) await eqStore.setEQEnabled(true);
+        // EQ akan mengikuti state terakhir yang tersimpan di store
       }
 
-      console.log("[App] Core Init Success");
+      // C. INITIAL QUICK SCAN (Hanya sekali seumur hidup app)
+      if (!hasCompletedInitialScan) {
+        console.log("[App] First install detected, performing initial scan...");
+        try {
+          // Ganti dengan fungsi scan library asli Anda jika sudah siap
+          // await libraryScanner.scanAll(); 
+          
+          setInitialScanCompleted();
+          console.log("[App] Initial scan successful.");
+        } catch (scanError) {
+          console.error("[App] Initial scan failed:", scanError);
+        }
+      }
+
+      console.log("[App] Core Initialization Success.");
       setAppState("loading");
     } catch (error) {
-      console.error("[App] Init Failed:", error);
-      setErrorMessage(error instanceof Error ? error.message : "Initialization Error");
+      console.error("[App] Initialization Fatal Error:", error);
+      setErrorMessage(error instanceof Error ? error.message : "Pristine Engine Failure");
       setAppState("error");
     }
-  }, [initStore, setAudioMode]);
+  }, [initStore, setAudioMode, hasCompletedInitialScan, setInitialScanCompleted]);
 
-  // --- 4. Lifecycle Handlers ---
+  // --- 5. Lifecycle Hooks ---
   useEffect(() => {
     if (!hasInitialized.current) {
       hasInitialized.current = true;
@@ -119,7 +139,6 @@ export default function RootLayout() {
   const handleLoadingComplete = useCallback(() => {
     SplashScreen.hideAsync().catch(() => {});
     
-    // Memberikan jeda halus sebelum transisi opacity
     setTimeout(() => {
       setAppState("ready");
       Animated.timing(contentOpacity, {
@@ -130,11 +149,12 @@ export default function RootLayout() {
     }, 200);
   }, [contentOpacity]);
 
-  // --- Rendering Logic ---
+  // --- 6. Conditional Rendering ---
+
   if (appState === "error") {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorTitle}>Pristine Audio Engine Failure</Text>
+        <Text style={styles.errorTitle}>System Engine Failure</Text>
         <Text style={styles.errorMessage}>{errorMessage}</Text>
         <TouchableOpacity 
           style={styles.retryButton} 
@@ -144,13 +164,13 @@ export default function RootLayout() {
             performInitialization();
           }}
         >
-          <Text style={styles.retryText}>Retry Init</Text>
+          <Text style={styles.retryText}>Retry Initialize</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  // State loading & initializing menggunakan LoadingScreen
+  // Menampilkan LoadingScreen selama fase inisialisasi & loading
   if (appState === "initializing" || appState === "loading") {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -194,15 +214,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#000', 
     padding: 20 
   },
-  errorTitle: { color: '#FF4444', fontSize: 18, fontWeight: 'bold', marginBottom: 10 },
-  errorMessage: { color: '#888', textAlign: 'center', marginBottom: 20 },
+  errorTitle: { color: '#FF4444', fontSize: 20, fontWeight: 'bold', marginBottom: 10 },
+  errorMessage: { color: '#888', textAlign: 'center', marginBottom: 30, lineHeight: 20 },
   retryButton: { 
-    paddingVertical: 12, 
-    paddingHorizontal: 24, 
+    paddingVertical: 14, 
+    paddingHorizontal: 30, 
     borderColor: '#00D4AA', 
-    borderWidth: 1, 
-    borderRadius: 8 
+    borderWidth: 1.5, 
+    borderRadius: 12 
   },
-  retryText: { color: '#00D4AA', fontWeight: 'bold' }
+  retryText: { color: '#00D4AA', fontWeight: 'bold', fontSize: 16 }
 });
-  

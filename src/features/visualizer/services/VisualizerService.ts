@@ -1,3 +1,5 @@
+// src/features/visualizer/services/VisualizerService.ts
+
 import {
   AppState,
   AppStateStatus,
@@ -34,6 +36,7 @@ class VisualizerService {
   private isStarted = false;
   private isPaused = false;
   private lastSessionId = 0;
+  private pendingSessionId = 0; // session ID dari playback.ts sebelum callback diset
   private retryCount = 0;
   private readonly maxRetries = 3;
   private previousData: number[] | null = null;
@@ -41,9 +44,20 @@ class VisualizerService {
 
   constructor() {
     this.setupAppStateListener();
+    // Subscribe ke emitter SEKALI di konstruktor — tidak hilang karena stop()
+    this.subscribeToEmitter();
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
+
+  private subscribeToEmitter(): void {
+    if (!visualizerEmitter || this.subscription) return;
+    try {
+      this.subscription = visualizerEmitter.addListener("onFftData", this.handleFftData);
+    } catch (e) {
+      console.error("[VisualizerService] Failed to subscribe to emitter:", e);
+    }
+  }
 
   private setupAppStateListener() {
     this.appStateSubscription?.remove();
@@ -71,58 +85,71 @@ class VisualizerService {
   // ── Public API ─────────────────────────────────────────────────────────────
 
   /**
-   * Initialize dengan callback biasa (bukan SharedValue).
-   * Harus dipanggil sebelum start().
+   * Set callback untuk menerima FFT data.
+   * Dipanggil dari SpectrumAnalyzer saat mount.
+   * Bisa dipanggil sebelum atau sesudah start().
+   */
+  setDataCallback(
+    callback: (data: number[]) => void,
+    config?: Partial<VisualizerConfig>,
+  ): void {
+    if (typeof callback !== "function") {
+      console.error("[VisualizerService] setDataCallback() requires a function");
+      return;
+    }
+    if (config) this.config = { ...this.config, ...config };
+    this.onFftData = callback;
+    this.previousData = null;
+
+    // Kalau sudah ada pending session ID dari playback.ts tapi belum ada callback,
+    // start sekarang
+    if (this.pendingSessionId > 0 && !this.isStarted) {
+      const sid = this.pendingSessionId;
+      this.pendingSessionId = 0;
+      this.doStart(sid).catch(() => {});
+    }
+  }
+
+  /**
+   * Alias lama untuk kompatibilitas dengan SpectrumAnalyzer yang pakai initialize().
+   * @deprecated gunakan setDataCallback()
    */
   initialize(
     callback: (data: number[]) => void,
     config?: Partial<VisualizerConfig>,
   ): boolean {
-    if (typeof callback !== "function") {
-      console.error("[VisualizerService] initialize() requires a callback function");
-      return false;
-    }
-
-    this.config = { ...this.config, ...config };
-    this.stopSubscription();
-    this.onFftData = callback;
-    this.previousData = null;
-
-    if (!visualizerEmitter) {
-      console.warn("[VisualizerService] Emitter not available");
-      return false;
-    }
-
-    try {
-      this.subscription = visualizerEmitter.addListener(
-        "onFftData",
-        this.handleFftData,
-      );
-      return true;
-    } catch (e) {
-      console.error("[VisualizerService] Failed to subscribe:", e);
-      return false;
-    }
+    this.setDataCallback(callback, config);
+    return true;
   }
 
+  /**
+   * Start visualizer dengan session ID.
+   * Aman dipanggil sebelum setDataCallback() — akan di-queue.
+   */
   async start(sessionId: number = 0): Promise<boolean> {
     if (!NativeVisualizerBridge) return false;
-    if (sessionId === 0) {
-      console.warn("[VisualizerService] Invalid session ID: 0");
+    if (sessionId <= 0) {
+      console.warn("[VisualizerService] Invalid session ID:", sessionId);
       return false;
     }
-    if (!this.onFftData) {
-      console.warn("[VisualizerService] Call initialize() before start()");
-      return false;
-    }
+
     if (this.isStarted && this.lastSessionId === sessionId) return true;
     if (this.isStarted && this.lastSessionId !== sessionId) {
       this.stopNativeVisualizer();
+      this.isStarted = false;
     }
 
     this.lastSessionId = sessionId;
     this.isPaused = false;
     this.retryCount = 0;
+
+    // Kalau callback belum diset, simpan session ID dan tunggu
+    if (!this.onFftData) {
+      console.log("[VisualizerService] Callback not set yet, queuing session", sessionId);
+      this.pendingSessionId = sessionId;
+      return false;
+    }
+
     return this.doStart(sessionId);
   }
 
@@ -132,6 +159,7 @@ class VisualizerService {
       if (success) {
         this.isStarted = true;
         this.retryCount = 0;
+        this.lastSessionId = sessionId;
         console.log("[VisualizerService] Started for session", sessionId);
         return true;
       }
@@ -151,11 +179,12 @@ class VisualizerService {
   pause(): void {
     if (!this.isStarted || this.isPaused) return;
     this.isPaused = true;
+    this.isStarted = false;
     this.stopNativeVisualizer();
   }
 
   async resume(): Promise<boolean> {
-    if (!this.isPaused || this.lastSessionId === 0) return this.isStarted;
+    if (this.lastSessionId === 0) return false;
     const success = await this.doStart(this.lastSessionId);
     if (success) this.isPaused = false;
     return success;
@@ -165,14 +194,18 @@ class VisualizerService {
     this.isStarted = false;
     this.isPaused = false;
     this.lastSessionId = 0;
+    this.pendingSessionId = 0;
     this.retryCount = 0;
     this.previousData = null;
-    this.stopSubscription();
+    // TIDAK hapus subscription — emitter tetap aktif
+    // TIDAK hapus onFftData — callback tetap valid untuk track berikutnya
     this.stopNativeVisualizer();
   }
 
   destroy(): void {
     this.stop();
+    try { this.subscription?.remove(); } catch (_) {}
+    this.subscription = null;
     this.appStateSubscription?.remove();
     this.appStateSubscription = null;
     this.onFftData = null;
@@ -182,11 +215,11 @@ class VisualizerService {
 
   private handleFftData = (data: number[]) => {
     if (!this.onFftData) return;
+    if (!this.isStarted) return; // jangan proses kalau sudah stop/pause
     if (!Array.isArray(data) || data.length !== 128) {
       console.warn("[VisualizerService] Invalid FFT data length:", data?.length);
       return;
     }
-
     const smoothed = this.applySmoothing(data);
     this.onFftData(smoothed);
   };
@@ -211,7 +244,8 @@ class VisualizerService {
       isStarted: this.isStarted,
       isPaused: this.isPaused,
       sessionId: this.lastSessionId,
-      isInitialized: this.onFftData !== null,
+      pendingSessionId: this.pendingSessionId,
+      hasCallback: this.onFftData !== null,
     };
   }
 
@@ -219,13 +253,9 @@ class VisualizerService {
     try { NativeVisualizerBridge?.stopVisualizer(); } catch (_) {}
   }
 
-  private stopSubscription(): void {
-    try { this.subscription?.remove(); } catch (_) {}
-    this.subscription = null;
-  }
-
   private delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 }
 
 export const visualizerService = new VisualizerService();
-export default visualizerService; 
+export default visualizerService;
+ 

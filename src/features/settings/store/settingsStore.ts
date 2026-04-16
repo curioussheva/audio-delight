@@ -13,7 +13,7 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-      enableOnlineArtistImage: true,
+      enableOnlineArtistImage: false,
       downloadOnlyOnWiFi: true,
 
       setEnableOnlineArtistImage: (enableOnlineArtistImage) => 
