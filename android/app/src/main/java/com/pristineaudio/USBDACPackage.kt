@@ -13,10 +13,11 @@ class USBDACPackage : ReactPackage {
         NativeDSPModule(reactContext),
         NativeVisualizerBridge(reactContext),
         MediaStoreModule(reactContext)
+        OboeAudioProcessor(reactContext)
     )
 }
 
     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {
         return emptyList()
     }
-} 
+}  

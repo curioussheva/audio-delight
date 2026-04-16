@@ -662,37 +662,57 @@ export class LibraryScanner {
     return (hash >>> 0).toString(36);
   }
   
-  private static dbRowToSong(row: any): Song {
-    return {
-      id: row.id,
-      uri: row.uri || "",
-      title: row.title || "Unknown Title",
-      artist: row.artist || "Unknown Artist",
-      album: row.album || "Unknown Album",
-      genre: row.genre || "Unknown Genre",
-      folder: row.folder || "Music",
-      filename: row.filename || "Unknown File",
-      artwork: row.artwork,
-      duration: row.duration || 0,
-      codec: row.codec || "UNKNOWN",
-      sampleRate: row.sampleRate || 0,
-      bitDepth: row.bitDepth || 0,
-      bitrate: row.bitrate || 0,
-      fileSize: row.fileSize || 0,
-      channels: row.channels || 2,
-      year: row.year || 0,
-      trackNumber: row.trackNumber || 0,
-      discNumber: row.discNumber || 0,
-      playCount: row.playCount || 0,
-      rating: row.rating || 0,
-      dateAdded: row.dateAdded || Date.now(),
-      isEnriched: row.isEnriched === 1,
-      isFavorite: row.isFavorite === 1,
-      compilation: row.compilation === 1,
-      explicit: row.explicit === 1,
-      isHiRes: (row.sampleRate > 48000) || (row.bitDepth > 16),
-    } as Song;
-  }
+  public static dbRowToSong(row: any): Song {
+  return {
+    // Required fields
+    id: String(row.id || ""),
+    uri: row.uri || "",
+    title: row.title || "Unknown Title",
+    artist: row.artist || "Unknown Artist",
+    album: row.album || "Unknown Album",
+    duration: Number(row.duration || 0),
+
+    // Optional fields
+    genre: row.genre || undefined,
+    folder: row.folder || undefined,
+    filename: row.filename || undefined,
+    artwork: row.artwork || undefined,
+    codec: row.codec || undefined,
+    sampleRate: Number(row.sampleRate) || undefined,
+    bitDepth: Number(row.bitDepth) || undefined,
+    bitrate: Number(row.bitrate) || undefined,
+    fileSize: Number(row.fileSize) || undefined,
+    channels: Number(row.channels) || 2,
+    year: Number(row.year) || undefined,
+    trackNumber: Number(row.trackNumber) || undefined,
+    discNumber: Number(row.discNumber) || undefined,
+    
+    // Boolean fields
+    isEnriched: Boolean(row.isEnriched),
+    isFavorite: Boolean(row.isFavorite),
+    isHiRes: (Number(row.sampleRate) > 48000) || (Number(row.bitDepth) > 16),
+    
+    // Additional fields
+    albumId: Number(row.albumId) || undefined,
+    label: row.label || undefined,
+    publisher: row.publisher || undefined,
+    mood: row.mood || undefined,
+    tempo: Number(row.tempo) || undefined,
+    artistImageUrl: row.artistImageUrl || undefined,
+    artistBio: row.artistBio || undefined,
+    
+    // ✅ Tambahan untuk PlaylistService
+    playCount: Number(row.playCount) || 0,
+    rating: Number(row.rating) || 0,
+    lastPlayed: Number(row.lastPlayed) || undefined,
+    dateModified: Number(row.dateModified) || undefined,
+    lastSeenAt: Number(row.lastSeenAt) || Date.now(),
+    lastEnrichedAt: Number(row.lastEnrichedAt) || undefined,
+    
+    // Timestamp
+    dateAdded: Number(row.dateAdded) || Date.now(),
+  };
+}
   
   private static getLastScanTimestamp(): number {
     try {

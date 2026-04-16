@@ -82,7 +82,7 @@ export const ReverbDropdown: React.FC<ReverbProps> = ({
             style={styles.modalBackdrop}
             onPress={() => setModalVisible(false)}
           />
-          <View style={[styles.dropdownContainer, { backgroundColor: theme.colors.background }]}>
+          <View style={[styles.dropdownContainer, { backgroundColor: theme.colors.background.primary }]}>
             <Text style={styles.modalTitle}>Select Reverb Preset</Text>
             
             <FlatList

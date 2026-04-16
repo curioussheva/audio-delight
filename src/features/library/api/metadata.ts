@@ -6,7 +6,7 @@ import { MediaStore, NativeSong } from "@/features/library/native/MediaStoreModu
 import { Song } from "@/shared/types/audio";
 
 class MetadataExtractor {
-  
+
   /**
    * Extract metadata satu lagu
    */
@@ -18,7 +18,7 @@ class MetadataExtractor {
       if (!nativeSong) return null;
 
       return this.convertNativeToSong(nativeSong);
-      
+
     } catch (error) {
       console.error(`[MetadataExtractor] Extract failed for ${uri}:`, error);
       return null;
@@ -70,14 +70,14 @@ class MetadataExtractor {
       id: native.id?.toString() || this.uriToId(safeUri),
       uri: safeUri,
       filename: native.filename || "",
-      
+
       title: native.title?.trim() || this.parseTitleFromFilename(native.filename || ""),
       artist: native.artist?.trim() || "Unknown Artist",
       album: native.album?.trim() || "Unknown Album",
       genre: native.genre?.trim() || "Unknown",
-      
+
       folder: native.folder?.trim() || this.extractFolder(safeUri),
-      
+
       // Artwork yang sudah di-normalisasi
       artwork: artwork || undefined,
 
@@ -101,21 +101,21 @@ class MetadataExtractor {
    * Extract Best Artwork - Logic yang lebih kuat
    */
   private extractBestArtwork(native: NativeSong): string | null {
-  // Priority 1: Field artworkUri asli
-  if (native.artworkUri?.trim()) return native.artworkUri;
+    // Priority 1: Field artworkUri asli
+    if (native.artworkUri?.trim()) return native.artworkUri;
 
-  // Priority 2: Field albumArt/thumbnail
-  if ((native as any).albumArt?.trim()) return (native as any).albumArt;
+    // Priority 2: Field albumArt/thumbnail
+    if ((native as any).albumArt?.trim()) return (native as any).albumArt;
 
-  // Priority 3: ✅ GENERATE URI dari Album ID (Standard Android)
-  if (native.albumId) {
-    return `content://media/external/audio/albums/${native.albumId}/albumart`;
+    // Priority 3: ✅ GENERATE URI dari Album ID (Standard Android)
+    if ((native as any).albumId) {
+      return `content://media/external/audio/albums/${(native as any).albumId}/albumart`;
+    }
+
+    return null;
   }
 
-  return null;
-}
-
-  // === Utility Methods (tidak berubah banyak) ===
+  // === Utility Methods ===
 
   private parseTitleFromFilename(filename: string): string {
     if (!filename) return "Unknown Title";
@@ -167,4 +167,3 @@ class MetadataExtractor {
 }
 
 export default new MetadataExtractor(); 
-

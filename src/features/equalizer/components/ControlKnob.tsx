@@ -20,8 +20,8 @@ interface KnobProps {
 }
 
 const TICK_ANGLES = [-135, -90, -45, 0, 45, 90, 135];
-const KNOB_SIZE = 120; // Ukuran diperbesar
-const OUTER_SIZE = 140; 
+const KNOB_SIZE = 120;
+const OUTER_SIZE = 140;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -55,16 +55,12 @@ const AnimatedTick = ({
   const animStyle = useAnimatedStyle(() => {
     if (disabled) return { backgroundColor: "rgba(255,255,255,0.05)" };
     const diff = Math.abs(rotation.value - angle);
-    const isActive = diff < 20; // Threshold cahaya tick
-    
+    const isActive = diff < 20;
+
     return {
-      backgroundColor: isActive 
-        ? `rgba(${rgb.r},${rgb.g},${rgb.b},0.9)` 
+      backgroundColor: isActive
+        ? `rgba(${rgb.r},${rgb.g},${rgb.b},0.9)`
         : "rgba(255,255,255,0.1)",
-      transform: [
-        { rotate: `${angle}deg` },
-        { translateY: isActive ? -2 : 0 }, // Efek sedikit "pop" saat aktif
-      ],
       height: isActive ? 14 : 10,
     };
   });
@@ -85,10 +81,13 @@ export const ControlKnob = ({
   const MAX_ROT = 135;
 
   const rgb = parseHexToRGB(color);
-  const rotation = useSharedValue(interpolate(value || 0, [0, 1000], [MIN_ROT, MAX_ROT]));
+  const rotation = useSharedValue(
+    interpolate(value || 0, [0, 1000], [MIN_ROT, MAX_ROT])
+  );
   const startRotation = useSharedValue(0);
+  const offsetY = useSharedValue(0); // ✅ Definisikan offset
 
-  // Sync saat value prop berubah (misal dari preset)
+  // Sync saat value prop berubah
   useEffect(() => {
     if (!isNaN(value)) {
       const newRot = interpolate(value, [0, 1000], [MIN_ROT, MAX_ROT]);
@@ -102,11 +101,10 @@ export const ControlKnob = ({
       startRotation.value = rotation.value;
     })
     .onUpdate((e) => {
-      // Sensitivitas disesuaikan untuk knob besar
       const sensitivity = 0.5;
       let delta = e.translationY * sensitivity;
       let newRot = startRotation.value - delta;
-      
+
       newRot = Math.min(MAX_ROT, Math.max(MIN_ROT, newRot));
       rotation.value = newRot;
 
@@ -133,10 +131,7 @@ export const ControlKnob = ({
 
       <GestureDetector gesture={gesture}>
         <Animated.View style={[styles.knobWrapper, containerStyle]}>
-          {/* Ring Luar (Glow effect) */}
           <View style={[styles.knobOuter, { borderColor: hexToRGBA(color, 0.2) }]}>
-            
-            {/* Tick Marks */}
             <View style={styles.tickMarksContainer}>
               {TICK_ANGLES.map((angle) => (
                 <AnimatedTick
@@ -149,13 +144,10 @@ export const ControlKnob = ({
               ))}
             </View>
 
-            {/* Titik Tengah Indikator */}
             <View style={[styles.centerDot, { backgroundColor: color }]} />
 
-            {/* Bagian Knob yang Berputar */}
             <Animated.View style={[styles.knobSurface, animatedKnobStyle]}>
               <View style={[styles.pointer, { backgroundColor: color }]}>
-                {/* Efek Cahaya di Pointer */}
                 <View style={[styles.pointerGlow, { backgroundColor: color }]} />
               </View>
             </Animated.View>
@@ -200,7 +192,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#050505",
     justifyContent: "center",
     alignItems: "center",
-    // Shadow Mewah
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.8,
@@ -218,7 +209,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: 3,
     borderRadius: 2,
-    top: -5, // Mengambang sedikit di atas ring
+    top: -5,
   },
   centerDot: {
     position: "absolute",
@@ -252,7 +243,7 @@ const styles = StyleSheet.create({
     marginTop: 15,
   },
   valueText: {
-    fontSize: 22, // Ukuran angka diperbesar
+    fontSize: 22,
     fontWeight: "900",
     fontVariant: ["tabular-nums"],
     textShadowColor: "rgba(0,0,0,0.5)",
@@ -270,5 +261,4 @@ const styles = StyleSheet.create({
     color: "#444",
     fontWeight: "bold",
   },
-});
- 
+}); 

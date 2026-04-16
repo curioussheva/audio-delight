@@ -9,6 +9,7 @@ export interface NativeSong {
   title: string;
   artist: string;
   album: string;
+  albumId: number;
   artwork: string;
   artworkUri: string;
   folder: string;

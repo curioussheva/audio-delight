@@ -61,7 +61,6 @@ export interface ThemeColors {
     primary?: string;
     heavy?: string;
   };
-  // FIX: Tambahkan properti gradient karena dipanggil di cyber.ts, dark.ts, dll.
   gradient?: {
     primary: string[];
     secondary?: string[];
@@ -93,12 +92,10 @@ export interface ThemeTypography {
   h2?: { fontSize: number; fontWeight: string; lineHeight: number };
   h3?: { fontSize: number; fontWeight: string; lineHeight: number };
   h4?: { fontSize: number; fontWeight: string; lineHeight: number };
-  // Use body1/body2 for more granular control
   body1?: { fontSize: number; fontWeight: string; lineHeight: number };
   body2?: { fontSize: number; fontWeight: string; lineHeight: number };
   caption?: { fontSize: number; fontWeight: string; lineHeight: number };
   button?: { fontSize: number; fontWeight: string; lineHeight: number };
-  // Keep body as alias/optional for backward compatibility if needed
   body?: { fontSize: number; lineHeight: number };
 }
 
@@ -120,8 +117,8 @@ export interface ThemeShadows {
   xl?: object;
 }
 
-// Tambahkan ID tema baru jika ada yang belum terdaftar agar tidak error di objek tema
 export type ThemeId =
+  // Original themes
   | "deep-navy"
   | "obsidian"
   | "light-elegant"
@@ -135,16 +132,23 @@ export type ThemeId =
   | "golden-hour"
   | "rose-gold"
   | "neon-cyber"
-  | "sunset-orange";
-  | "emerald-noir";
+  | "sunset-orange"
+  | "emerald-noir"
+  // dark.ts themes
+  | "cozy-metallic"
+  | "blue-jeans"
+  | "vinyl-noir"
+  | "aged-whiskey"
+  | "graphite-slate";
 
 export interface Theme {
   id: ThemeId;
   name: string;
-  description?: string; // ✅ Add this (optional)
+  description?: string;
   isDark: boolean;
   colors: ThemeColors;
   typography: ThemeTypography;
   spacing: ThemeSpacing;
   shadows: ThemeShadows;
 }
+ 

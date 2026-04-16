@@ -7,6 +7,7 @@ import { audioEngine } from "@/features/player/api/engine";
 import { Song } from "@/shared/types/audio";
 import { LibraryScanner } from "@/features/library/api/scanner";
 import { SongQueries } from "@/shared/lib/sqlite";
+import { db } from "@/shared/lib/sqlite";
 
 export interface LyricLine {
   time: number;
@@ -347,21 +348,37 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 // ─────────────────────────────────────────────
 // Helper Functions
 // ─────────────────────────────────────────────
-
 const getSongsByIds = (ids: string[]): Song[] => {
   if (!ids.length) return [];
   try {
     const placeholders = ids.map(() => "?").join(", ");
-    const result = LibraryScanner.db?.execute(
+    const result = db.execute(
       `SELECT * FROM songs WHERE id IN (${placeholders})`,
       ids
     );
-    return result?.rows?._array ?? [];
+    const rows = result.rows?._array ?? [];
+    
+    return rows.map((row: any) => ({
+      id: String(row.id || ""),
+      uri: row.uri || "",
+      title: row.title || "Unknown Title",
+      artist: row.artist || "Unknown Artist",
+      album: row.album || "Unknown Album",
+      duration: Number(row.duration || 0),
+      artwork: row.artwork || undefined,
+      genre: row.genre,
+      folder: row.folder,
+      filename: row.filename,
+      sampleRate: Number(row.sampleRate) || undefined,
+      bitDepth: Number(row.bitDepth) || undefined,
+      bitrate: Number(row.bitrate) || undefined,
+      isHiRes: (Number(row.sampleRate) > 48000) || (Number(row.bitDepth) > 16),
+    } as Song));
   } catch (e) {
     console.warn("[Player] getSongsByIds failed:", e);
     return [];
   }
-};
+}; 
 
 const songToTrack = (s: Song) => ({
   id: s.id,

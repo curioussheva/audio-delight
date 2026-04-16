@@ -10,6 +10,15 @@ import Animated, {
   withTiming
 } from "react-native-reanimated";
 
+// Tambah di atas file, atau import dari file types
+interface BandProps {
+  frequency: number;
+  gain: number;
+  onValueChange: (gain: number) => void;
+  color?: string;
+  disabled?: boolean;
+}
+
 const { width } = Dimensions.get("window");
 const BAND_WIDTH = 65; // Ukuran lebar yang pas untuk scroll horizontal
 const SLIDER_HEIGHT = 160; // Tinggi area geser

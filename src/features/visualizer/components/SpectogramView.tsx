@@ -1,5 +1,6 @@
 // src/features/visualizer/components/SpectogramView.tsx
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import {
   View,
   StyleSheet,
@@ -167,7 +168,7 @@ export const SpectogramView = React.memo(
     // Render rects dengan threshold rendah (0.005) agar data kecil terlihat
     const rects = useMemo(() => {
       const threshold = 0.005;
-      const elements: JSX.Element[] = [];
+      const elements: React.ReactElement[] = []; 
 
       for (let row = 0; row < maxRows; row++) {
         for (let col = 0; col < bins; col++) {
