@@ -60,3 +60,44 @@ void AudioEngine::stop() {
         mStream->close();
     }
 }
+
+// ==================== DSP CONTROL METHODS ====================
+
+void AudioEngine::setEqualizerBand(int bandIndex, float gain) {
+    // TODO: Implement actual equalizer (IIR / biquad filter, etc.)
+    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, 
+        "EQ Band %d set to %.2f dB (not yet implemented)", bandIndex, gain);
+    
+    // Placeholder: you can store the values and apply them in onAudioReady later
+}
+
+void AudioEngine::setBassBoost(float intensity) {
+    // TODO: Implement bass boost (low-shelf filter or dedicated effect)
+    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, 
+        "Bass Boost set to %.2f (not yet implemented)", intensity);
+}
+
+void AudioEngine::setExclusiveMode(bool enabled) {
+    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, 
+        "Exclusive Mode requested: %s", enabled ? "ON" : "OFF");
+
+    if (!mStream) return;
+
+    // Restart stream with new sharing mode
+    mStream->stop();
+    mStream->close();
+
+    oboe::AudioStreamBuilder builder;
+    builder.setDirection(oboe::Direction::Output)
+           ->setPerformanceMode(oboe::PerformanceMode::LowLatency)
+           ->setSharingMode(enabled ? oboe::SharingMode::Exclusive : oboe::SharingMode::Shared)
+           ->setFormat(oboe::AudioFormat::Float)
+           ->setChannelCount(oboe::ChannelCount::Stereo)
+           ->setSampleRate(48000)
+           ->setCallback(this);
+
+    oboe::Result result = builder.openStream(mStream);
+    if (result == oboe::Result::OK) {
+        mStream->requestStart();
+    }
+}
