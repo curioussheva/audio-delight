@@ -36,22 +36,21 @@ android {
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
 
+        // --- KONFIGURASI NATIVE ENGINE (C++) ---
         externalNativeBuild {
             cmake {
                 cppFlags "-std=c++17 -Wall"
                 arguments "-DANDROID_STL=c++_shared"
-                abiFilters 'arm64-v8a'
+                // Menambahkan x86_64 agar bisa jalan di emulator PC jika dibutuhkan
+                abiFilters 'arm64-v8a', 'x86_64'
             }
         }
     }
 
-    // --- KONFIGURASI NATIVE ENGINE ---
-    
-
     externalNativeBuild {
         cmake {
             path "src/main/cpp/CMakeLists.txt"
-            version "3.31.6"
+            version "3.31.6" // Sesuai dengan spesifikasi NDK/CMake di GitHub Actions
         }
     }
     
@@ -77,13 +76,20 @@ android {
         }
     }
     
+    // --- PENANGANAN KONFLIK NEW ARCHITECTURE & C++ ---
     packagingOptions {
         jniLibs {
-            def enableLegacyPackaging = findProperty('expo.useLegacyPackaging') ?: 'false'
+            // Memastikan Legacy JNI Bridge (untuk Oboe) tetap berfungsi di New Arch
+            def enableLegacyPackaging = findProperty('expo.useLegacyPackaging') ?: 'true'
             useLegacyPackaging enableLegacyPackaging.toBoolean()
             
-            // Mencegah konflik library STL antara RN dan Oboe
+            // Mencegah duplikasi library saat build biner C++
             pickFirst '**/libc++_shared.so'
+            pickFirst '**/libfbjni.so'
+            pickFirst '**/libjsi.so'
+        }
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
 }
@@ -93,9 +99,10 @@ dependencies {
     implementation("com.facebook.react:react-android")
 
     // PRISTINE AUDIO ENGINE: Oboe Library
-// implementation 'com.google.oboe:oboe:1.9.0'
+    // Kita biarkan di-comment karena CMake akan mengompilasinya langsung dari folder /cpp/oboe
+    // implementation 'com.google.oboe:oboe:1.9.0'
 
-    // MEDIA3 EXOPLAYER - Required for AudioProcessor
+    // MEDIA3 EXOPLAYER - Required for AudioProcessor (PCM data capture)
     def media3Version = "1.6.1"
     implementation "androidx.media3:media3-common:$media3Version"
     implementation "androidx.media3:media3-exoplayer:$media3Version"
@@ -123,4 +130,4 @@ dependencies {
         options.each { android.packagingOptions[prop] += it }
     }
 }
-  
+ 

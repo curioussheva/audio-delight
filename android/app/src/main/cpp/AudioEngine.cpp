@@ -1,146 +1,141 @@
 #include "AudioEngine.h"
 #include <android/log.h>
-#include <cmath>
 
-#define LOG_TAG "AudioEngine"
- 
-// Global pointer untuk JNI
-AudioEngine* gAudioEngine = nullptr;
+#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, "PristineEngine", __VA_ARGS__)
+
+// --- IMPLEMENTASI BIQUAD FILTER ---
+
+void BiquadFilter::setPeakingEQ(float freq, float Q, float gainDb, float sampleRate) {
+    float A = powf(10.0f, gainDb / 40.0f);
+    float omega = 2.0f * M_PI * freq / sampleRate;
+    float alpha = sinf(omega) / (2.0f * Q);
+    
+    float a0 = 1.0f + alpha / A;
+    coeffs.b0 = (1.0f + alpha * A) / a0;
+    coeffs.b1 = (-2.0f * cosf(omega)) / a0;
+    coeffs.b2 = (1.0f - alpha * A) / a0;
+    coeffs.a1 = (-2.0f * cosf(omega)) / a0;
+    coeffs.a2 = (1.0f - alpha / A) / a0;
+}
+
+void BiquadFilter::setLowShelf(float freq, float Q, float gainDb, float sampleRate) {
+    float A = powf(10.0f, gainDb / 40.0f);
+    float omega = 2.0f * M_PI * freq / sampleRate;
+    float alpha = sinf(omega) / (2.0f * Q);
+    float cosW = cosf(omega);
+    float sqrtA2 = 2.0f * sqrtf(A) * alpha;
+
+    float a0 = (A + 1.0f) + (A - 1.0f) * cosW + sqrtA2;
+    coeffs.b0 = (A * ((A + 1.0f) - (A - 1.0f) * cosW + sqrtA2)) / a0;
+    coeffs.b1 = (2.0f * A * ((A - 1.0f) - (A + 1.0f) * cosW)) / a0;
+    coeffs.b2 = (A * ((A + 1.0f) - (A - 1.0f) * cosW - sqrtA2)) / a0;
+    coeffs.a1 = (-2.0f * ((A - 1.0f) + (A + 1.0f) * cosW)) / a0;
+    coeffs.a2 = ((A + 1.0f) + (A - 1.0f) * cosW - sqrtA2) / a0;
+}
+
+float BiquadFilter::process(float in) {
+    float out = in * coeffs.b0 + z1;
+    z1 = in * coeffs.b1 + z2 - coeffs.a1 * out;
+    z2 = in * coeffs.b2 - coeffs.a2 * out;
+    return out;
+}
+
+// --- IMPLEMENTASI AUDIO ENGINE ---
 
 AudioEngine::AudioEngine() {
-    mBuffer.resize(kBufferCapacity, 0.0f);
-    gAudioEngine = this;
+    mBuffer.resize(48000 * 4); // Buffer untuk ~4 detik stereo (mencegah underrun)
+    
+    // Inisialisasi frekuensi EQ standar (Flat 0dB)
+    float freqs[] = {31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000};
+    for(int i = 0; i < 10; i++) {
+        mEqBandsLeft[i].setPeakingEQ(freqs[i], 1.414f, 0.0f, mSampleRate);
+        mEqBandsRight[i].setPeakingEQ(freqs[i], 1.414f, 0.0f, mSampleRate);
+    }
+    mBassBoostLeft.setLowShelf(100.0f, 0.707f, 0.0f, mSampleRate);
+    mBassBoostRight.setLowShelf(100.0f, 0.707f, 0.0f, mSampleRate);
 }
 
-bool AudioEngine::start() {
+void AudioEngine::start() {
     oboe::AudioStreamBuilder builder;
-    builder.setDirection(oboe::Direction::Output)
-           ->setPerformanceMode(oboe::PerformanceMode::LowLatency)
-           ->setSharingMode(oboe::SharingMode::Exclusive)
+    builder.setPerformanceMode(oboe::PerformanceMode::LowLatency)
+           ->setSharingMode(oboe::SharingMode::Exclusive) // Jalur langsung DAC
            ->setFormat(oboe::AudioFormat::Float)
            ->setChannelCount(oboe::ChannelCount::Stereo)
-           ->setSampleRate(48000)
-           ->setCallback(this);
-
-    oboe::Result result = builder.openStream(mStream);
-    if (result != oboe::Result::OK) {
-        __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "Failed to open stream: %d", result);
-        return false;
-    }
-
-    return (mStream->requestStart() == oboe::Result::OK);
+           ->setCallback(this)
+           ->openStream(&mStream);
+           
+    mSampleRate = mStream->getSampleRate();
+    LOGD("Oboe Stream Started. Sample Rate: %f", mSampleRate);
+    mStream->requestStart();
 }
 
-oboe::DataCallbackResult AudioEngine::onAudioReady(
-    oboe::AudioStream *audioStream, void *audioData, int32_t numFrames) {
-
-    float* output = static_cast<float*>(audioData);
-    int32_t numSamplesNeeded = numFrames * 2; // Stereo
-
-    int32_t available = mWriteIndex - mReadIndex;
-
-    if (available < numSamplesNeeded) {
-        memset(audioData, 0, numSamplesNeeded * sizeof(float));
-        return oboe::DataCallbackResult::Continue;
+void AudioEngine::pushData(const float *data, int32_t numSamples) {
+    for (int i = 0; i < numSamples; ++i) {
+        mBuffer[mWriteIndex % mBuffer.size()] = data[i];
+        mWriteIndex++;
     }
+}
 
-    for (int i = 0; i < numSamplesNeeded; i += 2) {
-        float sample = mBuffer[mReadIndex % kBufferCapacity];
-        mReadIndex++;
+oboe::DataCallbackResult AudioEngine::onAudioReady(oboe::AudioStream *audioStream, void *audioData, int32_t numFrames) {
+    float *output = static_cast<float *>(audioData);
+    
+    // Cache atomic variables secara lokal untuk performa
+    float masterGain = mMasterGain.load();
+    float balance = mBalance.load();
+    float stereoWide = mStereoWide.load();
 
-        // Apply Master Volume & Balance
-        float left  = sample * mMasterVolume * (1.0f - mBalance);
-        float right = sample * mMasterVolume * (1.0f + mBalance);
+    for (int i = 0; i < numFrames; ++i) {
+        if (mReadIndex + 1 < mWriteIndex) {
+            // Ambil sample L dan R (Interleaved)
+            float left = mBuffer[mReadIndex++ % mBuffer.size()];
+            float right = mBuffer[mReadIndex++ % mBuffer.size()];
 
-        // TODO: Apply EQ, Bass Boost, Reverb, Sound Stage di sini nanti
+            // 1. Eksekusi 10-Band EQ
+            for(int b = 0; b < 10; b++) {
+                left = mEqBandsLeft[b].process(left);
+                right = mEqBandsRight[b].process(right);
+            }
 
-        output[i]     = left;
-        output[i + 1] = right;
+            // 2. Eksekusi Bass Boost (Low-shelf)
+            left = mBassBoostLeft.process(left);
+            right = mBassBoostRight.process(right);
+
+            // 3. Eksekusi Soundstage (Stereo Widener / Mid-Side Processing)
+            float mid = (left + right) * 0.5f;
+            float side = (left - right) * 0.5f * stereoWide;
+            left = mid + side;
+            right = mid - side;
+
+            // 4. Eksekusi Balance & Master Gain
+            float gainL = masterGain * (1.0f - std::max(0.0f, balance));
+            float gainR = masterGain * (1.0f - std::max(0.0f, -balance));
+
+            output[i * 2] = left * gainL;
+            output[i * 2 + 1] = right * gainR;
+        } else {
+            // Jika buffer kosong (ExoPlayer telat kirim data), keluarkan silence
+            output[i * 2] = 0.0f;
+            output[i * 2 + 1] = 0.0f;
+        }
     }
-
-    if (mWriteIndex - mReadIndex > kBufferCapacity / 2) {
-        mReadIndex = mWriteIndex.load() - numSamplesNeeded;
-    }
-
     return oboe::DataCallbackResult::Continue;
 }
 
-void AudioEngine::stop() {
-    if (mStream) {
-        mStream->stop();
-        mStream->close();
-    }
+// --- FUNGSI SETTER UNTUK JNI ---
+
+void AudioEngine::setEqBand(int band, float gainDb) {
+    if (band < 0 || band > 9) return;
+    float freqs[] = {31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000};
+    mEqBandsLeft[band].setPeakingEQ(freqs[band], 1.414f, gainDb, mSampleRate);
+    mEqBandsRight[band].setPeakingEQ(freqs[band], 1.414f, gainDb, mSampleRate);
 }
 
-// ==================== DSP CONTROLS ====================
-
-void AudioEngine::setEqualizerBand(int bandIndex, float gain) {
-    if (bandIndex >= 0 && bandIndex < 5) {
-        mEqGains[bandIndex] = gain;
-        __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "EQ Band %d = %.2f dB", bandIndex, gain);
-    }
+void AudioEngine::setBassBoost(float gainDb) {
+    mBassBoostLeft.setLowShelf(100.0f, 0.707f, gainDb, mSampleRate);
+    mBassBoostRight.setLowShelf(100.0f, 0.707f, gainDb, mSampleRate);
 }
 
-void AudioEngine::setBassBoost(float intensity) {
-    mBassBoost = intensity;
-    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Bass Boost = %.2f", intensity);
-}
-
-void AudioEngine::setReverb(float amount) {
-    mReverbAmount = amount;
-    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Reverb amount = %.2f", amount);
-}
-
-void AudioEngine::setSoundStage(float width) {
-    mSoundStageWidth = width;
-    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Sound Stage width = %.2f", width);
-}
-
-void AudioEngine::setMasterVolume(float volume) {
-    mMasterVolume = volume;
-    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Master Volume = %.2f", volume);
-}
-
-void AudioEngine::setBalance(float balance) {
-    mBalance = balance;
-    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Balance = %.2f", balance);
-}
-
-void AudioEngine::setExclusiveMode(bool enabled) {
-    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, 
-        "Exclusive Mode requested: %s", enabled ? "ON" : "OFF");
-
-    if (!mStream) return;
-
-    mStream->stop();
-    mStream->close();
-
-    oboe::AudioStreamBuilder builder;
-    builder.setDirection(oboe::Direction::Output)
-           ->setPerformanceMode(oboe::PerformanceMode::LowLatency)
-           ->setSharingMode(enabled ? oboe::SharingMode::Exclusive : oboe::SharingMode::Shared)
-           ->setFormat(oboe::AudioFormat::Float)
-           ->setChannelCount(oboe::ChannelCount::Stereo)
-           ->setSampleRate(48000)
-           ->setCallback(this);
-
-    oboe::Result result = builder.openStream(mStream);
-    if (result == oboe::Result::OK) {
-        mStream->requestStart();
-    } else {
-        __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "Failed to reopen stream: %d", result);
-    }
-}
-
-void AudioEngine::pushData(const float* data, int32_t numSamples) {
-    if (!data || numSamples <= 0) return;
-
-    for (int32_t i = 0; i < numSamples; ++i) {
-        mBuffer[mWriteIndex % kBufferCapacity] = data[i];
-        mWriteIndex++;
-    }
-
-    if (mWriteIndex - mReadIndex > kBufferCapacity * 2) {
-        mReadIndex = mWriteIndex.load() - kBufferCapacity;
-    }
-}
+void AudioEngine::setMasterGain(float gain) { mMasterGain.store(gain); }
+void AudioEngine::setBalance(float balance) { mBalance.store(balance); }
+void AudioEngine::setStereoWide(float width) { mStereoWide.store(width); }
+ 

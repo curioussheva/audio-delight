@@ -1,49 +1,58 @@
-#ifndef PRISTINE_AUDIO_ENGINE_H
-#define PRISTINE_AUDIO_ENGINE_H
-
+#pragma once
 #include <oboe/Oboe.h>
 #include <vector>
 #include <atomic>
+#include <cmath>
+#include <algorithm>
 
-class AudioEngine : public oboe::AudioStreamCallback {
-public:
-    AudioEngine();
-    bool start();
-    void stop();
-
-    // === DSP Controls ===
-    void setEqualizerBand(int bandIndex, float gain);     // band 0-4 (60Hz, 250Hz, 1kHz, 4kHz, 12kHz)
-    void setBassBoost(float intensity);                   // 0.0 - 1.0
-    void setReverb(float amount);                         // 0.0 - 1.0 (wet level)
-    void setSoundStage(float width);                      // 0.0 - 1.0 (stereo width)
-    void setMasterVolume(float volume);                   // 0.0 - 1.0
-    void setBalance(float balance);                       // -1.0 (left) ... 1.0 (right)
-    void setExclusiveMode(bool enabled);
-
-    // Push audio data from Java
-    void pushData(const float* data, int32_t numSamples);
-
-    oboe::DataCallbackResult onAudioReady(
-        oboe::AudioStream *audioStream,
-        void *audioData,
-        int32_t numFrames) override;
-
-private:
-    std::shared_ptr<oboe::AudioStream> mStream;
-
-    // Ring Buffer
-    std::vector<float> mBuffer;
-    std::atomic<int32_t> mReadIndex{0};
-    std::atomic<int32_t> mWriteIndex{0};
-    const int32_t kBufferCapacity = 8192 * 8;
-
-    // DSP Parameters (state)
-    float mEqGains[5] = {0.0f};      // 5-band EQ
-    float mBassBoost = 0.0f;
-    float mReverbAmount = 0.0f;
-    float mSoundStageWidth = 1.0f;   // 1.0 = normal stereo
-    float mMasterVolume = 1.0f;
-    float mBalance = 0.0f;           // -1.0 left, 1.0 right
+struct BiquadCoefficients {
+    float b0, b1, b2, a1, a2;
 };
 
-#endif 
+class BiquadFilter {
+public:
+    void setPeakingEQ(float freq, float Q, float gainDb, float sampleRate);
+    void setLowShelf(float freq, float Q, float gainDb, float sampleRate);
+    float process(float input);
+private:
+    float z1 = 0.0f, z2 = 0.0f; // State memori filter
+    BiquadCoefficients coeffs = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+};
+
+class AudioEngine : public oboe::AudioStreamDataCallback {
+public:
+    AudioEngine();
+    void start();
+    void pushData(const float *data, int32_t numSamples);
+    
+    // Setters untuk JNI
+    void setEqBand(int bandIndex, float gainDb);
+    void setBassBoost(float gainDb);
+    void setMasterGain(float gain);
+    void setBalance(float balance);
+    void setStereoWide(float width);
+    void setExclusiveMode(bool enabled);
+
+    oboe::DataCallbackResult onAudioReady(oboe::AudioStream *audioStream, void *audioData, int32_t numFrames) override;
+
+private:
+    oboe::AudioStream *mStream = nullptr;
+    float mSampleRate = 48000.0f;
+    
+    // Lock-free Ring Buffer sederhana
+    std::vector<float> mBuffer;
+    std::atomic<int32_t> mWriteIndex{0};
+    std::atomic<int32_t> mReadIndex{0};
+
+    // DSP States (DIPISAH KIRI & KANAN)
+    BiquadFilter mEqBandsLeft[10];
+    BiquadFilter mEqBandsRight[10];
+    BiquadFilter mBassBoostLeft;
+    BiquadFilter mBassBoostRight;
+
+    // Parameter Audio
+    std::atomic<float> mMasterGain{1.0f};
+    std::atomic<float> mBalance{0.0f};
+    std::atomic<float> mStereoWide{1.0f};
+};
+ 

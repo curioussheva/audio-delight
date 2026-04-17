@@ -1,44 +1,56 @@
 #include <jni.h>
+#include <vector>
 #include "AudioEngine.h"
 
-// Global static engine (singleton sederhana)
+// Singleton engine
 static AudioEngine* engine = nullptr;
 
 extern "C" {
 
-// ==================== BOOT ENGINE ====================
-// Dipanggil dari NativeDSPModule.kt
+// --- Engine Lifecycle ---
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_NativeDSPModule_bootEngineNative(JNIEnv *env, jobject thiz) {
     if (engine == nullptr) {
         engine = new AudioEngine();
     }
-    if (engine) {
-        engine->start();
-    }
+    if (engine) engine->start();
 }
 
-// ==================== FEED AUDIO DATA ====================
-// Dipanggil dari OboeAudioProcessor.kt
+// --- Audio Data Bridge ---
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_OboeAudioProcessor_feedNativeAudio(
     JNIEnv *env, jobject thiz, jfloatArray data, jint num_samples) {
     
-    if (engine == nullptr || num_samples <= 0) {
-        return;
-    }
-
-    jfloat* samples = env->GetFloatArrayElements(data, nullptr);
-    if (samples != nullptr) {
-        engine->pushData(samples, num_samples);
-        env->ReleaseFloatArrayElements(data, samples, JNI_ABORT);  // Hanya baca
+    if (engine != nullptr && num_samples > 0) {
+        jfloat* samples = env->GetFloatArrayElements(data, nullptr);
+        if (samples != nullptr) {
+            engine->pushData(samples, num_samples);
+            env->ReleaseFloatArrayElements(data, samples, JNI_ABORT);
+        }
     }
 }
 
-// ==================== HELPER UNTUK NATIVE DSP MODULE ====================
-// Agar NativeDSPModule.cpp bisa mengakses engine yang sama
+// --- Visualizer Data (Baru) ---
+JNIEXPORT jfloatArray JNICALL
+Java_com_pristineaudio_NativeVisualizerModule_getVisualizerData(JNIEnv *env, jobject thiz) {
+    // Ukuran FFT standar untuk mobile (128 bin cukup untuk bar visualizer)
+    int binSize = 128;
+    std::vector<float> fftData(binSize, 0.0f); 
+
+    if (engine != nullptr) {
+        // Nanti di AudioEngine.cpp kita buat fungsi getFFT()
+        // fftData = engine->getFFT(); 
+    }
+    
+    jfloatArray result = env->NewFloatArray(binSize);
+    env->SetFloatArrayRegion(result, 0, binSize, fftData.data());
+    return result;
+}
+
+// --- Helper untuk Module Lain ---
 AudioEngine* getAudioEngine() {
     return engine;
 }
 
-} // extern "C" 
+} // extern "C"
+ 
