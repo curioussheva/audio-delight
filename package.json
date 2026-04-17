@@ -10,7 +10,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "reset": "expo start -c",
-    "prebuild": "expo prebuild --clean",
+    "prebuild": "expo prebuild",
     "build:dev": "eas build --platform android --profile development",
     "build:dev:ios": "eas build --platform ios --profile development",
     "build:preview": "eas build --platform all --profile preview",

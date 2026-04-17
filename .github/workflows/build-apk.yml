@@ -25,6 +25,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -52,14 +54,6 @@ jobs:
             "cmake;3.31.6"
           echo "$ANDROID_HOME/cmake/3.31.6/bin" >> $GITHUB_PATH
 
-      - name: Patch Android Build Files
-        run: |
-          ROOT_DIR="${{ github.workspace }}"
-          sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/build.gradle
-          sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/react-native-track-player/android/repo\" }" android/build.gradle
-          sed -i "/defaultConfig {/a \        ndk { abiFilters 'arm64-v8a' }" android/app/build.gradle
-          echo "Patched successfully"
-
       - name: Build Debug APK
         run: |
           cd android
@@ -71,7 +65,6 @@ jobs:
             --max-workers=2 \
             --no-build-cache \
             -PkotlinVersion=2.0.21 \
-            -Pandroid.injected.build.abi.filters=arm64-v8a \
             -Dorg.gradle.jvmargs="-Xmx3g -Xms512m -XX:MaxMetaspaceSize=512m"
 
       - name: Upload Debug APK
