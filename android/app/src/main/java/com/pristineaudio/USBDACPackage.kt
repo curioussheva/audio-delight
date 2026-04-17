@@ -11,7 +11,7 @@ class USBDACPackage : ReactPackage {
     return listOf(
         USBDACModule(reactContext),
         NativeDSPModule(reactContext),
-        NativeVisualizerBridge(reactContext),
+      //  NativeVisualizerBridge(reactContext),
         MediaStoreModule(reactContext)
        // OboeAudioProcessor(reactContext)
     )
