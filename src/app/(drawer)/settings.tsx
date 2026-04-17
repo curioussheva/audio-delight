@@ -11,6 +11,7 @@ import {
   Modal,
   FlatList,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 // Lucide Icons
 import {
@@ -1058,10 +1059,11 @@ export default function SettingsScreen() {
   // ─── Main Render ─────────────────────────────────────────────────────────────
 
   return (
+  <SafeAreaView style={{ flex: 1, backgroundColor: colors.background.primary }}>
     <ScrollView
-      style={[styles.container, { backgroundColor: colors.background.primary }]}
+      style={styles.container}
       contentContainerStyle={{
-        padding: 16, // fallback manual
+        paddingHorizontal: 16,
         paddingBottom: 48,
       }}
       showsVerticalScrollIndicator={false}
@@ -1106,7 +1108,8 @@ export default function SettingsScreen() {
         onClose={() => setShowThemePicker(false)}
       />
     </ScrollView>
-  );
+  </SafeAreaView>
+);
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -1154,3 +1157,5 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
 });
+
+

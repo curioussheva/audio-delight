@@ -51,7 +51,7 @@ import {
 
 // Scan System
 import { useScanManager } from "@/features/library/hooks/useScanManager";
-import { ScanStatusBar } from "@/features/library/components/ScanStatusBar";
+//import { ScanStatusBar } from "@/features/library/components/ScanStatusBar";
 import { EnrichMetadataModal } from "@/features/library/components/EnrichMetadataModal";
 
 // Components
@@ -157,10 +157,7 @@ export default function LibraryScreen() {
 
   // Tab data
   const albums = useMemo(() => selectAlbums(filteredSource), [filteredSource]);
-  const artists = useMemo(
-    () => selectArtists(filteredSource),
-    [filteredSource],
-  );
+  const artists = useMemo(() => selectArtists(filteredSource), [filteredSource]);
   const folders = useMemo(
     () => selectFolders(filteredSource),
     [filteredSource],
@@ -450,16 +447,16 @@ export default function LibraryScreen() {
           />
         );
       case "artist":
-        return (
-          <ArtistList
-            artists={artists} // <--- ADD THIS (Fixes TS2741)
-            tracks={filteredSource}
-            currentTrackId={currentSong?.id}
-            onSongPress={handleSongPress}
-            onToggleFavorite={toggleFavorite}
-            enableOnlineArtistImage={true}
-          />
-        );
+  return (
+    <ArtistList
+      artists={artists}           // <--- ADD THIS (Fixes TS2741)
+      tracks={filteredSource}
+      currentTrackId={currentSong?.id}
+      onSongPress={handleSongPress}
+      onToggleFavorite={toggleFavorite}
+      enableOnlineArtistImage={true}
+    />
+  );
       case "genre":
         return (
           <GenreList
@@ -507,16 +504,13 @@ export default function LibraryScreen() {
   const { playSong, currentSong, isPlaying } = usePlayerStore();
 
   // ── BRIDGE: Convert MediaTrack to Song for Player ──────────────────────────
-  const handleSongPress = useCallback(
-    (track: any, queue: any[]) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  const handleSongPress = useCallback((track: any, queue: any[]) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-      // Kita lakukan casting ke 'any' lalu ke 'Song' di dalam store
-      // Ini menyelesaikan error TS2322 pada AlbumGrid, GenreList, dll.
-      playSong(track, queue);
-    },
-    [playSong],
-  );
+    // Kita lakukan casting ke 'any' lalu ke 'Song' di dalam store
+    // Ini menyelesaikan error TS2322 pada AlbumGrid, GenreList, dll.
+    playSong(track, queue);
+  }, [playSong]);
 
   return (
     <View style={[s.container, { backgroundColor: colors.background.primary }]}>
@@ -694,4 +688,4 @@ const createStyles = (colors: any) =>
       marginTop: 8,
       opacity: 0.6,
     },
-  });
+  }); 

@@ -5,8 +5,8 @@
 #define LOG_TAG "NativeDSP"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 
-// Helper dari Native-lib.cpp
-extern AudioEngine* getAudioEngine();
+// Global pointer dari AudioEngine.cpp (paling penting!)
+extern AudioEngine* gAudioEngine;
 
 extern "C" {
 
@@ -17,9 +17,8 @@ Java_com_pristineaudio_NativeDSPModule_setNativeEqualizerBand(
     
     LOGD("Setting EQ Band %d to %.2f dB", band_index, gain);
     
-    AudioEngine* engine = getAudioEngine();
-    if (engine != nullptr) {
-        engine->setEqualizerBand(band_index, gain);
+    if (gAudioEngine != nullptr) {
+        gAudioEngine->setEqualizerBand(band_index, gain);
     }
 }
 
@@ -30,9 +29,56 @@ Java_com_pristineaudio_NativeDSPModule_setNativeBassBoost(
     
     LOGD("Setting Bass Boost intensity to %.2f", intensity);
     
-    AudioEngine* engine = getAudioEngine();
-    if (engine != nullptr) {
-        engine->setBassBoost(intensity);
+    if (gAudioEngine != nullptr) {
+        gAudioEngine->setBassBoost(intensity);
+    }
+}
+
+// ==================== REVERB ====================
+JNIEXPORT void JNICALL
+Java_com_pristineaudio_NativeDSPModule_setNativeReverb(
+    JNIEnv *env, jobject thiz, jfloat amount) {
+    
+    LOGD("Setting Reverb to %.2f", amount);
+    
+    if (gAudioEngine != nullptr) {
+        gAudioEngine->setReverb(amount);
+    }
+}
+
+// ==================== SOUND STAGE ====================
+JNIEXPORT void JNICALL
+Java_com_pristineaudio_NativeDSPModule_setNativeSoundStage(
+    JNIEnv *env, jobject thiz, jfloat width) {
+    
+    LOGD("Setting Sound Stage width to %.2f", width);
+    
+    if (gAudioEngine != nullptr) {
+        gAudioEngine->setSoundStage(width);
+    }
+}
+
+// ==================== MASTER VOLUME ====================
+JNIEXPORT void JNICALL
+Java_com_pristineaudio_NativeDSPModule_setNativeMasterVolume(
+    JNIEnv *env, jobject thiz, jfloat volume) {
+    
+    LOGD("Setting Master Volume to %.2f", volume);
+    
+    if (gAudioEngine != nullptr) {
+        gAudioEngine->setMasterVolume(volume);
+    }
+}
+
+// ==================== BALANCE ====================
+JNIEXPORT void JNICALL
+Java_com_pristineaudio_NativeDSPModule_setNativeBalance(
+    JNIEnv *env, jobject thiz, jfloat balance) {
+    
+    LOGD("Setting Balance to %.2f", balance);
+    
+    if (gAudioEngine != nullptr) {
+        gAudioEngine->setBalance(balance);
     }
 }
 
@@ -43,9 +89,8 @@ Java_com_pristineaudio_NativeDSPModule_toggleNativeExclusiveMode(
     
     LOGD("Exclusive Mode Toggled: %s", enabled ? "ON" : "OFF");
     
-    AudioEngine* engine = getAudioEngine();
-    if (engine != nullptr) {
-        engine->setExclusiveMode(enabled);
+    if (gAudioEngine != nullptr) {
+        gAudioEngine->setExclusiveMode(enabled);
     }
 }
 

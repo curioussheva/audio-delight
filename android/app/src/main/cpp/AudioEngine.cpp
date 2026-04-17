@@ -1,14 +1,15 @@
 #include "AudioEngine.h"
 #include <android/log.h>
+#include <cmath>
 
 #define LOG_TAG "AudioEngine"
-
-// ==================== GLOBAL POINTER FOR JNI ====================
+ 
+// Global pointer untuk JNI
 AudioEngine* gAudioEngine = nullptr;
 
 AudioEngine::AudioEngine() {
     mBuffer.resize(kBufferCapacity, 0.0f);
-    gAudioEngine = this;                    // Penting! Agar JNI bisa mengakses engine
+    gAudioEngine = this;
 }
 
 bool AudioEngine::start() {
@@ -34,22 +35,29 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
     oboe::AudioStream *audioStream, void *audioData, int32_t numFrames) {
 
     float* output = static_cast<float*>(audioData);
-    int32_t numSamplesNeeded = numFrames * audioStream->getChannelCount();
+    int32_t numSamplesNeeded = numFrames * 2; // Stereo
 
-    int32_t availableSamples = mWriteIndex - mReadIndex;
+    int32_t available = mWriteIndex - mReadIndex;
 
-    if (availableSamples < numSamplesNeeded) {
-        // Underrun → isi silence
+    if (available < numSamplesNeeded) {
         memset(audioData, 0, numSamplesNeeded * sizeof(float));
         return oboe::DataCallbackResult::Continue;
     }
 
-    for (int i = 0; i < numSamplesNeeded; ++i) {
-        output[i] = mBuffer[mReadIndex % kBufferCapacity];
+    for (int i = 0; i < numSamplesNeeded; i += 2) {
+        float sample = mBuffer[mReadIndex % kBufferCapacity];
         mReadIndex++;
+
+        // Apply Master Volume & Balance
+        float left  = sample * mMasterVolume * (1.0f - mBalance);
+        float right = sample * mMasterVolume * (1.0f + mBalance);
+
+        // TODO: Apply EQ, Bass Boost, Reverb, Sound Stage di sini nanti
+
+        output[i]     = left;
+        output[i + 1] = right;
     }
 
-    // Prevent latency buildup
     if (mWriteIndex - mReadIndex > kBufferCapacity / 2) {
         mReadIndex = mWriteIndex.load() - numSamplesNeeded;
     }
@@ -64,18 +72,38 @@ void AudioEngine::stop() {
     }
 }
 
-// ==================== DSP CONTROL METHODS ====================
+// ==================== DSP CONTROLS ====================
 
 void AudioEngine::setEqualizerBand(int bandIndex, float gain) {
-    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, 
-        "EQ Band %d set to %.2f dB (not yet implemented)", bandIndex, gain);
-    // TODO: Implement real biquad EQ here later
+    if (bandIndex >= 0 && bandIndex < 5) {
+        mEqGains[bandIndex] = gain;
+        __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "EQ Band %d = %.2f dB", bandIndex, gain);
+    }
 }
 
 void AudioEngine::setBassBoost(float intensity) {
-    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, 
-        "Bass Boost set to %.2f (not yet implemented)", intensity);
-    // TODO: Implement low-shelf filter here later
+    mBassBoost = intensity;
+    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Bass Boost = %.2f", intensity);
+}
+
+void AudioEngine::setReverb(float amount) {
+    mReverbAmount = amount;
+    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Reverb amount = %.2f", amount);
+}
+
+void AudioEngine::setSoundStage(float width) {
+    mSoundStageWidth = width;
+    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Sound Stage width = %.2f", width);
+}
+
+void AudioEngine::setMasterVolume(float volume) {
+    mMasterVolume = volume;
+    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Master Volume = %.2f", volume);
+}
+
+void AudioEngine::setBalance(float balance) {
+    mBalance = balance;
+    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "Balance = %.2f", balance);
 }
 
 void AudioEngine::setExclusiveMode(bool enabled) {
@@ -84,7 +112,6 @@ void AudioEngine::setExclusiveMode(bool enabled) {
 
     if (!mStream) return;
 
-    // Restart stream dengan sharing mode baru
     mStream->stop();
     mStream->close();
 
@@ -105,8 +132,6 @@ void AudioEngine::setExclusiveMode(bool enabled) {
     }
 }
 
-// ==================== PUSH DATA FROM JAVA ====================
-
 void AudioEngine::pushData(const float* data, int32_t numSamples) {
     if (!data || numSamples <= 0) return;
 
@@ -115,8 +140,7 @@ void AudioEngine::pushData(const float* data, int32_t numSamples) {
         mWriteIndex++;
     }
 
-    // Prevent write index from growing too far ahead
     if (mWriteIndex - mReadIndex > kBufferCapacity * 2) {
         mReadIndex = mWriteIndex.load() - kBufferCapacity;
     }
-} 
+}
