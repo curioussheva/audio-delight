@@ -3,14 +3,17 @@
  */
 
 import { LibraryScanner } from "@/features/library/api/scanner";
-import { MediaStore, NativeSong } from "@/features/library/native/MediaStoreModule";
+import {
+  MediaStore,
+  NativeSong,
+} from "@/features/library/native/MediaStoreModule";
 import MetadataExtractor from "@/features/library/api/metadata";
-import { useLibraryStore } from '../store/libraryStore';
+import { useLibraryStore } from "../store/libraryStore";
 
 /* =============================================
    TYPE DEFINITIONS
    ============================================= */
- 
+
 export type DiffResult = {
   newCount: number;
   deletedCount: number;
@@ -43,8 +46,13 @@ async function getNativeSongs(): Promise<NativeSong[]> {
 
 function _emptyQuickResult(): QuickDiffResult {
   return {
-    newCount: 0, deletedCount: 0, updatedCount: 0,
-    totalScanned: 0, newSongs: [], updatedSongs: [], deletedUris: []
+    newCount: 0,
+    deletedCount: 0,
+    updatedCount: 0,
+    totalScanned: 0,
+    newSongs: [],
+    updatedSongs: [],
+    deletedUris: [],
   };
 }
 
@@ -52,7 +60,7 @@ function _extractFolder(uri: string): string {
   try {
     const parts = uri.split(/[/\\]/);
     for (let i = parts.length - 2; i >= 0; i--) {
-      if (parts[i] && !parts[i].includes('.')) return parts[i];
+      if (parts[i] && !parts[i].includes(".")) return parts[i];
     }
     return "Music";
   } catch {
@@ -63,9 +71,17 @@ function _extractFolder(uri: string): string {
 function _getCodecFromFilename(filename: string): string {
   const ext = filename.split(".").pop()?.toUpperCase() ?? "UNKNOWN";
   const codecMap: Record<string, string> = {
-    'MP3': 'MP3', 'FLAC': 'FLAC', 'WAV': 'WAV', 'M4A': 'AAC',
-    'AAC': 'AAC', 'OGG': 'OGG', 'OPUS': 'OPUS', 'DSF': 'DSD',
-    'DFF': 'DSD', 'ALAC': 'ALAC', 'APE': 'APE',
+    MP3: "MP3",
+    FLAC: "FLAC",
+    WAV: "WAV",
+    M4A: "AAC",
+    AAC: "AAC",
+    OGG: "OGG",
+    OPUS: "OPUS",
+    DSF: "DSD",
+    DFF: "DSD",
+    ALAC: "ALAC",
+    APE: "APE",
   };
   return codecMap[ext] || ext;
 }
@@ -76,12 +92,16 @@ function _getCodecFromFilename(filename: string): string {
 
 async function saveBasicSongInfo(song: NativeSong): Promise<void> {
   if (!song?.id) return;
-  const finalUri = song.uri || `content://media/external/audio/media/${song.id}`;
+  const finalUri =
+    song.uri || `content://media/external/audio/media/${song.id}`;
   const isHiRes = (song.sampleRate || 0) > 48000 || (song.bitDepth || 0) > 16;
 
   // ✅ SOLUSI: Bangun URI artwork secara mandiri jika native.artworkUri kosong
-  const artworkUri = song.artworkUri || 
-    (song.albumId ? `content://media/external/audio/albums/${song.albumId}/albumart` : null);
+  const artworkUri =
+    song.artworkUri ||
+    (song.albumId
+      ? `content://media/external/audio/albums/${song.albumId}/albumart`
+      : null);
 
   const basicData = {
     id: song.id,
@@ -105,9 +125,10 @@ async function saveBasicSongInfo(song: NativeSong): Promise<void> {
   await LibraryScanner.saveToDatabase(basicData);
 }
 
-
-async function processQuickDiff(nativeSongs: NativeSong[]): Promise<QuickDiffResult> {
-  const currentUris = new Set(nativeSongs.map(s => s.uri).filter(Boolean));
+async function processQuickDiff(
+  nativeSongs: NativeSong[],
+): Promise<QuickDiffResult> {
+  const currentUris = new Set(nativeSongs.map((s) => s.uri).filter(Boolean));
   const existingUris = LibraryScanner.getExistingUris();
 
   const newSongs: NativeSong[] = [];
@@ -127,7 +148,7 @@ async function processQuickDiff(nativeSongs: NativeSong[]): Promise<QuickDiffRes
     }
   }
 
-  const deletedUris = [...existingUris].filter(uri => !currentUris.has(uri));
+  const deletedUris = [...existingUris].filter((uri) => !currentUris.has(uri));
   if (deletedUris.length > 0) {
     await LibraryScanner.deleteSongsByUris(deletedUris);
   }
@@ -161,11 +182,15 @@ export const ScanDiffEngine = {
     }
   },
 
-  async runMediaStoreDiff(onProgress?: (c: number, t: number) => void): Promise<DiffResult> {
+  async runMediaStoreDiff(
+    onProgress?: (c: number, t: number) => void,
+  ): Promise<DiffResult> {
     try {
       const nativeSongs = await getNativeSongs();
       const existingUris = LibraryScanner.getExistingUris();
-      const currentUris = new Set(nativeSongs.map(s => s.uri).filter(Boolean));
+      const currentUris = new Set(
+        nativeSongs.map((s) => s.uri).filter(Boolean),
+      );
 
       const newSongs: NativeSong[] = [];
       const updatedSongs: NativeSong[] = [];
@@ -182,7 +207,9 @@ export const ScanDiffEngine = {
         }
       }
 
-      const deletedUris = [...existingUris].filter(uri => !currentUris.has(uri));
+      const deletedUris = [...existingUris].filter(
+        (uri) => !currentUris.has(uri),
+      );
       if (deletedUris.length > 0) {
         await LibraryScanner.deleteSongsByUris(deletedUris);
       }
@@ -207,6 +234,5 @@ export const ScanDiffEngine = {
       console.error("[ScanDiffEngine] Full diff failed:", error);
       throw error;
     }
-  }
+  },
 };
-

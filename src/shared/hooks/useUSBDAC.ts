@@ -154,16 +154,25 @@ export const useUSBDAC = () => {
   }, [currentDAC, config]);
 
   const toggleExclusiveMode = useCallback(async (): Promise<boolean> => {
-    if (!currentDAC) { setError("No DAC selected"); return false; }
+    if (!currentDAC) {
+      setError("No DAC selected");
+      return false;
+    }
     return isExclusiveMode
       ? await deactivateExclusiveMode()
       : await activateExclusiveMode(currentDAC.id); // ✅ .id
-  }, [currentDAC, isExclusiveMode, activateExclusiveMode, deactivateExclusiveMode]);
+  }, [
+    currentDAC,
+    isExclusiveMode,
+    activateExclusiveMode,
+    deactivateExclusiveMode,
+  ]);
 
   const setSampleRate = useCallback(
     async (rate: number | "auto"): Promise<boolean> => {
       if (!config || !currentDAC) return false;
-      if (rate !== "auto" && !currentDAC.sampleRates?.includes(rate)) { // ✅ .sampleRates
+      if (rate !== "auto" && !currentDAC.sampleRates?.includes(rate)) {
+        // ✅ .sampleRates
         setError(`Sample rate ${rate}Hz not supported by DAC`);
         return false;
       }
@@ -188,4 +197,3 @@ export const useUSBDAC = () => {
     checkExclusiveMode,
   };
 };
- 

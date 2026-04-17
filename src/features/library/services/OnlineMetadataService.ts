@@ -68,7 +68,7 @@ const delay = (ms: number): Promise<void> =>
 async function fetchWithRetry(
   url: string,
   options?: RequestInit,
-  retryCount: number = 0
+  retryCount: number = 0,
 ): Promise<Response | null> {
   try {
     const response = await fetch(url, {
@@ -82,7 +82,9 @@ async function fetchWithRetry(
     // Rate limited - retry dengan exponential backoff
     if (response.status === 429 && retryCount < MAX_RETRIES) {
       const delayMs = INITIAL_RETRY_DELAY_MS * Math.pow(2, retryCount);
-      console.warn(`[OnlineMetadata] Rate limited, retrying in ${delayMs}ms...`);
+      console.warn(
+        `[OnlineMetadata] Rate limited, retrying in ${delayMs}ms...`,
+      );
       await delay(delayMs);
       return fetchWithRetry(url, options, retryCount + 1);
     }
@@ -90,7 +92,9 @@ async function fetchWithRetry(
     // Server error - retry
     if (response.status >= 500 && retryCount < MAX_RETRIES) {
       const delayMs = INITIAL_RETRY_DELAY_MS * Math.pow(2, retryCount);
-      console.warn(`[OnlineMetadata] Server error ${response.status}, retrying in ${delayMs}ms...`);
+      console.warn(
+        `[OnlineMetadata] Server error ${response.status}, retrying in ${delayMs}ms...`,
+      );
       await delay(delayMs);
       return fetchWithRetry(url, options, retryCount + 1);
     }
@@ -99,11 +103,17 @@ async function fetchWithRetry(
   } catch (error) {
     if (retryCount < MAX_RETRIES) {
       const delayMs = INITIAL_RETRY_DELAY_MS * Math.pow(2, retryCount);
-      console.warn(`[OnlineMetadata] Network error, retrying in ${delayMs}ms...`, error);
+      console.warn(
+        `[OnlineMetadata] Network error, retrying in ${delayMs}ms...`,
+        error,
+      );
       await delay(delayMs);
       return fetchWithRetry(url, options, retryCount + 1);
     }
-    console.error(`[OnlineMetadata] Failed after ${MAX_RETRIES} retries:`, error);
+    console.error(
+      `[OnlineMetadata] Failed after ${MAX_RETRIES} retries:`,
+      error,
+    );
     return null;
   }
 }
@@ -113,11 +123,13 @@ async function fetchWithRetry(
  */
 async function safeJsonParse<T>(response: Response): Promise<T | null> {
   const contentType = response.headers.get("content-type");
-  
+
   if (!contentType || !contentType.includes("application/json")) {
     const text = await response.text();
     const preview = text.substring(0, 200);
-    console.warn(`[OnlineMetadata] Expected JSON but got ${contentType}. Preview: ${preview}`);
+    console.warn(
+      `[OnlineMetadata] Expected JSON but got ${contentType}. Preview: ${preview}`,
+    );
     return null;
   }
 
@@ -126,7 +138,9 @@ async function safeJsonParse<T>(response: Response): Promise<T | null> {
   } catch (error) {
     const text = await response.text();
     const preview = text.substring(0, 200);
-    console.warn(`[OnlineMetadata] JSON parse error: ${error}. Preview: ${preview}`);
+    console.warn(
+      `[OnlineMetadata] JSON parse error: ${error}. Preview: ${preview}`,
+    );
     return null;
   }
 }
@@ -142,34 +156,35 @@ class OnlineMetadataService {
    */
   static async searchRecording(
     title: string,
-    artist: string
+    artist: string,
   ): Promise<MBSearchResult[]> {
     const query = encodeURIComponent(
-      `recording:"${title}" AND artist:"${artist}"`
+      `recording:"${title}" AND artist:"${artist}"`,
     );
     try {
       const response = await fetchWithRetry(
-        `${MUSICBRAINZ_BASE}/recording/?query=${query}&fmt=json`
+        `${MUSICBRAINZ_BASE}/recording/?query=${query}&fmt=json`,
       );
-      
+
       if (!response || !response.ok) return [];
 
       const data = await safeJsonParse<any>(response);
       if (!data) return [];
 
-      return (data.recordings ?? []).map((rec: any): MBSearchResult => ({
-        mbid: rec.id,
-        title: rec.title,
-        artist: rec["artist-credit"]?.[0]?.name || artist,
-        album: rec.releases?.[0]?.title || "Unknown Album",
-        releaseId: rec.releases?.[0]?.id,
-        year:
-          rec.releases?.[0]?.date?.split("-")[0] ||
-          rec.releases?.[0]?.["release-event"]?.[0]?.date?.split("-")[0] ||
-          "-",
-        label:
-          rec.releases?.[0]?.["label-info"]?.[0]?.label?.name || "-",
-      }));
+      return (data.recordings ?? []).map(
+        (rec: any): MBSearchResult => ({
+          mbid: rec.id,
+          title: rec.title,
+          artist: rec["artist-credit"]?.[0]?.name || artist,
+          album: rec.releases?.[0]?.title || "Unknown Album",
+          releaseId: rec.releases?.[0]?.id,
+          year:
+            rec.releases?.[0]?.date?.split("-")[0] ||
+            rec.releases?.[0]?.["release-event"]?.[0]?.date?.split("-")[0] ||
+            "-",
+          label: rec.releases?.[0]?.["label-info"]?.[0]?.label?.name || "-",
+        }),
+      );
     } catch (e) {
       console.warn("[OnlineMetadata] searchRecording error:", e);
       return [];
@@ -186,7 +201,7 @@ class OnlineMetadataService {
    * artist_bio, isEnriched, dan last_enriched_at di tabel songs.
    */
   static async getArtistEnrichment(
-    artistName: string
+    artistName: string,
   ): Promise<ArtistEnrichment> {
     if (!artistName || artistName.toLowerCase() === "unknown artist") {
       return { imageUrl: null, bio: null, source: "fallback", lastUpdated: 0 };
@@ -202,8 +217,15 @@ class OnlineMetadataService {
       // 2. Cari MBID artist
       const mbid = await this._searchArtistMBID(artistName);
       if (!mbid) {
-        console.warn(`[OnlineMetadata] Artist "${artistName}" not found on MusicBrainz`);
-        return { imageUrl: null, bio: null, source: "fallback", lastUpdated: 0 };
+        console.warn(
+          `[OnlineMetadata] Artist "${artistName}" not found on MusicBrainz`,
+        );
+        return {
+          imageUrl: null,
+          bio: null,
+          source: "fallback",
+          lastUpdated: 0,
+        };
       }
 
       // 3. Rate limit sebelum parallel fetch
@@ -248,43 +270,47 @@ class OnlineMetadataService {
 
   // ── Private: MusicBrainz ───────────────────────────────────────────────────
 
-  private static async _searchArtistMBID(
-    name: string
-  ): Promise<string | null> {
+  private static async _searchArtistMBID(name: string): Promise<string | null> {
     try {
       const query = encodeURIComponent(`artist:${name}`);
       const response = await fetchWithRetry(
-        `${MUSICBRAINZ_BASE}/artist/?query=${query}&fmt=json`
+        `${MUSICBRAINZ_BASE}/artist/?query=${query}&fmt=json`,
       );
-      
+
       if (!response || !response.ok) return null;
-      
+
       const data = await safeJsonParse<any>(response);
       return data?.artists?.[0]?.id ?? null;
     } catch (e) {
-      console.warn(`[OnlineMetadata] _searchArtistMBID error for "${name}":`, e);
+      console.warn(
+        `[OnlineMetadata] _searchArtistMBID error for "${name}":`,
+        e,
+      );
       return null;
     }
   }
 
   private static async _getArtistImageFromRelease(
-    mbid: string
+    mbid: string,
   ): Promise<string | null> {
     try {
       const response = await fetchWithRetry(
-        `${MUSICBRAINZ_BASE}/release-group?artist=${mbid}&type=album&fmt=json`
+        `${MUSICBRAINZ_BASE}/release-group?artist=${mbid}&type=album&fmt=json`,
       );
-      
+
       if (!response || !response.ok) return null;
 
       const data = await safeJsonParse<any>(response);
       const firstReleaseGroupId = data?.["release-groups"]?.[0]?.id;
-      
-      return firstReleaseGroupId 
+
+      return firstReleaseGroupId
         ? `https://coverartarchive.org/release-group/${firstReleaseGroupId}/front-500`
         : null;
     } catch (error) {
-      console.warn(`[OnlineMetadata] _getArtistImageFromRelease error for MBID ${mbid}:`, error);
+      console.warn(
+        `[OnlineMetadata] _getArtistImageFromRelease error for MBID ${mbid}:`,
+        error,
+      );
       return null;
     }
   }
@@ -292,21 +318,21 @@ class OnlineMetadataService {
   // ── Private: Wikipedia ────────────────────────────────────────────────────
 
   private static async _fetchWikipediaBio(
-    mbid: string
+    mbid: string,
   ): Promise<string | null> {
     try {
       // A: Ambil relasi URL dari profil MusicBrainz
       const mbRes = await fetchWithRetry(
-        `${MUSICBRAINZ_BASE}/artist/${mbid}?inc=url-rels&fmt=json`
+        `${MUSICBRAINZ_BASE}/artist/${mbid}?inc=url-rels&fmt=json`,
       );
-      
+
       if (!mbRes || !mbRes.ok) return null;
 
       const mbData = await safeJsonParse<any>(mbRes);
       if (!mbData) return null;
-      
+
       const wikidataRel = mbData.relations?.find((r: any) =>
-        r.url?.resource?.includes("wikidata.org")
+        r.url?.resource?.includes("wikidata.org"),
       );
 
       // Fallback ke anotasi MusicBrainz jika tidak ada Wikidata
@@ -318,44 +344,46 @@ class OnlineMetadataService {
 
       // B: Resolve judul artikel Wikipedia dari Wikidata
       const wdRes = await fetchWithRetry(
-        `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${wikidataId}&props=sitelinks&sitefilter=enwiki&format=json&origin=*`
+        `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${wikidataId}&props=sitelinks&sitefilter=enwiki&format=json&origin=*`,
       );
-      
+
       if (!wdRes || !wdRes.ok) return null;
-      
+
       const wdData = await safeJsonParse<any>(wdRes);
       if (!wdData) return null;
-      
+
       const wikiTitle = wdData.entities?.[wikidataId]?.sitelinks?.enwiki?.title;
       if (!wikiTitle) return null;
 
       // C: Ambil intro artikel Wikipedia
       const wikiRes = await fetchWithRetry(
         `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=1&explaintext=1&titles=${encodeURIComponent(
-          wikiTitle
-        )}&format=json&origin=*`
+          wikiTitle,
+        )}&format=json&origin=*`,
       );
-      
+
       if (!wikiRes || !wikiRes.ok) return null;
-      
+
       // Cek content-type sebelum parse JSON
       const contentType = wikiRes.headers.get("content-type");
       if (!contentType || !contentType.includes("application/json")) {
-        console.warn(`[OnlineMetadata] Wikipedia returned non-JSON response: ${contentType}`);
+        console.warn(
+          `[OnlineMetadata] Wikipedia returned non-JSON response: ${contentType}`,
+        );
         return null;
       }
-      
+
       const wikiData = await safeJsonParse<any>(wikiRes);
       if (!wikiData) return null;
-      
+
       const pages = wikiData.query?.pages;
       if (!pages) return null;
 
       const pageId = Object.keys(pages)[0];
-      
+
       // Handle case where page doesn't exist (pageId = "-1")
       if (pageId === "-1") return null;
-      
+
       return pages[pageId]?.extract ?? null;
     } catch (e) {
       console.warn("[OnlineMetadata] _fetchWikipediaBio error:", e);
@@ -370,12 +398,12 @@ class OnlineMetadataService {
    * Return null jika tidak ada atau sudah expired (> 7 hari).
    */
   private static _getCachedArtist(
-    artistName: string
+    artistName: string,
   ): Omit<ArtistEnrichment, "source"> | null {
     try {
       const result = db.execute(
         `SELECT bio, image_url, last_fetched FROM artist_cache WHERE artist_name = ? LIMIT 1`,
-        [artistName]
+        [artistName],
       );
       const row = result.rows?.item?.(0);
       if (!row) return null;
@@ -401,35 +429,35 @@ class OnlineMetadataService {
    */
   private static _saveArtistCache(
     artistName: string,
-    data: ArtistEnrichment
+    data: ArtistEnrichment,
   ): void {
     try {
       db.execute(
         `INSERT OR REPLACE INTO artist_cache
            (artist_name, bio, image_url, last_fetched)
          VALUES (?, ?, ?, ?)`,
-        [artistName, data.bio, data.imageUrl, data.lastUpdated]
+        [artistName, data.bio, data.imageUrl, data.lastUpdated],
       );
     } catch (e) {
       console.warn("[OnlineMetadata] _saveArtistCache error:", e);
     }
   }
-  
+
   static async clearArtistCache(): Promise<boolean> {
-  try {
-    // Jika kamu pakai SQLite (contoh expo-sqlite):
-    // await db.runAsync("DELETE FROM artist_enrichment");
-    
-    // Jika kamu hanya pakai cache folder:
-    // await FileSystem.deleteAsync(FileSystem.cacheDirectory + 'artist-images/', { idempotent: true });
-    
-    console.log("[MetadataService] Cache cleared successfully");
-    return true;
-  } catch (e) {
-    console.error("[MetadataService] Failed to clear cache", e);
-    return false;
+    try {
+      // Jika kamu pakai SQLite (contoh expo-sqlite):
+      // await db.runAsync("DELETE FROM artist_enrichment");
+
+      // Jika kamu hanya pakai cache folder:
+      // await FileSystem.deleteAsync(FileSystem.cacheDirectory + 'artist-images/', { idempotent: true });
+
+      console.log("[MetadataService] Cache cleared successfully");
+      return true;
+    } catch (e) {
+      console.error("[MetadataService] Failed to clear cache", e);
+      return false;
+    }
   }
-}
 
   /**
    * Update semua lagu di tabel songs yang artistnya sama.
@@ -437,7 +465,7 @@ class OnlineMetadataService {
    */
   private static _updateSongsEnrichment(
     artistName: string,
-    data: ArtistEnrichment
+    data: ArtistEnrichment,
   ): void {
     try {
       db.execute(
@@ -447,7 +475,7 @@ class OnlineMetadataService {
              isEnriched       = 1,
              last_enriched_at = ?
          WHERE artist = ?`,
-        [data.imageUrl, data.bio, data.lastUpdated, artistName]
+        [data.imageUrl, data.bio, data.lastUpdated, artistName],
       );
     } catch (e) {
       console.warn("[OnlineMetadata] _updateSongsEnrichment error:", e);
@@ -455,6 +483,4 @@ class OnlineMetadataService {
   }
 }
 
-export default OnlineMetadataService; 
-
-
+export default OnlineMetadataService;

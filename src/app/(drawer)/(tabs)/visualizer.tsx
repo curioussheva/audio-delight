@@ -6,7 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Dimensions
+  Dimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { usePlayerStore } from "@/features/player/store/playerStore";
@@ -31,14 +31,22 @@ export default function VisualizerScreen() {
   }, [audioSessionId]);
 
   const handleRetry = () => {
-    setRetryCount(prev => prev + 1);
+    setRetryCount((prev) => prev + 1);
     // Bisa trigger reconnect di store jika ada
     // usePlayerStore.getState().reconnectDSP?.();
   };
 
   if (!currentSong) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background.primary, paddingTop: safePadding.paddingTop }]}>
+      <View
+        style={[
+          styles.container,
+          {
+            backgroundColor: colors.background.primary,
+            paddingTop: safePadding.paddingTop,
+          },
+        ]}
+      >
         <View style={styles.emptyState}>
           <AlertCircle size={48} color={colors.text.tertiary} />
           <Text style={[styles.emptyText, { color: colors.text.secondary }]}>
@@ -56,7 +64,15 @@ export default function VisualizerScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background.primary, paddingTop: safePadding.paddingTop }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: colors.background.primary,
+          paddingTop: safePadding.paddingTop,
+        },
+      ]}
+    >
       {/* Header */}
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: colors.text.primary }]}>
@@ -105,7 +121,9 @@ export default function VisualizerScreen() {
         {!hasValidSession && isPlaying && (
           <View style={styles.sessionWarning}>
             <AlertCircle size={16} color={colors.status.warning} />
-            <Text style={[styles.warningText, { color: colors.status.warning }]}>
+            <Text
+              style={[styles.warningText, { color: colors.status.warning }]}
+            >
               Audio session tidak tersedia. Coba restart lagu.
             </Text>
           </View>
@@ -116,7 +134,8 @@ export default function VisualizerScreen() {
       {__DEV__ && (
         <View style={styles.debugInfo}>
           <Text style={{ color: colors.text.tertiary, fontSize: 10 }}>
-            Session ID: {audioSessionId || 'null'} | Playing: {isPlaying ? 'Yes' : 'No'}
+            Session ID: {audioSessionId || "null"} | Playing:{" "}
+            {isPlaying ? "Yes" : "No"}
           </Text>
         </View>
       )}
@@ -129,28 +148,28 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   retryButton: {
     padding: 8,
   },
   songInfo: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingHorizontal: 16,
     marginBottom: 20,
   },
   songTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
+    fontWeight: "600",
+    textAlign: "center",
   },
   artistName: {
     fontSize: 14,
@@ -158,28 +177,28 @@ const styles = StyleSheet.create({
   },
   visualizerContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginHorizontal: 16,
     borderRadius: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   pausedOverlay: {
-    position: 'absolute',
-    justifyContent: 'center',
-    alignItems: 'center',
+    position: "absolute",
+    justifyContent: "center",
+    alignItems: "center",
   },
   pausedText: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   sessionWarning: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
     marginTop: 12,
     padding: 8,
-    backgroundColor: 'rgba(245,158,11,0.1)',
+    backgroundColor: "rgba(245,158,11,0.1)",
     borderRadius: 8,
   },
   warningText: {
@@ -187,8 +206,8 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     gap: 16,
   },
   emptyText: {
@@ -200,14 +219,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   buttonText: {
-    color: '#FFF',
-    fontWeight: '600',
+    color: "#FFF",
+    fontWeight: "600",
   },
   debugInfo: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 20,
     left: 16,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: "rgba(0,0,0,0.5)",
     padding: 4,
     borderRadius: 4,
   },

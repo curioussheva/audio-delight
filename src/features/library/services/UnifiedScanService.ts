@@ -127,14 +127,16 @@ export class UnifiedScanService {
       });
 
       // ✅ ScanDiffEngine.runMediaStoreDiff() — bukan runMediaStoreDiff() langsung
-      const diffResult = await ScanDiffEngine.runMediaStoreDiff((current, total) => {
-        onProgress?.({
-          phase: "process",
-          current,
-          total,
-          message: `Processing file ${current} of ${total}...`,
-        });
-      });
+      const diffResult = await ScanDiffEngine.runMediaStoreDiff(
+        (current, total) => {
+          onProgress?.({
+            phase: "process",
+            current,
+            total,
+            message: `Processing file ${current} of ${total}...`,
+          });
+        },
+      );
 
       store.finishManualScan();
 
@@ -188,7 +190,9 @@ export class UnifiedScanService {
       return { processed: 0, success: 0, failed: 0 };
     }
 
-    console.log(`✨ [UnifiedScan] Starting enrichment for ${targetIds.length} songs...`);
+    console.log(
+      `✨ [UnifiedScan] Starting enrichment for ${targetIds.length} songs...`,
+    );
 
     this.isRunning = true;
     this.currentMode = "auto";
@@ -272,7 +276,10 @@ export class UnifiedScanService {
         enableVibrate: false,
       });
     } catch (error) {
-      console.warn("[UnifiedScan] Failed to setup notification channel:", error);
+      console.warn(
+        "[UnifiedScan] Failed to setup notification channel:",
+        error,
+      );
     }
   }
 
@@ -313,4 +320,3 @@ export class UnifiedScanService {
     };
   }
 }
- 

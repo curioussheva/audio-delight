@@ -168,7 +168,7 @@ const AlbumTile = memo(
         </View>
       </TouchableOpacity>
     );
-  }
+  },
 );
 
 // ─── AlbumSongRow ─────────────────────────────────────────────────────────────
@@ -249,10 +249,7 @@ const AlbumSongRow = memo(
             >
               {track.title}
             </Text>
-            <QualityBadge
-              sampleRate={track.sampleRate}
-              codec={track.codec}
-            />
+            <QualityBadge sampleRate={track.sampleRate} codec={track.codec} />
           </View>
           <Text style={[styles.songSub, { color: colors.text.tertiary }]}>
             {track.bitDepth > 0 ? track.bitDepth : 16}bit •{" "}
@@ -282,7 +279,7 @@ const AlbumSongRow = memo(
         </View>
       </TouchableOpacity>
     );
-  }
+  },
 );
 
 // ─── AlbumGrid ────────────────────────────────────────────────────────────────
@@ -313,14 +310,14 @@ export const AlbumGrid: React.FC<AlbumGridProps> = ({
       .filter(
         (t) =>
           (t.album || "Unknown Album") === selectedAlbum.name &&
-          (t.artist || "Unknown Artist") === selectedAlbum.artist
+          (t.artist || "Unknown Artist") === selectedAlbum.artist,
       )
       .sort((a, b) => (a.trackNumber || 0) - (b.trackNumber || 0));
   }, [tracks, selectedAlbum]);
 
   const totalDuration = useMemo(
     () => filteredSongs.reduce((acc, t) => acc + (t.duration || 0), 0),
-    [filteredSongs]
+    [filteredSongs],
   );
 
   const handlePlayAlbum = useCallback(() => {
@@ -350,7 +347,9 @@ export const AlbumGrid: React.FC<AlbumGridProps> = ({
             <Text style={[styles.emptyText, { color: colors.text.disabled }]}>
               No albums found
             </Text>
-            <Text style={[styles.emptySubText, { color: colors.text.disabled }]}>
+            <Text
+              style={[styles.emptySubText, { color: colors.text.disabled }]}
+            >
               {tracks.length} tracks loaded
             </Text>
           </View>
@@ -370,10 +369,7 @@ export const AlbumGrid: React.FC<AlbumGridProps> = ({
       ]}
     >
       <View
-        style={[
-          styles.navBar,
-          { paddingTop: Platform.OS === "ios" ? 50 : 20 },
-        ]}
+        style={[styles.navBar, { paddingTop: Platform.OS === "ios" ? 50 : 20 }]}
       >
         <TouchableOpacity
           onPress={() => setSelectedAlbum(null)}
@@ -408,11 +404,7 @@ export const AlbumGrid: React.FC<AlbumGridProps> = ({
                   onError={() => setHeroImgError(true)}
                 />
               ) : (
-                <Disc3
-                  size={80}
-                  color={colors.text.disabled}
-                  strokeWidth={1}
-                />
+                <Disc3 size={80} color={colors.text.disabled} strokeWidth={1} />
               )}
             </View>
 
@@ -595,4 +587,3 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
 });
- 

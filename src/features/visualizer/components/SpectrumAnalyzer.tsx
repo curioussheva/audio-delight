@@ -51,20 +51,23 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
   isPlaying,
   audioSessionId,
 }) => {
-  const barCount = Math.max(MIN_BAR_COUNT, Math.min(MAX_BAR_COUNT, rawBarCount));
+  const barCount = Math.max(
+    MIN_BAR_COUNT,
+    Math.min(MAX_BAR_COUNT, rawBarCount),
+  );
 
-  const freqData    = useSharedValue<number[]>(Array(MAX_BAR_COUNT).fill(0.1));
-  const prevData    = useSharedValue<number[]>(Array(barCount).fill(0.1));
-  const dummyPhase  = useSharedValue(0);
+  const freqData = useSharedValue<number[]>(Array(MAX_BAR_COUNT).fill(0.1));
+  const prevData = useSharedValue<number[]>(Array(barCount).fill(0.1));
+  const dummyPhase = useSharedValue(0);
 
   // FIX: hasRealData dan isPlayingSV sebagai SharedValue agar bisa dibaca worklet
-  const hasRealData  = useSharedValue(false);
-  const isPlayingSV  = useSharedValue(isPlaying);
+  const hasRealData = useSharedValue(false);
+  const isPlayingSV = useSharedValue(isPlaying);
 
   const isServiceInitialized = useRef(false);
-  const isStarted            = useRef(false);
-  const lastSessionId        = useRef<number | null>(null);
-  const frameCount           = useRef(0);
+  const isStarted = useRef(false);
+  const lastSessionId = useRef<number | null>(null);
+  const frameCount = useRef(0);
 
   // Sync isPlaying prop → SharedValue
   useEffect(() => {
@@ -128,7 +131,10 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
         isStarted.current = true;
         lastSessionId.current = audioSessionId;
         frameCount.current = 0;
-        runOnUI(() => { "worklet"; hasRealData.value = false; })();
+        runOnUI(() => {
+          "worklet";
+          hasRealData.value = false;
+        })();
       }
     } else {
       if (isStarted.current) {
@@ -148,19 +154,20 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
 
   // Processed data — semua SharedValue, aman di worklet
   const processedData = useDerivedValue(() => {
-    const raw      = freqData.value;
+    const raw = freqData.value;
     const useDummy = !hasRealData.value && isPlayingSV.value;
 
     if (useDummy) {
       const dummy = new Array(barCount).fill(0);
       const phase = dummyPhase.value;
       for (let i = 0; i < barCount; i++) {
-        const t   = i / (barCount - 1);
-        const val = 0.3 + 0.5 * (
-          Math.sin(phase * 2 + t * 10) * 0.5 +
-          Math.sin(phase * 0.5 + t * 20) * 0.3 +
-          Math.sin(phase * 3 + t * 5) * 0.2
-        );
+        const t = i / (barCount - 1);
+        const val =
+          0.3 +
+          0.5 *
+            (Math.sin(phase * 2 + t * 10) * 0.5 +
+              Math.sin(phase * 0.5 + t * 20) * 0.3 +
+              Math.sin(phase * 3 + t * 5) * 0.2);
         dummy[i] = Math.max(0.05, Math.min(0.8, val));
       }
       return dummy;
@@ -168,16 +175,17 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
 
     if (!raw || raw.length === 0) return Array(barCount).fill(0.1);
 
-    const result  = new Array(barCount).fill(0);
+    const result = new Array(barCount).fill(0);
     const falloff = 0.85;
 
     for (let i = 0; i < barCount; i++) {
-      const t        = i / (barCount - 1);
-      const logT     = Math.pow(t, 1.2);
+      const t = i / (barCount - 1);
+      const logT = Math.pow(t, 1.2);
       const startIdx = Math.floor(logT * (raw.length - 1));
-      const endIdx   = Math.min(raw.length - 1, startIdx + 8);
+      const endIdx = Math.min(raw.length - 1, startIdx + 8);
 
-      let sum = 0, count = 0;
+      let sum = 0,
+        count = 0;
       for (let j = startIdx; j <= endIdx && j < raw.length; j++) {
         sum += raw[j] || 0;
         count++;
@@ -200,19 +208,19 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
     () => processedData.value,
     (current) => {
       prevData.value = [...current];
-    }
+    },
   );
 
   const visualizerPath = useDerivedValue(() => {
     const data = processedData.value;
     const path = Skia.Path.Make();
-    const gap  = 3;
+    const gap = 3;
     const barWidth = (width - (barCount - 1) * gap) / barCount;
 
     data.forEach((amp, i) => {
       const barHeight = Math.max(4, amp * height * 0.85);
-      const x    = i * (barWidth + gap);
-      const y    = height - barHeight;
+      const x = i * (barWidth + gap);
+      const y = height - barHeight;
       const rect = Skia.XYWHRect(x, y, barWidth, barHeight);
       path.addRRect(Skia.RRectXY(rect, 4, 4));
     });
@@ -222,7 +230,7 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
 
   // Debug value untuk display (JS side) — derived dari SharedValue
   const debugMaxSV = useDerivedValue(() =>
-    freqData.value.reduce((a, b) => Math.max(a, b), 0)
+    freqData.value.reduce((a, b) => Math.max(a, b), 0),
   );
 
   return (
@@ -243,7 +251,8 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
       {__DEV__ && (
         <View style={styles.debugOverlay}>
           <Text style={styles.debugText}>
-            FFT Max: {debugMaxSV.value.toFixed(3)} | Real: {hasRealData.value ? "Y" : "N"}
+            FFT Max: {debugMaxSV.value.toFixed(3)} | Real:{" "}
+            {hasRealData.value ? "Y" : "N"}
           </Text>
         </View>
       )}
@@ -271,4 +280,3 @@ const styles = StyleSheet.create({
     fontFamily: "monospace",
   },
 });
- 

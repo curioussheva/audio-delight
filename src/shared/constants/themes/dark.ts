@@ -190,7 +190,7 @@ export const EMERALD_NOIR: Theme = {
       500: "#D4AF37", // Gold accent matching the border/shine in image
     },
     background: {
-      primary: "#0A0F0C",   // Very dark green-black
+      primary: "#0A0F0C", // Very dark green-black
       secondary: "#0E1511", // Slightly lighter
       tertiary: "#141D17",
       elevated: "#1B2620",

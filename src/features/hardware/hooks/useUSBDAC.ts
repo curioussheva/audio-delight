@@ -2,10 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import USBDACService, {
-  DACInfo,
-  DACConfig,
-} from "../api/USBDACModule";
+import USBDACService, { DACInfo, DACConfig } from "../api/USBDACModule";
 
 const STORAGE_KEY = "@pristineaudio/dac_config";
 
@@ -184,7 +181,12 @@ export const useUSBDAC = (): UseUSBDACReturn => {
     return isExclusiveMode
       ? await deactivateExclusiveMode()
       : await activateExclusiveMode(currentDAC.id);
-  }, [currentDAC, isExclusiveMode, activateExclusiveMode, deactivateExclusiveMode]);
+  }, [
+    currentDAC,
+    isExclusiveMode,
+    activateExclusiveMode,
+    deactivateExclusiveMode,
+  ]);
 
   const setSampleRate = useCallback(
     async (rate: number | "auto"): Promise<boolean> => {
@@ -213,4 +215,3 @@ export const useUSBDAC = (): UseUSBDACReturn => {
     checkExclusiveMode,
   };
 };
- 

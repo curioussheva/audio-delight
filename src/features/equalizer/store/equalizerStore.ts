@@ -18,9 +18,11 @@ const getCurrentSessionId = async (): Promise<number> => {
     // 1. Coba ambil langsung dari TrackPlayer (Paling Akurat untuk RNTP)
     const TrackPlayer = require("react-native-track-player").default;
     const playerSessionId = await TrackPlayer.getAudioSessionId();
-    
+
     if (playerSessionId && playerSessionId !== 0 && playerSessionId !== -1) {
-      console.log(`[EQ Store] Found Real Session ID from RNTP: ${playerSessionId}`);
+      console.log(
+        `[EQ Store] Found Real Session ID from RNTP: ${playerSessionId}`,
+      );
       return playerSessionId;
     }
 
@@ -31,7 +33,6 @@ const getCurrentSessionId = async (): Promise<number> => {
     return -1;
   }
 };
-
 
 // Helper untuk apply semua efek ke native dengan individual try-catch
 const applyAllEffectsToNative = async (state: any) => {
@@ -132,7 +133,10 @@ export const useEqualizerStore = create<EqualizerStore>()(
         set({ isBassEnabled: enabled });
         const { isEQEnabled, audioSessionId, bassStrength } = get();
         if (isEQEnabled && audioSessionId !== -1) {
-          await NativeDSPModule.setBassBoost(enabled ? bassStrength : 0, audioSessionId);
+          await NativeDSPModule.setBassBoost(
+            enabled ? bassStrength : 0,
+            audioSessionId,
+          );
         }
       },
 
@@ -140,7 +144,10 @@ export const useEqualizerStore = create<EqualizerStore>()(
         set({ isVirtualizerEnabled: enabled });
         const { isEQEnabled, audioSessionId, virtualizerLevel } = get();
         if (isEQEnabled && audioSessionId !== -1) {
-          await NativeDSPModule.setVirtualizer(enabled ? virtualizerLevel : 0, audioSessionId);
+          await NativeDSPModule.setVirtualizer(
+            enabled ? virtualizerLevel : 0,
+            audioSessionId,
+          );
         }
       },
 
@@ -148,7 +155,10 @@ export const useEqualizerStore = create<EqualizerStore>()(
         set({ isReverbEnabled: enabled });
         const { isEQEnabled, audioSessionId, reverbPreset } = get();
         if (isEQEnabled && audioSessionId !== -1) {
-          await NativeDSPModule.setReverbPreset(enabled ? reverbPreset : 0, audioSessionId);
+          await NativeDSPModule.setReverbPreset(
+            enabled ? reverbPreset : 0,
+            audioSessionId,
+          );
         }
       },
 
@@ -182,32 +192,44 @@ export const useEqualizerStore = create<EqualizerStore>()(
       },
 
       setBandGain: (index: number, gain: number) => {
-  const clampedGain = Math.min(12, Math.max(-12, gain));
-  const newBands = get().bands.map((b, i) => i === index ? { ...b, gain: clampedGain } : b);
-  set({ bands: newBands, activePresetId: "custom" });
+        const clampedGain = Math.min(12, Math.max(-12, gain));
+        const newBands = get().bands.map((b, i) =>
+          i === index ? { ...b, gain: clampedGain } : b,
+        );
+        set({ bands: newBands, activePresetId: "custom" });
 
-  const { isEQEnabled, audioSessionId } = get();
-  if (isEQEnabled && audioSessionId !== -1 && NativeDSPModule?.setEqualizer) {
-    // Kotlin setEqualizer tidak konversi, jadi kita konversi di sini
-    const millibels = Math.round(clampedGain * 100);
-    NativeDSPModule.setEqualizer(index, millibels, audioSessionId);
-  }
-},
- 
-       setBandsGain: async (gains: number[]) => {
+        const { isEQEnabled, audioSessionId } = get();
+        if (
+          isEQEnabled &&
+          audioSessionId !== -1 &&
+          NativeDSPModule?.setEqualizer
+        ) {
+          // Kotlin setEqualizer tidak konversi, jadi kita konversi di sini
+          const millibels = Math.round(clampedGain * 100);
+          NativeDSPModule.setEqualizer(index, millibels, audioSessionId);
+        }
+      },
+
+      setBandsGain: async (gains: number[]) => {
         const newBands = get().bands.map((b, i) => ({
           ...b,
           gain: Math.min(12, Math.max(-12, gains[i] ?? b.gain)),
         }));
         set({ bands: newBands, activePresetId: "custom" });
 
-        if (get().isEQEnabled && get().audioSessionId !== -1 && NativeDSPModule?.setFullEqualizer) {
+        if (
+          get().isEQEnabled &&
+          get().audioSessionId !== -1 &&
+          NativeDSPModule?.setFullEqualizer
+        ) {
           await NativeDSPModule.setFullEqualizer(gains, get().audioSessionId);
         }
       },
 
       applyPreset: (presetId: string) => {
-        const preset = ALL_PRESETS.find((p) => p.id === presetId) || get().customPresets.find((p) => p.id === presetId);
+        const preset =
+          ALL_PRESETS.find((p) => p.id === presetId) ||
+          get().customPresets.find((p) => p.id === presetId);
         if (preset) {
           const newBands = preset.bands.map((b) => ({ ...b }));
           set({ activePresetId: presetId, bands: newBands });
@@ -218,8 +240,16 @@ export const useEqualizerStore = create<EqualizerStore>()(
       },
 
       saveCustomPreset: (name: string) => {
-        const newPreset: Preset = { id: `custom_${Date.now()}`, name, isCustom: true, bands: JSON.parse(JSON.stringify(get().bands)) };
-        set({ customPresets: [...get().customPresets, newPreset], activePresetId: newPreset.id });
+        const newPreset: Preset = {
+          id: `custom_${Date.now()}`,
+          name,
+          isCustom: true,
+          bands: JSON.parse(JSON.stringify(get().bands)),
+        };
+        set({
+          customPresets: [...get().customPresets, newPreset],
+          activePresetId: newPreset.id,
+        });
       },
 
       deleteCustomPreset: (id: string) => {
@@ -229,9 +259,12 @@ export const useEqualizerStore = create<EqualizerStore>()(
       },
 
       resetToDefault: async () => {
-        set({ 
-          bands: makeBands([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), 
-          activePresetId: "flat", bassStrength: 0, virtualizerLevel: 0, reverbPreset: 0 
+        set({
+          bands: makeBands([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+          activePresetId: "flat",
+          bassStrength: 0,
+          virtualizerLevel: 0,
+          reverbPreset: 0,
         });
         if (get().isEQEnabled && get().audioSessionId !== -1) {
           await applyAllEffectsToNative(get());
@@ -253,10 +286,12 @@ export const useEqualizerStore = create<EqualizerStore>()(
         isVirtualizerEnabled: state.isVirtualizerEnabled,
         isReverbEnabled: state.isReverbEnabled,
       }),
-    }
+    },
   ),
 );
 
 if (Platform.OS === "android") {
-  setTimeout(() => { useEqualizerStore.getState().initialize(); }, 1000);
+  setTimeout(() => {
+    useEqualizerStore.getState().initialize();
+  }, 1000);
 }

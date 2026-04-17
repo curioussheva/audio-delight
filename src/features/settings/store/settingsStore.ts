@@ -16,15 +16,15 @@ export const useSettingsStore = create<SettingsState>()(
       enableOnlineArtistImage: false,
       downloadOnlyOnWiFi: true,
 
-      setEnableOnlineArtistImage: (enableOnlineArtistImage) => 
+      setEnableOnlineArtistImage: (enableOnlineArtistImage) =>
         set({ enableOnlineArtistImage }),
-        
-      setDownloadOnlyOnWiFi: (downloadOnlyOnWiFi) => 
+
+      setDownloadOnlyOnWiFi: (downloadOnlyOnWiFi) =>
         set({ downloadOnlyOnWiFi }),
     }),
     {
       name: "pristine-settings",
       storage: createJSONStorage(() => AsyncStorage),
-    }
-  )
+    },
+  ),
 );

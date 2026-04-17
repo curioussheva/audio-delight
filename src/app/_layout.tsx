@@ -2,14 +2,14 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Stack } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import * as SplashScreen from "expo-splash-screen"; 
-import { 
-  Platform, 
-  Animated, 
-  StyleSheet, 
-  View, 
-  Text, 
-  TouchableOpacity 
+import * as SplashScreen from "expo-splash-screen";
+import {
+  Platform,
+  Animated,
+  StyleSheet,
+  View,
+  Text,
+  TouchableOpacity,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -44,10 +44,10 @@ export default function RootLayout() {
   // --- 1. Store Selectors ---
   const initStore = usePlayerStore((s) => s.initStore);
   const setAudioMode = usePlayerStore((s) => s.setAudioMode);
-  const { 
-    isAutoScanEnabled, 
-    hasCompletedInitialScan, 
-    setInitialScanCompleted 
+  const {
+    isAutoScanEnabled,
+    hasCompletedInitialScan,
+    setInitialScanCompleted,
   } = useLibraryStore();
 
   // --- 2. Master Audio Sync (DSP Guard) ---
@@ -72,7 +72,7 @@ export default function RootLayout() {
     const syncBackgroundTask = async () => {
       try {
         if (isAutoScanEnabled) {
-          await BackgroundScanTask.register(60); 
+          await BackgroundScanTask.register(60);
         } else {
           await BackgroundScanTask.unregister();
         }
@@ -88,7 +88,7 @@ export default function RootLayout() {
   const performInitialization = useCallback(async () => {
     try {
       console.log("[App] Starting Core Initialization...");
-      
+
       // A. Driver & Base Store Init
       await audioEngine.initialize();
       await initStore();
@@ -110,8 +110,8 @@ export default function RootLayout() {
         console.log("[App] First install detected, performing initial scan...");
         try {
           // Ganti dengan fungsi scan library asli Anda jika sudah siap
-          // await libraryScanner.scanAll(); 
-          
+          // await libraryScanner.scanAll();
+
           setInitialScanCompleted();
           console.log("[App] Initial scan successful.");
         } catch (scanError) {
@@ -123,10 +123,17 @@ export default function RootLayout() {
       setAppState("loading");
     } catch (error) {
       console.error("[App] Initialization Fatal Error:", error);
-      setErrorMessage(error instanceof Error ? error.message : "Pristine Engine Failure");
+      setErrorMessage(
+        error instanceof Error ? error.message : "Pristine Engine Failure",
+      );
       setAppState("error");
     }
-  }, [initStore, setAudioMode, hasCompletedInitialScan, setInitialScanCompleted]);
+  }, [
+    initStore,
+    setAudioMode,
+    hasCompletedInitialScan,
+    setInitialScanCompleted,
+  ]);
 
   // --- 5. Lifecycle Hooks ---
   useEffect(() => {
@@ -138,7 +145,7 @@ export default function RootLayout() {
 
   const handleLoadingComplete = useCallback(() => {
     SplashScreen.hideAsync().catch(() => {});
-    
+
     setTimeout(() => {
       setAppState("ready");
       Animated.timing(contentOpacity, {
@@ -156,8 +163,8 @@ export default function RootLayout() {
       <View style={styles.errorContainer}>
         <Text style={styles.errorTitle}>System Engine Failure</Text>
         <Text style={styles.errorMessage}>{errorMessage}</Text>
-        <TouchableOpacity 
-          style={styles.retryButton} 
+        <TouchableOpacity
+          style={styles.retryButton}
           onPress={() => {
             setAppState("initializing");
             hasInitialized.current = false;
@@ -183,18 +190,25 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
         <SafeAreaProvider>
-          <Animated.View style={[styles.container, { opacity: contentOpacity }]}>
-            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#000' } }}>
+          <Animated.View
+            style={[styles.container, { opacity: contentOpacity }]}
+          >
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: "#000" },
+              }}
+            >
               <Stack.Screen name="index" />
               <Stack.Screen name="(drawer)" />
-              <Stack.Screen 
-                name="player/index" 
-                options={{ 
-                  presentation: "modal", 
+              <Stack.Screen
+                name="player/index"
+                options={{
+                  presentation: "modal",
                   animation: "slide_from_bottom",
                   gestureEnabled: true,
-                  gestureDirection: "vertical"
-                }} 
+                  gestureDirection: "vertical",
+                }}
               />
             </Stack>
             <AudioPropertyToast />
@@ -206,22 +220,32 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
-  errorContainer: { 
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    backgroundColor: '#000', 
-    padding: 20 
+  container: { flex: 1, backgroundColor: "#000" },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#000",
+    padding: 20,
   },
-  errorTitle: { color: '#FF4444', fontSize: 20, fontWeight: 'bold', marginBottom: 10 },
-  errorMessage: { color: '#888', textAlign: 'center', marginBottom: 30, lineHeight: 20 },
-  retryButton: { 
-    paddingVertical: 14, 
-    paddingHorizontal: 30, 
-    borderColor: '#00D4AA', 
-    borderWidth: 1.5, 
-    borderRadius: 12 
+  errorTitle: {
+    color: "#FF4444",
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 10,
   },
-  retryText: { color: '#00D4AA', fontWeight: 'bold', fontSize: 16 }
+  errorMessage: {
+    color: "#888",
+    textAlign: "center",
+    marginBottom: 30,
+    lineHeight: 20,
+  },
+  retryButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 30,
+    borderColor: "#00D4AA",
+    borderWidth: 1.5,
+    borderRadius: 12,
+  },
+  retryText: { color: "#00D4AA", fontWeight: "bold", fontSize: 16 },
 });

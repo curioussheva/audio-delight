@@ -5,11 +5,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import {
-  ScanStoreState,
-  ScanStoreActions,
-  LibraryTab,
-} from "../types/scan";
+import { ScanStoreState, ScanStoreActions, LibraryTab } from "../types/scan";
 
 // Definisi MediaTrack tetap sama seperti kode Anda...
 export interface MediaTrack {
@@ -46,7 +42,7 @@ export interface MediaTrack {
   last_enriched_at?: number;
   artist_bio?: string;
   artist_image_url?: string;
-} 
+}
 
 /**
  * FIX 1: Update LibraryState Interface
@@ -58,7 +54,7 @@ type LibraryState = ScanStoreState &
     activeTab: LibraryTab;
     selectedTracks: string[];
     searchQuery: string;
-    
+
     // Properti Baru
     isAutoScanEnabled: boolean;
     hasCompletedInitialScan: boolean; // 👈 NEW: Flag untuk scan perdana
@@ -68,13 +64,13 @@ type LibraryState = ScanStoreState &
     setActiveTab: (tab: LibraryTab) => void;
     setSearchQuery: (query: string) => void;
     setSelectedTracks: (ids: string[]) => void;
-    
+
     toggleAutoScanEnabled: () => void;
     setInitialScanCompleted: () => void; // 👈 NEW: Action untuk menandai scan perdana selesai
-    
+
     updateTrack: (trackId: string, updatedData: Partial<MediaTrack>) => void;
     toggleFavorite: (trackId: string) => void;
-    
+
     clearLibrary: () => void;
     markAsEnriched: (trackId: string, metadata?: Partial<MediaTrack>) => void;
     getUnenrichedSongs: () => MediaTrack[];
@@ -109,57 +105,94 @@ export const useLibraryStore = create<LibraryState>()(
       lastEnrichmentAt: null,
       unenrichedCount: 0,
       pendingArtistImages: 0,
-      
+
       // Default Value
-      isAutoScanEnabled: false,        // 👈 FIX: Default OFF
-      hasCompletedInitialScan: false,  // 👈 FIX: Default belum pernah scan
+      isAutoScanEnabled: false, // 👈 FIX: Default OFF
+      hasCompletedInitialScan: false, // 👈 FIX: Default belum pernah scan
 
       // --- 2. CORE ACTIONS ---
-      setTracks: (tracks) => set({ 
-        tracks,
-        unenrichedCount: tracks.filter(t => !t.isEnriched).length 
-      }),
+      setTracks: (tracks) =>
+        set({
+          tracks,
+          unenrichedCount: tracks.filter((t) => !t.isEnriched).length,
+        }),
 
       setActiveTab: (activeTab) => set({ activeTab }),
       setSearchQuery: (searchQuery) => set({ searchQuery }),
       setSelectedTracks: (selectedTracks) => set({ selectedTracks }),
-      
-      toggleAutoScanEnabled: () => set((state) => ({ 
-        isAutoScanEnabled: !state.isAutoScanEnabled 
-      })),
+
+      toggleAutoScanEnabled: () =>
+        set((state) => ({
+          isAutoScanEnabled: !state.isAutoScanEnabled,
+        })),
 
       setInitialScanCompleted: () => set({ hasCompletedInitialScan: true }), // 👈 NEW: Implementasi
-      
+
       // ... (Action updateTrack, toggleFavorite, startAutoScan, dll biarkan sama persis seperti sebelumnya) ...
-      updateTrack: (trackId, updatedData) => 
+      updateTrack: (trackId, updatedData) =>
         set((state) => {
-          const newTracks = state.tracks.map((t) => 
-            t.id === trackId ? { ...t, ...updatedData } : t
+          const newTracks = state.tracks.map((t) =>
+            t.id === trackId ? { ...t, ...updatedData } : t,
           );
           return {
             tracks: newTracks,
-            unenrichedCount: newTracks.filter(t => !t.isEnriched).length
+            unenrichedCount: newTracks.filter((t) => !t.isEnriched).length,
           };
         }),
 
       toggleFavorite: (trackId) =>
         set((state) => ({
           tracks: state.tracks.map((t) =>
-            t.id === trackId ? { ...t, isFavorite: !t.isFavorite } : t
+            t.id === trackId ? { ...t, isFavorite: !t.isFavorite } : t,
           ),
         })),
 
-      startAutoScan: () => set({ isAutoScanning: true, autoScanProgress: { phase: "discover", current: 0, total: 0 } }),
+      startAutoScan: () =>
+        set({
+          isAutoScanning: true,
+          autoScanProgress: { phase: "discover", current: 0, total: 0 },
+        }),
       updateAutoScanProgress: (progress) => set({ autoScanProgress: progress }),
-      finishAutoScan: () => set({ isAutoScanning: false, autoScanProgress: null, lastScanAt: Date.now() }),
+      finishAutoScan: () =>
+        set({
+          isAutoScanning: false,
+          autoScanProgress: null,
+          lastScanAt: Date.now(),
+        }),
 
-      startManualScan: () => set({ isManualScanning: true, manualScanProgress: { phase: "discover", current: 0, total: 0 } }),
-      updateManualScanProgress: (progress) => set({ manualScanProgress: progress }),
-      finishManualScan: () => set({ isManualScanning: false, manualScanProgress: null, lastScanAt: Date.now() }),
+      startManualScan: () =>
+        set({
+          isManualScanning: true,
+          manualScanProgress: { phase: "discover", current: 0, total: 0 },
+        }),
+      updateManualScanProgress: (progress) =>
+        set({ manualScanProgress: progress }),
+      finishManualScan: () =>
+        set({
+          isManualScanning: false,
+          manualScanProgress: null,
+          lastScanAt: Date.now(),
+        }),
 
-      startEnrichment: (level, total) => set({ isEnriching: true, enrichmentProgress: { level, current: 0, total, success: 0, failed: 0 } }),
-      updateEnrichmentProgress: (progress) => set({ enrichmentProgress: progress }),
-      finishEnrichment: () => set({ isEnriching: false, enrichmentProgress: null, lastEnrichmentAt: Date.now() }),
+      startEnrichment: (level, total) =>
+        set({
+          isEnriching: true,
+          enrichmentProgress: {
+            level,
+            current: 0,
+            total,
+            success: 0,
+            failed: 0,
+          },
+        }),
+      updateEnrichmentProgress: (progress) =>
+        set({ enrichmentProgress: progress }),
+      finishEnrichment: () =>
+        set({
+          isEnriching: false,
+          enrichmentProgress: null,
+          lastEnrichmentAt: Date.now(),
+        }),
 
       setEnrichmentQueueSize: (size) => set({ enrichmentQueueSize: size }),
       setUnenrichedCount: (count) => set({ unenrichedCount: count }),
@@ -171,7 +204,12 @@ export const useLibraryStore = create<LibraryState>()(
         set((state) => {
           const updated = state.tracks.map((track) =>
             track.id === trackId
-              ? { ...track, ...metadata, isEnriched: true, enrichedAt: Date.now() }
+              ? {
+                  ...track,
+                  ...metadata,
+                  isEnriched: true,
+                  enrichedAt: Date.now(),
+                }
               : track,
           );
           return {
@@ -189,14 +227,17 @@ export const useLibraryStore = create<LibraryState>()(
           enrichmentQueueSize: 0,
           unenrichedCount: 0,
           lastScanAt: null,
-          // Catatan: jangan reset hasCompletedInitialScan saat clear library 
+          // Catatan: jangan reset hasCompletedInitialScan saat clear library
           // kecuali kamu benar-benar ingin scan otomatis jalan lagi dari nol.
         }),
 
       get hasPendingEnrichment() {
-        return (get().unenrichedCount || 0) > 0 || (get().enrichmentQueueSize || 0) > 0;
+        return (
+          (get().unenrichedCount || 0) > 0 ||
+          (get().enrichmentQueueSize || 0) > 0
+        );
       },
-      
+
       get scanStatus() {
         return {
           isScanning: get().isAutoScanning || get().isManualScanning,
@@ -224,4 +265,3 @@ export const useLibraryStore = create<LibraryState>()(
     },
   ),
 );
- 

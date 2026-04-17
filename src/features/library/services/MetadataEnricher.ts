@@ -3,14 +3,14 @@
  * Pristine Audio - Background processor untuk metadata extraction & deep analysis
  */
 
-import { ScanQueue } from './ScanQueue';
-import MetadataExtractor from '../api/metadata';
-import { LibraryScanner } from '../api/scanner';
-import { useLibraryStore } from '../store/libraryStore';
-import { analyzeBitDepth } from '../../audio/api/BitDepthVerifier';
-import OnlineMetadataService from './OnlineMetadataService';
-import type { QueueItem, EnrichmentLevel } from '../types/scan';
-import { Song } from '@/shared/types/audio';
+import { ScanQueue } from "./ScanQueue";
+import MetadataExtractor from "../api/metadata";
+import { LibraryScanner } from "../api/scanner";
+import { useLibraryStore } from "../store/libraryStore";
+import { analyzeBitDepth } from "../../audio/api/BitDepthVerifier";
+import OnlineMetadataService from "./OnlineMetadataService";
+import type { QueueItem, EnrichmentLevel } from "../types/scan";
+import { Song } from "@/shared/types/audio";
 
 export class MetadataEnricher {
   private static isRunning = false;
@@ -21,7 +21,11 @@ export class MetadataEnricher {
    * Menjalankan worker di background untuk memproses antrian secara perlahan
    */
   static async startBackgroundWorker(
-    onProgress?: (processed: number, remaining: number, currentSong?: string) => void
+    onProgress?: (
+      processed: number,
+      remaining: number,
+      currentSong?: string,
+    ) => void,
   ): Promise<void> {
     if (this.isRunning) return;
 
@@ -29,7 +33,7 @@ export class MetadataEnricher {
     this.abortController = new AbortController();
     this.processedCount = 0;
 
-    console.log('[MetadataEnricher] Background worker started');
+    console.log("[MetadataEnricher] Background worker started");
     const store = useLibraryStore.getState();
 
     while (this.isRunning && !this.abortController?.signal.aborted) {
@@ -42,25 +46,24 @@ export class MetadataEnricher {
 
         const remaining = await ScanQueue.getSize();
         onProgress?.(this.processedCount, remaining, item.songId);
-        
+
         // Update size antrian di store untuk UI (ScanStatusBar)
         store.setEnrichmentQueueSize(remaining);
-
       } catch (error) {
         console.warn(`[MetadataEnricher] Failed ${item.songId}:`, error);
         await ScanQueue.retry(item);
       }
 
       // Gentle delay (350ms) agar I/O storage tidak bottleneck dan UI tetap smooth
-      await new Promise(r => setTimeout(r, 350));
+      await new Promise((r) => setTimeout(r, 350));
     }
 
     this.isRunning = false;
     this.abortController = null;
-    
+
     // Memberitahu store bahwa proses enrichment selesai
     store.finishEnrichment({ success: this.processedCount, failed: 0 });
-    console.log('[MetadataEnricher] Background worker finished');
+    console.log("[MetadataEnricher] Background worker finished");
   }
 
   /**
@@ -76,7 +79,7 @@ export class MetadataEnricher {
    */
   private static async processItem(item: QueueItem): Promise<void> {
     const store = useLibraryStore.getState();
-    
+
     // Ambil data track awal dari store
     const existingTrack = store.tracks?.find((t) => t.id === item.songId);
     const uri = existingTrack?.uri || item.uri;
@@ -89,20 +92,23 @@ export class MetadataEnricher {
     try {
       // === LEVEL 1 & 2: Technical Metadata & Basic Tags ===
       const metadata = await MetadataExtractor.extract(uri);
-      
+
       if (metadata) {
         // === LEVEL 3: Deep Verification (Pristine Engine) ===
         // Hanya verifikasi jika file mengklaim kualitas Hi-Res
-        const isHighResClaimed = (metadata.bitDepth || 0) > 16 || (metadata.sampleRate || 0) > 48000;
-        
+        const isHighResClaimed =
+          (metadata.bitDepth || 0) > 16 || (metadata.sampleRate || 0) > 48000;
+
         if (isHighResClaimed) {
           const analysis = await analyzeBitDepth(metadata as Song);
-          
+
           // Set ulang flag Hi-Res berdasarkan data verifikasi asli
           metadata.isHiRes = !analysis.isFake && isHighResClaimed;
-          
+
           if (analysis.isFake) {
-            console.log(`[MetadataEnricher] ⚠️ Fake Hi-Res detected: ${metadata.title} (Actual: ${analysis.realDepth}-bit)`);
+            console.log(
+              `[MetadataEnricher] ⚠️ Fake Hi-Res detected: ${metadata.title} (Actual: ${analysis.realDepth}-bit)`,
+            );
           }
         }
 
@@ -110,10 +116,10 @@ export class MetadataEnricher {
         // 1. Simpan ke SQLite (Gunakan integer 1 untuk SQLite boolean compatibility)
         await LibraryScanner.updateMetadata(item.songId, {
           ...metadata,
-          isEnriched: true, 
+          isEnriched: true,
           lastEnrichedAt: Date.now(),
         });
- 
+
         // 2. Update Zustand Store (Gunakan boolean true untuk React UI)
         store.markAsEnriched(item.songId, {
           ...metadata,
@@ -126,16 +132,26 @@ export class MetadataEnricher {
         if (metadata.artist && metadata.artist !== "Unknown Artist") {
           OnlineMetadataService.getArtistEnrichment(metadata.artist)
             .then((artistData) => {
-               if(artistData.imageUrl) {
-                 // Opsional: Kamu bisa buat action di store `store.updateArtistImage(name, url)`
-                 console.log(`[Level 4] Downloaded image for: ${metadata.artist}`);
-               }
+              if (artistData.imageUrl) {
+                // Opsional: Kamu bisa buat action di store `store.updateArtistImage(name, url)`
+                console.log(
+                  `[Level 4] Downloaded image for: ${metadata.artist}`,
+                );
+              }
             })
-            .catch(e => console.warn(`[Level 4] Error fetching artist ${metadata.artist}`, e));
+            .catch((e) =>
+              console.warn(
+                `[Level 4] Error fetching artist ${metadata.artist}`,
+                e,
+              ),
+            );
         }
       }
     } catch (error) {
-      console.error(`[MetadataEnricher] Critical error processing ${item.songId}:`, error);
+      console.error(
+        `[MetadataEnricher] Critical error processing ${item.songId}:`,
+        error,
+      );
       throw error; // Lempar error agar ditangkap blok catch di worker untuk di-retry
     }
   }
@@ -146,11 +162,19 @@ export class MetadataEnricher {
    */
   static async enrichBatch(
     songIds: string[],
-    onProgress?: (current: number, total: number, songInfo?: { title?: string; artist?: string }) => void
+    onProgress?: (
+      current: number,
+      total: number,
+      songInfo?: { title?: string; artist?: string },
+    ) => void,
   ): Promise<{ success: number; failed: number; skipped: number }> {
-    console.log(`[MetadataEnricher] enrichBatch started with ${songIds.length} songs`);
+    console.log(
+      `[MetadataEnricher] enrichBatch started with ${songIds.length} songs`,
+    );
 
-    let success = 0, failed = 0, skipped = 0;
+    let success = 0,
+      failed = 0,
+      skipped = 0;
     const store = useLibraryStore.getState();
 
     for (let i = 0; i < songIds.length; i++) {
@@ -163,19 +187,19 @@ export class MetadataEnricher {
       }
 
       try {
-        await this.processItem({ 
+        await this.processItem({
           songId,
           uri: song.uri,
           priority: 0,
           level: 2 as EnrichmentLevel,
           addedAt: Date.now(),
-          retryCount: 0
+          retryCount: 0,
         });
 
         success++;
-        onProgress?.(i + 1, songIds.length, { 
-          title: song.title, 
-          artist: song.artist 
+        onProgress?.(i + 1, songIds.length, {
+          title: song.title,
+          artist: song.artist,
         });
       } catch (error) {
         failed++;
@@ -183,7 +207,7 @@ export class MetadataEnricher {
       }
 
       // Delay minimal saat batch manual agar UI tidak membeku (freeze)
-      if (i % 5 === 0) await new Promise(r => setTimeout(r, 10));
+      if (i % 5 === 0) await new Promise((r) => setTimeout(r, 10));
     }
 
     store.finishEnrichment({ success, failed });
@@ -193,8 +217,10 @@ export class MetadataEnricher {
   /**
    * Menambahkan lagu-lagu baru ke dalam database antrian persisten
    */
-  static async queueSongs(songs: Array<{ id: string; uri: string; priority?: number }>): Promise<number> {
-    const items: QueueItem[] = songs.map(s => ({
+  static async queueSongs(
+    songs: Array<{ id: string; uri: string; priority?: number }>,
+  ): Promise<number> {
+    const items: QueueItem[] = songs.map((s) => ({
       songId: s.id,
       uri: s.uri,
       priority: s.priority || 0,
@@ -204,12 +230,12 @@ export class MetadataEnricher {
     }));
 
     const added = await ScanQueue.add(items);
-    
+
     // Sinkronisasikan angka antrian UI
     const store = useLibraryStore.getState();
     const currentSize = store.enrichmentQueueSize || 0;
     store.setEnrichmentQueueSize(currentSize + added);
-    
+
     return added;
   }
 }

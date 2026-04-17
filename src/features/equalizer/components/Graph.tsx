@@ -36,11 +36,11 @@ export const FrequencyGraph: React.FC<Props> = ({
     if (!bands) return { curve: Skia.Path.Make(), fill: Skia.Path.Make() };
 
     // Ambil data: cek apakah dia SharedValue (punya property .value) atau array biasa
-    const currentBands = 'value' in bands ? bands.value : bands;
-    
+    const currentBands = "value" in bands ? bands.value : bands;
+
     const skPath = Skia.Path.Make();
     if (!currentBands || currentBands.length === 0) {
-        return { curve: skPath, fill: skPath };
+      return { curve: skPath, fill: skPath };
     }
 
     const stepX = width / (currentBands.length - 1);
@@ -68,13 +68,22 @@ export const FrequencyGraph: React.FC<Props> = ({
   });
 
   // 2. Config warna (useMemo agar tidak re-render kecuali tema berubah)
-  const colors = useMemo(() => ({
-    primary: theme.colors.primary[500],
-    accent: theme.colors.accent?.blue ?? "#00D4AA",
-    fillGradient: [`${theme.colors.primary[500]}44`, "transparent"] as string[],
-    lineGradient: [theme.colors.primary[500], theme.colors.accent?.blue ?? "#00D4AA"] as string[],
-    border: theme.colors.border.light
-  }), [theme]);
+  const colors = useMemo(
+    () => ({
+      primary: theme.colors.primary[500],
+      accent: theme.colors.accent?.blue ?? "#00D4AA",
+      fillGradient: [
+        `${theme.colors.primary[500]}44`,
+        "transparent",
+      ] as string[],
+      lineGradient: [
+        theme.colors.primary[500],
+        theme.colors.accent?.blue ?? "#00D4AA",
+      ] as string[],
+      border: theme.colors.border.light,
+    }),
+    [theme],
+  );
 
   return (
     <View style={[styles.container, { width, height }]}>
@@ -127,7 +136,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginVertical: 10,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: "rgba(0,0,0,0.05)",
     borderRadius: 8,
   },
   zeroLine: {
@@ -150,5 +159,3 @@ const styles = StyleSheet.create({
     fontFamily: "monospace",
   },
 });
-
- 

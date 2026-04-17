@@ -77,4 +77,4 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: "600",
   },
-}); 
+});

@@ -83,7 +83,7 @@ export function formatFileSize(bytes: number): string {
 export interface Playlist {
   id: string;
   name: string;
-  songs: string[];       // Array of Song IDs
+  songs: string[]; // Array of Song IDs
   createdAt: number;
   updatedAt: number;
 }
@@ -91,11 +91,11 @@ export interface Playlist {
 export interface PlaybackState {
   isPlaying: boolean;
   isLoading: boolean;
-  position: number;      // Dalam detik (float)
+  position: number; // Dalam detik (float)
   duration: number;
   buffered: number;
   volume: number;
-  rate: number;          // Playback speed (0.5x - 2.0x)
+  rate: number; // Playback speed (0.5x - 2.0x)
 }
 
 export interface Queue {

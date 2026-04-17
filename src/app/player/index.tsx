@@ -144,9 +144,7 @@ export default function PlayerScreen() {
     isDark ? "#000000" : colors.background.secondary,
   ];
 
-  const bottomBarColor = isDark
-    ? "rgba(255,255,255,0.05)"
-    : "rgba(0,0,0,0.03)";
+  const bottomBarColor = isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)";
 
   const iconColorDefault = isDark ? textTertiary : textSecondary;
 
@@ -246,16 +244,16 @@ export default function PlayerScreen() {
 
         {/* ✅ SPECTOGRAM VIEW */}
         <SpectogramView
-  width={width - 48}
-  height={120}
-  isPlaying={isPlaying}
-  audioSessionId={audioSessionId}
-  bins={64}
-  maxRows={30}
-  colorScheme="classic"
-  sensitivity={2.0}
-  showLabels={false} // bisa dimatikan untuk tampilan minimal
-/>
+          width={width - 48}
+          height={120}
+          isPlaying={isPlaying}
+          audioSessionId={audioSessionId}
+          bins={64}
+          maxRows={30}
+          colorScheme="classic"
+          sensitivity={2.0}
+          showLabels={false} // bisa dimatikan untuk tampilan minimal
+        />
 
         {/* Progress Section */}
         <View style={styles.progressSection}>
@@ -301,7 +299,11 @@ export default function PlayerScreen() {
             onPress={handlePlayPause}
           >
             {isPlaying ? (
-              <Pause size={32} color={isDark ? "#000" : "#FFF"} strokeWidth={2.5} />
+              <Pause
+                size={32}
+                color={isDark ? "#000" : "#FFF"}
+                strokeWidth={2.5}
+              />
             ) : (
               <Play
                 size={32}

@@ -28,7 +28,9 @@ TaskManager.defineTask(TASK_NAME, async () => {
   // Guard 2: Cek apakah user mengizinkan auto-scan di store
   const { isAutoScanEnabled } = useLibraryStore.getState();
   if (!isAutoScanEnabled) {
-    console.log("[BackgroundTask] Auto-scan is DISABLED by user. Unregistering task...");
+    console.log(
+      "[BackgroundTask] Auto-scan is DISABLED by user. Unregistering task...",
+    );
     await BackgroundTask.unregisterTaskAsync(TASK_NAME).catch(() => {});
     return BackgroundTask.BackgroundTaskResult.Success;
   }
@@ -49,27 +51,34 @@ TaskManager.defineTask(TASK_NAME, async () => {
 
     // 2. ✅ PENTING: Antrekan lagu baru untuk ekstraksi artwork/metadata
     if (result.newCount > 0 && result.newSongs && result.newSongs.length > 0) {
-      console.log(`[BackgroundTask] Queuing ${result.newCount} new songs for artwork enrichment...`);
-      
+      console.log(
+        `[BackgroundTask] Queuing ${result.newCount} new songs for artwork enrichment...`,
+      );
+
       await MetadataEnricher.queueSongs(
         result.newSongs.map((s: any) => ({
           id: s.id,
           uri: s.uri,
           priority: 0,
           level: 2, // Level 2 untuk ekstraksi lengkap (termasuk artwork)
-        }))
+        })),
       );
 
       // Jalankan worker di background (jangan ditunggu/await agar task tidak timeout)
       MetadataEnricher.startBackgroundWorker().catch((err) => {
-        console.warn("[BackgroundTask] Background worker encountered an error:", err);
+        console.warn(
+          "[BackgroundTask] Background worker encountered an error:",
+          err,
+        );
       });
     }
 
     // 3. Beritahu user jika ada perubahan koleksi
     await _sendChangeNotification(result.newCount, result.deletedCount);
 
-    console.log(`✅ [BackgroundTask] Success: +${result.newCount}, -${result.deletedCount}`);
+    console.log(
+      `✅ [BackgroundTask] Success: +${result.newCount}, -${result.deletedCount}`,
+    );
     return BackgroundTask.BackgroundTaskResult.Success;
   } catch (error) {
     console.error("[BackgroundTask] Task execution failed:", error);
@@ -89,7 +98,9 @@ export const BackgroundScanTask = {
 
     const { isAutoScanEnabled } = useLibraryStore.getState();
     if (!isAutoScanEnabled) {
-      console.log("[BackgroundTask] Skip registration: User disabled auto-scan.");
+      console.log(
+        "[BackgroundTask] Skip registration: User disabled auto-scan.",
+      );
       return false;
     }
 
@@ -158,7 +169,10 @@ async function _setupNotificationChannel(): Promise<void> {
   });
 }
 
-async function _sendChangeNotification(newCount: number, deletedCount: number): Promise<void> {
+async function _sendChangeNotification(
+  newCount: number,
+  deletedCount: number,
+): Promise<void> {
   const body = [
     newCount > 0 ? `${newCount} lagu baru ditemukan` : null,
     deletedCount > 0 ? `${deletedCount} lagu dihapus` : null,
@@ -176,4 +190,3 @@ async function _sendChangeNotification(newCount: number, deletedCount: number): 
     trigger: null,
   });
 }
- 

@@ -31,7 +31,9 @@ const visualizerEmitter = NativeVisualizerBridge
 class VisualizerService {
   private onFftData: ((data: number[]) => void) | null = null;
   private subscription: EmitterSubscription | null = null;
-  private appStateSubscription: ReturnType<typeof AppState.addEventListener> | null = null;
+  private appStateSubscription: ReturnType<
+    typeof AppState.addEventListener
+  > | null = null;
 
   private isStarted = false;
   private isPaused = false;
@@ -53,7 +55,10 @@ class VisualizerService {
   private subscribeToEmitter(): void {
     if (!visualizerEmitter || this.subscription) return;
     try {
-      this.subscription = visualizerEmitter.addListener("onFftData", this.handleFftData);
+      this.subscription = visualizerEmitter.addListener(
+        "onFftData",
+        this.handleFftData,
+      );
     } catch (e) {
       console.error("[VisualizerService] Failed to subscribe to emitter:", e);
     }
@@ -70,7 +75,8 @@ class VisualizerService {
   private handleAppStateChange = (nextAppState: AppStateStatus) => {
     if (
       (nextAppState === "inactive" || nextAppState === "background") &&
-      this.isStarted && !this.isPaused
+      this.isStarted &&
+      !this.isPaused
     ) {
       this.pause();
     } else if (
@@ -94,7 +100,9 @@ class VisualizerService {
     config?: Partial<VisualizerConfig>,
   ): void {
     if (typeof callback !== "function") {
-      console.error("[VisualizerService] setDataCallback() requires a function");
+      console.error(
+        "[VisualizerService] setDataCallback() requires a function",
+      );
       return;
     }
     if (config) this.config = { ...this.config, ...config };
@@ -145,7 +153,10 @@ class VisualizerService {
 
     // Kalau callback belum diset, simpan session ID dan tunggu
     if (!this.onFftData) {
-      console.log("[VisualizerService] Callback not set yet, queuing session", sessionId);
+      console.log(
+        "[VisualizerService] Callback not set yet, queuing session",
+        sessionId,
+      );
       this.pendingSessionId = sessionId;
       return false;
     }
@@ -204,7 +215,9 @@ class VisualizerService {
 
   destroy(): void {
     this.stop();
-    try { this.subscription?.remove(); } catch (_) {}
+    try {
+      this.subscription?.remove();
+    } catch (_) {}
     this.subscription = null;
     this.appStateSubscription?.remove();
     this.appStateSubscription = null;
@@ -217,7 +230,10 @@ class VisualizerService {
     if (!this.onFftData) return;
     if (!this.isStarted) return; // jangan proses kalau sudah stop/pause
     if (!Array.isArray(data) || data.length !== 128) {
-      console.warn("[VisualizerService] Invalid FFT data length:", data?.length);
+      console.warn(
+        "[VisualizerService] Invalid FFT data length:",
+        data?.length,
+      );
       return;
     }
     const smoothed = this.applySmoothing(data);
@@ -231,7 +247,8 @@ class VisualizerService {
       return data;
     }
     const smoothed = data.map(
-      (v, i) => this.previousData![i] * (1 - smoothingFactor) + v * smoothingFactor,
+      (v, i) =>
+        this.previousData![i] * (1 - smoothingFactor) + v * smoothingFactor,
     );
     this.previousData = smoothed;
     return smoothed;
@@ -250,7 +267,9 @@ class VisualizerService {
   }
 
   private stopNativeVisualizer(): void {
-    try { NativeVisualizerBridge?.stopVisualizer(); } catch (_) {}
+    try {
+      NativeVisualizerBridge?.stopVisualizer();
+    } catch (_) {}
   }
 
   private delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -258,4 +277,3 @@ class VisualizerService {
 
 export const visualizerService = new VisualizerService();
 export default visualizerService;
- 

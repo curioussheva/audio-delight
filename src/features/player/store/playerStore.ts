@@ -32,7 +32,9 @@ let _positionSaveTimer: ReturnType<typeof setTimeout> | null = null;
 const savePositionThrottled = (position: number) => {
   if (_positionSaveTimer) return;
   _positionSaveTimer = setTimeout(() => {
-    AsyncStorage.setItem(KEYS.LAST_POSITION, position.toString()).catch(() => {});
+    AsyncStorage.setItem(KEYS.LAST_POSITION, position.toString()).catch(
+      () => {},
+    );
     _positionSaveTimer = null;
   }, 5000);
 };
@@ -110,7 +112,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isVisualizerOpen: false,
   isDrawerOpen: false,
   audioSessionId: null,
-  
 
   // ── Initialization ───────────────────────────────────────────────────────
   initStore: async () => {
@@ -131,13 +132,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         ...(mode ? { audioMode: mode as AudioMode } : {}),
       });
 
-      const queueIds: string[] = lastQueueIdsRaw ? JSON.parse(lastQueueIdsRaw) : [];
+      const queueIds: string[] = lastQueueIdsRaw
+        ? JSON.parse(lastQueueIdsRaw)
+        : [];
       const lastPosition = lastPositionRaw ? parseFloat(lastPositionRaw) : 0;
 
       if (queueIds.length > 0 && lastSongId) {
         const restoredQueue = getSongsByIds(queueIds);
         if (restoredQueue.length > 0) {
-          const currentSong = restoredQueue.find((s) => s.id === lastSongId) ?? restoredQueue[0];
+          const currentSong =
+            restoredQueue.find((s) => s.id === lastSongId) ?? restoredQueue[0];
 
           set({
             queue: restoredQueue,
@@ -146,11 +150,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           });
 
           try {
-            const tracks = restoredQueue.map(songToTrack).filter((t) => !!t.url);
+            const tracks = restoredQueue
+              .map(songToTrack)
+              .filter((t) => !!t.url);
             if (tracks.length > 0) {
               await TrackPlayer.reset();
               await TrackPlayer.add(tracks);
-              const songIndex = restoredQueue.findIndex((s) => s.id === currentSong.id);
+              const songIndex = restoredQueue.findIndex(
+                (s) => s.id === currentSong.id,
+              );
               if (songIndex >= 0) await TrackPlayer.skip(songIndex);
               if (lastPosition > 0) await TrackPlayer.seekTo(lastPosition);
             }
@@ -208,7 +216,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
       // Save to storage
       AsyncStorage.setItem(KEYS.LAST_SONG_ID, playableSong.id).catch(() => {});
-      AsyncStorage.setItem(KEYS.LAST_QUEUE_IDS, JSON.stringify(targetQueue.map(s => s.id))).catch(() => {});
+      AsyncStorage.setItem(
+        KEYS.LAST_QUEUE_IDS,
+        JSON.stringify(targetQueue.map((s) => s.id)),
+      ).catch(() => {});
       AsyncStorage.setItem(KEYS.LAST_POSITION, "0").catch(() => {});
 
       SongQueries.incrementPlayCount?.(playableSong.id, 0);
@@ -282,7 +293,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   toggleShuffle: () => set((s) => ({ shuffle: !s.shuffle })),
 
   toggleRepeat: () => {
-    const map: Record<RepeatMode, RepeatMode> = { off: "all", all: "track", track: "off" };
+    const map: Record<RepeatMode, RepeatMode> = {
+      off: "all",
+      all: "track",
+      track: "off",
+    };
     set((s) => ({ repeat: map[s.repeat] }));
   },
 
@@ -335,9 +350,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setMainPlayerOpen: (open) => set({ isMainPlayerOpen: open }),
   setVisualizerOpen: (open) => set({ isVisualizerOpen: open }),
   setDrawerOpen: (open) => set({ isDrawerOpen: open }),
-  toggleMainPlayer: () => set((s) => ({ isMainPlayerOpen: !s.isMainPlayerOpen })),
-  resetFloatingPlayerVisibility: () => 
-    set({ isMainPlayerOpen: false, isVisualizerOpen: false, isDrawerOpen: false }),
+  toggleMainPlayer: () =>
+    set((s) => ({ isMainPlayerOpen: !s.isMainPlayerOpen })),
+  resetFloatingPlayerVisibility: () =>
+    set({
+      isMainPlayerOpen: false,
+      isVisualizerOpen: false,
+      isDrawerOpen: false,
+    }),
 
   setAudioSessionId: (id: number | null) => {
     set({ audioSessionId: id });
@@ -354,31 +374,34 @@ const getSongsByIds = (ids: string[]): Song[] => {
     const placeholders = ids.map(() => "?").join(", ");
     const result = db.execute(
       `SELECT * FROM songs WHERE id IN (${placeholders})`,
-      ids
+      ids,
     );
     const rows = result.rows?._array ?? [];
-    
-    return rows.map((row: any) => ({
-      id: String(row.id || ""),
-      uri: row.uri || "",
-      title: row.title || "Unknown Title",
-      artist: row.artist || "Unknown Artist",
-      album: row.album || "Unknown Album",
-      duration: Number(row.duration || 0),
-      artwork: row.artwork || undefined,
-      genre: row.genre,
-      folder: row.folder,
-      filename: row.filename,
-      sampleRate: Number(row.sampleRate) || undefined,
-      bitDepth: Number(row.bitDepth) || undefined,
-      bitrate: Number(row.bitrate) || undefined,
-      isHiRes: (Number(row.sampleRate) > 48000) || (Number(row.bitDepth) > 16),
-    } as Song));
+
+    return rows.map(
+      (row: any) =>
+        ({
+          id: String(row.id || ""),
+          uri: row.uri || "",
+          title: row.title || "Unknown Title",
+          artist: row.artist || "Unknown Artist",
+          album: row.album || "Unknown Album",
+          duration: Number(row.duration || 0),
+          artwork: row.artwork || undefined,
+          genre: row.genre,
+          folder: row.folder,
+          filename: row.filename,
+          sampleRate: Number(row.sampleRate) || undefined,
+          bitDepth: Number(row.bitDepth) || undefined,
+          bitrate: Number(row.bitrate) || undefined,
+          isHiRes: Number(row.sampleRate) > 48000 || Number(row.bitDepth) > 16,
+        }) as Song,
+    );
   } catch (e) {
     console.warn("[Player] getSongsByIds failed:", e);
     return [];
   }
-}; 
+};
 
 const songToTrack = (s: Song) => ({
   id: s.id,
@@ -401,4 +424,4 @@ const recoverUri = async (song: Song): Promise<Song> => {
 };
 
 // Bootstrap
-usePlayerStore.getState().initStore(); 
+usePlayerStore.getState().initStore();

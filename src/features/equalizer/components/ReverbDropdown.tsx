@@ -41,7 +41,8 @@ export const ReverbDropdown: React.FC<ReverbProps> = ({
   const { theme } = useTheme();
   const [modalVisible, setModalVisible] = useState(false);
 
-  const currentPreset = REVERB_PRESETS.find((p) => p.id === value) || REVERB_PRESETS[0];
+  const currentPreset =
+    REVERB_PRESETS.find((p) => p.id === value) || REVERB_PRESETS[0];
 
   const handleSelect = (presetId: number) => {
     onChange(presetId);
@@ -58,7 +59,9 @@ export const ReverbDropdown: React.FC<ReverbProps> = ({
         style={[
           styles.selectorBox,
           {
-            borderColor: disabled ? "rgba(68, 68, 68, 0.3)" : hexToRGBA(color, 0.3),
+            borderColor: disabled
+              ? "rgba(68, 68, 68, 0.3)"
+              : hexToRGBA(color, 0.3),
             backgroundColor: disabled ? "#0A0A0A" : "#111",
             opacity: disabled ? 0.6 : 1,
           },
@@ -82,9 +85,14 @@ export const ReverbDropdown: React.FC<ReverbProps> = ({
             style={styles.modalBackdrop}
             onPress={() => setModalVisible(false)}
           />
-          <View style={[styles.dropdownContainer, { backgroundColor: theme.colors.background.primary }]}>
+          <View
+            style={[
+              styles.dropdownContainer,
+              { backgroundColor: theme.colors.background.primary },
+            ]}
+          >
             <Text style={styles.modalTitle}>Select Reverb Preset</Text>
-            
+
             <FlatList
               data={REVERB_PRESETS}
               keyExtractor={(item) => item.id.toString()}
@@ -101,13 +109,19 @@ export const ReverbDropdown: React.FC<ReverbProps> = ({
                     <Text
                       style={[
                         styles.presetLabel,
-                        { color: isSelected ? color : theme.colors.text.secondary },
+                        {
+                          color: isSelected
+                            ? color
+                            : theme.colors.text.secondary,
+                        },
                       ]}
                     >
                       {item.label}
                     </Text>
                     {isSelected && (
-                      <View style={[styles.activeDot, { backgroundColor: color }]} />
+                      <View
+                        style={[styles.activeDot, { backgroundColor: color }]}
+                      />
                     )}
                   </Pressable>
                 );

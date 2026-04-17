@@ -44,13 +44,13 @@ export const analyzeBitDepth = async (
     // Pastikan variabel 'sampleRate' tersedia di scope ini (diambil dari metadata lagu)
 
     const estimatedDepth = estimateRealBitDepth(
-  declaredDepth,
-  analysis.estimatedDynamicRangeDb,
-  analysis.estimatedSpectralCutoffHz,
-  compressionRatio,
-  analysis.detectedBitrateKbps,
-  44100 // Jika benar-benar tidak ada variabel sampleRate, gunakan 44100 sebagai fallback
-);
+      declaredDepth,
+      analysis.estimatedDynamicRangeDb,
+      analysis.estimatedSpectralCutoffHz,
+      compressionRatio,
+      analysis.detectedBitrateKbps,
+      44100, // Jika benar-benar tidak ada variabel sampleRate, gunakan 44100 sebagai fallback
+    );
 
     // Calculate confidence
     const confidence = calculateConfidence(
@@ -89,7 +89,7 @@ function estimateRealBitDepth(
   sampleRate: number, // Tambahkan parameter ini
 ): number {
   // --- Heuristic 1: Dynamic Range Validation ---
-  // File 24-bit asli harusnya punya DR > 96dB. 
+  // File 24-bit asli harusnya punya DR > 96dB.
   // Jika DR hanya ~90dB, itu kemungkinan besar 16-bit yang di-padding.
   const theoreticalFromDR = Math.max(1, (dynamicRange - 1.76) / 6.02);
 
@@ -102,8 +102,9 @@ function estimateRealBitDepth(
   // --- Heuristic 3: Enhanced Compression Ratio ---
   // File 24-bit dengan 8-bit terakhir berisi nol (padding) akan sangat "kopong".
   // FLAC akan mengompresi bit padding ini mendekati rasio 0.
-  const expectedRatio = declared <= 16 ? 0.6 : 0.45; 
-  const isPaddingSuspected = compressionRatio > 0 && compressionRatio < (expectedRatio * 0.65);
+  const expectedRatio = declared <= 16 ? 0.6 : 0.45;
+  const isPaddingSuspected =
+    compressionRatio > 0 && compressionRatio < expectedRatio * 0.65;
 
   // --- Scoring System ---
   let score = theoreticalFromDR;
@@ -123,7 +124,7 @@ function estimateRealBitDepth(
   if (score < 18) return 16;
   if (score < 26) return 24;
   return 32;
-} 
+}
 
 function calculateConfidence(
   declared: number,

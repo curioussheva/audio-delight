@@ -226,11 +226,11 @@ export const SongQueries = {
   incrementPlayCount: (songId: string, duration: number) => {
     db.execute(
       `UPDATE songs SET playCount = playCount + 1, lastPlayedAt = ? WHERE id = ?`,
-      [Date.now(), songId]
+      [Date.now(), songId],
     );
     db.execute(
       `INSERT INTO recent_plays (song_id, played_at, play_duration) VALUES (?, ?, ?)`,
-      [songId, Date.now(), duration]
+      [songId, Date.now(), duration],
     );
   },
 
@@ -241,7 +241,7 @@ export const SongQueries = {
        JOIN songs s ON rp.song_id = s.id
        ORDER BY rp.played_at DESC
        LIMIT ?`,
-      [limit]
+      [limit],
     );
   },
 
@@ -261,8 +261,15 @@ export const SongQueries = {
            ELSE 3
          END
        LIMIT 100`,
-      [searchTerm, searchTerm, searchTerm, searchTerm, searchTerm,
-       searchTerm, searchTerm]
+      [
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+      ],
     );
   },
 
@@ -272,14 +279,14 @@ export const SongQueries = {
        WHERE playCount > 0
        ORDER BY playCount DESC, lastPlayedAt DESC
        LIMIT ?`,
-      [limit]
+      [limit],
     );
   },
 
   getByRating: (minRating: number = 4) => {
     return db.execute(
       `SELECT * FROM songs WHERE rating >= ? ORDER BY rating DESC`,
-      [minRating]
+      [minRating],
     );
   },
 
@@ -287,10 +294,9 @@ export const SongQueries = {
   getUnenrichedSongs: (limit: number = 50) => {
     return db.execute(
       `SELECT id, artist FROM songs WHERE isEnriched = 0 LIMIT ?`,
-      [limit]
+      [limit],
     );
   },
 };
 
 export default SQLiteService;
- 

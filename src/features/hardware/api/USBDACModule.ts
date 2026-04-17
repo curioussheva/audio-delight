@@ -48,11 +48,16 @@ export interface ExclusiveModeResult {
 interface NativeUSBDACModuleType {
   // 1. Detection
   detectDACs(): Promise<DACInfo[]>;
-  
+
   // 2. Settings & Exclusive Mode
-  setExclusiveMode(dacId: string, enabled: boolean): Promise<ExclusiveModeResult>;
+  setExclusiveMode(
+    dacId: string,
+    enabled: boolean,
+  ): Promise<ExclusiveModeResult>;
   isExclusiveModeActive(): Promise<boolean>;
-  setSampleRate(sampleRate: number): Promise<{ success: boolean; sampleRate: number }>;
+  setSampleRate(
+    sampleRate: number,
+  ): Promise<{ success: boolean; sampleRate: number }>;
   getRecommendedSettings(dacId: string): Promise<{
     sampleRate: number;
     bitDepth: number;
@@ -77,10 +82,14 @@ interface NativeUSBDACModuleType {
 // Module Resolution
 // ============================================================================
 
-const NativeModule = NativeModules.USBDACModule as NativeUSBDACModuleType | undefined;
+const NativeModule = NativeModules.USBDACModule as
+  | NativeUSBDACModuleType
+  | undefined;
 
 if (Platform.OS === "android" && !NativeModule) {
-  console.warn("[USBDACModule] Not available. Check MainApplication registration.");
+  console.warn(
+    "[USBDACModule] Not available. Check MainApplication registration.",
+  );
 }
 
 export const usbDacEmitter = NativeModule
@@ -119,7 +128,10 @@ export const USBDACService = {
   },
 
   // ─── Exclusive Mode ─────────────────────────────────────────────────────────
-  setExclusiveMode: async (dacId: string, enabled: boolean): Promise<ExclusiveModeResult> => {
+  setExclusiveMode: async (
+    dacId: string,
+    enabled: boolean,
+  ): Promise<ExclusiveModeResult> => {
     if (!NativeModule) {
       return { success: false, active: false, mode: "system" };
     }
@@ -206,7 +218,10 @@ export const USBDACService = {
     }
   },
 
-  setEqualizerGains: async (gains: number[], audioSessionId: number): Promise<boolean> => {
+  setEqualizerGains: async (
+    gains: number[],
+    audioSessionId: number,
+  ): Promise<boolean> => {
     if (!NativeModule) return false;
     try {
       return await NativeModule.setEqualizerGains(gains, audioSessionId);
@@ -223,8 +238,7 @@ export const USBDACService = {
     } catch (e) {
       return false;
     }
-  }
+  },
 };
 
 export default USBDACService;
- 

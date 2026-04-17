@@ -285,11 +285,11 @@ export const THEME_CATEGORIES = {
     "neon-cyber",
     "sunset-orange",
     "emerald-noir",
-    "cozy-metallic",    // ✨ Baru
-    "blue-jeans",       // ✨ Baru
-    "vinyl-noir",       // ✨ Baru
-    "aged-whiskey",     // ✨ Baru
-    "graphite-slate",   // ✨ Baru
+    "cozy-metallic", // ✨ Baru
+    "blue-jeans", // ✨ Baru
+    "vinyl-noir", // ✨ Baru
+    "aged-whiskey", // ✨ Baru
+    "graphite-slate", // ✨ Baru
   ],
   nature: ["forest-green", "ocean-wave"],
   premium: ["golden-hour", "rose-gold"],

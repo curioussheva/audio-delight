@@ -11,7 +11,12 @@ import { Tabs, usePathname } from "expo-router";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
-import { Library, SlidersHorizontal, Activity, BarChart2 } from "lucide-react-native";
+import {
+  Library,
+  SlidersHorizontal,
+  Activity,
+  BarChart2,
+} from "lucide-react-native";
 
 import { useTheme } from "@/shared/context/ThemeContext";
 import FloatingPlayer from "@/features/player/components/FloatingPlayer";
@@ -19,7 +24,7 @@ import FloatingPlayer from "@/features/player/components/FloatingPlayer";
 // ─── Konstanta tinggi — dipakai di sini dan bisa diexport untuk paddingBottom list
 export const TAB_BAR_HEIGHT = Platform.OS === "ios" ? 60 : 64;
 export const FLOATING_PLAYER_HEIGHT = 72; // tinggi FloatingPlayer
-export const FLOATING_PLAYER_MARGIN = 8;  // jarak player dari tab bar
+export const FLOATING_PLAYER_MARGIN = 8; // jarak player dari tab bar
 
 // Total padding bawah yang dibutuhkan list agar row terakhir tidak tertutup
 export const LIST_BOTTOM_PADDING =
@@ -28,20 +33,27 @@ export const LIST_BOTTOM_PADDING =
 // ── Tab Item ──────────────────────────────────────────────────────────────────
 
 const TAB_ICONS: Record<string, any> = {
-  library:   Library,
+  library: Library,
   equalizer: SlidersHorizontal,
   visualizer: Activity,
-  analyzer:  BarChart2,
+  analyzer: BarChart2,
 };
 
 const TabItem = memo(({ route, isFocused, onPress, colors, label }: any) => {
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () =>
-    Animated.spring(scaleAnim, { toValue: 0.88, useNativeDriver: true }).start();
+    Animated.spring(scaleAnim, {
+      toValue: 0.88,
+      useNativeDriver: true,
+    }).start();
 
   const handlePressOut = () =>
-    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, friction: 5 }).start();
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      friction: 5,
+    }).start();
 
   const IconComponent = TAB_ICONS[route.name] ?? Activity;
 
@@ -56,11 +68,13 @@ const TabItem = memo(({ route, isFocused, onPress, colors, label }: any) => {
       style={styles.tabItem}
       activeOpacity={1}
     >
-      <Animated.View style={{ transform: [{ scale: scaleAnim }], alignItems: "center" }}>
+      <Animated.View
+        style={{ transform: [{ scale: scaleAnim }], alignItems: "center" }}
+      >
         <IconComponent
           size={22}
           color={isFocused ? colors.primary[500] : colors.text.tertiary}
-          strokeWidth={isFocused ? 2.5 : 1.8}  // konsisten semua tab
+          strokeWidth={isFocused ? 2.5 : 1.8} // konsisten semua tab
         />
         <Text
           style={[
@@ -146,10 +160,10 @@ export default function TabsLayout() {
           animation: "fade",
         }}
       >
-        <Tabs.Screen name="library"    options={{ title: "Library" }} />
-        <Tabs.Screen name="equalizer"  options={{ title: "DSP" }} />
+        <Tabs.Screen name="library" options={{ title: "Library" }} />
+        <Tabs.Screen name="equalizer" options={{ title: "DSP" }} />
         <Tabs.Screen name="visualizer" options={{ title: "Live" }} />
-        <Tabs.Screen name="analyzer"   options={{ title: "Analyzer" }} />
+        <Tabs.Screen name="analyzer" options={{ title: "Analyzer" }} />
       </Tabs>
 
       {showFloatingPlayer && (
@@ -193,7 +207,7 @@ const styles = StyleSheet.create({
   floatingContainer: {
     position: "absolute",
     left: 12,
-    right: 12,       // ✅ simetris
+    right: 12, // ✅ simetris
     zIndex: 999,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
@@ -202,4 +216,3 @@ const styles = StyleSheet.create({
     elevation: 20,
   },
 });
- 

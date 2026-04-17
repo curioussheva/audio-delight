@@ -8,8 +8,8 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
-  Modal, 
-  FlatList
+  Modal,
+  FlatList,
 } from "react-native";
 
 // Lucide Icons
@@ -24,9 +24,9 @@ import {
   ChevronRight,
   CheckCircle,
   RefreshCw,
-  Globe, 
-  Wifi, 
-  Database
+  Globe,
+  Wifi,
+  Database,
 } from "lucide-react-native";
 import { useLibraryStore } from "@/features/library/store/libraryStore"; // Pastikan path benar
 import { BackgroundScanTask } from "@/features/library/services/BackgroundScanTask";
@@ -39,9 +39,7 @@ import { useUSBDAC } from "@/features/hardware/hooks/useUSBDAC";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { ThemePicker } from "@/shared/components/ui/ThemePicker";
 import type { Theme } from "@/constants/themes/types";
-import {
-  selectArtists
-} from "@/features/library/store/selectors";
+import { selectArtists } from "@/features/library/store/selectors";
 import { useSettingsStore } from "@/features/settings/store/settingsStore";
 import OnlineMetadataService from "@/features/library/services/OnlineMetadataService";
 
@@ -164,20 +162,20 @@ const SettingRow: React.FC<SettingRowProps> = ({
 export default function SettingsScreen() {
   const { theme, isDarkMode, toggleTheme } = useTheme();
   const { colors, spacing } = theme;
-  
-  const { 
-    isAutoScanEnabled, 
-    toggleAutoScanEnabled // Gunakan action yang sesuai di store kamu
+
+  const {
+    isAutoScanEnabled,
+    toggleAutoScanEnabled, // Gunakan action yang sesuai di store kamu
   } = useLibraryStore();
 
-  const { 
-    enableOnlineArtistImage, 
-    setEnableOnlineArtistImage, 
-    downloadOnlyOnWiFi, 
-    setDownloadOnlyOnWiFi 
+  const {
+    enableOnlineArtistImage,
+    setEnableOnlineArtistImage,
+    downloadOnlyOnWiFi,
+    setDownloadOnlyOnWiFi,
   } = useSettingsStore();
-  
-   // --- 2. EXISTING STATES ---
+
+  // --- 2. EXISTING STATES ---
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [showDacSettings, setShowDacSettings] = useState(false);
   const [showAudioSettings, setShowAudioSettings] = useState(false);
@@ -202,13 +200,13 @@ export default function SettingsScreen() {
 
   const { activePresetId, applyPreset } = useEqualizerStore();
 
-  const { 
-  playbackSpeed, 
-  setPlaybackSpeed,
-  defaultEQ, 
-  audioMode,    // <--- Add this
-  setAudioMode  // <--- Add this
-} = usePlayerStore();
+  const {
+    playbackSpeed,
+    setPlaybackSpeed,
+    defaultEQ,
+    audioMode, // <--- Add this
+    setAudioMode, // <--- Add this
+  } = usePlayerStore();
 
   const isExclusive = audioMode === "bit-perfect";
 
@@ -222,7 +220,7 @@ export default function SettingsScreen() {
       Alert.alert("Error", "Gagal scan USB DAC");
     }
   };
-  
+
   const handleToggle = (setter: (v: boolean) => void, value: boolean) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setter(value);
@@ -235,20 +233,22 @@ export default function SettingsScreen() {
       "Foto artis yang sudah diunduh akan dihapus. Lanjutkan?",
       [
         { text: "Batal", style: "cancel" },
-        { 
-          text: "Bersihkan", 
-          style: "destructive", 
+        {
+          text: "Bersihkan",
+          style: "destructive",
           onPress: async () => {
             setIsClearing(true);
-            const success = await OnlineMetadataService.clearArtistCache(); 
+            const success = await OnlineMetadataService.clearArtistCache();
             setIsClearing(false);
             if (success) {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              Haptics.notificationAsync(
+                Haptics.NotificationFeedbackType.Success,
+              );
               Alert.alert("Sukses", "Cache telah dibersihkan.");
             }
-          } 
-        }
-      ]
+          },
+        },
+      ],
     );
   };
 
@@ -267,58 +267,56 @@ export default function SettingsScreen() {
       ],
     );
   };
-  
+
   const handleToggleAutoScan = async (value: boolean) => {
-  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  toggleAutoScanEnabled(); // update store dulu (optimistic)
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    toggleAutoScanEnabled(); // update store dulu (optimistic)
 
-  if (value) {
-    // Aktifkan → daftarkan background task
-    const ok = await BackgroundScanTask.register(30).catch((err) => {
-      console.warn("[Settings] BackgroundTask register failed:", err);
-      return false;
-    });
-    if (ok) console.log("[Settings] Background scan registered");
-  } else {
-    // Matikan → batalkan background task
-    await BackgroundScanTask.unregister().catch((err) =>
-      console.warn("[Settings] BackgroundTask unregister failed:", err)
-    );
-    console.log("[Settings] Background scan unregistered");
-  }
-};
+    if (value) {
+      // Aktifkan → daftarkan background task
+      const ok = await BackgroundScanTask.register(30).catch((err) => {
+        console.warn("[Settings] BackgroundTask register failed:", err);
+        return false;
+      });
+      if (ok) console.log("[Settings] Background scan registered");
+    } else {
+      // Matikan → batalkan background task
+      await BackgroundScanTask.unregister().catch((err) =>
+        console.warn("[Settings] BackgroundTask unregister failed:", err),
+      );
+      console.log("[Settings] Background scan unregistered");
+    }
+  };
 
-  
   // ─── Handler tambahan ─────────────────────────────────────────────────────────
 
-   const handleSpeedChange = (delta: number) => {
-  const current = playbackSpeed ?? 1.0;
-  const next = Math.round((current + delta) * 4) / 4; // step 0.25, hindari float error
-  const clamped = Math.min(2.0, Math.max(0.5, next));
-  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  setPlaybackSpeed(clamped);
-};
+  const handleSpeedChange = (delta: number) => {
+    const current = playbackSpeed ?? 1.0;
+    const next = Math.round((current + delta) * 4) / 4; // step 0.25, hindari float error
+    const clamped = Math.min(2.0, Math.max(0.5, next));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setPlaybackSpeed(clamped);
+  };
 
-   const handleToggleAudioMode = (toBitPerfect: boolean) => {
-  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  const handleToggleAudioMode = (toBitPerfect: boolean) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-  if (toBitPerfect) {
-    Alert.alert(
-      "Aktifkan Bit-Perfect?",
-      "Mode ini menonaktifkan semua DSP (EQ, Bass, Reverb) untuk output murni tanpa pemrosesan.",
-      [
-        { text: "Batal", style: "cancel" },
-        {
-          text: "Aktifkan",
-          onPress: () => setAudioMode("bit-perfect"),
-        },
-      ]
-    );
-  } else {
-    setAudioMode("dsp");
-  }
-};
-
+    if (toBitPerfect) {
+      Alert.alert(
+        "Aktifkan Bit-Perfect?",
+        "Mode ini menonaktifkan semua DSP (EQ, Bass, Reverb) untuk output murni tanpa pemrosesan.",
+        [
+          { text: "Batal", style: "cancel" },
+          {
+            text: "Aktifkan",
+            onPress: () => setAudioMode("bit-perfect"),
+          },
+        ],
+      );
+    } else {
+      setAudioMode("dsp");
+    }
+  };
 
   // ─── Sections ──────────────────────────────────────────────────────────────
 
@@ -514,18 +512,19 @@ export default function SettingsScreen() {
                   Exclusive Mode
                 </Text>
                 <Switch
-  value={isExclusive}
-  onValueChange={(value) => {
-    // This updates the Zustand store, which then triggers the engine
-    setAudioMode(value ? "bit-perfect" : "dsp");
-  }}
-  trackColor={{
-    false: colors.background.tertiary,
-    true: colors.primary[500],
-  }}
-  thumbColor={isExclusive ? colors.text.primary : colors.text.secondary}
-/>
-
+                  value={isExclusive}
+                  onValueChange={(value) => {
+                    // This updates the Zustand store, which then triggers the engine
+                    setAudioMode(value ? "bit-perfect" : "dsp");
+                  }}
+                  trackColor={{
+                    false: colors.background.tertiary,
+                    true: colors.primary[500],
+                  }}
+                  thumbColor={
+                    isExclusive ? colors.text.primary : colors.text.secondary
+                  }
+                />
               </SettingRow>
 
               {/* Sample Rate Selector */}
@@ -579,261 +578,326 @@ export default function SettingsScreen() {
 
   // ─── renderAudio ──────────────────────────────────────────────────────────────
 
-   const renderAudio = () => (
-  <Section colors={colors} spacing={spacing}>
-    <SectionHeader
-      icon={<Music size={24} color={colors.primary[500]} strokeWidth={2.2} />}
-      title="Audio"
-      colors={colors}
-      spacing={spacing}
-      collapsible
-      expanded={showAudioSettings}
-      onPress={() => setShowAudioSettings((v) => !v)}
-    />
+  const renderAudio = () => (
+    <Section colors={colors} spacing={spacing}>
+      <SectionHeader
+        icon={<Music size={24} color={colors.primary[500]} strokeWidth={2.2} />}
+        title="Audio"
+        colors={colors}
+        spacing={spacing}
+        collapsible
+        expanded={showAudioSettings}
+        onPress={() => setShowAudioSettings((v) => !v)}
+      />
 
-    {showAudioSettings && (
-      <View style={{ paddingBottom: spacing.sm }}>
+      {showAudioSettings && (
+        <View style={{ paddingBottom: spacing.sm }}>
+          {/* ── 1. Audio Mode Toggle ─────────────────────────────────────── */}
+          <SettingRow colors={colors} spacing={spacing} bordered={false}>
+            <View style={{ flex: 1, marginRight: spacing.md }}>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+              >
+                {audioMode === "bit-perfect" ? (
+                  <ShieldCheck
+                    size={16}
+                    color={colors.status.warning}
+                    strokeWidth={2.2}
+                  />
+                ) : (
+                  <Zap
+                    size={16}
+                    color={colors.primary[500]}
+                    strokeWidth={2.2}
+                  />
+                )}
+                <Text style={{ color: colors.text.primary, fontWeight: "600" }}>
+                  {audioMode === "bit-perfect"
+                    ? "Bit-Perfect Mode"
+                    : "DSP Mode"}
+                </Text>
+              </View>
+              <Text
+                style={{
+                  color: colors.text.tertiary,
+                  fontSize: 11,
+                  marginTop: 2,
+                }}
+              >
+                {audioMode === "bit-perfect"
+                  ? "Output murni tanpa EQ/DSP. Cocok untuk DAC eksternal."
+                  : "EQ, Bass Boost & efek aktif."}
+              </Text>
+            </View>
+            <Switch
+              value={audioMode === "bit-perfect"}
+              onValueChange={handleToggleAudioMode}
+              trackColor={{
+                false: colors.primary[500] + "88",
+                true: colors.status.warning + "88",
+              }}
+              thumbColor={
+                audioMode === "bit-perfect"
+                  ? colors.status.warning
+                  : colors.primary[500]
+              }
+            />
+          </SettingRow>
 
-        {/* ── 1. Audio Mode Toggle ─────────────────────────────────────── */}
-        <SettingRow colors={colors} spacing={spacing} bordered={false}>
-          <View style={{ flex: 1, marginRight: spacing.md }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              {audioMode === "bit-perfect" ? (
-                <ShieldCheck size={16} color={colors.status.warning} strokeWidth={2.2} />
-              ) : (
-                <Zap size={16} color={colors.primary[500]} strokeWidth={2.2} />
-              )}
+          {/* ── 2. Default EQ Preset ─────────────────────────────────────── */}
+          <SettingRow colors={colors} spacing={spacing}>
+            <View style={{ flex: 1 }}>
               <Text style={{ color: colors.text.primary, fontWeight: "600" }}>
-                {audioMode === "bit-perfect" ? "Bit-Perfect Mode" : "DSP Mode"}
+                Default EQ
+              </Text>
+              <Text
+                style={{
+                  color: colors.text.tertiary,
+                  fontSize: 11,
+                  marginTop: 2,
+                }}
+              >
+                Preset yang diterapkan saat app dibuka.
               </Text>
             </View>
-            <Text style={{ color: colors.text.tertiary, fontSize: 11, marginTop: 2 }}>
-              {audioMode === "bit-perfect"
-                ? "Output murni tanpa EQ/DSP. Cocok untuk DAC eksternal."
-                : "EQ, Bass Boost & efek aktif."}
-            </Text>
-          </View>
-          <Switch
-            value={audioMode === "bit-perfect"}
-            onValueChange={handleToggleAudioMode}
-            trackColor={{
-              false: colors.primary[500] + "88",
-              true: colors.status.warning + "88",
-            }}
-            thumbColor={
-              audioMode === "bit-perfect"
-                ? colors.status.warning
-                : colors.primary[500]
-            }
-          />
-        </SettingRow>
-
-        {/* ── 2. Default EQ Preset ─────────────────────────────────────── */}
-        <SettingRow colors={colors} spacing={spacing}>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.text.primary, fontWeight: "600" }}>
-              Default EQ
-            </Text>
-            <Text style={{ color: colors.text.tertiary, fontSize: 11, marginTop: 2 }}>
-              Preset yang diterapkan saat app dibuka.
-            </Text>
-          </View>
-          <TouchableOpacity
-            onPress={() => setShowEQPicker(true)}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 4,
-              paddingVertical: 4,
-              paddingHorizontal: 8,
-              borderRadius: 8,
-              backgroundColor: colors.background.tertiary,
-            }}
-          >
-            <Text style={{ color: colors.primary[500], fontWeight: "700", fontSize: 13 }}>
-              {ALL_PRESETS.find((p) => p.id === activePresetId)?.name ?? "Flat"}
-            </Text>
-            <ChevronRight size={14} color={colors.primary[500]} strokeWidth={2.5} />
-          </TouchableOpacity>
-        </SettingRow>
-
-        {/* ── 3. Playback Speed ────────────────────────────────────────── */}
-        <SettingRow colors={colors} spacing={spacing}>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.text.primary, fontWeight: "600" }}>
-              Playback Speed
-            </Text>
-            <Text style={{ color: colors.text.tertiary, fontSize: 11, marginTop: 2 }}>
-              Kecepatan putar audio (0.5× – 2.0×).
-            </Text>
-          </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
             <TouchableOpacity
-              onPress={() => handleSpeedChange(-0.25)}
-              disabled={(playbackSpeed ?? 1.0) <= 0.5}
+              onPress={() => setShowEQPicker(true)}
               style={{
-                width: 32,
-                height: 32,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 4,
+                paddingVertical: 4,
+                paddingHorizontal: 8,
                 borderRadius: 8,
                 backgroundColor: colors.background.tertiary,
-                justifyContent: "center",
-                alignItems: "center",
-                opacity: (playbackSpeed ?? 1.0) <= 0.5 ? 0.3 : 1,
               }}
             >
-              <Text style={{ color: colors.text.primary, fontSize: 18, lineHeight: 20 }}>−</Text>
+              <Text
+                style={{
+                  color: colors.primary[500],
+                  fontWeight: "700",
+                  fontSize: 13,
+                }}
+              >
+                {ALL_PRESETS.find((p) => p.id === activePresetId)?.name ??
+                  "Flat"}
+              </Text>
+              <ChevronRight
+                size={14}
+                color={colors.primary[500]}
+                strokeWidth={2.5}
+              />
             </TouchableOpacity>
+          </SettingRow>
 
+          {/* ── 3. Playback Speed ────────────────────────────────────────── */}
+          <SettingRow colors={colors} spacing={spacing}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.text.primary, fontWeight: "600" }}>
+                Playback Speed
+              </Text>
+              <Text
+                style={{
+                  color: colors.text.tertiary,
+                  fontSize: 11,
+                  marginTop: 2,
+                }}
+              >
+                Kecepatan putar audio (0.5× – 2.0×).
+              </Text>
+            </View>
             <View
-              style={{
-                minWidth: 52,
-                alignItems: "center",
-                paddingHorizontal: 4,
-              }}
+              style={{ flexDirection: "row", alignItems: "center", gap: 2 }}
             >
-              <Text style={{ color: colors.primary[500], fontWeight: "800", fontSize: 15 }}>
-                {(playbackSpeed ?? 1.0).toFixed(2)}×
-              </Text>
+              <TouchableOpacity
+                onPress={() => handleSpeedChange(-0.25)}
+                disabled={(playbackSpeed ?? 1.0) <= 0.5}
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  backgroundColor: colors.background.tertiary,
+                  justifyContent: "center",
+                  alignItems: "center",
+                  opacity: (playbackSpeed ?? 1.0) <= 0.5 ? 0.3 : 1,
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.text.primary,
+                    fontSize: 18,
+                    lineHeight: 20,
+                  }}
+                >
+                  −
+                </Text>
+              </TouchableOpacity>
+
+              <View
+                style={{
+                  minWidth: 52,
+                  alignItems: "center",
+                  paddingHorizontal: 4,
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.primary[500],
+                    fontWeight: "800",
+                    fontSize: 15,
+                  }}
+                >
+                  {(playbackSpeed ?? 1.0).toFixed(2)}×
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                onPress={() => handleSpeedChange(0.25)}
+                disabled={(playbackSpeed ?? 1.0) >= 2.0}
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  backgroundColor: colors.background.tertiary,
+                  justifyContent: "center",
+                  alignItems: "center",
+                  opacity: (playbackSpeed ?? 1.0) >= 2.0 ? 0.3 : 1,
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.text.primary,
+                    fontSize: 18,
+                    lineHeight: 20,
+                  }}
+                >
+                  +
+                </Text>
+              </TouchableOpacity>
             </View>
+          </SettingRow>
+        </View>
+      )}
 
-            <TouchableOpacity
-              onPress={() => handleSpeedChange(0.25)}
-              disabled={(playbackSpeed ?? 1.0) >= 2.0}
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 8,
-                backgroundColor: colors.background.tertiary,
-                justifyContent: "center",
-                alignItems: "center",
-                opacity: (playbackSpeed ?? 1.0) >= 2.0 ? 0.3 : 1,
-              }}
-            >
-              <Text style={{ color: colors.text.primary, fontSize: 18, lineHeight: 20 }}>+</Text>
-            </TouchableOpacity>
-          </View>
-        </SettingRow>
-
-      </View>
-    )}
-
-    {/* ── EQ Picker Modal ──────────────────────────────────────────────── */}
-    <Modal
-      visible={showEQPicker}
-      transparent
-      animationType="slide"
-      onRequestClose={() => setShowEQPicker(false)}
-    >
-      <View
-        style={{
-          flex: 1,
-          justifyContent: "flex-end",
-          backgroundColor: "rgba(0,0,0,0.6)",
-        }}
+      {/* ── EQ Picker Modal ──────────────────────────────────────────────── */}
+      <Modal
+        visible={showEQPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowEQPicker(false)}
       >
         <View
           style={{
-            backgroundColor: colors.background.secondary,
-            borderTopLeftRadius: 24,
-            borderTopRightRadius: 24,
-            paddingBottom: 32,
-            maxHeight: "60%",
+            flex: 1,
+            justifyContent: "flex-end",
+            backgroundColor: "rgba(0,0,0,0.6)",
           }}
         >
-          {/* Handle bar */}
           <View
             style={{
-              width: 40,
-              height: 4,
-              borderRadius: 2,
-              backgroundColor: colors.text.disabled,
-              alignSelf: "center",
-              marginTop: 12,
-              marginBottom: 16,
-            }}
-          />
-
-          <Text
-            style={{
-              color: colors.text.primary,
-              fontSize: 16,
-              fontWeight: "800",
-              paddingHorizontal: 20,
-              marginBottom: 8,
+              backgroundColor: colors.background.secondary,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              paddingBottom: 32,
+              maxHeight: "60%",
             }}
           >
-            Pilih Default EQ
-          </Text>
+            {/* Handle bar */}
+            <View
+              style={{
+                width: 40,
+                height: 4,
+                borderRadius: 2,
+                backgroundColor: colors.text.disabled,
+                alignSelf: "center",
+                marginTop: 12,
+                marginBottom: 16,
+              }}
+            />
 
-          <FlatList
-            data={ALL_PRESETS}
-            keyExtractor={(p) => p.id}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  applyPreset(item.id);
-                  setShowEQPicker(false);
-                }}
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  paddingVertical: 14,
-                  paddingHorizontal: 20,
-                  borderBottomWidth: 1,
-                  borderBottomColor: colors.background.tertiary,
-                  backgroundColor:
-                    activePresetId === item.id
-                      ? colors.primary[500] + "18"
-                      : "transparent",
-                }}
-              >
-                <View>
-                  <Text
-                    style={{
-                      color:
-                        activePresetId === item.id
-                          ? colors.primary[500]
-                          : colors.text.primary,
-                      fontWeight: activePresetId === item.id ? "700" : "500",
-                      fontSize: 14,
-                    }}
-                  >
-                    {item.name}
-                  </Text>
-                  {item.description && (
+            <Text
+              style={{
+                color: colors.text.primary,
+                fontSize: 16,
+                fontWeight: "800",
+                paddingHorizontal: 20,
+                marginBottom: 8,
+              }}
+            >
+              Pilih Default EQ
+            </Text>
+
+            <FlatList
+              data={ALL_PRESETS}
+              keyExtractor={(p) => p.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    applyPreset(item.id);
+                    setShowEQPicker(false);
+                  }}
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    paddingVertical: 14,
+                    paddingHorizontal: 20,
+                    borderBottomWidth: 1,
+                    borderBottomColor: colors.background.tertiary,
+                    backgroundColor:
+                      activePresetId === item.id
+                        ? colors.primary[500] + "18"
+                        : "transparent",
+                  }}
+                >
+                  <View>
                     <Text
                       style={{
-                        color: colors.text.tertiary,
-                        fontSize: 11,
-                        marginTop: 2,
+                        color:
+                          activePresetId === item.id
+                            ? colors.primary[500]
+                            : colors.text.primary,
+                        fontWeight: activePresetId === item.id ? "700" : "500",
+                        fontSize: 14,
                       }}
                     >
-                      {item.description}
+                      {item.name}
                     </Text>
+                    {item.description && (
+                      <Text
+                        style={{
+                          color: colors.text.tertiary,
+                          fontSize: 11,
+                          marginTop: 2,
+                        }}
+                      >
+                        {item.description}
+                      </Text>
+                    )}
+                  </View>
+                  {activePresetId === item.id && (
+                    <CheckCircle
+                      size={18}
+                      color={colors.primary[500]}
+                      strokeWidth={2.5}
+                    />
                   )}
-                </View>
-                {activePresetId === item.id && (
-                  <CheckCircle
-                    size={18}
-                    color={colors.primary[500]}
-                    strokeWidth={2.5}
-                  />
-                )}
-              </TouchableOpacity>
-            )}
-          />
+                </TouchableOpacity>
+              )}
+            />
+          </View>
         </View>
-      </View>
-    </Modal>
-  </Section>
-);
-  
+      </Modal>
+    </Section>
+  );
+
   const renderLibrary = () => (
     <Section colors={colors} spacing={spacing}>
       <SectionHeader
-        icon={<Database size={24} color={colors.primary[500]} strokeWidth={2.2} />}
+        icon={
+          <Database size={24} color={colors.primary[500]} strokeWidth={2.2} />
+        }
         title="Library & Metadata"
         colors={colors}
         spacing={spacing}
@@ -844,22 +908,33 @@ export default function SettingsScreen() {
 
       {showLibrarySettings && (
         <View style={{ paddingBottom: spacing.sm }}>
-          
           {/* --- NEW: Auto Scan Library Toggle --- */}
           <SettingRow colors={colors} spacing={spacing} bordered={false}>
             <View style={{ flex: 1, marginRight: spacing.md }}>
               <Text style={{ color: colors.text.primary, fontWeight: "600" }}>
                 Auto Scan Library
               </Text>
-              <Text style={{ color: colors.text.tertiary, fontSize: 11, marginTop: 2 }}>
-                Cari musik baru secara otomatis saat aplikasi dibuka atau di background.
+              <Text
+                style={{
+                  color: colors.text.tertiary,
+                  fontSize: 11,
+                  marginTop: 2,
+                }}
+              >
+                Cari musik baru secara otomatis saat aplikasi dibuka atau di
+                background.
               </Text>
             </View>
             <Switch
               value={isAutoScanEnabled}
               onValueChange={handleToggleAutoScan}
-              trackColor={{ false: colors.background.tertiary, true: colors.primary[500] }}
-              thumbColor={isAutoScanEnabled ? colors.text.primary : colors.text.secondary}
+              trackColor={{
+                false: colors.background.tertiary,
+                true: colors.primary[500],
+              }}
+              thumbColor={
+                isAutoScanEnabled ? colors.text.primary : colors.text.secondary
+              }
             />
           </SettingRow>
 
@@ -869,14 +944,23 @@ export default function SettingsScreen() {
               <Text style={{ color: colors.text.primary, fontWeight: "600" }}>
                 Online Artist Metadata
               </Text>
-              <Text style={{ color: colors.text.tertiary, fontSize: 11, marginTop: 2 }}>
+              <Text
+                style={{
+                  color: colors.text.tertiary,
+                  fontSize: 11,
+                  marginTop: 2,
+                }}
+              >
                 Otomatis cari foto artis via MusicBrainz.
               </Text>
             </View>
             <Switch
               value={enableOnlineArtistImage}
               onValueChange={(v) => handleToggle(setEnableOnlineArtistImage, v)}
-              trackColor={{ false: colors.background.tertiary, true: colors.primary[500] }}
+              trackColor={{
+                false: colors.background.tertiary,
+                true: colors.primary[500],
+              }}
             />
           </SettingRow>
 
@@ -886,7 +970,13 @@ export default function SettingsScreen() {
               <Text style={{ color: colors.text.primary, fontWeight: "600" }}>
                 Hanya lewat Wi-Fi
               </Text>
-              <Text style={{ color: colors.text.tertiary, fontSize: 11, marginTop: 2 }}>
+              <Text
+                style={{
+                  color: colors.text.tertiary,
+                  fontSize: 11,
+                  marginTop: 2,
+                }}
+              >
                 Mencegah penggunaan kuota seluler untuk mengunduh gambar.
               </Text>
             </View>
@@ -894,19 +984,28 @@ export default function SettingsScreen() {
               value={downloadOnlyOnWiFi}
               onValueChange={(v) => handleToggle(setDownloadOnlyOnWiFi, v)}
               disabled={!enableOnlineArtistImage}
-              trackColor={{ false: colors.background.tertiary, true: colors.primary[500] }}
+              trackColor={{
+                false: colors.background.tertiary,
+                true: colors.primary[500],
+              }}
             />
           </SettingRow>
-          
-          <TouchableOpacity 
-            style={{ padding: spacing.md, alignItems: 'center' }}
+
+          <TouchableOpacity
+            style={{ padding: spacing.md, alignItems: "center" }}
             onPress={handleClearCache}
             disabled={isClearing}
           >
             {isClearing ? (
               <ActivityIndicator size="small" color={colors.primary[500]} />
             ) : (
-              <Text style={{ color: colors.status.error, fontSize: 13, fontWeight: "700" }}>
+              <Text
+                style={{
+                  color: colors.status.error,
+                  fontSize: 13,
+                  fontWeight: "700",
+                }}
+              >
                 Kosongkan Cache Gambar Artis
               </Text>
             )}
@@ -1054,4 +1153,4 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
   },
-}); 
+});

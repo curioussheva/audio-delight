@@ -8,11 +8,7 @@ import {
   Text,
   ActivityIndicator,
 } from "react-native";
-import {
-  Canvas,
-  Rect,
-  Group,
-} from "@shopify/react-native-skia";
+import { Canvas, Rect, Group } from "@shopify/react-native-skia";
 import { visualizerService } from "@/features/visualizer/services/VisualizerService";
 
 interface SpectogramViewProps {
@@ -31,7 +27,10 @@ const DEFAULT_BINS = 64;
 const DEFAULT_MAX_ROWS = 40;
 
 // Palet warna (sama seperti sebelumnya)
-const generateColorCache = (steps: number = 256, scheme: "classic" | "thermal" | "grayscale" = "classic"): string[] => {
+const generateColorCache = (
+  steps: number = 256,
+  scheme: "classic" | "thermal" | "grayscale" = "classic",
+): string[] => {
   const cache: string[] = new Array(steps);
   if (scheme === "grayscale") {
     for (let i = 0; i < steps; i++) {
@@ -43,11 +42,17 @@ const generateColorCache = (steps: number = 256, scheme: "classic" | "thermal" |
       const t = i / (steps - 1);
       let r, g, b;
       if (t < 0.33) {
-        r = 0; g = Math.floor(t * 3 * 255); b = 255;
+        r = 0;
+        g = Math.floor(t * 3 * 255);
+        b = 255;
       } else if (t < 0.66) {
-        r = Math.floor((t - 0.33) * 3 * 255); g = 255; b = 255 - Math.floor((t - 0.33) * 3 * 255);
+        r = Math.floor((t - 0.33) * 3 * 255);
+        g = 255;
+        b = 255 - Math.floor((t - 0.33) * 3 * 255);
       } else {
-        r = 255; g = 255 - Math.floor((t - 0.66) * 3 * 128); b = 0;
+        r = 255;
+        g = 255 - Math.floor((t - 0.66) * 3 * 128);
+        b = 0;
       }
       cache[i] = `rgb(${r}, ${g}, ${b})`;
     }
@@ -56,13 +61,21 @@ const generateColorCache = (steps: number = 256, scheme: "classic" | "thermal" |
       const t = i / (steps - 1);
       let r, g, b;
       if (t < 0.25) {
-        r = 0; g = Math.floor((t / 0.25) * 255); b = 255;
+        r = 0;
+        g = Math.floor((t / 0.25) * 255);
+        b = 255;
       } else if (t < 0.5) {
-        r = 0; g = 255; b = 255 - Math.floor(((t - 0.25) / 0.25) * 255);
+        r = 0;
+        g = 255;
+        b = 255 - Math.floor(((t - 0.25) / 0.25) * 255);
       } else if (t < 0.75) {
-        r = Math.floor(((t - 0.5) / 0.25) * 255); g = 255; b = 0;
+        r = Math.floor(((t - 0.5) / 0.25) * 255);
+        g = 255;
+        b = 0;
       } else {
-        r = 255; g = 255 - Math.floor(((t - 0.75) / 0.25) * 128); b = 0;
+        r = 255;
+        g = 255 - Math.floor(((t - 0.75) / 0.25) * 128);
+        b = 0;
       }
       cache[i] = `rgb(${r}, ${g}, ${b})`;
     }
@@ -83,7 +96,7 @@ export const SpectogramView = React.memo(
     showLabels = true,
   }: SpectogramViewProps) => {
     const [grid, setGrid] = useState<number[][]>(() =>
-      Array.from({ length: maxRows }, () => new Array(bins).fill(0))
+      Array.from({ length: maxRows }, () => new Array(bins).fill(0)),
     );
 
     const gridRef = useRef<number[][]>(grid);
@@ -93,7 +106,10 @@ export const SpectogramView = React.memo(
     const [debugMax, setDebugMax] = useState(0);
     const [debugSamples, setDebugSamples] = useState("");
 
-    const colorCache = useMemo(() => generateColorCache(256, colorScheme), [colorScheme]);
+    const colorCache = useMemo(
+      () => generateColorCache(256, colorScheme),
+      [colorScheme],
+    );
 
     const cellWidth = width / bins;
     const cellHeight = height / maxRows;
@@ -102,13 +118,18 @@ export const SpectogramView = React.memo(
       if (!fftData || fftData.length === 0) return;
 
       const maxVal = Math.max(...fftData);
-      const samples = fftData.slice(0, 5).map(v => v.toFixed(3)).join(', ');
+      const samples = fftData
+        .slice(0, 5)
+        .map((v) => v.toFixed(3))
+        .join(", ");
       setDebugMax(maxVal);
       setDebugSamples(samples);
 
       // Log setiap 20 frame agar tidak spam
       if (Math.random() < 0.05) {
-        console.log(`[SpectogramView] FFT max: ${maxVal.toFixed(4)}, samples: ${samples}`);
+        console.log(
+          `[SpectogramView] FFT max: ${maxVal.toFixed(4)}, samples: ${samples}`,
+        );
       }
 
       // Resample ke jumlah bin
@@ -130,7 +151,7 @@ export const SpectogramView = React.memo(
       }
 
       // Update grid: shift rows up, add new row at bottom
-      setGrid(prevGrid => {
+      setGrid((prevGrid) => {
         const newGrid = [...prevGrid.slice(1), resampled];
         gridRef.current = newGrid;
         return newGrid;
@@ -139,7 +160,9 @@ export const SpectogramView = React.memo(
 
     useEffect(() => {
       if (!isPlaying || !audioSessionId || audioSessionId <= 0) {
-        const emptyGrid = Array.from({ length: maxRows }, () => new Array(bins).fill(0));
+        const emptyGrid = Array.from({ length: maxRows }, () =>
+          new Array(bins).fill(0),
+        );
         setGrid(emptyGrid);
         gridRef.current = emptyGrid;
         setDebugMax(0);
@@ -168,7 +191,7 @@ export const SpectogramView = React.memo(
     // Render rects dengan threshold rendah (0.005) agar data kecil terlihat
     const rects = useMemo(() => {
       const threshold = 0.005;
-      const elements: React.ReactElement[] = []; 
+      const elements: React.ReactElement[] = [];
 
       for (let row = 0; row < maxRows; row++) {
         for (let col = 0; col < bins; col++) {
@@ -186,14 +209,14 @@ export const SpectogramView = React.memo(
               width={cellWidth + 0.5}
               height={cellHeight + 0.5}
               color={color}
-            />
+            />,
           );
         }
       }
       return elements;
     }, [grid, cellWidth, cellHeight, maxRows, bins, colorCache]);
 
-    const hasData = grid.some(row => row.some(amp => amp > 0.01));
+    const hasData = grid.some((row) => row.some((amp) => amp > 0.01));
 
     return (
       <View style={[styles.container, { width }]}>
@@ -214,7 +237,7 @@ export const SpectogramView = React.memo(
           {__DEV__ && (
             <View style={styles.debugOverlay}>
               <Text style={styles.debugText}>
-                Max: {debugMax.toFixed(4)} | HasData: {hasData ? 'Y' : 'N'}
+                Max: {debugMax.toFixed(4)} | HasData: {hasData ? "Y" : "N"}
               </Text>
               <Text style={styles.debugText} numberOfLines={1}>
                 {debugSamples}
@@ -238,15 +261,21 @@ export const SpectogramView = React.memo(
               <Text style={styles.label}>20 kHz</Text>
             </View>
             <View style={styles.colorBar}>
-              {[0, 64, 128, 192, 255].map(idx => (
-                <View key={idx} style={[styles.colorSegment, { backgroundColor: colorCache[idx] }]} />
+              {[0, 64, 128, 192, 255].map((idx) => (
+                <View
+                  key={idx}
+                  style={[
+                    styles.colorSegment,
+                    { backgroundColor: colorCache[idx] },
+                  ]}
+                />
               ))}
             </View>
           </View>
         )}
       </View>
     );
-  }
+  },
 );
 
 const styles = StyleSheet.create({
@@ -334,4 +363,4 @@ const styles = StyleSheet.create({
     flex: 1,
     height: "100%",
   },
-}); 
+});

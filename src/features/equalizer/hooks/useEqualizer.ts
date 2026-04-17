@@ -15,7 +15,7 @@ export const useEqualizer = () => {
     isBassEnabled,
     isVirtualizerEnabled,
     isReverbEnabled,
-    
+
     bassStrength,
     virtualizerLevel,
     reverbPreset,
@@ -45,20 +45,29 @@ export const useEqualizer = () => {
   }, [isDSPDisabled, toggleEQ]);
 
   // ✅ Wrapper untuk individual switches
-  const handleSetBassEnabled = useCallback((val: boolean) => {
-    if (isDSPDisabled) return;
-    setBassEnabled(val);
-  }, [isDSPDisabled, setBassEnabled]);
+  const handleSetBassEnabled = useCallback(
+    (val: boolean) => {
+      if (isDSPDisabled) return;
+      setBassEnabled(val);
+    },
+    [isDSPDisabled, setBassEnabled],
+  );
 
-  const handleSetVirtualizerEnabled = useCallback((val: boolean) => {
-    if (isDSPDisabled) return;
-    setVirtualizerEnabled(val);
-  }, [isDSPDisabled, setVirtualizerEnabled]);
+  const handleSetVirtualizerEnabled = useCallback(
+    (val: boolean) => {
+      if (isDSPDisabled) return;
+      setVirtualizerEnabled(val);
+    },
+    [isDSPDisabled, setVirtualizerEnabled],
+  );
 
-  const handleSetReverbEnabled = useCallback((val: boolean) => {
-    if (isDSPDisabled) return;
-    setReverbEnabled(val);
-  }, [isDSPDisabled, setReverbEnabled]);
+  const handleSetReverbEnabled = useCallback(
+    (val: boolean) => {
+      if (isDSPDisabled) return;
+      setReverbEnabled(val);
+    },
+    [isDSPDisabled, setReverbEnabled],
+  );
 
   const updateBandGain = useCallback(
     (index: number, gain: number) => {
@@ -113,9 +122,9 @@ export const useEqualizer = () => {
   return {
     // States
     isEQEnabled,
-    isBassEnabled,          // ✅ Expose ke UI
-    isVirtualizerEnabled,   // ✅ Expose ke UI
-    isReverbEnabled,        // ✅ Expose ke UI
+    isBassEnabled, // ✅ Expose ke UI
+    isVirtualizerEnabled, // ✅ Expose ke UI
+    isReverbEnabled, // ✅ Expose ke UI
     isDSPDisabled,
     currentBands: bands,
     activePresetId,
@@ -126,9 +135,9 @@ export const useEqualizer = () => {
 
     // Actions
     toggleEQ: handleToggleEQ,
-    setBassEnabled: handleSetBassEnabled,               // ✅ Expose ke UI
+    setBassEnabled: handleSetBassEnabled, // ✅ Expose ke UI
     setVirtualizerEnabled: handleSetVirtualizerEnabled, // ✅ Expose ke UI
-    setReverbEnabled: handleSetReverbEnabled,           // ✅ Expose ke UI
+    setReverbEnabled: handleSetReverbEnabled, // ✅ Expose ke UI
     updateBandGain,
     applyPreset: handleApplyPreset,
     savePreset: saveCustomPreset,
@@ -139,4 +148,3 @@ export const useEqualizer = () => {
     resetToDefault: handleResetToDefault,
   };
 };
- 

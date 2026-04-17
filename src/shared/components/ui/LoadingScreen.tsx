@@ -37,7 +37,13 @@ const BOOT_SEQUENCE = [
 ];
 
 // Waveform Bar Component
-const WaveformBar = ({ index, isExiting }: { index: number; isExiting: boolean }) => {
+const WaveformBar = ({
+  index,
+  isExiting,
+}: {
+  index: number;
+  isExiting: boolean;
+}) => {
   const heightValue = useSharedValue(10);
 
   useEffect(() => {
@@ -82,10 +88,12 @@ interface LoadingScreenProps {
   onLoadingComplete?: () => void;
 }
 
-export default function LoadingScreen({ onLoadingComplete }: LoadingScreenProps) {
+export default function LoadingScreen({
+  onLoadingComplete,
+}: LoadingScreenProps) {
   const [loadingText, setLoadingText] = useState(BOOT_SEQUENCE[0]);
   const [isExiting, setIsExiting] = useState(false);
-  
+
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideUpAnim = useRef(new Animated.Value(0)).current;
 
@@ -96,7 +104,7 @@ export default function LoadingScreen({ onLoadingComplete }: LoadingScreenProps)
       step += 1;
       if (step < BOOT_SEQUENCE.length) {
         setLoadingText(BOOT_SEQUENCE[step]);
-        
+
         // Trigger exit animation on last step
         if (step === BOOT_SEQUENCE.length - 1) {
           setTimeout(() => {
@@ -130,9 +138,16 @@ export default function LoadingScreen({ onLoadingComplete }: LoadingScreenProps)
 
   return (
     <Animated.View style={[styles.container, containerStyle]}>
-      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-      
-      <LinearGradient colors={COLORS.bgGradient} style={StyleSheet.absoluteFill} />
+      <StatusBar
+        barStyle="light-content"
+        translucent
+        backgroundColor="transparent"
+      />
+
+      <LinearGradient
+        colors={COLORS.bgGradient}
+        style={StyleSheet.absoluteFill}
+      />
 
       <View style={styles.content}>
         {/* Logo */}
@@ -176,7 +191,7 @@ export default function LoadingScreen({ onLoadingComplete }: LoadingScreenProps)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: "#000",
   },
   content: {
     flex: 1,
@@ -254,4 +269,3 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
 });
- 

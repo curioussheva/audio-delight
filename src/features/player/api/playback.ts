@@ -72,9 +72,7 @@ const applyAllEffects = async (sessionId: number): Promise<void> => {
     try {
       // FIX 2: Kirim dB mentah (-12..+12), Kotlin yang konversi ke millibels (* 100)
       // JANGAN konversi di sini — NativeDSPModule.kt sudah handle konversi
-      const gains = eq.bands.map((b) =>
-        Math.min(12, Math.max(-12, b.gain))
-      );
+      const gains = eq.bands.map((b) => Math.min(12, Math.max(-12, b.gain)));
 
       if (NativeDSPModule.setFullEqualizer) {
         await NativeDSPModule.setFullEqualizer(gains, sessionId);
@@ -141,7 +139,9 @@ const releaseAllEffects = async (): Promise<void> => {
 
 let lastDspTrackIndex: number | null = null;
 
-const initDspForTrack = async (trackIndex: number | undefined): Promise<void> => {
+const initDspForTrack = async (
+  trackIndex: number | undefined,
+): Promise<void> => {
   if (trackIndex === undefined || trackIndex === lastDspTrackIndex) return;
   lastDspTrackIndex = trackIndex;
 
@@ -153,9 +153,9 @@ const initDspForTrack = async (trackIndex: number | undefined): Promise<void> =>
   // FIX 3: Start visualizer dengan session ID yang sama, paralel dengan DSP
   await Promise.all([
     applyAllEffects(sessionId),
-    visualizerService.start(sessionId).catch((e) =>
-      console.warn("[Visualizer] Start failed:", e)
-    ),
+    visualizerService
+      .start(sessionId)
+      .catch((e) => console.warn("[Visualizer] Start failed:", e)),
   ]);
 };
 
@@ -191,7 +191,7 @@ export const playbackService = async function () {
         if (Platform.OS === "android") {
           setTimeout(() => {
             initDspForTrack(pendingTrackIndex).catch((err) =>
-              console.error("[DSP] Init Error:", err)
+              console.error("[DSP] Init Error:", err),
             );
           }, DSP_INIT_DELAY_MS);
         }
@@ -222,8 +222,12 @@ export const playbackService = async function () {
   // Remote controls
   TrackPlayer.addEventListener(Event.RemotePlay, () => TrackPlayer.play());
   TrackPlayer.addEventListener(Event.RemotePause, () => TrackPlayer.pause());
-  TrackPlayer.addEventListener(Event.RemoteNext, () => usePlayerStore.getState().playNext());
-  TrackPlayer.addEventListener(Event.RemotePrevious, () => usePlayerStore.getState().playPrevious());
+  TrackPlayer.addEventListener(Event.RemoteNext, () =>
+    usePlayerStore.getState().playNext(),
+  );
+  TrackPlayer.addEventListener(Event.RemotePrevious, () =>
+    usePlayerStore.getState().playPrevious(),
+  );
 
   TrackPlayer.addEventListener(Event.RemoteSeek, async (event) => {
     await TrackPlayer.seekTo(event.position);
@@ -281,15 +285,23 @@ const sleep = (ms: number): Promise<void> =>
 
 const stateToString = (state: number): string => {
   switch (state) {
-    case State.Playing:   return "playing";
-    case State.Paused:    return "paused";
-    case State.Stopped:   return "stopped";
-    case State.Buffering: return "buffering";
-    case State.Loading:   return "loading";
-    case State.Ready:     return "ready";
-    case State.Error:     return "error";
-    case State.None:      return "none";
-    default:              return `unknown (${state})`;
+    case State.Playing:
+      return "playing";
+    case State.Paused:
+      return "paused";
+    case State.Stopped:
+      return "stopped";
+    case State.Buffering:
+      return "buffering";
+    case State.Loading:
+      return "loading";
+    case State.Ready:
+      return "ready";
+    case State.Error:
+      return "error";
+    case State.None:
+      return "none";
+    default:
+      return `unknown (${state})`;
   }
 };
- 

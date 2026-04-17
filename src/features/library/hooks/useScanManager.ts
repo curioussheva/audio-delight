@@ -29,10 +29,14 @@ export function useScanManager() {
       const currentStore = useLibraryStore.getState();
 
       if (currentStore.tracks.length === 0) {
-        console.log("[useScanManager] Fresh/empty library → Running initial Quick Scan");
+        console.log(
+          "[useScanManager] Fresh/empty library → Running initial Quick Scan",
+        );
         await UnifiedScanService.autoScan().catch(console.warn);
       } else {
-        console.log("[useScanManager] Library already exists → Skipping initial auto scan");
+        console.log(
+          "[useScanManager] Library already exists → Skipping initial auto scan",
+        );
       }
     }, 1500);
 
@@ -43,7 +47,8 @@ export function useScanManager() {
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
 
-    const subscription = AppState.addEventListener("change", (nextState) => { // ✅ param = nextState
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      // ✅ param = nextState
       if (nextState !== "active") return;
       if (isQuickDiffRunning.current) return;
 

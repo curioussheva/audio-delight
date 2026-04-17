@@ -1,13 +1,13 @@
 import React from "react";
 import { View, Text, StyleSheet, Dimensions } from "react-native";
 import { GestureDetector, Gesture } from "react-native-gesture-handler";
-import Animated, { 
-  useAnimatedStyle, 
-  useSharedValue, 
-  interpolate, 
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  interpolate,
   runOnJS,
   withSpring,
-  withTiming
+  withTiming,
 } from "react-native-reanimated";
 
 // Tambah di atas file, atau import dari file types
@@ -23,12 +23,22 @@ const { width } = Dimensions.get("window");
 const BAND_WIDTH = 65; // Ukuran lebar yang pas untuk scroll horizontal
 const SLIDER_HEIGHT = 160; // Tinggi area geser
 
-export const EqualizerBand = ({ frequency, gain, onValueChange, color, disabled }: BandProps) => {
-  const translateY = useSharedValue(interpolate(gain, [-12, 12], [SLIDER_HEIGHT, 0]));
+export const EqualizerBand = ({
+  frequency,
+  gain,
+  onValueChange,
+  color,
+  disabled,
+}: BandProps) => {
+  const translateY = useSharedValue(
+    interpolate(gain, [-12, 12], [SLIDER_HEIGHT, 0]),
+  );
 
   // Sync saat gain berubah (misal ganti preset)
   React.useEffect(() => {
-    translateY.value = withSpring(interpolate(gain, [-12, 12], [SLIDER_HEIGHT, 0]));
+    translateY.value = withSpring(
+      interpolate(gain, [-12, 12], [SLIDER_HEIGHT, 0]),
+    );
   }, [gain]);
 
   const gesture = Gesture.Pan()
@@ -37,7 +47,7 @@ export const EqualizerBand = ({ frequency, gain, onValueChange, color, disabled 
       let nextY = e.y;
       if (nextY < 0) nextY = 0;
       if (nextY > SLIDER_HEIGHT) nextY = SLIDER_HEIGHT;
-      
+
       translateY.value = nextY;
       const newGain = interpolate(nextY, [0, SLIDER_HEIGHT], [12, -12]);
       runOnJS(onValueChange)(parseFloat(newGain.toFixed(1)));
@@ -69,7 +79,10 @@ export const EqualizerBand = ({ frequency, gain, onValueChange, color, disabled 
           {/* Garis-garis Skala (Tick Marks) */}
           <View style={styles.ticks}>
             {[12, 6, 0, -6, -12].map((v) => (
-              <View key={v} style={[styles.tickLine, v === 0 && styles.tickZero]} />
+              <View
+                key={v}
+                style={[styles.tickLine, v === 0 && styles.tickZero]}
+              />
             ))}
           </View>
 
@@ -109,7 +122,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#151515",
-    overflow: 'visible'
+    overflow: "visible",
   },
   ticks: {
     ...StyleSheet.absoluteFillObject,
@@ -129,7 +142,7 @@ const styles = StyleSheet.create({
   fill: {
     width: 4,
     borderRadius: 2,
-    position: 'absolute',
+    position: "absolute",
     bottom: 0,
   },
   thumb: {

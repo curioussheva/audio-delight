@@ -92,10 +92,17 @@ export default function FloatingPlayer() {
         ]}
       >
         {/* Accent line */}
-        <View style={[s.accentLine, { backgroundColor: colors.primary[500] }]} />
+        <View
+          style={[s.accentLine, { backgroundColor: colors.primary[500] }]}
+        />
 
         {/* Progress bar */}
-        <View style={[s.progressBg, { backgroundColor: colors.background.tertiary }]}>
+        <View
+          style={[
+            s.progressBg,
+            { backgroundColor: colors.background.tertiary },
+          ]}
+        >
           <Animated.View
             style={[
               s.progressFill,
@@ -111,14 +118,20 @@ export default function FloatingPlayer() {
           <Pressable onPress={() => router.push("/player" as any)}>
             <Image
               source={artworkSource}
-              style={[s.artwork, { backgroundColor: colors.background.tertiary }]}
+              style={[
+                s.artwork,
+                { backgroundColor: colors.background.tertiary },
+              ]}
               contentFit="cover"
               transition={300}
             />
           </Pressable>
 
           {/* Info */}
-          <Pressable style={s.info} onPress={() => router.push("/player" as any)}>
+          <Pressable
+            style={s.info}
+            onPress={() => router.push("/player" as any)}
+          >
             <Text
               style={[s.title, { color: colors.text.primary }]}
               numberOfLines={1}
@@ -128,7 +141,9 @@ export default function FloatingPlayer() {
 
             <View style={s.metaRow}>
               {currentSong.bitDepth > 16 && (
-                <View style={[s.hiResBadge, { borderColor: colors.status.warning }]}>
+                <View
+                  style={[s.hiResBadge, { borderColor: colors.status.warning }]}
+                >
                   <Text style={[s.hiResText, { color: colors.status.warning }]}>
                     HI-RES
                   </Text>
@@ -154,7 +169,11 @@ export default function FloatingPlayer() {
             </Pressable>
 
             <Pressable onPress={playPrevious} hitSlop={8}>
-              <SkipBack size={20} color={colors.text.secondary} strokeWidth={2.5} />
+              <SkipBack
+                size={20}
+                color={colors.text.secondary}
+                strokeWidth={2.5}
+              />
             </Pressable>
 
             <Pressable
@@ -174,18 +193,31 @@ export default function FloatingPlayer() {
             </Pressable>
 
             <Pressable onPress={playNext} hitSlop={8}>
-              <SkipForward size={20} color={colors.text.secondary} strokeWidth={2.5} />
+              <SkipForward
+                size={20}
+                color={colors.text.secondary}
+                strokeWidth={2.5}
+              />
             </Pressable>
 
-            <Pressable onPress={toggleRepeat} hitSlop={8} style={{ position: "relative" }}>
+            <Pressable
+              onPress={toggleRepeat}
+              hitSlop={8}
+              style={{ position: "relative" }}
+            >
               <Repeat
                 size={18}
-                color={repeat !== "off" ? colors.primary[400] : colors.text.tertiary}
+                color={
+                  repeat !== "off" ? colors.primary[400] : colors.text.tertiary
+                }
                 strokeWidth={2.5}
               />
               {repeat === "track" && (
                 <View
-                  style={[s.repeatOneDot, { backgroundColor: colors.primary[400] }]}
+                  style={[
+                    s.repeatOneDot,
+                    { backgroundColor: colors.primary[400] },
+                  ]}
                 />
               )}
             </Pressable>
@@ -270,4 +302,3 @@ const s = StyleSheet.create({
     alignSelf: "center",
   },
 });
- 

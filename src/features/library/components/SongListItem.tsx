@@ -26,46 +26,62 @@ interface SongListItemProps {
 
 // ─── Artwork Thumbnail ────────────────────────────────────────────────────────
 
-const ArtworkThumb = memo(({
-  uri,
-  isNowPlaying,
-  colors,
-}: {
-  uri?: string | null;
-  isNowPlaying: boolean;
-  colors: any;
-}) => {
-  const [imgError, setImgError] = useState(false);
-  const showImage = !!uri && !imgError && !isNowPlaying;
+const ArtworkThumb = memo(
+  ({
+    uri,
+    isNowPlaying,
+    colors,
+  }: {
+    uri?: string | null;
+    isNowPlaying: boolean;
+    colors: any;
+  }) => {
+    const [imgError, setImgError] = useState(false);
+    const showImage = !!uri && !imgError && !isNowPlaying;
 
-  if (isNowPlaying) {
+    if (isNowPlaying) {
+      return (
+        <View
+          style={[
+            styles.artworkContainer,
+            { backgroundColor: colors.primary[500] },
+          ]}
+        >
+          <AudioLines
+            size={20}
+            color={colors.background.primary}
+            strokeWidth={2.5}
+          />
+        </View>
+      );
+    }
+
+    if (showImage) {
+      return (
+        <View style={styles.artworkContainer}>
+          <Image
+            source={{ uri }}
+            style={StyleSheet.absoluteFillObject}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            onError={() => setImgError(true)}
+          />
+        </View>
+      );
+    }
+
     return (
-      <View style={[styles.artworkContainer, { backgroundColor: colors.primary[500] }]}>
-        <AudioLines size={20} color={colors.background.primary} strokeWidth={2.5} />
+      <View
+        style={[
+          styles.artworkContainer,
+          { backgroundColor: colors.background.secondary },
+        ]}
+      >
+        <Music2 size={20} color={colors.text.tertiary} strokeWidth={1.5} />
       </View>
     );
-  }
-
-  if (showImage) {
-    return (
-      <View style={styles.artworkContainer}>
-        <Image
-          source={{ uri }}
-          style={StyleSheet.absoluteFillObject}
-          contentFit="cover"
-          cachePolicy="memory-disk"
-          onError={() => setImgError(true)}
-        />
-      </View>
-    );
-  }
-
-  return (
-    <View style={[styles.artworkContainer, { backgroundColor: colors.background.secondary }]}>
-      <Music2 size={20} color={colors.text.tertiary} strokeWidth={1.5} />
-    </View>
-  );
-});
+  },
+);
 
 // ─── SongListItem ─────────────────────────────────────────────────────────────
 
@@ -109,7 +125,11 @@ export const SongListItem = memo(
             <Text
               style={[
                 styles.title,
-                { color: isNowPlaying ? colors.primary[500] : colors.text.primary },
+                {
+                  color: isNowPlaying
+                    ? colors.primary[500]
+                    : colors.text.primary,
+                },
               ]}
               numberOfLines={1}
             >
@@ -138,9 +158,7 @@ export const SongListItem = memo(
             {" | "}
             {item.bitDepth > 0 ? item.bitDepth : 16}bit
             {" | "}
-            {item.sampleRate > 0
-              ? (item.sampleRate / 1000).toFixed(1)
-              : "44.1"}
+            {item.sampleRate > 0 ? (item.sampleRate / 1000).toFixed(1) : "44.1"}
             kHz
           </Text>
         </View>
@@ -178,7 +196,7 @@ export const SongListItem = memo(
 const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
-    alignItems: "flex-start",   // ← seluruh row rata atas
+    alignItems: "flex-start", // ← seluruh row rata atas
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 12,
@@ -193,7 +211,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 2,               // sedikit offset agar sejajar dengan baris 1 teks
+    marginTop: 2, // sedikit offset agar sejajar dengan baris 1 teks
   },
 
   // Info area
@@ -223,7 +241,7 @@ const styles = StyleSheet.create({
 
   // Right actions — rata atas
   actions: {
-    alignItems: "flex-end",     // ← rata atas, bukan center
+    alignItems: "flex-end", // ← rata atas, bukan center
     justifyContent: "flex-start",
     marginLeft: 8,
     paddingTop: 2,
@@ -238,4 +256,3 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
 });
- 

@@ -11,11 +11,7 @@ import {
 } from "react-native";
 
 // Lucide Icons
-import {
-  X,
-  Shuffle,
-  Check,
-} from "lucide-react-native";
+import { X, Shuffle, Check } from "lucide-react-native";
 
 import { useTheme } from "@/shared/context/ThemeContext";
 import { ALL_THEMES, THEME_CATEGORIES } from "@/shared/constants/theme";
@@ -56,10 +52,7 @@ export const ThemePicker: React.FC<{
           setTheme(t.id);
           // Optional: haptic feedback
         }}
-        style={[
-          styles.cardContainer,
-          { marginBottom: spacing.md },
-        ]}
+        style={[styles.cardContainer, { marginBottom: spacing.md }]}
         activeOpacity={0.7}
       >
         <View
@@ -83,7 +76,7 @@ export const ThemePicker: React.FC<{
               },
             ]}
           />
-          
+
           {/* Preview text lines */}
           <View
             style={[
@@ -115,10 +108,7 @@ export const ThemePicker: React.FC<{
             ].map((bg, i) => (
               <View
                 key={i}
-                style={[
-                  styles.colorDot,
-                  { backgroundColor: bg },
-                ]}
+                style={[styles.colorDot, { backgroundColor: bg }]}
               />
             ))}
           </View>
@@ -172,7 +162,8 @@ export const ThemePicker: React.FC<{
             style={[
               styles.header,
               {
-                borderBottomColor: colors.border?.medium || colors.background.tertiary,
+                borderBottomColor:
+                  colors.border?.medium || colors.background.tertiary,
                 paddingHorizontal: spacing.lg,
                 paddingVertical: spacing.md,
               },
@@ -221,8 +212,10 @@ export const ThemePicker: React.FC<{
                   >
                     {label}
                   </Text>
-                  
-                  <View style={[styles.grid, { paddingHorizontal: spacing.lg }]}>
+
+                  <View
+                    style={[styles.grid, { paddingHorizontal: spacing.lg }]}
+                  >
                     {themes.map(renderThemeCard)}
                   </View>
                 </View>
@@ -235,7 +228,8 @@ export const ThemePicker: React.FC<{
             style={[
               styles.footer,
               {
-                borderTopColor: colors.border?.medium || colors.background.tertiary,
+                borderTopColor:
+                  colors.border?.medium || colors.background.tertiary,
                 paddingVertical: spacing.md,
                 paddingHorizontal: spacing.lg,
               },
@@ -377,4 +371,4 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
   },
-}); 
+});

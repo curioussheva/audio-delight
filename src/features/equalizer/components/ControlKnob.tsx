@@ -82,7 +82,7 @@ export const ControlKnob = ({
 
   const rgb = parseHexToRGB(color);
   const rotation = useSharedValue(
-    interpolate(value || 0, [0, 1000], [MIN_ROT, MAX_ROT])
+    interpolate(value || 0, [0, 1000], [MIN_ROT, MAX_ROT]),
   );
   const startRotation = useSharedValue(0);
   const offsetY = useSharedValue(0); // ✅ Definisikan offset
@@ -131,7 +131,9 @@ export const ControlKnob = ({
 
       <GestureDetector gesture={gesture}>
         <Animated.View style={[styles.knobWrapper, containerStyle]}>
-          <View style={[styles.knobOuter, { borderColor: hexToRGBA(color, 0.2) }]}>
+          <View
+            style={[styles.knobOuter, { borderColor: hexToRGBA(color, 0.2) }]}
+          >
             <View style={styles.tickMarksContainer}>
               {TICK_ANGLES.map((angle) => (
                 <AnimatedTick
@@ -148,7 +150,9 @@ export const ControlKnob = ({
 
             <Animated.View style={[styles.knobSurface, animatedKnobStyle]}>
               <View style={[styles.pointer, { backgroundColor: color }]}>
-                <View style={[styles.pointerGlow, { backgroundColor: color }]} />
+                <View
+                  style={[styles.pointerGlow, { backgroundColor: color }]}
+                />
               </View>
             </Animated.View>
           </View>
@@ -261,4 +265,4 @@ const styles = StyleSheet.create({
     color: "#444",
     fontWeight: "bold",
   },
-}); 
+});

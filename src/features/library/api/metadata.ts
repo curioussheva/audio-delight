@@ -2,11 +2,13 @@
  * MetadataExtractor.ts - Versi Final dengan Artwork Handling yang Lebih Baik
  */
 
-import { MediaStore, NativeSong } from "@/features/library/native/MediaStoreModule";
+import {
+  MediaStore,
+  NativeSong,
+} from "@/features/library/native/MediaStoreModule";
 import { Song } from "@/shared/types/audio";
 
 class MetadataExtractor {
-
   /**
    * Extract metadata satu lagu
    */
@@ -18,7 +20,6 @@ class MetadataExtractor {
       if (!nativeSong) return null;
 
       return this.convertNativeToSong(nativeSong);
-
     } catch (error) {
       console.error(`[MetadataExtractor] Extract failed for ${uri}:`, error);
       return null;
@@ -28,7 +29,9 @@ class MetadataExtractor {
   /**
    * Extract semua lagu (Full Scan)
    */
-  async extractAll(onProgress?: (current: number, total: number) => void): Promise<Partial<Song>[]> {
+  async extractAll(
+    onProgress?: (current: number, total: number) => void,
+  ): Promise<Partial<Song>[]> {
     try {
       console.log("[MetadataExtractor] Starting batch extractAll...");
 
@@ -48,9 +51,10 @@ class MetadataExtractor {
         onProgress?.(i + 1, total);
       }
 
-      console.log(`[MetadataExtractor] Successfully extracted ${results.length} songs from ${total} files`);
+      console.log(
+        `[MetadataExtractor] Successfully extracted ${results.length} songs from ${total} files`,
+      );
       return results;
-
     } catch (error) {
       console.error("[MetadataExtractor] Batch extractAll failed:", error);
       return [];
@@ -61,7 +65,8 @@ class MetadataExtractor {
    * Konversi utama dengan fokus pada Artwork
    */
   private convertNativeToSong(native: NativeSong): Partial<Song> {
-    const safeUri = native.uri || `content://media/external/audio/media/${native.id}`;
+    const safeUri =
+      native.uri || `content://media/external/audio/media/${native.id}`;
 
     // === Artwork Priority (Ini yang paling penting) ===
     const artwork = this.extractBestArtwork(native);
@@ -71,7 +76,9 @@ class MetadataExtractor {
       uri: safeUri,
       filename: native.filename || "",
 
-      title: native.title?.trim() || this.parseTitleFromFilename(native.filename || ""),
+      title:
+        native.title?.trim() ||
+        this.parseTitleFromFilename(native.filename || ""),
       artist: native.artist?.trim() || "Unknown Artist",
       album: native.album?.trim() || "Unknown Album",
       genre: native.genre?.trim() || "Unknown",
@@ -82,7 +89,8 @@ class MetadataExtractor {
       artwork: artwork || undefined,
 
       duration: Math.floor(native.duration || 0),
-      codec: native.codec || this.extractCodecFromFilename(native.filename || ""),
+      codec:
+        native.codec || this.extractCodecFromFilename(native.filename || ""),
       sampleRate: native.sampleRate || 0,
       bitDepth: native.bitDepth || 0,
       bitrate: native.bitrate || 0,
@@ -119,19 +127,28 @@ class MetadataExtractor {
 
   private parseTitleFromFilename(filename: string): string {
     if (!filename) return "Unknown Title";
-    return filename
-      .replace(/\.[^/.]+$/, "")
-      .replace(/\s*\([^)]*\)\s*$/, "")
-      .replace(/\s*\[[^\]]*\]\s*$/, "")
-      .trim() || "Unknown Title";
+    return (
+      filename
+        .replace(/\.[^/.]+$/, "")
+        .replace(/\s*\([^)]*\)\s*$/, "")
+        .replace(/\s*\[[^\]]*\]\s*$/, "")
+        .trim() || "Unknown Title"
+    );
   }
 
   private extractCodecFromFilename(filename: string): string {
-    const ext = filename.split('.').pop()?.toUpperCase() || "";
+    const ext = filename.split(".").pop()?.toUpperCase() || "";
     const codecMap: Record<string, string> = {
-      'MP3': 'MP3', 'FLAC': 'FLAC', 'WAV': 'WAV', 'M4A': 'AAC',
-      'AAC': 'AAC', 'OGG': 'OGG', 'OPUS': 'OPUS', 'DSF': 'DSD',
-      'ALAC': 'ALAC', 'APE': 'APE',
+      MP3: "MP3",
+      FLAC: "FLAC",
+      WAV: "WAV",
+      M4A: "AAC",
+      AAC: "AAC",
+      OGG: "OGG",
+      OPUS: "OPUS",
+      DSF: "DSD",
+      ALAC: "ALAC",
+      APE: "APE",
     };
     return codecMap[ext] || ext || "UNKNOWN";
   }
@@ -140,7 +157,7 @@ class MetadataExtractor {
     try {
       const parts = uri.split(/[/\\]/);
       for (let i = parts.length - 2; i >= 0; i--) {
-        if (parts[i] && !parts[i].includes('.')) return parts[i];
+        if (parts[i] && !parts[i].includes(".")) return parts[i];
       }
       return "Music";
     } catch {
@@ -159,11 +176,11 @@ class MetadataExtractor {
   private async findSongByUri(uri: string): Promise<NativeSong | null> {
     try {
       const allSongs = await MediaStore.queryAudioFiles();
-      return allSongs.find(song => song.uri === uri) || null;
+      return allSongs.find((song) => song.uri === uri) || null;
     } catch {
       return null;
     }
   }
 }
 
-export default new MetadataExtractor(); 
+export default new MetadataExtractor();

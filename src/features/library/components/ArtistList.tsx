@@ -32,7 +32,9 @@ import { useSettingsStore } from "@/features/settings/store/settingsStore"; // I
 
 // ── Artist Row ───────────────────────────────────────────────────
 const ArtistRow = memo(({ item, onPress, colors, enableOnlineImage }: any) => {
-  const [usableUri, setUsableUri] = useState<string | null>(item.artwork || null);
+  const [usableUri, setUsableUri] = useState<string | null>(
+    item.artwork || null,
+  );
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -44,7 +46,9 @@ const ArtistRow = memo(({ item, onPress, colors, enableOnlineImage }: any) => {
       if (enableOnlineImage) {
         setIsLoading(true);
         try {
-          const result = await OnlineMetadataService.getArtistEnrichment(item.name);
+          const result = await OnlineMetadataService.getArtistEnrichment(
+            item.name,
+          );
           if (isMounted && result.imageUrl) {
             setUsableUri(result.imageUrl);
           }
@@ -57,7 +61,9 @@ const ArtistRow = memo(({ item, onPress, colors, enableOnlineImage }: any) => {
     };
 
     fetchOnlineImage();
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, [item.name, item.artwork, enableOnlineImage]);
 
   return (
@@ -78,14 +84,22 @@ const ArtistRow = memo(({ item, onPress, colors, enableOnlineImage }: any) => {
             cachePolicy="memory-disk"
           />
         ) : (
-          <View style={[styles.avatarFallback, { backgroundColor: colors.background.tertiary }]}>
+          <View
+            style={[
+              styles.avatarFallback,
+              { backgroundColor: colors.background.tertiary },
+            ]}
+          >
             <User size={28} color={colors.text.disabled} />
           </View>
         )}
       </View>
 
       <View style={styles.artistInfo}>
-        <Text style={[styles.artistName, { color: colors.text.primary }]} numberOfLines={1}>
+        <Text
+          style={[styles.artistName, { color: colors.text.primary }]}
+          numberOfLines={1}
+        >
           {item.name}
         </Text>
         <Text style={[styles.artistMeta, { color: colors.text.tertiary }]}>
@@ -99,7 +113,15 @@ const ArtistRow = memo(({ item, onPress, colors, enableOnlineImage }: any) => {
 });
 
 // ── Artist Song Row (Detail Item) ─────────────────────────────────────────────
-const ArtistSongRow = memo(({ track, isNowPlaying, isFavorite, onPress, onToggleFavorite, colors }: any) => {
+const ArtistSongRow = memo(
+  ({
+    track,
+    isNowPlaying,
+    isFavorite,
+    onPress,
+    onToggleFavorite,
+    colors,
+  }: any) => {
     const router = useRouter();
 
     const handleLongPress = () => {
@@ -112,7 +134,10 @@ const ArtistSongRow = memo(({ track, isNowPlaying, isFavorite, onPress, onToggle
         onPress={onPress}
         onLongPress={handleLongPress}
         activeOpacity={0.7}
-        style={[styles.songRow, isNowPlaying && { backgroundColor: `${colors.primary[500]}15` }]}
+        style={[
+          styles.songRow,
+          isNowPlaying && { backgroundColor: `${colors.primary[500]}15` },
+        ]}
       >
         <View style={styles.songLeading}>
           {isNowPlaying ? (
@@ -125,20 +150,34 @@ const ArtistSongRow = memo(({ track, isNowPlaying, isFavorite, onPress, onToggle
         <View style={styles.songMain}>
           <View style={styles.songTitleRow}>
             <Text
-              style={[styles.songTitle, { color: isNowPlaying ? colors.primary[500] : colors.text.primary }]}
+              style={[
+                styles.songTitle,
+                {
+                  color: isNowPlaying
+                    ? colors.primary[500]
+                    : colors.text.primary,
+                },
+              ]}
               numberOfLines={1}
             >
               {track.title}
             </Text>
             <QualityBadge sampleRate={track.sampleRate} codec={track.codec} />
           </View>
-          <Text style={[styles.songAlbum, { color: colors.text.tertiary }]} numberOfLines={1}>
+          <Text
+            style={[styles.songAlbum, { color: colors.text.tertiary }]}
+            numberOfLines={1}
+          >
             {track.album || "Unknown Album"}
           </Text>
         </View>
 
         <View style={styles.songTrailing}>
-          <TouchableOpacity onPress={onToggleFavorite} style={styles.favBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <TouchableOpacity
+            onPress={onToggleFavorite}
+            style={styles.favBtn}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
             <Heart
               size={18}
               color={isFavorite ? colors.status.error : colors.text.disabled}
@@ -151,7 +190,7 @@ const ArtistSongRow = memo(({ track, isNowPlaying, isFavorite, onPress, onToggle
         </View>
       </TouchableOpacity>
     );
-  }
+  },
 );
 
 // ── Main ArtistList ──────────────────────────────────────────────────────────
@@ -176,7 +215,7 @@ export const ArtistList: React.FC<any> = ({
       Alert.alert(
         "Fitur Dinonaktifkan",
         "Pencarian metadata online saat ini mati. Silakan aktifkan 'Online Artist Metadata' di menu Settings > Library untuk menggunakan fitur ini.",
-        [{ text: "Mengerti" }]
+        [{ text: "Mengerti" }],
       );
       return;
     }
@@ -186,9 +225,9 @@ export const ArtistList: React.FC<any> = ({
     Alert.alert(
       "Metadata Scan",
       "Pencarian foto dan bio artis sedang diproses di latar belakang via MusicBrainz.",
-      [{ text: "OK" }]
+      [{ text: "OK" }],
     );
-    
+
     // Logic batch scan kamu...
     // OnlineMetadataService.enhanceMultipleArtists(enrichedArtists.map(a => a.name))
   };
@@ -222,15 +261,35 @@ export const ArtistList: React.FC<any> = ({
   // Render detail view (jika artis dipilih)
   if (selectedArtist) {
     const filteredSongs = tracks
-      .filter((t: MediaTrack) => (t.artist || "Unknown Artist") === selectedArtist.name)
-      .sort((a: any, b: any) => (a.album === b.album ? (a.trackNumber || 0) - (b.trackNumber || 0) : (a.album || "").localeCompare(b.album || "")));
-    
+      .filter(
+        (t: MediaTrack) =>
+          (t.artist || "Unknown Artist") === selectedArtist.name,
+      )
+      .sort((a: any, b: any) =>
+        a.album === b.album
+          ? (a.trackNumber || 0) - (b.trackNumber || 0)
+          : (a.album || "").localeCompare(b.album || ""),
+      );
+
     const heroImage = selectedArtist.resolvedArtwork || selectedArtist.artwork;
 
     return (
-      <View style={[styles.detailContainer, { backgroundColor: colors.background.primary }]}>
-        <View style={[styles.navBar, { paddingTop: Platform.OS === "ios" ? 50 : 20 }]}>
-          <TouchableOpacity onPress={() => setSelectedArtist(null)} style={styles.backBtn}>
+      <View
+        style={[
+          styles.detailContainer,
+          { backgroundColor: colors.background.primary },
+        ]}
+      >
+        <View
+          style={[
+            styles.navBar,
+            { paddingTop: Platform.OS === "ios" ? 50 : 20 },
+          ]}
+        >
+          <TouchableOpacity
+            onPress={() => setSelectedArtist(null)}
+            style={styles.backBtn}
+          >
             <ChevronLeft size={30} color={colors.text.primary} />
           </TouchableOpacity>
         </View>
@@ -239,19 +298,36 @@ export const ArtistList: React.FC<any> = ({
           keyExtractor={(item) => item.id}
           ListHeaderComponent={
             <View style={styles.headerHero}>
-               <View style={styles.avatarLargeContainer}>
+              <View style={styles.avatarLargeContainer}>
                 {heroImage ? (
-                  <Image source={{ uri: heroImage }} style={styles.avatarLarge} contentFit="cover" transition={300} />
+                  <Image
+                    source={{ uri: heroImage }}
+                    style={styles.avatarLarge}
+                    contentFit="cover"
+                    transition={300}
+                  />
                 ) : (
-                  <View style={[styles.avatarLargeFallback, { backgroundColor: colors.background.tertiary }]}>
+                  <View
+                    style={[
+                      styles.avatarLargeFallback,
+                      { backgroundColor: colors.background.tertiary },
+                    ]}
+                  >
                     <User size={60} color={colors.text.disabled} />
                   </View>
                 )}
               </View>
-              <Text style={[styles.headerTitle, { color: colors.text.primary }]}>{selectedArtist.name}</Text>
+              <Text
+                style={[styles.headerTitle, { color: colors.text.primary }]}
+              >
+                {selectedArtist.name}
+              </Text>
               <View style={styles.actionRow}>
                 <TouchableOpacity
-                  style={[styles.playBtn, { backgroundColor: colors.primary[500] }]}
+                  style={[
+                    styles.playBtn,
+                    { backgroundColor: colors.primary[500] },
+                  ]}
                   onPress={() => onSongPress(filteredSongs[0], filteredSongs)}
                 >
                   <Play size={20} color="#FFF" fill="#FFF" />
@@ -283,32 +359,53 @@ export const ArtistList: React.FC<any> = ({
       <TouchableOpacity
         activeOpacity={0.7}
         style={[
-          styles.scanHeader, 
-          { 
-            backgroundColor: enableOnlineArtistImage ? `${colors.primary[500]}15` : colors.background.tertiary,
-            opacity: enableOnlineArtistImage ? 1 : 0.7 
-          }
+          styles.scanHeader,
+          {
+            backgroundColor: enableOnlineArtistImage
+              ? `${colors.primary[500]}15`
+              : colors.background.tertiary,
+            opacity: enableOnlineArtistImage ? 1 : 0.7,
+          },
         ]}
         onPress={handleScanMetadata}
       >
-        <RefreshCw 
-          size={16} 
-          color={enableOnlineArtistImage ? colors.primary[500] : colors.text.disabled} 
+        <RefreshCw
+          size={16}
+          color={
+            enableOnlineArtistImage ? colors.primary[500] : colors.text.disabled
+          }
         />
-        <Text style={[
-          styles.scanText, 
-          { color: enableOnlineArtistImage ? colors.primary[500] : colors.text.disabled }
-        ]}>
-          {enableOnlineArtistImage ? "Scan Artist Metadata" : "Metadata Scan Disabled"}
+        <Text
+          style={[
+            styles.scanText,
+            {
+              color: enableOnlineArtistImage
+                ? colors.primary[500]
+                : colors.text.disabled,
+            },
+          ]}
+        >
+          {enableOnlineArtistImage
+            ? "Scan Artist Metadata"
+            : "Metadata Scan Disabled"}
         </Text>
       </TouchableOpacity>
 
       {/* Info Box jika disabled */}
       {!enableOnlineArtistImage && (
-        <View style={[styles.infoBox, { backgroundColor: `${colors.background.tertiary}50`, marginHorizontal: 16 }]}>
+        <View
+          style={[
+            styles.infoBox,
+            {
+              backgroundColor: `${colors.background.tertiary}50`,
+              marginHorizontal: 16,
+            },
+          ]}
+        >
           <Info size={14} color={colors.text.tertiary} />
           <Text style={[styles.infoText, { color: colors.text.tertiary }]}>
-            Aktifkan "Online Artist Metadata" di pengaturan untuk mengunduh foto artis secara otomatis.
+            Aktifkan "Online Artist Metadata" di pengaturan untuk mengunduh foto
+            artis secara otomatis.
           </Text>
         </View>
       )}
@@ -326,7 +423,12 @@ export const ArtistList: React.FC<any> = ({
           />
         )}
         ItemSeparatorComponent={() => (
-          <View style={[styles.separator, { backgroundColor: colors.background.tertiary }]} />
+          <View
+            style={[
+              styles.separator,
+              { backgroundColor: colors.background.tertiary },
+            ]}
+          />
         )}
       />
     </View>
@@ -335,28 +437,77 @@ export const ArtistList: React.FC<any> = ({
 
 const styles = StyleSheet.create({
   listContent: { paddingHorizontal: 16, paddingBottom: 100 },
-  artistRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12 },
-  avatarContainer: { width: 50, height: 50, borderRadius: 25, overflow: "hidden", justifyContent: "center", alignItems: "center" },
+  artistRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+  },
+  avatarContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    overflow: "hidden",
+    justifyContent: "center",
+    alignItems: "center",
+  },
   avatarImage: { width: "100%", height: "100%" },
-  avatarFallback: { width: "100%", height: "100%", justifyContent: "center", alignItems: "center" },
+  avatarFallback: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
   artistInfo: { flex: 1, marginLeft: 16 },
   artistName: { fontSize: 16, fontWeight: "700" },
   artistMeta: { fontSize: 12, marginTop: 2 },
   separator: { height: 1, marginLeft: 66 },
   detailContainer: { flex: 1 },
   navBar: { paddingHorizontal: 8, zIndex: 10 },
-  backBtn: { width: 44, height: 44, justifyContent: "center", alignItems: "center" },
+  backBtn: {
+    width: 44,
+    height: 44,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   headerHero: { alignItems: "center", padding: 20 },
-  avatarLargeContainer: { width: 160, height: 160, borderRadius: 80, overflow: "hidden", marginBottom: 20, elevation: 10, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5 },
+  avatarLargeContainer: {
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    overflow: "hidden",
+    marginBottom: 20,
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+  },
   avatarLarge: { width: "100%", height: "100%" },
-  avatarLargeFallback: { width: "100%", height: "100%", justifyContent: "center", alignItems: "center" },
+  avatarLargeFallback: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
   headerTitle: { fontSize: 26, fontWeight: "800", textAlign: "center" },
   headerMeta: { fontSize: 13, marginTop: 6, letterSpacing: 1 },
   actionRow: { marginTop: 25, width: "100%", paddingHorizontal: 20 },
-  playBtn: { height: 52, borderRadius: 26, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 10 },
+  playBtn: {
+    height: 52,
+    borderRadius: 26,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 10,
+  },
   playBtnText: { color: "#FFF", fontWeight: "800", letterSpacing: 1 },
 
-  songRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, paddingHorizontal: 20 },
+  songRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+  },
   songLeading: { width: 30 },
   songMain: { flex: 1, marginLeft: 10, marginRight: 10 },
   songTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -365,31 +516,26 @@ const styles = StyleSheet.create({
   songTrailing: { alignItems: "flex-end" },
   favBtn: { padding: 5 },
   duration: { fontSize: 11, marginTop: 4, opacity: 0.6 },
-  scanHeader: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    justifyContent: "center", 
-    marginHorizontal: 16, 
-    marginTop: 16, 
-    padding: 12, 
-    borderRadius: 12, 
+  scanHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 12,
     gap: 8,
     borderWidth: 1,
-    borderColor: 'transparent'
+    borderColor: "transparent",
   },
   scanText: { fontWeight: "700", fontSize: 13 },
   infoBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     padding: 10,
     borderRadius: 8,
     marginTop: 8,
-    gap: 8
+    gap: 8,
   },
   infoText: { fontSize: 11, flex: 1, lineHeight: 14 },
-  
 });
-
-
-
-
