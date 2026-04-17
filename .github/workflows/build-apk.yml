@@ -15,7 +15,7 @@ jobs:
           echo "Disk before cleanup:"
           df -h
           sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android/sdk/ndk
+          # REMOVED: sudo rm -rf /usr/local/lib/android/sdk/ndk  ← ini yang bikin NDK re-download tiap run
           sudo rm -rf /usr/local/lib/android/sdk/build-tools/3[0-2]*
           sudo rm -rf /opt/ghc
           sudo rm -rf /opt/hostedtoolcache/CodeQL
@@ -46,12 +46,16 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Install CMake 3.31.6
+        run: |
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "cmake;3.31.6"
+          echo "$ANDROID_HOME/cmake/3.31.6/bin" >> $GITHUB_PATH
+
       - name: Patch Android Build Files
         run: |
           ROOT_DIR="${{ github.workspace }}"
           sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/build.gradle
           sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/react-native-track-player/android/repo\" }" android/build.gradle
-          sed -i "/repositories {/a \        flatDir { dirs \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/app/build.gradle
           sed -i "/defaultConfig {/a \        ndk { abiFilters 'arm64-v8a' }" android/app/build.gradle
           echo "Patched successfully"
 
