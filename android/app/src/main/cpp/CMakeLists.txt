@@ -14,7 +14,7 @@ FetchContent_MakeAvailable(oboe)
 add_library(
     pristineaudio_engine
     SHARED
-    native-lib.cpp
+    Native-lib.cpp
     AudioEngine.cpp
     NativeDSPModule.cpp
     NativeVisualizerBridge.cpp
