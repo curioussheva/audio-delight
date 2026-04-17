@@ -19,7 +19,7 @@ private:
     BiquadCoefficients coeffs = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
 };
 
-class AudioEngine : public oboe::AudioStreamDataCallback {
+class AudioEngine : public oboe::AudioStreamCallback {
 public:
     AudioEngine();
     void start();
@@ -33,7 +33,9 @@ public:
     void setStereoWide(float width);
     void setExclusiveMode(bool enabled);
 
+    // Oboe Callbacks
     oboe::DataCallbackResult onAudioReady(oboe::AudioStream *audioStream, void *audioData, int32_t numFrames) override;
+    void onErrorAfterClose(oboe::AudioStream *stream, oboe::Result error) override;
 
 private:
     oboe::AudioStream *mStream = nullptr;
@@ -50,9 +52,15 @@ private:
     BiquadFilter mBassBoostLeft;
     BiquadFilter mBassBoostRight;
 
-    // Parameter Audio
+    // Parameter Audio (Atomic untuk thread-safety)
     std::atomic<float> mMasterGain{1.0f};
     std::atomic<float> mBalance{0.0f};
     std::atomic<float> mStereoWide{1.0f};
+
+    // Cache nilai dB agar filter bisa di-recalculate jika sample rate DAC berubah
+    float mEqGains[10] = {0.0f};
+    float mBassBoostGain = 0.0f;
+    
+    void recalculateFilters();
 };
  

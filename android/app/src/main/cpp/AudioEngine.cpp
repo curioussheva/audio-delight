@@ -7,7 +7,7 @@
 
 void BiquadFilter::setPeakingEQ(float freq, float Q, float gainDb, float sampleRate) {
     float A = powf(10.0f, gainDb / 40.0f);
-    float omega = 2.0f * M_PI * freq / sampleRate;
+    float omega = 2.0f * (float)M_PI * freq / sampleRate;
     float alpha = sinf(omega) / (2.0f * Q);
     
     float a0 = 1.0f + alpha / A;
@@ -20,7 +20,7 @@ void BiquadFilter::setPeakingEQ(float freq, float Q, float gainDb, float sampleR
 
 void BiquadFilter::setLowShelf(float freq, float Q, float gainDb, float sampleRate) {
     float A = powf(10.0f, gainDb / 40.0f);
-    float omega = 2.0f * M_PI * freq / sampleRate;
+    float omega = 2.0f * (float)M_PI * freq / sampleRate;
     float alpha = sinf(omega) / (2.0f * Q);
     float cosW = cosf(omega);
     float sqrtA2 = 2.0f * sqrtf(A) * alpha;
@@ -44,15 +44,17 @@ float BiquadFilter::process(float in) {
 
 AudioEngine::AudioEngine() {
     mBuffer.resize(48000 * 4); // Buffer untuk ~4 detik stereo (mencegah underrun)
-    
-    // Inisialisasi frekuensi EQ standar (Flat 0dB)
+    recalculateFilters(); // Inisialisasi awal pada 48kHz
+}
+
+void AudioEngine::recalculateFilters() {
     float freqs[] = {31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000};
     for(int i = 0; i < 10; i++) {
-        mEqBandsLeft[i].setPeakingEQ(freqs[i], 1.414f, 0.0f, mSampleRate);
-        mEqBandsRight[i].setPeakingEQ(freqs[i], 1.414f, 0.0f, mSampleRate);
+        mEqBandsLeft[i].setPeakingEQ(freqs[i], 1.414f, mEqGains[i], mSampleRate);
+        mEqBandsRight[i].setPeakingEQ(freqs[i], 1.414f, mEqGains[i], mSampleRate);
     }
-    mBassBoostLeft.setLowShelf(100.0f, 0.707f, 0.0f, mSampleRate);
-    mBassBoostRight.setLowShelf(100.0f, 0.707f, 0.0f, mSampleRate);
+    mBassBoostLeft.setLowShelf(100.0f, 0.707f, mBassBoostGain, mSampleRate);
+    mBassBoostRight.setLowShelf(100.0f, 0.707f, mBassBoostGain, mSampleRate);
 }
 
 void AudioEngine::start() {
@@ -64,8 +66,12 @@ void AudioEngine::start() {
            ->setCallback(this)
            ->openStream(&mStream);
            
+    // Penting: Update sample rate sesuai kemampuan DAC eksternal/internal saat ini
     mSampleRate = mStream->getSampleRate();
-    LOGD("Oboe Stream Started. Sample Rate: %f", mSampleRate);
+    LOGD("Oboe Stream Started. Actual Sample Rate: %f", mSampleRate);
+    
+    recalculateFilters(); // Terapkan ulang filter dengan sample rate yang akurat
+    
     mStream->requestStart();
 }
 
@@ -121,16 +127,26 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(oboe::AudioStream *audioStrea
     return oboe::DataCallbackResult::Continue;
 }
 
+void AudioEngine::onErrorAfterClose(oboe::AudioStream *stream, oboe::Result error) {
+    LOGD("Oboe stream closed with error: %d", error);
+    if (error == oboe::Result::ErrorDisconnected) {
+        // Logika saat Headphone/DAC dicabut/dicolok ulang
+        start(); 
+    }
+}
+
 // --- FUNGSI SETTER UNTUK JNI ---
 
 void AudioEngine::setEqBand(int band, float gainDb) {
     if (band < 0 || band > 9) return;
+    mEqGains[band] = gainDb; // Cache state
     float freqs[] = {31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000};
     mEqBandsLeft[band].setPeakingEQ(freqs[band], 1.414f, gainDb, mSampleRate);
     mEqBandsRight[band].setPeakingEQ(freqs[band], 1.414f, gainDb, mSampleRate);
 }
 
 void AudioEngine::setBassBoost(float gainDb) {
+    mBassBoostGain = gainDb; // Cache state
     mBassBoostLeft.setLowShelf(100.0f, 0.707f, gainDb, mSampleRate);
     mBassBoostRight.setLowShelf(100.0f, 0.707f, gainDb, mSampleRate);
 }
@@ -138,4 +154,9 @@ void AudioEngine::setBassBoost(float gainDb) {
 void AudioEngine::setMasterGain(float gain) { mMasterGain.store(gain); }
 void AudioEngine::setBalance(float balance) { mBalance.store(balance); }
 void AudioEngine::setStereoWide(float width) { mStereoWide.store(width); }
+
+// Mencegah linker error jika fungsi ini dideklarasikan di header tapi belum diimplementasi
+void AudioEngine::setExclusiveMode(bool enabled) {
+    // Dapat diimplementasi dengan me-restart stream dengan mode yang baru
+}
  
