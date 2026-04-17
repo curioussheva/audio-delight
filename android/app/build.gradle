@@ -46,10 +46,7 @@ android {
     }
 
     // --- KONFIGURASI NATIVE ENGINE ---
-    buildFeatures {
-        prefab true      // Wajib untuk Oboe
-        buildConfig true
-    }
+    
 
     externalNativeBuild {
         cmake {
@@ -96,7 +93,7 @@ dependencies {
     implementation("com.facebook.react:react-android")
 
     // PRISTINE AUDIO ENGINE: Oboe Library
-    implementation 'com.google.oboe:oboe:1.9.0'
+// implementation 'com.google.oboe:oboe:1.9.0'
 
     // MEDIA3 EXOPLAYER - Required for AudioProcessor
     def media3Version = "1.6.1"

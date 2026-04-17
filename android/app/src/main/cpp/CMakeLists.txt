@@ -1,24 +1,28 @@
 cmake_minimum_required(VERSION 3.22.1)
-
 project("pristineaudio_engine")
 
-# Cari library Oboe via Prefab
-find_package(oboe REQUIRED CONFIG)
+# Fetch Oboe dari source — lebih reliable daripada Prefab di CI
+include(FetchContent)
+FetchContent_Declare(
+    oboe
+    GIT_REPOSITORY https://github.com/google/oboe.git
+    GIT_TAG 1.9.0
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(oboe)
 
-# Definisikan library utama
 add_library(
     pristineaudio_engine
     SHARED
     native-lib.cpp
     AudioEngine.cpp
-    NativeDSPModule.cpp        # Tambahkan ini untuk kontrol EQ
-    NativeVisualizerBridge.cpp # Tambahkan ini untuk data visualizer
+    NativeDSPModule.cpp
+    NativeVisualizerBridge.cpp
 )
 
-# Hubungkan library
 target_link_libraries(
     pristineaudio_engine
-    oboe::oboe
+    oboe
     log
     android
-)
+)  

@@ -475,45 +475,35 @@ export class LibraryScanner {
    * Update metadata enrichment
    */
   static async updateMetadata(songId: string, metadata: Partial<Song>): Promise<void> {
-    try {
-      const fields: string[] = [];
-      const params: any[] = [];
-      
-      const allowedFields = [
-        'title', 'artist', 'album', 'genre', 'artwork', 'duration',
-        'sampleRate', 'bitDepth', 'bitrate', 'codec', 'fileSize',
-        'year', 'trackNumber', 'discNumber', 'composer', 'lyricist',
-        'isEnriched'
-      ];
-      
-      for (const field of allowedFields) {
-        if (metadata[field as keyof Song] !== undefined) {
-          fields.push(`${field} = ?`);
-          params.push(metadata[field as keyof Song]);
-        }
+  try {
+    const fields: string[] = [];
+    const params: any[] = [];
+
+    const allowedFields = [
+      'title', 'artist', 'album', 'genre', 'artwork', 'duration',
+      'sampleRate', 'bitDepth', 'bitrate', 'codec', 'fileSize',
+      'year', 'trackNumber', 'discNumber', 'composer', 'lyricist',
+      'isEnriched', 'artistImageUrl', 'artistBio', 'lastEnrichedAt', // <-- tambahkan
+    ];
+
+    for (const field of allowedFields) {
+      if (metadata[field as keyof Song] !== undefined) {
+        fields.push(`${field} = ?`);
+        params.push(metadata[field as keyof Song]);
       }
-      
-      if (metadata.isEnriched) {
-        fields.push('last_enriched_at = ?');
-        params.push(Date.now());
-      }
-      
-      if (fields.length === 0) {
-        console.warn(`[LibraryScanner] No fields to update for ${songId}`);
-        return;
-      }
-      
-      params.push(songId);
-      const sql = `UPDATE songs SET ${fields.join(", ")} WHERE id = ?`;
-      
-      db.execute(sql, params);
-      console.log(`[LibraryScanner] Updated metadata for: ${songId}`);
-    } catch (error) {
-      console.error(`[LibraryScanner] Failed to update metadata for ${songId}:`, error);
-      throw error;
     }
+
+    if (fields.length === 0) return;
+
+    params.push(songId);
+    const sql = `UPDATE songs SET ${fields.join(", ")} WHERE id = ?`;
+    db.execute(sql, params);
+  } catch (error) {
+    console.error(`[LibraryScanner] Failed to update metadata for ${songId}:`, error);
+    throw error;
   }
-  
+}
+
   /**
    * Update enrichment data
    */
@@ -753,3 +743,5 @@ export class LibraryScanner {
 }
 
 export default LibraryScanner; 
+
+
