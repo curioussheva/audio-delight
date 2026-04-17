@@ -52,18 +52,20 @@ jobs:
           echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
             "ndk;27.1.12297006" \
             "cmake;3.31.6"
+          # Menambahkan cmake ke PATH agar dikenali oleh sistem build
           echo "$ANDROID_HOME/cmake/3.31.6/bin" >> $GITHUB_PATH
 
       - name: Build Debug APK
         run: |
           cd android
           chmod +x gradlew
-          rm -rf app/.cxx
+          rm -rf app/.cxx 
           ./gradlew assembleDebug \
             --no-daemon \
             --no-parallel \
             --max-workers=2 \
             --no-build-cache \
+            -PnewArchEnabled=true \
             -PkotlinVersion=2.0.21 \
             -Dorg.gradle.jvmargs="-Xmx3g -Xms512m -XX:MaxMetaspaceSize=512m"
 
@@ -71,5 +73,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: PristineAudio-Debug
-          path: android/app/build/outputs/apk/debug/*.apk
-          retention-days: 7 
+          # Menggunakan path yang lebih spesifik untuk memastikan file ditemukan
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
+ 

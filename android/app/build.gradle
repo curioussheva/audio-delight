@@ -130,4 +130,3 @@ dependencies {
         options.each { android.packagingOptions[prop] += it }
     }
 }
- 
