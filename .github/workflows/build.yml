@@ -1,0 +1,86 @@
+name: Build PristineAudio APK (Debug)
+
+on:
+  push:
+    branches: [ "pristine-audio" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Free Disk Space
+        run: |
+          echo "Disk before cleanup:"
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android/sdk/build-tools/3[0-2]*
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/share/boost
+          sudo apt-get clean
+          echo "Disk after cleanup:"
+          df -h
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Setup Oboe 1.9.0
+        run: |
+          OBOE_DIR="android/app/src/main/cpp/oboe"
+          mkdir -p "$OBOE_DIR"
+          curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz -o oboe.tar.gz
+          tar -xzf oboe.tar.gz --strip-components=1 -C "$OBOE_DIR"
+          rm oboe.tar.gz
+          echo "Oboe files: $(ls $OBOE_DIR | wc -l)"
+          head -3 "$OBOE_DIR/CMakeLists.txt"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile --ignore-engines
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK 27 and CMake 3.31.6
+        run: |
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+            "ndk;27.1.12297006" \
+            "cmake;3.31.6"
+          echo "$ANDROID_HOME/cmake/3.31.6/bin" >> $GITHUB_PATH
+
+      - name: Build Debug APK
+        run: |
+          cd android
+          chmod +x gradlew
+          rm -rf app/.cxx
+          ./gradlew assembleDebug \
+            --no-daemon \
+            --no-parallel \
+            --max-workers=2 \
+            --no-build-cache \
+            -PnewArchEnabled=true \
+            -PkotlinVersion=2.0.21 \
+            -Dorg.gradle.jvmargs="-Xmx3g -Xms512m -XX:MaxMetaspaceSize=512m"
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PristineAudio-Debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
