@@ -2,7 +2,10 @@
 #include <android/log.h>
 #include "AudioEngine.h"
 
-extern AudioEngine *getAudioEngine(); 
+// PERBAIKAN: Bungkus deklarasi eksternal agar menggunakan linkage C
+extern "C" {
+    AudioEngine *getAudioEngine(); 
+}
 
 extern "C" {
 
@@ -55,3 +58,4 @@ Java_com_pristineaudio_NativeDSPModule_toggleNativeExclusiveMode(
 }
 
 } // extern "C"
+ 
