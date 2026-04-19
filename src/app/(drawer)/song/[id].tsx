@@ -170,7 +170,7 @@ export default function SongDetailScreen() {
         year: song.year?.toString() || "",
         trackNumber: song.trackNumber?.toString() || "",
         discNumber: song.discNumber?.toString() || "",
-        composer: (song as any).composer || "",
+        composer: song.composer || "",
         publisher: song.publisher || "",
         label: song.label || "",
       });

@@ -47,6 +47,25 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile --ignore-engines
 
+      # ✅ Expo Prebuild untuk generate AndroidManifest.xml dengan usesCleartextTraffic
+      - name: Expo Prebuild
+        run: npx expo prebuild --platform android
+        env:
+          NODE_ENV: development
+
+      # ✅ Verifikasi usesCleartextTraffic di AndroidManifest.xml
+      - name: Verify usesCleartextTraffic in AndroidManifest.xml
+        run: |
+          echo "Checking AndroidManifest.xml for usesCleartextTraffic..."
+          if grep -q 'usesCleartextTraffic' android/app/src/main/AndroidManifest.xml; then
+            echo "✅ usesCleartextTraffic found in AndroidManifest.xml"
+            grep 'usesCleartextTraffic' android/app/src/main/AndroidManifest.xml
+          else
+            echo "❌ usesCleartextTraffic NOT found - adding manually..."
+            sed -i 's/<application/<application android:usesCleartextTraffic="true"/' android/app/src/main/AndroidManifest.xml
+            echo "✅ usesCleartextTraffic added manually"
+          fi
+
       - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
@@ -64,6 +83,11 @@ jobs:
             "cmake;3.31.6"
           echo "$ANDROID_HOME/cmake/3.31.6/bin" >> $GITHUB_PATH
 
+      # ✅ Set NODE_ENV untuk development build
+      - name: Set environment variables
+        run: |
+          echo "NODE_ENV=development" >> $GITHUB_ENV
+
       - name: Build Debug APK
         run: |
           cd android
@@ -77,6 +101,8 @@ jobs:
             -PnewArchEnabled=true \
             -PkotlinVersion=2.0.21 \
             -Dorg.gradle.jvmargs="-Xmx3g -Xms512m -XX:MaxMetaspaceSize=512m"
+        env:
+          NODE_ENV: development
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -84,3 +110,12 @@ jobs:
           name: PristineAudio-Debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 7
+
+      # ✅ Upload AndroidManifest.xml untuk verifikasi
+      - name: Upload AndroidManifest.xml for verification
+        uses: actions/upload-artifact@v4
+        with:
+          name: AndroidManifest-Debug
+          path: android/app/src/main/AndroidManifest.xml
+          retention-days: 7
+ 

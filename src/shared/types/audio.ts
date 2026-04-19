@@ -42,6 +42,7 @@ export interface Song {
   year?: number;
   trackNumber?: number;
   discNumber?: number;
+  composer?: string;
 
   // Statistik & User Data
   playCount?: number;
