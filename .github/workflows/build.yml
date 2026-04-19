@@ -47,12 +47,6 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile --ignore-engines
 
-      # ✅ Expo Prebuild untuk generate AndroidManifest.xml dengan usesCleartextTraffic
-      - name: Expo Prebuild
-        run: npx expo prebuild --platform android
-        env:
-          NODE_ENV: development
-
       # ✅ Verifikasi usesCleartextTraffic di AndroidManifest.xml
       - name: Verify usesCleartextTraffic in AndroidManifest.xml
         run: |
@@ -118,4 +112,4 @@ jobs:
           name: AndroidManifest-Debug
           path: android/app/src/main/AndroidManifest.xml
           retention-days: 7
- 
+  

@@ -80,28 +80,27 @@
       ],
       "expo-document-picker",
       [
-  "expo-build-properties",
-  {
-    "android": {
-      "compileSdkVersion": 36,
-      "targetSdkVersion": 36,
-      "minSdkVersion": 24,
-      "buildToolsVersion": "36.0.0",
-      "kotlinVersion": "2.0.21",
-      "newArchEnabled": true,
-      "ndkVersion": "27.1.12297006",
-      "usesCleartextTraffic": true,
-      "extraMavenRepos": [
-        "../../node_modules/react-native-track-player/android/repo"
-      ]
-    },
-    "ios": {
-      "deploymentTarget": "15.1",
-      "useFrameworks": "static"
-    }
-  }
-]
-
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
+            "minSdkVersion": 24,
+            "buildToolsVersion": "36.0.0",
+            "kotlinVersion": "2.0.21",
+            "newArchEnabled": true,
+            "ndkVersion": "27.1.12297006",
+            "usesCleartextTraffic": true,
+            "extraMavenRepos": [
+              "../../node_modules/react-native-track-player/android/repo"
+            ]
+          },
+          "ios": {
+            "deploymentTarget": "15.1",
+            "useFrameworks": "static"
+          }
+        }
+      ],
       [
         "expo-router",
         {
@@ -125,3 +124,4 @@
     }
   }
 }
+ 
