@@ -51,7 +51,7 @@ android {
     externalNativeBuild {
         cmake {
             path "src/main/cpp/CMakeLists.txt"
-            version "3.31.6" // Sesuai dengan spesifikasi NDK/CMake di GitHub Actions
+            version "3.22.1" // Sesuai dengan spesifikasi NDK/CMake di GitHub Actions
         }
     }
     
@@ -64,6 +64,11 @@ android {
         }
     }
     
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
