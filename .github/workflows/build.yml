@@ -88,11 +88,14 @@ jobs:
           echo "Membersihkan sisa cache build dan C++..."
           rm -rf app/.cxx
           rm -rf app/build
+          rm -rf ../node_modules/.cache/metro
+          rm -rf ~/.gradle/caches/transforms-*
           ./gradlew clean
           
           echo "Mulai kompilasi APK..."
           ./gradlew assembleDebug \
             --no-daemon \
+            --rerun-tasks \
             -PnewArchEnabled=true \
             -PkotlinVersion=2.0.21 \
             -PforceBundle=true \
@@ -113,4 +116,4 @@ jobs:
           name: AndroidManifest-Debug
           path: android/app/src/main/AndroidManifest.xml
           retention-days: 7
- 
+ # Note: tambahkan ini sebelum Build Debug APK step
