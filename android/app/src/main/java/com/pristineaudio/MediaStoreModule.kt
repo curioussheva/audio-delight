@@ -7,11 +7,13 @@ import android.os.Build
 import android.provider.MediaStore
 import android.media.MediaMetadataRetriever
 import com.facebook.react.bridge.*
+import com.facebook.react.module.annotations.ReactModule
 
 class MediaStoreModule(private val reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
-    override fun getName() = "MediaStoreModule"
+    companion object { const val NAME = "MediaStoreModule" }
+    override fun getName() = NAME
     
     private fun getAudioTechnicalInfo(uriString: String): WritableMap {
     val info = Arguments.createMap()

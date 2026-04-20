@@ -1,8 +1,10 @@
 package com.pristineaudio
 
 import com.facebook.react.bridge.*
+import com.facebook.react.module.annotations.ReactModule
 import android.util.Log
 
+@ReactModule(name = NativeDSPModule.NAME)
 class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
     private var engineAvailable = false
@@ -26,7 +28,8 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
         }
     }
 
-    override fun getName() = "NativeDSPModule"
+    companion object { const val NAME = "NativeDSPModule" }
+    override fun getName() = NAME
 
     private external fun bootEngineNative()
     private external fun setNativeMasterGain(gain: Float)

@@ -113,5 +113,10 @@
     "node": ">=20.19.0",
     "npm": ">=10.0.0",
     "yarn": ">=1.22.0"
+  },
+  "codegenConfig": {
+    "name": "PristineAudioSpec",
+    "type": "modules",
+    "jsSrcsDir": "src/specs"
   }
 }

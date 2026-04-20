@@ -5,8 +5,10 @@ import android.media.*
 import android.os.Build
 import android.util.Log
 import com.facebook.react.bridge.*
+import com.facebook.react.module.annotations.ReactModule
 import com.facebook.react.modules.core.DeviceEventManagerModule
 
+@ReactModule(name = USBDACModule.NAME)
 class USBDACModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
     private val audioManager = reactContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -42,7 +44,8 @@ class USBDACModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
         audioManager.registerAudioDeviceCallback(audioDeviceCallback, null)
     }
 
-    override fun getName(): String = "USBDACModule"
+    companion object { const val NAME = "USBDACModule" }
+    override fun getName(): String = NAME
 
     override fun invalidate() {
         audioManager.unregisterAudioDeviceCallback(audioDeviceCallback)
