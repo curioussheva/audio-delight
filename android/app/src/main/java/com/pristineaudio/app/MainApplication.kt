@@ -12,7 +12,6 @@ import com.facebook.react.ReactHost
 import com.facebook.react.common.ReleaseLevel
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint
 import com.facebook.react.defaults.DefaultReactNativeHost
-import com.facebook.soloader.SoLoader
 
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
@@ -43,22 +42,14 @@ class MainApplication : Application(), ReactApplication {
   override fun onCreate() {
     super.onCreate()
 
-    // 1. SoLoader HARUS diinit pertama
-    SoLoader.init(this, false)
-
-    // 2. Set release level
+    // Set release level saja — load() ditangani oleh loadReactNative
     DefaultNewArchitectureEntryPoint.releaseLevel = try {
       ReleaseLevel.valueOf(BuildConfig.REACT_NATIVE_RELEASE_LEVEL.uppercase())
     } catch (e: IllegalArgumentException) {
       ReleaseLevel.STABLE
     }
 
-    // 3. Load New Architecture setelah SoLoader siap
-    if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
-      DefaultNewArchitectureEntryPoint.load()
-    }
-
-    // 4. loadReactNative terakhir
+    // loadReactNative handle seluruh bootstrap termasuk New Architecture
     loadReactNative(this)
     ApplicationLifecycleDispatcher.onApplicationCreate(this)
   }
