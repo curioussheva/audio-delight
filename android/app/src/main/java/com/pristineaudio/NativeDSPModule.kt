@@ -10,6 +10,7 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     private var engineAvailable = false
 
     companion object {
+        const val NAME = "NativeDSPModule"
         private const val TAG = "NativeDSPModule"
     }
 
@@ -28,7 +29,6 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
         }
     }
 
-    companion object { const val NAME = "NativeDSPModule" }
     override fun getName() = NAME
 
     private external fun bootEngineNative()
