@@ -8,7 +8,7 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "node": "20.19.4",  // ← TAMBAHKAN INI
+      "node": "20.19.4",  
       "android": {
         "buildType": "apk",
         "gradleCommand": ":app:assembleDebug",
@@ -34,7 +34,7 @@
     },
     "development-simulator": {
       "extends": "development",
-      "node": "20.19.0",  // ← TAMBAHKAN
+      "node": "20.19.4",  
       "ios": {
         "simulator": true,
         "resourceClass": "medium"
@@ -42,7 +42,7 @@
     },
     "preview": {
       "distribution": "internal",
-      "node": "20.19.0",  // ← TAMBAHKAN
+      "node": "20.19.4",  
       "android": {
         "buildType": "apk",
         "resourceClass": "medium"
@@ -57,7 +57,7 @@
     },
     "production": {
       "distribution": "store",
-      "node": "20.19.0",  // ← TAMBAHKAN
+      "node": "20.19.4",  
       "android": {
         "buildType": "app-bundle",
         "resourceClass": "large"
