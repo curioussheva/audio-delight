@@ -57,13 +57,7 @@
         "EXPO_NO_UPDATES": "1"
       },
       "channel": "preview",
-      "autoIncrement": true,
-      "hooks": {
-        "pre-install": "./eas-hooks/eas-build-pre-install.sh"
-      },
-      "updates": {
-        "enabled": false
-      }
+      "autoIncrement": true
     },
     "production": {
       "distribution": "store",
