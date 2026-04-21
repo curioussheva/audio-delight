@@ -15,6 +15,7 @@ jobs:
           echo "Disk before cleanup:"
           df -h
           sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android/sdk/ndk
           sudo rm -rf /usr/local/lib/android/sdk/build-tools/3[0-2]*
           sudo rm -rf /opt/ghc
           sudo rm -rf /opt/hostedtoolcache/CodeQL
@@ -36,7 +37,6 @@ jobs:
           tar -xzf oboe.tar.gz --strip-components=1 -C "$OBOE_DIR"
           rm oboe.tar.gz
           echo "Oboe files: $(ls $OBOE_DIR | wc -l)"
-          head -3 "$OBOE_DIR/CMakeLists.txt"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -46,18 +46,6 @@ jobs:
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile --ignore-engines
-
-      - name: Verify usesCleartextTraffic in AndroidManifest.xml
-        run: |
-          echo "Checking AndroidManifest.xml for usesCleartextTraffic..."
-          if grep -q 'usesCleartextTraffic' android/app/src/main/AndroidManifest.xml; then
-            echo "✅ usesCleartextTraffic found in AndroidManifest.xml"
-            grep 'usesCleartextTraffic' android/app/src/main/AndroidManifest.xml
-          else
-            echo "❌ usesCleartextTraffic NOT found - adding manually..."
-            sed -i 's/<application/<application android:usesCleartextTraffic="true"/' android/app/src/main/AndroidManifest.xml
-            echo "✅ usesCleartextTraffic added manually"
-          fi
 
       - name: Setup JDK 17
         uses: actions/setup-java@v4
@@ -69,51 +57,38 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install NDK 27 and CMake 3.31.6
+      - name: Install NDK 27
         run: |
           echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
             "ndk;27.1.12297006" \
-            "cmake;3.31.6"
-          echo "$ANDROID_HOME/cmake/3.31.6/bin" >> $GITHUB_PATH
+            "cmake;3.22.1"
+          echo "$ANDROID_HOME/cmake/3.22.1/bin" >> $GITHUB_PATH
 
-      - name: Set environment variables
+      - name: Patch Android Build Files
         run: |
-          echo "NODE_ENV=development" >> $GITHUB_ENV
+          ROOT_DIR="${{ github.workspace }}"
+          sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/@react-native-async-storage/async-storage/android/libs\" }" android/build.gradle
+          sed -i "/repositories {/a \        maven { url \"$ROOT_DIR/node_modules/react-native-track-player/android/repo\" }" android/build.gradle
+          echo "Patched successfully"
 
       - name: Build Debug APK
         run: |
           cd android
           chmod +x gradlew
-          
-          echo "Membersihkan sisa cache build dan C++..."
           rm -rf app/.cxx
-          rm -rf app/build
-          rm -rf ../node_modules/.cache/metro
-          rm -rf ~/.gradle/caches/transforms-*
-          ./gradlew clean
-          
-          echo "Mulai kompilasi APK..."
           ./gradlew assembleDebug \
             --no-daemon \
-            --rerun-tasks \
+            --no-parallel \
+            --max-workers=2 \
+            --build-cache \
             -PnewArchEnabled=true \
             -PkotlinVersion=2.0.21 \
-            -PforceBundle=true \
-            -Dorg.gradle.jvmargs="-Xmx4g -XX:+HeapDumpOnOutOfMemoryError"
-        env:
-          NODE_ENV: development
+            -Pandroid.injected.build.abi.filters=arm64-v8a \
+            -Dorg.gradle.jvmargs="-Xmx3g -Xms512m -XX:MaxMetaspaceSize=512m"
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
           name: PristineAudio-Debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: android/app/build/outputs/apk/debug/*.apk
           retention-days: 7
-
-      - name: Upload AndroidManifest.xml for verification
-        uses: actions/upload-artifact@v4
-        with:
-          name: AndroidManifest-Debug
-          path: android/app/src/main/AndroidManifest.xml
-          retention-days: 7
- # Note: tambahkan ini sebelum Build Debug APK step
