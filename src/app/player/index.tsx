@@ -152,7 +152,7 @@ export default function PlayerScreen() {
     <View style={[styles.container, { backgroundColor }]}>
       <LinearGradient
         colors={gradientColors as [string, string, ...string[]]}
-        locations={[0, 0.5, 1]}
+        locations={gradientColors.length === 3 ? [0, 0.5, 1] : [0, 1]}
         style={StyleSheet.absoluteFill}
       />
 

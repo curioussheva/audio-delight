@@ -1,3 +1,6 @@
+import { configureReanimatedLogger, ReanimatedLogLevel } from "react-native-reanimated";
+configureReanimatedLogger({ level: ReanimatedLogLevel.warn, strict: false });
+
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Stack } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
