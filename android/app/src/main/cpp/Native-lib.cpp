@@ -32,7 +32,7 @@ Java_com_pristineaudio_OboeAudioProcessor_feedNativeAudio(
 
 // --- Visualizer Data (Baru) ---
 JNIEXPORT jfloatArray JNICALL
-Java_com_pristineaudio_NativeVisualizerModule_getVisualizerData(JNIEnv *env, jobject thiz) {
+Java_com_pristineaudio_NativeVisualizerBridge_getVisualizerData(JNIEnv *env, jobject thiz) {
     // Ukuran FFT standar untuk mobile (128 bin cukup untuk bar visualizer)
     int binSize = 128;
     std::vector<float> fftData(binSize, 0.0f); 

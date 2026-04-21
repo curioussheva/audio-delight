@@ -1,12 +1,20 @@
 // src/features/player/api/playback.ts
 
 import TrackPlayer, { Event, State } from "react-native-track-player";
-import { NativeModules, Platform } from "react-native";
+import { NativeModules } from "react-native";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { visualizerService } from "@/features/visualizer/services/VisualizerService";
 
 const { NativeDSPModule } = NativeModules;
+
+// Lazy Platform access untuk avoid PlatformConstants crash saat bootstrap
+const getPlatformOS = () => {
+  try {
+    const { Platform } = require("react-native");
+    return Platform.OS;
+  } catch { return "android"; }
+};
 
 // ─────────────────────────────────────────────
 // Constants
@@ -21,7 +29,7 @@ const SESSION_ID_RETRY_DELAY_MS = 300;
 // ─────────────────────────────────────────────
 
 const getAudioSessionId = async (): Promise<number | null> => {
-  if (Platform.OS !== "android") return null;
+  if (getPlatformOS() !== "android") return null;
 
   for (let attempt = 1; attempt <= SESSION_ID_MAX_RETRIES; attempt++) {
     try {
@@ -188,7 +196,7 @@ export const playbackService = async function () {
     switch (event.state) {
       case State.Playing:
         player.setIsPlaying(true);
-        if (Platform.OS === "android") {
+        if (getPlatformOS() === "android") {
           setTimeout(() => {
             initDspForTrack(pendingTrackIndex).catch((err) =>
               console.error("[DSP] Init Error:", err),

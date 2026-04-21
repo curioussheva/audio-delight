@@ -1,6 +1,7 @@
 // src/features/visualizer/native/VisualizerBridge.ts
 
-import { NativeModules, NativeEventEmitter, Platform } from "react-native";
+import { NativeModules, NativeEventEmitter } from "react-native";
+const Platform = require("react-native").Platform;
 
 // ============================================================================
 // Type Definitions

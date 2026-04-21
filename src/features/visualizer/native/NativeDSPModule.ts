@@ -1,5 +1,6 @@
 // src/features/visualizer/native/NativeDSPModule.ts
-import { NativeModules, Platform } from "react-native";
+import { NativeModules } from "react-native";
+const Platform = require("react-native").Platform;
 
 interface NativeDSPModuleType {
   // Equalizer

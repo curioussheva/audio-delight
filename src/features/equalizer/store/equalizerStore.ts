@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Platform } from "react-native";
+const Platform = require("react-native").Platform;
 import { EqualizerStore, Preset } from "@/features/equalizer/types";
 import { ALL_PRESETS, makeBands } from "../constants/presets";
 import { audioEngine } from "@/features/player/api/engine";
