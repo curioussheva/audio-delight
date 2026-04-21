@@ -1,4 +1,6 @@
 import { configureReanimatedLogger, ReanimatedLogLevel } from "react-native-reanimated";
+console.log("[BOOT] 0. _layout module loaded");
+const Platform = require("react-native").Platform;
 configureReanimatedLogger({ level: ReanimatedLogLevel.warn, strict: false });
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -7,7 +9,6 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SplashScreen from "expo-splash-screen";
 import {
-  Platform,
   Animated,
   StyleSheet,
   View,
@@ -90,11 +91,14 @@ export default function RootLayout() {
   // --- 4. Core Initialization Logic ---
   const performInitialization = useCallback(async () => {
     try {
-      console.log("[App] Starting Core Initialization...");
+      console.log("[BOOT] 5. _layout performInitialization start");
 
       // A. Driver & Base Store Init
+      console.log("[BOOT] 6. audioEngine.initialize() calling...");
       await audioEngine.initialize();
+      console.log("[BOOT] 7. audioEngine.initialize() done");
       await initStore();
+      console.log("[BOOT] 8. initStore() done");
 
       // B. Load Preferences (Audio Mode & DSP)
       const savedMode = await AsyncStorage.getItem("audio_mode_preference");

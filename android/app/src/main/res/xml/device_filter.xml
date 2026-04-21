@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- USB Audio Class devices -->
+    <usb-device class="0x01" subclass="0x01" protocol="0x00" />
+    <usb-device class="0x01" subclass="0x02" protocol="0x00" />
+    <usb-device class="0x01" subclass="0x03" protocol="0x00" />
+    
+    <!-- USB Audio Class 2.0 -->
+    <usb-device class="0xEF" subclass="0x02" protocol="0x01" />
+    
+    <!-- Generic USB DAC — vendor specific -->
+    <usb-device class="0xFF" subclass="0xFF" protocol="0xFF" />
+</resources>

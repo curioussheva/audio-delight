@@ -8,7 +8,7 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "node": "20.19.4",  
+      "node": "20.19.4",
       "android": {
         "buildType": "apk",
         "gradleCommand": ":app:assembleDebug",
@@ -27,14 +27,17 @@
       "cache": {
         "disabled": false,
         "key": "development-{{ checksum \"yarn.lock\" }}",
-        "paths": ["node_modules", ".expo"]
+        "paths": [
+          "node_modules",
+          ".expo"
+        ]
       },
       "channel": "development",
       "autoIncrement": true
     },
     "development-simulator": {
       "extends": "development",
-      "node": "20.19.4",  
+      "node": "20.19.4",
       "ios": {
         "simulator": true,
         "resourceClass": "medium"
@@ -42,7 +45,7 @@
     },
     "preview": {
       "distribution": "internal",
-      "node": "20.19.4",  
+      "node": "20.19.4",
       "android": {
         "buildType": "apk",
         "resourceClass": "medium"
@@ -50,14 +53,21 @@
       "env": {
         "APP_ENV": "preview",
         "EAS_NO_VCS": "1",
-        "EAS_NO_FINGERPRINT": "1"
+        "EAS_NO_FINGERPRINT": "1",
+        "EXPO_NO_UPDATES": "1"
       },
       "channel": "preview",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "hooks": {
+        "pre-install": "./eas-hooks/eas-build-pre-install.sh"
+      },
+      "updates": {
+        "enabled": false
+      }
     },
     "production": {
       "distribution": "store",
-      "node": "20.19.4",  
+      "node": "20.19.4",
       "android": {
         "buildType": "app-bundle",
         "resourceClass": "large"
@@ -83,4 +93,4 @@
       }
     }
   }
-} 
+}

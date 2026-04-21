@@ -4,11 +4,11 @@ import {
   ActivityIndicator,
   Text,
   StyleSheet,
-  Platform,
 } from "react-native";
 import { Redirect } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SplashScreen from "expo-splash-screen";
+const Platform = require("react-native").Platform;
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -23,18 +23,19 @@ export default function Index() {
 
     const initializeApp = async () => {
       try {
+        console.log("[BOOT] 1. Index mount started");
         // 1. Check onboarding status
         const onboardedValue = await AsyncStorage.getItem("has_onboarded");
+        console.log("[BOOT] 2. Onboarding status:", onboardedValue);
 
         // 2. Check for any pending migrations or initial setup
         const needsMigration = await AsyncStorage.getItem("needs_migration");
+        console.log("[BOOT] 3. Migration needed:", needsMigration);
 
         // 3. Validate library permissions (optional)
         let hasPermission = true;
         if (Platform.OS === "android") {
-          // Quick permission check without requesting
-          // Just log status for debugging
-          console.log("[Index] Checking app initialization...");
+          console.log("[BOOT] 4. Android platform detected");
         }
 
         if (isMounted) {

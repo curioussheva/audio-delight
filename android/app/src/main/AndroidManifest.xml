@@ -41,6 +41,7 @@
       </intent-filter>
       <intent-filter data-generated="true">
         <action android:name="android.intent.action.android.hardware.usb.action.USB_DEVICE_ATTACHED"/>
+      <meta-data android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" android:resource="@xml/device_filter"/>
       </intent-filter>
     </activity>
   </application>
