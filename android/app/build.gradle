@@ -42,8 +42,8 @@ android {
             cmake {
                 cppFlags "-std=c++17 -Wall"
                 arguments "-DANDROID_STL=c++_shared"
-                // Menambahkan x86_64 agar bisa jalan di emulator PC jika dibutuhkan
-                abiFilters 'arm64-v8a', 'x86_64'
+                // Hanya gunakan arm64-v8a agar tidak terjadi arsitektur biner yang setengah-setengah
+                abiFilters 'arm64-v8a'
             }
         }
     }
@@ -51,7 +51,7 @@ android {
     externalNativeBuild {
         cmake {
             path "src/main/cpp/CMakeLists.txt"
-            version "3.22.1" // Sesuai dengan spesifikasi NDK/CMake di GitHub Actions
+            version "3.22.1"
         }
     }
     
@@ -85,12 +85,17 @@ android {
     // --- PENANGANAN KONFLIK NEW ARCHITECTURE & C++ ---
     packagingOptions {
         jniLibs {
-            useLegacyPackaging true
+            // Gunakan false agar SoLoader Android bisa menemukan file dengan standar baru
+            useLegacyPackaging false
+            
             pickFirst '**/libc++_shared.so'
             pickFirst '**/libfbjni.so'
             pickFirst '**/libjsi.so'
-            pickFirst '**/libreact_featureflagsjni.so'
             pickFirst '**/libreactnative.so'
+            
+            // Paksa merge untuk library New Architecture yang sempat hilang
+            merge '**/libreact_featureflagsjni.so'
+            merge '**/libturbomodulejsijni.so'
         }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -134,3 +139,4 @@ dependencies {
         options.each { android.packagingOptions[prop] += it }
     }
 }
+ 
