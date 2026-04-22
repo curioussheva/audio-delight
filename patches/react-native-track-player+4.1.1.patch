@@ -1,0 +1,127 @@
+diff --git a/node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/AudioPlayer.kt b/node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/AudioPlayer.kt
+index c5945d6..d41e7aa 100644
+--- a/node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/AudioPlayer.kt
++++ b/node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/AudioPlayer.kt
+@@ -1,4 +1,5 @@
+-@file: OptIn(UnstableApi::class) package com.lovegaoshi.kotlinaudio.player
++@file:OptIn(UnstableApi::class) 
++package com.lovegaoshi.kotlinaudio.player
+ 
+ import android.content.Context
+ import android.media.AudioManager
+@@ -21,6 +22,8 @@ import androidx.media3.datasource.cache.SimpleCache
+ import androidx.media3.exoplayer.DefaultRenderersFactory
+ import androidx.media3.exoplayer.ExoPlayer
+ import androidx.media3.exoplayer.analytics.AnalyticsListener
++import androidx.media3.exoplayer.audio.AudioSink
++import androidx.media3.exoplayer.audio.DefaultAudioSink
+ import com.lovegaoshi.kotlinaudio.event.PlayerEventHolder
+ import com.lovegaoshi.kotlinaudio.models.AudioItem
+ import com.lovegaoshi.kotlinaudio.models.audioItem2MediaItem
+@@ -39,6 +42,10 @@ import com.lovegaoshi.kotlinaudio.player.components.FocusManager
+ import com.lovegaoshi.kotlinaudio.player.components.MediaFactory
+ import com.lovegaoshi.kotlinaudio.player.components.setupBuffer
+ import com.lovegaoshi.kotlinaudio.processors.FFTEmitter
++
++// IMPORT JEMBATAN NATIVE KITA
++import com.pristineaudio.OboeAudioProcessor
++
+ import kotlinx.coroutines.Deferred
+ import kotlinx.coroutines.MainScope
+ import kotlinx.coroutines.async
+@@ -54,6 +61,9 @@ abstract class AudioPlayer internal constructor(
+     val options: PlayerOptions = PlayerOptions()
+ ) {
+ 
++    // --- INSTANCE OBOE PROCESSOR ---
++    private val oboeAudioProcessor = OboeAudioProcessor()
++
+     // for crossfading
+     private var exoPlayer1: ExoPlayer
+     private var exoPlayer2: ExoPlayer? = null
+@@ -179,6 +189,10 @@ abstract class AudioPlayer internal constructor(
+     }
+ 
+     fun setAudioOffload(offload: Boolean = true) {
++        if (offload) {
++            Timber.tag("AudioPlayer").w("Audio Offload diaktifkan. Native Oboe DSP mungkin akan ter-bypass!")
++        }
++        
+         val audioOffloadPreferences =
+             TrackSelectionParameters.AudioOffloadPreferences.Builder()
+                 .setAudioOffloadMode(
+@@ -196,20 +210,37 @@ abstract class AudioPlayer internal constructor(
+     }
+ 
+     private fun initExoPlayer(name: String): ExoPlayer {
+-        // HACK: horrible memleak, but I cant think of how to track exoplayers
+         val nameHolder = arrayOf("")
+-        val renderer = if (options.useFFTProcessor > 0) APMRenderersFactory(
+-            context, options.useFFTProcessor, object: FFTEmitter {
+-                override fun onSpectrumReady(spectrum: FloatArray, maxRawAmp: Float) {
+-                    return
+-                }
+-                override fun onFrequencyFFTReady(fft: DoubleArray, max: Float) {
+-                    if (this@AudioPlayer.exoPlayer.toString() == nameHolder[0]) {
+-                        fftEmitter(fft)
++        
++        // --- INJEKSI RENDERER & OBOE PROCESSOR ---
++        val renderer = if (options.useFFTProcessor > 0) {
++            APMRenderersFactory(
++                context, options.useFFTProcessor, object: FFTEmitter {
++                    override fun onSpectrumReady(spectrum: FloatArray, maxRawAmp: Float) {
++                        return
++                    }
++                    override fun onFrequencyFFTReady(fft: DoubleArray, max: Float) {
++                        if (this@AudioPlayer.exoPlayer.toString() == nameHolder[0]) {
++                            fftEmitter(fft)
++                        }
+                     }
++            })
++        } else {
++            object : DefaultRenderersFactory(context) {
++                override fun buildAudioSink(
++                    context: Context,
++                    enableFloatOutput: Boolean,
++                    enableAudioTrackPlaybackParams: Boolean,
++                    enableAudioOffload: Boolean
++                ): AudioSink {
++                    return DefaultAudioSink.Builder(context)
++                        .setAudioProcessors(arrayOf(oboeAudioProcessor))
++                        .setEnableFloatOutput(enableFloatOutput)
++                        .build()
+                 }
++            }
++        }
+         
+-        }) else DefaultRenderersFactory(context)
+         renderer.setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+         val mPlayer = ExoPlayer
+             .Builder(context)
+@@ -223,10 +254,12 @@ abstract class AudioPlayer internal constructor(
+             .setSkipSilenceEnabled(options.skipSilence)
+             .setName(name)
+             .build()
++            
+         val audioAttributes = AudioAttributes.Builder()
+             .setUsage(C.USAGE_MEDIA)
+             .setContentType(options.audioContentType)
+             .build()
++            
+         mPlayer.setAudioAttributes(audioAttributes, options.handleAudioFocus)
+         nameHolder[0] = mPlayer.toString()
+         // https://github.com/androidx/media/issues/2319
+@@ -244,7 +277,6 @@ abstract class AudioPlayer internal constructor(
+         exoPlayer = exoPlayer1
+         player = if (options.nativeExample) ExampleForwardingPlayer(exoPlayer1, exoPlayer2) else APMForwardingPlayer(exoPlayer1, exoPlayer2)
+         player.addListener(playerListener)
+-
+     }
+ 
+     /**
+@@ -754,3 +786,4 @@ abstract class AudioPlayer internal constructor(
+         }
+     }
+ }
++   
+\ No newline at end of file
