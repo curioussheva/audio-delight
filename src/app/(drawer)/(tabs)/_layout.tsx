@@ -22,7 +22,7 @@ import { useTheme } from "@/shared/context/ThemeContext";
 import FloatingPlayer from "@/features/player/components/FloatingPlayer";
 
 // ─── Konstanta tinggi — dipakai di sini dan bisa diexport untuk paddingBottom list
-export const TAB_BAR_HEIGHT = Platform.OS === "ios" ? 60 : 64;
+export const TAB_BAR_HEIGHT = 64; // Android only, iOS tidak support
 export const FLOATING_PLAYER_HEIGHT = 72; // tinggi FloatingPlayer
 export const FLOATING_PLAYER_MARGIN = 8; // jarak player dari tab bar
 

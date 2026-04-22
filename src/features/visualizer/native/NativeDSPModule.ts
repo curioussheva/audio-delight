@@ -24,7 +24,7 @@ const NativeDSPModule = NativeModules.NativeDSPModule as
   | NativeDSPModuleType
   | undefined;
 
-if (Platform.OS === "android" && !NativeDSPModule) {
+if (require("react-native").Platform.OS === "android" && !NativeDSPModule) {
   console.warn(
     "[NativeDSPModule] Not available. Check USBDACPackage registration.",
   );

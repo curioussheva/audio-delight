@@ -25,7 +25,7 @@ const NativeVisualizerBridge = NativeModules.NativeVisualizerBridge as
   | undefined;
 
 // Safety check
-if (Platform.OS === "android" && !NativeVisualizerBridge) {
+if (require("react-native").Platform.OS === "android" && !NativeVisualizerBridge) {
   console.warn(
     "[VisualizerBridge] NativeVisualizerBridge tidak ditemukan. " +
       "Pastikan sudah terdaftar di USBDACPackage.kt dan MainApplication.kt",

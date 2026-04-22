@@ -37,7 +37,7 @@ import { SavePresetModal } from "@/features/equalizer/components/SavePresetModal
 import { LIST_BOTTOM_PADDING } from "@/app/(drawer)/(tabs)/_layout";
 
 if (
-  Platform.OS === "android" &&
+  require("react-native").Platform.OS === "android" &&
   UIManager.setLayoutAnimationEnabledExperimental
 ) {
   UIManager.setLayoutAnimationEnabledExperimental(true);

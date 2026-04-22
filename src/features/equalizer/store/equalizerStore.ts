@@ -290,7 +290,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
   ),
 );
 
-if (Platform.OS === "android") {
+if (require("react-native").Platform.OS === "android") {
   setTimeout(() => {
     useEqualizerStore.getState().initialize();
   }, 1000);
