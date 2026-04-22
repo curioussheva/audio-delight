@@ -2,7 +2,7 @@
 // ✅ Import DACInfo dan DACConfig dari USBDACModule (flat shape),
 //    bukan dari @/shared/types/dac (nested shape — untuk komponen UI lain)
 import { useState, useEffect, useCallback } from "react";
-import { Platform } from "react-native";
+const Platform = require("react-native").Platform;
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import USBDACService, {
   DACInfo,

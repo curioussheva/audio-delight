@@ -1,6 +1,6 @@
 // src/features/hardware/hooks/useUSBDAC.ts
 import { useState, useEffect, useCallback } from "react";
-import { Platform } from "react-native";
+const Platform = require("react-native").Platform;
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import USBDACService, { DACInfo, DACConfig } from "../api/USBDACModule";
 

@@ -10,7 +10,7 @@
  */
 
 import * as Notifications from "expo-notifications";
-import { Platform } from "react-native";
+const Platform = require("react-native").Platform;
 import { useLibraryStore } from "../store/libraryStore";
 import { UnifiedScanService } from "./UnifiedScanService";
 import { MetadataEnricher } from "./MetadataEnricher";

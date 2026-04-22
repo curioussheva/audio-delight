@@ -180,7 +180,7 @@ export default function LoadingScreen({
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.creditText}>HANDCRAFTED BY CuriousSheva</Text>
+          <Text style={styles.creditText}>HANDCRAFTED BY CURIOUSSHEVA</Text>
           <View style={[styles.line, { backgroundColor: COLORS.accent }]} />
         </View>
       </View>

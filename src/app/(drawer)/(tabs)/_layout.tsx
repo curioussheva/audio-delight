@@ -97,7 +97,7 @@ const CustomTabBar = memo(({ state, descriptors, navigation }: any) => {
 
   return (
     <BlurView
-      intensity={Platform.OS === "ios" ? 85 : 100}
+      intensity={Platform.OS === "ios" ? 95 : 100}
       tint={theme.isDark ? "dark" : "light"}
       style={[
         styles.tabBar,

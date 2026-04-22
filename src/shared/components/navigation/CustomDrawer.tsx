@@ -49,7 +49,8 @@ export default function CustomDrawer(props: DrawerContentComponentProps) {
           />
           <View style={styles.versionBadge}>
             <Text style={[styles.versionText, { color: colors.primary[500] }]}>
-              v1.0.0 GOLD
+              PRISTINE AUDIO
+              
             </Text>
           </View>
         </View>
@@ -174,9 +175,9 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
   },
-  logo: { width: 140, height: 80 },
+  logo: { width: 280, height: 160 },
   versionBadge: {
-    marginTop: 5,
+    marginTop: 15,
     paddingHorizontal: 10,
     paddingVertical: 2,
     borderRadius: 12,
@@ -184,7 +185,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(0, 212, 170, 0.2)",
   },
-  versionText: { fontSize: 10, fontWeight: "800", letterSpacing: 1 },
+  versionText: { fontSize: 14, fontWeight: "800", letterSpacing: 1 },
   drawerListContainer: { paddingHorizontal: 10, paddingTop: 20 },
   divider: { height: 1, marginHorizontal: 25, marginVertical: 20 },
   extraMenu: { paddingHorizontal: 25 },

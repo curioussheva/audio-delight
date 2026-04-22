@@ -1,6 +1,7 @@
 // shared/styles exports
 // src/styles/premium.ts
-import { StyleSheet, Platform } from "react-native";
+import { StyleSheet } from "react-native";
+const Platform = require("react-native").Platform;
 
 export const premiumStyles = StyleSheet.create({
   // Kartu Utama yang terlihat melayang

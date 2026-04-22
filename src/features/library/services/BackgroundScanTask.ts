@@ -4,7 +4,7 @@ import * as TaskManager from "expo-task-manager";
 import * as BackgroundTask from "expo-background-task";
 import * as Notifications from "expo-notifications";
 import * as MediaLibrary from "expo-media-library";
-import { Platform } from "react-native";
+const Platform = require("react-native").Platform;
 
 import { ScanDiffEngine } from "./ScanDiffEngine";
 import { MetadataEnricher } from "./MetadataEnricher"; // ✅ Import MetadataEnricher

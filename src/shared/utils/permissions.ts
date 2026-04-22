@@ -1,4 +1,5 @@
-import { PermissionsAndroid, Platform } from "react-native";
+import { PermissionsAndroid } from "react-native";
+const Platform = require("react-native").Platform;
 
 export const requestAudioPermissions = async () => {
   if (Platform.OS !== "android") return true;

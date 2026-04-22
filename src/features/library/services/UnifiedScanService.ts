@@ -9,7 +9,7 @@ import { MetadataEnricher } from "./MetadataEnricher";
 import { useLibraryStore } from "../store/libraryStore";
 import { ScanResult, ScanProgress, EnrichmentLevel } from "../types/scan";
 import * as Notifications from "expo-notifications";
-import { Platform } from "react-native";
+const Platform = require("react-native").Platform;
 
 export class UnifiedScanService {
   private static isRunning = false;
