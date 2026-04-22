@@ -54,9 +54,9 @@
         "APP_ENV": "preview",
         "EAS_NO_VCS": "1",
         "EAS_NO_FINGERPRINT": "1",
-        "EXPO_NO_UPDATES": "1"
+        "EXPO_NO_UPDATES": "1",
+        "BUILD_TIMESTAMP": "1776823853"
       },
-      "channel": "preview",
       "autoIncrement": true
     },
     "production": {
