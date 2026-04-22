@@ -45,7 +45,7 @@ jobs:
           cache: 'yarn'
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile --ignore-engines
+        run: yarn install --frozen-lockfile --ignore-engines && npx patch-package
 
       - name: Verify usesCleartextTraffic in AndroidManifest.xml
         run: |

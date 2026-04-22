@@ -19,6 +19,7 @@ build-apk:
   before_script:
     - echo "Installing dependencies..."
     - yarn install --frozen-lockfile --ignore-engines
+    - npx patch-package
     - echo "Downloading Oboe 1.9.0..."
     - mkdir -p android/app/src/main/cpp/oboe
     - curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz -o oboe.tar.gz
@@ -27,9 +28,7 @@ build-apk:
     - echo "Oboe files $(ls android/app/src/main/cpp/oboe | wc -l)"
   script:
     - echo "Installing NDK and CMake..."
-    - yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
-        "ndk;27.1.12297006"
-        "cmake;3.22.1" || true
+    - yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;27.1.12297006" "cmake;3.22.1" || true
     - export PATH=$ANDROID_HOME/cmake/3.22.1/bin:$PATH
     - cd android
     - chmod +x gradlew
