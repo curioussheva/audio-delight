@@ -45,7 +45,13 @@ jobs:
           cache: 'yarn'
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile --ignore-engines && npx patch-package
+        run: yarn install --frozen-lockfile --ignore-engines
+
+      - name: Apply patches
+        run: |
+          npx patch-package
+          echo "Verifying patch applied..."
+          grep -q "OboeAudioProcessor" node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/AudioPlayer.kt && echo "✅ Patch applied" || echo "❌ Patch NOT applied"
 
       - name: Verify usesCleartextTraffic in AndroidManifest.xml
         run: |
