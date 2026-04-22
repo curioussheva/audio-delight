@@ -1,6 +1,5 @@
 package com.pristineaudio
 
-// Ganti import lama dengan androidx.media3
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
 import androidx.media3.common.C
@@ -8,29 +7,44 @@ import java.nio.ByteBuffer
 
 class OboeAudioProcessor : BaseAudioProcessor() {
 
+    // JNI Bridge ke C++
+    private external fun feedNativeAudio(data: FloatArray, numSamples: Int)
+
+    companion object {
+        init {
+            // Gunakan nama library yang sama dengan NativeDSPModule
+            System.loadLibrary("pristineaudio_engine")
+        }
+    }
+
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
-        // Media3 menggunakan AudioFormat sebagai objek input
+        // Engine kita (AudioEngine.h) minta Float atau 16-bit
         if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT && 
             inputAudioFormat.encoding != C.ENCODING_PCM_FLOAT) {
             throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
         }
-        
-        // Kembalikan format yang sama (kita hanya memantau data/passthrough)
         return inputAudioFormat
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
-        val remaining = inputBuffer.remaining()
-        if (remaining == 0) return
+        if (!inputBuffer.hasRemaining()) return
 
-        // Kirim data ke JNI (Native-lib.cpp)
-        // Kita asumsikan data dalam format float untuk engine kita
-        if (inputBuffer.hasArray()) {
-            // Logika feedNativeAudio Anda di sini
+        // Konversi ke FloatArray karena AudioEngine::pushData butuh const float*
+        val floatArray = if (inputAudioFormat.encoding == C.ENCODING_PCM_FLOAT) {
+            val fb = inputBuffer.asFloatBuffer()
+            FloatArray(fb.remaining()).also { fb.get(it) }
+        } else {
+            val sb = inputBuffer.asShortBuffer()
+            FloatArray(sb.remaining()).also { 
+                for (i in it.indices) it[i] = sb.get().toFloat() / 32768.0f 
+            }
         }
 
-        // Penting: Kosongkan buffer setelah diproses atau salin ke outputBuffer
-        replaceOutputBuffer(remaining).put(inputBuffer).flip()
+        // Kirim data ke AudioEngine::pushData via JNI
+        feedNativeAudio(floatArray, floatArray.size)
+
+        // Teruskan buffer ke sink berikutnya (agar tidak memutus aliran data)
+        replaceOutputBuffer(inputBuffer.remaining()).put(inputBuffer).flip()
     }
 }
  
