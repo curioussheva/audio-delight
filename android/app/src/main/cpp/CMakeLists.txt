@@ -4,9 +4,6 @@ project("pristineaudio_engine")
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(ReactAndroid REQUIRED CONFIG)
-find_package(fbjni REQUIRED CONFIG)
-
 add_subdirectory(oboe)
 
 add_library(
@@ -25,8 +22,6 @@ target_include_directories(
 
 target_link_libraries(
     pristineaudio_engine
-    ReactAndroid::react_nativemodule_core
-    fbjni::fbjni
     oboe
     log
     android

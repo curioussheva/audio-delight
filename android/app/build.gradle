@@ -24,7 +24,11 @@ android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
-
+    
+    buildFeatures {
+        prefab true
+    }
+    
     namespace 'com.pristineaudio.app'
     
     defaultConfig {
@@ -42,8 +46,7 @@ android {
             cmake {
                 cppFlags "-std=c++17 -Wall"
                 arguments "-DANDROID_STL=c++_shared"
-                // Hanya gunakan arm64-v8a agar tidak terjadi arsitektur biner yang setengah-setengah
-               // abiFilters 'arm64-v8a', 'x86_64'
+                // abiFilters dihapus - gunakan reactNativeArchitectures di gradle.properties
             }
         }
     }
@@ -85,15 +88,15 @@ android {
     // --- PENANGANAN KONFLIK NEW ARCHITECTURE & C++ ---
     packagingOptions {
         jniLibs {
-            // Gunakan false agar SoLoader Android bisa menemukan file dengan standar baru
             useLegacyPackaging false
             
             pickFirst '**/libc++_shared.so'
             pickFirst '**/libfbjni.so'
             pickFirst '**/libjsi.so'
             pickFirst '**/libreactnative.so'
+            pickFirst '**/libhermes.so'
+            pickFirst '**/libhermesexecutor.so'
             
-            // Paksa merge untuk library New Architecture yang sempat hilang
             merge '**/libreact_featureflagsjni.so'
             merge '**/libturbomodulejsijni.so'
         }
@@ -104,34 +107,25 @@ android {
 }
 
 dependencies {
-    // React Native Core
     implementation("com.facebook.react:react-android")
 
-    // PRISTINE AUDIO ENGINE: Oboe Library
-    // Kita biarkan di-comment karena CMake akan mengompilasinya langsung dari folder /cpp/oboe
-    // implementation 'com.google.oboe:oboe:1.9.0'
-
-    // MEDIA3 EXOPLAYER - Required for AudioProcessor (PCM data capture)
     def media3Version = "1.6.1"
     implementation "androidx.media3:media3-common:$media3Version"
     implementation "androidx.media3:media3-exoplayer:$media3Version"
     implementation "androidx.media3:media3-decoder:$media3Version"
 
-    // JS Engine (Hermes/JSC)
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
     } else {
         implementation jscFlavor
     }
 
-    // Fresco / Image support (Default Expo/RN)
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true"
     if (isGifEnabled) {
         implementation("com.facebook.fresco:animated-gif:${expoLibs.versions.fresco.get()}")
     }
 }
 
-// Menangani opsi packaging tambahan secara dinamis
 ["pickFirsts", "excludes", "merges", "doNotStrip"].each { prop ->
     def options = (findProperty("android.packagingOptions.$prop") ?: "").split(",")
     options = options.collect { it.trim() }.findAll { it }
