@@ -301,4 +301,4 @@ const styles = StyleSheet.create({
   },
   nextButtonText: { fontSize: 16, fontWeight: "700" },
   hintText: { fontSize: 12, marginTop: 12, textAlign: "center" },
-});
+}); 

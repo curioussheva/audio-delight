@@ -1,4 +1,6 @@
+
 import { Drawer } from "expo-router/drawer";
+
 import { Music, Activity, Settings, Info } from "lucide-react-native";
 import { useTheme } from "@/context/ThemeContext";
 import CustomDrawer from "@/shared/components/navigation/CustomDrawer";

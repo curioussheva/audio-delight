@@ -11,6 +11,7 @@ import Animated, {
   withSpring,
   runOnJS,
 } from "react-native-reanimated";
+
 import { GestureDetector, Gesture } from "react-native-gesture-handler";
 
 import {

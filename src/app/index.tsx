@@ -9,10 +9,11 @@ SplashScreen.preventAutoHideAsync();
 
 export default function Index() {
   const { theme } = useTheme(); // Gunakan theme dari layout parent
+  const { colors } = theme;
   const [hasOnboarded, setHasOnboarded] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
-
+ 
   const initializeApp = useCallback(async () => {
     try {
       console.log("[BOOT] 1. Index mount started");
@@ -75,4 +76,3 @@ const styles = StyleSheet.create({
   errorText: { color: "#FF4444", fontSize: 16, textAlign: "center", marginHorizontal: 20 },
   retryText: { fontSize: 14, marginTop: 20, fontWeight: "600" },
 });
- 

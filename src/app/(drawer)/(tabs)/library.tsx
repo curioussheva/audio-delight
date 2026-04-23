@@ -335,10 +335,10 @@ export default function LibraryScreen() {
 
           {!isScanning && hasPendingEnrichment && unenrichedCount > 0 && (
             <TouchableOpacity onPress={handleEnhanceMetadata} hitSlop={8}>
-              <View style={s.enhanceBadge}>
+           {/*}   <View style={s.enhanceBadge}>
                 <Sparkles size={18} color={colors.status.success} />
                 <Text style={s.enhanceBadgeText}>{unenrichedCount}</Text>
-              </View>
+              </View> */}
             </TouchableOpacity>
           )}
 

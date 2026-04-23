@@ -1,6 +1,8 @@
 import React from "react";
 import { View, Text, StyleSheet, Dimensions } from "react-native";
+
 import { GestureDetector, Gesture } from "react-native-gesture-handler";
+
 import Animated, {
   useAnimatedStyle,
   useSharedValue,

@@ -1,13 +1,15 @@
 // src/features/visualizer/components/SpectrumAnalyzer.tsx
 import React, { useEffect, useRef } from "react";
 import { View, StyleSheet, Dimensions, Text } from "react-native";
+
 import {
   Canvas,
   Path,
   Skia,
   Group,
   BlurMask,
-} from "@shopify/react-native-skia";
+} from "@shopify/react-native-skia"; 
+
 import {
   useSharedValue,
   useDerivedValue,

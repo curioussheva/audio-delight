@@ -25,6 +25,7 @@ import {
   Layers,
   ChevronRight,
 } from "lucide-react-native";
+
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { useTheme } from "@/context/ThemeContext";

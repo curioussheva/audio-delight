@@ -1,11 +1,15 @@
+
 import { configureReanimatedLogger, ReanimatedLogLevel } from "react-native-reanimated";
+
 console.log("[BOOT] 0. _layout module loaded");
 const Platform = require("react-native").Platform;
 configureReanimatedLogger({ level: ReanimatedLogLevel.warn, strict: false });
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Stack } from "expo-router";
+
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SplashScreen from "expo-splash-screen";
 import {
@@ -187,14 +191,14 @@ export default function RootLayout() {
   // Menampilkan LoadingScreen selama fase inisialisasi & loading
   if (appState === "initializing" || appState === "loading") {
     return (
-      <GestureHandlerRootView style={{ flex: 1 }}>
+     <GestureHandlerRootView style={{ flex: 1 }}>
         <LoadingScreen onLoadingComplete={handleLoadingComplete} />
       </GestureHandlerRootView>
     );
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1 }}> 
       <ThemeProvider>
         <SafeAreaProvider>
           <Animated.View
@@ -222,7 +226,7 @@ export default function RootLayout() {
           </Animated.View>
         </SafeAreaProvider>
       </ThemeProvider>
-    </GestureHandlerRootView>
+   </GestureHandlerRootView> 
   );
 }
 

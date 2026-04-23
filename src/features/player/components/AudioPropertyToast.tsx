@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 const Platform = require("react-native").Platform;
+
 import Animated, { FadeInUp, FadeOutUp } from "react-native-reanimated";
+
 import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
 import { usePlayerStore } from "@/features/player/store/playerStore";

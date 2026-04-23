@@ -10,7 +10,9 @@ import {
   Dimensions,
 } from "react-native";
 import { Image } from "expo-image";
+
 import { LinearGradient } from "expo-linear-gradient";
+
 import Reanimated, {
   useSharedValue,
   useAnimatedStyle,
@@ -19,7 +21,7 @@ import Reanimated, {
   withSequence,
   withDelay,
   cancelAnimation,
-} from "react-native-reanimated";
+} from "react-native-reanimated"; 
 
 const { width } = Dimensions.get("window");
 
@@ -257,7 +259,7 @@ const styles = StyleSheet.create({
   },
   creditText: {
     color: "#3A4B5E",
-    fontSize: 10,
+    fontSize: 16,
     letterSpacing: 3,
     fontWeight: "700",
   },

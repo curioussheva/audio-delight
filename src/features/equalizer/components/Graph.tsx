@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { View, StyleSheet, Text } from "react-native";
+
 import {
   Skia,
   Canvas,
@@ -8,7 +9,9 @@ import {
   vec,
   BlurMask,
 } from "@shopify/react-native-skia";
+
 import { useDerivedValue, SharedValue } from "react-native-reanimated";
+
 import { EqualizerBand } from "@/features/equalizer/types";
 import { useTheme } from "@/context/ThemeContext";
 

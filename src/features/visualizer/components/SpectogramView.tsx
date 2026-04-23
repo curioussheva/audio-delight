@@ -8,7 +8,9 @@ import {
   Text,
   ActivityIndicator,
 } from "react-native";
+
 import { Canvas, Rect, Group } from "@shopify/react-native-skia";
+
 import { visualizerService } from "@/features/visualizer/services/VisualizerService";
 
 interface SpectogramViewProps {
