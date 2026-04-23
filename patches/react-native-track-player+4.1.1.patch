@@ -1,5 +1,5 @@
 diff --git a/node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/AudioPlayer.kt b/node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/AudioPlayer.kt
-index c5945d6..d41e7aa 100644
+index c5945d6..40acd51 100644
 --- a/node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/AudioPlayer.kt
 +++ b/node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/AudioPlayer.kt
 @@ -1,4 +1,5 @@
@@ -24,7 +24,7 @@ index c5945d6..d41e7aa 100644
  import com.lovegaoshi.kotlinaudio.processors.FFTEmitter
 +
 +// IMPORT JEMBATAN NATIVE KITA
-+import com.pristineaudio.OboeAudioProcessor
++import com.lovegaoshi.kotlinaudio.processors.OboeAudioProcessor
 +
  import kotlinx.coroutines.Deferred
  import kotlinx.coroutines.MainScope
@@ -123,5 +123,62 @@ index c5945d6..d41e7aa 100644
          }
      }
  }
-+   
++ 
+\ No newline at end of file
+diff --git a/node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/processors/OboeAudioProcessor.kt b/node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/processors/OboeAudioProcessor.kt
+new file mode 100644
+index 0000000..50e3d4c
+--- /dev/null
++++ b/node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/processors/OboeAudioProcessor.kt
+@@ -0,0 +1,50 @@
++package com.lovegaoshi.kotlinaudio.processors
++
++import androidx.media3.common.audio.AudioProcessor
++import androidx.media3.common.audio.BaseAudioProcessor
++import androidx.media3.common.C
++import java.nio.ByteBuffer
++
++class OboeAudioProcessor : BaseAudioProcessor() {
++
++    // JNI Bridge ke C++
++    private external fun feedNativeAudio(data: FloatArray, numSamples: Int)
++
++    companion object {
++        init {
++            // Gunakan nama library yang sama dengan NativeDSPModule
++            System.loadLibrary("pristineaudio_engine")
++        }
++    }
++
++    override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
++        // Engine kita (AudioEngine.h) minta Float atau 16-bit
++        if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT && 
++            inputAudioFormat.encoding != C.ENCODING_PCM_FLOAT) {
++            throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
++        }
++        return inputAudioFormat
++    }
++
++    override fun queueInput(inputBuffer: ByteBuffer) {
++        if (!inputBuffer.hasRemaining()) return
++
++        // Konversi ke FloatArray karena AudioEngine::pushData butuh const float*
++        val floatArray = if (inputAudioFormat.encoding == C.ENCODING_PCM_FLOAT) {
++            val fb = inputBuffer.asFloatBuffer()
++            FloatArray(fb.remaining()).also { fb.get(it) }
++        } else {
++            val sb = inputBuffer.asShortBuffer()
++            FloatArray(sb.remaining()).also { 
++                for (i in it.indices) it[i] = sb.get().toFloat() / 32768.0f 
++            }
++        }
++
++        // Kirim data ke AudioEngine::pushData via JNI
++        feedNativeAudio(floatArray, floatArray.size)
++
++        // Teruskan buffer ke sink berikutnya (agar tidak memutus aliran data)
++        replaceOutputBuffer(inputBuffer.remaining()).put(inputBuffer).flip()
++    }
++}
++ 
 \ No newline at end of file
