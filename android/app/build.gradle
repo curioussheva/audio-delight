@@ -86,6 +86,7 @@ android {
     }
     
     // --- PENANGANAN KONFLIK NEW ARCHITECTURE & C++ ---
+        // --- PENANGANAN KONFLIK NEW ARCHITECTURE & C++ ---
     packagingOptions {
         jniLibs {
             useLegacyPackaging false
@@ -96,7 +97,11 @@ android {
             pickFirst '**/libreactnative.so'
             pickFirst '**/libhermes.so'
             pickFirst '**/libhermesexecutor.so'
+            pickFirst '**/libreact_featureflagsjni.so'
+            pickFirst '**/libturbomodulejsijni.so'
+            pickFirst '**/libreact_newarchdefaults.so'
             
+            merge '**/libreactnative.so'
             merge '**/libreact_featureflagsjni.so'
             merge '**/libturbomodulejsijni.so'
         }
