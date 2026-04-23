@@ -40,13 +40,19 @@ class MainApplication : Application(), ReactApplication {
   override fun onCreate() {
     super.onCreate()
     
-    // Inisialisasi SoLoader dengan OpenSourceMergedSoMapping (WAJIB untuk RN 0.76+)
+    // INISIALISASI SOLOADER (WAJIB untuk RN 0.76+ New Architecture)
+    // Harus dipanggil SEBELUM loadReactNative()
     SoLoader.init(this, OpenSourceMergedSoMapping)
     
-    // Load New Architecture jika diaktifkan
-    if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
-      DefaultNewArchitectureEntryPoint.load()
+    // Set release level untuk New Architecture
+    DefaultNewArchitectureEntryPoint.releaseLevel = try {
+      ReleaseLevel.valueOf(BuildConfig.REACT_NATIVE_RELEASE_LEVEL.uppercase())
+    } catch (e: IllegalArgumentException) {
+      ReleaseLevel.STABLE
     }
+    
+    // Load React Native (dari Expo)
+    loadReactNative(this)
     
     ApplicationLifecycleDispatcher.onApplicationCreate(this)
   }
@@ -56,3 +62,4 @@ class MainApplication : Application(), ReactApplication {
     ApplicationLifecycleDispatcher.onConfigurationChanged(this, newConfig)
   }
 }
+ 
