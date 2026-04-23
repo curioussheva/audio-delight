@@ -11,8 +11,8 @@ import com.facebook.react.ReactHost
 import com.facebook.react.common.ReleaseLevel
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint
 import com.facebook.react.defaults.DefaultReactNativeHost
-import com.facebook.react.soloader.OpenSourceMergedSoMapping
 import com.facebook.soloader.SoLoader
+import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
@@ -41,7 +41,7 @@ class MainApplication : Application(), ReactApplication {
     super.onCreate()
 
     // Inisialisasi SoLoader (WAJIB untuk RN 0.76+ New Architecture)
-    SoLoader.init(this, OpenSourceMergedSoMapping)
+    SoLoader.init(this, false)
 
     // Set release level untuk New Architecture
     DefaultNewArchitectureEntryPoint.releaseLevel = try {
@@ -50,6 +50,7 @@ class MainApplication : Application(), ReactApplication {
       ReleaseLevel.STABLE
     }
 
+    loadReactNative(this)
     ApplicationLifecycleDispatcher.onApplicationCreate(this)
   }
 
