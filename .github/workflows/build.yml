@@ -2,7 +2,7 @@ name: Build PristineAudio APK (Debug)
 
 on:
   push:
-    branches: [ "pristine-audio" ]
+    branches: ["pristine-audio"]
   workflow_dispatch:
 
 jobs:
@@ -10,6 +10,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # ============================================
+      # STEP 1: Free Disk Space
+      # ============================================
       - name: Free Disk Space
         run: |
           echo "Disk before cleanup:"
@@ -23,11 +26,17 @@ jobs:
           echo "Disk after cleanup:"
           df -h
 
+      # ============================================
+      # STEP 2: Checkout Code
+      # ============================================
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: false
 
+      # ============================================
+      # STEP 3: Setup Oboe 1.9.0
+      # ============================================
       - name: Setup Oboe 1.9.0
         run: |
           OBOE_DIR="android/app/src/main/cpp/oboe"
@@ -38,21 +47,57 @@ jobs:
           echo "Oboe files: $(ls $OBOE_DIR | wc -l)"
           head -3 "$OBOE_DIR/CMakeLists.txt"
 
+      # ============================================
+      # STEP 4: Setup Node.js
+      # ============================================
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
-          cache: 'yarn'
+          node-version: "20.x"
+          cache: "yarn"
 
+      # ============================================
+      # STEP 5: Install Dependencies
+      # ============================================
       - name: Install dependencies
         run: yarn install --frozen-lockfile --ignore-engines
 
+      # ============================================
+      # STEP 6: Apply Patches
+      # ============================================
       - name: Apply patches
         run: |
           npx patch-package
-          echo "Verifying patch applied..."
-          grep -q "OboeAudioProcessor" node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/AudioPlayer.kt && echo "✅ Patch applied" || echo "❌ Patch NOT applied"
+          echo "Verifying patches applied..."
 
+          # Verifikasi AudioPlayer.kt
+          if grep -q "OboeAudioProcessor" node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/AudioPlayer.kt; then
+            echo "✅ AudioPlayer.kt patched"
+          else
+            echo "❌ AudioPlayer.kt NOT patched"
+            exit 1
+          fi
+
+          # Verifikasi APMRenderersFactory.kt (jika ada)
+          if [ -f node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/components/APMRenderersFactory.kt ]; then
+            if grep -q "buildAudioSink" node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/components/APMRenderersFactory.kt; then
+              echo "⚠️  APMRenderersFactory.kt found - checking signature..."
+              # Cek apakah masih pakai 4 parameter (enableAudioOffload)
+              if grep -A 3 "override fun buildAudioSink" node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/components/APMRenderersFactory.kt | grep -q "enableAudioOffload"; then
+                echo "❌ APMRenderersFactory.kt masih pakai enableAudioOffload (4 parameter)"
+                echo "   Media3 1.6.1 hanya support 3 parameter. Perlu patch manual."
+                # Auto-patch: hapus parameter ke-4
+                sed -i '/enableAudioOffload/d' node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/components/APMRenderersFactory.kt
+                echo "✅ APMRenderersFactory.kt auto-patched"
+              else
+                echo "✅ APMRenderersFactory.kt sudah benar (3 parameter)"
+              fi
+            fi
+          fi
+
+      # ============================================
+      # STEP 7: Verify AndroidManifest.xml
+      # ============================================
       - name: Verify usesCleartextTraffic in AndroidManifest.xml
         run: |
           echo "Checking AndroidManifest.xml for usesCleartextTraffic..."
@@ -65,16 +110,25 @@ jobs:
             echo "✅ usesCleartextTraffic added manually"
           fi
 
+      # ============================================
+      # STEP 8: Setup JDK 17
+      # ============================================
       - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: 'gradle'
+          java-version: "17"
+          distribution: "temurin"
+          cache: "gradle"
 
+      # ============================================
+      # STEP 9: Setup Android SDK
+      # ============================================
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      # ============================================
+      # STEP 10: Install NDK 27 and CMake 3.31.6
+      # ============================================
       - name: Install NDK 27 and CMake 3.31.6
         run: |
           echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
@@ -82,22 +136,31 @@ jobs:
             "cmake;3.31.6"
           echo "$ANDROID_HOME/cmake/3.31.6/bin" >> $GITHUB_PATH
 
+      # ============================================
+      # STEP 11: Set Environment Variables
+      # ============================================
       - name: Set environment variables
         run: |
           echo "NODE_ENV=development" >> $GITHUB_ENV
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
 
+      # ============================================
+      # STEP 12: Build Debug APK
+      # ============================================
       - name: Build Debug APK
         run: |
           cd android
           chmod +x gradlew
-          
+
           echo "🔥 Deep Cleaning Native Cache..."
-          # Menghapus cache agar CMake dan Gradle merekonstruksi JNI secara utuh
+          # Menghapus SEMUA cache agar CMake dan Gradle merekonstruksi JNI secara utuh
           rm -rf app/.cxx
           rm -rf build
           rm -rf app/build
+          rm -rf ~/.gradle/caches/build-cache-*
           ./gradlew clean
-          
+
           echo "🚀 Starting Full Clean Build..."
           ./gradlew assembleDebug \
             --no-daemon \
@@ -108,7 +171,28 @@ jobs:
             -Dorg.gradle.jvmargs="-Xmx4g -XX:+HeapDumpOnOutOfMemoryError"
         env:
           NODE_ENV: development
+          JAVA_HOME: ${{ env.JAVA_HOME }}
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
 
+      # ============================================
+      # STEP 13: Verify APK ABI Contents
+      # ============================================
+      - name: Verify APK ABI contents
+        run: |
+          cd android
+          echo "📦 Checking APK contents..."
+          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep -E "\.so$" || true
+          echo ""
+          echo "🔍 Checking for libreactnative.so..."
+          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep "libreactnative" || true
+          echo ""
+          echo "🔍 Checking for libpristineaudio_engine.so..."
+          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep "libpristineaudio_engine" || true
+
+      # ============================================
+      # STEP 14: Upload Debug APK
+      # ============================================
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
@@ -116,6 +200,9 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 7
 
+      # ============================================
+      # STEP 15: Upload AndroidManifest.xml for verification
+      # ============================================
       - name: Upload AndroidManifest.xml for verification
         uses: actions/upload-artifact@v4
         with:
