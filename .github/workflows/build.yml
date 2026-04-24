@@ -19,7 +19,8 @@ jobs:
           df -h
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android/sdk/build-tools/3[0-2]*
-          sudo rm -rf /usr/local/lib/android/sdk/ndk/2[0-6]* sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/lib/android/sdk/ndk/2[0-6]*
+          sudo rm -rf /opt/ghc
           sudo rm -rf /opt/hostedtoolcache/CodeQL
           sudo rm -rf /usr/local/share/boost
           sudo apt-get clean
@@ -35,20 +36,7 @@ jobs:
           submodules: false
 
       # ============================================
-      # STEP 3: Setup Oboe 1.9.0
-      # ============================================
-      - name: Setup Oboe 1.9.0
-        run: |
-          OBOE_DIR="android/app/src/main/cpp/oboe"
-          mkdir -p "$OBOE_DIR"
-          curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz -o oboe.tar.gz
-          tar -xzf oboe.tar.gz --strip-components=1 -C "$OBOE_DIR"
-          rm oboe.tar.gz
-          echo "Oboe files: $(ls $OBOE_DIR | wc -l)"
-          head -3 "$OBOE_DIR/CMakeLists.txt"
-
-      # ============================================
-      # STEP 4: Setup Node.js
+      # STEP 3: Setup Node.js
       # ============================================
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -57,20 +45,55 @@ jobs:
           cache: "yarn"
 
       # ============================================
-      # STEP 5: Install Dependencies
+      # STEP 4: Install Dependencies
       # ============================================
       - name: Install dependencies
         run: yarn install --frozen-lockfile --ignore-engines
 
       # ============================================
-      # STEP 6: Apply Patches & Verify Environment
+      # STEP 5: Verify Gradle Plugin Paths
+      # (Must run AFTER yarn install, BEFORE any Gradle step)
       # ============================================
-      - name: Apply patches & Verify
+      - name: Verify Gradle plugin paths
+        run: |
+          echo "Checking @react-native/gradle-plugin..."
+          ls node_modules/@react-native/gradle-plugin/build.gradle || {
+            echo "❌ @react-native/gradle-plugin missing!"
+            exit 1
+          }
+
+          echo "Checking expo-gradle-plugin..."
+          ls node_modules/expo-modules-autolinking/android/expo-gradle-plugin/build.gradle || {
+            echo "❌ expo-gradle-plugin missing!"
+            exit 1
+          }
+
+          echo "✅ Both Gradle plugins found"
+          echo "Workspace root: $(pwd)"
+          echo "node_modules path: $(pwd)/node_modules"
+
+      # ============================================
+      # STEP 6: Setup Oboe 1.9.0
+      # ============================================
+      - name: Setup Oboe 1.9.0
+        run: |
+          OBOE_DIR="android/app/src/main/cpp/oboe"
+          mkdir -p "$OBOE_DIR"
+          curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz -o oboe.tar.gz
+          tar -xzf oboe.tar.gz --strip-components=1 -C "$OBOE_DIR"
+          rm oboe.tar.gz
+          echo "✅ Oboe files: $(ls $OBOE_DIR | wc -l)"
+          head -3 "$OBOE_DIR/CMakeLists.txt"
+
+      # ============================================
+      # STEP 7: Apply Patches
+      # ============================================
+      - name: Apply patches
         run: |
           npx patch-package
           echo "Verifying patches applied..."
 
-          # Verifikasi Babel Plugin untuk Reanimated
+          # Verifikasi Babel Plugin untuk Reanimated v4
           if grep -q "react-native-reanimated/plugin" babel.config.cjs; then
             echo "✅ Babel plugin found for Reanimated v4"
           else
@@ -79,39 +102,41 @@ jobs:
           fi
 
           # Verifikasi AudioPlayer.kt
-          if grep -q "OboeAudioProcessor" node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/AudioPlayer.kt; then
+          if grep -q "OboeAudioProcessor" \
+            node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/AudioPlayer.kt; then
             echo "✅ AudioPlayer.kt patched"
           else
             echo "❌ AudioPlayer.kt NOT patched"
             exit 1
           fi
 
-          # Verifikasi APMRenderersFactory.kt
-          if [ -f node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/components/APMRenderersFactory.kt ]; then
-            if grep -q "buildAudioSink" node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/components/APMRenderersFactory.kt; then
-              if grep -A 3 "override fun buildAudioSink" node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/components/APMRenderersFactory.kt | grep -q "enableAudioOffload"; then
-                echo "⚠️ Auto-patching APMRenderersFactory.kt to 3 parameters for Media3 1.6.1..."
-                sed -i '/enableAudioOffload/d' node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/components/APMRenderersFactory.kt
+          # Auto-patch APMRenderersFactory.kt jika masih pakai 4-parameter buildAudioSink
+          APMF="node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/components/APMRenderersFactory.kt"
+          if [ -f "$APMF" ]; then
+            if grep -q "buildAudioSink" "$APMF"; then
+              if grep -A 3 "override fun buildAudioSink" "$APMF" | grep -q "enableAudioOffload"; then
+                echo "⚠️ Auto-patching APMRenderersFactory.kt for Media3 1.6.1..."
+                sed -i '/enableAudioOffload/d' "$APMF"
                 echo "✅ APMRenderersFactory.kt auto-patched"
               fi
             fi
           fi
 
       # ============================================
-      # STEP 7: Verify AndroidManifest.xml
+      # STEP 8: Verify AndroidManifest.xml
       # ============================================
       - name: Verify usesCleartextTraffic in AndroidManifest.xml
         run: |
-          echo "Checking AndroidManifest.xml for usesCleartextTraffic..."
-          if grep -q 'usesCleartextTraffic' android/app/src/main/AndroidManifest.xml; then
-            echo "✅ usesCleartextTraffic found"
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          if grep -q 'usesCleartextTraffic' "$MANIFEST"; then
+            echo "✅ usesCleartextTraffic already present"
           else
-            sed -i 's/<application/<application android:usesCleartextTraffic="true"/' android/app/src/main/AndroidManifest.xml
-            echo "✅ usesCleartextTraffic added manually"
+            sed -i 's/<application/<application android:usesCleartextTraffic="true"/' "$MANIFEST"
+            echo "✅ usesCleartextTraffic added"
           fi
 
       # ============================================
-      # STEP 8: Setup JDK 17
+      # STEP 9: Setup JDK 17
       # ============================================
       - name: Setup JDK 17
         uses: actions/setup-java@v4
@@ -121,13 +146,13 @@ jobs:
           cache: "gradle"
 
       # ============================================
-      # STEP 9: Setup Android SDK
+      # STEP 10: Setup Android SDK
       # ============================================
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
       # ============================================
-      # STEP 10: Install NDK 27 and CMake 3.31.6
+      # STEP 11: Install NDK 27 and CMake 3.31.6
       # ============================================
       - name: Install NDK 27 and CMake 3.31.6
         run: |
@@ -137,61 +162,49 @@ jobs:
           echo "$ANDROID_HOME/cmake/3.31.6/bin" >> $GITHUB_PATH
 
       # ============================================
-      # STEP 11: Set Environment Variables
-      # ============================================
-      - name: Set environment variables
-        run: |
-          echo "NODE_ENV=development" >> $GITHUB_ENV
-          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
-
-      # ============================================
-      # STEP 12: Build Debug APK (Strict New Arch)
+      # STEP 12: Build Debug APK
       # ============================================
       - name: Build Debug APK
+        working-directory: android
+        env:
+          NODE_ENV: development
+          GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
         run: |
-          cd android
           chmod +x gradlew
 
           echo "🔥 Deep Cleaning Native Cache..."
-          rm -rf app/.cxx build app/build ~/.gradle/caches/build-cache-*
-          ./gradlew clean
-
-          echo "⚙️ Generating TurboModule/Fabric Codegen Artifacts..."
-          ./gradlew generateCodegenArtifactsFromSchema \
-            -PnewArchEnabled=true \
-            --no-daemon
+          rm -rf app/.cxx build app/build
+          rm -rf $GRADLE_USER_HOME/caches/build-cache-*
 
           echo "🚀 Starting Full Clean Build..."
-          ./gradlew assembleDebug \
+          ./gradlew clean generateCodegenArtifactsFromSchema assembleDebug \
             --no-daemon \
             --no-build-cache \
+            --stacktrace \
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
             -PkotlinVersion=2.0.21 \
             -PforceBundle=true \
             -Dorg.gradle.jvmargs="-Xmx4g -XX:+HeapDumpOnOutOfMemoryError"
-        env:
-          NODE_ENV: development
-          JAVA_HOME: ${{ env.JAVA_HOME }}
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
 
       # ============================================
-      # STEP 13: Verify APK ABI Contents & New Arch
+      # STEP 13: Verify APK — New Arch Artifacts
       # ============================================
       - name: Verify APK ABI contents
         run: |
-          cd android
-          APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
-          echo "📦 Checking APK contents for New Architecture Core..."
-          unzip -l $APK_PATH | grep -E "libpristineaudio_engine\.so|libfabricjni\.so|libturbomodulejsijni\.so|libreactnative\.so" || true
-          
+          APK_PATH="android/app/build/outputs/apk/debug/app-debug.apk"
+
+          echo "📦 Checking APK for New Architecture core libs..."
+          unzip -l "$APK_PATH" | grep -E \
+            "libpristineaudio_engine\.so|libfabricjni\.so|libturbomodulejsijni\.so|libreactnative\.so" || true
+
           echo "-----------------------------------"
-          if unzip -l $APK_PATH | grep -q "libfabricjni.so"; then
-            echo "✅ SUCCESS: libfabricjni.so found! App is running Full New Architecture."
+          if unzip -l "$APK_PATH" | grep -q "libfabricjni.so"; then
+            echo "✅ SUCCESS: libfabricjni.so found — Full New Architecture confirmed."
           else
-            echo "❌ WARNING: libfabricjni.so missing! New Architecture compilation failed."
+            echo "❌ WARNING: libfabricjni.so missing — New Architecture compilation failed."
             exit 1
           fi
 
@@ -208,9 +221,22 @@ jobs:
       # ============================================
       # STEP 15: Upload AndroidManifest.xml
       # ============================================
-      - name: Upload AndroidManifest.xml for verification
+      - name: Upload AndroidManifest.xml
         uses: actions/upload-artifact@v4
         with:
           name: AndroidManifest-Debug
           path: android/app/src/main/AndroidManifest.xml
           retention-days: 7
+    if unzip -l "$APK_PATH" | grep -q "libfabricjni.so"; then
+            echo "✅ SUCCESS: libfabricjni.so found — Full New Architecture confirmed."
+          else
+            echo "❌ WARNING: libfabricjni.so missing — New Architecture compilation failed."
+            exit 1
+          fi
+
+      # ============================================
+      # STEP 14: Upload Debug APK
+      # ============================================
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        
