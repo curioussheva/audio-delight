@@ -71,7 +71,7 @@ jobs:
           echo "Verifying patches applied..."
 
           # Verifikasi Babel Plugin untuk Reanimated
-          if grep -q "react-native-reanimated/plugin" babel.config.js; then
+          if grep -q "react-native-reanimated/plugin" babel.config.cjs; then
             echo "✅ Babel plugin found for Reanimated v4"
           else
             echo "❌ Babel plugin missing - this will break Reanimated v4!"
