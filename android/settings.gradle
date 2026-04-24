@@ -4,12 +4,34 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
     }
-    
-    // Gunakan settingsDir untuk memastikan path absolut dari lokasi file ini
-    def nodeModules = new File(settingsDir, "../node_modules")
-    
-    includeBuild(new File(nodeModules, "@react-native/gradle-plugin"))
-    includeBuild(new File(nodeModules, "expo-modules-autolinking/android/expo-gradle-plugin"))
+
+    // Resolve node_modules: support CI (GITHUB_WORKSPACE) and local (relative to settingsDir)
+    def githubWorkspace = System.getenv("GITHUB_WORKSPACE")
+    def nodeModules
+    if (githubWorkspace) {
+        nodeModules = new File(githubWorkspace, "node_modules")
+        println "CI mode: using GITHUB_WORKSPACE node_modules at ${nodeModules.absolutePath}"
+    } else {
+        nodeModules = new File(settingsDir, "../node_modules")
+        println "Local mode: using relative node_modules at ${nodeModules.absolutePath}"
+    }
+
+    if (!nodeModules.exists()) {
+        throw new GradleException("node_modules not found at ${nodeModules.absolutePath}. Run yarn install first.")
+    }
+
+    def rnGradlePlugin = new File(nodeModules, "@react-native/gradle-plugin")
+    def expoGradlePlugin = new File(nodeModules, "expo-modules-autolinking/android/expo-gradle-plugin")
+
+    if (!rnGradlePlugin.exists()) {
+        throw new GradleException("@react-native/gradle-plugin not found at ${rnGradlePlugin.absolutePath}")
+    }
+    if (!expoGradlePlugin.exists()) {
+        throw new GradleException("expo-gradle-plugin not found at ${expoGradlePlugin.absolutePath}")
+    }
+
+    includeBuild(rnGradlePlugin)
+    includeBuild(expoGradlePlugin)
 }
 
 plugins {
