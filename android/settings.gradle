@@ -4,24 +4,26 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
     }
-    
-    // Pastikan path benar-benar menunjuk ke folder yang memiliki build.gradle milik plugin
-    def rnPluginFolder = file("../node_modules/@react-native/gradle-plugin")
-    def expoPluginFolder = file("../node_modules/expo-modules-autolinking/android/expo-gradle-plugin")
-
-    if (rnPluginFolder.exists()) {
-        includeBuild(rnPluginFolder)
-    }
-    if (expoPluginFolder.exists()) {
-        includeBuild(expoPluginFolder)
-    }
 }
 
-plugins {
-    id("com.facebook.react.settings")
-    id("expo-autolinking-settings")
+// Kita tidak menggunakan blok plugins { ... } karena sering gagal di CI Gradle 8.x
+// Sebagai gantinya, kita langsung "apply" file gradle dari node_modules.
+// Cara ini membypass semua aturan ketat urutan blok di Gradle 8.x.
+
+def rnPlugin = file("../node_modules/@react-native/gradle-plugin/settings-plugin.gradle")
+def expoPlugin = file("../node_modules/expo-modules-autolinking/android/expo-gradle-plugin/settings-plugin.gradle")
+
+if (rnPlugin.exists()) {
+    apply from: rnPlugin
+} else {
+    throw new GradleException("React Native plugin not found. Ensure node_modules is installed.")
 }
 
+if (expoPlugin.exists()) {
+    apply from: expoPlugin
+}
+
+// Setelah di-apply, kita bisa mengonfigurasi extensi-nya
 extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
     ex.autolinkLibrariesFromCommand(expoAutolinking.rnConfigCommand)
 }
