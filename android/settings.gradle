@@ -3,8 +3,11 @@ pluginManagement {
         google()
         mavenCentral()
         gradlePluginPortal()
+        maven {
+            url("${rootDir}/../node_modules/react-native/android")
+        }
     }
-
+    
     def nodeModules = new File(settingsDir, "../node_modules")
     includeBuild(new File(nodeModules, "@react-native/gradle-plugin"))
     includeBuild(new File(nodeModules, "expo-modules-autolinking/android/expo-gradle-plugin"))
