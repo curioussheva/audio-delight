@@ -178,11 +178,16 @@ jobs:
           rm -rf app/.cxx build app/build
           rm -rf $GRADLE_USER_HOME/caches/build-cache-*
 
+          RN_PLUGIN="${{ github.workspace }}/node_modules/@react-native/gradle-plugin"
+          EXPO_PLUGIN="${{ github.workspace }}/node_modules/expo-modules-autolinking/android/expo-gradle-plugin"
+
           echo "🚀 Starting Full Clean Build..."
           ./gradlew clean generateCodegenArtifactsFromSchema assembleDebug \
             --no-daemon \
             --no-build-cache \
             --stacktrace \
+            --include-build "$RN_PLUGIN" \
+            --include-build "$EXPO_PLUGIN" \
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
             -PkotlinVersion=2.0.21 \
