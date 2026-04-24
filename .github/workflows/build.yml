@@ -227,16 +227,4 @@ jobs:
           name: AndroidManifest-Debug
           path: android/app/src/main/AndroidManifest.xml
           retention-days: 7
-    if unzip -l "$APK_PATH" | grep -q "libfabricjni.so"; then
-            echo "✅ SUCCESS: libfabricjni.so found — Full New Architecture confirmed."
-          else
-            echo "❌ WARNING: libfabricjni.so missing — New Architecture compilation failed."
-            exit 1
-          fi
-
-      # ============================================
-      # STEP 14: Upload Debug APK
-      # ============================================
-      - name: Upload Debug APK
-        uses: actions/upload-artifact@v4
-        
+ 
