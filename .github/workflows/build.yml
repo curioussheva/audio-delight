@@ -57,20 +57,20 @@ jobs:
       - name: Verify Gradle plugin paths
         run: |
           echo "Checking @react-native/gradle-plugin..."
-          ls node_modules/@react-native/gradle-plugin/build.gradle || {
+          ls node_modules/@react-native/gradle-plugin/build.gradle* 2>/dev/null | grep -q "build.gradle" || {
             echo "❌ @react-native/gradle-plugin missing!"
             exit 1
           }
+          echo "✅ @react-native/gradle-plugin found: $(ls node_modules/@react-native/gradle-plugin/build.gradle*)"
 
           echo "Checking expo-gradle-plugin..."
-          ls node_modules/expo-modules-autolinking/android/expo-gradle-plugin/build.gradle || {
+          ls node_modules/expo-modules-autolinking/android/expo-gradle-plugin/build.gradle* 2>/dev/null | grep -q "build.gradle" || {
             echo "❌ expo-gradle-plugin missing!"
             exit 1
           }
+          echo "✅ expo-gradle-plugin found: $(ls node_modules/expo-modules-autolinking/android/expo-gradle-plugin/build.gradle*)"
 
-          echo "✅ Both Gradle plugins found"
           echo "Workspace root: $(pwd)"
-          echo "node_modules path: $(pwd)/node_modules"
 
       # ============================================
       # STEP 6: Setup Oboe 1.9.0
