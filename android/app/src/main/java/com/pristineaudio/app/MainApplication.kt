@@ -3,6 +3,9 @@ package com.pristineaudio.app
 import android.app.Application
 import android.content.res.Configuration
 
+// CRITICAL: Pastikan import ini mengarah ke package ID yang benar!
+import com.pristineaudio.app.BuildConfig 
+
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactNativeHost
@@ -25,12 +28,16 @@ class MainApplication : Application(), ReactApplication {
       object : DefaultReactNativeHost(this) {
         override fun getPackages(): List<ReactPackage> =
             PackageList(this).packages.apply {
+              // Add custom native modules
               add(USBDACPackage())
             }
 
         override fun getJSMainModuleName(): String = ".expo/.virtual-metro-entry"
         override fun getUseDeveloperSupport(): Boolean = BuildConfig.DEBUG
+        
+        // Memastikan flag New Arch diambil dari build.gradle via BuildConfig
         override val isNewArchEnabled: Boolean = BuildConfig.IS_NEW_ARCHITECTURE_ENABLED
+        override val isHermesEnabled: Boolean = BuildConfig.IS_HERMES_ENABLED
       }
   )
 
@@ -40,14 +47,18 @@ class MainApplication : Application(), ReactApplication {
   override fun onCreate() {
     super.onCreate()
 
-    // Inisialisasi SoLoader (WAJIB untuk RN 0.76+ New Architecture)
+    // 1. Inisialisasi SoLoader dengan Merged So Mapping (Performa New Arch)
     SoLoader.init(this, OpenSourceMergedSoMapping)
 
-    // Set release level untuk New Architecture
-    DefaultNewArchitectureEntryPoint.releaseLevel = try {
-      ReleaseLevel.valueOf(BuildConfig.REACT_NATIVE_RELEASE_LEVEL.uppercase())
-    } catch (e: IllegalArgumentException) {
-      ReleaseLevel.STABLE
+    // 2. Konfigurasi Entry Point New Architecture
+    if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
+        DefaultNewArchitectureEntryPoint.releaseLevel = try {
+          ReleaseLevel.valueOf(BuildConfig.REACT_NATIVE_RELEASE_LEVEL.uppercase())
+        } catch (e: IllegalArgumentException) {
+          ReleaseLevel.STABLE
+        }
+        // Opsional: Beberapa versi membutuhkan pemanggilan .load() secara eksplisit
+        // DefaultNewArchitectureEntryPoint.load() 
     }
 
     ApplicationLifecycleDispatcher.onApplicationCreate(this)
@@ -58,4 +69,3 @@ class MainApplication : Application(), ReactApplication {
     ApplicationLifecycleDispatcher.onConfigurationChanged(this, newConfig)
   }
 }
- 

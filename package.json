@@ -117,8 +117,11 @@
     "yarn": ">=1.22.0"
   },
   "codegenConfig": {
-    "name": "PristineAudioSpec",
-    "type": "modules",
-    "jsSrcsDir": "src/specs"
+  "name": "PristineAudioSpec",
+  "type": "modules",
+  "jsSrcsDir": "src/specs",
+  "android": {
+    "package": "com.pristineaudio.app"
   }
+}
 }

@@ -39,14 +39,16 @@ android {
         versionName "1.0.37"
 
         buildConfigField "Boolean", "IS_NEW_ARCHITECTURE_ENABLED", "true"
+        buildConfigField "Boolean", "IS_HERMES_ENABLED", "true"
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
 
         // --- KONFIGURASI NATIVE ENGINE (C++) ---
         externalNativeBuild {
             cmake {
-                cppFlags "-std=c++17 -Wall"
-                arguments "-DANDROID_STL=c++_shared"
-                // abiFilters dihapus - gunakan reactNativeArchitectures di gradle.properties
+                // Tambahan -O3 untuk optimasi performa DSP Audio
+                cppFlags "-std=c++17 -Wall -O3"
+                arguments "-DANDROID_STL=c++_shared",
+                          "-DANDROID_TOOLCHAIN=clang"
             }
         }
     }
@@ -86,7 +88,6 @@ android {
     }
     
     // --- PENANGANAN KONFLIK NEW ARCHITECTURE & C++ ---
-        // --- PENANGANAN KONFLIK NEW ARCHITECTURE & C++ ---
     packagingOptions {
         jniLibs {
             useLegacyPackaging false
@@ -101,12 +102,11 @@ android {
             pickFirst '**/libturbomodulejsijni.so'
             pickFirst '**/libreact_newarchdefaults.so'
             
-            merge '**/libreactnative.so'
-            merge '**/libreact_featureflagsjni.so'
-            merge '**/libturbomodulejsijni.so'
+            // Baris 'merge' untuk .so DIHAPUS agar tidak merusak binary JSI
         }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "**/libjscexecutor.so"
         }
     }
 }

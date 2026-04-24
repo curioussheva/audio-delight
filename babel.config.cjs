@@ -20,7 +20,7 @@ module.exports = function (api) {
             '@/context':    './src/shared/context',
             '@/assets':     './assets',
             '@':            './src',
-            'expo-file-system': 'expo-file-system/legacy',
+          //  'expo-file-system': 'expo-file-system/legacy',
           },
         },
       ],

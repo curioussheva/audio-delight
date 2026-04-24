@@ -11,8 +11,9 @@ add_library(
     SHARED
     Native-lib.cpp
     AudioEngine.cpp
-    NativeDSPModule.cpp
+    NativePristineAudio.cpp
 )
+
 
 target_include_directories(
     pristineaudio_engine

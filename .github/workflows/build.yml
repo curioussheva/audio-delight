@@ -19,7 +19,7 @@ jobs:
           df -h
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android/sdk/build-tools/3[0-2]*
-          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/lib/android/sdk/ndk/2[0-6]* sudo rm -rf /opt/ghc
           sudo rm -rf /opt/hostedtoolcache/CodeQL
           sudo rm -rf /usr/local/share/boost
           sudo apt-get clean
@@ -63,12 +63,20 @@ jobs:
         run: yarn install --frozen-lockfile --ignore-engines
 
       # ============================================
-      # STEP 6: Apply Patches
+      # STEP 6: Apply Patches & Verify Environment
       # ============================================
-      - name: Apply patches
+      - name: Apply patches & Verify
         run: |
           npx patch-package
           echo "Verifying patches applied..."
+
+          # Verifikasi Babel Plugin untuk Reanimated
+          if grep -q "react-native-reanimated/plugin" babel.config.js; then
+            echo "✅ Babel plugin found for Reanimated v4"
+          else
+            echo "❌ Babel plugin missing - this will break Reanimated v4!"
+            exit 1
+          fi
 
           # Verifikasi AudioPlayer.kt
           if grep -q "OboeAudioProcessor" node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/AudioPlayer.kt; then
@@ -78,19 +86,13 @@ jobs:
             exit 1
           fi
 
-          # Verifikasi APMRenderersFactory.kt (jika ada)
+          # Verifikasi APMRenderersFactory.kt
           if [ -f node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/components/APMRenderersFactory.kt ]; then
             if grep -q "buildAudioSink" node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/components/APMRenderersFactory.kt; then
-              echo "⚠️  APMRenderersFactory.kt found - checking signature..."
-              # Cek apakah masih pakai 4 parameter (enableAudioOffload)
               if grep -A 3 "override fun buildAudioSink" node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/components/APMRenderersFactory.kt | grep -q "enableAudioOffload"; then
-                echo "❌ APMRenderersFactory.kt masih pakai enableAudioOffload (4 parameter)"
-                echo "   Media3 1.6.1 hanya support 3 parameter. Perlu patch manual."
-                # Auto-patch: hapus parameter ke-4
+                echo "⚠️ Auto-patching APMRenderersFactory.kt to 3 parameters for Media3 1.6.1..."
                 sed -i '/enableAudioOffload/d' node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/components/APMRenderersFactory.kt
                 echo "✅ APMRenderersFactory.kt auto-patched"
-              else
-                echo "✅ APMRenderersFactory.kt sudah benar (3 parameter)"
               fi
             fi
           fi
@@ -102,10 +104,8 @@ jobs:
         run: |
           echo "Checking AndroidManifest.xml for usesCleartextTraffic..."
           if grep -q 'usesCleartextTraffic' android/app/src/main/AndroidManifest.xml; then
-            echo "✅ usesCleartextTraffic found in AndroidManifest.xml"
-            grep 'usesCleartextTraffic' android/app/src/main/AndroidManifest.xml
+            echo "✅ usesCleartextTraffic found"
           else
-            echo "❌ usesCleartextTraffic NOT found - adding manually..."
             sed -i 's/<application/<application android:usesCleartextTraffic="true"/' android/app/src/main/AndroidManifest.xml
             echo "✅ usesCleartextTraffic added manually"
           fi
@@ -146,7 +146,7 @@ jobs:
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
 
       # ============================================
-      # STEP 12: Build Debug APK
+      # STEP 12: Build Debug APK (Strict New Arch)
       # ============================================
       - name: Build Debug APK
         run: |
@@ -154,18 +154,20 @@ jobs:
           chmod +x gradlew
 
           echo "🔥 Deep Cleaning Native Cache..."
-          # Menghapus SEMUA cache agar CMake dan Gradle merekonstruksi JNI secara utuh
-          rm -rf app/.cxx
-          rm -rf build
-          rm -rf app/build
-          rm -rf ~/.gradle/caches/build-cache-*
+          rm -rf app/.cxx build app/build ~/.gradle/caches/build-cache-*
           ./gradlew clean
+
+          echo "⚙️ Generating TurboModule/Fabric Codegen Artifacts..."
+          ./gradlew generateCodegenArtifactsFromSchema \
+            -PnewArchEnabled=true \
+            --no-daemon
 
           echo "🚀 Starting Full Clean Build..."
           ./gradlew assembleDebug \
             --no-daemon \
             --no-build-cache \
             -PnewArchEnabled=true \
+            -PreactNativeNewArch=true \
             -PkotlinVersion=2.0.21 \
             -PforceBundle=true \
             -Dorg.gradle.jvmargs="-Xmx4g -XX:+HeapDumpOnOutOfMemoryError"
@@ -176,19 +178,22 @@ jobs:
           ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
 
       # ============================================
-      # STEP 13: Verify APK ABI Contents
+      # STEP 13: Verify APK ABI Contents & New Arch
       # ============================================
       - name: Verify APK ABI contents
         run: |
           cd android
-          echo "📦 Checking APK contents..."
-          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep -E "\.so$" || true
-          echo ""
-          echo "🔍 Checking for libreactnative.so..."
-          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep "libreactnative" || true
-          echo ""
-          echo "🔍 Checking for libpristineaudio_engine.so..."
-          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep "libpristineaudio_engine" || true
+          APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
+          echo "📦 Checking APK contents for New Architecture Core..."
+          unzip -l $APK_PATH | grep -E "libpristineaudio_engine\.so|libfabricjni\.so|libturbomodulejsijni\.so|libreactnative\.so" || true
+          
+          echo "-----------------------------------"
+          if unzip -l $APK_PATH | grep -q "libfabricjni.so"; then
+            echo "✅ SUCCESS: libfabricjni.so found! App is running Full New Architecture."
+          else
+            echo "❌ WARNING: libfabricjni.so missing! New Architecture compilation failed."
+            exit 1
+          fi
 
       # ============================================
       # STEP 14: Upload Debug APK
@@ -201,7 +206,7 @@ jobs:
           retention-days: 7
 
       # ============================================
-      # STEP 15: Upload AndroidManifest.xml for verification
+      # STEP 15: Upload AndroidManifest.xml
       # ============================================
       - name: Upload AndroidManifest.xml for verification
         uses: actions/upload-artifact@v4
@@ -209,4 +214,3 @@ jobs:
           name: AndroidManifest-Debug
           path: android/app/src/main/AndroidManifest.xml
           retention-days: 7
- 
