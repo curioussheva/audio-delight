@@ -1,26 +1,13 @@
 pluginManagement {
+    includeBuild(new File(rootDir, "../node_modules/@react-native/gradle-plugin"))
+    includeBuild(new File(rootDir, "../node_modules/expo-modules-autolinking/android/expo-gradle-plugin"))
+
     repositories {
         google()
         mavenCentral()
         gradlePluginPortal()
     }
 }
-
-// Memuat plugin autolinking expo secara manual
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
-    }
-    dependencies {
-        // Mencoba mencari gradle plugin secara langsung di node_modules
-        classpath("com.facebook.react:react-native-gradle-plugin")
-    }
-}
-
-// Terapkan pengaturan React Native menggunakan script bawaan mereka
-apply from: new File(rootDir, "../node_modules/@react-native/gradle-plugin/settings-plugin.gradle")
-apply from: new File(rootDir, "../node_modules/expo-modules-autolinking/android/expo-gradle-plugin/settings-plugin.gradle")
 
 plugins {
     id("com.facebook.react.settings")
