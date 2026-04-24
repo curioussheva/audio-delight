@@ -1,7 +1,7 @@
 pluginManagement {
-    def reactNativeGradlePlugin = new File(["node", "--print", "require.resolve('@react-native/gradle-plugin/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile()
-    
-    def expoPluginsPath = new File(["node", "--print", "require.resolve('expo-modules-autolinking/package.json', { paths: [require.resolve('expo/package.json')] })"].execute(null, rootDir).text.trim(), "../android/expo-gradle-plugin").absolutePath
+    // Hardcoded path yang lebih stabil untuk CI/GitHub Actions
+    def reactNativeGradlePlugin = new File(rootDir, "../node_modules/@react-native/gradle-plugin")
+    def expoPluginsPath = new File(rootDir, "../node_modules/expo-modules-autolinking/android/expo-gradle-plugin")
 
     includeBuild(reactNativeGradlePlugin)
     includeBuild(expoPluginsPath)
@@ -14,7 +14,6 @@ pluginManagement {
 }
 
 plugins {
-    // Memanggil plugin yang sudah di-include di atas
     id("com.facebook.react.settings")
     id("expo-autolinking-settings")
 }
