@@ -36,7 +36,7 @@ class MainApplication : Application(), ReactApplication {
         override fun getUseDeveloperSupport(): Boolean = BuildConfig.DEBUG
         
         // Memastikan flag New Arch diambil dari build.gradle via BuildConfig
-        override val isNewArchEnabled: Boolean = BuildConfig.IS_NEW_ARCHITECTURE_ENABLED
+        override val isNewArchEnabled: Boolean = true
         override val isHermesEnabled: Boolean = BuildConfig.IS_HERMES_ENABLED
       }
   )
@@ -51,15 +51,7 @@ class MainApplication : Application(), ReactApplication {
     SoLoader.init(this, OpenSourceMergedSoMapping)
 
     // 2. Konfigurasi Entry Point New Architecture
-    if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
-        DefaultNewArchitectureEntryPoint.releaseLevel = try {
-          ReleaseLevel.valueOf(BuildConfig.REACT_NATIVE_RELEASE_LEVEL.uppercase())
-        } catch (e: IllegalArgumentException) {
-          ReleaseLevel.STABLE
-        }
-        // Opsional: Beberapa versi membutuhkan pemanggilan .load() secara eksplisit
-        // DefaultNewArchitectureEntryPoint.load() 
-    }
+    DefaultNewArchitectureEntryPoint.load()
 
     ApplicationLifecycleDispatcher.onApplicationCreate(this)
   }
