@@ -120,7 +120,20 @@ jobs:
           fi
 
       # ============================================
-      # STEP 8: Verify AndroidManifest.xml
+      # STEP 8: Patch @react-native/gradle-plugin
+      # Removes foojay toolchain plugin from RN's
+      # settings.gradle.kts — causes circular
+      # dependency when loaded as includeBuild
+      # ============================================
+      - name: Patch @react-native/gradle-plugin settings
+        run: |
+          RN_SETTINGS="${{ github.workspace }}/node_modules/@react-native/gradle-plugin/settings.gradle.kts"
+          sed -i '/foojay-resolver-convention/d' "$RN_SETTINGS"
+          echo "✅ Patched settings.gradle.kts:"
+          cat "$RN_SETTINGS"
+
+      # ============================================
+      # STEP 9: Verify AndroidManifest.xml
       # ============================================
       - name: Verify usesCleartextTraffic in AndroidManifest.xml
         run: |
@@ -133,7 +146,7 @@ jobs:
           fi
 
       # ============================================
-      # STEP 9: Setup JDK 17
+      # STEP 10: Setup JDK 17
       # ============================================
       - name: Setup JDK 17
         uses: actions/setup-java@v4
@@ -143,13 +156,13 @@ jobs:
           cache: "gradle"
 
       # ============================================
-      # STEP 10: Setup Android SDK
+      # STEP 11: Setup Android SDK
       # ============================================
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
       # ============================================
-      # STEP 11: Install NDK 27 and CMake 3.31.6
+      # STEP 12: Install NDK 27 and CMake 3.31.6
       # ============================================
       - name: Install NDK 27 and CMake 3.31.6
         run: |
@@ -159,7 +172,7 @@ jobs:
           echo "$ANDROID_HOME/cmake/3.31.6/bin" >> $GITHUB_PATH
 
       # ============================================
-      # STEP 12: Inject Gradle Init Script
+      # STEP 13: Inject Gradle Init Script
       # Runs BEFORE settings.gradle is parsed —
       # the only reliable way to inject includeBuild
       # for plugin resolution in Gradle 8.x
@@ -188,10 +201,10 @@ jobs:
           EOF
 
           echo "✅ Init script:"
-          cat $GRADLE_USER_HOME/init.d/rn-plugins.gradle 
+          cat $GRADLE_USER_HOME/init.d/rn-plugins.gradle
 
       # ============================================
-      # STEP 13: Build Debug APK
+      # STEP 14: Build Debug APK
       # ============================================
       - name: Build Debug APK
         working-directory: android
@@ -219,7 +232,7 @@ jobs:
             -Dorg.gradle.jvmargs="-Xmx4g -XX:+HeapDumpOnOutOfMemoryError"
 
       # ============================================
-      # STEP 14: Verify APK — New Arch Artifacts
+      # STEP 15: Verify APK — New Arch Artifacts
       # ============================================
       - name: Verify APK ABI contents
         run: |
@@ -238,7 +251,7 @@ jobs:
           fi
 
       # ============================================
-      # STEP 15: Upload Debug APK
+      # STEP 16: Upload Debug APK
       # ============================================
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -248,7 +261,7 @@ jobs:
           retention-days: 7
 
       # ============================================
-      # STEP 16: Upload AndroidManifest.xml
+      # STEP 17: Upload AndroidManifest.xml
       # ============================================
       - name: Upload AndroidManifest.xml
         uses: actions/upload-artifact@v4
