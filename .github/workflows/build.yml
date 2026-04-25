@@ -174,14 +174,21 @@ jobs:
           EXPO_PLUGIN="${{ github.workspace }}/node_modules/expo/node_modules/expo-modules-autolinking/android/expo-gradle-plugin"
 
           cat > $GRADLE_USER_HOME/init.d/rn-plugins.gradle << EOF
-          beforeSettings {
-            it.pluginManagement.includeBuild("${RN_PLUGIN}")
-            it.pluginManagement.includeBuild("${EXPO_PLUGIN}")
+          beforeSettings { settings ->
+              settings.pluginManagement {
+                  repositories {
+                      google()
+                      mavenCentral()
+                      gradlePluginPortal()
+                  }
+                  includeBuild("${RN_PLUGIN}")
+                  includeBuild("${EXPO_PLUGIN}")
+              }
           }
           EOF
 
-          echo "✅ Init script created:"
-          cat $GRADLE_USER_HOME/init.d/rn-plugins.gradle
+          echo "✅ Init script:"
+          cat $GRADLE_USER_HOME/init.d/rn-plugins.gradle 
 
       # ============================================
       # STEP 13: Build Debug APK
