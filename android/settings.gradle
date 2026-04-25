@@ -1,22 +1,3 @@
-pluginManagement {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-        maven {
-            url("${rootDir}/../node_modules/react-native/android")
-        }
-    }
-}
-
-plugins {
-    id("com.facebook.react.settings")
-}
-
-extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
-    ex.autolinkLibrariesFromCommand(["node", "--print", "require('expo-modules-core/android/autolinking.js')"])
-}
-
 rootProject.name = 'PristineAudio'
 
 include ':app'
