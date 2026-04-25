@@ -16,7 +16,6 @@ buildscript {
         // Versi Gradle Plugin yang stabil untuk NDK 27
         classpath('com.android.tools.build:gradle:8.2.1')
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
-        classpath('com.facebook.react:react-native-gradle-plugin')
     }
 }
 
@@ -25,7 +24,7 @@ allprojects {
         google()
         mavenCentral()
         maven { url 'https://www.jitpack.io' }
-        
+
         // Tambahkan repository extra untuk Track Player jika ada di gradle.properties
         def extraMavenRepos = findProperty('android.extraMavenRepos')
         if (extraMavenRepos) {
@@ -38,4 +37,3 @@ allprojects {
 // Plugin root wajib untuk integrasi Expo & RN
 apply plugin: "expo-root-project"
 apply plugin: "com.facebook.react.rootproject"
- 
