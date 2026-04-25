@@ -204,36 +204,35 @@ jobs:
           cat $GRADLE_USER_HOME/init.d/rn-plugins.gradle
 
       # ============================================
-      # STEP 14: Build Debug APK
+      # STEP 14: Generate Codegen Artifacts
       # ============================================
-      - name: Build Debug APK
+      - name: Generate Codegen Artifacts
         working-directory: android
         env:
-          NODE_ENV: development
           GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
         run: |
           chmod +x gradlew
-
-          echo "🔥 Deep Cleaning Native Cache..."
-          rm -rf app/.cxx build app/build
-          rm -rf $GRADLE_USER_HOME/caches/build-cache-*
-
-          echo "🚀 Starting Full Clean Build..."
-          ./gradlew clean generateCodegenArtifactsFromSchema assembleDebug \
+          echo "🔧 Generating Codegen bindings for TurboModule..."
+          
+          # Generate Codegen artifacts
+          ./gradlew generateCodegenArtifactsFromSchema \
             --no-daemon \
-            --no-build-cache \
-            --stacktrace \
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
-            -PkotlinVersion=2.0.21 \
-            -PforceBundle=true \
-            -Dorg.gradle.jvmargs="-Xmx4g -XX:+HeapDumpOnOutOfMemoryError"
+            -PkotlinVersion=2.0.21
+          
+          # Debug: Cari semua file Codegen
+          echo "🔍 Searching for Codegen output..."
+          find . -type f \( -name "*.h" -o -name "*.cpp" \) -path "*codegen*" 2>/dev/null | sort | head -30
+          
+          # Cari PristineAudioSpec khususnya
+          echo "🔍 Searching for PristineAudioSpec..."
+          find . -name "*PristineAudio*" 2>/dev/null | head -20
+          
+          # Cek direktori build/generated
+          echo "📁 Listing build/generated..."
+          ls -la app/build/generated/source/codegen/ 2>/dev/null || echo "❌ Directory not found"
 
-      # ============================================
-      # STEP 15: Verify APK — New Arch Artifacts
-      # ============================================
       - name: Verify APK ABI contents
         run: |
           APK_PATH="android/app/build/outputs/apk/debug/app-debug.apk"
