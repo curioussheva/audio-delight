@@ -7,9 +7,6 @@ pluginManagement {
             url("${rootDir}/../node_modules/react-native/android")
         }
     }
-    
-    def nodeModules = new File(settingsDir, "../node_modules")
-    includeBuild(new File(nodeModules, "@react-native/gradle-plugin"))
 }
 
 plugins {
