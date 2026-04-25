@@ -10,20 +10,16 @@ pluginManagement {
     
     def nodeModules = new File(settingsDir, "../node_modules")
     includeBuild(new File(nodeModules, "@react-native/gradle-plugin"))
-    includeBuild(new File(nodeModules, "expo-modules-autolinking/android/expo-gradle-plugin"))
 }
 
 plugins {
     id("com.facebook.react.settings")
-    id("expo-autolinking-settings")
 }
 
 extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
-    ex.autolinkLibrariesFromCommand(expoAutolinking.rnConfigCommand)
+    ex.autolinkLibrariesFromCommand(["node", "--print", "require('expo-modules-core/android/autolinking.js')"])
 }
-
-expoAutolinking.useExpoModules()
 
 rootProject.name = 'PristineAudio'
 
-include ':app' 
+include ':app'
