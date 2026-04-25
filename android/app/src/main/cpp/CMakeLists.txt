@@ -43,9 +43,9 @@ target_include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/oboe/include
     ${CODEGEN_INCLUDE_DIR}
-    # React Native / TurboModule headers
     ${RN_DIR}/ReactCommon
     ${RN_DIR}/ReactCommon/react/nativemodule/core
+    ${RN_DIR}/ReactCommon/react/nativemodule/core/platform/android
     ${RN_DIR}/ReactAndroid/src/main/jni/react/turbomodule
     ${RN_DIR}/ReactAndroid/src/main/jni
 )
