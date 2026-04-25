@@ -7,6 +7,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # ---- Oboe ----
 add_subdirectory(oboe)
 
+# ---- React Native headers ----
+set(RN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../node_modules/react-native")
+
 # ---- Codegen Output (cari di beberapa lokasi yang mungkin) ----
 set(CODEGEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../build/generated/source/codegen")
 set(CODEGEN_DIR_ALT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../app/build/generated/source/codegen")
@@ -40,6 +43,11 @@ target_include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/oboe/include
     ${CODEGEN_INCLUDE_DIR}
+    # React Native / TurboModule headers
+    ${RN_DIR}/ReactCommon
+    ${RN_DIR}/ReactCommon/react/nativemodule/core
+    ${RN_DIR}/ReactAndroid/src/main/jni/react/turbomodule
+    ${RN_DIR}/ReactAndroid/src/main/jni
 )
 
 # ---- Link ----
