@@ -34,6 +34,7 @@ public:
     void setBalance(float balance);
     void setStereoWide(float width);
     void setExclusiveMode(bool enabled);
+    std::vector<float> getVisualizerData();
 
     // Oboe Callbacks
     oboe::DataCallbackResult onAudioReady(oboe::AudioStream *audioStream, void *audioData, int32_t numFrames) override;

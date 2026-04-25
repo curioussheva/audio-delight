@@ -68,7 +68,7 @@ void AudioEngine::start() {
            ->setFormat(oboe::AudioFormat::Float)
            ->setChannelCount(oboe::ChannelCount::Stereo)
            // Konversi otomatis jika file lagu vs DAC hardware beda format
-           ->setSampleRateConversionAllowed(true)
+           ->setSampleRateConversionQuality(oboe::SampleRateConversionQuality::Medium)
            ->setFormatConversionAllowed(true)
            ->setChannelConversionAllowed(true)
            ->setCallback(this)
