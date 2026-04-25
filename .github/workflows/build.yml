@@ -63,13 +63,6 @@ jobs:
           }
           echo "✅ @react-native/gradle-plugin found: $(ls node_modules/@react-native/gradle-plugin/build.gradle*)"
 
-          echo "Checking expo-gradle-plugin..."
-          ls node_modules/expo-modules-autolinking/android/expo-gradle-plugin/build.gradle* 2>/dev/null | grep -q "build.gradle" || {
-            echo "❌ expo-gradle-plugin missing!"
-            exit 1
-          }
-          echo "✅ expo-gradle-plugin found: $(ls node_modules/expo-modules-autolinking/android/expo-gradle-plugin/build.gradle*)"
-
           echo "Workspace root: $(pwd)"
 
       # ============================================
@@ -179,7 +172,6 @@ jobs:
           rm -rf $GRADLE_USER_HOME/caches/build-cache-*
 
           RN_PLUGIN="${{ github.workspace }}/node_modules/@react-native/gradle-plugin"
-          EXPO_PLUGIN="${{ github.workspace }}/node_modules/expo-modules-autolinking/android/expo-gradle-plugin"
 
           echo "🚀 Starting Full Clean Build..."
           ./gradlew clean generateCodegenArtifactsFromSchema assembleDebug \
@@ -187,7 +179,6 @@ jobs:
             --no-build-cache \
             --stacktrace \
             --include-build "$RN_PLUGIN" \
-            --include-build "$EXPO_PLUGIN" \
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
             -PkotlinVersion=2.0.21 \
@@ -232,4 +223,3 @@ jobs:
           name: AndroidManifest-Debug
           path: android/app/src/main/AndroidManifest.xml
           retention-days: 7
-  
