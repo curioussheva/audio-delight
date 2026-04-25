@@ -52,18 +52,25 @@ jobs:
 
       # ============================================
       # STEP 5: Verify Gradle Plugin Paths
-      # (Must run AFTER yarn install, BEFORE any Gradle step)
       # ============================================
       - name: Verify Gradle plugin paths
         run: |
+          RN_PLUGIN="${{ github.workspace }}/node_modules/@react-native/gradle-plugin"
+          EXPO_PLUGIN="${{ github.workspace }}/node_modules/expo/node_modules/expo-modules-autolinking/android/expo-gradle-plugin"
+
           echo "Checking @react-native/gradle-plugin..."
-          ls node_modules/@react-native/gradle-plugin/build.gradle* 2>/dev/null | grep -q "build.gradle" || {
-            echo "❌ @react-native/gradle-plugin missing!"
+          ls "$RN_PLUGIN"/build.gradle* 2>/dev/null | grep -q "build.gradle" || {
+            echo "❌ @react-native/gradle-plugin missing at $RN_PLUGIN"
             exit 1
           }
-          echo "✅ @react-native/gradle-plugin found: $(ls node_modules/@react-native/gradle-plugin/build.gradle*)"
+          echo "✅ @react-native/gradle-plugin found"
 
-          echo "Workspace root: $(pwd)"
+          echo "Checking expo-gradle-plugin..."
+          ls "$EXPO_PLUGIN"/build.gradle* 2>/dev/null | grep -q "build.gradle" || {
+            echo "❌ expo-gradle-plugin missing at $EXPO_PLUGIN"
+            exit 1
+          }
+          echo "✅ expo-gradle-plugin found"
 
       # ============================================
       # STEP 6: Setup Oboe 1.9.0
@@ -86,15 +93,13 @@ jobs:
           npx patch-package
           echo "Verifying patches applied..."
 
-          # Verifikasi Babel Plugin untuk Reanimated v4
           if grep -q "react-native-reanimated/plugin" babel.config.cjs; then
             echo "✅ Babel plugin found for Reanimated v4"
           else
-            echo "❌ Babel plugin missing - this will break Reanimated v4!"
+            echo "❌ Babel plugin missing!"
             exit 1
           fi
 
-          # Verifikasi AudioPlayer.kt
           if grep -q "OboeAudioProcessor" \
             node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/AudioPlayer.kt; then
             echo "✅ AudioPlayer.kt patched"
@@ -103,7 +108,6 @@ jobs:
             exit 1
           fi
 
-          # Auto-patch APMRenderersFactory.kt jika masih pakai 4-parameter buildAudioSink
           APMF="node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/components/APMRenderersFactory.kt"
           if [ -f "$APMF" ]; then
             if grep -q "buildAudioSink" "$APMF"; then
@@ -155,7 +159,32 @@ jobs:
           echo "$ANDROID_HOME/cmake/3.31.6/bin" >> $GITHUB_PATH
 
       # ============================================
-      # STEP 12: Build Debug APK
+      # STEP 12: Inject Gradle Init Script
+      # Runs BEFORE settings.gradle is parsed —
+      # the only reliable way to inject includeBuild
+      # for plugin resolution in Gradle 8.x
+      # ============================================
+      - name: Inject Gradle init script
+        env:
+          GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
+        run: |
+          mkdir -p $GRADLE_USER_HOME/init.d
+
+          RN_PLUGIN="${{ github.workspace }}/node_modules/@react-native/gradle-plugin"
+          EXPO_PLUGIN="${{ github.workspace }}/node_modules/expo/node_modules/expo-modules-autolinking/android/expo-gradle-plugin"
+
+          cat > $GRADLE_USER_HOME/init.d/rn-plugins.gradle << EOF
+          beforeSettings {
+            it.pluginManagement.includeBuild("${RN_PLUGIN}")
+            it.pluginManagement.includeBuild("${EXPO_PLUGIN}")
+          }
+          EOF
+
+          echo "✅ Init script created:"
+          cat $GRADLE_USER_HOME/init.d/rn-plugins.gradle
+
+      # ============================================
+      # STEP 13: Build Debug APK
       # ============================================
       - name: Build Debug APK
         working-directory: android
@@ -183,7 +212,7 @@ jobs:
             -Dorg.gradle.jvmargs="-Xmx4g -XX:+HeapDumpOnOutOfMemoryError"
 
       # ============================================
-      # STEP 13: Verify APK — New Arch Artifacts
+      # STEP 14: Verify APK — New Arch Artifacts
       # ============================================
       - name: Verify APK ABI contents
         run: |
@@ -202,7 +231,7 @@ jobs:
           fi
 
       # ============================================
-      # STEP 14: Upload Debug APK
+      # STEP 15: Upload Debug APK
       # ============================================
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -212,7 +241,7 @@ jobs:
           retention-days: 7
 
       # ============================================
-      # STEP 15: Upload AndroidManifest.xml
+      # STEP 16: Upload AndroidManifest.xml
       # ============================================
       - name: Upload AndroidManifest.xml
         uses: actions/upload-artifact@v4
