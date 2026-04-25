@@ -8,4 +8,4 @@ export interface Spec extends TurboModule {
   setVolume(volume: number): void;
 }
 
-export default TurboModuleRegistry.getEnforced<Spec>('PristineAudio');
+export default TurboModuleRegistry.getEnforcing<Spec>('PristineAudio'); 
