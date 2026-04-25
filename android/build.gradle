@@ -1,10 +1,10 @@
 buildscript {
     ext {
         // Konsisten dengan gradle.properties dan workflow
-        buildToolsVersion = findProperty('android.buildToolsVersion') ?: "35.0.0"
+        buildToolsVersion = findProperty('android.buildToolsVersion') ?: "36.0.0"
         minSdkVersion = findProperty('android.minSdkVersion')?.toInteger() ?: 24
-        compileSdkVersion = findProperty('android.compileSdkVersion')?.toInteger() ?: 35
-        targetSdkVersion = findProperty('android.targetSdkVersion')?.toInteger() ?: 35
+        compileSdkVersion = findProperty('android.compileSdkVersion')?.toInteger() ?: 36
+        targetSdkVersion = findProperty('android.targetSdkVersion')?.toInteger() ?: 36
         ndkVersion = findProperty('android.ndkVersion') ?: "27.1.12297006"
         kotlinVersion = findProperty('android.kotlinVersion') ?: "2.0.21"
     }
