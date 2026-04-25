@@ -94,7 +94,9 @@
     "oxlint": "^1.56.0",
     "patch-package": "^8.0.1",
     "prettier": "^3.8.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "@react-native/gradle-plugin": "^0.81.0",
+    "expo-modules-autolinking": "1.11.1"
   },
   "expo": {
     "doctor": {
