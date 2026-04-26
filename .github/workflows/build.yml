@@ -45,9 +45,6 @@ jobs:
       - name: Apply PristineAudio patches
         run: bash scripts/patch-pristine.sh
         
-      - name: Rebuild Skia
-        run: yarn rebuild @shopify/react-native-skia
-  
       # STEP 6: Verify Gradle Plugins
       - name: Verify Gradle plugin paths
         run: |
