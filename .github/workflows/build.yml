@@ -46,8 +46,7 @@ jobs:
       - name: Verify Gradle plugin paths
         run: |
           RN_PLUGIN="${{ github.workspace }}/node_modules/@react-native/gradle-plugin"
-          EXPO_PLUGIN="${{ github.workspace }}/node_modules/expo/android/expo-gradle-plugin"
-
+          EXPO_PLUGIN="${{ github.workspace }}/node_modules/expo-modules-core/expo-gradle-plugin"
           echo "Checking @react-native/gradle-plugin..."
           ls "$RN_PLUGIN"/build.gradle* 2>/dev/null | grep -q "build.gradle" || {
             echo "❌ @react-native/gradle-plugin missing at $RN_PLUGIN"
