@@ -5,7 +5,7 @@ apply plugin: "com.facebook.react"
 // =============================================
 // GLOBAL FLAGS
 // =============================================
-def hermesEnabled = true
+
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 
 // =============================================
@@ -30,7 +30,7 @@ react {
 // =============================================
 // ANDROID CONFIG
 // =============================================
-def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
+
 def enableMinifyInReleaseBuilds = (findProperty('android.enableMinifyInReleaseBuilds') ?: false).toBoolean()
 
 android {
@@ -127,13 +127,6 @@ dependencies {
     implementation "androidx.media3:media3-common:$media3Version"
     implementation "androidx.media3:media3-exoplayer:$media3Version"
     implementation "androidx.media3:media3-decoder:$media3Version"
-
-    // Hermes OFF → use JSC
-    if (hermesEnabled) {
-        implementation("com.facebook.react:hermes-android")
-    } else {
-        implementation jscFlavor
-    }
 
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true"
     if (isGifEnabled) {
