@@ -28,46 +28,34 @@ jobs:
       # STEP 2: Checkout Code
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          submodules: false
 
-      # STEP 3: Setup Node.js
+      # STEP 3: Setup Node.js + Yarn
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20.x"
           cache: "yarn"
 
-      # STEP 4: Install Dependencies
+      # STEP 4: Install Dependencies (Hermes OFF → no strict mode)
       - name: Install dependencies
         run: yarn install
 
-      # STEP 5: Locate and Verify Gradle plugin paths
-      - name: Locate expo-gradle-plugin
-        run: |
-         echo "🔍 Searching for expo-gradle-plugin..."
-         find ${{ github.workspace }}/node_modules -type d -name "expo-gradle-plugin" | tee plugin-paths.txt
-         echo "✅ Found paths:"
-         cat plugin-paths.txt
-
+      # STEP 5: Verify Gradle Plugins
       - name: Verify Gradle plugin paths
         run: |
-         RN_PLUGIN="${{ github.workspace }}/node_modules/@react-native/gradle-plugin"
-         EXPO_PLUGIN=$(head -1 plugin-paths.txt)   # ambil path pertama hasil find
+          echo "🔍 Searching for expo-gradle-plugin..."
+          find node_modules -type d -name "expo-gradle-plugin" | tee plugin-paths.txt
 
-         echo "Checking @react-native/gradle-plugin..."
-         ls "$RN_PLUGIN"/build.gradle* 2>/dev/null | grep -q "build.gradle" || {
-         echo "❌ @react-native/gradle-plugin missing at $RN_PLUGIN"
-         exit 1
-         }
-         echo "✅ @react-native/gradle-plugin found"
+          RN_PLUGIN="node_modules/@react-native/gradle-plugin"
+          EXPO_PLUGIN=$(head -1 plugin-paths.txt)
 
-         echo "Checking expo-gradle-plugin at $EXPO_PLUGIN..."
-         ls "$EXPO_PLUGIN"/build.gradle* 2>/dev/null | grep -q "build.gradle" || {
-         echo "❌ expo-gradle-plugin missing at $EXPO_PLUGIN"
-         exit 1
-         }
-         echo "✅ expo-gradle-plugin found"
+          echo "Checking @react-native/gradle-plugin..."
+          test -f "$RN_PLUGIN/build.gradle.kts" || { echo "❌ Missing RN gradle plugin"; exit 1; }
+          echo "✅ RN gradle plugin OK"
+
+          echo "Checking expo-gradle-plugin..."
+          test -f "$EXPO_PLUGIN/build.gradle.kts" || { echo "❌ Missing Expo gradle plugin"; exit 1; }
+          echo "✅ Expo gradle plugin OK"
 
       # STEP 6: Setup Oboe 1.9.0
       - name: Setup Oboe 1.9.0
@@ -77,73 +65,36 @@ jobs:
           curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz -o oboe.tar.gz
           tar -xzf oboe.tar.gz --strip-components=1 -C "$OBOE_DIR"
           rm oboe.tar.gz
-          echo "✅ Oboe files: $(ls $OBOE_DIR | wc -l)"
-          head -3 "$OBOE_DIR/CMakeLists.txt"
+          echo "✅ Oboe installed"
 
-      # ============================================
-      # STEP 7: Apply Manual Injection (Bypass Patch-Package)
-      # ============================================
-      - name: Inject Custom RNTP (Oboe Integration)
+      # STEP 7: Inject Custom RNTP (Oboe Integration)
+      - name: Inject Custom RNTP
         run: |
-          echo "🛠️ Starting manual injection of Pristine Audio components..."
-          
-          # Define Paths
+          echo "🛠️ Injecting custom RNTP..."
           RNTP_PATH="node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player"
-          SOURCE_DIR="scripts/custom-rntp"
+          SRC="scripts/custom-rntp"
 
-          # 1. Inject AudioPlayer.kt (JNI Bridge)
-          if [ -f "$SOURCE_DIR/AudioPlayer.kt" ]; then
-            cp "$SOURCE_DIR/AudioPlayer.kt" "$RNTP_PATH/AudioPlayer.kt"
-            echo "✅ AudioPlayer.kt injected"
-          else
-            echo "❌ Error: scripts/custom-rntp/AudioPlayer.kt not found!"
-            exit 1
-          fi
+          cp "$SRC/AudioPlayer.kt" "$RNTP_PATH/AudioPlayer.kt"
+          cp "$SRC/APMRenderersFactory.kt" "$RNTP_PATH/components/APMRenderersFactory.kt"
 
-          # 2. Inject APMRenderersFactory.kt (Media3 1.6.1 Fix)
-          if [ -f "$SOURCE_DIR/APMRenderersFactory.kt" ]; then
-            cp "$SOURCE_DIR/APMRenderersFactory.kt" "$RNTP_PATH/components/APMRenderersFactory.kt"
-            echo "✅ APMRenderersFactory.kt injected"
-          else
-            echo "❌ Error: scripts/custom-rntp/APMRenderersFactory.kt not found!"
-            exit 1
-          fi
+          grep -q "nativeInitEngine" "$RNTP_PATH/AudioPlayer.kt" || exit 1
+          grep -q "enableAudioOffload" "$RNTP_PATH/components/APMRenderersFactory.kt" && exit 1
 
-          # 3. Final Verification
-          echo "🔍 Verifying Oboe JNI hooks..."
-          if grep -q "nativeInitEngine" "$RNTP_PATH/AudioPlayer.kt"; then
-            echo "✅ Verification Success: JNI native hooks detected."
-          else
-            echo "❌ Verification Failed: native hooks missing in injected file!"
-            exit 1
-          fi
+          echo "✅ RNTP injection OK"
 
-          # 4. Check for incompatible code in factory
-          if grep -q "enableAudioOffload" "$RNTP_PATH/components/APMRenderersFactory.kt"; then
-            echo "❌ Verification Failed: APMRenderersFactory still contains 'enableAudioOffload'!"
-            exit 1
-          else
-            echo "✅ Verification Success: Incompatible Media3 code removed."
-          fi
-
-      # STEP 8: Patch @react-native/gradle-plugin settings
-      - name: Patch @react-native/gradle-plugin settings
+      # STEP 8: Patch RN Gradle Plugin
+      - name: Patch @react-native/gradle-plugin
         run: |
-          RN_SETTINGS="${{ github.workspace }}/node_modules/@react-native/gradle-plugin/settings.gradle.kts"
-          sed -i '/foojay-resolver-convention/d' "$RN_SETTINGS"
-          echo "✅ Patched settings.gradle.kts:"
-          cat "$RN_SETTINGS"
+          sed -i '/foojay-resolver-convention/d' node_modules/@react-native/gradle-plugin/settings.gradle.kts
+          echo "✅ Patched RN gradle plugin"
 
-      # STEP 9: Verify AndroidManifest.xml
-      - name: Verify usesCleartextTraffic in AndroidManifest.xml
+      # STEP 9: Ensure usesCleartextTraffic
+      - name: Ensure usesCleartextTraffic
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
-          if grep -q 'usesCleartextTraffic' "$MANIFEST"; then
-            echo "✅ usesCleartextTraffic already present"
-          else
+          grep -q 'usesCleartextTraffic' "$MANIFEST" || \
             sed -i 's/<application/<application android:usesCleartextTraffic="true"/' "$MANIFEST"
-            echo "✅ usesCleartextTraffic added"
-          fi
+          echo "✅ CleartextTraffic OK"
 
       # STEP 10: Setup JDK 17
       - name: Setup JDK 17
@@ -157,91 +108,61 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # STEP 12: Install NDK 27 and CMake 3.31.6
-      - name: Install NDK 27 and CMake 3.31.6
+      # STEP 12: Install NDK + CMake
+      - name: Install NDK 27 + CMake 3.31.6
         run: |
           echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
             "ndk;27.1.12297006" \
             "cmake;3.31.6"
           echo "$ANDROID_HOME/cmake/3.31.6/bin" >> $GITHUB_PATH
 
-      # STEP 13: Inject Gradle init script
+      # STEP 13: Inject Gradle Init Script
       - name: Inject Gradle init script
         env:
           GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
         run: |
           mkdir -p $GRADLE_USER_HOME/init.d
-
-          RN_PLUGIN="${{ github.workspace }}/node_modules/@react-native/gradle-plugin"
-          EXPO_PLUGIN="${{ github.workspace }}/node_modules/expo-modules-autolinking/android/expo-gradle-plugin"
+          RN_PLUGIN="node_modules/@react-native/gradle-plugin"
+          EXPO_PLUGIN="node_modules/expo-modules-autolinking/android/expo-gradle-plugin"
 
           cat > $GRADLE_USER_HOME/init.d/rn-plugins.gradle << EOF
           beforeSettings { settings ->
-              settings.pluginManagement {
-                  repositories {
-                      google()
-                      mavenCentral()
-                      gradlePluginPortal()
-                  }
-                  includeBuild("${RN_PLUGIN}")
-                  includeBuild("${EXPO_PLUGIN}")
+            settings.pluginManagement {
+              repositories {
+                google()
+                mavenCentral()
+                gradlePluginPortal()
               }
+              includeBuild("${RN_PLUGIN}")
+              includeBuild("${EXPO_PLUGIN}")
+            }
           }
           EOF
 
-          echo "✅ Init script:"
-          cat $GRADLE_USER_HOME/init.d/rn-plugins.gradle
+          echo "✅ Init script OK"
 
-      # ============================================
       # STEP 14: Generate Codegen Artifacts
-      # ============================================
       - name: Generate Codegen Artifacts
         working-directory: android
         env:
           GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
         run: |
           chmod +x gradlew
-          echo "🔧 Generating Codegen bindings for TurboModule..."
-          
-          # Generate Codegen artifacts
           ./gradlew generateCodegenArtifactsFromSchema \
             --no-daemon \
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
-            -PkotlinVersion=2.0.21 || {
-            echo "⚠️ Codegen generation failed or not needed"
-          }
-          
-          # Debug: Cari semua file Codegen
-          echo "🔍 Searching for Codegen output..."
-          find . -type f \( -name "*.h" -o -name "*.cpp" \) -path "*codegen*" 2>/dev/null | sort | head -30 || true
-          
-          # Cari PristineAudioSpec khususnya
-          echo "🔍 Searching for PristineAudioSpec..."
-          find . -name "*PristineAudio*" 2>/dev/null | head -20 || true
-          
-          # Cek direktori build/generated
-          echo "📁 Listing build/generated..."
-          ls -la app/build/generated/source/codegen/ 2>/dev/null || echo "⚠️ Codegen directory not found (may be expected)"
+            -PkotlinVersion=2.0.21 || true
 
-      # ============================================
       # STEP 15: Build Debug APK
-      # ============================================
       - name: Build Debug APK
         working-directory: android
         env:
           NODE_ENV: development
           GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
         run: |
           chmod +x gradlew
-
-          echo "🔥 Deep Cleaning Native Cache..."
           rm -rf app/.cxx build app/build
-          rm -rf $GRADLE_USER_HOME/caches/build-cache-*
-
-          echo "🚀 Starting Full Clean Build..."
           ./gradlew clean assembleDebug \
             --no-daemon \
             --no-build-cache \
@@ -249,17 +170,9 @@ jobs:
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
             -PkotlinVersion=2.0.21 \
-            -PforceBundle=true \
-            -Dorg.gradle.jvmargs="-Xmx4g -XX:+HeapDumpOnOutOfMemoryError" || {
-            echo "❌ Build failed, checking for partial outputs..."
-            find app/build -name "*.apk" 2>/dev/null || true
-            exit 1
-          }
+            -PforceBundle=true
 
-
-      # ============================================
       # STEP 16: Upload Debug APK
-      # ============================================
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
@@ -267,13 +180,10 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 7
 
-      # ============================================
       # STEP 17: Upload AndroidManifest.xml
-      # ============================================
       - name: Upload AndroidManifest.xml
         uses: actions/upload-artifact@v4
         with:
           name: AndroidManifest-Debug
           path: android/app/src/main/AndroidManifest.xml
-          retention-days: 7
-   
+          retention-days: 7 

@@ -2,12 +2,22 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
+// =============================================
+// GLOBAL FLAGS
+// =============================================
+def hermesEnabled = false
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 
+// =============================================
+// REACT CONFIG
+// =============================================
 react {
     entryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry')", projectRoot, "android", "absolute"].execute(null, rootDir).text.trim())
     reactNativeDir = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
-    hermesCommand = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsolutePath() + "/sdks/hermesc/%OS-BIN%/hermesc"
+
+    // Disable Hermes compiler entirely
+    hermesCommand = null
+
     codegenDir = new File(["node", "--print", "require.resolve('@react-native/codegen/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
 
     enableBundleCompression = (findProperty('android.enableBundleCompression') ?: false).toBoolean()
@@ -17,20 +27,23 @@ react {
     autolinkLibrariesWithApp()
 }
 
-def enableMinifyInReleaseBuilds = (findProperty('android.enableMinifyInReleaseBuilds') ?: false).toBoolean()
+// =============================================
+// ANDROID CONFIG
+// =============================================
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
+def enableMinifyInReleaseBuilds = (findProperty('android.enableMinifyInReleaseBuilds') ?: false).toBoolean()
 
 android {
+    namespace 'com.pristineaudio.app'
+
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
-    
+
     buildFeatures {
         prefab true
     }
-    
-    namespace 'com.pristineaudio.app'
-    
+
     defaultConfig {
         applicationId 'com.pristineaudio.app'
         minSdkVersion rootProject.ext.minSdkVersion
@@ -39,13 +52,11 @@ android {
         versionName "1.0.37"
 
         buildConfigField "Boolean", "IS_NEW_ARCHITECTURE_ENABLED", "true"
-        buildConfigField "Boolean", "IS_HERMES_ENABLED", "true"
+        buildConfigField "Boolean", "IS_HERMES_ENABLED", "false"
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
 
-        // --- KONFIGURASI NATIVE ENGINE (C++) ---
         externalNativeBuild {
             cmake {
-                // Tambahan -O3 untuk optimasi performa DSP Audio
                 cppFlags "-std=c++17 -Wall -O3"
                 arguments "-DANDROID_STL=c++_shared",
                           "-DANDROID_TOOLCHAIN=clang"
@@ -59,7 +70,7 @@ android {
             version "3.22.1"
         }
     }
-    
+
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
@@ -68,7 +79,7 @@ android {
             keyPassword 'android'
         }
     }
-    
+
     lint {
         checkReleaseBuilds false
         abortOnError false
@@ -80,30 +91,25 @@ android {
         }
         release {
             signingConfig signingConfigs.debug
-            def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
-            shrinkResources enableShrinkResources.toBoolean()
+            shrinkResources false
             minifyEnabled enableMinifyInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
     }
-    
-    // --- PENANGANAN KONFLIK NEW ARCHITECTURE & C++ ---
+
     packagingOptions {
         jniLibs {
             useLegacyPackaging false
-            
+
             pickFirst '**/libc++_shared.so'
             pickFirst '**/libfbjni.so'
             pickFirst '**/libjsi.so'
             pickFirst '**/libreactnative.so'
-            pickFirst '**/libhermes.so'
-            pickFirst '**/libhermesexecutor.so'
             pickFirst '**/libreact_featureflagsjni.so'
             pickFirst '**/libturbomodulejsijni.so'
             pickFirst '**/libreact_newarchdefaults.so'
-            
-            // Baris 'merge' untuk .so DIHAPUS agar tidak merusak binary JSI
         }
+
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "**/libjscexecutor.so"
@@ -111,6 +117,9 @@ android {
     }
 }
 
+// =============================================
+// DEPENDENCIES
+// =============================================
 dependencies {
     implementation("com.facebook.react:react-android")
 
@@ -119,7 +128,8 @@ dependencies {
     implementation "androidx.media3:media3-exoplayer:$media3Version"
     implementation "androidx.media3:media3-decoder:$media3Version"
 
-    if (hermesEnabled.toBoolean()) {
+    // Hermes OFF → use JSC
+    if (hermesEnabled) {
         implementation("com.facebook.react:hermes-android")
     } else {
         implementation jscFlavor
@@ -131,6 +141,9 @@ dependencies {
     }
 }
 
+// =============================================
+// PACKAGING OPTIONS EXTENSION
+// =============================================
 ["pickFirsts", "excludes", "merges", "doNotStrip"].each { prop ->
     def options = (findProperty("android.packagingOptions.$prop") ?: "").split(",")
     options = options.collect { it.trim() }.findAll { it }
@@ -138,4 +151,3 @@ dependencies {
         options.each { android.packagingOptions[prop] += it }
     }
 }
- 
