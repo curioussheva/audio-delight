@@ -9714,13 +9714,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"postinstall-postinstall@npm:^2.1.0":
-  version: 2.1.0
-  resolution: "postinstall-postinstall@npm:2.1.0"
-  checksum: 10c0/70488447292c712afa7806126824d6fe93362392cbe261ae60166d9119a350713e0dbf4deb2ca91637c1037bc030ed1de78d61d9041bf2504513070f1caacdfd
-  languageName: node
-  linkType: hard
-
 "prelude-ls@npm:^1.2.1":
   version: 1.2.1
   resolution: "prelude-ls@npm:1.2.1"
@@ -9815,7 +9808,6 @@ __metadata:
     moti: "npm:^0.30.0"
     oxlint: "npm:^1.56.0"
     patch-package: "npm:^8.0.1"
-    postinstall-postinstall: "npm:^2.1.0"
     prettier: "npm:^3.8.1"
     react: "npm:19.2.0"
     react-dom: "npm:19.2.0"

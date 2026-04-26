@@ -62,7 +62,6 @@
     "expo-task-manager": "~55.0.15",
     "lucide-react-native": "^1.7.0",
     "moti": "^0.30.0",
-    "postinstall-postinstall": "^2.1.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-native": "0.83.6",
