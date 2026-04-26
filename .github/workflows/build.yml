@@ -40,7 +40,7 @@ jobs:
 
       # STEP 4: Install Dependencies
       - name: Install dependencies
-        run: yarn install --frozen-lockfile --ignore-engines
+        run: yarn install
 
       # STEP 5: Locate and Verify Gradle plugin paths
       - name: Locate expo-gradle-plugin
