@@ -72,7 +72,7 @@ jobs:
         run: |
           echo "🛠️ Injecting custom RNTP..."
           RNTP_PATH="node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player"
-          SRC="scripts/custom-rntp"
+          SRC="scripts/patch-pristine.sh"
 
           cp "$SRC/AudioPlayer.kt" "$RNTP_PATH/AudioPlayer.kt"
           cp "$SRC/APMRenderersFactory.kt" "$RNTP_PATH/components/APMRenderersFactory.kt"
