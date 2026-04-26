@@ -22,7 +22,7 @@
     "lint:check": "oxlint src",
     "format": "prettier --write \"src/**/*.{ts,tsx}\"",
     "prepare": "husky install",
-    "postinstall": "bash scripts/fix-rntp.sh && yarn download-oboe",
+    "patch": "bash scripts/patch-pristine.sh",
     "download-oboe": "mkdir -p android/app/src/main/cpp/oboe && curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz -o oboe.tar.gz && tar -xzf oboe.tar.gz --strip-components=1 -C android/app/src/main/cpp/oboe && rm oboe.tar.gz"
   },
   "dependencies": {
