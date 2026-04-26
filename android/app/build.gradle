@@ -5,7 +5,7 @@ apply plugin: "com.facebook.react"
 // =============================================
 // GLOBAL FLAGS
 // =============================================
-def hermesEnabled = false
+def hermesEnabled = true
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 
 // =============================================
@@ -16,7 +16,7 @@ react {
     reactNativeDir = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
 
     // Disable Hermes compiler entirely
-    hermesCommand = null
+  //  hermesCommand = null
 
     codegenDir = new File(["node", "--print", "require.resolve('@react-native/codegen/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
 
@@ -52,7 +52,7 @@ android {
         versionName "1.0.37"
 
         buildConfigField "Boolean", "IS_NEW_ARCHITECTURE_ENABLED", "true"
-        buildConfigField "Boolean", "IS_HERMES_ENABLED", "false"
+        buildConfigField "Boolean", "IS_HERMES_ENABLED", "true"
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
 
         externalNativeBuild {
