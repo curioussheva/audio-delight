@@ -73,3 +73,12 @@ __tests__/
 !tsconfig.json
 !metro.config.js
 !babel.config.js
+
+
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions

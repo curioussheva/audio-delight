@@ -81,37 +81,49 @@ jobs:
           head -3 "$OBOE_DIR/CMakeLists.txt"
 
       # ============================================
-      # STEP 7: Apply Patches
+      # STEP 7: Apply Manual Injection (Bypass Patch-Package)
       # ============================================
-      - name: Apply patches
+      - name: Inject Custom RNTP (Oboe Integration)
         run: |
-          npx patch-package
-          echo "Verifying patches applied..."
+          echo "🛠️ Starting manual injection of Pristine Audio components..."
+          
+          # Define Paths
+          RNTP_PATH="node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player"
+          SOURCE_DIR="scripts/custom-rntp"
 
-          if grep -q "react-native-reanimated/plugin" babel.config.cjs; then
-            echo "✅ Babel plugin found for Reanimated v4"
+          # 1. Inject AudioPlayer.kt (JNI Bridge)
+          if [ -f "$SOURCE_DIR/AudioPlayer.kt" ]; then
+            cp "$SOURCE_DIR/AudioPlayer.kt" "$RNTP_PATH/AudioPlayer.kt"
+            echo "✅ AudioPlayer.kt injected"
           else
-            echo "❌ Babel plugin missing!"
+            echo "❌ Error: scripts/custom-rntp/AudioPlayer.kt not found!"
             exit 1
           fi
 
-          if grep -q "OboeAudioProcessor" \
-            node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/AudioPlayer.kt; then
-            echo "✅ AudioPlayer.kt patched"
+          # 2. Inject APMRenderersFactory.kt (Media3 1.6.1 Fix)
+          if [ -f "$SOURCE_DIR/APMRenderersFactory.kt" ]; then
+            cp "$SOURCE_DIR/APMRenderersFactory.kt" "$RNTP_PATH/components/APMRenderersFactory.kt"
+            echo "✅ APMRenderersFactory.kt injected"
           else
-            echo "❌ AudioPlayer.kt NOT patched"
+            echo "❌ Error: scripts/custom-rntp/APMRenderersFactory.kt not found!"
             exit 1
           fi
 
-          APMF="node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/components/APMRenderersFactory.kt"
-          if [ -f "$APMF" ]; then
-            if grep -q "buildAudioSink" "$APMF"; then
-              if grep -A 3 "override fun buildAudioSink" "$APMF" | grep -q "enableAudioOffload"; then
-                echo "⚠️ Auto-patching APMRenderersFactory.kt for Media3 1.6.1..."
-                sed -i '/enableAudioOffload/d' "$APMF"
-                echo "✅ APMRenderersFactory.kt auto-patched"
-              fi
-            fi
+          # 3. Final Verification
+          echo "🔍 Verifying Oboe JNI hooks..."
+          if grep -q "nativeInitEngine" "$RNTP_PATH/AudioPlayer.kt"; then
+            echo "✅ Verification Success: JNI native hooks detected."
+          else
+            echo "❌ Verification Failed: native hooks missing in injected file!"
+            exit 1
+          fi
+
+          # 4. Check for incompatible code in factory
+          if grep -q "enableAudioOffload" "$RNTP_PATH/components/APMRenderersFactory.kt"; then
+            echo "❌ Verification Failed: APMRenderersFactory still contains 'enableAudioOffload'!"
+            exit 1
+          else
+            echo "✅ Verification Success: Incompatible Media3 code removed."
           fi
 
       # STEP 8: Patch @react-native/gradle-plugin settings

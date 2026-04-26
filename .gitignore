@@ -108,3 +108,11 @@ __tests__/
 # @generated expo-cli sync
 expo-env.d.ts
 # @end expo-cli
+
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions

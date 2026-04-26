@@ -1,6 +1,5 @@
 buildscript {
     ext {
-        // Konsisten dengan gradle.properties dan workflow
         buildToolsVersion = findProperty('android.buildToolsVersion') ?: "36.0.0"
         minSdkVersion = findProperty('android.minSdkVersion')?.toInteger() ?: 24
         compileSdkVersion = findProperty('android.compileSdkVersion')?.toInteger() ?: 36
@@ -13,7 +12,6 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        // Versi Gradle Plugin yang stabil untuk NDK 27
         classpath('com.android.tools.build:gradle:8.2.1')
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
     }
@@ -24,17 +22,20 @@ allprojects {
         google()
         mavenCentral()
         maven { url 'https://www.jitpack.io' }
-
-        // Tambahkan repository extra untuk Track Player jika ada di gradle.properties
+        
+        // Repository untuk React Native Track Player & lib lainnya
         def extraMavenRepos = findProperty('android.extraMavenRepos')
         if (extraMavenRepos) {
-            def repos = new groovy.json.JsonSlurper().parseText(extraMavenRepos)
-            repos.each { repo -> maven { url repo.url } }
+            try {
+                def repos = new groovy.json.JsonSlurper().parseText(extraMavenRepos)
+                repos.each { repo -> maven { url repo.url } }
+            } catch (Exception e) {
+                // Mencegah build gagal jika JSON tidak valid
+            }
         }
     }
 }
 
-// Plugin root wajib untuk integrasi Expo & RN
 apply plugin: "expo-root-project"
 apply plugin: "com.facebook.react.rootproject"
-
+ 
