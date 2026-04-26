@@ -10,9 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ============================================
       # STEP 1: Free Disk Space
-      # ============================================
       - name: Free Disk Space
         run: |
           echo "Disk before cleanup:"
@@ -27,36 +25,28 @@ jobs:
           echo "Disk after cleanup:"
           df -h
 
-      # ============================================
       # STEP 2: Checkout Code
-      # ============================================
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: false
 
-      # ============================================
       # STEP 3: Setup Node.js
-      # ============================================
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20.x"
           cache: "yarn"
 
-      # ============================================
       # STEP 4: Install Dependencies
-      # ============================================
       - name: Install dependencies
         run: yarn install --frozen-lockfile --ignore-engines
 
-      # ============================================
-      # STEP 5: Verify Gradle Plugin Paths
-      # ============================================
+      # STEP 5: Verify Gradle plugin paths
       - name: Verify Gradle plugin paths
         run: |
           RN_PLUGIN="${{ github.workspace }}/node_modules/@react-native/gradle-plugin"
-          EXPO_PLUGIN="${{ github.workspace }}/node_modules/expo/node_modules/expo-modules-autolinking/android/expo-gradle-plugin"
+          EXPO_PLUGIN="${{ github.workspace }}/node_modules/expo-modules-core/android/expo-gradle-plugin"
 
           echo "Checking @react-native/gradle-plugin..."
           ls "$RN_PLUGIN"/build.gradle* 2>/dev/null | grep -q "build.gradle" || {
@@ -72,9 +62,7 @@ jobs:
           }
           echo "✅ expo-gradle-plugin found"
 
-      # ============================================
       # STEP 6: Setup Oboe 1.9.0
-      # ============================================
       - name: Setup Oboe 1.9.0
         run: |
           OBOE_DIR="android/app/src/main/cpp/oboe"
@@ -119,12 +107,7 @@ jobs:
             fi
           fi
 
-      # ============================================
-      # STEP 8: Patch @react-native/gradle-plugin
-      # Removes foojay toolchain plugin from RN's
-      # settings.gradle.kts — causes circular
-      # dependency when loaded as includeBuild
-      # ============================================
+      # STEP 8: Patch @react-native/gradle-plugin settings
       - name: Patch @react-native/gradle-plugin settings
         run: |
           RN_SETTINGS="${{ github.workspace }}/node_modules/@react-native/gradle-plugin/settings.gradle.kts"
@@ -132,9 +115,7 @@ jobs:
           echo "✅ Patched settings.gradle.kts:"
           cat "$RN_SETTINGS"
 
-      # ============================================
       # STEP 9: Verify AndroidManifest.xml
-      # ============================================
       - name: Verify usesCleartextTraffic in AndroidManifest.xml
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
@@ -145,9 +126,7 @@ jobs:
             echo "✅ usesCleartextTraffic added"
           fi
 
-      # ============================================
       # STEP 10: Setup JDK 17
-      # ============================================
       - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
@@ -155,15 +134,11 @@ jobs:
           distribution: "temurin"
           cache: "gradle"
 
-      # ============================================
       # STEP 11: Setup Android SDK
-      # ============================================
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # ============================================
       # STEP 12: Install NDK 27 and CMake 3.31.6
-      # ============================================
       - name: Install NDK 27 and CMake 3.31.6
         run: |
           echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
@@ -171,12 +146,7 @@ jobs:
             "cmake;3.31.6"
           echo "$ANDROID_HOME/cmake/3.31.6/bin" >> $GITHUB_PATH
 
-      # ============================================
-      # STEP 13: Inject Gradle Init Script
-      # Runs BEFORE settings.gradle is parsed —
-      # the only reliable way to inject includeBuild
-      # for plugin resolution in Gradle 8.x
-      # ============================================
+      # STEP 13: Inject Gradle init script
       - name: Inject Gradle init script
         env:
           GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
@@ -184,7 +154,7 @@ jobs:
           mkdir -p $GRADLE_USER_HOME/init.d
 
           RN_PLUGIN="${{ github.workspace }}/node_modules/@react-native/gradle-plugin"
-          EXPO_PLUGIN="${{ github.workspace }}/node_modules/expo/node_modules/expo-modules-autolinking/android/expo-gradle-plugin"
+          EXPO_PLUGIN="${{ github.workspace }}/node_modules/expo-modules-core/android/expo-gradle-plugin"
 
           cat > $GRADLE_USER_HOME/init.d/rn-plugins.gradle << EOF
           beforeSettings { settings ->
@@ -287,4 +257,4 @@ jobs:
           name: AndroidManifest-Debug
           path: android/app/src/main/AndroidManifest.xml
           retention-days: 7
- 
+  
