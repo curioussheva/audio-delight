@@ -117,29 +117,28 @@ jobs:
           echo "$ANDROID_HOME/cmake/3.31.6/bin" >> $GITHUB_PATH
 
       # STEP 13: Inject Gradle Init Script
-      - name: Inject Gradle init script
-        env:
-          GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
-        run: |
-          mkdir -p $GRADLE_USER_HOME/init.d
-          RN_PLUGIN="node_modules/@react-native/gradle-plugin"
-          EXPO_PLUGIN="node_modules/expo-modules-autolinking/android/expo-gradle-plugin"
+     - name: Inject Gradle init script
+       env:
+         GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
+       run: |
+        mkdir -p $GRADLE_USER_HOME/init.d
 
-          cat > $GRADLE_USER_HOME/init.d/rn-plugins.gradle << EOF
-          beforeSettings { settings ->
-            settings.pluginManagement {
-              repositories {
+        RN_PLUGIN="${{ github.workspace }}/node_modules/@react-native/gradle-plugin"
+        EXPO_PLUGIN="${{ github.workspace }}/node_modules/expo-modules-autolinking/android/expo-gradle-plugin"
+
+        cat > $GRADLE_USER_HOME/init.d/rn-plugins.gradle << EOF
+        beforeSettings { settings ->
+        settings.pluginManagement {
+            repositories {
                 google()
                 mavenCentral()
                 gradlePluginPortal()
-              }
-              includeBuild("${RN_PLUGIN}")
-              includeBuild("${EXPO_PLUGIN}")
             }
-          }
-          EOF
-
-          echo "✅ Init script OK"
+            includeBuild("${RN_PLUGIN}")
+            includeBuild("${EXPO_PLUGIN}")
+        }
+        }
+        EOF
 
       # STEP 14: Generate Codegen Artifacts
       - name: Generate Codegen Artifacts
