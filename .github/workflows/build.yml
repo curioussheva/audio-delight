@@ -35,10 +35,17 @@ jobs:
         with:
           node-version: "20.x"
 
-      # STEP 4: Skip yarn install (node_modules sudah dipatch di lokal)
-      # Tidak ada step install dependencies
+      # STEP 4: Yarn install (immutable, scripts disabled)
+      - name: Install dependencies
+        run: yarn install --immutable
+        env:
+          YARN_ENABLE_SCRIPTS: false
 
-      # STEP 5: Verify Gradle Plugins
+      # STEP 5: Apply PristineAudio patches (RNTP + Worklets)
+      - name: Apply PristineAudio patches
+        run: bash scripts/patch-pristine.sh
+
+      # STEP 6: Verify Gradle Plugins
       - name: Verify Gradle plugin paths
         run: |
           RN_PLUGIN="node_modules/@react-native/gradle-plugin"
@@ -47,7 +54,7 @@ jobs:
           test -f "$EXPO_PLUGIN/build.gradle.kts" || { echo "❌ Missing Expo gradle plugin"; exit 1; }
           echo "✅ Gradle plugins OK"
 
-      # STEP 6: Setup Oboe 1.9.0
+      # STEP 7: Setup Oboe 1.9.0
       - name: Setup Oboe 1.9.0
         run: |
           OBOE_DIR="android/app/src/main/cpp/oboe"
@@ -57,13 +64,13 @@ jobs:
           rm oboe.tar.gz
           echo "✅ Oboe installed"
 
-      # STEP 7: Patch RN Gradle Plugin
+      # STEP 8: Patch RN Gradle Plugin
       - name: Patch @react-native/gradle-plugin
         run: |
           sed -i '/foojay-resolver-convention/d' node_modules/@react-native/gradle-plugin/settings.gradle.kts
           echo "✅ Patched RN gradle plugin"
 
-      # STEP 8: Ensure usesCleartextTraffic
+      # STEP 9: Ensure usesCleartextTraffic
       - name: Ensure usesCleartextTraffic
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
@@ -71,7 +78,7 @@ jobs:
             sed -i 's/<application/<application android:usesCleartextTraffic="true"/' "$MANIFEST"
           echo "✅ CleartextTraffic OK"
 
-      # STEP 9: Setup JDK 17
+      # STEP 10: Setup JDK 17
       - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
@@ -79,11 +86,11 @@ jobs:
           distribution: "temurin"
           cache: "gradle"
 
-      # STEP 10: Setup Android SDK
+      # STEP 11: Setup Android SDK
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # STEP 11: Install NDK + CMake
+      # STEP 12: Install NDK + CMake
       - name: Install NDK 27 + CMake 3.31.6
         run: |
           echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
@@ -91,7 +98,7 @@ jobs:
             "cmake;3.31.6"
           echo "$ANDROID_HOME/cmake/3.31.6/bin" >> $GITHUB_PATH
 
-      # STEP 12: Inject Gradle Init Script
+      # STEP 13: Inject Gradle Init Script
       - name: Inject Gradle init script
         env:
           GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
@@ -113,7 +120,7 @@ jobs:
           }
           EOF
 
-      # STEP 13: Generate Codegen Artifacts
+      # STEP 14: Generate Codegen Artifacts
       - name: Generate Codegen Artifacts
         working-directory: android
         env:
@@ -126,7 +133,7 @@ jobs:
             -PreactNativeNewArch=true \
             -PkotlinVersion=2.0.21 || true
 
-      # STEP 14: Build Debug APK
+      # STEP 15: Build Debug APK
       - name: Build Debug APK
         working-directory: android
         env:
@@ -144,7 +151,7 @@ jobs:
             -PkotlinVersion=2.0.21 \
             -PforceBundle=true
 
-      # STEP 15: Upload Debug APK
+      # STEP 16: Upload Debug APK
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
@@ -152,11 +159,10 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 7
 
-      # STEP 16: Upload AndroidManifest.xml
+      # STEP 17: Upload AndroidManifest.xml
       - name: Upload AndroidManifest.xml
         uses: actions/upload-artifact@v4
         with:
           name: AndroidManifest-Debug
           path: android/app/src/main/AndroidManifest.xml
-          retention-days: 7
-          
+          retention-days: 7 
