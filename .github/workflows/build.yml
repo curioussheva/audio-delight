@@ -161,7 +161,7 @@ jobs:
           mkdir -p $GRADLE_USER_HOME/init.d
 
           RN_PLUGIN="${{ github.workspace }}/node_modules/@react-native/gradle-plugin"
-          EXPO_PLUGIN="${{ github.workspace }}/node_modules/expo/android/expo-gradle-plugin"
+          EXPO_PLUGIN="${{ github.workspace }}/node_modules/expo-modules-autolinking/android/expo-gradle-plugin"
 
           cat > $GRADLE_USER_HOME/init.d/rn-plugins.gradle << EOF
           beforeSettings { settings ->
