@@ -39,6 +39,11 @@ jobs:
       # STEP 4: Install Dependencies (Hermes OFF → no strict mode)
       - name: Install dependencies
         run: yarn install
+        env:
+          YARN_ENABLE_SCRIPTS: false
+
+      - name: Apply PristineAudio patches
+        run: bash scripts/patch-pristine.sh
 
       # STEP 5: Verify Gradle Plugins
       - name: Verify Gradle plugin paths
@@ -68,19 +73,7 @@ jobs:
           echo "✅ Oboe installed"
 
       # STEP 7: Inject Custom RNTP (Oboe Integration)
-      - name: Inject Custom RNTP
-        run: |
-          echo "🛠️ Injecting custom RNTP..."
-          RNTP_PATH="node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player"
-          SRC="scripts/patch-pristine.sh"
 
-          cp "$SRC/AudioPlayer.kt" "$RNTP_PATH/AudioPlayer.kt"
-          cp "$SRC/APMRenderersFactory.kt" "$RNTP_PATH/components/APMRenderersFactory.kt"
-
-          grep -q "nativeInitEngine" "$RNTP_PATH/AudioPlayer.kt" || exit 1
-          grep -q "enableAudioOffload" "$RNTP_PATH/components/APMRenderersFactory.kt" && exit 1
-
-          echo "✅ RNTP injection OK"
 
       # STEP 8: Patch RN Gradle Plugin
       - name: Patch @react-native/gradle-plugin
