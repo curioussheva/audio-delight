@@ -46,7 +46,7 @@ jobs:
       - name: Verify Gradle plugin paths
         run: |
           RN_PLUGIN="${{ github.workspace }}/node_modules/@react-native/gradle-plugin"
-          EXPO_PLUGIN="${{ github.workspace }}/node_modules/expo-modules-core/android/expo-gradle-plugin"
+          EXPO_PLUGIN="${{ github.workspace }}/node_modules/expo/android/expo-gradle-plugin"
 
           echo "Checking @react-native/gradle-plugin..."
           ls "$RN_PLUGIN"/build.gradle* 2>/dev/null | grep -q "build.gradle" || {
@@ -154,7 +154,7 @@ jobs:
           mkdir -p $GRADLE_USER_HOME/init.d
 
           RN_PLUGIN="${{ github.workspace }}/node_modules/@react-native/gradle-plugin"
-          EXPO_PLUGIN="${{ github.workspace }}/node_modules/expo-modules-core/android/expo-gradle-plugin"
+          EXPO_PLUGIN="${{ github.workspace }}/node_modules/expo/android/expo-gradle-plugin"
 
           cat > $GRADLE_USER_HOME/init.d/rn-plugins.gradle << EOF
           beforeSettings { settings ->
@@ -257,4 +257,4 @@ jobs:
           name: AndroidManifest-Debug
           path: android/app/src/main/AndroidManifest.xml
           retention-days: 7
-  
+   
