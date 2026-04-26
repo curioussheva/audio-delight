@@ -43,7 +43,7 @@ jobs:
 
       # STEP 5: Apply PristineAudio patches (RNTP + Worklets)
       - name: Apply PristineAudio patches
-        run: yarn patch
+        run: bash scripts/patch-pristine.sh
   
       # STEP 6: Verify Gradle Plugins
       - name: Verify Gradle plugin paths
