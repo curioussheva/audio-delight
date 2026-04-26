@@ -42,24 +42,32 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile --ignore-engines
 
-      # STEP 5: Verify Gradle plugin paths
+      # STEP 5: Locate and Verify Gradle plugin paths
+      - name: Locate expo-gradle-plugin
+        run: |
+         echo "🔍 Searching for expo-gradle-plugin..."
+         find ${{ github.workspace }}/node_modules -type d -name "expo-gradle-plugin" | tee plugin-paths.txt
+         echo "✅ Found paths:"
+         cat plugin-paths.txt
+
       - name: Verify Gradle plugin paths
         run: |
-          RN_PLUGIN="${{ github.workspace }}/node_modules/@react-native/gradle-plugin"
-          EXPO_PLUGIN="${{ github.workspace }}/node_modules/expo-modules-core/expo-gradle-plugin"
-          echo "Checking @react-native/gradle-plugin..."
-          ls "$RN_PLUGIN"/build.gradle* 2>/dev/null | grep -q "build.gradle" || {
-            echo "❌ @react-native/gradle-plugin missing at $RN_PLUGIN"
-            exit 1
-          }
-          echo "✅ @react-native/gradle-plugin found"
+         RN_PLUGIN="${{ github.workspace }}/node_modules/@react-native/gradle-plugin"
+         EXPO_PLUGIN=$(head -1 plugin-paths.txt)   # ambil path pertama hasil find
 
-          echo "Checking expo-gradle-plugin..."
-          ls "$EXPO_PLUGIN"/build.gradle* 2>/dev/null | grep -q "build.gradle" || {
-            echo "❌ expo-gradle-plugin missing at $EXPO_PLUGIN"
-            exit 1
-          }
-          echo "✅ expo-gradle-plugin found"
+         echo "Checking @react-native/gradle-plugin..."
+         ls "$RN_PLUGIN"/build.gradle* 2>/dev/null | grep -q "build.gradle" || {
+         echo "❌ @react-native/gradle-plugin missing at $RN_PLUGIN"
+         exit 1
+         }
+         echo "✅ @react-native/gradle-plugin found"
+
+         echo "Checking expo-gradle-plugin at $EXPO_PLUGIN..."
+         ls "$EXPO_PLUGIN"/build.gradle* 2>/dev/null | grep -q "build.gradle" || {
+         echo "❌ expo-gradle-plugin missing at $EXPO_PLUGIN"
+         exit 1
+         }
+         echo "✅ expo-gradle-plugin found"
 
       # STEP 6: Setup Oboe 1.9.0
       - name: Setup Oboe 1.9.0
