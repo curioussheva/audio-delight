@@ -122,7 +122,18 @@ jobs:
               }
           }
           EOF
-
+          
+      - name: Debug hermestooling headers
+        working-directory: android
+        env:
+          GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
+        run: |
+         chmod +x gradlew
+         ./gradlew :react-native-worklets:configureCMakeDebug --no-daemon \
+         -PnewArchEnabled=true -PkotlinVersion=2.0.21 || true
+         find ${{ github.workspace }}/.gradle/caches -path "*/hermestooling/include*" 2>/dev/null | head -20
+         find ${{ github.workspace }}/.gradle/caches -path "*/hermestooling*" -name "*.h" 2>/dev/null | head -20
+         
       # STEP 14: Generate Codegen Artifacts
       - name: Generate Codegen Artifacts
         working-directory: android
