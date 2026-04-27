@@ -27,7 +27,7 @@ echo "🔧 Patching Worklets CMakeLists.txt..."
 # Fix 1: Remove find_package(hermes-engine)
 sed -i '/find_package(hermes-engine REQUIRED CONFIG)/d' "$WORKLETS_CMAKE"
 
-# Fix 2: Replace hermes-engine::hermesvm with ReactAndroid::reactnative (already linked, but harmless)
+# Fix 2: Replace hermes-engine::hermesvm with comment
 sed -i 's/target_link_libraries(worklets hermes-engine::hermesvm)/# hermes linked transitively via ReactAndroid::reactnative/' "$WORKLETS_CMAKE"
 
 # Fix 3: Remove hermes-engine::libhermes line
@@ -36,9 +36,14 @@ sed -i 's/target_link_libraries(worklets hermes-engine::libhermes)/# hermes link
 # Fix 4: Original jsctooling fix
 sed -i 's/ReactAndroid::jsctooling/ReactAndroid::jsi ReactAndroid::reactnative/' "$WORKLETS_CMAKE"
 
+# Fix 5: Link hermestooling after main target_link_libraries to expose hermes/hermes.h headers
+sed -i 's/target_link_libraries(worklets android log ReactAndroid::reactnative/target_link_libraries(worklets android log ReactAndroid::reactnative ReactAndroid::hermestooling/' "$WORKLETS_CMAKE"
+
 grep -q "find_package(hermes-engine" "$WORKLETS_CMAKE" && { echo "❌ Worklets CMake patch failed: hermes find_package still present"; exit 1; }
+grep -q "hermestooling" "$WORKLETS_CMAKE" || { echo "❌ Worklets CMake patch failed: hermestooling not added"; exit 1; }
 
 echo "✅ Worklets CMakeLists.txt patched successfully"
+
 # ============================================
 # 3. Patch Worklets (remove hermes-android Maven dep)
 # ============================================
