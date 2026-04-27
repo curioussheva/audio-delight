@@ -145,6 +145,8 @@ jobs:
             --no-daemon \
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
+            -PhermesEnabled=false \
+            -DJS_RUNTIME_HERMES=0
             -PkotlinVersion=2.0.21 || true
 
       # STEP 15: Build Debug APK
@@ -162,6 +164,8 @@ jobs:
             --stacktrace \
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
+            -PhermesEnabled=false \
+            -DJS_RUNTIME_HERMES=0
             -PkotlinVersion=2.0.21 \
             -PforceBundle=true
 

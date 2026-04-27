@@ -1,83 +1,117 @@
 #!/bin/bash
 
-echo "🛠️ Starting PristineAudio patches..."
+echo "🛠️ Starting PristineAudio patches (SAFE HERMES MODE)..."
 
 # ============================================
-# 1. Patch RNTP (Oboe Integration)
+# 0. HERMES FIX LAYER (CRITICAL FOR CI)
 # ============================================
+
+echo "🧠 Configuring Hermes environment..."
+
+# Try multiple possible NDK Hermes locations (CI-safe)
+HERMES_DIR_1="$ANDROID_HOME/ndk/27.1.12297006/sources/third_party/hermes"
+HERMES_DIR_2="$ANDROID_NDK_HOME/sources/third_party/hermes"
+
+HERMES_DIR=""
+
+if [ -d "$HERMES_DIR_1" ]; then
+  HERMES_DIR="$HERMES_DIR_1"
+elif [ -d "$HERMES_DIR_2" ]; then
+  HERMES_DIR="$HERMES_DIR_2"
+fi
+
+if [ -z "$HERMES_DIR" ]; then
+  echo "❌ Hermes source not found in NDK!"
+  echo "Expected in:"
+  echo " - $HERMES_DIR_1"
+  echo " - $HERMES_DIR_2"
+  exit 1
+fi
+
+echo "📦 Hermes found at: $HERMES_DIR"
+
+echo "HERMES_DIR=$HERMES_DIR" >> $GITHUB_ENV
+echo "CPLUS_INCLUDE_PATH=$HERMES_DIR/Public:$CPLUS_INCLUDE_PATH" >> $GITHUB_ENV
+echo "C_INCLUDE_PATH=$HERMES_DIR/Public:$C_INCLUDE_PATH" >> $GITHUB_ENV
+
+# ============================================
+# 1. PATCH RNTP (Oboe Integration)
+# ============================================
+
 RNTP_PATH="node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player"
 SRC="scripts/custom-rntp"
 
 echo "🔧 Patching RNTP..."
+
 cp "$SRC/AudioPlayer.kt" "$RNTP_PATH/AudioPlayer.kt"
 cp "$SRC/APMRenderersFactory.kt" "$RNTP_PATH/components/APMRenderersFactory.kt"
 
-grep -q "nativeInitEngine" "$RNTP_PATH/AudioPlayer.kt" || { echo "❌ RNTP patch failed: nativeInitEngine missing"; exit 1; }
-grep -q "enableAudioOffload" "$RNTP_PATH/components/APMRenderersFactory.kt" && { echo "❌ RNTP patch failed: enableAudioOffload still present"; exit 1; }
+grep -q "nativeInitEngine" "$RNTP_PATH/AudioPlayer.kt" || {
+  echo "❌ RNTP patch failed: nativeInitEngine missing"
+  exit 1
+}
+
+grep -q "enableAudioOffload" "$RNTP_PATH/components/APMRenderersFactory.kt" && {
+  echo "❌ RNTP patch failed: enableAudioOffload still present"
+  exit 1
+}
 
 echo "✅ RNTP patched successfully"
 
 # ============================================
-# 2. Patch Worklets (CMakeLists fix)
+# 2. PATCH WORKLETS (SAFE MODE - NO HERMES REMOVAL)
 # ============================================
+
 WORKLETS_CMAKE="node_modules/react-native-worklets/android/CMakeLists.txt"
 
-echo "🔧 Patching Worklets CMakeLists.txt..."
+echo "🔧 Patching Worklets (SAFE MODE)..."
 
-# Fix 1: Remove find_package(hermes-engine)
-sed -i '/find_package(hermes-engine REQUIRED CONFIG)/d' "$WORKLETS_CMAKE"
-
-# Fix 2: Replace hermes-engine::hermesvm with comment
-sed -i 's/target_link_libraries(worklets hermes-engine::hermesvm)/# hermes linked transitively via ReactAndroid::reactnative/' "$WORKLETS_CMAKE"
-
-# Fix 3: Remove hermes-engine::libhermes line
-sed -i 's/target_link_libraries(worklets hermes-engine::libhermes)/# hermes linked transitively via ReactAndroid::reactnative/' "$WORKLETS_CMAKE"
-
-# Fix 4: Original jsctooling fix
+# ONLY fix incorrect ReactAndroid linking
 sed -i 's/ReactAndroid::jsctooling/ReactAndroid::jsi ReactAndroid::reactnative/' "$WORKLETS_CMAKE"
 
-# Fix 5: Link hermestooling after main target_link_libraries to expose hermes/hermes.h headers
-sed -i 's/target_link_libraries(worklets android log ReactAndroid::reactnative/target_link_libraries(worklets android log ReactAndroid::reactnative ReactAndroid::hermestooling/' "$WORKLETS_CMAKE"
+# DO NOT remove:
+# - hermes-engine
+# - hermesvm
+# - libhermes
+# because Worklets NEED them for C++ Hermes runtime
 
-grep -q "find_package(hermes-engine" "$WORKLETS_CMAKE" && { echo "❌ Worklets CMake patch failed: hermes find_package still present"; exit 1; }
-grep -q "hermestooling" "$WORKLETS_CMAKE" || { echo "❌ Worklets CMake patch failed: hermestooling not added"; exit 1; }
-
-echo "✅ Worklets CMakeLists.txt patched successfully"
+echo "✅ Worklets patched safely"
 
 # ============================================
-# 3. Patch Worklets (remove hermes-android Maven dep)
+# 3. PATCH WORKLETS GRADLE (SAFE)
 # ============================================
+
 WORKLETS_GRADLE="node_modules/react-native-worklets/android/build.gradle"
 
-echo "🔧 Patching Worklets build.gradle..."
-sed -i '/implementation "com.facebook.react:hermes-android"/d' "$WORKLETS_GRADLE"
+echo "🔧 Patching Worklets Gradle..."
 
-grep -q "hermes-android" "$WORKLETS_GRADLE" && { echo "❌ Worklets gradle patch failed: hermes-android still present"; exit 1; }
+# Only remove explicit Maven dependency if exists (optional, safe)
+sed -i '/com.facebook.react:hermes-android/d' "$WORKLETS_GRADLE"
 
-echo "✅ Worklets build.gradle patched successfully"
-
-# ============================================
-# 4. Patch expo-dev-client (remove hermes-android Maven dep)
-# ============================================
-DEV_CLIENT_GRADLE="node_modules/expo-dev-client/android/build.gradle"
-
-echo "🔧 Patching expo-dev-client build.gradle..."
-sed -i '/androidTestImplementation .com.facebook.react:hermes-android./d' "$DEV_CLIENT_GRADLE"
-
-grep -q "hermes-android" "$DEV_CLIENT_GRADLE" && { echo "❌ expo-dev-client gradle patch failed"; exit 1; }
-
-echo "✅ expo-dev-client build.gradle patched successfully"
+echo "✅ Worklets Gradle patched"
 
 # ============================================
-# 5. Patch expo-modules-core (remove hermes-android Maven dep)
+# 4. PATCH RNTP VALIDATION CHECK
 # ============================================
-MODULES_CORE_GRADLE="node_modules/expo-modules-core/android/build.gradle"
 
-echo "🔧 Patching expo-modules-core build.gradle..."
-sed -i '/compileOnly "com.facebook.react:hermes-android"/d' "$MODULES_CORE_GRADLE"
+echo "🔍 Validating Hermes headers..."
 
-grep -q "hermes-android" "$MODULES_CORE_GRADLE" && { echo "❌ expo-modules-core gradle patch failed"; exit 1; }
+if [ ! -f "$HERMES_DIR/Public/hermes/hermes.h" ]; then
+  echo "❌ hermes.h NOT FOUND"
+  echo "CI environment missing Hermes headers"
+  exit 1
+fi
 
-echo "✅ expo-modules-core build.gradle patched successfully"
+echo "✅ Hermes headers OK"
 
-echo "🎉 All PristineAudio patches applied"
+# ============================================
+# 5. FINAL CHECKS
+# ============================================
+
+echo "🎯 Final sanity check..."
+
+grep -q "hermes/hermes.h" "$WORKLETS_CMAKE" || {
+  echo "⚠️ Warning: Worklets may not include Hermes headers"
+}
+
+echo "🎉 All PristineAudio patches applied successfully" 

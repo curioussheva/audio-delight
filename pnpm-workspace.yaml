@@ -1,0 +1,4 @@
+onlyBuiltDependencies:
+
+  - react-native-quick-sqlite
+  - react-native-track-player
