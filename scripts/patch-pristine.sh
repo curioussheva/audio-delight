@@ -22,13 +22,23 @@ echo "✅ RNTP patched successfully"
 # ============================================
 WORKLETS_CMAKE="node_modules/react-native-worklets/android/CMakeLists.txt"
 
-echo "🔧 Patching Worklets..."
+echo "🔧 Patching Worklets CMakeLists.txt..."
+
+# Fix 1: Remove find_package(hermes-engine)
+sed -i '/find_package(hermes-engine REQUIRED CONFIG)/d' "$WORKLETS_CMAKE"
+
+# Fix 2: Replace hermes-engine::hermesvm with ReactAndroid::reactnative (already linked, but harmless)
+sed -i 's/target_link_libraries(worklets hermes-engine::hermesvm)/# hermes linked transitively via ReactAndroid::reactnative/' "$WORKLETS_CMAKE"
+
+# Fix 3: Remove hermes-engine::libhermes line
+sed -i 's/target_link_libraries(worklets hermes-engine::libhermes)/# hermes linked transitively via ReactAndroid::reactnative/' "$WORKLETS_CMAKE"
+
+# Fix 4: Original jsctooling fix
 sed -i 's/ReactAndroid::jsctooling/ReactAndroid::jsi ReactAndroid::reactnative/' "$WORKLETS_CMAKE"
 
-grep -q "ReactAndroid::jsi ReactAndroid::reactnative" "$WORKLETS_CMAKE" || { echo "❌ Worklets patch failed"; exit 1; }
+grep -q "find_package(hermes-engine" "$WORKLETS_CMAKE" && { echo "❌ Worklets CMake patch failed: hermes find_package still present"; exit 1; }
 
-echo "✅ Worklets patched successfully"
-
+echo "✅ Worklets CMakeLists.txt patched successfully"
 # ============================================
 # 3. Patch Worklets (remove hermes-android Maven dep)
 # ============================================
@@ -66,4 +76,3 @@ grep -q "hermes-android" "$MODULES_CORE_GRADLE" && { echo "❌ expo-modules-core
 echo "✅ expo-modules-core build.gradle patched successfully"
 
 echo "🎉 All PristineAudio patches applied"
-
