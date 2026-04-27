@@ -40,6 +40,9 @@ jobs:
         run: yarn install --immutable
         env:
           YARN_ENABLE_SCRIPTS: false
+    
+      - name: Download Skia binaries
+        run: yarn node node_modules/@shopify/react-native-skia/scripts/install-skia.mjs
 
       # STEP 5: Apply PristineAudio patches (RNTP + Worklets)
       - name: Apply PristineAudio patches
