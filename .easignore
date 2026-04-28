@@ -1,49 +1,42 @@
 # ----------------------------------------------------------------------------
-# PristineAudio - EAS Ignore (Optimized for SDK 36 & Native Modules)
+# PristineAudio - EAS Ignore (PNPM + Native Safe)
 # ----------------------------------------------------------------------------
 
-# Dependencies & Cache
+# Dependencies (EAS akan install sendiri)
 node_modules/
-.yarn/
-.pnp.*
-yarn-error.log
 
-# Expo & Build Artifacts (EAS will generate its own)
+# Expo artifacts
 .expo/
 .expo-shared/
 dist/
 web-build/
 
-# --- Android Specific (Bare Workflow) ---
-# JANGAN ignore folder android karena berisi file .kt kustom Anda.
-# Tapi abaikan file sampah hasil build lokal:
+# --- Android build output ---
 android/.gradle/
 android/build/
 android/app/build/
-android/local.properties
-android/generated/
 android/.cxx/
 android/.externalNativeBuild/
-android/*.iml
-android/app/*.iml
+android/generated/
+android/local.properties
 
-# Pengecualian: Kita butuh debug.keystore agar build tidak error
+# KEEP native source (jangan ignore android folder!)
+
 !android/app/debug.keystore
 
-# --- iOS Specific ---
+# --- iOS ---
 ios/Pods/
 ios/build/
 ios/DerivedData/
 ios/Podfile.lock
 
-# Environment & Secrets 
-# (EAS Secrets sebaiknya diatur di dashboard expo.dev, bukan di file .env)
+# Env
 .env
 .env.local
 .env.*.local
 !.env.example
 
-# Temporary & Migration Files (PENTING: Jangan upload 400+ file sampah)
+# Temp junk
 temp/
 temp_migration/
 *.tmp
@@ -51,34 +44,22 @@ temp_migration/
 *.backup
 MIGRATION_REPORT.txt
 
-# IDE & OS Garbage
+# Logs
+*.log
+coverage/
+
+# IDE
 .vscode/
 .idea/
 .DS_Store
-Thumbs.db
-*.swp
 
-# Logs & Tests
-*.log
-coverage/
-__tests__/
-*.test.ts
-*.spec.ts
-
-# --- EAS Config Preservation ---
-# Pastikan file konfigurasi utama tidak ter-ignore
+# ----------------------------------------------------------------------------
+# IMPORTANT: KEEP CORE CONFIG
+# ----------------------------------------------------------------------------
 !package.json
+!pnpm-lock.yaml
 !app.json
 !eas.json
 !tsconfig.json
 !metro.config.js
 !babel.config.js
-
-
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/sdks
-!.yarn/versions

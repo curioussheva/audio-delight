@@ -3,36 +3,22 @@
 echo "🛠️ Starting PristineAudio patches (SAFE HERMES MODE)..."
 
 # ============================================
-# 0. HERMES FIX LAYER (CRITICAL FOR CI)
+# 0. HERMES CHECK (GRADLE PREFAB)
 # ============================================
 
-echo "🧠 Configuring Hermes environment..."
+echo "🧠 Checking Hermes prefab availability..."
 
-# Try multiple possible NDK Hermes locations (CI-safe)
-HERMES_DIR_1="$ANDROID_HOME/ndk/27.1.12297006/sources/third_party/hermes"
-HERMES_DIR_2="$ANDROID_NDK_HOME/sources/third_party/hermes"
+HERMES_HEADER=$(find ~/.gradle/caches -path "*hermestooling/include/hermes/hermes.h" 2>/dev/null | head -1)
 
-HERMES_DIR=""
-
-if [ -d "$HERMES_DIR_1" ]; then
-  HERMES_DIR="$HERMES_DIR_1"
-elif [ -d "$HERMES_DIR_2" ]; then
-  HERMES_DIR="$HERMES_DIR_2"
-fi
-
-if [ -z "$HERMES_DIR" ]; then
-  echo "❌ Hermes source not found in NDK!"
-  echo "Expected in:"
-  echo " - $HERMES_DIR_1"
-  echo " - $HERMES_DIR_2"
+if [ -z "$HERMES_HEADER" ]; then
+  echo "❌ Hermes headers not found in Gradle cache!"
+  echo "Expected path: hermestooling/include/hermes/hermes.h"
+  echo "👉 Ensure Gradle prefab is resolved before build"
   exit 1
 fi
 
-echo "📦 Hermes found at: $HERMES_DIR"
-
-echo "HERMES_DIR=$HERMES_DIR" >> $GITHUB_ENV
-echo "CPLUS_INCLUDE_PATH=$HERMES_DIR/Public:$CPLUS_INCLUDE_PATH" >> $GITHUB_ENV
-echo "C_INCLUDE_PATH=$HERMES_DIR/Public:$C_INCLUDE_PATH" >> $GITHUB_ENV
+echo "📦 Hermes headers found:"
+echo "$HERMES_HEADER"
 
 # ============================================
 # 1. PATCH RNTP (Oboe Integration)
@@ -59,59 +45,40 @@ grep -q "enableAudioOffload" "$RNTP_PATH/components/APMRenderersFactory.kt" && {
 echo "✅ RNTP patched successfully"
 
 # ============================================
-# 2. PATCH WORKLETS (SAFE MODE - NO HERMES REMOVAL)
+# 2. PATCH WORKLETS (SAFE)
 # ============================================
 
 WORKLETS_CMAKE="node_modules/react-native-worklets/android/CMakeLists.txt"
 
-echo "🔧 Patching Worklets (SAFE MODE)..."
+echo "🔧 Patching Worklets (SAFE)..."
 
-# ONLY fix incorrect ReactAndroid linking
+# Fix incorrect jsctooling reference
 sed -i 's/ReactAndroid::jsctooling/ReactAndroid::jsi ReactAndroid::reactnative/' "$WORKLETS_CMAKE"
-
-# DO NOT remove:
-# - hermes-engine
-# - hermesvm
-# - libhermes
-# because Worklets NEED them for C++ Hermes runtime
 
 echo "✅ Worklets patched safely"
 
 # ============================================
-# 3. PATCH WORKLETS GRADLE (SAFE)
+# 3. PATCH WORKLETS GRADLE (MINIMAL)
 # ============================================
 
 WORKLETS_GRADLE="node_modules/react-native-worklets/android/build.gradle"
 
 echo "🔧 Patching Worklets Gradle..."
 
-# Only remove explicit Maven dependency if exists (optional, safe)
+# Remove duplicate Hermes dep if exists (optional safety)
 sed -i '/com.facebook.react:hermes-android/d' "$WORKLETS_GRADLE"
 
 echo "✅ Worklets Gradle patched"
 
 # ============================================
-# 4. PATCH RNTP VALIDATION CHECK
-# ============================================
-
-echo "🔍 Validating Hermes headers..."
-
-if [ ! -f "$HERMES_DIR/Public/hermes/hermes.h" ]; then
-  echo "❌ hermes.h NOT FOUND"
-  echo "CI environment missing Hermes headers"
-  exit 1
-fi
-
-echo "✅ Hermes headers OK"
-
-# ============================================
-# 5. FINAL CHECKS
+# 4. FINAL CHECKS
 # ============================================
 
 echo "🎯 Final sanity check..."
 
-grep -q "hermes/hermes.h" "$WORKLETS_CMAKE" || {
-  echo "⚠️ Warning: Worklets may not include Hermes headers"
+grep -q "ReactAndroid::reactnative" "$WORKLETS_CMAKE" || {
+  echo "❌ Worklets linking not properly patched"
+  exit 1
 }
 
 echo "🎉 All PristineAudio patches applied successfully" 
