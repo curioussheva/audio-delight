@@ -86,18 +86,20 @@ jobs:
           curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz | tar -xz --strip-components=1 -C "$OBOE_DIR"
 
       # 10. Warmup Hermes (CORRECT)
-      - name: Warmup Hermes Prefab
+      - name: Force Hermes Prefab Extraction
         working-directory: android
         run: |
          set -e
          chmod +x gradlew
 
-         ./gradlew :app:preBuild \
+         ./gradlew :app:assembleDebug \
          --no-daemon \
+         -x lint \
+         -x test \
          -PnewArchEnabled=true \
          -PreactNativeNewArch=true \
          -PhermesEnabled=true \
-         -PkotlinVersion=2.0.21
+         -PkotlinVersion=2.0.21 || true
 
       # 11. Verify Hermes prefab (FAIL FAST)
       - name: Verify Hermes prefab
