@@ -85,17 +85,19 @@ jobs:
           mkdir -p "$OBOE_DIR"
           curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz | tar -xz --strip-components=1 -C "$OBOE_DIR"
 
-      # 🔥 10. CRITICAL: Trigger Hermes prefab (REAL)
+      # 10. Warmup Hermes (CORRECT)
       - name: Warmup Hermes Prefab
         working-directory: android
         run: |
-          chmod +x gradlew
-          ./gradlew :react-native-worklets:configureCMakeDebug \
-            --no-daemon \
-            -PnewArchEnabled=true \
-            -PreactNativeNewArch=true \
-            -PhermesEnabled=true \
-            -PkotlinVersion=2.0.21 || true
+         set -e
+         chmod +x gradlew
+
+         ./gradlew :app:preBuild \
+         --no-daemon \
+         -PnewArchEnabled=true \
+         -PreactNativeNewArch=true \
+         -PhermesEnabled=true \
+         -PkotlinVersion=2.0.21
 
       # 11. Verify Hermes prefab (FAIL FAST)
       - name: Verify Hermes prefab
