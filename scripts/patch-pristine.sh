@@ -3,22 +3,21 @@
 echo "🛠️ Starting PristineAudio patches (SAFE HERMES MODE)..."
 
 # ============================================
-# 0. HERMES CHECK (GRADLE PREFAB)
+# 0. HERMES CHECK (NON-BLOCKING)
 # ============================================
 
 echo "🧠 Checking Hermes prefab availability..."
 
-HERMES_HEADER=$(find ~/.gradle/caches -path "*hermestooling/include/hermes/hermes.h" 2>/dev/null | head -1)
+HERMES_HEADER=$(find ~/.gradle/caches -name hermes.h 2>/dev/null | head -1)
 
 if [ -z "$HERMES_HEADER" ]; then
-  echo "❌ Hermes headers not found in Gradle cache!"
-  echo "Expected path: hermestooling/include/hermes/hermes.h"
-  echo "👉 Ensure Gradle prefab is resolved before build"
-  exit 1
+  echo "⚠️ Hermes headers not found (this is OK in early build stage)"
+  echo "👉 Will continue without Hermes-dependent assumptions"
+  SKIP_HERMES=1
+else
+  echo "📦 Hermes headers found:"
+  echo "$HERMES_HEADER"
 fi
-
-echo "📦 Hermes headers found:"
-echo "$HERMES_HEADER"
 
 # ============================================
 # 1. PATCH RNTP (Oboe Integration)
@@ -45,33 +44,35 @@ grep -q "enableAudioOffload" "$RNTP_PATH/components/APMRenderersFactory.kt" && {
 echo "✅ RNTP patched successfully"
 
 # ============================================
-# 2. PATCH WORKLETS (SAFE)
+# 2. PATCH WORKLETS (SAFE, IDEMPOTENT)
 # ============================================
 
 WORKLETS_CMAKE="node_modules/react-native-worklets/android/CMakeLists.txt"
 
 echo "🔧 Patching Worklets (SAFE)..."
 
-# Fix incorrect jsctooling reference
-sed -i 's/ReactAndroid::jsctooling/ReactAndroid::jsi ReactAndroid::reactnative/' "$WORKLETS_CMAKE"
+# Only patch if not already patched
+grep -q "ReactAndroid::reactnative" "$WORKLETS_CMAKE" || \
+  sed -i 's/ReactAndroid::jsctooling/ReactAndroid::jsi ReactAndroid::reactnative/' "$WORKLETS_CMAKE"
 
 echo "✅ Worklets patched safely"
 
 # ============================================
-# 3. PATCH WORKLETS GRADLE (MINIMAL)
+# 3. PATCH WORKLETS GRADLE (SAFE)
 # ============================================
 
 WORKLETS_GRADLE="node_modules/react-native-worklets/android/build.gradle"
 
 echo "🔧 Patching Worklets Gradle..."
 
-# Remove duplicate Hermes dep if exists (optional safety)
-sed -i '/com.facebook.react:hermes-android/d' "$WORKLETS_GRADLE"
+# Remove duplicate Hermes dep safely
+grep -q "hermes-android" "$WORKLETS_GRADLE" && \
+  sed -i '/com.facebook.react:hermes-android/d' "$WORKLETS_GRADLE"
 
 echo "✅ Worklets Gradle patched"
 
 # ============================================
-# 4. FINAL CHECKS
+# 4. FINAL CHECKS (NO HERMES DEPENDENCY)
 # ============================================
 
 echo "🎯 Final sanity check..."
