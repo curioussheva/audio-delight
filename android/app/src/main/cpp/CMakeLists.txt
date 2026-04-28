@@ -3,6 +3,9 @@ project("pristineaudio_engine")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_ANDROID_STL_TYPE c++_shared)
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden -O3")
 
 # ---- Oboe ----
 add_subdirectory(oboe)
@@ -29,7 +32,6 @@ target_link_libraries(
     oboe
     android
     log
-    OpenSLES
     atomic
     m
 ) 

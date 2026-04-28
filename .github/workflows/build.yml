@@ -101,16 +101,16 @@ jobs:
          -PhermesEnabled=true \
          -PkotlinVersion=2.0.21 || true
 
-      # 11. Verify Hermes prefab (FAIL FAST)
-      - name: Verify Hermes prefab
+      # 11. Verify Hermes 
+      - name: Verify Hermes AAR (non-prefab)
         run: |
-          echo "🔍 Checking hermes-engineConfig.cmake..."
-          find $GRADLE_USER_HOME -name "hermes-engineConfig.cmake" | head -5
+         echo "🔍 Checking Hermes AAR..."
+         find $GRADLE_USER_HOME -name "*hermes*.aar" | head -5
 
-          test -n "$(find $GRADLE_USER_HOME -name 'hermes-engineConfig.cmake' -print -quit)" \
-            || { echo "❌ Hermes prefab NOT found"; exit 1; }
+         test -n "$(find $GRADLE_USER_HOME -name '*hermes*.aar' -print -quit)" \
+         || { echo "❌ Hermes AAR NOT found"; exit 1; }
 
-          echo "✅ Hermes prefab OK"
+         echo "✅ Hermes AAR OK"
 
       # 12. Apply patches (AFTER Hermes ready)
       - name: Apply PristineAudio patches

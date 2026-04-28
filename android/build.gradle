@@ -22,20 +22,8 @@ allprojects {
         google()
         mavenCentral()
         maven { url 'https://www.jitpack.io' }
-        
-        // Repository untuk React Native Track Player & lib lainnya
-        def extraMavenRepos = findProperty('android.extraMavenRepos')
-        if (extraMavenRepos) {
-            try {
-                def repos = new groovy.json.JsonSlurper().parseText(extraMavenRepos)
-                repos.each { repo -> maven { url repo.url } }
-            } catch (Exception e) {
-                // Mencegah build gagal jika JSON tidak valid
-            }
-        }
     }
 }
 
 apply plugin: "expo-root-project"
-apply plugin: "com.facebook.react.rootproject"
- 
+apply plugin: "com.facebook.react.rootproject" 
