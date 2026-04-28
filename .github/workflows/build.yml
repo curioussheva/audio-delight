@@ -27,6 +27,11 @@ jobs:
       # 3. Install deps
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
+        
+      # FIX Skia postinstall
+      - name: Fix Skia binaries
+        run: |
+         pnpm rebuild @shopify/react-native-skia
 
       # 4. Verify Gradle plugin
       - name: Verify Gradle plugin paths
@@ -51,7 +56,11 @@ jobs:
           yes | sdkmanager \
             "ndk;27.1.12297006" \
             "cmake;3.31.6"
-
+            
+      - name: Force CMake version
+        run: |
+         echo "cmake.dir=$ANDROID_HOME/cmake/3.31.6" >> android/local.properties
+    
       # 7. Inject Gradle init
       - name: Inject Gradle init script
         run: |

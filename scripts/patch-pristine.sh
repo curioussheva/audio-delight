@@ -22,35 +22,37 @@ grep -q "nativeInitEngine" "$RNTP_PATH/AudioPlayer.kt" || {
 
 echo "✅ RNTP patched"
 
-
 # ============================================
-# 2. PATCH WORKLETS (REMOVE HERMES TOTAL)
+# 2. PATCH WORKLETS (SAFE JSC MODE)
 # ============================================
 
 WORKLETS_CMAKE="node_modules/react-native-worklets/android/CMakeLists.txt"
 
-echo "🔧 Hard patching Worklets CMake (FULL STRIP HERMES)..."
+echo "🔧 Rewriting Worklets CMake (JSC ONLY, SAFE)..."
 
-# 1. Hapus semua referensi hermes-engine
-sed -i '/hermes-engine/d' "$WORKLETS_CMAKE"
+cat > "$WORKLETS_CMAKE" << 'EOF'
+cmake_minimum_required(VERSION 3.13)
 
-# 2. Hapus blok find_package hermes
-sed -i '/find_package(hermes-engine/d' "$WORKLETS_CMAKE"
+project(worklets)
 
-# 3. Replace linking hermes → jsi
-sed -i 's/hermes-engine::libhermes/ReactAndroid::jsi/g' "$WORKLETS_CMAKE"
+set(CMAKE_CXX_STANDARD 17)
 
-# 4. Fix jsctooling
-sed -i 's/ReactAndroid::jsctooling/ReactAndroid::jsi ReactAndroid::reactnative/g' "$WORKLETS_CMAKE"
+add_library(worklets SHARED
+  cpp/worklets.cpp
+)
 
-# 5. FORCE runtime ke JSC (semua kemungkinan format)
-sed -i 's/JS_RUNTIME hermes/JS_RUNTIME jsc/g' "$WORKLETS_CMAKE"
-sed -i 's/JS_RUNTIME=hermes/JS_RUNTIME=jsc/g' "$WORKLETS_CMAKE"
+# React Native dependencies
+find_package(ReactAndroid REQUIRED CONFIG)
 
-# 6. Extra safety: hapus conditional hermes block
-sed -i '/JS_RUNTIME.*hermes/d' "$WORKLETS_CMAKE"
+target_include_directories(worklets PRIVATE
+  ${REACT_NATIVE_DIR}/ReactCommon
+)
 
-echo "✅ Worklets fully de-hermes-ed"
+target_link_libraries(worklets
+  ReactAndroid::reactnative
+  ReactAndroid::jsi
+)
 
-echo "🔍 Checking for leftover hermes references..."
-grep -n "hermes" "$WORKLETS_CMAKE" || echo "✅ No hermes references left"
+EOF
+
+echo "✅ Worklets CMake rewritten (NO HERMES, NO CONDITIONALS)" 
