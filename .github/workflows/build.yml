@@ -16,19 +16,19 @@ jobs:
       # 1. Checkout
       - uses: actions/checkout@v4
 
-      # 2. Setup PNPM + Node (pin version biar deterministic)
+      # 2. Setup Node + PNPM
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
+          cache: pnpm
 
-      # 3. Install deps (no scripts → kita kontrol patch manual)
+      # 3. Install deps (NO scripts → kita kontrol patch manual)
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      # 4. Verify Gradle plugin early
+      # 4. Verify Gradle plugin (fail fast)
       - name: Verify Gradle plugin paths
         run: |
           set -e
@@ -36,16 +36,16 @@ jobs:
           test -f node_modules/expo-modules-autolinking/android/expo-gradle-plugin/build.gradle.kts
           echo "✅ Gradle plugins OK"
 
-      # 5. Setup Java + Android (dipindah ke atas biar cache kepakai lebih awal)
+      # 5. Setup Java + Android
       - uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: "temurin"
-          cache: "gradle"
+          cache: gradle
 
       - uses: android-actions/setup-android@v3
 
-      # 6. Install NDK + CMake (pin exact version)
+      # 6. Install NDK + CMake (pin exact)
       - name: Install NDK + CMake
         run: |
           set -e
@@ -77,7 +77,7 @@ jobs:
         run: |
           sed -i '/foojay-resolver-convention/d' node_modules/@react-native/gradle-plugin/settings.gradle.kts
 
-      # 9. Setup Oboe (cacheable step)
+      # 9. Setup Oboe
       - name: Setup Oboe
         run: |
           set -e
@@ -85,21 +85,36 @@ jobs:
           mkdir -p "$OBOE_DIR"
           curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz | tar -xz --strip-components=1 -C "$OBOE_DIR"
 
-      # 10. Warm-up Gradle (CRITICAL → resolve Hermes + prefab)
-      - name: Warmup Gradle (Hermes + Prefab)
+      # 🔥 10. CRITICAL: Trigger Hermes prefab (REAL)
+      - name: Warmup Hermes Prefab
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew help \
+          ./gradlew :react-native-worklets:configureCMakeDebug \
             --no-daemon \
             -PnewArchEnabled=true \
-            -PkotlinVersion=2.0.21
+            -PreactNativeNewArch=true \
+            -PhermesEnabled=true \
+            -PkotlinVersion=2.0.21 || true
 
-      # 11. Apply patches (AFTER warmup)
+      # 11. Verify Hermes prefab (FAIL FAST)
+      - name: Verify Hermes prefab
+        run: |
+          echo "🔍 Checking hermes-engineConfig.cmake..."
+          find $GRADLE_USER_HOME -name "hermes-engineConfig.cmake" | head -5
+
+          test -n "$(find $GRADLE_USER_HOME -name 'hermes-engineConfig.cmake' -print -quit)" \
+            || { echo "❌ Hermes prefab NOT found"; exit 1; }
+
+          echo "✅ Hermes prefab OK"
+
+      # 12. Apply patches (AFTER Hermes ready)
       - name: Apply PristineAudio patches
-        run: bash scripts/patch-pristine.sh
+        run: |
+          set -e
+          bash scripts/patch-pristine.sh
 
-      # 12. Verify patches
+      # 13. Verify patches
       - name: Verify patches applied
         run: |
           set -e
@@ -107,7 +122,7 @@ jobs:
           grep -q "ReactAndroid::reactnative" node_modules/react-native-worklets/android/CMakeLists.txt
           echo "✅ Patches verified"
 
-      # 13. Codegen (optional tapi aman)
+      # 14. Generate Codegen (safe optional)
       - name: Generate Codegen
         working-directory: android
         run: |
@@ -119,7 +134,12 @@ jobs:
             -PhermesEnabled=true \
             -PkotlinVersion=2.0.21 || true
 
-      # 14. Build APK (clean minimal, jangan overkill)
+      # 15. Clean CMake cache (IMPORTANT)
+      - name: Clean CMake cache
+        run: |
+          rm -rf node_modules/react-native-worklets/android/.cxx
+
+      # 16. Build APK
       - name: Build Debug APK
         working-directory: android
         env:
@@ -133,15 +153,16 @@ jobs:
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
             -PhermesEnabled=true \
-            -PkotlinVersion=2.0.21
+            -PkotlinVersion=2.0.21 \
+            -Pandroid.prefabVersion=2.0.0
 
-      # 15. Upload APK
+      # 17. Upload APK
       - uses: actions/upload-artifact@v4
         with:
           name: PristineAudio-Debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
-      # 16. Upload Manifest
+      # 18. Upload Manifest
       - uses: actions/upload-artifact@v4
         with:
           name: AndroidManifest-Debug

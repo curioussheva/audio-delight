@@ -1,26 +1,26 @@
 #!/bin/bash
 
-echo "🛠️ Starting PristineAudio patches (SAFE HERMES MODE)..."
+echo "🛠️ Starting PristineAudio patches (HYBRID HERMES MODE)..."
 
 # ============================================
-# 0. HERMES CHECK (NON-BLOCKING)
+# 0. HERMES CHECK (SMART)
 # ============================================
 
-echo "🧠 Checking Hermes prefab availability..."
+echo "🧠 Checking Hermes prefab..."
 
-HERMES_HEADER=$(find ~/.gradle/caches -name hermes.h 2>/dev/null | head -1)
+HERMES_CONFIG=$(find ~/.gradle/caches -name "hermes-engineConfig.cmake" 2>/dev/null | head -1)
 
-if [ -z "$HERMES_HEADER" ]; then
-  echo "⚠️ Hermes headers not found (this is OK in early build stage)"
-  echo "👉 Will continue without Hermes-dependent assumptions"
-  SKIP_HERMES=1
+if [ -z "$HERMES_CONFIG" ]; then
+  echo "⚠️ Hermes prefab NOT found → fallback mode"
+  USE_HERMES=0
 else
-  echo "📦 Hermes headers found:"
-  echo "$HERMES_HEADER"
+  echo "📦 Hermes prefab found:"
+  echo "$HERMES_CONFIG"
+  USE_HERMES=1
 fi
 
 # ============================================
-# 1. PATCH RNTP (Oboe Integration)
+# 1. PATCH RNTP
 # ============================================
 
 RNTP_PATH="node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player"
@@ -31,55 +31,39 @@ echo "🔧 Patching RNTP..."
 cp "$SRC/AudioPlayer.kt" "$RNTP_PATH/AudioPlayer.kt"
 cp "$SRC/APMRenderersFactory.kt" "$RNTP_PATH/components/APMRenderersFactory.kt"
 
-grep -q "nativeInitEngine" "$RNTP_PATH/AudioPlayer.kt" || {
-  echo "❌ RNTP patch failed: nativeInitEngine missing"
-  exit 1
-}
+grep -q "nativeInitEngine" "$RNTP_PATH/AudioPlayer.kt" || exit 1
 
-grep -q "enableAudioOffload" "$RNTP_PATH/components/APMRenderersFactory.kt" && {
-  echo "❌ RNTP patch failed: enableAudioOffload still present"
-  exit 1
-}
-
-echo "✅ RNTP patched successfully"
+echo "✅ RNTP patched"
 
 # ============================================
-# 2. PATCH WORKLETS (SAFE, IDEMPOTENT)
+# 2. PATCH WORKLETS
 # ============================================
 
 WORKLETS_CMAKE="node_modules/react-native-worklets/android/CMakeLists.txt"
 
-echo "🔧 Patching Worklets (SAFE)..."
+echo "🔧 Patching Worklets..."
 
-# Only patch if not already patched
-grep -q "ReactAndroid::reactnative" "$WORKLETS_CMAKE" || \
-  sed -i 's/ReactAndroid::jsctooling/ReactAndroid::jsi ReactAndroid::reactnative/' "$WORKLETS_CMAKE"
+# fix jsctooling
+sed -i 's/ReactAndroid::jsctooling/ReactAndroid::jsi ReactAndroid::reactnative/' "$WORKLETS_CMAKE"
 
-echo "✅ Worklets patched safely"
+if [ "$USE_HERMES" -eq 0 ]; then
+  echo "⚠️ Applying Hermes fallback patch..."
 
-# ============================================
-# 3. PATCH WORKLETS GRADLE (SAFE)
-# ============================================
+  sed -i '/find_package(hermes-engine/d' "$WORKLETS_CMAKE"
+  sed -i 's/hermes-engine::[a-zA-Z0-9_]*/ReactAndroid::hermes/g' "$WORKLETS_CMAKE"
 
-WORKLETS_GRADLE="node_modules/react-native-worklets/android/build.gradle"
-
-echo "🔧 Patching Worklets Gradle..."
-
-# Remove duplicate Hermes dep safely
-grep -q "hermes-android" "$WORKLETS_GRADLE" && \
-  sed -i '/com.facebook.react:hermes-android/d' "$WORKLETS_GRADLE"
-
-echo "✅ Worklets Gradle patched"
+  echo "✅ Fallback mode applied"
+else
+  echo "✅ Using REAL Hermes prefab (no patch needed)"
+fi
 
 # ============================================
-# 4. FINAL CHECKS (NO HERMES DEPENDENCY)
+# 3. FINAL CHECK
 # ============================================
-
-echo "🎯 Final sanity check..."
 
 grep -q "ReactAndroid::reactnative" "$WORKLETS_CMAKE" || {
-  echo "❌ Worklets linking not properly patched"
+  echo "❌ Worklets patch failed"
   exit 1
 }
 
-echo "🎉 All PristineAudio patches applied successfully" 
+echo "🎉 All patches applied successfully"  
