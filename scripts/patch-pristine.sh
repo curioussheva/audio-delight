@@ -29,48 +29,28 @@ echo "✅ RNTP patched"
 
 WORKLETS_CMAKE="node_modules/react-native-worklets/android/CMakeLists.txt"
 
-echo "🔧 Patching Worklets CMake..."
+echo "🔧 Hard patching Worklets CMake (FULL STRIP HERMES)..."
 
-# Hapus hermes-engine
-sed -i 's/find_package(hermes-engine REQUIRED)//g' "$WORKLETS_CMAKE"
+# 1. Hapus semua referensi hermes-engine
+sed -i '/hermes-engine/d' "$WORKLETS_CMAKE"
 
-# Replace linking
+# 2. Hapus blok find_package hermes
+sed -i '/find_package(hermes-engine/d' "$WORKLETS_CMAKE"
+
+# 3. Replace linking hermes → jsi
 sed -i 's/hermes-engine::libhermes/ReactAndroid::jsi/g' "$WORKLETS_CMAKE"
 
-# Fix jsctooling issue
+# 4. Fix jsctooling
 sed -i 's/ReactAndroid::jsctooling/ReactAndroid::jsi ReactAndroid::reactnative/g' "$WORKLETS_CMAKE"
 
-# FORCE JSC
+# 5. FORCE runtime ke JSC (semua kemungkinan format)
 sed -i 's/JS_RUNTIME hermes/JS_RUNTIME jsc/g' "$WORKLETS_CMAKE"
+sed -i 's/JS_RUNTIME=hermes/JS_RUNTIME=jsc/g' "$WORKLETS_CMAKE"
 
-echo "✅ Worklets CMake patched"
+# 6. Extra safety: hapus conditional hermes block
+sed -i '/JS_RUNTIME.*hermes/d' "$WORKLETS_CMAKE"
 
+echo "✅ Worklets fully de-hermes-ed"
 
-# ============================================
-# 3. PATCH WORKLETS GRADLE
-# ============================================
-
-WORKLETS_GRADLE="node_modules/react-native-worklets/android/build.gradle"
-
-echo "🔧 Patching Worklets Gradle..."
-
-# Remove Hermes dependency
-sed -i '/hermes-android/d' "$WORKLETS_GRADLE"
-
-echo "✅ Worklets Gradle patched"
-
-
-# ============================================
-# 4. CLEAN NATIVE CACHE
-# ============================================
-
-echo "🧹 Cleaning CMake cache..."
-
-rm -rf node_modules/react-native-worklets/android/.cxx || true
-
-
-# ============================================
-# DONE
-# ============================================
-
-echo "🎉 All patches applied (JSC mode)" 
+echo "🔍 Checking for leftover hermes references..."
+grep -n "hermes" "$WORKLETS_CMAKE" || echo "✅ No hermes references left"
