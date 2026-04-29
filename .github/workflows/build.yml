@@ -54,30 +54,11 @@ jobs:
           yes | sdkmanager \
             "ndk;27.1.12297006" \
             "cmake;3.31.6"
-      - name: Force CMake version
-        run: echo "cmake.dir=$ANDROID_HOME/cmake/3.31.6" >> android/local.properties
 
       # 7. Inject Gradle init (RN + Expo fix)
-      - name: Inject Gradle init script
-        run: |
-          mkdir -p $GRADLE_USER_HOME/init.d
-          cat > $GRADLE_USER_HOME/init.d/rn-plugins.gradle << EOF
-          beforeSettings { settings ->
-              settings.pluginManagement {
-                  repositories {
-                      google()
-                      mavenCentral()
-                      gradlePluginPortal()
-                  }
-                  includeBuild("${{ github.workspace }}/node_modules/@react-native/gradle-plugin")
-                  includeBuild("${{ github.workspace }}/node_modules/expo-modules-autolinking/android/expo-gradle-plugin")
-              }
-          }
-          EOF
+
 
       # 8. Patch RN Gradle Plugin (CI fix)
-      - name: Patch RN Gradle Plugin
-        run: sed -i '/foojay-resolver-convention/d' node_modules/@react-native/gradle-plugin/settings.gradle.kts
 
       # 9. Setup Oboe (native audio)
       - name: Setup Oboe
@@ -125,6 +106,10 @@ jobs:
       # 14. Clean again (post-codegen)
       - name: Clean native cache (post)
         run: rm -rf android/.cxx
+        
+      - name: Clean project
+        working-directory: android
+        run: ./gradlew clean
 
       # 15. Build APK (Hermes) with log
       - name: Build Debug APK (with log)
