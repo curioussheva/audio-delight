@@ -55,13 +55,17 @@ android {
         prefab true
     }
 
-    externalNativeBuild {
-    cmake {
-        cppFlags "-std=c++17 -O3"
-        arguments "-DANDROID_STL=c++_shared",
-                  "-DJS_RUNTIME=hermes"
-       }
-    }
+    externalNativeBuild {  
+    cmake {  
+        path "src/main/cpp/CMakeLists.txt"  
+        version "3.31.6"  
+
+        cppFlags "-std=c++17 -O3"  
+
+        arguments "-DANDROID_STL=c++_shared",  
+                  "-DJS_RUNTIME=hermes"  
+    }  
+}  
 
     buildTypes {
         debug {}
