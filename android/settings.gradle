@@ -4,11 +4,14 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
     }
+
+    includeBuild("../node_modules/@react-native/gradle-plugin")
+    includeBuild("../node_modules/expo-modules-autolinking/android/expo-gradle-plugin")
 }
 
 plugins {
     id("com.facebook.react.settings")
-    id("expo-autolinking-settings") 
+    id("expo-autolinking-settings")
 }
 
 extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
@@ -17,6 +20,6 @@ extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
 
 expoAutolinking.useExpoModules()
 
-rootProject.name = 'PristineAudio'
+rootProject.name = "PristineAudio"
 
-include ':app'
+include(":app") 
