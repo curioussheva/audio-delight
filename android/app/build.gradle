@@ -59,13 +59,8 @@ android {
     cmake {
         path "src/main/cpp/CMakeLists.txt"
         version "3.31.6"
-
-        arguments = [
-            ANDROID_STL: "c++_shared",
-            JS_RUNTIME: "hermes"
-            ]
-        }
     }
+}
 
     buildTypes {
         debug {}
