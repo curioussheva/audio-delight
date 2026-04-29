@@ -133,6 +133,16 @@ jobs:
         run: |
           grep -q "nativeInitEngine" node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/AudioPlayer.kt
           echo "✅ RNTP patch verified"
+          
+      - name: Patch RN Gradle Plugin safely
+        run: |
+         FILE=node_modules/@react-native/gradle-plugin/settings.gradle.kts
+         if grep -q "foojay-resolver-convention" "$FILE"; then
+         sed -i '/foojay-resolver-convention/d' "$FILE"
+         echo "✅ Patched foojay"
+         else
+         echo "✅ Already patched"
+         fi
 
       # ============================================
       # 12. Generate Codegen
