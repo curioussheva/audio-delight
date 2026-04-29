@@ -9,7 +9,8 @@ apply plugin: "com.facebook.react"
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 
 react {
-    entryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry')", projectRoot, "android", "absolute"].execute(null, rootDir).text.trim())
+    entryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry')", projectRoot, "android", "absolute"]
+        .execute(null, rootDir).text.trim())
 
     reactNativeDir = new File(
         ["node", "--print", "require.resolve('react-native/package.json')"]
@@ -48,20 +49,21 @@ android {
 
         versionCode 1
         versionName "1.0.37"
-
-        externalNativeBuild {
-            cmake {
-                cppFlags "-std=c++17 -O3"
-                arguments "-DANDROID_STL=c++_shared"
-            }
-        }
     }
 
-    // ✅ CMake aktif TANPA prefab
+    buildFeatures {
+        prefab true
+    }
+
     externalNativeBuild {
         cmake {
             path "src/main/cpp/CMakeLists.txt"
-            version "3.22.1"
+            version "3.31.6"
+
+            cppFlags "-std=c++17 -O3"
+
+            arguments "-DANDROID_STL=c++_shared",
+                      "-DJS_RUNTIME=hermes"
         }
     }
 
@@ -102,7 +104,4 @@ dependencies {
     implementation "androidx.media3:media3-common:$media3Version"
     implementation "androidx.media3:media3-exoplayer:$media3Version"
     implementation "androidx.media3:media3-decoder:$media3Version"
-}
-
-apply plugin: "expo-root-project"
-apply plugin: "com.facebook.react.rootproject"
+} 
