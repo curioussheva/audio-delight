@@ -11,6 +11,7 @@ jobs:
 
     env:
       GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
+      NODE_ENV: development   # ✅ gunakan development, bukan production
 
     steps:
       # ============================================
@@ -126,6 +127,13 @@ jobs:
           set -e
           bash scripts/patch-pristine.sh
 
+      # 🔥 Patch AndroidManifest (remove package attr)
+      - name: Patch AndroidManifest in node_modules
+        run: |
+          find node_modules -path "*/android/src/main/AndroidManifest.xml" \
+            -exec sed -i '/package="/d' {} +
+          echo "✅ Cleaned package attributes from manifests"
+
       # ============================================
       # 12. Verify RNTP patch
       # ============================================
@@ -184,5 +192,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: AndroidManifest-Debug
-          path: android/app/src/main/AndroidManifest.xml
-          
+          path: android/app/src/main/AndroidManifest.xml 
