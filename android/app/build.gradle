@@ -56,16 +56,14 @@ android {
     }
 
     externalNativeBuild {
-        cmake {
-            path "src/main/cpp/CMakeLists.txt"
-            version "3.31.6"
-
-            // FIX: Use assignment (=) or add to arguments
-            arguments "-DANDROID_STL=c++_shared",
-                      "-DJS_RUNTIME=hermes",
-                      "-DCMAKE_CXX_FLAGS=-std=c++17 -O3" 
-        }
+    cmake {
+        arguments = [
+            "-DANDROID_STL=c++_shared",
+            "-DJS_RUNTIME=hermes",
+            "-DCMAKE_CXX_FLAGS=-std=c++17 -O3"
+        ]
     }
+}
 
     buildTypes {
         debug {}
