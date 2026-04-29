@@ -67,7 +67,7 @@ jobs:
         run: |
           yes | sdkmanager \
             "ndk;27.1.12297006" \
-            "cmake;3.22.1"
+            "cmake;3.31.6"
 
       - name: Force CMake version
         run: |
