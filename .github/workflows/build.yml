@@ -166,17 +166,23 @@ jobs:
       # ============================================
       # 15. Build APK (Hermes)
       # ============================================
-      - name: Build Debug APK
+      - name: Build Debug APK (with log)
         working-directory: android
         run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug \
-            --no-daemon \
-            --stacktrace \
-            -PnewArchEnabled=true \
-            -PreactNativeNewArch=true \
-            -PhermesEnabled=true \
-            -DJS_RUNTIME=hermes
+         chmod +x gradlew
+         ./gradlew assembleDebug \
+         --no-daemon \
+         --stacktrace \
+         --info \
+         -PnewArchEnabled=true \
+         -PreactNativeNewArch=true \
+         -PhermesEnabled=true \
+         -DJS_RUNTIME=hermes | tee build.log
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kotlin-Compile-Log
+          path: android/build.log
 
       # ============================================
       # 16. Upload APK
