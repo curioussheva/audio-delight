@@ -147,7 +147,7 @@ jobs:
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
             -PhermesEnabled=true \
-            -PkotlinVersion=1.9.24 || true
+            -PkotlinVersion=2.0.21 || true
 
       # ============================================
       # 🔥 14. Clean again (post-codegen)
@@ -169,7 +169,7 @@ jobs:
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
             -PhermesEnabled=true \
-            -PkotlinVersion=1.9.24 \
+            -PkotlinVersion=2.0.21 \
             -DJS_RUNTIME=hermes
 
       # ============================================
