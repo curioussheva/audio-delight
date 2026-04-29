@@ -70,7 +70,7 @@ jobs:
 
       - name: Force CMake version
         run: |
-          echo "cmake.dir=$ANDROID_HOME/cmake/3.22.1" >> android/local.properties
+          echo "cmake.dir=$ANDROID_HOME/cmake/3.31.6" >> android/local.properties
 
       # ============================================
       # 7. Inject Gradle init (RN + Expo fix)
