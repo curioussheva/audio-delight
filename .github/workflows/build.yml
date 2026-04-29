@@ -14,25 +14,35 @@ jobs:
       NODE_ENV: development
 
     steps:
+      # ============================================
       # 1. Checkout
+      # ============================================
       - uses: actions/checkout@v4
 
+      # ============================================
       # 2. Setup Node + PNPM
+      # ============================================
       - uses: pnpm/action-setup@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
 
-      # 3. Install dependencies
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      # ============================================
+      # 3. Install dependencies (NO ignore-scripts!)
+      # ============================================
+      - run: rm -rf node_modules
+      
+      - run: pnpm install --frozen-lockfile
 
-      # Fix Skia (native binding)
-      - name: Fix Skia binaries
+      # Fix native bindings
+      - name: Rebuild native deps
         run: pnpm rebuild @shopify/react-native-skia
 
-      # 4. Verify Gradle plugins
+      # ============================================
+      # 4. Verify Gradle plugins exist
+      # ============================================
       - name: Verify Gradle plugin paths
         run: |
           set -e
@@ -40,27 +50,57 @@ jobs:
           test -f node_modules/expo-modules-autolinking/android/expo-gradle-plugin/build.gradle.kts
           echo "✅ Gradle plugins OK"
 
+      # ============================================
       # 5. Setup Java + Android SDK
+      # ============================================
       - uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: "temurin"
           cache: gradle
+
       - uses: android-actions/setup-android@v3
 
-      # 6. Install NDK + CMake
+      # ============================================
+      # 6. Install NDK + CMake (STABLE VERSION)
+      # ============================================
       - name: Install NDK + CMake
         run: |
           yes | sdkmanager \
             "ndk;27.1.12297006" \
-            "cmake;3.31.6"
+            "cmake;3.22.1"
 
-      # 7. Inject Gradle init (RN + Expo fix)
+      # ============================================
+      # 7. Set local.properties (IMPORTANT)
+      # ============================================
+      - name: Configure Android paths
+        run: |
+          echo "ndk.dir=$ANDROID_HOME/ndk/27.1.12297006" >> android/local.properties
+          echo "cmake.dir=$ANDROID_HOME/cmake/3.22.1" >> android/local.properties
 
+      # ============================================
+      # 8. Inject Gradle init (FIX RN + Expo plugins)
+      # ============================================
+      - name: Inject Gradle init script
+        run: |
+          mkdir -p $GRADLE_USER_HOME/init.d
+          cat > $GRADLE_USER_HOME/init.d/rn-plugins.gradle << 'EOF'
+          beforeSettings { settings ->
+              settings.pluginManagement {
+                  repositories {
+                      google()
+                      mavenCentral()
+                      gradlePluginPortal()
+                  }
+                  includeBuild("${{ github.workspace }}/node_modules/@react-native/gradle-plugin")
+                  includeBuild("${{ github.workspace }}/node_modules/expo-modules-autolinking/android/expo-gradle-plugin")
+              }
+          }
+          EOF
 
-      # 8. Patch RN Gradle Plugin (CI fix)
-
+      # ============================================
       # 9. Setup Oboe (native audio)
+      # ============================================
       - name: Setup Oboe
         run: |
           OBOE_DIR="android/app/src/main/cpp/oboe"
@@ -68,31 +108,35 @@ jobs:
           curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz \
           | tar -xz --strip-components=1 -C "$OBOE_DIR"
 
+      # ============================================
       # 10. Clean native cache
+      # ============================================
       - name: Clean native cache
         run: |
           rm -rf node_modules/react-native-worklets/android/.cxx
           rm -rf android/.cxx
           rm -rf android/build
 
-      # 11. Apply RNTP patch ONLY
+      # ============================================
+      # 11. Apply patches
+      # ============================================
       - name: Apply PristineAudio patches
         run: bash scripts/patch-pristine.sh
 
-      # Patch AndroidManifest (remove only package attr)
-      - name: Patch AndroidManifest in node_modules
+      - name: Patch AndroidManifest
         run: |
           find node_modules -path "*/android/src/main/AndroidManifest.xml" \
             -exec sed -i 's/ package="[^"]*"//g' {} +
-          echo "✅ Removed package attributes safely"
+          echo "✅ Manifest patched"
 
-      # 12. Verify RNTP patch
       - name: Verify RNTP patch
         run: |
           grep -q "nativeInitEngine" node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/AudioPlayer.kt
           echo "✅ RNTP patch verified"
 
-      # 13. Generate Codegen (Hermes)
+      # ============================================
+      # 12. Generate Codegen
+      # ============================================
       - name: Generate Codegen
         working-directory: android
         run: |
@@ -101,18 +145,22 @@ jobs:
             --no-daemon \
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
-            -PhermesEnabled=true 
+            -PhermesEnabled=true
 
-      # 14. Clean again (post-codegen)
-      - name: Clean native cache (post)
+      # ============================================
+      # 13. Clean after codegen
+      # ============================================
+      - name: Clean after codegen
         run: rm -rf android/.cxx
-        
-      - name: Clean project
+
+      - name: Gradle clean
         working-directory: android
         run: ./gradlew clean
 
-      # 15. Build APK (Hermes) with log
-      - name: Build Debug APK (with log)
+      # ============================================
+      # 14. Build APK
+      # ============================================
+      - name: Build Debug APK
         working-directory: android
         run: |
           chmod +x gradlew
@@ -125,35 +173,30 @@ jobs:
             -PhermesEnabled=true \
             -DJS_RUNTIME=hermes | tee build.log
 
-      # Upload full log always
+      # ============================================
+      # 15. Upload logs
+      # ============================================
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: Kotlin-Compile-Log
+          name: Full-Build-Log
           path: android/build.log
 
-      # Extract warnings and errors
-      - name: Extract warnings and errors
+      - name: Extract warnings/errors
         if: always()
-        run: grep -E "warning|error|w:" android/build.log > android/build-warnings-errors.log || true
+        run: grep -E "warning|error|w:" android/build.log > android/build-issues.log || true
 
-      # Upload warnings and errors log always
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: Kotlin-Warnings-Errors
-          path: android/build-warnings-errors.log
+          name: Build-Issues
+          path: android/build-issues.log
 
-      # Upload APK only if build success
+      # ============================================
+      # 16. Upload APK
+      # ============================================
       - uses: actions/upload-artifact@v4
         if: success()
         with:
           name: PristineAudio-Debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
-
-      # Upload Manifest only if build success
-      - uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: AndroidManifest-Debug
-          path: android/app/src/main/AndroidManifest.xml   
