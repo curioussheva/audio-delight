@@ -127,12 +127,12 @@ jobs:
           set -e
           bash scripts/patch-pristine.sh
 
-      # 🔥 Patch AndroidManifest (remove package attr)
+      # 🔥 Patch AndroidManifest (remove only package attr)
       - name: Patch AndroidManifest in node_modules
         run: |
-          find node_modules -path "*/android/src/main/AndroidManifest.xml" \
-            -exec sed -i '/package="/d' {} +
-          echo "✅ Cleaned package attributes from manifests"
+         find node_modules -path "*/android/src/main/AndroidManifest.xml" \
+         -exec sed -i 's/ package="[^"]*"//g' {} +
+         echo "✅ Removed package attributes safely"
 
       # ============================================
       # 12. Verify RNTP patch
