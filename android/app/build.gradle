@@ -60,8 +60,10 @@ android {
         path "src/main/cpp/CMakeLists.txt"
         version "3.31.6"
 
-        arguments "-DANDROID_STL=c++_shared",
-                  "-DJS_RUNTIME=hermes"
+        arguments = [
+            ANDROID_STL: "c++_shared",
+            JS_RUNTIME: "hermes"
+            ]
         }
     }
 
