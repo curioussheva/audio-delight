@@ -40,7 +40,7 @@ android {
     namespace 'com.pristineaudio.app'
 
     compileSdk rootProject.ext.compileSdkVersion
-    ndkVersion rootProject.ext.ndkVersion
+    ndkVersion rootProject.ext.ndkVersion ?: "27.1.12297006"
 
     defaultConfig {
         applicationId 'com.pristineaudio.app'
@@ -49,6 +49,9 @@ android {
 
         versionCode 1
         versionName "1.0.37"
+
+        buildConfigField "boolean", "IS_NEW_ARCHITECTURE_ENABLED", "true"
+        buildConfigField "boolean", "IS_HERMES_ENABLED", "true"
     }
 
     buildFeatures {
@@ -56,11 +59,11 @@ android {
     }
 
     externalNativeBuild {
-    cmake {
-        path "src/main/cpp/CMakeLists.txt"
-        version "3.22.1"
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1"
+        }
     }
-}
 
     buildTypes {
         debug {}
@@ -79,6 +82,7 @@ android {
             pickFirst '**/libreactnative.so'
             pickFirst '**/libreact_featureflagsjni.so'
             pickFirst '**/libturbomodulejsijni.so'
+            pickFirst '**/libfolly_runtime.so'
         }
 
         resources {
@@ -93,6 +97,7 @@ android {
 
 dependencies {
     implementation("com.facebook.react:react-android")
+
     implementation("com.facebook.react:hermes-android")
 
     def media3Version = "1.6.1"
