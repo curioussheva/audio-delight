@@ -191,8 +191,6 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug \
             --no-daemon \
-            --stacktrace \
-            --info \
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
             -PhermesEnabled=true \
