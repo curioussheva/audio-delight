@@ -16,22 +16,26 @@ class APMRenderersFactory(
     sampleRate: Int = 4096,
     emitter: FFTEmitter?
 ) : DefaultRenderersFactory(context) {
-    
-    // Processor ini yang biasanya digunakan RNTP untuk visualizer/FFT
+
     val teeProcessor = TeeAudioProcessor(TeeListener(sampleRate, emitter))
+    val oboeProcessor = OboeAudioProcessor()
 
     @OptIn(UnstableApi::class)
     override fun buildAudioSink(
         context: Context,
         enableFloatOutput: Boolean,
         enableAudioTrackPlaybackParams: Boolean
-    ): AudioSink? {
-        // Kita membangun Sink secara manual untuk menyuntikkan teeProcessor
+    ): AudioSink {
+
         return DefaultAudioSink.Builder(context)
-            .setEnableFloatOutput(enableFloatOutput)
+            .setEnableFloatOutput(true) // paksa float
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-            .setAudioProcessors(arrayOf(teeProcessor))
+            .setAudioProcessors(
+                arrayOf(
+                    teeProcessor,   // visualizer
+                    oboeProcessor   // 🔥 native pipeline
+                )
+            )
             .build()
     }
 }
- 

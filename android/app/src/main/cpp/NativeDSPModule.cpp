@@ -1,54 +1,70 @@
 #include <jni.h>
 #include <android/log.h>
-#include "AudioEngine.h"
+#include "EngineManager.h"
 
-// Mengambil fungsi Singleton dari native-lib.cpp
-extern "C" {
-    AudioEngine* getAudioEngine(); 
-}
+#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, "NativeDSP", __VA_ARGS__)
 
 extern "C" {
+
+// ==========================================
+// DSP CONTROL
+// ==========================================
 
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_NativeDSPModule_setNativeEqualizerBand(
-    JNIEnv *env, jobject thiz, jint band, jfloat gainDb) {
-    
-    getAudioEngine()->setEqBand(band, gainDb);
+    JNIEnv *, jobject, jint band, jfloat gainDb) {
+
+    EngineManager::get().setEqBand(band, gainDb);
 }
 
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_NativeDSPModule_setNativeBassBoost(
-    JNIEnv *env, jobject thiz, jfloat gainDb) {
-    
-    getAudioEngine()->setBassBoost(gainDb);
+    JNIEnv *, jobject, jfloat gainDb) {
+
+    EngineManager::get().setBassBoost(gainDb);
 }
 
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_NativeDSPModule_setNativeMasterGain(
-    JNIEnv *env, jobject thiz, jfloat gain) {
-    
-    getAudioEngine()->setMasterGain(gain);
+    JNIEnv *, jobject, jfloat gain) {
+
+    EngineManager::get().setMasterGain(gain);
 }
 
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_NativeDSPModule_setNativeStereoWide(
-    JNIEnv *env, jobject thiz, jfloat width) {
-    
-    getAudioEngine()->setStereoWide(width);
+    JNIEnv *, jobject, jfloat width) {
+
+    EngineManager::get().setStereoWide(width);
 }
 
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_NativeDSPModule_setNativeBalance(
-    JNIEnv *env, jobject thiz, jfloat balance) {
-    
-    getAudioEngine()->setBalance(balance);
+    JNIEnv *, jobject, jfloat balance) {
+
+    EngineManager::get().setBalance(balance);
 }
+
+// ==========================================
+// MODE CONTROL (CORE FEATURE)
+// ==========================================
+
+JNIEXPORT void JNICALL
+Java_com_pristineaudio_NativeDSPModule_setProcessingMode(
+    JNIEnv *, jobject, jint mode) {
+
+    EngineManager::get().setProcessingMode(mode);
+}
+
+// ==========================================
+// OPTIONAL
+// ==========================================
 
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_NativeDSPModule_toggleNativeExclusiveMode(
-    JNIEnv *env, jobject thiz, jboolean enabled) {
-    
-    getAudioEngine()->setExclusiveMode(enabled);
+    JNIEnv *, jobject, jboolean enabled) {
+
+    EngineManager::get().setExclusiveMode(enabled);
 }
 
-} // extern "C"
+} 

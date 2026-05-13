@@ -1,22 +1,17 @@
 #include <jni.h>
 #include <vector>
-#include <cstdint>
-#include "AudioEngine.h"
+#include "EngineManager.h"
 
 // ========================================
-// Global Audio Engine (singleton simple)
+// OPTIONAL LEGACY BRIDGE (if needed)
 // ========================================
-static AudioEngine* gEngine = nullptr;
-
+extern "C"
 AudioEngine* getAudioEngine() {
-    if (gEngine == nullptr) {
-        gEngine = new AudioEngine();
-    }
-    return gEngine;
+    return &EngineManager::get(); // redirect ke singleton baru
 }
 
 // ========================================
-// JNI INTERFACE
+// JNI
 // ========================================
 extern "C" {
 
@@ -25,66 +20,54 @@ extern "C" {
 // ========================================
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_NativeDSPModule_bootEngineNative(JNIEnv *, jobject) {
-    getAudioEngine()->start();
+    EngineManager::get().start();
 }
 
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_NativeDSPModule_shutdownEngineNative(JNIEnv *, jobject) {
-    if (gEngine != nullptr) {
-        gEngine->stop(); // optional tapi recommended
-        delete gEngine;
-        gEngine = nullptr;
-    }
+    // ❗ jangan delete engine
+    EngineManager::get().stop();
 }
 
 // ========================================
-// Audio input (Java → Native)
+// Audio input (REALTIME PATH)
 // ========================================
 JNIEXPORT void JNICALL
-Java_com_pristineaudio_OboeAudioProcessor_feedNativeAudio(
-    JNIEnv *env,
-    jobject /* this */,
-    jfloatArray data,
-    jint num_samples
+Java_com_pristineaudio_OboeAudioProcessor_feedNativeBuffer(
+    JNIEnv* env,
+    jobject,
+    jobject byteBuffer,
+    jint size,
+    jint encoding
 ) {
-    if (data == nullptr || num_samples <= 0) return;
+    auto* data = static_cast<uint8_t*>(env->GetDirectBufferAddress(byteBuffer));
+    if (!data) return;
 
-    // Ambil pointer langsung (fast path)
-    jfloat* samples = (jfloat*) env->GetPrimitiveArrayCritical(data, nullptr);
+    auto& engine = EngineManager::get();
 
-    if (samples != nullptr) {
-        // Copy ke buffer aman (hindari blocking GC terlalu lama)
-        std::vector<float> buffer(samples, samples + num_samples);
-
-        // WAJIB release secepat mungkin
-        env->ReleasePrimitiveArrayCritical(data, samples, JNI_ABORT);
-
-        // Kirim ke audio engine
-        getAudioEngine()->pushData(buffer.data(), num_samples);
+    if (encoding == 2) { // PCM 16
+        engine.pushPCM16(reinterpret_cast<int16_t*>(data), size / 2);
+    } else {
+        engine.pushFloat(reinterpret_cast<float*>(data), size / 4);
     }
 }
 
 // ========================================
-// Visualizer output (Native → Java)
+// Visualizer
 // ========================================
 JNIEXPORT jfloatArray JNICALL
 Java_com_pristineaudio_NativeVisualizerBridge_getVisualizerData(
     JNIEnv *env,
-    jobject /* this */
+    jobject
 ) {
-    auto& engine = *getAudioEngine();
+    auto& engine = EngineManager::get();
+    auto fftData = engine.getVisualizerData();
 
-    std::vector<float> fftData = engine.getVisualizerData();
+    jfloatArray result = env->NewFloatArray(fftData.size());
+    if (!result) return nullptr;
 
-    jsize size = static_cast<jsize>(fftData.size());
-    jfloatArray result = env->NewFloatArray(size);
-
-    if (result == nullptr) {
-        return nullptr; // Out of memory
-    }
-
-    env->SetFloatArrayRegion(result, 0, size, fftData.data());
+    env->SetFloatArrayRegion(result, 0, fftData.size(), fftData.data());
     return result;
 }
 
-} // extern "C" 
+}

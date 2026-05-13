@@ -9,7 +9,6 @@ import android.util.Log
 class NativeVisualizerBridge(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
     private var nativeAvailable = false
-    private var visualizer: Visualizer? = null
 
     companion object {
         const val NAME = "NativeVisualizerBridge"
@@ -59,22 +58,20 @@ class NativeVisualizerBridge(reactContext: ReactApplicationContext) : ReactConte
 
     @ReactMethod
     fun getFFTData(promise: Promise) {
-        val vis = visualizer
-        if (vis == null || !vis.enabled) {
-            promise.resolve(Arguments.createArray())
-            return
-        }
-        try {
-            val fft = ByteArray(vis.captureSize)
-            vis.getFft(fft)
-            val array = Arguments.createArray()
-            for (value in fft) array.pushDouble(value.toDouble())
-            promise.resolve(array)
-        } catch (e: Exception) {
-            Log.e(TAG, "getFFTData error: ${e.message}")
-            promise.resolve(Arguments.createArray())
-        }
+    if (!nativeAvailable) {
+        promise.resolve(Arguments.createArray())
+        return
     }
+
+    try {
+        val data = getVisualizerData()
+        val array = Arguments.createArray()
+        data.forEach { array.pushDouble(it.toDouble()) }
+        promise.resolve(array)
+    } catch (e: Exception) {
+        promise.resolve(Arguments.createArray())
+    }
+}
 
     override fun onCatalystInstanceDestroy() {
         visualizer?.release()

@@ -1,43 +1,105 @@
 #include "NativePristineAudio.h"
 #include "AudioEngine.h"
 #include <jni.h>
+#include <memory>
+#include <mutex>
+#include "EngineManager.h"
 
 namespace facebook::react {
 
-// Kita buat instance global agar state audio tetap terjaga selama aplikasi hidup
-static AudioEngine gAudioEngine;
+// ==========================================
+// GLOBAL ENGINE (SAFE VERSION)
+// ==========================================
+
+static std::unique_ptr<AudioEngine> gEngine = nullptr;
+static std::mutex gEngineMutex;
+
+// Helper: ensure engine exists
+static AudioEngine* getEngine() {
+    std::lock_guard<std::mutex> lock(gEngineMutex);
+    if (!gEngine) {
+        gEngine = std::make_unique<AudioEngine>();
+    }
+    return gEngine.get();
+}
+
+// ==========================================
+// CONSTRUCTOR
+// ==========================================
 
 NativePristineAudio::NativePristineAudio(std::shared_ptr<CallInvoker> jsInvoker)
     : NativePristineAudioSpecJSI(jsInvoker) {}
 
-// Implementasi fungsi startEngine
+
+// ==========================================
+// ENGINE CONTROL
+// ==========================================
+
 void NativePristineAudio::startEngine(jsi::Runtime &rt) {
-    gAudioEngine.start();
+    getEngine()->start();
 }
 
-// Implementasi fungsi stopEngine (Opsional, pastikan ada di .h)
 void NativePristineAudio::stopEngine(jsi::Runtime &rt) {
-    // gAudioEngine.stop(); 
+    if (gEngine) {
+        gEngine->stop();
+    }
 }
 
-// Implementasi setEqBand
+// Optional: destroy (kalau mau clean reload)
+void NativePristineAudio::destroyEngine(jsi::Runtime &rt) {
+    std::lock_guard<std::mutex> lock(gEngineMutex);
+    if (gEngine) {
+        gEngine->stop();
+        gEngine.reset();
+    }
+}
+
+
+// ==========================================
+// DSP CONTROL
+// ==========================================
+
 void NativePristineAudio::setEqBand(jsi::Runtime &rt, double band, double gainDb) {
-    gAudioEngine.setEqBand(static_cast<int>(band), static_cast<float>(gainDb));
+    getEngine()->setEqBand((int)band, (float)gainDb);
 }
 
-// Implementasi setMasterGain
 void NativePristineAudio::setMasterGain(jsi::Runtime &rt, double gain) {
-    gAudioEngine.setMasterGain(static_cast<float>(gain));
+    getEngine()->setMasterGain((float)gain);
 }
 
-// Implementasi Bass Boost
 void NativePristineAudio::setBassBoost(jsi::Runtime &rt, double gainDb) {
-    gAudioEngine.setBassBoost(static_cast<float>(gainDb));
+    getEngine()->setBassBoost((float)gainDb);
 }
 
-// Implementasi Stereo Wide
 void NativePristineAudio::setStereoWide(jsi::Runtime &rt, double width) {
-    gAudioEngine.setStereoWide(static_cast<float>(width));
+    getEngine()->setStereoWide((float)width);
 }
 
-} // namespace facebook::react
+
+// ==========================================
+// MODE CONTROL (🔥 CORE FEATURE)
+// ==========================================
+
+void NativePristineAudio::setProcessingMode(jsi::Runtime &rt, int mode) {
+    // 0 = BIT PERFECT (bypass DSP)
+    // 1 = DSP ENABLED
+    getEngine()->setProcessingMode(mode);
+}
+
+
+// ==========================================
+// VISUALIZER (🔥 UX FEATURE)
+// ==========================================
+
+jsi::Array NativePristineAudio::getVisualizerData(jsi::Runtime &rt) {
+    auto data = getEngine()->getVisualizerData();
+
+    jsi::Array result(rt, data.size());
+    for (size_t i = 0; i < data.size(); i++) {
+        result.setValueAtIndex(rt, i, data[i]);
+    }
+
+    return result;
+}
+
+} // namespace facebook::react 

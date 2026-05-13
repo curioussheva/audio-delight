@@ -1,38 +1,39 @@
 #include "AudioEngine.h"
 #include <android/log.h>
+#include <cstring>
 
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, "PristineEngine", __VA_ARGS__)
 
-// ==========================================
-// IMPLEMENTASI BIQUAD FILTER
-// ==========================================
+// ================= BIQUAD =================
 
-void BiquadFilter::setPeakingEQ(float freq, float Q, float gainDb, float sampleRate) {
+void BiquadFilter::setPeakingEQ(float freq, float Q, float gainDb, float sr) {
     float A = powf(10.0f, gainDb / 40.0f);
-    float omega = 2.0f * (float)M_PI * freq / sampleRate;
-    float alpha = sinf(omega) / (2.0f * Q);
-    
-    float a0 = 1.0f + alpha / A;
-    coeffs.b0 = (1.0f + alpha * A) / a0;
-    coeffs.b1 = (-2.0f * cosf(omega)) / a0;
-    coeffs.b2 = (1.0f - alpha * A) / a0;
-    coeffs.a1 = (-2.0f * cosf(omega)) / a0;
-    coeffs.a2 = (1.0f - alpha / A) / a0;
+    float w = 2.0f * M_PI * freq / sr;
+    float alpha = sinf(w) / (2.0f * Q);
+
+    float a0 = 1 + alpha / A;
+
+    coeffs.b0 = (1 + alpha * A) / a0;
+    coeffs.b1 = (-2 * cosf(w)) / a0;
+    coeffs.b2 = (1 - alpha * A) / a0;
+    coeffs.a1 = (-2 * cosf(w)) / a0;
+    coeffs.a2 = (1 - alpha / A) / a0;
 }
 
-void BiquadFilter::setLowShelf(float freq, float Q, float gainDb, float sampleRate) {
+void BiquadFilter::setLowShelf(float freq, float Q, float gainDb, float sr) {
     float A = powf(10.0f, gainDb / 40.0f);
-    float omega = 2.0f * (float)M_PI * freq / sampleRate;
-    float alpha = sinf(omega) / (2.0f * Q);
-    float cosW = cosf(omega);
-    float sqrtA2 = 2.0f * sqrtf(A) * alpha;
+    float w = 2.0f * M_PI * freq / sr;
+    float alpha = sinf(w) / (2.0f * Q);
+    float cosW = cosf(w);
+    float beta = 2 * sqrtf(A) * alpha;
 
-    float a0 = (A + 1.0f) + (A - 1.0f) * cosW + sqrtA2;
-    coeffs.b0 = (A * ((A + 1.0f) - (A - 1.0f) * cosW + sqrtA2)) / a0;
-    coeffs.b1 = (2.0f * A * ((A - 1.0f) - (A + 1.0f) * cosW)) / a0;
-    coeffs.b2 = (A * ((A + 1.0f) - (A - 1.0f) * cosW - sqrtA2)) / a0;
-    coeffs.a1 = (-2.0f * ((A - 1.0f) + (A + 1.0f) * cosW)) / a0;
-    coeffs.a2 = ((A + 1.0f) + (A - 1.0f) * cosW - sqrtA2) / a0;
+    float a0 = (A + 1) + (A - 1) * cosW + beta;
+
+    coeffs.b0 = A * ((A + 1) - (A - 1) * cosW + beta) / a0;
+    coeffs.b1 = 2 * A * ((A - 1) - (A + 1) * cosW) / a0;
+    coeffs.b2 = A * ((A + 1) - (A - 1) * cosW - beta) / a0;
+    coeffs.a1 = -2 * ((A - 1) + (A + 1) * cosW) / a0;
+    coeffs.a2 = ((A + 1) + (A - 1) * cosW - beta) / a0;
 }
 
 float BiquadFilter::process(float in) {
@@ -42,159 +43,219 @@ float BiquadFilter::process(float in) {
     return out;
 }
 
-// ==========================================
-// IMPLEMENTASI AUDIO ENGINE
-// ==========================================
+// ================= ENGINE =================
 
-AudioEngine::AudioEngine() : mStream(nullptr) { // Tambahkan inisialisasi nullptr
+AudioEngine::AudioEngine() {
     mBuffer.resize(kBufferSize, 0.0f);
-    recalculateFilters(); 
-}
-
-void AudioEngine::recalculateFilters() {
-    float freqs[] = {31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000};
-    for(int i = 0; i < 10; i++) {
-        mEqBandsLeft[i].setPeakingEQ(freqs[i], 1.414f, mEqGains[i], mSampleRate);
-        mEqBandsRight[i].setPeakingEQ(freqs[i], 1.414f, mEqGains[i], mSampleRate);
-    }
-    mBassBoostLeft.setLowShelf(100.0f, 0.707f, mBassBoostGain, mSampleRate);
-    mBassBoostRight.setLowShelf(100.0f, 0.707f, mBassBoostGain, mSampleRate);
+    mVizBuffer.resize(kVizSize, 0.0f);
+    recalculateFilters();
 }
 
 void AudioEngine::start() {
+    if (mRunning.load()) return;
+
     oboe::AudioStreamBuilder builder;
+
     builder.setPerformanceMode(oboe::PerformanceMode::LowLatency)
-           ->setSharingMode(oboe::SharingMode::Exclusive)
-           ->setFormat(oboe::AudioFormat::Float)
-           ->setChannelCount(oboe::ChannelCount::Stereo)
-           // Konversi otomatis jika file lagu vs DAC hardware beda format
-           ->setSampleRateConversionQuality(oboe::SampleRateConversionQuality::Medium)
-           ->setFormatConversionAllowed(true)
-           ->setChannelConversionAllowed(true)
-           ->setCallback(this)
-           ->openStream(&mStream);
-           
-    if (mStream != nullptr) {
-        mSampleRate = mStream->getSampleRate();
-        LOGD("Oboe Stream Started. Actual Sample Rate: %f", mSampleRate);
-        
-        recalculateFilters(); // Pastikan filter menggunakan sample rate aslinya DAC
-        mStream->requestStart();
-    } else {
-        LOGD("Failed to open Oboe stream");
+        ->setSharingMode(mExclusiveMode.load()
+            ? oboe::SharingMode::Exclusive
+            : oboe::SharingMode::Shared)
+        ->setFormat(oboe::AudioFormat::Float)
+        ->setChannelCount(oboe::ChannelCount::Stereo)
+        ->setCallback(this);
+
+    if (builder.openStream(&mStream) != oboe::Result::OK || !mStream) {
+        LOGD("Failed to open stream");
+        return;
+    }
+
+    mSampleRate = mStream->getSampleRate();
+    recalculateFilters();
+
+    mReadIndex = 0;
+    mWriteIndex = 0;
+
+    mRunning = true;
+    mStream->requestStart();
+}
+
+void AudioEngine::stop() {
+    mRunning = false;
+
+    if (mStream) {
+        mStream->requestStop();
+        mStream->close();
+        mStream = nullptr;
     }
 }
+
+// ================= AUDIO INPUT =================
 
 void AudioEngine::pushData(const float *data, int32_t numSamples) {
-    // Menulis data dari ExoPlayer ke dalam Ring Buffer
-    for (int i = 0; i < numSamples; ++i) {
-        mBuffer[mWriteIndex.load() & kBufferMask] = data[i];
-        mWriteIndex.fetch_add(1);
+    uint32_t write = mWriteIndex.load();
+    uint32_t read  = mReadIndex.load();
+
+    if ((write - read) > kBufferSize - numSamples) {
+        mReadIndex.store(write - kBufferSize / 2);
     }
+
+    for (int i = 0; i < numSamples; i++) {
+        mBuffer[write & kBufferMask] = data[i];
+        write++;
+    }
+
+    mWriteIndex.store(write);
 }
 
-oboe::DataCallbackResult AudioEngine::onAudioReady(oboe::AudioStream *audioStream, void *audioData, int32_t numFrames) {
-    float *output = static_cast<float *>(audioData);
-    
-    // Cache local variables
-    float masterGain = mMasterGain.load();
-    float balance = mBalance.load();
-    float stereoWide = mStereoWide.load();
+// ================= DSP =================
 
-    for (int i = 0; i < numFrames; ++i) {
-        // Cek apakah ada data di buffer (mencegah underrun)
-        if (mWriteIndex.load() - mReadIndex.load() >= 2) {
-            
-            // Baca buffer menggunakan bitwise masking (sangat cepat)
-            float left = mBuffer[mReadIndex.load() & kBufferMask];
-            mReadIndex.fetch_add(1);
-            float right = mBuffer[mReadIndex.load() & kBufferMask];
-            mReadIndex.fetch_add(1);
-
-            // 1. DSP: 10-Band EQ
-            for(int b = 0; b < 10; b++) {
-                left = mEqBandsLeft[b].process(left);
-                right = mEqBandsRight[b].process(right);
-            }
-
-            // 2. DSP: Bass Boost
-            left = mBassBoostLeft.process(left);
-            right = mBassBoostRight.process(right);
-
-            // 3. DSP: Stereo Widener (Mid-Side Processing)
-            float mid = (left + right) * 0.5f;
-            float side = (left - right) * 0.5f * stereoWide;
-            left = mid + side;
-            right = mid - side;
-
-            // 4. DSP: Balance & Gain
-            float gainL = masterGain * (1.0f - std::max(0.0f, balance));
-            float gainR = masterGain * (1.0f - std::max(0.0f, -balance));
-
-            output[i * 2] = left * gainL;
-            output[i * 2 + 1] = right * gainR;
-            
-        } else {
-            // Buffer kosong (mengeluarkan silence agar stream tidak error)
-            output[i * 2] = 0.0f;
-            output[i * 2 + 1] = 0.0f;
-        }
+inline void AudioEngine::processDSP(float &left, float &right) {
+    for (int i = 0; i < 10; i++) {
+        left = mEqBandsLeft[i].process(left);
+        right = mEqBandsRight[i].process(right);
     }
+
+    left = mBassBoostLeft.process(left);
+    right = mBassBoostRight.process(right);
+
+    float mid = (left + right) * 0.5f;
+    float side = (left - right) * 0.5f * mStereoWide.load();
+
+    left = mid + side;
+    right = mid - side;
+}
+
+inline float AudioEngine::softClip(float x) {
+    return tanhf(x);
+}
+
+// ================= CALLBACK =================
+
+oboe::DataCallbackResult AudioEngine::onAudioReady(
+    oboe::AudioStream *,
+    void *audioData,
+    int32_t numFrames) {
+
+    float *out = static_cast<float *>(audioData);
+
+    if (!mRunning.load()) {
+        memset(out, 0, sizeof(float) * numFrames * 2);
+        return oboe::DataCallbackResult::Continue;
+    }
+
+    uint32_t read = mReadIndex.load();
+
+    for (int i = 0; i < numFrames; i++) {
+
+        float left = 0.0f;
+        float right = 0.0f;
+
+        if (mWriteIndex.load() - read >= 2) {
+            left  = mBuffer[read & kBufferMask]; read++;
+            right = mBuffer[read & kBufferMask]; read++;
+        }
+
+        // 🔥 MODE SWITCH
+        if (mProcessingMode.load() == DSP) {
+            processDSP(left, right);
+
+            float gain = mMasterGain.load();
+            float balance = mBalance.load();
+
+            float gainL = gain * (1.0f - std::max(0.0f, balance));
+            float gainR = gain * (1.0f - std::max(0.0f, -balance));
+
+            left  = softClip(left * gainL);
+            right = softClip(right * gainR);
+        }
+
+        // write output
+        out[i * 2]     = left;
+        out[i * 2 + 1] = right;
+
+        // 🔥 push to visualizer (AFTER processing)
+        uint32_t vizIndex = mVizWrite.load();
+        mVizBuffer[vizIndex & kVizMask] = (left + right) * 0.5f;
+        mVizWrite.store(vizIndex + 1);
+    }
+
+    mReadIndex.store(read);
     return oboe::DataCallbackResult::Continue;
 }
 
-void AudioEngine::onErrorAfterClose(oboe::AudioStream *stream, oboe::Result error) {
-    LOGD("Oboe stream closed with error: %d", error);
-    if (error == oboe::Result::ErrorDisconnected) {
-        // Otomatis restart stream saat DAC / Headphone dicolok atau dicabut
-        start(); 
+// ================= VISUALIZER =================
+
+std::vector<float> AudioEngine::getVisualizerData() {
+    std::vector<float> out(256, 0.0f);
+
+    uint32_t write = mVizWrite.load();
+
+    for (int i = 0; i < 256; i++) {
+        out[i] = mVizBuffer[(write - 256 + i) & kVizMask];
     }
+
+    return out;
 }
 
-// ==========================================
-// FUNGSI SETTER UNTUK JNI / TURBOMODULES
-// ==========================================
+// ================= CONTROL =================
+
+void AudioEngine::setProcessingMode(int mode) {
+    mProcessingMode.store(mode);
+}
+
+void AudioEngine::setExclusiveMode(bool enabled) {
+    mExclusiveMode.store(enabled);
+}
 
 void AudioEngine::setEqBand(int band, float gainDb) {
     if (band < 0 || band > 9) return;
-    mEqGains[band] = gainDb; // Simpan nilai untuk recalculate
-    float freqs[] = {31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000};
+
+    mEqGains[band] = gainDb;
+
+    float freqs[10] = {31,62,125,250,500,1000,2000,4000,8000,16000};
+
     mEqBandsLeft[band].setPeakingEQ(freqs[band], 1.414f, gainDb, mSampleRate);
     mEqBandsRight[band].setPeakingEQ(freqs[band], 1.414f, gainDb, mSampleRate);
 }
 
 void AudioEngine::setBassBoost(float gainDb) {
-    mBassBoostGain = gainDb; 
-    mBassBoostLeft.setLowShelf(100.0f, 0.707f, gainDb, mSampleRate);
-    mBassBoostRight.setLowShelf(100.0f, 0.707f, gainDb, mSampleRate);
+    mBassBoostGain = gainDb;
+
+    mBassBoostLeft.setLowShelf(100, 0.707f, gainDb, mSampleRate);
+    mBassBoostRight.setLowShelf(100, 0.707f, gainDb, mSampleRate);
 }
 
-void AudioEngine::setMasterGain(float gain) { 
-    mMasterGain.store(gain); 
+void AudioEngine::setMasterGain(float g) {
+    mMasterGain.store(g);
 }
 
-void AudioEngine::setBalance(float balance) { 
-    mBalance.store(balance); 
+void AudioEngine::setBalance(float b) {
+    mBalance.store(b);
 }
 
-void AudioEngine::setStereoWide(float width) { 
-    mStereoWide.store(width); 
+void AudioEngine::setStereoWide(float w) {
+    mStereoWide.store(w);
 }
 
-void AudioEngine::setExclusiveMode(bool enabled) {
-    // Akan diimplementasikan jika ingin memaksa mode eksklusif di-restart on the fly
-}
- 
- std::vector<float> AudioEngine::getVisualizerData() {
-    std::vector<float> data(128, 0.0f);
-    uint32_t currentRead = mReadIndex.load();
-    uint32_t currentWrite = mWriteIndex.load();
+void AudioEngine::recalculateFilters() {
+    float freqs[10] = {31,62,125,250,500,1000,2000,4000,8000,16000};
 
-    // Pastikan ada cukup data (minimal 128 sample) sebelum mengambil
-    if (currentWrite - currentRead >= 128) {
-        for (int i = 0; i < 128; ++i) {
-            data[i] = mBuffer[(currentRead - 128 + i) & kBufferMask];
-        }
+    for (int i = 0; i < 10; i++) {
+        mEqBandsLeft[i].setPeakingEQ(freqs[i], 1.414f, mEqGains[i], mSampleRate);
+        mEqBandsRight[i].setPeakingEQ(freqs[i], 1.414f, mEqGains[i], mSampleRate);
     }
-    return data;
+
+    setBassBoost(mBassBoostGain);
 }
+
+void AudioEngine::onErrorAfterClose(
+    oboe::AudioStream *,
+    oboe::Result error) {
+
+    LOGD("Stream error: %d", error);
+
+    if (error == oboe::Result::ErrorDisconnected) {
+        stop();
+        start();
+    }
+} 
