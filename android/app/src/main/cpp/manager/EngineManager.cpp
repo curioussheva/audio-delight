@@ -1,0 +1,240 @@
+// =====================================================
+// manager/EngineManager.cpp
+// =====================================================
+
+#include "EngineManager.h"
+
+namespace pristine {
+
+// =====================================================
+// CONSTRUCTOR
+// =====================================================
+
+EngineManager::EngineManager()
+    :
+
+    mEngine(),
+
+    mPlayback(
+        mEngine
+    ) {
+
+}
+
+// =====================================================
+// SINGLETON
+// =====================================================
+
+EngineManager&
+EngineManager::get() {
+
+    static EngineManager instance;
+
+    return instance;
+}
+
+// =====================================================
+// ACCESS
+// =====================================================
+
+AudioEngine&
+EngineManager::engine() {
+
+    return mEngine;
+}
+
+PlaybackController&
+EngineManager::playback() {
+
+    return mPlayback;
+}
+
+AudioState&
+EngineManager::state() {
+
+    return mState;
+}
+
+// =====================================================
+// LIFECYCLE
+// =====================================================
+
+void EngineManager::start() {
+
+    std::lock_guard<std::mutex>
+        lock(mMutex);
+
+    if (
+        mEngine.isRunning()
+    ) {
+        return;
+    }
+
+    const bool exclusiveMode =
+        mState.exclusiveMode.load(
+            std::memory_order_acquire
+        );
+
+    mEngine.start(
+        exclusiveMode
+    );
+}
+
+void EngineManager::stop() {
+
+    std::lock_guard<std::mutex>
+        lock(mMutex);
+
+    if (
+        !mEngine.isRunning()
+    ) {
+        return;
+    }
+
+    mEngine.stop();
+}
+
+// =====================================================
+// PLAYBACK
+// =====================================================
+
+void EngineManager::play() {
+
+    mPlayback.play();
+}
+
+void EngineManager::pause() {
+
+    mPlayback.pause();
+}
+
+// =====================================================
+// DSP CONTROL
+// =====================================================
+
+void EngineManager::setDSPEnabled(
+    bool enabled
+) {
+
+    mEngine.setDSPEnabled(
+        enabled
+    );
+}
+
+void EngineManager::setLimiterEnabled(
+    bool enabled
+) {
+
+    mEngine.setLimiterEnabled(
+        enabled
+    );
+}
+
+void EngineManager::setEqBand(
+    int band,
+    float gainDb
+) {
+
+    mEngine.setEqBand(
+        band,
+        gainDb
+    );
+}
+
+void EngineManager::setBassBoost(
+    float gainDb
+) {
+
+    mEngine.setBassBoost(
+        gainDb
+    );
+}
+
+void EngineManager::setMasterGain(
+    float gain
+) {
+
+    mEngine.setMasterGain(
+        gain
+    );
+}
+
+void EngineManager::setBalance(
+    float balance
+) {
+
+    mEngine.setBalance(
+        balance
+    );
+}
+
+void EngineManager::setStereoWide(
+    float width
+) {
+
+    mEngine.setStereoWidth(
+        width
+    );
+}
+
+// =====================================================
+// PROCESSING MODE
+// =====================================================
+
+void EngineManager::setProcessingMode(
+    ProcessingMode mode
+) {
+
+    mState.processingMode.store(
+        mode,
+        std::memory_order_release
+    );
+
+    mEngine.setProcessingMode(
+        mode
+    );
+}
+
+// =====================================================
+// EXCLUSIVE MODE
+// =====================================================
+
+void EngineManager::setExclusiveMode(
+    bool enabled
+) {
+
+    std::lock_guard<std::mutex>
+        lock(mMutex);
+
+    const bool wasRunning =
+        mEngine.isRunning();
+
+    if (wasRunning) {
+
+        mEngine.stop();
+    }
+
+    mState.exclusiveMode.store(
+        enabled,
+        std::memory_order_release
+    );
+
+    if (wasRunning) {
+
+        mEngine.start(
+            enabled
+        );
+    }
+}
+
+// =====================================================
+// METRICS
+// =====================================================
+
+EngineStats
+EngineManager::getStats() const {
+
+    return mEngine.getStats();
+}
+
+} // namespace pristine 
