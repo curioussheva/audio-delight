@@ -150,6 +150,22 @@ void EngineManager::setBassBoost(
     );
 }
 
+void EngineManager::setSolfeggioFreq(float freq) {
+    mEngine.setSolfeggioFreq(freq);
+}
+
+void EngineManager::setBrainwaveFreq(float freq) {
+    mEngine.setBrainwaveFreq(freq);
+}
+
+void EngineManager::setResonanceIntensity(float intensity) {
+    mEngine.setResonanceIntensity(intensity);
+}
+
+void EngineManager::setImmersiveEnabled(bool enabled) {
+    mEngine.setImmersiveEnabled(enabled);
+}
+
 void EngineManager::setMasterGain(
     float gain
 ) {

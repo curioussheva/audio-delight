@@ -31,29 +31,18 @@ public:
 
     // dsp
     void setDSPEnabled(bool enabled);
-
     void setLimiterEnabled(bool enabled);
+    void setEqBand(int band, float gainDb);
+    void setBassBoost(float gainDb);
+    void setMasterGain(float gain);
+    void setBalance(float balance);
+    void setStereoWide(float width);
 
-    void setEqBand(
-        int band,
-        float gainDb
-    );
-
-    void setBassBoost(
-        float gainDb
-    );
-
-    void setMasterGain(
-        float gain
-    );
-
-    void setBalance(
-        float balance
-    );
-
-    void setStereoWide(
-        float width
-    );
+    // immersive
+    void setSolfeggioFreq(float freq);
+    void setBrainwaveFreq(float freq);
+    void setResonanceIntensity(float intensity);
+    void setImmersiveEnabled(bool enabled);
 
     // mode
     void setProcessingMode(
@@ -94,3 +83,5 @@ private:
 };
 
 } // namespace pristine 
+
+

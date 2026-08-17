@@ -1,85 +1,190 @@
 #pragma once
 
 #include "DecoderTypes.h"
+#include "DecoderState.h"
+#include "StreamResampler.h"
 
+#include <memory>
 #include <string>
 
-namespace pristine {
+namespace pristine::decoder {
 
 // =====================================================
-// DECODE RESULT
-// =====================================================
-
-enum class DecodeResult {
-    Ok,
-    EndOfStream,
-    NeedMoreData,
-    Error
-};
-
-// =====================================================
-// AUDIO DECODER INTERFACE
+// AUDIO DECODER BASE CLASS
 // =====================================================
 
 class AudioDecoder {
 public:
+    explicit AudioDecoder(
+        const DecodeConfig& config = {}
+    );
 
     virtual ~AudioDecoder();
 
-    // =============================================
-    // OPEN / CLOSE
-    // =============================================
+    AudioDecoder(const AudioDecoder&) = delete;
+    AudioDecoder& operator=(const AudioDecoder&) = delete;
 
-    virtual bool open(
-        const std::string& uri
-    ) = 0;
+    // =====================================================
+    // LIFECYCLE
+    // =====================================================
 
-    virtual void close() = 0;
+    bool open(
+        const std::string& uri,
+        const AudioFormat* hint = nullptr
+    );
 
-    virtual bool isOpen() const = 0;
+    void close();
 
-    // =============================================
-    // STREAM INFO
-    // =============================================
+    [[nodiscard]]
+    bool isOpen() const noexcept;
 
-    virtual AudioStreamInfo
-    getStreamInfo() const = 0;
-
-    // =============================================
+    // =====================================================
     // DECODE
-    // =============================================
+    // =====================================================
 
-    virtual DecodeResult decodeNextChunk(
-        DecodedChunk& outChunk,
-        int32_t targetFrames
-    ) = 0;
+    [[nodiscard]]
+    DecodeResult decode(
+        uint32_t maxFrames
+    );
 
-    // =============================================
+    // =====================================================
     // SEEK
-    // =============================================
+    // =====================================================
 
-    virtual bool seek(
-        double seconds
+    bool seek(
+        double positionSeconds
+    );
+
+    bool seekToFrame(
+        uint64_t frame
+    );
+
+    [[nodiscard]]
+    virtual bool isSeekable() const = 0;
+
+    // =====================================================
+    // FORMAT
+    // =====================================================
+
+    [[nodiscard]]
+    const AudioFormat&
+    getInputFormat() const noexcept;
+
+    [[nodiscard]]
+    const AudioFormat&
+    getOutputFormat() const noexcept;
+
+    [[nodiscard]]
+    virtual DecoderCapabilities
+    getCapabilities() const = 0;
+
+    void setTargetFormat(
+        const AudioFormat& format
+    );
+
+    [[nodiscard]]
+    bool needsResampling() const noexcept;
+
+    // =====================================================
+    // STATE
+    // =====================================================
+
+    [[nodiscard]]
+    DecoderState getState() const noexcept;
+
+    [[nodiscard]]
+    bool isEof() const noexcept;
+
+    [[nodiscard]]
+    bool hasError() const noexcept;
+
+    [[nodiscard]]
+    const std::string&
+    getLastError() const noexcept;
+
+    // =====================================================
+    // POSITION
+    // =====================================================
+
+    [[nodiscard]]
+    virtual double
+    getPositionSeconds() const = 0;
+
+    [[nodiscard]]
+    virtual uint64_t
+    getPositionFrames() const = 0;
+
+    [[nodiscard]]
+    virtual double
+    getDurationSeconds() const = 0;
+
+protected:
+
+    // =====================================================
+    // IMPLEMENTED BY SUBCLASSES
+    // =====================================================
+
+    virtual bool onOpen(
+        const std::string& uri,
+        const AudioFormat* hint
     ) = 0;
 
-    // =============================================
-    // FLUSH
-    // =============================================
+    virtual void onClose() = 0;
 
-    virtual void flush() = 0;
+    virtual DecodeResult onDecode(
+        uint32_t maxFrames
+    ) = 0;
 
-    // =============================================
-    // POSITION
-    // =============================================
+    virtual bool onSeek(
+        double positionSeconds
+    ) = 0;
 
-    virtual double
-    getCurrentPosition() const = 0;
+    virtual bool onSeekToFrame(
+        uint64_t frame
+    ) = 0;
 
-    // =============================================
-    // EOF
-    // =============================================
+    virtual AudioFormat onGetInputFormat() const = 0;
 
-    virtual bool isEOF() const = 0;
+    // =====================================================
+    // HELPERS FOR DERIVED CLASSES
+    // =====================================================
+
+    void setEof(
+        bool eof
+    ) noexcept;
+
+    void setError(
+        std::string error
+    );
+
+    void clearError();
+
+    [[nodiscard]]
+    const DecodeConfig&
+    config() const noexcept;
+
+private:
+    DecodeResult applyResampling(
+        DecodeResult&& result
+    );
+
+    void refreshFormats();
+
+private:
+    DecodeConfig config_;
+
+    AtomicDecoderState state_;
+
+    std::unique_ptr<StreamResampler>
+        resampler_;
+
+    AudioFormat inputFormat_;
+    AudioFormat outputFormat_;
+
+    bool isOpen_ = false;
+    bool eof_ = false;
+
+    std::string lastError_;
 };
 
-} // namespace pristine
+} // namespace pristine::decoder 

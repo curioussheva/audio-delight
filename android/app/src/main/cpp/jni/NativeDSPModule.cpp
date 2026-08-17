@@ -166,4 +166,28 @@ Java_com_pristineaudio_dsp_NativeDSPModule_toggleNativeExclusiveMode(
         .setExclusiveMode(enabled);
 }
 
+JNIEXPORT void JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_setNativeSolfeggioFreq(
+    JNIEnv*, jobject, jfloat freq) {
+    EngineManager::get().setSolfeggioFreq(freq);
+}
+
+JNIEXPORT void JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_setNativeBrainwaveFreq(
+    JNIEnv*, jobject, jfloat freq) {
+    EngineManager::get().setBrainwaveFreq(freq);
+}
+
+JNIEXPORT void JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_setNativeResonanceIntensity(
+    JNIEnv*, jobject, jfloat intensity) {
+    EngineManager::get().setResonanceIntensity(intensity);
+}
+
+JNIEXPORT void JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_setNativeImmersiveEnabled(
+    JNIEnv*, jobject, jboolean enabled) {
+    EngineManager::get().setImmersiveEnabled(enabled);
+}
+
 }

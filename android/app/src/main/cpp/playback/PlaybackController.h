@@ -1,108 +1,97 @@
-// =====================================================
-// playback/PlaybackController.h
-// =====================================================
-
 #pragma once
 
+#include <memory>
 #include <atomic>
-#include <cstdint>
-#include <mutex>
 
 #include "PlaybackState.h"
+#include "PlaybackMetrics.h"
+#include "PlaybackClock.h"
+#include "PCMQueue.h"
+#include "PlaybackTypes.h"
 
-namespace pristine {
+#include "../decoder/DecoderWorker.h"
 
-class AudioEngine;
-
-// =====================================================
-// PLAYBACK CONTROLLER
-// =====================================================
+namespace pristine::playback {
 
 class PlaybackController {
 public:
-
     PlaybackController();
-
     ~PlaybackController();
 
-    // =============================================
-    // ENGINE
-    // =============================================
+    PlaybackController(const PlaybackController&) = delete;
+    PlaybackController& operator=(const PlaybackController&) = delete;
 
-    void setAudioEngine(
-        AudioEngine* engine
-    );
+    // =====================================================
+    // LIFECYCLE
+    // =====================================================
 
-    // =============================================
-    // AUDIO FEED
-    // =============================================
+    bool initialize();
+    void shutdown();
 
-    void pushAudioData(
-        const float* data,
-        int32_t numSamples
-    );
+    bool isInitialized() const noexcept;
 
-    // =============================================
-    // TRANSPORT
-    // =============================================
+    // =====================================================
+    // TRANSPORT (ASYNC SAFE ENTRYPOINTS)
+    // =====================================================
 
-    void play();
+    bool loadTrack(const TrackInfo& track);
 
-    void pause();
+    bool play();
+    bool pause();
+    bool stop();
+    bool seek(double seconds);
 
-    void stop();
+    // =====================================================
+    // AUDIO THREAD (REALTIME CRITICAL)
+    // =====================================================
 
-    void flush();
+    void render(float* output,
+                uint32_t frames,
+                uint32_t channels,
+                uint32_t sampleRate) noexcept;
 
-    // decoder-driven seek later
-    void seekTo(
-        uint64_t positionMs
-    );
+    // =====================================================
+    // STATE ACCESSORS (LOCK-FREE)
+    // =====================================================
 
-    // =============================================
-    // TRACK
-    // =============================================
-
-    void prepareNewTrack(
-        const TrackMetadata& metadata
-    );
-
-    void onPlaybackComplete();
-
-    // =============================================
-    // STATE
-    // =============================================
-
-    const PlaybackState&
-    getState() const noexcept;
-
-    bool isPlaying() const noexcept;
-
-    // =============================================
-    // POSITION
-    // =============================================
-
-    uint64_t getPositionSamples()
-    const noexcept;
-
-    uint64_t getPositionMs()
-    const noexcept;
+    std::shared_ptr<PlaybackState> state() const noexcept;
+    std::shared_ptr<PlaybackMetrics> metrics() const noexcept;
+    std::shared_ptr<PlaybackClock> clock() const noexcept;
+    std::shared_ptr<PCMQueue> pcmQueue() const noexcept;
 
 private:
 
-    void updatePlaybackPosition();
+    // =====================================================
+    // INTERNAL CONTROL
+    // =====================================================
+
+    bool startDecoder(const TrackInfo& track);
+    void stopDecoder();
+
+    void updatePlaybackState();
 
 private:
 
-    mutable std::mutex mMutex;
+    // =====================================================
+    // CORE STATE (ATOMIC FIRST)
+    // =====================================================
 
-    PlaybackState mState;
+    std::atomic<bool> initialized_{false};
+    std::atomic<bool> playing_{false};
+    std::atomic<bool> stopping_{false};
 
-    AudioEngine* mAudioEngine =
-        nullptr;
+    TrackInfo currentTrack_{};
 
-    std::atomic<bool>
-        mPlaybackActive{false};
+    // =====================================================
+    // CORE COMPONENTS
+    // =====================================================
+
+    std::shared_ptr<PlaybackState> state_;
+    std::shared_ptr<PlaybackMetrics> metrics_;
+    std::shared_ptr<PlaybackClock> clock_;
+    std::shared_ptr<PCMQueue> pcmQueue_;
+
+    std::unique_ptr<decoder::DecoderWorker> decoderWorker_;
 };
 
-} // namespace pristine 
+} // namespace pristine::playback 

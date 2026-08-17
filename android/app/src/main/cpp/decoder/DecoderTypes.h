@@ -1,103 +1,301 @@
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
+#include <string>
+#include <vector>
 
-namespace pristine {
+namespace pristine::decoder {
 
 // =====================================================
 // AUDIO FORMAT
 // =====================================================
 
-enum class AudioFormat {
-    PCM_F32,
-    PCM_S16,
-    PCM_S24,
-    PCM_S32,
-    UNKNOWN
+enum class SampleFormat {
+    Unknown,
+
+    U8,
+
+    S16,
+    S24,
+    S24P32,
+    S32,
+
+    F32,
+    F64
 };
-
-// =====================================================
-// SAMPLE LAYOUT
-// =====================================================
-
-enum class SampleLayout {
-    Interleaved,
-    Planar
-};
-
-// =====================================================
-// CHANNEL LAYOUT
-// =====================================================
 
 enum class ChannelLayout {
+    Unknown,
+
     Mono,
     Stereo,
-    Surround51,
-    Surround71,
-    Unknown
+
+    Surround5_1,
+    Surround7_1
+};
+
+struct AudioFormat {
+
+    uint32_t sampleRate = 48000;
+
+    uint32_t channels = 2;
+
+    SampleFormat sampleFormat =
+        SampleFormat::F32;
+
+    ChannelLayout channelLayout =
+        ChannelLayout::Stereo;
+
+    uint64_t totalFrames = 0;
+
+    uint64_t bitrate = 0;
+
+    double durationSeconds = 0.0;
+
+    [[nodiscard]]
+    bool isValid() const noexcept {
+        return sampleRate > 0 &&
+               channels > 0;
+    }
+
+    [[nodiscard]]
+    size_t bytesPerSample() const noexcept {
+
+        switch (sampleFormat) {
+
+            case SampleFormat::U8:
+                return 1;
+
+            case SampleFormat::S16:
+                return 2;
+
+            case SampleFormat::S24:
+                return 3;
+
+            case SampleFormat::S24P32:
+                return 4;
+
+            case SampleFormat::S32:
+                return 4;
+
+            case SampleFormat::F32:
+                return 4;
+
+            case SampleFormat::F64:
+                return 8;
+
+            default:
+                return 0;
+        }
+    }
+
+    [[nodiscard]]
+    size_t bytesPerFrame() const noexcept {
+        return channels *
+               bytesPerSample();
+    }
+};
+
+// =====================================================
+// METADATA
+// =====================================================
+
+struct AudioMetadata {
+
+    std::string title;
+
+    std::string artist;
+
+    std::string album;
+
+    std::string albumArtist;
+
+    std::string genre;
+
+    std::string composer;
+
+    uint32_t trackNumber = 0;
+
+    uint32_t discNumber = 0;
+
+    uint32_t year = 0;
+
+    std::string artworkUri;
+};
+
+// =====================================================
+// DECODER CAPABILITIES
+// =====================================================
+
+struct DecoderCapabilities {
+
+    bool supportsSeeking = true;
+
+    bool supportsStreaming = true;
+
+    bool supportsGapless = false;
+
+    bool supportsMetadata = true;
+
+    bool supportsEmbeddedArtwork = false;
+
+    uint32_t maxChannels = 8;
+
+    uint32_t maxSampleRate = 192000;
+
+    std::vector<std::string>
+        supportedFormats;
+};
+
+// =====================================================
+// DECODE CONFIG
+// =====================================================
+
+struct DecodeConfig {
+
+    uint32_t targetSampleRate =
+        48000;
+
+    uint32_t targetChannels =
+        2;
+
+    uint32_t chunkFrames =
+        4096;
+
+    uint32_t readAheadChunks =
+        4;
+
+    bool fastSeek =
+        false;
+
+    uint32_t maxConsecutiveErrors =
+        3;
+
+    bool continueOnError =
+        false;
+};
+
+// =====================================================
+// DECODE STATUS
+// =====================================================
+
+enum class DecodeStatus {
+
+    Success,
+
+    EndOfStream,
+
+    NeedMoreData,
+
+    Error,
+
+    FatalError,
+
+    NotSupported
+};
+
+// =====================================================
+// DECODE RESULT
+// =====================================================
+
+struct DecodeResult {
+
+    DecodeStatus status =
+        DecodeStatus::Success;
+
+    std::vector<float> samples;
+
+    uint32_t framesDecoded =
+        0;
+
+    uint64_t framePosition =
+        0;
+
+    std::string errorMessage;
+
+    DecodeResult() = default;
+
+    DecodeResult(
+        DecodeResult&&
+    ) noexcept = default;
+
+    DecodeResult&
+    operator=(
+        DecodeResult&&
+    ) noexcept = default;
+
+    DecodeResult(
+        const DecodeResult&
+    ) = delete;
+
+    DecodeResult&
+    operator=(
+        const DecodeResult&
+    ) = delete;
+
+    [[nodiscard]]
+    bool isSuccess() const noexcept {
+
+        return status ==
+                   DecodeStatus::Success &&
+               !samples.empty();
+    }
+
+    [[nodiscard]]
+    bool isEof() const noexcept {
+
+        return status ==
+               DecodeStatus::EndOfStream;
+    }
+};
+
+// =====================================================
+// SEEK
+// =====================================================
+
+enum class SeekMode {
+    Time,
+    Frame
+};
+
+struct SeekRequest {
+
+    SeekMode mode =
+        SeekMode::Time;
+
+    double targetSeconds =
+        0.0;
+
+    uint64_t targetFrame =
+        0;
+
+    bool fast =
+        false;
 };
 
 // =====================================================
 // STREAM INFO
 // =====================================================
 
-struct AudioStreamInfo {
+struct StreamInfo {
 
-    int32_t sampleRate = 0;
+    std::string url;
 
-    int32_t channels = 0;
+    std::vector<
+        std::pair<
+            std::string,
+            std::string
+        >
+    > headers;
 
-    AudioFormat format =
-        AudioFormat::UNKNOWN;
+    int64_t contentLength =
+        -1;
 
-    SampleLayout layout =
-        SampleLayout::Interleaved;
+    bool isLive =
+        false;
 
-    ChannelLayout channelLayout =
-        ChannelLayout::Stereo;
-
-    int64_t totalFrames = -1;
-
-    double durationSec = 0.0;
-
-    bool seekable = false;
-
-    bool isStreaming = false;
+    double bufferDuration =
+        0.0;
 };
 
-// =====================================================
-// PCM BUFFER VIEW
-// Non-owning realtime-safe descriptor
-// =====================================================
-
-struct PCMBufferView {
-
-    float* data = nullptr;
-
-    int32_t frames = 0;
-
-    int32_t channels = 0;
-
-    SampleLayout layout =
-        SampleLayout::Interleaved;
-
-    size_t stride = 0;
-};
-
-// =====================================================
-// DECODED CHUNK
-// =====================================================
-
-struct DecodedChunk {
-
-    PCMBufferView pcm;
-
-    double pts = 0.0;
-
-    bool endOfStream = false;
-
-    bool discontinuity = false;
-};
-
-} // namespace pristine
+} // namespace pristine::decoder 

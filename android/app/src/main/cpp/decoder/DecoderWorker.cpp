@@ -1,313 +1,214 @@
 #include "DecoderWorker.h"
 
-#include <android/log.h>
-
 #include <chrono>
-#include <thread>
+#include <iostream>
 
-#define LOGD(...) \
-__android_log_print( \
-    ANDROID_LOG_DEBUG, \
-    "DecoderWorker", \
-    __VA_ARGS__ \
-)
+namespace pristine::decoder {
 
-namespace pristine {
+using namespace std::chrono;
 
 // =====================================================
-// CTOR
+// CONSTRUCTOR / DESTRUCTOR
 // =====================================================
 
-DecoderWorker::DecoderWorker() = default;
-
-// =====================================================
-// DTOR
-// =====================================================
+DecoderWorker::DecoderWorker(std::unique_ptr<IDecoder> decoder)
+    : decoder_(std::move(decoder)) {}
 
 DecoderWorker::~DecoderWorker() {
-
     stop();
 }
 
 // =====================================================
-// SET DECODER
+// LIFECYCLE
 // =====================================================
 
-void DecoderWorker::setDecoder(
-    std::unique_ptr<
-        audio::AudioDecoder
-    > decoder
-) {
+bool DecoderWorker::start(const std::string& uri, double startPosition) {
+    if (running_.load()) return false;
 
-    mDecoder =
-        std::move(decoder);
-}
+    shouldStop_.store(false);
+    paused_.store(false);
+    currentUri_ = uri;
 
-// =====================================================
-// SET PCM QUEUE
-// =====================================================
-
-void DecoderWorker::setPCMQueue(
-    PCMQueue* queue
-) {
-
-    mPCMQueue = queue;
-}
-
-// =====================================================
-// START
-// =====================================================
-
-bool DecoderWorker::start(
-    const std::string& uri
-) {
-
-    if (
-        mRunning.load()
-    ) {
-
-        return true;
-    }
-
-    if (
-        !mDecoder ||
-        !mPCMQueue
-    ) {
-
-        LOGD(
-            "Decoder or queue missing"
-        );
-
+    if (!decoder_) {
+        notifyError("Decoder not set");
         return false;
     }
 
-    if (
-        !mDecoder->open(uri)
-    ) {
-
-        LOGD(
-            "Failed opening decoder"
-        );
-
+    if (!decoder_->open(uri)) {
+        notifyError("Failed to open decoder");
         return false;
     }
 
-    const auto info =
-        mDecoder->getStreamInfo();
+    if (startPosition > 0.0) {
+        decoder_->seek(startPosition);
+    }
 
-    mStreamInfo.sampleRate =
-        info.sampleRate;
+    running_.store(true);
 
-    mStreamInfo.channels =
-        info.channels;
-
-    mStreamInfo.durationSec =
-        info.durationSec;
-
-    mStreamInfo.totalFrames =
-        info.totalFrames;
-
-    mStreamInfo.seekable =
-        info.seekable;
-
-    mStreamInfo.isStreaming =
-        info.isStreaming;
-
-    mResampler.configure(
-        info.sampleRate,
-        48000,
-        info.channels
-    );
-
-    mStopRequested.store(false);
-
-    mRunning.store(true);
-
-    mThread =
-        std::make_unique<std::thread>(
-            &DecoderWorker::decodeLoop,
-            this
-        );
-
+    workerThread_ = std::thread(&DecoderWorker::workerLoop, this);
     return true;
 }
 
-// =====================================================
-// STOP
-// =====================================================
-
 void DecoderWorker::stop() {
+    if (!running_.load()) return;
 
-    mStopRequested.store(true);
+    shouldStop_.store(true);
+    paused_.store(false);
+    cv_.notify_all();
 
-    mRunning.store(false);
-
-    if (
-        mThread &&
-        mThread->joinable()
-    ) {
-
-        mThread->join();
+    if (workerThread_.joinable()) {
+        workerThread_.join();
     }
 
-    if (mDecoder) {
+    running_.store(false);
 
-        mDecoder->close();
+    if (decoder_) {
+        decoder_->close();
     }
 }
 
-// =====================================================
-// IS RUNNING
-// =====================================================
+void DecoderWorker::pause() {
+    paused_.store(true);
+}
 
-bool DecoderWorker::isRunning()
-    const {
-
-    return
-        mRunning.load();
+void DecoderWorker::resume() {
+    paused_.store(false);
+    cv_.notify_all();
 }
 
 // =====================================================
 // SEEK
 // =====================================================
 
-void DecoderWorker::seek(
-    double seconds
-) {
+bool DecoderWorker::seek(double positionSeconds) {
+    if (!decoder_) return false;
 
-    mSeekTargetSec.store(
-        seconds
-    );
+    std::lock_guard<std::mutex> lock(mutex_);
 
-    mSeekRequested.store(true);
-}
-
-// =====================================================
-// STREAM INFO
-// =====================================================
-
-pristine::AudioStreamInfo
-DecoderWorker::getStreamInfo()
-    const {
-
-    return mStreamInfo;
-}
-
-// =====================================================
-// DECODE LOOP
-// =====================================================
-
-void DecoderWorker::decodeLoop() {
-
-    constexpr int32_t
-        kDecodeFrames = 2048;
-
-    while (
-        !mStopRequested.load()
-    ) {
-
-        // =====================================
-        // SEEK
-        // =====================================
-
-        if (
-            mSeekRequested.load()
-        ) {
-
-            const double target =
-                mSeekTargetSec.load();
-
-            mDecoder->seek(target);
-
-            mPCMQueue->clear();
-
-            mResampler.reset();
-
-            mSeekRequested.store(false);
-        }
-
-        // =====================================
-        // BACKPRESSURE
-        // =====================================
-
-        if (
-            mPCMQueue->freeFrames() <
-            kDecodeFrames * 4
-        ) {
-
-            std::this_thread
-                ::sleep_for(
-                    std::chrono
-                        ::milliseconds(4)
-                );
-
-            continue;
-        }
-
-        // =====================================
-        // DECODE
-        // =====================================
-
-        audio::DecodedChunk
-            decodedChunk;
-
-        const bool ok =
-            mDecoder
-                ->decodeNextChunk(
-                    decodedChunk,
-                    kDecodeFrames
-                );
-
-        if (!ok) {
-
-            LOGD(
-                "Decode EOS"
-            );
-
-            break;
-        }
-
-        // =====================================
-        // RESAMPLE
-        // =====================================
-
-        pristine::DecodedChunk
-            inputChunk;
-
-        inputChunk.pcm.data =
-            decodedChunk.pcm.data;
-
-        inputChunk.pcm.frames =
-            decodedChunk.pcm.frames;
-
-        inputChunk.pcm.channels =
-            decodedChunk.pcm.channels;
-
-        inputChunk.pcm.interleaved =
-            true;
-
-        inputChunk.pts =
-            decodedChunk.pts;
-
-        pristine::DecodedChunk
-            outputChunk;
-
-        mResampler.process(
-            inputChunk,
-            outputChunk
-        );
-
-        // =====================================
-        // PUSH TO QUEUE
-        // =====================================
-
-        mPCMQueue->push(
-            outputChunk.pcm.data,
-            outputChunk.pcm.frames
-        );
+    bool ok = decoder_->seek(positionSeconds);
+    if (!ok) {
+        notifyError("Seek failed");
+        return false;
     }
 
-    mRunning.store(false);
+    return true;
 }
 
-} // namespace pristine
+// =====================================================
+// CONFIG
+// =====================================================
+
+void DecoderWorker::setChunkSize(uint32_t frames) {
+    chunkSize_ = frames;
+}
+
+void DecoderWorker::setChunkCallback(ChunkCallback cb) {
+    chunkCb_ = std::move(cb);
+}
+
+void DecoderWorker::setErrorCallback(ErrorCallback cb) {
+    errorCb_ = std::move(cb);
+}
+
+void DecoderWorker::setEofCallback(EofCallback cb) {
+    eofCb_ = std::move(cb);
+}
+
+// =====================================================
+// QUERY
+// =====================================================
+
+DecoderState DecoderWorker::getState() const {
+    if (!decoder_) return DecoderState::Idle;
+    return decoder_->getState();
+}
+
+double DecoderWorker::getPosition() const {
+    if (!decoder_) return 0.0;
+    return decoder_->getCurrentPosition();
+}
+
+double DecoderWorker::getDuration() const {
+    if (!decoder_) return 0.0;
+    return decoder_->getDurationSeconds();
+}
+
+const AudioFormat& DecoderWorker::getFormat() const {
+    static AudioFormat empty{};
+    if (!decoder_) return empty;
+    return decoder_->getOutputFormat();
+}
+
+// =====================================================
+// MAIN LOOP
+// =====================================================
+
+void DecoderWorker::workerLoop() {
+    while (!shouldStop_.load()) {
+
+        // PAUSE HANDLING
+        if (paused_.load()) {
+            std::unique_lock<std::mutex> lock(mutex_);
+            cv_.wait(lock, [&] {
+                return !paused_.load() || shouldStop_.load();
+            });
+        }
+
+        if (shouldStop_.load()) break;
+
+        // DECODE
+        auto result = decoder_->decode(chunkSize_);
+
+        if (result.status == DecodeStatus::Success) {
+
+            if (chunkCb_) {
+                playback::PCMChunk chunk;
+
+                chunk.header.sampleRate = decoder_->getOutputFormat().sampleRate;
+                chunk.header.channels   = decoder_->getOutputFormat().channels;
+                chunk.header.numFrames  = result.framesDecoded;
+                chunk.header.framePosition = result.framePosition;
+                chunk.header.payloadSize = result.samples.size() * sizeof(float);
+
+                chunk.samples = std::move(result.samples);
+
+                chunkCb_(std::move(chunk));
+            }
+
+        } else if (result.status == DecodeStatus::Eof) {
+            notifyEof();
+            break;
+
+        } else if (result.status == DecodeStatus::Error) {
+            notifyError(result.errorMessage);
+            break;
+
+        } else if (result.status == DecodeStatus::NeedMoreData) {
+            // streaming case → small sleep to avoid busy loop
+            std::this_thread::sleep_for(milliseconds(2));
+        }
+
+        // yield ringan biar CPU tidak full spike
+        std::this_thread::yield();
+    }
+
+    running_.store(false);
+}
+
+// =====================================================
+// NOTIFIERS
+// =====================================================
+
+void DecoderWorker::notifyChunk(playback::PCMChunk&& chunk) {
+    if (chunkCb_) chunkCb_(std::move(chunk));
+}
+
+void DecoderWorker::notifyError(const std::string& error) {
+    if (errorCb_) errorCb_(error);
+}
+
+void DecoderWorker::notifyEof() {
+    if (eofCb_) eofCb_();
+}
+
+} // namespace pristine::decoder 

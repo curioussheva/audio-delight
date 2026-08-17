@@ -1,192 +1,379 @@
-// =====================================================
-// playback/PlaybackState.h
-// =====================================================
-
 #pragma once
 
+#include "PlaybackTypes.h"
+
 #include <atomic>
-#include <cstdint>
 #include <mutex>
-#include <string>
+#include <optional>
 
-namespace pristine {
+namespace pristine::playback {
 
 // =====================================================
-// PLAYBACK STATUS
+// IMMUTABLE SNAPSHOT
 // =====================================================
 
-enum class PlaybackStatus : uint8_t {
+struct PlaybackSnapshot {
 
-    Stopped = 0,
-    Loading,
-    Playing,
-    Paused,
-    Buffering,
-    Completed,
-    Error
+    PlaybackStatus status =
+        PlaybackStatus::Stopped;
+
+    PlaybackPosition position;
+
+    RepeatMode repeat =
+        RepeatMode::Off;
+
+    ShuffleMode shuffle =
+        ShuffleMode::Off;
+
+    std::optional<TrackInfo>
+        currentTrack;
+
+    size_t queueIndex = 0;
+
+    size_t queueLength = 0;
+
+    bool isBuffering = false;
+
+    float playbackRate = 1.0f;
 };
 
 // =====================================================
-// TRACK METADATA
-// =====================================================
-
-struct TrackMetadata {
-
-    std::string uri;
-    std::string title;
-    std::string artist;
-    std::string album;
-
-    uint64_t durationMs = 0;
-};
-
-// =====================================================
-// PLAYBACK STATE
+// THREAD SAFE PLAYBACK STATE
 // =====================================================
 
 class PlaybackState {
 public:
 
-    // =============================================
-    // STATUS
-    // =============================================
+    PlaybackState() = default;
 
-    inline void setStatus(
+    ~PlaybackState() = default;
+
+    PlaybackState(
+        const PlaybackState&
+    ) = delete;
+
+    PlaybackState& operator=(
+        const PlaybackState&
+    ) = delete;
+
+    PlaybackState(
+        PlaybackState&&
+    ) = default;
+
+    PlaybackState& operator=(
+        PlaybackState&&
+    ) = default;
+
+    // =====================================
+    // STATUS
+    // =====================================
+
+    [[nodiscard]]
+    PlaybackStatus
+    getStatus() const noexcept {
+
+        return status_.load(
+            std::memory_order_acquire
+        );
+    }
+
+    void setStatus(
         PlaybackStatus status
     ) noexcept {
 
-        mStatus.store(
+        status_.store(
             status,
             std::memory_order_release
         );
     }
 
-    inline PlaybackStatus
-    getStatus() const noexcept {
+    // =====================================
+    // POSITION
+    // =====================================
 
-        return mStatus.load(
-            std::memory_order_acquire
-        );
+    [[nodiscard]]
+    PlaybackPosition
+    getPosition() const noexcept {
+
+        PlaybackPosition pos;
+
+        pos.positionMs =
+            positionMs_.load(
+                std::memory_order_acquire
+            );
+
+        pos.durationMs =
+            durationMs_.load(
+                std::memory_order_acquire
+            );
+
+        return pos;
     }
 
-    // =============================================
-    // POSITION
-    // =============================================
-
-    inline void setPositionSamples(
-        uint64_t samples
+    void setPosition(
+        uint64_t positionMs
     ) noexcept {
 
-        mPositionSamples.store(
-            samples,
+        positionMs_.store(
+            positionMs,
             std::memory_order_release
         );
     }
 
-    inline uint64_t
-    getPositionSamples() const noexcept {
+    void setDuration(
+        uint64_t durationMs
+    ) noexcept {
 
-        return mPositionSamples.load(
+        durationMs_.store(
+            durationMs,
+            std::memory_order_release
+        );
+    }
+
+    // =====================================
+    // REPEAT
+    // =====================================
+
+    [[nodiscard]]
+    RepeatMode
+    getRepeatMode() const noexcept {
+
+        return repeat_.load(
             std::memory_order_acquire
         );
     }
 
-    inline uint64_t
-    getPositionMs(
-        uint32_t sampleRate
-    ) const noexcept {
+    void setRepeatMode(
+        RepeatMode mode
+    ) noexcept {
 
-        if (sampleRate == 0) {
-            return 0;
-        }
-
-        return
-            (
-                getPositionSamples()
-                * 1000ULL
-            ) / sampleRate;
+        repeat_.store(
+            mode,
+            std::memory_order_release
+        );
     }
 
-    // =============================================
-    // METADATA
-    // =============================================
+    // =====================================
+    // SHUFFLE
+    // =====================================
 
-    void setMetadata(
-        const TrackMetadata& meta
+    [[nodiscard]]
+    ShuffleMode
+    getShuffleMode() const noexcept {
+
+        return shuffle_.load(
+            std::memory_order_acquire
+        );
+    }
+
+    void setShuffleMode(
+        ShuffleMode mode
+    ) noexcept {
+
+        shuffle_.store(
+            mode,
+            std::memory_order_release
+        );
+    }
+
+    // =====================================
+    // BUFFERING
+    // =====================================
+
+    [[nodiscard]]
+    bool isBuffering() const noexcept {
+
+        return buffering_.load(
+            std::memory_order_acquire
+        );
+    }
+
+    void setBuffering(
+        bool buffering
+    ) noexcept {
+
+        buffering_.store(
+            buffering,
+            std::memory_order_release
+        );
+    }
+
+    // =====================================
+    // PLAYBACK RATE
+    // =====================================
+
+    [[nodiscard]]
+    float getPlaybackRate()
+    const noexcept {
+
+        return rate_.load(
+            std::memory_order_acquire
+        );
+    }
+
+    void setPlaybackRate(
+        float rate
+    ) noexcept {
+
+        rate_.store(
+            rate,
+            std::memory_order_release
+        );
+    }
+
+    // =====================================
+    // TRACK
+    // =====================================
+
+    void setCurrentTrack(
+        const TrackInfo& track
     ) {
 
         std::lock_guard<std::mutex>
-            lock(mMutex);
+            lock(trackMutex_);
 
-        mMetadata = meta;
+        currentTrack_ = track;
     }
 
-    TrackMetadata
-    getMetadata() const {
+    void clearCurrentTrack() {
 
         std::lock_guard<std::mutex>
-            lock(mMutex);
+            lock(trackMutex_);
 
-        return mMetadata;
+        currentTrack_.reset();
     }
 
-    // =============================================
-    // ERROR
-    // =============================================
-
-    void setError(
-        const std::string& error
-    ) {
+    [[nodiscard]]
+    std::optional<TrackInfo>
+    getCurrentTrack() const {
 
         std::lock_guard<std::mutex>
-            lock(mMutex);
+            lock(trackMutex_);
 
-        mError = error;
+        return currentTrack_;
     }
 
-    std::string
-    getError() const {
+    // =====================================
+    // QUEUE
+    // =====================================
 
-        std::lock_guard<std::mutex>
-            lock(mMutex);
+    void setQueueInfo(
+        size_t index,
+        size_t length
+    ) noexcept {
 
-        return mError;
-    }
-
-    // =============================================
-    // RESET
-    // =============================================
-
-    void reset() {
-
-        setStatus(
-            PlaybackStatus::Stopped
+        queueIndex_.store(
+            index,
+            std::memory_order_release
         );
 
-        setPositionSamples(0);
+        queueLength_.store(
+            length,
+            std::memory_order_release
+        );
+    }
 
-        std::lock_guard<std::mutex>
-            lock(mMutex);
+    // =====================================
+    // SNAPSHOT
+    // =====================================
 
-        mMetadata = {};
-        mError.clear();
+    [[nodiscard]]
+    PlaybackSnapshot
+    snapshot() const {
+
+        PlaybackSnapshot snap;
+
+        snap.status =
+            getStatus();
+
+        snap.position =
+            getPosition();
+
+        snap.repeat =
+            getRepeatMode();
+
+        snap.shuffle =
+            getShuffleMode();
+
+        snap.isBuffering =
+            isBuffering();
+
+        snap.playbackRate =
+            getPlaybackRate();
+
+        snap.queueIndex =
+            queueIndex_.load(
+                std::memory_order_acquire
+            );
+
+        snap.queueLength =
+            queueLength_.load(
+                std::memory_order_acquire
+            );
+
+        {
+            std::lock_guard<std::mutex>
+                lock(trackMutex_);
+
+            snap.currentTrack =
+                currentTrack_;
+        }
+
+        return snap;
     }
 
 private:
 
-    mutable std::mutex mMutex;
+    // Playback status
 
     std::atomic<PlaybackStatus>
-        mStatus{
+        status_{
             PlaybackStatus::Stopped
         };
 
+    // Position
+
     std::atomic<uint64_t>
-        mPositionSamples{0};
+        positionMs_{0};
 
-    TrackMetadata mMetadata;
+    std::atomic<uint64_t>
+        durationMs_{0};
 
-    std::string mError;
+    // Playback modes
+
+    std::atomic<RepeatMode>
+        repeat_{
+            RepeatMode::Off
+        };
+
+    std::atomic<ShuffleMode>
+        shuffle_{
+            ShuffleMode::Off
+        };
+
+    // Runtime state
+
+    std::atomic<bool>
+        buffering_{false};
+
+    std::atomic<float>
+        rate_{1.0f};
+
+    // Queue state
+
+    std::atomic<size_t>
+        queueIndex_{0};
+
+    std::atomic<size_t>
+        queueLength_{0};
+
+    // Track metadata
+
+    mutable std::mutex
+        trackMutex_;
+
+    std::optional<TrackInfo>
+        currentTrack_;
 };
 
-} // namespace pristine 
+} // namespace pristine::playback 

@@ -1,287 +1,227 @@
-// =====================================================
-// playback/PlaybackController.cpp
-// =====================================================
-
 #include "PlaybackController.h"
 
-#include "../core/AudioEngine.h"
+#include <algorithm>
 
-#include <android/log.h>
-
-#define LOGD(...) \
-__android_log_print( \
-    ANDROID_LOG_DEBUG, \
-    "PlaybackController", \
-    __VA_ARGS__ \
-)
-
-namespace pristine {
+namespace pristine::playback {
 
 // =====================================================
-// CONSTRUCTOR
+// CONSTRUCTOR / DESTRUCTOR
 // =====================================================
 
 PlaybackController::PlaybackController() = default;
 
-// =====================================================
-// DESTRUCTOR
-// =====================================================
-
-PlaybackController::~PlaybackController() = default;
-
-// =====================================================
-// ENGINE
-// =====================================================
-
-void PlaybackController::setAudioEngine(
-    AudioEngine* engine
-) {
-
-    std::lock_guard<std::mutex>
-        lock(mMutex);
-
-    mAudioEngine = engine;
+PlaybackController::~PlaybackController() {
+    shutdown();
 }
 
 // =====================================================
-// PUSH AUDIO DATA
+// LIFECYCLE
 // =====================================================
 
-void PlaybackController::pushAudioData(
-    const float* data,
-    int32_t numSamples
-) {
+bool PlaybackController::initialize() {
+    if (initialized_.load(std::memory_order_acquire))
+        return true;
 
-    if (
-        !data ||
-        numSamples <= 0
-    ) {
+    pcmQueue_ = std::make_shared<PCMQueue>(48000 * 10); // ~10 sec buffer
+    clock_ = std::make_shared<PlaybackClock>();
+    metrics_ = std::make_shared<PlaybackMetrics>();
+    state_ = std::make_shared<PlaybackState>();
+
+    initialized_.store(true, std::memory_order_release);
+    return true;
+}
+
+void PlaybackController::shutdown() {
+    if (!initialized_.exchange(false))
         return;
+
+    stopDecoder();
+
+    playing_.store(false);
+    stopping_.store(true);
+
+    pcmQueue_.reset();
+    clock_.reset();
+    metrics_.reset();
+    state_.reset();
+}
+
+// =====================================================
+// STATE ACCESSORS
+// =====================================================
+
+bool PlaybackController::isInitialized() const noexcept {
+    return initialized_.load(std::memory_order_acquire);
+}
+
+std::shared_ptr<PlaybackState> PlaybackController::state() const noexcept {
+    return state_;
+}
+
+std::shared_ptr<PlaybackMetrics> PlaybackController::metrics() const noexcept {
+    return metrics_;
+}
+
+std::shared_ptr<PlaybackClock> PlaybackController::clock() const noexcept {
+    return clock_;
+}
+
+std::shared_ptr<PCMQueue> PlaybackController::pcmQueue() const noexcept {
+    return pcmQueue_;
+}
+
+// =====================================================
+// TRANSPORT
+// =====================================================
+
+bool PlaybackController::loadTrack(const TrackInfo& track) {
+    if (!initialized_.load(std::memory_order_acquire))
+        return false;
+
+    stopDecoder();
+
+    currentTrack_ = track;
+
+    pcmQueue_->clear();
+    clock_->reset();
+
+    return startDecoder(track);
+}
+
+bool PlaybackController::play() {
+    if (!initialized_.load(std::memory_order_acquire))
+        return false;
+
+    playing_.store(true, std::memory_order_release);
+
+    if (decoderWorker_) {
+        decoderWorker_->resume();
     }
 
-    if (
-        !mPlaybackActive.load(
-            std::memory_order_acquire
-        )
-    ) {
-        return;
+    return true;
+}
+
+bool PlaybackController::pause() {
+    playing_.store(false, std::memory_order_release);
+
+    if (decoderWorker_) {
+        decoderWorker_->pause();
     }
 
-    std::lock_guard<std::mutex>
-        lock(mMutex);
+    return true;
+}
 
-    if (!mAudioEngine) {
-        return;
+bool PlaybackController::stop() {
+    playing_.store(false, std::memory_order_release);
+
+    stopDecoder();
+
+    pcmQueue_->clear();
+    clock_->reset();
+
+    return true;
+}
+
+bool PlaybackController::seek(double seconds) {
+    if (!decoderWorker_)
+        return false;
+
+    pcmQueue_->clear();
+    clock_->seekToSeconds(seconds, 48000);
+
+    return decoderWorker_->seek(seconds);
+}
+
+// =====================================================
+// AUDIO RENDER (REALTIME CRITICAL)
+// =====================================================
+
+void PlaybackController::render(float* output,
+                                uint32_t frames,
+                                uint32_t channels,
+                                uint32_t sampleRate) noexcept {
+    if (!output || frames == 0) return;
+
+    // 1. pull PCM from queue (NO LOCK)
+    const size_t requested = frames * channels;
+
+    size_t readFrames = pcmQueue_->read(output, frames);
+
+    // 2. if underrun → fill silence
+    if (readFrames < frames) {
+        const size_t offset = readFrames * channels;
+        const size_t remaining = (frames - readFrames) * channels;
+
+        std::fill(output + offset,
+                  output + offset + remaining,
+                  0.0f);
     }
 
-    mAudioEngine->pushData(
-        data,
-        numSamples
-    );
-}
+    // 3. advance clock
+    clock_->advanceFrames(frames);
 
-// =====================================================
-// PLAY
-// =====================================================
-
-void PlaybackController::play() {
-
-    mPlaybackActive.store(
-        true,
-        std::memory_order_release
-    );
-
-    mState.setStatus(
-        PlaybackStatus::Playing
-    );
-
-    LOGD("Playback started");
-}
-
-// =====================================================
-// PAUSE
-// =====================================================
-
-void PlaybackController::pause() {
-
-    mPlaybackActive.store(
-        false,
-        std::memory_order_release
-    );
-
-    mState.setStatus(
-        PlaybackStatus::Paused
-    );
-
-    LOGD("Playback paused");
-}
-
-// =====================================================
-// STOP
-// =====================================================
-
-void PlaybackController::stop() {
-
-    mPlaybackActive.store(
-        false,
-        std::memory_order_release
-    );
-
-    flush();
-
-    mState.setPositionSamples(
-        0
-    );
-
-    mState.setStatus(
-        PlaybackStatus::Stopped
-    );
-
-    LOGD("Playback stopped");
-}
-
-// =====================================================
-// FLUSH
-// =====================================================
-
-void PlaybackController::flush() {
-
-    std::lock_guard<std::mutex>
-        lock(mMutex);
-
-    if (!mAudioEngine) {
-        return;
+    // 4. update metrics (cheap atomic ops inside)
+    if (metrics_) {
+        metrics_->onAudioRendered(frames);
     }
 
-    mAudioEngine->flushBuffers();
-}
-
-// =====================================================
-// SEEK
-// =====================================================
-
-void PlaybackController::seekTo(
-    uint64_t
-) {
-
-    // =========================================
-    // TODO
-    // decoder-driven seek
-    // =========================================
-}
-
-// =====================================================
-// PREPARE TRACK
-// =====================================================
-
-void PlaybackController::prepareNewTrack(
-    const TrackMetadata& metadata
-) {
-
-    stop();
-
-    mState.reset();
-
-    mState.setMetadata(
-        metadata
-    );
-
-    LOGD(
-        "Prepared track: %s",
-        metadata.title.c_str()
-    );
-}
-
-// =====================================================
-// COMPLETE
-// =====================================================
-
-void PlaybackController::onPlaybackComplete() {
-
-    mPlaybackActive.store(
-        false,
-        std::memory_order_release
-    );
-
-    mState.setStatus(
-        PlaybackStatus::Completed
-    );
-
-    LOGD("Playback completed");
-}
-
-// =====================================================
-// STATE
-// =====================================================
-
-const PlaybackState&
-PlaybackController::getState()
-const noexcept {
-
-    return mState;
-}
-
-bool PlaybackController::isPlaying()
-const noexcept {
-
-    return
-        mPlaybackActive.load(
-            std::memory_order_acquire
-        );
-}
-
-// =====================================================
-// POSITION
-// =====================================================
-
-uint64_t
-PlaybackController::getPositionSamples()
-const noexcept {
-
-    if (!mAudioEngine) {
-        return 0;
+    // 5. optional state sync (VERY LIGHT)
+    const bool isPlaying = playing_.load(std::memory_order_relaxed);
+    if (!isPlaying) {
+        // optional: could mute output or fade
     }
-
-    return
-        mAudioEngine
-            ->getRenderedSamples();
 }
 
-uint64_t
-PlaybackController::getPositionMs()
-const noexcept {
+// =====================================================
+// DECODER CONTROL
+// =====================================================
 
-    if (!mAudioEngine) {
-        return 0;
-    }
-
-    const auto samples =
-        getPositionSamples();
-
-    const auto sampleRate =
-        static_cast<uint64_t>(
-            mAudioEngine
-                ->getSampleRate()
+bool PlaybackController::startDecoder(const TrackInfo& track) {
+    try {
+        decoderWorker_ = std::make_unique<decoder::DecoderWorker>(
+            std::make_unique<decoder::FFmpegDecoder>()
         );
 
-    if (sampleRate == 0) {
-        return 0;
+        decoderWorker_->setPCMQueue(pcmQueue_.get());
+
+        decoderWorker_->setChunkCallback(
+            [this](playback::PCMChunk&& chunk) {
+                if (pcmQueue_) {
+                    pcmQueue_->write(chunk.samples.data(),
+                                     chunk.samples.size());
+                }
+            }
+        );
+
+        return decoderWorker_->start(track.uri, 0.0);
     }
+    catch (...) {
+        return false;
+    }
+}
 
-    return
-        (samples * 1000ULL)
-        / sampleRate;
+void PlaybackController::stopDecoder() {
+    if (!decoderWorker_)
+        return;
+
+    decoderWorker_->stop();
+    decoderWorker_.reset();
 }
 
 // =====================================================
-// UPDATE POSITION
+// INTERNAL STATE UPDATE
 // =====================================================
 
-void PlaybackController::updatePlaybackPosition() {
+void PlaybackController::updatePlaybackState() {
+    if (!state_)
+        return;
 
-    mState.setPositionSamples(
-        getPositionSamples()
-    );
+    state_->setPlaying(playing_.load(std::memory_order_acquire));
+    state_->setTrack(currentTrack_);
 }
 
-} // namespace pristine 
+// =====================================================
+// END
+// =====================================================
+
+} // namespace pristine::playback 

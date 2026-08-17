@@ -1,112 +1,261 @@
 #include "PlaybackManager.h"
 
-#include "../core/AudioEngine.h"
+namespace pristine::playback {
 
-namespace pristine {
+PlaybackManager::PlaybackManager()
+    :
+    controller_(
+        std::make_unique<
+            PlaybackController>()
+    ),
 
-// =====================================
-// SINGLETON
-// =====================================
+    queue_(
+        std::make_unique<
+            TrackQueue>()
+    ),
 
-PlaybackManager&
-PlaybackManager::get() {
+    scheduler_(
+        std::make_unique<
+            PlaybackScheduler>()
+    ),
 
-    static PlaybackManager instance;
-    return instance;
+    events_(
+        std::make_shared<
+            PlaybackEventDispatcher>()
+    ) {
+
 }
 
-// =====================================
-// INITIALIZE
-// =====================================
+PlaybackManager::~PlaybackManager() {
 
-void PlaybackManager::initialize(
-    AudioEngine* engine
-) {
+    shutdown();
+}
 
-    std::lock_guard<std::mutex>
-        lock(mMutex);
+bool PlaybackManager::initialize() {
 
-    mController.setAudioEngine(
-        engine
+    if (
+        initialized_.exchange(true)
+    ) {
+        return true;
+    }
+
+    return controller_->initialize();
+}
+
+void PlaybackManager::shutdown() {
+
+    if (
+        !initialized_.exchange(false)
+    ) {
+        return;
+    }
+
+    controller_->shutdown();
+}
+
+bool PlaybackManager::isInitialized() const noexcept {
+
+    return initialized_.load(
+        std::memory_order_acquire
     );
 }
 
-// =====================================
-// TRANSPORT
-// =====================================
+bool PlaybackManager::play() {
 
-void PlaybackManager::play() {
+    if (
+        queue_->isEmpty()
+    ) {
+        return false;
+    }
 
-    mController.play();
+    if (
+        !loadCurrentTrack()
+    ) {
+        return false;
+    }
+
+    return controller_->play();
 }
 
-void PlaybackManager::pause() {
+bool PlaybackManager::pause() {
 
-    mController.pause();
+    return controller_->pause();
 }
 
-void PlaybackManager::stop() {
+bool PlaybackManager::stop() {
 
-    mController.stop();
+    return controller_->stop();
 }
 
-void PlaybackManager::seekTo(
-    uint64_t positionMs
+bool PlaybackManager::seek(
+    double seconds
 ) {
 
-    mController.seekTo(
-        positionMs
+    return controller_->seek(
+        seconds
     );
 }
 
-void PlaybackManager::next() {
+bool PlaybackManager::next() {
 
-    // TODO:
-    // delegated to JS/RNTP queue
+    if (
+        !queue_->advance()
+    ) {
+        return false;
+    }
+
+    return transitionToNextTrack();
 }
 
-void PlaybackManager::previous() {
+bool PlaybackManager::previous() {
 
-    // TODO:
-    // delegated to JS/RNTP queue
+    if (
+        !queue_->retreat()
+    ) {
+        return false;
+    }
+
+    return transitionToNextTrack();
 }
 
-// =====================================
-// TRACK
-// =====================================
-
-void PlaybackManager::prepareTrack(
-    const TrackMetadata& metadata
+bool PlaybackManager::skipTo(
+    size_t index
 ) {
 
-    mController.prepareNewTrack(
-        metadata
+    if (
+        !queue_->jumpTo(index)
+    ) {
+        return false;
+    }
+
+    return transitionToNextTrack();
+}
+
+void PlaybackManager::setQueue(
+    const std::vector<TrackInfo>& tracks
+) {
+
+    queue_->setTracks(
+        tracks
     );
 }
 
-// =====================================
-// AUDIO FEED
-// =====================================
-
-void PlaybackManager::pushAudioData(
-    const float* data,
-    int32_t numSamples
+void PlaybackManager::addTrack(
+    const TrackInfo& track
 ) {
 
-    mController.pushAudioData(
-        data,
-        numSamples
+    queue_->appendTrack(
+        track
     );
 }
 
-// =====================================
-// STATE
-// =====================================
+void PlaybackManager::removeTrack(
+    size_t index
+) {
 
-const PlaybackState&
-PlaybackManager::getState() const {
-
-    return mController.getState();
+    queue_->removeTrack(
+        index
+    );
 }
 
-} // namespace pristine
+void PlaybackManager::clearQueue() {
+
+    queue_->clear();
+}
+
+std::vector<TrackInfo>
+PlaybackManager::queue() const {
+
+    return queue_->tracks();
+}
+
+void PlaybackManager::setRepeatMode(
+    RepeatMode mode
+) {
+
+    repeatMode_ = mode;
+}
+
+void PlaybackManager::setShuffleMode(
+    ShuffleMode mode
+) {
+
+    shuffleMode_ = mode;
+
+    queue_->setShuffleMode(
+        mode
+    );
+}
+
+RepeatMode
+PlaybackManager::repeatMode() const {
+
+    return repeatMode_;
+}
+
+ShuffleMode
+PlaybackManager::shuffleMode() const {
+
+    return shuffleMode_;
+}
+
+PlaybackSnapshot
+PlaybackManager::snapshot() const {
+
+    return controller_
+        ->state()
+        ->snapshot();
+}
+
+PlaybackMetrics
+PlaybackManager::metrics() const {
+
+    return controller_
+        ->metrics()
+        ->snapshot();
+}
+
+void PlaybackManager::addListener(
+    PlaybackEventListener* listener
+) {
+
+    events_->addListener(
+        listener
+    );
+}
+
+void PlaybackManager::removeListener(
+    PlaybackEventListener* listener
+) {
+
+    events_->removeListener(
+        listener
+    );
+}
+
+bool PlaybackManager::loadCurrentTrack() {
+
+    auto track =
+        queue_->current();
+
+    if (!track) {
+        return false;
+    }
+
+    return controller_->loadTrack(
+        *track
+    );
+}
+
+bool PlaybackManager::transitionToNextTrack() {
+
+    if (
+        !loadCurrentTrack()
+    ) {
+        return false;
+    }
+
+    return controller_->play();
+}
+
+} // namespace pristine::playback 

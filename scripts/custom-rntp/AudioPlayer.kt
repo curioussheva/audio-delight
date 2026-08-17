@@ -11,9 +11,10 @@ import androidx.media3.exoplayer.*
 import androidx.media3.exoplayer.audio.*
 import com.lovegaoshi.kotlinaudio.models.*
 import com.lovegaoshi.kotlinaudio.player.components.*
-import com.pristineaudio.OboeAudioProcessor
+import com.pristineaudio.audio.OboeAudioProcessor
 import kotlinx.coroutines.*
 import timber.log.Timber
+
 
 abstract class AudioPlayer(
     private val context: Context,
@@ -25,7 +26,7 @@ abstract class AudioPlayer(
     // =============================
     companion object {
         init {
-            System.loadLibrary("pristineaudio_engine")
+            System.loadLibrary("pristine-audio")
         }
     }
 

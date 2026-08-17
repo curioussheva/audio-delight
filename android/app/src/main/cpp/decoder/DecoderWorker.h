@@ -1,106 +1,129 @@
 #pragma once
 
-#include <atomic>
-#include <memory>
-#include <thread>
-#include <string>
-
-#include "../playback/PCMQueue.h"
 #include "AudioDecoder.h"
-#include "StreamResampler.h"
 
-namespace pristine {
+#include <atomic>
+#include <condition_variable>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <thread>
+
+namespace pristine::decoder {
+
+// =====================================================
+// DECODED CHUNK CALLBACK
+// =====================================================
+
+using DecodeCallback =
+    std::function<void(DecodeResult&&)>;
+
+using ErrorCallback =
+    std::function<void(const std::string&)>;
+
+using EofCallback =
+    std::function<void()>;
 
 // =====================================================
 // DECODER WORKER
-// Dedicated decode thread
-// Realtime-safe separation layer
 // =====================================================
 
 class DecoderWorker {
 public:
-
-    DecoderWorker();
+    explicit DecoderWorker(
+        std::unique_ptr<AudioDecoder> decoder);
 
     ~DecoderWorker();
 
-    // =========================================
-    // Decoder
-    // =========================================
+    DecoderWorker(const DecoderWorker&) = delete;
+    DecoderWorker& operator=(const DecoderWorker&) = delete;
 
-    void setDecoder(
-        std::unique_ptr<audio::AudioDecoder>
-            decoder
-    );
-
-    // =========================================
-    // Queue
-    // =========================================
-
-    void setPCMQueue(
-        PCMQueue* queue
-    );
-
-    // =========================================
+    // =============================================
     // Lifecycle
-    // =========================================
+    // =============================================
 
     bool start(
-        const std::string& uri
-    );
+        const std::string& uri,
+        double startPosition = 0.0);
 
     void stop();
 
-    bool isRunning() const;
+    void pause();
+    void resume();
 
-    // =========================================
+    [[nodiscard]]
+    bool isRunning() const noexcept;
+
+    [[nodiscard]]
+    bool isPaused() const noexcept;
+
+    // =============================================
     // Seeking
-    // =========================================
+    // =============================================
 
-    void seek(
-        double seconds
-    );
+    bool seek(double positionSeconds);
 
-    // =========================================
-    // Stream Info
-    // =========================================
+    // =============================================
+    // Configuration
+    // =============================================
 
-    pristine::AudioStreamInfo
-    getStreamInfo() const;
+    void setChunkSize(
+        uint32_t frames);
+
+    void setDecodeCallback(
+        DecodeCallback callback);
+
+    void setErrorCallback(
+        ErrorCallback callback);
+
+    void setEofCallback(
+        EofCallback callback);
+
+    // =============================================
+    // Queries
+    // =============================================
+
+    [[nodiscard]]
+    DecoderState getState() const;
+
+    [[nodiscard]]
+    double getPosition() const;
+
+    [[nodiscard]]
+    double getDuration() const;
+
+    [[nodiscard]]
+    AudioFormat getFormat() const;
 
 private:
-
-    void decodeLoop();
+    void workerLoop();
 
 private:
+    std::unique_ptr<AudioDecoder>
+        decoder_;
 
-    std::unique_ptr<
-        audio::AudioDecoder
-    > mDecoder;
-
-    PCMQueue* mPCMQueue =
-        nullptr;
-
-    StreamResampler
-        mResampler;
-
-    std::unique_ptr<std::thread>
-        mThread;
+    std::thread workerThread_;
 
     std::atomic<bool>
-        mRunning{false};
+        running_{false};
 
     std::atomic<bool>
-        mStopRequested{false};
+        paused_{false};
 
     std::atomic<bool>
-        mSeekRequested{false};
+        stopRequested_{false};
 
-    std::atomic<double>
-        mSeekTargetSec{0.0};
+    uint32_t chunkSize_ = 4096;
 
-    pristine::AudioStreamInfo
-        mStreamInfo;
+    std::string currentUri_;
+
+    DecodeCallback decodeCallback_;
+    ErrorCallback errorCallback_;
+    EofCallback eofCallback_;
+
+    mutable std::mutex mutex_;
+    std::condition_variable pauseCv_;
 };
 
-} // namespace pristine
+} // namespace pristine::decoder 

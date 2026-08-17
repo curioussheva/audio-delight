@@ -1,115 +1,45 @@
 #include "PCMDecoder.h"
 
-#include <android/log.h>
-
-#include <fstream>
-#include <vector>
 #include <cstring>
+#include <algorithm>
 
-#define LOGD(...) \
-__android_log_print( \
-    ANDROID_LOG_DEBUG, \
-    "PCMDecoder", \
-    __VA_ARGS__ \
-)
-
-namespace pristine {
+namespace pristine::decoder {
 
 // =====================================================
-// INTERNAL IMPL
+// CTOR / DTOR
 // =====================================================
 
-struct PCMDecoder::Impl {
-
-    bool open = false;
-
-    std::ifstream file;
-
-    AudioStreamInfo streamInfo;
-
-    uint64_t framesRead = 0;
-
-    double currentPosition = 0.0;
-
-    // reusable decode buffer
-    std::vector<float> decodeBuffer;
-};
-
-// =====================================================
-// CTOR
-// =====================================================
-
-PCMDecoder::PCMDecoder()
-    : mImpl(
-        std::make_unique<Impl>()
-    ) {
-}
-
-// =====================================================
-// DTOR
-// =====================================================
+PCMDecoder::PCMDecoder() = default;
 
 PCMDecoder::~PCMDecoder() {
-
-    close();
+    onClose();
 }
 
 // =====================================================
 // OPEN
 // =====================================================
 
-bool PCMDecoder::open(
-    const std::string& uri
+bool PCMDecoder::onOpen(
+    const std::string& uri,
+    const AudioFormat* /*hint*/
 ) {
+    onClose();
 
-    LOGD(
-        "PCM open: %s",
-        uri.c_str()
+    file_ = std::fopen(
+        uri.c_str(),
+        "rb"
     );
 
-    close();
-
-    mImpl->file.open(
-        uri,
-        std::ios::binary
-    );
-
-    if (!mImpl->file.is_open()) {
-
-        LOGD(
-            "Failed open PCM"
-        );
-
+    if (!file_) {
         return false;
     }
 
-    mImpl->open = true;
+    if (!parseWavHeader()) {
+        onClose();
+        return false;
+    }
 
-    // =========================================
-    // STUB FORMAT
-    // =========================================
-    // Future:
-    // parse WAV/RAW headers
-    // =========================================
-
-    mImpl->streamInfo.sampleRate =
-        44100;
-
-    mImpl->streamInfo.channels =
-        2;
-
-    mImpl->streamInfo.format =
-        AudioFormat::PCM_F32;
-
-    mImpl->streamInfo.seekable =
-        true;
-
-    mImpl->streamInfo.isStreaming =
-        false;
-
-    mImpl->framesRead = 0;
-
-    mImpl->currentPosition = 0.0;
+    currentFrame_ = 0;
 
     return true;
 }
@@ -118,192 +48,375 @@ bool PCMDecoder::open(
 // CLOSE
 // =====================================================
 
-void PCMDecoder::close() {
+void PCMDecoder::onClose() {
 
-    if (mImpl->file.is_open()) {
-
-        mImpl->file.close();
+    if (file_) {
+        std::fclose(file_);
+        file_ = nullptr;
     }
 
-    mImpl->decodeBuffer.clear();
-
-    mImpl->open = false;
-}
-
-// =====================================================
-// IS OPEN
-// =====================================================
-
-bool PCMDecoder::isOpen()
-    const {
-
-    return mImpl->open;
-}
-
-// =====================================================
-// STREAM INFO
-// =====================================================
-
-AudioStreamInfo
-PCMDecoder::getStreamInfo()
-    const {
-
-    return mImpl->streamInfo;
+    currentFrame_ = 0;
+    dataOffset_ = 0;
+    dataSize_ = 0;
+    totalFrames_ = 0;
 }
 
 // =====================================================
 // DECODE
 // =====================================================
 
-bool PCMDecoder::decodeNextChunk(
-    DecodedChunk& outChunk,
-    int32_t targetFrames
+DecodeResult PCMDecoder::onDecode(
+    uint32_t maxFrames
 ) {
+    DecodeResult result;
 
-    if (!mImpl->open) {
+    if (!file_) {
+        result.status =
+            DecodeStatus::FatalError;
 
-        return false;
+        result.errorMessage =
+            "PCM file not open";
+
+        return result;
     }
 
-    const int channels =
-        mImpl->streamInfo.channels;
+    const uint32_t channels =
+        format_.channels;
 
-    const size_t sampleCount =
-        static_cast<size_t>(
-            targetFrames * channels
-        );
+    const uint32_t bytesPerFrame =
+        static_cast<uint32_t>(
+            format_.bytesPerFrame());
 
-    mImpl->decodeBuffer.resize(
-        sampleCount
-    );
-
-    const size_t bytesToRead =
-        sampleCount * sizeof(float);
-
-    mImpl->file.read(
-        reinterpret_cast<char*>(
-            mImpl->decodeBuffer.data()
-        ),
-        static_cast<std::streamsize>(
-            bytesToRead
-        )
-    );
+    std::vector<uint8_t> raw(
+        maxFrames * bytesPerFrame);
 
     const size_t bytesRead =
-        static_cast<size_t>(
-            mImpl->file.gcount()
-        );
+        std::fread(
+            raw.data(),
+            1,
+            raw.size(),
+            file_);
 
-    const size_t samplesRead =
-        bytesRead / sizeof(float);
+    if (bytesRead == 0) {
 
-    const int framesRead =
-        static_cast<int>(
-            samplesRead / channels
-        );
+        result.status =
+            DecodeStatus::Eof;
 
-    if (framesRead <= 0) {
-
-        outChunk.endOfStream =
-            true;
-
-        return false;
+        return result;
     }
 
-    outChunk.pcm.data =
-        mImpl->decodeBuffer.data();
+    const uint32_t framesRead =
+        static_cast<uint32_t>(
+            bytesRead /
+            bytesPerFrame);
 
-    outChunk.pcm.frames =
+    result.samples.resize(
+        static_cast<size_t>(framesRead) *
+        channels);
+
+    convertToFloat(
+        raw.data(),
+        result.samples.data(),
+        result.samples.size());
+
+    result.status =
+        DecodeStatus::Success;
+
+    result.framesDecoded =
         framesRead;
 
-    outChunk.pcm.channels =
-        channels;
+    result.framePosition =
+        currentFrame_;
 
-    outChunk.pcm.interleaved =
-        true;
-
-    outChunk.pts =
-        mImpl->currentPosition;
-
-    outChunk.endOfStream =
-        false;
-
-    outChunk.discontinuity =
-        false;
-
-    mImpl->framesRead +=
+    currentFrame_ +=
         framesRead;
 
-    mImpl->currentPosition =
-        static_cast<double>(
-            mImpl->framesRead
-        ) /
-        static_cast<double>(
-            mImpl->streamInfo.sampleRate
-        );
-
-    return true;
+    return result;
 }
 
 // =====================================================
 // SEEK
 // =====================================================
 
-void PCMDecoder::seek(
-    double seconds
+bool PCMDecoder::onSeek(
+    double positionSeconds
 ) {
-
-    if (
-        !mImpl->open ||
-        !mImpl->file.is_open()
-    ) {
-
-        return;
+    if (!file_) {
+        return false;
     }
 
-    const int64_t targetFrame =
-        static_cast<int64_t>(
-            seconds *
-            mImpl->streamInfo.sampleRate
-        );
-
-    const int channels =
-        mImpl->streamInfo.channels;
-
-    const int64_t byteOffset =
-        targetFrame *
-        channels *
-        sizeof(float);
-
-    mImpl->file.clear();
-
-    mImpl->file.seekg(
-        byteOffset,
-        std::ios::beg
-    );
-
-    mImpl->framesRead =
+    uint64_t frame =
         static_cast<uint64_t>(
-            targetFrame
-        );
+            positionSeconds *
+            format_.sampleRate);
 
-    mImpl->currentPosition =
-        seconds;
+    return onSeekToFrame(frame);
+}
 
-    LOGD(
-        "PCM seek %.3f",
-        seconds
-    );
+bool PCMDecoder::onSeekToFrame(
+    uint64_t frame
+) {
+    if (!file_) {
+        return false;
+    }
+
+    frame =
+        std::min(
+            frame,
+            totalFrames_);
+
+    const uint64_t offset =
+        dataOffset_ +
+        frame *
+        format_.bytesPerFrame();
+
+    if (std::fseek(
+            file_,
+            static_cast<long>(offset),
+            SEEK_SET) != 0) {
+        return false;
+    }
+
+    currentFrame_ = frame;
+
+    return true;
 }
 
 // =====================================================
-// POSITION
+// INFO
 // =====================================================
 
-double PCMDecoder::getCurrentPosition()
-    const {
-
-    return mImpl->currentPosition;
+AudioFormat PCMDecoder::onGetInputFormat() const {
+    return format_;
 }
 
-} // namespace pristine
+DecoderCapabilities
+PCMDecoder::onGetCapabilities() const {
+
+    DecoderCapabilities caps;
+
+    caps.supportsSeeking = true;
+    caps.supportsGapless = true;
+
+    caps.supportedFormats = {
+        "wav",
+        "aiff",
+        "pcm"
+    };
+
+    return caps;
+}
+
+double PCMDecoder::onGetDuration() const {
+
+    if (format_.sampleRate == 0) {
+        return 0.0;
+    }
+
+    return static_cast<double>(
+        totalFrames_) /
+        format_.sampleRate;
+}
+
+// =====================================================
+// WAV PARSER
+// =====================================================
+
+bool PCMDecoder::parseWavHeader() {
+
+    WavHeader header{};
+
+    if (std::fread(
+            &header,
+            sizeof(header),
+            1,
+            file_) != 1) {
+        return false;
+    }
+
+    if (std::memcmp(
+            header.riff,
+            "RIFF",
+            4) != 0) {
+        return false;
+    }
+
+    if (std::memcmp(
+            header.wave,
+            "WAVE",
+            4) != 0) {
+        return false;
+    }
+
+    format_.sampleRate =
+        header.sampleRate;
+
+    format_.channels =
+        header.channels;
+
+    format_.bitsPerSample =
+        header.bitsPerSample;
+
+    switch (header.bitsPerSample) {
+
+        case 16:
+            format_.sampleFormat =
+                AudioFormat::SampleFormat::S16;
+            break;
+
+        case 24:
+            format_.sampleFormat =
+                AudioFormat::SampleFormat::S24;
+            break;
+
+        case 32:
+            format_.sampleFormat =
+                AudioFormat::SampleFormat::S32;
+            break;
+
+        default:
+            return false;
+    }
+
+    char chunkId[4];
+    uint32_t chunkSize;
+
+    while (std::fread(
+               chunkId,
+               1,
+               4,
+               file_) == 4 &&
+           std::fread(
+               &chunkSize,
+               4,
+               1,
+               file_) == 1) {
+
+        if (std::memcmp(
+                chunkId,
+                "data",
+                4) == 0) {
+
+            dataOffset_ =
+                std::ftell(file_);
+
+            dataSize_ =
+                chunkSize;
+
+            break;
+        }
+
+        std::fseek(
+            file_,
+            chunkSize,
+            SEEK_CUR);
+    }
+
+    if (dataSize_ == 0) {
+        return false;
+    }
+
+    totalFrames_ =
+        dataSize_ /
+        format_.bytesPerFrame();
+
+    format_.totalFrames =
+        totalFrames_;
+
+    format_.durationSeconds =
+        onGetDuration();
+
+    return true;
+}
+
+// =====================================================
+// PCM -> FLOAT
+// =====================================================
+
+void PCMDecoder::convertToFloat(
+    const uint8_t* input,
+    float* output,
+    size_t sampleCount
+) {
+    switch (format_.bitsPerSample) {
+
+        case 16: {
+
+            auto pcm =
+                reinterpret_cast<
+                    const int16_t*>(
+                    input);
+
+            for (size_t i = 0;
+                 i < sampleCount;
+                 ++i) {
+
+                output[i] =
+                    static_cast<float>(
+                        pcm[i]) /
+                    32768.0f;
+            }
+
+            break;
+        }
+
+        case 24: {
+
+            for (size_t i = 0;
+                 i < sampleCount;
+                 ++i) {
+
+                const uint8_t* p =
+                    input + (i * 3);
+
+                int32_t sample =
+                    (p[0]) |
+                    (p[1] << 8) |
+                    (p[2] << 16);
+
+                if (sample & 0x800000) {
+                    sample |= ~0xFFFFFF;
+                }
+
+                output[i] =
+                    static_cast<float>(
+                        sample) /
+                    8388608.0f;
+            }
+
+            break;
+        }
+
+        case 32: {
+
+            auto pcm =
+                reinterpret_cast<
+                    const int32_t*>(
+                    input);
+
+            for (size_t i = 0;
+                 i < sampleCount;
+                 ++i) {
+
+                output[i] =
+                    static_cast<float>(
+                        pcm[i]) /
+                    2147483648.0f;
+            }
+
+            break;
+        }
+
+        default:
+            break;
+    }
+}
+
+uint64_t PCMDecoder::currentByteOffset() const noexcept {
+
+    return dataOffset_ +
+           currentFrame_ *
+           format_.bytesPerFrame();
+}
+
+} // namespace pristine::decoder 
