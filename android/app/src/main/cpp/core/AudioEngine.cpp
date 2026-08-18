@@ -63,15 +63,8 @@ bool AudioEngine::start(
     return false;
 }
 
-    mState.exclusiveMode.store(
-        exclusiveMode,
-        std::memory_order_release
-    );
-
-    mState.isRunning.store(
-        true,
-        std::memory_order_release
-    );
+    mState.setExclusiveMode(exclusiveMode);
+    mState.setRunning(true); 
 
     return true;
 }
