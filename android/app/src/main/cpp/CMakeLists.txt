@@ -108,10 +108,24 @@ target_include_directories(pristine-audio
 )
 
 # =====================================================
-# OBOE (Audio I/O)
+# OBOE (Audio I/O) - Support both subdirectory and find_package
 # =====================================================
 
-find_package(oboe REQUIRED CONFIG)
+# First, try to add as subdirectory (for local builds)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/oboe/CMakeLists.txt")
+    message(STATUS "Found Oboe as subdirectory, adding...")
+    add_subdirectory(oboe EXCLUDE_FROM_ALL)
+    set(OBOE_FOUND TRUE)
+else()
+    # Fallback to find_package (for pre-installed or external builds)
+    message(STATUS "Oboe not found as subdirectory, searching via find_package...")
+    find_package(oboe REQUIRED CONFIG)
+    set(OBOE_FOUND TRUE)
+endif()
+
+if(NOT OBOE_FOUND)
+    message(FATAL_ERROR "Oboe library not found! Please ensure Oboe is available in oboe/ subdirectory or via pkg-config")
+endif()
 
 # =====================================================
 # FFMPEG DECODER
@@ -277,4 +291,3 @@ endif()
 # =====================================================
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
- 
