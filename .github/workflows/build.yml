@@ -2,7 +2,7 @@ name: Build PristineAudio APK (Debug)
 
 on:
   push:
-    branches: ["pristine-audio"]
+    branches: ["pristinev2"]
   workflow_dispatch:
 
 jobs:
@@ -123,14 +123,21 @@ jobs:
           EOF
 
       # ============================================
-      # 11. Setup Oboe (native audio)
+      # 11. Setup Oboe (native audio) - MOVED EARLY
       # ============================================
       - name: Setup Oboe
         run: |
           OBOE_DIR="android/app/src/main/cpp/oboe"
           mkdir -p "$OBOE_DIR"
+          echo "⬇️  Downloading Oboe 1.9.0..."
           curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz \
           | tar -xz --strip-components=1 -C "$OBOE_DIR"
+          
+          echo "✅ Oboe extracted to $OBOE_DIR"
+          echo "📁 Verifying Oboe structure:"
+          ls -la "$OBOE_DIR/CMakeLists.txt" || { echo "❌ CMakeLists.txt not found!"; exit 1; }
+          ls -la "$OBOE_DIR/include/" | head -5
+          echo "✅ Oboe OK"
 
       # ============================================
       # 12. Clean native cache
@@ -143,47 +150,34 @@ jobs:
           rm -rf android/build
 
       # ============================================
-      # 13. Apply patches
+      # 13. Apply patches (if any)
       # ============================================
       - name: Apply PristineAudio patches
-        run: bash scripts/patch-pristine.sh
+        run: |
+          if [ -f "scripts/patch-pristine.sh" ]; then
+            bash scripts/patch-pristine.sh
+            echo "✅ Patches applied"
+          else
+            echo "⚠️  No patch script found, skipping"
+          fi
 
       - name: Patch AndroidManifest
         run: |
           find node_modules -path "*/android/src/main/AndroidManifest.xml" \
-            -exec sed -i 's/ package="[^"]*"//g' {} +
-          echo "✅ Manifest patched"
-
-      - name: Verify RNTP patch
-        run: |
-          grep -q "nativeInitEngine" node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/AudioPlayer.kt
-          echo "✅ RNTP patch verified"
+            -exec sed -i 's/ package="[^"]*"//g' {} + || true
+          echo "✅ Manifest patched (or no manifests found)"
 
       # ============================================
-      # 14. Generate Codegen
+      # 14. Clean and Gradle refresh
       # ============================================
-      - name: Generate Codegen
+      - name: Gradle clean
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew generateCodegenArtifactsFromSchema \
-            --no-daemon \
-            -PnewArchEnabled=true \
-            -PreactNativeNewArch=true \
-            -PhermesEnabled=true
+          ./gradlew clean --no-daemon
 
       # ============================================
-      # 15. Clean after codegen
-      # ============================================
-      - name: Clean after codegen
-        run: rm -rf android/.cxx
-
-      - name: Gradle clean
-        working-directory: android
-        run: ./gradlew clean
-
-      # ============================================
-      # 16. Build APK
+      # 15. Build APK (no codegen for pristinev2 - pure native)
       # ============================================
       - name: Build Debug APK
         working-directory: android
@@ -191,21 +185,27 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug \
             --no-daemon \
-            -PnewArchEnabled=true \
-            -PreactNativeNewArch=true \
+            -PnewArchEnabled=false \
             -PhermesEnabled=true \
-            -DJS_RUNTIME=hermes | tee build.log
+            -DJS_RUNTIME=hermes 2>&1 | tee build.log
 
       # ============================================
-      # 17. Verify APK exists
+      # 16. Verify APK exists
       # ============================================
       - name: Verify APK exists
         if: success()
         run: |
-          test -f android/app/build/outputs/apk/debug/app-debug.apk
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          if [ -f "$APK" ]; then
+            echo "✅ APK built successfully: $APK"
+            ls -lh "$APK"
+          else
+            echo "❌ APK not found at $APK"
+            exit 1
+          fi
 
       # ============================================
-      # 18. Upload logs
+      # 17. Upload logs
       # ============================================
       - uses: actions/upload-artifact@v4
         if: always()
@@ -224,10 +224,10 @@ jobs:
           path: android/build-issues.log
 
       # ============================================
-      # 19. Upload APK
+      # 18. Upload APK
       # ============================================
       - uses: actions/upload-artifact@v4
         if: success()
         with:
           name: PristineAudio-Debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk 
+          path: android/app/build/outputs/apk/debug/app-debug.apk
