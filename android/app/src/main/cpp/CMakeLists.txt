@@ -70,6 +70,20 @@ if(EXCLUDED_SRCS)
 endif()
 
 # =====================================================
+# OBOE SETUP (BEFORE adding library)
+# =====================================================
+
+set(OBOE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/oboe")
+
+if(EXISTS "${OBOE_DIR}/CMakeLists.txt")
+    message(STATUS "Found Oboe subdirectory at ${OBOE_DIR}")
+    add_subdirectory(${OBOE_DIR} oboe EXCLUDE_FROM_ALL)
+    set(OBOE_LIB oboe)
+else()
+    message(FATAL_ERROR "Oboe not found at ${OBOE_DIR}/CMakeLists.txt. Please run: curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz | tar -xz --strip-components=1 -C ${OBOE_DIR}")
+endif()
+
+# =====================================================
 # SHARED LIBRARY
 # =====================================================
 
@@ -106,26 +120,6 @@ target_include_directories(pristine-audio
         utils
         jni
 )
-
-# =====================================================
-# OBOE (Audio I/O) - Support both subdirectory and find_package
-# =====================================================
-
-# First, try to add as subdirectory (for local builds)
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/oboe/CMakeLists.txt")
-    message(STATUS "Found Oboe as subdirectory, adding...")
-    add_subdirectory(oboe EXCLUDE_FROM_ALL)
-    set(OBOE_FOUND TRUE)
-else()
-    # Fallback to find_package (for pre-installed or external builds)
-    message(STATUS "Oboe not found as subdirectory, searching via find_package...")
-    find_package(oboe REQUIRED CONFIG)
-    set(OBOE_FOUND TRUE)
-endif()
-
-if(NOT OBOE_FOUND)
-    message(FATAL_ERROR "Oboe library not found! Please ensure Oboe is available in oboe/ subdirectory or via pkg-config")
-endif()
 
 # =====================================================
 # FFMPEG DECODER
@@ -270,9 +264,11 @@ target_precompile_headers(pristine-audio
 # =====================================================
 
 target_link_libraries(pristine-audio
-    oboe::oboe
-    android
-    log
+    PUBLIC
+        ${OBOE_LIB}
+    PRIVATE
+        android
+        log
 )
 
 # =====================================================
