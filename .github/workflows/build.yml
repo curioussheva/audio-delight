@@ -23,6 +23,8 @@ jobs:
       # 2. Setup Node + PNPM
       # ============================================
       - uses: pnpm/action-setup@v4
+        with:
+          version: 9.0.0
 
       - uses: actions/setup-node@v4
         with:
@@ -30,10 +32,10 @@ jobs:
           cache: pnpm
 
       # ============================================
-      # 3. Install dependencies
+      # 3. Install dependencies (generate lockfile)
       # ============================================
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
 
       # Fix native bindings
       - name: Rebuild native deps
@@ -123,21 +125,14 @@ jobs:
           EOF
 
       # ============================================
-      # 11. Setup Oboe (native audio) - MOVED EARLY
+      # 11. Setup Oboe (native audio)
       # ============================================
       - name: Setup Oboe
         run: |
           OBOE_DIR="android/app/src/main/cpp/oboe"
           mkdir -p "$OBOE_DIR"
-          echo "⬇️  Downloading Oboe 1.9.0..."
           curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz \
           | tar -xz --strip-components=1 -C "$OBOE_DIR"
-          
-          echo "✅ Oboe extracted to $OBOE_DIR"
-          echo "📁 Verifying Oboe structure:"
-          ls -la "$OBOE_DIR/CMakeLists.txt" || { echo "❌ CMakeLists.txt not found!"; exit 1; }
-          ls -la "$OBOE_DIR/include/" | head -5
-          echo "✅ Oboe OK"
 
       # ============================================
       # 12. Clean native cache
@@ -150,34 +145,47 @@ jobs:
           rm -rf android/build
 
       # ============================================
-      # 13. Apply patches (if any)
+      # 13. Apply patches
       # ============================================
       - name: Apply PristineAudio patches
-        run: |
-          if [ -f "scripts/patch-pristine.sh" ]; then
-            bash scripts/patch-pristine.sh
-            echo "✅ Patches applied"
-          else
-            echo "⚠️  No patch script found, skipping"
-          fi
+        run: bash scripts/patch-pristine.sh
 
       - name: Patch AndroidManifest
         run: |
           find node_modules -path "*/android/src/main/AndroidManifest.xml" \
-            -exec sed -i 's/ package="[^"]*"//g' {} + || true
-          echo "✅ Manifest patched (or no manifests found)"
+            -exec sed -i 's/ package="[^"]*"//g' {} +
+          echo "✅ Manifest patched"
+
+      - name: Verify RNTP patch
+        run: |
+          grep -q "nativeInitEngine" node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/AudioPlayer.kt
+          echo "✅ RNTP patch verified"
 
       # ============================================
-      # 14. Clean and Gradle refresh
+      # 14. Generate Codegen
       # ============================================
-      - name: Gradle clean
+      - name: Generate Codegen
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew clean --no-daemon
+          ./gradlew generateCodegenArtifactsFromSchema \
+            --no-daemon \
+            -PnewArchEnabled=true \
+            -PreactNativeNewArch=true \
+            -PhermesEnabled=true
 
       # ============================================
-      # 15. Build APK (no codegen for pristinev2 - pure native)
+      # 15. Clean after codegen
+      # ============================================
+      - name: Clean after codegen
+        run: rm -rf android/.cxx
+
+      - name: Gradle clean
+        working-directory: android
+        run: ./gradlew clean
+
+      # ============================================
+      # 16. Build APK
       # ============================================
       - name: Build Debug APK
         working-directory: android
@@ -185,27 +193,21 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug \
             --no-daemon \
-            -PnewArchEnabled=false \
+            -PnewArchEnabled=true \
+            -PreactNativeNewArch=true \
             -PhermesEnabled=true \
-            -DJS_RUNTIME=hermes 2>&1 | tee build.log
+            -DJS_RUNTIME=hermes | tee build.log
 
       # ============================================
-      # 16. Verify APK exists
+      # 17. Verify APK exists
       # ============================================
       - name: Verify APK exists
         if: success()
         run: |
-          APK="android/app/build/outputs/apk/debug/app-debug.apk"
-          if [ -f "$APK" ]; then
-            echo "✅ APK built successfully: $APK"
-            ls -lh "$APK"
-          else
-            echo "❌ APK not found at $APK"
-            exit 1
-          fi
+          test -f android/app/build/outputs/apk/debug/app-debug.apk
 
       # ============================================
-      # 17. Upload logs
+      # 18. Upload logs
       # ============================================
       - uses: actions/upload-artifact@v4
         if: always()
@@ -224,7 +226,7 @@ jobs:
           path: android/build-issues.log
 
       # ============================================
-      # 18. Upload APK
+      # 19. Upload APK
       # ============================================
       - uses: actions/upload-artifact@v4
         if: success()
