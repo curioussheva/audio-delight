@@ -7,8 +7,10 @@ set(CMAKE_ANDROID_STL_TYPE c++_shared)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden -O3")
 
-# ---- Oboe ----
-add_subdirectory(oboe)
+# ---- Oboe (add as subdirectory) ----
+if(NOT TARGET oboe)
+  add_subdirectory(oboe EXCLUDE_FROM_ALL)
+endif()
 
 # ---- Library utama ----
 add_library(
@@ -34,4 +36,4 @@ target_link_libraries(
     log
     atomic
     m
-) 
+)
