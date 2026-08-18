@@ -9,6 +9,7 @@ import android.util.Log
 class NativeVisualizerBridge(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
     private var nativeAvailable = false
+    private var visualizer: Visualizer? = null
 
     companion object {
         const val NAME = "NativeVisualizerBridge"
@@ -17,7 +18,9 @@ class NativeVisualizerBridge(reactContext: ReactApplicationContext) : ReactConte
 
     init {
         nativeAvailable = try {
-            System.loadLibrary("pristineaudio_engine")
+            // FIX: nama lib yang benar sesuai CMakeLists.txt
+            // (add_library(pristine-audio SHARED ...)), bukan "pristineaudio_engine".
+            System.loadLibrary("pristine-audio")
             Log.d(TAG, "Native engine loaded for visualizer")
             true
         } catch (e: UnsatisfiedLinkError) {
@@ -58,23 +61,24 @@ class NativeVisualizerBridge(reactContext: ReactApplicationContext) : ReactConte
 
     @ReactMethod
     fun getFFTData(promise: Promise) {
-    if (!nativeAvailable) {
-        promise.resolve(Arguments.createArray())
-        return
-    }
+        if (!nativeAvailable) {
+            promise.resolve(Arguments.createArray())
+            return
+        }
 
-    try {
-        val data = getVisualizerData()
-        val array = Arguments.createArray()
-        data.forEach { array.pushDouble(it.toDouble()) }
-        promise.resolve(array)
-    } catch (e: Exception) {
-        promise.resolve(Arguments.createArray())
+        try {
+            val data = getVisualizerData()
+            val array = Arguments.createArray()
+            data.forEach { array.pushDouble(it.toDouble()) }
+            promise.resolve(array)
+        } catch (e: Exception) {
+            promise.resolve(Arguments.createArray())
+        }
     }
-}
 
     override fun onCatalystInstanceDestroy() {
         visualizer?.release()
         visualizer = null
     }
 }
+ 
