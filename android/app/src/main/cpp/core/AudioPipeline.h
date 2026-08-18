@@ -33,12 +33,7 @@ public:
     // PROCESS
     // =============================================
 
-    void process(
-        float* left,
-        float* right,
-        int32_t frames,
-        const AudioState& state
-    ) noexcept;
+   void process(float* left, float* right, int32_t frames, const DSPParameters& params) noexcept;
 
 private:
 
