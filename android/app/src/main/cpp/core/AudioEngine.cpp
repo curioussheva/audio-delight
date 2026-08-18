@@ -40,30 +40,28 @@ bool AudioEngine::start(
 ) {
 
     if (
-        mState.isRunning.load(
-            std::memory_order_acquire
-        )
-    ) {
+    mState.isRunning()
+) {
         return true;
     }
 
     if (
-        !mStreamController.openStream(
-            &mCallback,
-            exclusiveMode
-        )
-    ) {
+    !mStreamController.open(
+        &mCallback,
+        exclusiveMode
+    )
+) {
         return false;
     }
 
     if (
-        !mStreamController.startStream()
-    ) {
+    !mStreamController.start()
+) {
 
-        mStreamController.closeStream();
+    mStreamController.close();
 
-        return false;
-    }
+    return false;
+}
 
     mState.exclusiveMode.store(
         exclusiveMode,
@@ -84,14 +82,11 @@ bool AudioEngine::start(
 
 void AudioEngine::stop() {
 
-    mState.isRunning.store(
-        false,
-        std::memory_order_release
-    );
+    mState.setRunning(false);
 
-    mStreamController.stopStream();
+    mStreamController.stop();
 
-    mStreamController.closeStream();
+    mStreamController.close();
 
     reset();
 }
@@ -102,10 +97,7 @@ void AudioEngine::stop() {
 
 bool AudioEngine::isRunning() const {
 
-    return
-        mState.isRunning.load(
-            std::memory_order_acquire
-        );
+    return mState.isRunning();
 }
 
 // =====================================================
@@ -117,10 +109,10 @@ void AudioEngine::pushData(
     int32_t numSamples
 ) {
 
-    mBufferController.pushData(
-        data,
-        numSamples
-    );
+    mBufferController.pushInterleaved(
+    data,
+    static_cast<uint32_t>(numSamples)
+);
 }
 
 // =====================================================
@@ -131,10 +123,7 @@ void AudioEngine::setProcessingMode(
     ProcessingMode mode
 ) {
 
-    mState.processingMode.store(
-        mode,
-        std::memory_order_release
-    );
+    mState.setProcessingMode(mode);
 
     rebuildPipeline();
 }
@@ -146,10 +135,7 @@ void AudioEngine::setProcessingMode(
 ProcessingMode
 AudioEngine::getProcessingMode() const {
 
-    return
-        mState.processingMode.load(
-            std::memory_order_acquire
-        );
+    return mState.processingMode();
 }
 
 // =====================================================
@@ -178,10 +164,7 @@ void AudioEngine::setDSPEnabled(
     bool enabled
 ) {
 
-    mState.isDSPEnabled.store(
-        enabled,
-        std::memory_order_release
-    );
+    mState.setDSPEnabled(enabled);
 }
 
 // =====================================================
@@ -192,10 +175,7 @@ void AudioEngine::setLimiterEnabled(
     bool enabled
 ) {
 
-    mState.isLimiterEnabled.store(
-        enabled,
-        std::memory_order_release
-    );
+    mState.setLimiterEnabled(enabled);
 }
 
 // =====================================================
@@ -206,10 +186,7 @@ void AudioEngine::setMasterGain(
     float gain
 ) {
 
-    mState.masterGain.store(
-        gain,
-        std::memory_order_release
-    );
+    mState.setMasterGain(gain);
 }
 
 // =====================================================
@@ -220,10 +197,7 @@ void AudioEngine::setBalance(
     float balance
 ) {
 
-    mState.balance.store(
-        balance,
-        std::memory_order_release
-    );
+    mState.setBalance(balance);
 }
 
 // =====================================================
@@ -234,10 +208,7 @@ void AudioEngine::setStereoWidth(
     float width
 ) {
 
-    mState.stereoWidth.store(
-        width,
-        std::memory_order_release
-    );
+    mState.setStereoWidth(width);
 }
 
 // =====================================================
@@ -271,10 +242,7 @@ void AudioEngine::setSolfeggioFreq(
     float freq
 ) {
 
-    mState.solfeggioFreq.store(
-        freq,
-        std::memory_order_release
-    );
+    mState.setSolfeggioFreq(freq);
 }
 
 // =====================================================
@@ -285,10 +253,7 @@ void AudioEngine::setBrainwaveFreq(
     float freq
 ) {
 
-    mState.brainwaveFreq.store(
-        freq,
-        std::memory_order_release
-    );
+    mState.setBrainwaveFreq(freq);
 }
 
 // =====================================================
@@ -299,10 +264,7 @@ void AudioEngine::setResonanceIntensity(
     float intensity
 ) {
 
-    mState.resonanceIntensity.store(
-        intensity,
-        std::memory_order_release
-    );
+    mState.setResonanceIntensity(intensity);
 }
 
 // =====================================================
@@ -321,9 +283,9 @@ AudioEngine::getStats() const {
 
 void AudioEngine::reset() {
 
-    mBufferController.reset();
+    mBufferController.clear();
 
     mMetrics.reset();
 }
 
-} // namespace pristine 
+} // namespace pristine

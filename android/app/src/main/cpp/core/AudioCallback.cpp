@@ -63,7 +63,7 @@ AudioCallback::onAudioReady(
     if (
         numFrames <= 0 ||
         numFrames >
-        audio::kMaxFramesPerCallback
+        kMaxFramesPerCallback
     ) {
 
         std::memset(
@@ -89,15 +89,13 @@ AudioCallback::onAudioReady(
     // =============================================
 
     const uint64_t readFrames =
-        mBufferController.readData(
+        mBufferController.popStereo(
             mLeft,
             mRight,
-            static_cast<uint64_t>(
+            static_cast<uint32_t>(
                 numFrames
-            ),
-            mBufferController
-                .getReadIndex()
-        );
+            )
+        ); 
 
     // =============================================
     // UNDERRUN
@@ -130,9 +128,7 @@ AudioCallback::onAudioReady(
     // =============================================
 
     if (
-        mState.isDSPEnabled.load(
-            std::memory_order_acquire
-        )
+        mState.isDSPEnabled()
     ) {
 
         mPipeline.process(
@@ -175,7 +171,7 @@ AudioCallback::onAudioReady(
     // =============================================
 
     mMetrics.updateBufferedSamples(
-        mBufferController.getAvailable()
+        mBufferController.availableFrames()
     );
 
     return
@@ -192,10 +188,7 @@ void AudioCallback::onErrorAfterClose(
     oboe::Result
 ) {
 
-    mState.isRunning.store(
-        false,
-        std::memory_order_release
-    );
+    mState.setRunning(false);
 }
 
 // =====================================================
@@ -204,46 +197,15 @@ void AudioCallback::onErrorAfterClose(
 
 void AudioCallback::updateParameters() {
 
-    mParams.masterGain =
-        mState.masterGain.load(
-            std::memory_order_relaxed
-        );
-
-    mParams.balance =
-        mState.balance.load(
-            std::memory_order_relaxed
-        );
-
-    mParams.stereoWidth =
-        mState.stereoWidth.load(
-            std::memory_order_relaxed
-        );
-
-    mParams.dspEnabled =
-        mState.isDSPEnabled.load(
-            std::memory_order_relaxed
-        );
-
-    mParams.limiterEnabled =
-        mState.isLimiterEnabled.load(
-            std::memory_order_relaxed
-        );
-
-    mParams.solfeggioFreq =
-        mState.solfeggioFreq.load(
-            std::memory_order_relaxed
-        );
-
-    mParams.brainwaveFreq =
-        mState.brainwaveFreq.load(
-            std::memory_order_relaxed
-        );
-
-    mParams.resonanceIntensity =
-        mState.resonanceIntensity.load(
-            std::memory_order_relaxed
-        );
-}
+    mParams.masterGain = mState.masterGain();
+    mParams.balance = mState.balance();
+    mParams.stereoWidth = mState.stereoWidth();
+    mParams.dspEnabled = mState.isDSPEnabled();
+    mParams.limiterEnabled = mState.isLimiterEnabled();
+    mParams.solfeggioFreq = mState.solfeggioFreq();
+    mParams.brainwaveFreq = mState.brainwaveFreq();
+    mParams.resonanceIntensity = mState.resonanceIntensity();
+} 
 
 // =====================================================
 // ZAP DENORMAL
@@ -255,7 +217,7 @@ inline float AudioCallback::zapDenormal(
 
     return
         (std::fabs(x) <
-         audio::kDenormalThreshold)
+         kDenormalThreshold)
         ? 0.0f
         : x;
 }
