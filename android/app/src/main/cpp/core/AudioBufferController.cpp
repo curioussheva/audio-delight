@@ -7,7 +7,7 @@ namespace pristine {
 // =====================================================
 
 AudioBufferController::AudioBufferController()
-    : mBuffer(audio::kRingBufferSize) {
+    : mBuffer(kRingBufferSize) {
 }
 
 // =====================================================
@@ -67,7 +67,7 @@ uint32_t AudioBufferController::popStereo(
 
     alignas(16)
     float interleaved[
-        audio::kMaxFramesPerCallback * 2
+        kMaxFramesPerCallback * 2
     ];
 
     const size_t popped =
