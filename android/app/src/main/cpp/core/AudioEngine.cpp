@@ -15,11 +15,10 @@ AudioEngine::AudioEngine()
 
     mCallback(
         mBufferController,
+        mPipeline,
         mMetrics,
         mState
     ) {
-
-    rebuildPipeline();
 }
 
 // =====================================================
@@ -40,31 +39,36 @@ bool AudioEngine::start(
 ) {
 
     if (
-    mState.isRunning()
-) {
+        mState.isRunning()
+    ) {
         return true;
     }
 
     if (
-    !mStreamController.open(
-        &mCallback,
-        exclusiveMode
-    )
-) {
+        !mStreamController.open(
+            &mCallback,
+            exclusiveMode
+        )
+    ) {
         return false;
     }
 
+    mPipeline.prepare(
+        mStreamController.sampleRate(),
+        mStreamController.framesPerBurst()
+    );
+
     if (
-    !mStreamController.start()
-) {
+        !mStreamController.start()
+    ) {
 
-    mStreamController.close();
+        mStreamController.close();
 
-    return false;
-}
+        return false;
+    }
 
     mState.setExclusiveMode(exclusiveMode);
-    mState.setRunning(true); 
+    mState.setRunning(true);
 
     return true;
 }
@@ -103,9 +107,9 @@ void AudioEngine::pushData(
 ) {
 
     mBufferController.pushInterleaved(
-    data,
-    static_cast<uint32_t>(numSamples)
-);
+        data,
+        static_cast<uint32_t>(numSamples)
+    );
 }
 
 // =====================================================
@@ -117,8 +121,6 @@ void AudioEngine::setProcessingMode(
 ) {
 
     mState.setProcessingMode(mode);
-
-    rebuildPipeline();
 }
 
 // =====================================================
@@ -129,24 +131,6 @@ ProcessingMode
 AudioEngine::getProcessingMode() const {
 
     return mState.processingMode();
-}
-
-// =====================================================
-// REBUILD PIPELINE
-// =====================================================
-
-void AudioEngine::rebuildPipeline() {
-
-    auto pipeline =
-        AudioModeManager
-            ::getInstance()
-            .createPipeline(
-                getProcessingMode()
-            );
-
-    mCallback.switchPipeline(
-        std::move(pipeline)
-    );
 }
 
 // =====================================================
@@ -278,7 +262,9 @@ void AudioEngine::reset() {
 
     mBufferController.clear();
 
+    mPipeline.reset();
+
     mMetrics.reset();
 }
 
-} // namespace pristine
+} // namespace pristine 

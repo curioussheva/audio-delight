@@ -95,7 +95,7 @@ AudioCallback::onAudioReady(
             static_cast<uint32_t>(
                 numFrames
             )
-        ); 
+        );
 
     // =============================================
     // UNDERRUN
@@ -205,7 +205,8 @@ void AudioCallback::updateParameters() {
     mParams.solfeggioFreq = mState.solfeggioFreq();
     mParams.brainwaveFreq = mState.brainwaveFreq();
     mParams.resonanceIntensity = mState.resonanceIntensity();
-} 
+    mParams.processingMode = mState.processingMode();
+}
 
 // =====================================================
 // ZAP DENORMAL
@@ -238,4 +239,4 @@ inline float AudioCallback::softClip(
         );
 }
 
-} // namespace pristine
+} // namespace pristine 

@@ -72,11 +72,11 @@ private:
     // =============================================
 
     float mLeft[
-        audio::kMaxFramesPerCallback
+        kMaxFramesPerCallback
     ];
 
     float mRight[
-        audio::kMaxFramesPerCallback
+        kMaxFramesPerCallback
     ];
 
     // =============================================

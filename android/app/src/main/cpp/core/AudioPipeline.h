@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "AudioState.h"
+#include "AudioTypes.h"
 
 #include "../dsp/DSPChain.h"
 
@@ -33,7 +33,7 @@ public:
     // PROCESS
     // =============================================
 
-   void process(float* left, float* right, int32_t frames, const DSPParameters& params) noexcept;
+    void process(float* left, float* right, int32_t frames, const DSPParameters& params) noexcept;
 
 private:
 
@@ -51,14 +51,14 @@ private:
         float* left,
         float* right,
         int32_t frames,
-        const AudioState& state
+        const DSPParameters& params
     ) noexcept;
 
     void processImmersive(
         float* left,
         float* right,
         int32_t frames,
-        const AudioState& state
+        const DSPParameters& params
     ) noexcept;
 
 private:
@@ -70,4 +70,4 @@ private:
     int32_t mMaxFrames = 1920;
 };
 
-} // namespace pristine
+} // namespace pristine 

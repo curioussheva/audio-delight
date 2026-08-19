@@ -11,6 +11,7 @@
 #include "AudioCallback.h"
 #include "AudioMetrics.h"
 #include "AudioModeManager.h"
+#include "AudioPipeline.h"
 #include "AudioState.h"
 #include "AudioStreamController.h"
 #include "AudioTypes.h"
@@ -118,16 +119,14 @@ public:
 
 private:
 
-    void rebuildPipeline();
-
-private:
-
     AudioState mState;
 
     AudioMetrics mMetrics;
 
     AudioBufferController
         mBufferController;
+
+    AudioPipeline mPipeline;
 
     AudioCallback mCallback;
 

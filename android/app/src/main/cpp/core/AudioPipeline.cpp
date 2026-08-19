@@ -50,13 +50,11 @@ void AudioPipeline::process(
     float* left,
     float* right,
     int32_t frames,
-    const AudioState& state
+    const DSPParameters& params
 ) noexcept {
 
     switch (
-        state.processingMode.load(
-            std::memory_order_acquire
-        )
+        params.processingMode
     ) {
 
         case ProcessingMode::BIT_PERFECT:
@@ -75,7 +73,7 @@ void AudioPipeline::process(
                 left,
                 right,
                 frames,
-                state
+                params
             );
 
             break;
@@ -86,7 +84,7 @@ void AudioPipeline::process(
                 left,
                 right,
                 frames,
-                state
+                params
             );
 
             break;
@@ -114,7 +112,7 @@ void AudioPipeline::processDSP(
     float* left,
     float* right,
     int32_t frames,
-    const AudioState&
+    const DSPParameters&
 ) noexcept {
 
     mDSP.process(
@@ -132,7 +130,7 @@ void AudioPipeline::processImmersive(
     float* left,
     float* right,
     int32_t frames,
-    const AudioState& state
+    const DSPParameters& params
 ) noexcept {
 
     // =============================================
@@ -154,7 +152,7 @@ void AudioPipeline::processImmersive(
     // - meditation ambience
     // =============================================
 
-    (void)state;
+    (void)params;
 }
 
-} // namespace pristine
+} // namespace pristine 
