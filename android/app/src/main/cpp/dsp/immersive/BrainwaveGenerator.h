@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 
-namespace audio { namespace dsp {
+namespace pristine { namespace dsp {
 
 enum class BrainwaveType {
     DELTA, THETA, ALPHA, BETA, GAMMA

@@ -2,7 +2,7 @@
 #include <vector>
 #include <functional>
 
-namespace audio {
+namespace pristine {
 
 class SpectrumVisualizer {
 public:
@@ -18,4 +18,4 @@ private:
     std::unique_ptr<Impl> pImpl;
 };
 
-} // namespace audio
+} // namespace pristine

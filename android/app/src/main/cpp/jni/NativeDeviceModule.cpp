@@ -6,7 +6,7 @@
 extern "C" {
 
 JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativeGetDevices(JNIEnv* env, jobject) {
-    auto& mgr = audio::AudioDeviceManager::get();
+    auto& mgr = pristine::AudioDeviceManager::get();
     auto devices = mgr.getAvailableDevices();
     jclass deviceClass = env->FindClass("com/pristineaudio/audio/AudioDeviceInfo");
     // stub: return empty array
@@ -15,7 +15,7 @@ JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_n
 
 JNIEXPORT jboolean JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativeSetActiveDevice(JNIEnv* env, jobject, jstring deviceId) {
     const char* id = env->GetStringUTFChars(deviceId, nullptr);
-    bool ok = audio::AudioDeviceManager::get().setActiveDevice(id);
+    bool ok = pristine::AudioDeviceManager::get().setActiveDevice(id);
     env->ReleaseStringUTFChars(deviceId, id);
     return ok ? JNI_TRUE : JNI_FALSE;
 }

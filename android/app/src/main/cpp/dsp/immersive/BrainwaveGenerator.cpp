@@ -1,7 +1,7 @@
 #include "BrainwaveGenerator.h"
 #include <cmath>
 
-namespace audio { namespace dsp {
+namespace pristine { namespace dsp {
 
 BrainwaveGenerator::BrainwaveGenerator() = default;
 void BrainwaveGenerator::setType(BrainwaveType type) { mType = type; }

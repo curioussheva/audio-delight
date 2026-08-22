@@ -51,13 +51,13 @@ private:
 
     dsp::SolfeggioResonator mSolfeggio;
 
-    audio::dsp::BrainwaveGenerator mBrainwave;
+    dsp::BrainwaveGenerator mBrainwave;
 
-    audio::dsp::HarmonicExciter mHarmonic;
+    dsp::HarmonicExciter mHarmonic;
 
-    audio::dsp::SpatialFieldProcessor mSpatial;
+    dsp::SpatialFieldProcessor mSpatial;
 
-    audio::dsp::BinauralRenderer mBinaural;
+    dsp::BinauralRenderer mBinaural;
 
     DSPParameters mParams{};
 

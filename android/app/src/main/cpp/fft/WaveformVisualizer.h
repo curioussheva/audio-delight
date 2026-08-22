@@ -2,7 +2,7 @@
 #include <vector>
 #include <functional>
 
-namespace audio {
+namespace pristine {
 
 class WaveformVisualizer {
 public:
@@ -17,4 +17,4 @@ private:
     std::unique_ptr<Impl> pImpl;
 };
 
-} // namespace audio
+} // namespace pristine

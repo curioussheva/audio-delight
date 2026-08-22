@@ -3,7 +3,7 @@
 #include "WindowFunctions.h"
 #include <vector>
 
-namespace audio {
+namespace pristine {
 
 class FFTProcessor {
 public:
@@ -18,4 +18,4 @@ private:
     std::vector<float> mMagnitude;
 };
 
-} // namespace audio
+} // namespace pristine

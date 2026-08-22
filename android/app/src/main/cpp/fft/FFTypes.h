@@ -2,7 +2,7 @@
 #include <complex>
 #include <vector>
 
-namespace audio {
+namespace pristine {
 using Complex = std::complex<float>;
 using ComplexVector = std::vector<Complex>;
-} // namespace audio
+} // namespace pristine

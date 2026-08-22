@@ -2,7 +2,7 @@
 #include "../../fft/FFTPlan.h"
 #include <vector>
 
-namespace audio { namespace dsp {
+namespace pristine { namespace dsp {
 
 class FFTResonanceAnalyzer {
 public:
@@ -13,7 +13,7 @@ public:
 
 private:
     int mFFTSize;
-    audio::FFTPlan mPlan;
+    FFTPlan mPlan;
     std::vector<float> mBuffer;
     int mWritePos;
 };

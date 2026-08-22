@@ -1,7 +1,7 @@
 #include "FFTResonanceAnalyzer.h"
 #include <algorithm>
 
-namespace audio { namespace dsp {
+namespace pristine { namespace dsp {
 
 FFTResonanceAnalyzer::FFTResonanceAnalyzer(int fftSize)
     : mFFTSize(fftSize), mPlan(fftSize), mBuffer(fftSize, 0.0f), mWritePos(0) {}

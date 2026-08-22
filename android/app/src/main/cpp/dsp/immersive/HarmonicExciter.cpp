@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace audio { namespace dsp {
+namespace pristine { namespace dsp {
 
 HarmonicExciter::HarmonicExciter() = default;
 void HarmonicExciter::setDrive(float driveDb) { 

@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 
-namespace audio {
+namespace pristine {
 
 class USBStreamSession {
 public:
@@ -13,4 +13,4 @@ private:
     bool mActive = false;
 };
 
-} // namespace audio
+} // namespace pristine

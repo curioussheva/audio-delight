@@ -2,7 +2,7 @@
 #include <memory>
 #include <vector>
 
-namespace audio {
+namespace pristine {
 
 struct WaveformVisualizer::Impl {
     std::vector<float> buffer;
@@ -27,4 +27,4 @@ void WaveformVisualizer::onUpdate(std::function<void(const std::vector<float>&)>
     // stub
 }
 
-} // namespace audio
+} // namespace pristine

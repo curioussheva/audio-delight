@@ -3,7 +3,7 @@
 
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, "AudioRouteManager", __VA_ARGS__)
 
-namespace audio {
+namespace pristine {
 
 AudioRouteManager& AudioRouteManager::get() {
     static AudioRouteManager instance;
@@ -15,12 +15,12 @@ bool AudioRouteManager::setRoute(const std::string& deviceId) {
     return true;
 }
 
-AudioDeviceInfo AudioRouteManager::getCurrentRoute() const {
-    return AudioDeviceInfo{};
+AudioDeviceDescriptor AudioRouteManager::getCurrentRoute() const {
+    return AudioDeviceDescriptor{};
 }
 
-void AudioRouteManager::registerRouteChangeCallback(std::function<void(const AudioDeviceInfo&)> callback) {
+void AudioRouteManager::registerRouteChangeCallback(std::function<void(const AudioDeviceDescriptor&)> callback) {
     // stub
 }
 
-} // namespace audio
+} // namespace pristine

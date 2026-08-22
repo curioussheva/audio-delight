@@ -3,7 +3,7 @@
 #include <functional>
 #include <string>
 
-namespace audio {
+namespace pristine {
 
 class USBDeviceManager {
 public:
@@ -19,4 +19,4 @@ private:
     USBDeviceManager() = default;
 };
 
-} // namespace audio
+} // namespace pristine

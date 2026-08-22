@@ -1,6 +1,6 @@
 #include "SpatialFieldProcessor.h"
 
-namespace audio { namespace dsp {
+namespace pristine { namespace dsp {
 
 SpatialFieldProcessor::SpatialFieldProcessor() = default;
 void SpatialFieldProcessor::setWidth(float width) { mWidth = width; }

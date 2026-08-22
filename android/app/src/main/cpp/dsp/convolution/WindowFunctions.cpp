@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <vector>
 
-namespace audio {
+namespace pristine {
 
 std::vector<float> createHanningWindow(int size) {
     std::vector<float> w(size);
@@ -33,4 +33,4 @@ std::vector<float> createRectangularWindow(int size) {
     return std::vector<float>(size, 1.0f);
 }
 
-} // namespace audio
+} // namespace pristine

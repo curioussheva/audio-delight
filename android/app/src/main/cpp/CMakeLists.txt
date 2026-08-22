@@ -65,6 +65,48 @@ if(TEST_SRCS)
     list(APPEND EXCLUDED_SRCS ${TEST_SRCS})
 endif()
 
+# =====================================================
+# FFMPEG DETECTION (BEFORE add_library, so we can
+# conditionally exclude decoder/FFmpegDecoder.cpp)
+# =====================================================
+
+option(ENABLE_FFMPEG "Enable FFmpeg decoder support" ON)
+
+set(PRISTINE_FFMPEG_AVAILABLE FALSE)
+
+if(ENABLE_FFMPEG)
+    find_package(PkgConfig QUIET)
+
+    if(PkgConfig_FOUND)
+        pkg_check_modules(FFMPEG QUIET
+            libavcodec>=58.0
+            libavformat>=58.0
+            libswresample>=3.0
+            libavutil>=56.0
+        )
+    endif()
+
+    if(FFMPEG_FOUND)
+        set(PRISTINE_FFMPEG_AVAILABLE TRUE)
+    else()
+        message(STATUS "FFmpeg not found via pkg-config, trying manual find...")
+
+        find_library(AVCODEC_LIB avcodec PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
+        find_library(AVFORMAT_LIB avformat PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
+        find_library(SWRESAMPLE_LIB swresample PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
+        find_library(AVUTIL_LIB avutil PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
+
+        if(AVCODEC_LIB AND AVFORMAT_LIB)
+            set(PRISTINE_FFMPEG_AVAILABLE TRUE)
+        endif()
+    endif()
+endif()
+
+if(NOT PRISTINE_FFMPEG_AVAILABLE)
+    message(WARNING "FFmpeg not found, decoder will use PCM only -- excluding decoder/FFmpegDecoder.cpp from build")
+    list(APPEND EXCLUDED_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/decoder/FFmpegDecoder.cpp")
+endif()
+
 if(EXCLUDED_SRCS)
     list(REMOVE_ITEM ALL_SRCS ${EXCLUDED_SRCS})
 endif()
@@ -121,48 +163,22 @@ target_include_directories(pristine-audio
         jni
 )
 
+
 # =====================================================
-# FFMPEG DECODER
+# FFMPEG DECODER (link only -- detection already done above)
 # =====================================================
 
-option(ENABLE_FFMPEG "Enable FFmpeg decoder support" ON)
-
-if(ENABLE_FFMPEG)
-    find_package(PkgConfig QUIET)
-    
-    if(PkgConfig_FOUND)
-        pkg_check_modules(FFMPEG QUIET
-            libavcodec>=58.0
-            libavformat>=58.0
-            libswresample>=3.0
-            libavutil>=56.0
-        )
-    endif()
-    
+if(PRISTINE_FFMPEG_AVAILABLE)
     if(FFMPEG_FOUND)
         message(STATUS "FFmpeg found via pkg-config")
         target_include_directories(pristine-audio PRIVATE ${FFMPEG_INCLUDE_DIRS})
         target_link_libraries(pristine-audio ${FFMPEG_LIBRARIES})
         target_compile_definitions(pristine-audio PRIVATE ENABLE_FFMPEG=1)
-        
-        # pkg-config doesn't always set INTERFACE include properly
         target_compile_options(pristine-audio PRIVATE ${FFMPEG_CFLAGS_OTHER})
     else()
-        # Fallback: manual find for Android NDK / custom paths
-        message(STATUS "FFmpeg not found via pkg-config, trying manual find...")
-        
-        find_library(AVCODEC_LIB avcodec PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
-        find_library(AVFORMAT_LIB avformat PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
-        find_library(SWRESAMPLE_LIB swresample PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
-        find_library(AVUTIL_LIB avutil PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
-        
-        if(AVCODEC_LIB AND AVFORMAT_LIB)
-            message(STATUS "FFmpeg found manually")
-            target_link_libraries(pristine-audio ${AVCODEC_LIB} ${AVFORMAT_LIB} ${SWRESAMPLE_LIB} ${AVUTIL_LIB})
-            target_compile_definitions(pristine-audio PRIVATE ENABLE_FFMPEG=1)
-        else()
-            message(WARNING "FFmpeg not found, decoder will use PCM only")
-        endif()
+        message(STATUS "FFmpeg found manually")
+        target_link_libraries(pristine-audio ${AVCODEC_LIB} ${AVFORMAT_LIB} ${SWRESAMPLE_LIB} ${AVUTIL_LIB})
+        target_compile_definitions(pristine-audio PRIVATE ENABLE_FFMPEG=1)
     endif()
 endif()
 

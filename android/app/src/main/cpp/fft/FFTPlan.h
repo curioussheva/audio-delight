@@ -2,7 +2,7 @@
 #include "FFTypes.h"
 #include <memory>
 
-namespace audio {
+namespace pristine {
 
 class FFTPlan {
 public:
@@ -18,4 +18,4 @@ private:
     void* mCfg; // kiss_fft_cfg
 };
 
-} // namespace audio
+} // namespace pristine

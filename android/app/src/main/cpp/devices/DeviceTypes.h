@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 
-namespace audio {
+namespace pristine {
 
 enum class DeviceType {
     WIRED_HEADSET,
@@ -11,4 +11,4 @@ enum class DeviceType {
     UNKNOWN
 };
 
-} // namespace audio
+} // namespace pristine

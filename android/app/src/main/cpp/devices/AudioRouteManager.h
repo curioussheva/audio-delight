@@ -1,17 +1,17 @@
 #pragma once
-#include "AudioDeviceInfo.h"
+#include "AudioDeviceDescriptor.h"
 #include <functional>
 
-namespace audio {
+namespace pristine {
 
 class AudioRouteManager {
 public:
     static AudioRouteManager& get();
     bool setRoute(const std::string& deviceId);
-    AudioDeviceInfo getCurrentRoute() const;
-    void registerRouteChangeCallback(std::function<void(const AudioDeviceInfo&)> callback);
+    AudioDeviceDescriptor getCurrentRoute() const;
+    void registerRouteChangeCallback(std::function<void(const AudioDeviceDescriptor&)> callback);
 private:
     AudioRouteManager() = default;
 };
 
-} // namespace audio
+} // namespace pristine

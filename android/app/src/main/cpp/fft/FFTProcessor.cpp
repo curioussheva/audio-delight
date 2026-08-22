@@ -1,7 +1,8 @@
 #include "FFTProcessor.h"
+#include "../dsp/convolution/WindowFunctions.h"
 #include <cmath>
 
-namespace audio {
+namespace pristine {
 
 FFTProcessor::FFTProcessor(int fftSize) 
     : mFFTSize(fftSize), mPlan(fftSize), mBuffer(fftSize), mMagnitude(fftSize/2+1) {
@@ -28,4 +29,4 @@ void FFTProcessor::process(const float* input, float* outputMagnitude) {
     }
 }
 
-} // namespace audio
+} // namespace pristine

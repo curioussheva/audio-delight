@@ -4,7 +4,7 @@
 
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, "FFTPlan", __VA_ARGS__)
 
-namespace audio {
+namespace pristine {
 
 FFTPlan::FFTPlan(int n) : mSize(n), mCfg(nullptr) {
     LOGD("FFTPlan created size %d (stub)", n);
@@ -30,4 +30,4 @@ void FFTPlan::inverse(const Complex* complexInput, float* realOutput) {
     }
 }
 
-} // namespace audio
+} // namespace pristine

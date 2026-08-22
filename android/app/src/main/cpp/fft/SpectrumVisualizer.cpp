@@ -4,7 +4,7 @@
 #include <thread>
 #include <atomic>
 
-namespace audio {
+namespace pristine {
 
 struct SpectrumVisualizer::Impl {
     SpectrumAnalyzer analyzer;
@@ -44,4 +44,4 @@ void SpectrumVisualizer::onUpdate(std::function<void(const std::vector<float>&)>
     // start thread etc. (stub)
 }
 
-} // namespace audio
+} // namespace pristine

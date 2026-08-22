@@ -1,8 +1,19 @@
 #pragma once
 
 #include <cmath>
+#include <vector>
 
 namespace pristine {
+
+// =====================================================
+// FREE-FUNCTION WINDOW GENERATORS
+// Return a full window buffer of the given size.
+// =====================================================
+
+std::vector<float> createHanningWindow(int size);
+std::vector<float> createHammingWindow(int size);
+std::vector<float> createBlackmanWindow(int size);
+std::vector<float> createRectangularWindow(int size);
 
 class WindowFunctions {
 public:

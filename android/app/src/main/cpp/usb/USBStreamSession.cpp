@@ -3,7 +3,7 @@
 
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, "USBStreamSession", __VA_ARGS__)
 
-namespace audio {
+namespace pristine {
 
 bool USBStreamSession::start(int sampleRate, int framesPerBurst) {
     LOGD("start session - stub");
@@ -23,4 +23,4 @@ bool USBStreamSession::isActive() const {
     return mActive;
 }
 
-} // namespace audio
+} // namespace pristine

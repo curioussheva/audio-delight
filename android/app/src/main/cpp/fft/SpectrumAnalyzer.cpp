@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace audio {
+namespace pristine {
 
 SpectrumAnalyzer::SpectrumAnalyzer(int fftSize, int sampleRate)
     : mFFTSize(fftSize), mSampleRate(sampleRate), mFFT(fftSize), mRingBuffer(fftSize, 0.0f), mWritePos(0) {
@@ -37,4 +37,4 @@ void SpectrumAnalyzer::reset() {
     mWritePos = 0;
 }
 
-} // namespace audio
+} // namespace pristine

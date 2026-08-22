@@ -2,7 +2,7 @@
 #include "FFTProcessor.h"
 #include <vector>
 
-namespace audio {
+namespace pristine {
 
 class SpectrumAnalyzer {
 public:
@@ -19,4 +19,4 @@ private:
     int mWritePos;
 };
 
-} // namespace audio
+} // namespace pristine

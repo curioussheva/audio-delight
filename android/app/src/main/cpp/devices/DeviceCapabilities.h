@@ -2,7 +2,7 @@
 #include <vector>
 #include <cstdint>
 
-namespace audio {
+namespace pristine {
 
 struct DeviceCapabilities {
     std::vector<int32_t> supportedSampleRates;
@@ -11,4 +11,4 @@ struct DeviceCapabilities {
     bool supports16bit = true;
 };
 
-} // namespace audio
+} // namespace pristine

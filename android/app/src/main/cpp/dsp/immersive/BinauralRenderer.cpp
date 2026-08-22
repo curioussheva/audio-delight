@@ -1,6 +1,6 @@
 #include "BinauralRenderer.h"
 
-namespace audio { namespace dsp {
+namespace pristine { namespace dsp {
 
 BinauralRenderer::BinauralRenderer() = default;
 void BinauralRenderer::setAzimuth(float degrees) { mAzimuth = degrees; }

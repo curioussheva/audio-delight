@@ -9,12 +9,12 @@ namespace {
 // Standard psychoacoustic band boundaries.
 // =====================================================
 
-audio::dsp::BrainwaveType mapFrequencyToBrainwaveType(float hz) {
-    if (hz < 4.0f)  return audio::dsp::BrainwaveType::DELTA;
-    if (hz < 8.0f)  return audio::dsp::BrainwaveType::THETA;
-    if (hz < 13.0f) return audio::dsp::BrainwaveType::ALPHA;
-    if (hz < 30.0f) return audio::dsp::BrainwaveType::BETA;
-    return audio::dsp::BrainwaveType::GAMMA;
+dsp::BrainwaveType mapFrequencyToBrainwaveType(float hz) {
+    if (hz < 4.0f)  return dsp::BrainwaveType::DELTA;
+    if (hz < 8.0f)  return dsp::BrainwaveType::THETA;
+    if (hz < 13.0f) return dsp::BrainwaveType::ALPHA;
+    if (hz < 30.0f) return dsp::BrainwaveType::BETA;
+    return dsp::BrainwaveType::GAMMA;
 }
 
 } // namespace

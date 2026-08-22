@@ -2,9 +2,9 @@
 #include "DeviceTypes.h"
 #include <string>
 
-namespace audio {
+namespace pristine {
 
-struct AudioDeviceInfo {
+struct AudioDeviceDescriptor {
     std::string id;
     std::string name;
     DeviceType type;
@@ -12,4 +12,4 @@ struct AudioDeviceInfo {
     bool supportsExclusive = false;
 };
 
-} // namespace audio
+} // namespace pristine
