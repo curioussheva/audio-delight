@@ -1,7 +1,6 @@
 #include "DecoderWorker.h"
 
 #include <chrono>
-#include <iostream>
 
 namespace pristine::decoder {
 
@@ -11,7 +10,7 @@ using namespace std::chrono;
 // CONSTRUCTOR / DESTRUCTOR
 // =====================================================
 
-DecoderWorker::DecoderWorker(std::unique_ptr<IDecoder> decoder)
+DecoderWorker::DecoderWorker(std::unique_ptr<AudioDecoder> decoder)
     : decoder_(std::move(decoder)) {}
 
 DecoderWorker::~DecoderWorker() {
@@ -25,17 +24,17 @@ DecoderWorker::~DecoderWorker() {
 bool DecoderWorker::start(const std::string& uri, double startPosition) {
     if (running_.load()) return false;
 
-    shouldStop_.store(false);
+    stopRequested_.store(false);
     paused_.store(false);
     currentUri_ = uri;
 
     if (!decoder_) {
-        notifyError("Decoder not set");
+        if (errorCallback_) errorCallback_("Decoder not set");
         return false;
     }
 
     if (!decoder_->open(uri)) {
-        notifyError("Failed to open decoder");
+        if (errorCallback_) errorCallback_("Failed to open decoder");
         return false;
     }
 
@@ -52,9 +51,9 @@ bool DecoderWorker::start(const std::string& uri, double startPosition) {
 void DecoderWorker::stop() {
     if (!running_.load()) return;
 
-    shouldStop_.store(true);
+    stopRequested_.store(true);
     paused_.store(false);
-    cv_.notify_all();
+    pauseCv_.notify_all();
 
     if (workerThread_.joinable()) {
         workerThread_.join();
@@ -73,7 +72,15 @@ void DecoderWorker::pause() {
 
 void DecoderWorker::resume() {
     paused_.store(false);
-    cv_.notify_all();
+    pauseCv_.notify_all();
+}
+
+bool DecoderWorker::isRunning() const noexcept {
+    return running_.load();
+}
+
+bool DecoderWorker::isPaused() const noexcept {
+    return paused_.load();
 }
 
 // =====================================================
@@ -87,7 +94,7 @@ bool DecoderWorker::seek(double positionSeconds) {
 
     bool ok = decoder_->seek(positionSeconds);
     if (!ok) {
-        notifyError("Seek failed");
+        if (errorCallback_) errorCallback_("Seek failed");
         return false;
     }
 
@@ -102,16 +109,16 @@ void DecoderWorker::setChunkSize(uint32_t frames) {
     chunkSize_ = frames;
 }
 
-void DecoderWorker::setChunkCallback(ChunkCallback cb) {
-    chunkCb_ = std::move(cb);
+void DecoderWorker::setDecodeCallback(DecodeCallback callback) {
+    decodeCallback_ = std::move(callback);
 }
 
-void DecoderWorker::setErrorCallback(ErrorCallback cb) {
-    errorCb_ = std::move(cb);
+void DecoderWorker::setErrorCallback(ErrorCallback callback) {
+    errorCallback_ = std::move(callback);
 }
 
-void DecoderWorker::setEofCallback(EofCallback cb) {
-    eofCb_ = std::move(cb);
+void DecoderWorker::setEofCallback(EofCallback callback) {
+    eofCallback_ = std::move(callback);
 }
 
 // =====================================================
@@ -125,7 +132,7 @@ DecoderState DecoderWorker::getState() const {
 
 double DecoderWorker::getPosition() const {
     if (!decoder_) return 0.0;
-    return decoder_->getCurrentPosition();
+    return decoder_->getPositionSeconds();
 }
 
 double DecoderWorker::getDuration() const {
@@ -133,9 +140,8 @@ double DecoderWorker::getDuration() const {
     return decoder_->getDurationSeconds();
 }
 
-const AudioFormat& DecoderWorker::getFormat() const {
-    static AudioFormat empty{};
-    if (!decoder_) return empty;
+AudioFormat DecoderWorker::getFormat() const {
+    if (!decoder_) return AudioFormat{};
     return decoder_->getOutputFormat();
 }
 
@@ -144,43 +150,34 @@ const AudioFormat& DecoderWorker::getFormat() const {
 // =====================================================
 
 void DecoderWorker::workerLoop() {
-    while (!shouldStop_.load()) {
+    while (!stopRequested_.load()) {
 
         // PAUSE HANDLING
         if (paused_.load()) {
             std::unique_lock<std::mutex> lock(mutex_);
-            cv_.wait(lock, [&] {
-                return !paused_.load() || shouldStop_.load();
+            pauseCv_.wait(lock, [&] {
+                return !paused_.load() || stopRequested_.load();
             });
         }
 
-        if (shouldStop_.load()) break;
+        if (stopRequested_.load()) break;
 
         // DECODE
         auto result = decoder_->decode(chunkSize_);
 
         if (result.status == DecodeStatus::Success) {
 
-            if (chunkCb_) {
-                playback::PCMChunk chunk;
-
-                chunk.header.sampleRate = decoder_->getOutputFormat().sampleRate;
-                chunk.header.channels   = decoder_->getOutputFormat().channels;
-                chunk.header.numFrames  = result.framesDecoded;
-                chunk.header.framePosition = result.framePosition;
-                chunk.header.payloadSize = result.samples.size() * sizeof(float);
-
-                chunk.samples = std::move(result.samples);
-
-                chunkCb_(std::move(chunk));
+            if (decodeCallback_) {
+                decodeCallback_(std::move(result));
             }
 
-        } else if (result.status == DecodeStatus::Eof) {
-            notifyEof();
+        } else if (result.status == DecodeStatus::EndOfStream) {
+            if (eofCallback_) eofCallback_();
             break;
 
-        } else if (result.status == DecodeStatus::Error) {
-            notifyError(result.errorMessage);
+        } else if (result.status == DecodeStatus::Error ||
+                   result.status == DecodeStatus::FatalError) {
+            if (errorCallback_) errorCallback_(result.errorMessage);
             break;
 
         } else if (result.status == DecodeStatus::NeedMoreData) {
@@ -195,20 +192,4 @@ void DecoderWorker::workerLoop() {
     running_.store(false);
 }
 
-// =====================================================
-// NOTIFIERS
-// =====================================================
-
-void DecoderWorker::notifyChunk(playback::PCMChunk&& chunk) {
-    if (chunkCb_) chunkCb_(std::move(chunk));
-}
-
-void DecoderWorker::notifyError(const std::string& error) {
-    if (errorCb_) errorCb_(error);
-}
-
-void DecoderWorker::notifyEof() {
-    if (eofCb_) eofCb_();
-}
-
-} // namespace pristine::decoder 
+} // namespace pristine::decoder

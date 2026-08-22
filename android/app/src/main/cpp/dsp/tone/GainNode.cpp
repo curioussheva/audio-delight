@@ -37,4 +37,27 @@ void GainNode::setGain(
     mGainR = right;
 }
 
+// =====================================================
+// APPLY CONFIG
+// =====================================================
+
+void GainNode::applyConfig(
+    const DSPConfig& config
+) {
+
+    float left =
+        config.masterGain *
+        (config.balance <= 0.0f
+            ? 1.0f
+            : 1.0f - config.balance);
+
+    float right =
+        config.masterGain *
+        (config.balance >= 0.0f
+            ? 1.0f
+            : 1.0f + config.balance);
+
+    setGain(left, right);
+}
+
 } // namespace pristine

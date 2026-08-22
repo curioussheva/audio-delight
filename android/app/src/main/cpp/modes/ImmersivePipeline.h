@@ -1,6 +1,5 @@
 #pragma once
 
-#include "../core/AudioPipeline.h"
 #include "../core/AudioTypes.h"
 
 #include "../dsp/immersive/SolfeggioResonator.h"
@@ -11,11 +10,11 @@
 
 namespace pristine {
 
-class ImmersivePipeline final : public AudioPipeline {
+class ImmersivePipeline final {
 public:
 
     ImmersivePipeline() = default;
-    ~ImmersivePipeline() override = default;
+    ~ImmersivePipeline() = default;
 
     // =================================================
     // PREPARE
@@ -44,21 +43,21 @@ public:
         float* right,
         int32_t numFrames,
         const DSPParameters& params
-    ) override;
+    );
 
-    void reset() override;
+    void reset();
 
 private:
 
     dsp::SolfeggioResonator mSolfeggio;
 
-    dsp::BrainwaveGenerator mBrainwave;
+    audio::dsp::BrainwaveGenerator mBrainwave;
 
-    dsp::HarmonicExciter mHarmonic;
+    audio::dsp::HarmonicExciter mHarmonic;
 
-    dsp::SpatialFieldProcessor mSpatial;
+    audio::dsp::SpatialFieldProcessor mSpatial;
 
-    dsp::BinauralRenderer mBinaural;
+    audio::dsp::BinauralRenderer mBinaural;
 
     DSPParameters mParams{};
 

@@ -21,6 +21,10 @@ public:
         int count
     ) override;
 
+    void applyConfig(
+        const DSPConfig& config
+    ) override;
+
     EQProcessor& processor();
 
 private:

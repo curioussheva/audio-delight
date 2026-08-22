@@ -15,9 +15,7 @@ EngineManager::EngineManager()
 
     mEngine(),
 
-    mPlayback(
-        mEngine
-    ) {
+    mPlayback() {
 
 }
 
@@ -43,7 +41,7 @@ EngineManager::engine() {
     return mEngine;
 }
 
-PlaybackController&
+playback::PlaybackController&
 EngineManager::playback() {
 
     return mPlayback;
@@ -71,9 +69,7 @@ void EngineManager::start() {
     }
 
     const bool exclusiveMode =
-        mState.exclusiveMode.load(
-            std::memory_order_acquire
-        );
+        mState.exclusiveMode();
 
     mEngine.start(
         exclusiveMode
@@ -201,10 +197,7 @@ void EngineManager::setProcessingMode(
     ProcessingMode mode
 ) {
 
-    mState.processingMode.store(
-        mode,
-        std::memory_order_release
-    );
+    mState.setProcessingMode(mode);
 
     mEngine.setProcessingMode(
         mode
@@ -230,10 +223,7 @@ void EngineManager::setExclusiveMode(
         mEngine.stop();
     }
 
-    mState.exclusiveMode.store(
-        enabled,
-        std::memory_order_release
-    );
+    mState.setExclusiveMode(enabled);
 
     if (wasRunning) {
 

@@ -1,32 +1,44 @@
-#pragma once
-
-#include "../core/AudioPipeline.h"
+#include "BitPerfectPipeline.h"
 
 namespace pristine {
 
-class BitPerfectPipeline final : public AudioPipeline {
-public:
+// =====================================================
+// PROCESS
+// =====================================================
 
-    BitPerfectPipeline() = default;
-    ~BitPerfectPipeline() override = default;
+void BitPerfectPipeline::process(
+    float* left,
+    float* right,
+    int32_t numFrames,
+    const DSPParameters& params
+) {
+
+    // Explicitly unused
+    (void)left;
+    (void)right;
+    (void)numFrames;
+    (void)params;
 
     // =================================================
-    // BIT PERFECT PATH
-    // No DSP
-    // No gain
-    // No limiter
-    // No stereo processing
-    // No sample modification
+    // INTENTIONALLY EMPTY
+    //
+    // Audio must pass through untouched:
+    // - no EQ
+    // - no gain
+    // - no limiter
+    // - no stereo widening
+    // - no resampling
+    // - no normalization
     // =================================================
+}
 
-    void process(
-        float* left,
-        float* right,
-        int32_t numFrames,
-        const DSPParameters& params
-    ) override;
+// =====================================================
+// RESET
+// =====================================================
 
-    void reset() override;
-};
+void BitPerfectPipeline::reset() {
+
+    // Nothing to reset
+}
 
 } // namespace pristine

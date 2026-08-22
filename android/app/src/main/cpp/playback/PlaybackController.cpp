@@ -1,5 +1,7 @@
 #include "PlaybackController.h"
 
+#include "../decoder/FFmpegDecoder.h"
+
 #include <algorithm>
 
 namespace pristine::playback {
@@ -24,7 +26,7 @@ bool PlaybackController::initialize() {
 
     pcmQueue_ = std::make_shared<PCMQueue>(48000 * 10); // ~10 sec buffer
     clock_ = std::make_shared<PlaybackClock>();
-    metrics_ = std::make_shared<PlaybackMetrics>();
+    metrics_ = std::make_shared<MetricsCollector>();
     state_ = std::make_shared<PlaybackState>();
 
     initialized_.store(true, std::memory_order_release);
@@ -58,7 +60,8 @@ std::shared_ptr<PlaybackState> PlaybackController::state() const noexcept {
     return state_;
 }
 
-std::shared_ptr<PlaybackMetrics> PlaybackController::metrics() const noexcept {
+std::shared_ptr<MetricsCollector> PlaybackController::metrics() const noexcept {
+
     return metrics_;
 }
 
@@ -162,7 +165,7 @@ void PlaybackController::render(float* output,
 
     // 4. update metrics (cheap atomic ops inside)
     if (metrics_) {
-        metrics_->onAudioRendered(frames);
+        metrics_->recordFrameRendered(frames);
     }
 
     // 5. optional state sync (VERY LIGHT)
@@ -182,13 +185,13 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
             std::make_unique<decoder::FFmpegDecoder>()
         );
 
-        decoderWorker_->setPCMQueue(pcmQueue_.get());
-
-        decoderWorker_->setChunkCallback(
-            [this](playback::PCMChunk&& chunk) {
-                if (pcmQueue_) {
-                    pcmQueue_->write(chunk.samples.data(),
-                                     chunk.samples.size());
+        decoderWorker_->setDecodeCallback(
+            [this](decoder::DecodeResult&& result) {
+                if (pcmQueue_ && !result.samples.empty()) {
+                    pcmQueue_->write(
+                        result.samples.data(),
+                        result.samples.size()
+                    );
                 }
             }
         );
@@ -216,8 +219,16 @@ void PlaybackController::updatePlaybackState() {
     if (!state_)
         return;
 
-    state_->setPlaying(playing_.load(std::memory_order_acquire));
-    state_->setTrack(currentTrack_);
+    const bool isPlaying =
+        playing_.load(std::memory_order_acquire);
+
+    state_->setStatus(
+        isPlaying
+            ? PlaybackStatus::Playing
+            : PlaybackStatus::Paused
+    );
+
+    state_->setCurrentTrack(currentTrack_);
 }
 
 // =====================================================

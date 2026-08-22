@@ -90,6 +90,12 @@ void TrackQueue::clear() {
     mCurrentIndex = 0;
 }
 
+std::vector<TrackInfo> TrackQueue::tracks() const {
+    std::lock_guard lock(mMutex);
+
+    return mTracks;
+}
+
 // =====================================
 // Navigation
 // =====================================

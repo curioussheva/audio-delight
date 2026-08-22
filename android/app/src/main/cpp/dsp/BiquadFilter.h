@@ -1,148 +1,96 @@
 #pragma once
 
-#include "BiquadFilter.h"
-
 namespace pristine {
 
 // =====================================================
-// 10-BAND PARAMETRIC EQ PROCESSOR
+// BIQUAD COEFFICIENTS
 // =====================================================
 
-class EQProcessor {
+struct BiquadCoefficients {
+    float b0 = 1.0f;
+    float b1 = 0.0f;
+    float b2 = 0.0f;
+    float a1 = 0.0f;
+    float a2 = 0.0f;
+};
+
+// =====================================================
+// BIQUAD FILTER
+// Direct Form II Transposed
+// RBJ Audio EQ Cookbook coefficients
+// =====================================================
+
+class BiquadFilter {
 public:
 
-    static constexpr int kBands = 10;
-
     // =============================================
-    // PREPARE
+    // COEFFICIENTS
     // =============================================
 
-    void prepare(
-        int sampleRate
+    void setCoefficients(
+        const BiquadCoefficients& c
+    );
+
+    [[nodiscard]]
+    const BiquadCoefficients&
+    getCoefficients() const;
+
+    // =============================================
+    // FILTER DESIGN
+    // =============================================
+
+    void setPeakingEQ(
+        float freq,
+        float Q,
+        float gainDb,
+        float sampleRate
+    );
+
+    void setLowShelf(
+        float freq,
+        float Q,
+        float gainDb,
+        float sampleRate
     );
 
     // =============================================
     // PROCESS
     // =============================================
 
-    inline void process(
-        float* left,
-        float* right,
-        int32_t frames
+    inline float process(
+        float x
     ) noexcept {
 
-        for (
-            int32_t i = 0;
-            i < frames;
-            ++i
-        ) {
+        const float y =
+            coeffs.b0 * x + z1;
 
-            float l = left[i];
-            float r = right[i];
+        z1 =
+            coeffs.b1 * x -
+            coeffs.a1 * y +
+            z2;
 
-            // =====================================
-            // PARAMETRIC EQ
-            // =====================================
+        z2 =
+            coeffs.b2 * x -
+            coeffs.a2 * y;
 
-            for (
-                int b = 0;
-                b < kBands;
-                ++b
-            ) {
-
-                l =
-                    mLeft[b]
-                        .process(l);
-
-                r =
-                    mRight[b]
-                        .process(r);
-            }
-
-            // =====================================
-            // BASS BOOST
-            // =====================================
-
-            l =
-                mBassLeft.process(l);
-
-            r =
-                mBassRight.process(r);
-
-            left[i] = l;
-            right[i] = r;
-        }
+        return y;
     }
-
-    // =============================================
-    // EQ CONTROL
-    // =============================================
-
-    void setBandGain(
-        int band,
-        float gainDb
-    );
-
-    void setBassBoost(
-        float gainDb
-    );
 
     // =============================================
     // RESET
     // =============================================
 
-    void reset();
+    inline void reset() noexcept {
+        z1 = 0.0f;
+        z2 = 0.0f;
+    }
 
 private:
 
-    // =============================================
-    // FILTERS
-    // =============================================
+    BiquadCoefficients coeffs;
 
-    BiquadFilter mLeft[kBands];
-    BiquadFilter mRight[kBands];
-
-    BiquadFilter mBassLeft;
-    BiquadFilter mBassRight;
-
-    // =============================================
-    // PARAMETERS
-    // =============================================
-
-    float mSampleRate = 48000.0f;
-
-    float mBandGain[kBands] = {
-        0.0f
-    };
-
-    float mBassBoost = 0.0f;
-
-    // =============================================
-    // CONSTANTS
-    // =============================================
-
-    static constexpr float kBandFreqs[kBands] = {
-        31.0f,
-        62.0f,
-        125.0f,
-        250.0f,
-        500.0f,
-        1000.0f,
-        2000.0f,
-        4000.0f,
-        8000.0f,
-        16000.0f
-    };
-
-    // =============================================
-    // INTERNAL
-    // =============================================
-
-    void updateBand(
-        int band
-    );
-
-    void updateBass();
+    float z1 = 0.0f;
+    float z2 = 0.0f;
 };
 
 } // namespace pristine

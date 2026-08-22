@@ -3,7 +3,7 @@
 #include "playback/PlaybackController.h"
 #include <android/log.h>
 
-static pristine::PlaybackController* gPlaybackController = nullptr;
+static pristine::playback::PlaybackController* gPlaybackController = nullptr;
 
 extern "C" {
 
@@ -20,21 +20,22 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeS
 }
 
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSeek(JNIEnv*, jobject, jlong positionMs) {
-    if (gPlaybackController) gPlaybackController->seekTo(static_cast<uint64_t>(positionMs));
+    if (gPlaybackController) gPlaybackController->seek(static_cast<double>(positionMs) / 1000.0);
 }
 
 JNIEXPORT jlong JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetPosition(JNIEnv*, jobject) {
-    return gPlaybackController ? gPlaybackController->getState().getPositionMs(48000) : 0;
+    if (!gPlaybackController) return 0;
+    return static_cast<jlong>(gPlaybackController->state()->getPosition().positionMs);
 }
 
 JNIEXPORT jint JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetStatus(JNIEnv*, jobject) {
     if (!gPlaybackController) return 0;
-    return static_cast<jint>(gPlaybackController->getState().getStatus());
+    return static_cast<jint>(gPlaybackController->state()->getStatus());
 }
 
 } // extern "C"
 
 // Call this from NativePristineAudio to initialize
-void initPlaybackModule(pristine::PlaybackController* controller) {
+void initPlaybackModule(pristine::playback::PlaybackController* controller) {
     gPlaybackController = controller;
 }

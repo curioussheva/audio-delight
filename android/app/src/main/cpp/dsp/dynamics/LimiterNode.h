@@ -20,6 +20,10 @@ public:
         float* right,
         int count
     ) override;
+
+    void applyConfig(
+        const DSPConfig& config
+    ) override;
 };
 
 } // namespace pristine

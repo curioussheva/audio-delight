@@ -130,6 +130,42 @@ public:
 
 #endif
     }
+
+    // =============================================
+    // INSTANCE-BASED API
+    // Stateful convenience wrapper for callers (e.g.
+    // OutputStage) that hold a persistent gain value
+    // across process() calls instead of passing it
+    // in explicitly each time.
+    // =============================================
+
+    void prepare(int sampleRate) noexcept {
+        (void)sampleRate;
+        // Stateless SIMD path — nothing to prepare.
+    }
+
+    void reset() noexcept {
+        mGainL = 1.0f;
+        mGainR = 1.0f;
+    }
+
+    void setGain(float gain) noexcept {
+        mGainL = gain;
+        mGainR = gain;
+    }
+
+    void setChannelGain(float gainL, float gainR) noexcept {
+        mGainL = gainL;
+        mGainR = gainR;
+    }
+
+    void process(float* left, float* right, int32_t frames) noexcept {
+        process(left, right, frames, mGainL, mGainR);
+    }
+
+private:
+    float mGainL = 1.0f;
+    float mGainR = 1.0f;
 };
 
 } // namespace pristine

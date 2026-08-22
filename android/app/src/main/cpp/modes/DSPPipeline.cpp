@@ -31,10 +31,27 @@ void DSPPipeline::updateParameters(
 
     mCurrentParams = params;
 
-    mDSPChain.configure(
-        params,
-        static_cast<float>(mSampleRate)
-    );
+    DSPConfig config;
+
+    config.enabled = params.dspEnabled;
+    config.limiterEnabled = params.limiterEnabled;
+    config.mode = params.processingMode;
+
+    config.masterGain = params.masterGain;
+    config.balance = params.balance;
+    config.stereoWidth = params.stereoWidth;
+
+    for (int i = 0; i < 10; ++i) {
+        config.eqGain[i] = params.eqGains[i];
+    }
+
+    config.bassBoost = params.bassBoostGain;
+
+    config.solfeggioFreq = params.solfeggioFreq;
+    config.brainwaveFreq = params.brainwaveFreq;
+    config.resonanceIntensity = params.resonanceIntensity;
+
+    mDSPChain.applyConfig(config);
 }
 
 // =====================================================

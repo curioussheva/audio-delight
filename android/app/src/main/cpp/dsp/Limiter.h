@@ -19,6 +19,15 @@ public:
             );
     }
 
+    void prepare(int sampleRate) noexcept {
+        (void)sampleRate;
+        // Stateless — nothing to prepare.
+    }
+
+    void reset() noexcept {
+        // Stateless — nothing to reset.
+    }
+
     static inline void process(
         float* left,
         float* right,

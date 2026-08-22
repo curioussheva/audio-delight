@@ -21,6 +21,10 @@ public:
         int count
     ) override;
 
+    void applyConfig(
+        const DSPConfig& config
+    ) override;
+
     void setWidth(float width);
 
 private:

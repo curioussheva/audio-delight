@@ -1,5 +1,5 @@
 #pragma once
-#include "FFTTypes.h"
+#include "FFTypes.h"
 #include <memory>
 
 namespace audio {

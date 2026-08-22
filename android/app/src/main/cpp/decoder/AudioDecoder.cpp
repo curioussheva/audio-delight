@@ -64,17 +64,17 @@ DecodeResult AudioDecoder::decode(
 )
 {
     if (!isOpen_) {
-        return {
-            .status = DecodeStatus::FatalError,
-            .errorMessage = "Decoder not open"
-        };
+        DecodeResult result;
+        result.status = DecodeStatus::FatalError;
+        result.errorMessage = "Decoder not open";
+        return result;
     }
 
     state_.set(DecoderState::Decoding);
 
     auto result = onDecode(maxFrames);
 
-    if (result.status == DecodeStatus::Eof) {
+    if (result.status == DecodeStatus::EndOfStream) {
         eof_ = true;
         state_.set(DecoderState::EndOfStream);
         return result;
@@ -230,13 +230,32 @@ DecodeResult AudioDecoder::applyResampling(
         return std::move(result);
     }
 
-    auto resampled = resampler_->process(
-        result.samples,
-        inputFormat_,
-        outputFormat_
+    resampler_->configure(
+        static_cast<int32_t>(inputFormat_.sampleRate),
+        static_cast<int32_t>(outputFormat_.sampleRate),
+        static_cast<int32_t>(inputFormat_.channels)
+    );
+
+    DecodedChunk input;
+    input.pcm.data = result.samples.data();
+    input.pcm.frames = static_cast<int32_t>(result.framesDecoded);
+    input.pcm.channels = static_cast<int32_t>(inputFormat_.channels);
+    input.pcm.interleaved = true;
+    input.pts = static_cast<int64_t>(result.framePosition);
+
+    DecodedChunk output;
+
+    if (!resampler_->process(input, output) || output.pcm.data == nullptr) {
+        return std::move(result);
+    }
+
+    std::vector<float> resampled(
+        output.pcm.data,
+        output.pcm.data + (static_cast<size_t>(output.pcm.frames) * output.pcm.channels)
     );
 
     result.samples = std::move(resampled);
+    result.framesDecoded = static_cast<uint32_t>(output.pcm.frames);
 
     return std::move(result);
 }

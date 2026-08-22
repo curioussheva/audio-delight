@@ -22,6 +22,10 @@ public:
     bool addNode(
         std::unique_ptr<DSPNode> node
     );
+    
+    void applyConfig(
+        const DSPConfig& config
+    );
 
     void clear();
 

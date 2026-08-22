@@ -142,14 +142,14 @@ private:
     std::unique_ptr<PlaybackController>
         controller_;
 
-    std::unique_ptr<TrackQueue>
+    std::shared_ptr<TrackQueue>
         queue_;
-
-    std::unique_ptr<PlaybackScheduler>
-        scheduler_;
 
     std::shared_ptr<PlaybackEventDispatcher>
         events_;
+
+    std::unique_ptr<PlaybackScheduler>
+        scheduler_;
 
     RepeatMode
         repeatMode_ =

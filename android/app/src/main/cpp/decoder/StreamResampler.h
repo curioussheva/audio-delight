@@ -1,7 +1,8 @@
 #pragma once
 
 #include "../core/AudioTypes.h"
-#include "../dsp/resampler/LinearResampler.h"
+#include "DecoderTypes.h"
+#include "../resampler/LinearResampler.h"
 
 namespace pristine {
 
@@ -30,8 +31,8 @@ public:
     // =========================================
 
     bool process(
-        const DecodedChunk& input,
-        DecodedChunk& output
+        const decoder::DecodedChunk& input,
+        decoder::DecodedChunk& output
     );
 
 private:

@@ -20,6 +20,10 @@ public:
         int count
     ) override;
 
+    void applyConfig(
+        const DSPConfig& config
+    ) override;
+
     void setGain(
         float left,
         float right

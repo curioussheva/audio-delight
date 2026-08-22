@@ -2,6 +2,8 @@
 
 #include <atomic>
 
+#include "../../core/DSPConfig.h"
+
 namespace pristine {
 
 class DSPNode {
@@ -21,6 +23,16 @@ public:
         float* right,
         int frames
     ) = 0;
+    
+    // =====================================
+    // CONFIG
+    // =====================================
+
+    virtual void applyConfig(
+        const DSPConfig& config
+    ) {
+        (void)config;
+    }
 
     // =====================================
     // BYPASS

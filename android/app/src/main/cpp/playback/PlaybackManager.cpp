@@ -10,18 +10,21 @@ PlaybackManager::PlaybackManager()
     ),
 
     queue_(
-        std::make_unique<
+        std::make_shared<
             TrackQueue>()
-    ),
-
-    scheduler_(
-        std::make_unique<
-            PlaybackScheduler>()
     ),
 
     events_(
         std::make_shared<
             PlaybackEventDispatcher>()
+    ),
+
+    scheduler_(
+        std::make_unique<PlaybackScheduler>(
+            controller_->state(),
+            queue_,
+            events_
+        )
     ) {
 
 }

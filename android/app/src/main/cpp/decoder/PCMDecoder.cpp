@@ -9,7 +9,8 @@ namespace pristine::decoder {
 // CTOR / DTOR
 // =====================================================
 
-PCMDecoder::PCMDecoder() = default;
+PCMDecoder::PCMDecoder(const DecodeConfig& config)
+    : AudioDecoder(config) {}
 
 PCMDecoder::~PCMDecoder() {
     onClose();
@@ -100,7 +101,7 @@ DecodeResult PCMDecoder::onDecode(
     if (bytesRead == 0) {
 
         result.status =
-            DecodeStatus::Eof;
+            DecodeStatus::EndOfStream;
 
         return result;
     }
@@ -183,6 +184,25 @@ bool PCMDecoder::onSeekToFrame(
 }
 
 // =====================================================
+// SEEKABLE / POSITION
+// =====================================================
+
+bool PCMDecoder::isSeekable() const {
+    return true;
+}
+
+double PCMDecoder::getPositionSeconds() const {
+    if (format_.sampleRate == 0) {
+        return 0.0;
+    }
+    return static_cast<double>(currentFrame_) / format_.sampleRate;
+}
+
+uint64_t PCMDecoder::getPositionFrames() const {
+    return currentFrame_;
+}
+
+// =====================================================
 // INFO
 // =====================================================
 
@@ -191,7 +211,7 @@ AudioFormat PCMDecoder::onGetInputFormat() const {
 }
 
 DecoderCapabilities
-PCMDecoder::onGetCapabilities() const {
+PCMDecoder::getCapabilities() const {
 
     DecoderCapabilities caps;
 
@@ -207,7 +227,7 @@ PCMDecoder::onGetCapabilities() const {
     return caps;
 }
 
-double PCMDecoder::onGetDuration() const {
+double PCMDecoder::getDurationSeconds() const {
 
     if (format_.sampleRate == 0) {
         return 0.0;
@@ -254,24 +274,24 @@ bool PCMDecoder::parseWavHeader() {
     format_.channels =
         header.channels;
 
-    format_.bitsPerSample =
+    bitsPerSample_ =
         header.bitsPerSample;
 
     switch (header.bitsPerSample) {
 
         case 16:
             format_.sampleFormat =
-                AudioFormat::SampleFormat::S16;
+                SampleFormat::S16;
             break;
 
         case 24:
             format_.sampleFormat =
-                AudioFormat::SampleFormat::S24;
+                SampleFormat::S24;
             break;
 
         case 32:
             format_.sampleFormat =
-                AudioFormat::SampleFormat::S32;
+                SampleFormat::S32;
             break;
 
         default:
@@ -324,7 +344,7 @@ bool PCMDecoder::parseWavHeader() {
         totalFrames_;
 
     format_.durationSeconds =
-        onGetDuration();
+        getDurationSeconds();
 
     return true;
 }
@@ -338,7 +358,7 @@ void PCMDecoder::convertToFloat(
     float* output,
     size_t sampleCount
 ) {
-    switch (format_.bitsPerSample) {
+    switch (bitsPerSample_) {
 
         case 16: {
 

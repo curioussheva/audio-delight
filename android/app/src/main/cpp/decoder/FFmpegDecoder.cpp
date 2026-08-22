@@ -14,7 +14,8 @@ namespace pristine::decoder {
 // CTOR / DTOR
 // =====================================================
 
-FFmpegDecoder::FFmpegDecoder() = default;
+FFmpegDecoder::FFmpegDecoder(const DecodeConfig& config)
+    : AudioDecoder(config) {}
 
 FFmpegDecoder::~FFmpegDecoder() {
     cleanup();
@@ -276,7 +277,7 @@ AudioFormat FFmpegDecoder::onGetInputFormat() const {
         32;
 
     format.sampleFormat =
-        AudioFormat::SampleFormat::F32;
+        SampleFormat::F32;
 
     format.durationSeconds =
         onGetDuration();
@@ -408,28 +409,28 @@ void FFmpegDecoder::cleanup() {
 // HELPERS
 // =====================================================
 
-AudioFormat::SampleFormat
+SampleFormat
 FFmpegDecoder::convertSampleFormat(
     int ffFormat
 ) {
     switch (ffFormat) {
         case AV_SAMPLE_FMT_U8:
-            return AudioFormat::SampleFormat::U8;
+            return SampleFormat::U8;
 
         case AV_SAMPLE_FMT_S16:
-            return AudioFormat::SampleFormat::S16;
+            return SampleFormat::S16;
 
         case AV_SAMPLE_FMT_S32:
-            return AudioFormat::SampleFormat::S32;
+            return SampleFormat::S32;
 
         case AV_SAMPLE_FMT_FLT:
-            return AudioFormat::SampleFormat::F32;
+            return SampleFormat::F32;
 
         case AV_SAMPLE_FMT_DBL:
-            return AudioFormat::SampleFormat::F64;
+            return SampleFormat::F64;
 
         default:
-            return AudioFormat::SampleFormat::Unknown;
+            return SampleFormat::Unknown;
     }
 }
 

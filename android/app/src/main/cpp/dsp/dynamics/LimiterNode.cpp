@@ -26,4 +26,17 @@ void LimiterNode::process(
     );
 }
 
+// =====================================================
+// APPLY CONFIG
+// =====================================================
+
+void LimiterNode::applyConfig(
+    const DSPConfig& config
+) {
+
+    setEnabled(
+        config.limiterEnabled
+    );
+}
+
 } // namespace pristine

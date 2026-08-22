@@ -1,17 +1,16 @@
 #pragma once
 
-#include "../core/AudioPipeline.h"
 #include "../core/AudioTypes.h"
 
 #include "../dsp/DSPChain.h"
 
 namespace pristine {
 
-class DSPPipeline final : public AudioPipeline {
+class DSPPipeline final {
 public:
 
     DSPPipeline() = default;
-    ~DSPPipeline() override = default;
+    ~DSPPipeline() = default;
 
     // =================================================
     // PREPARE
@@ -41,13 +40,13 @@ public:
         float* right,
         int32_t numFrames,
         const DSPParameters& params
-    ) override;
+    );
 
-    void reset() override;
+    void reset();
 
 private:
 
-    dsp::DSPChain mDSPChain;
+    DSPChain mDSPChain;
 
     DSPParameters mCurrentParams{};
 

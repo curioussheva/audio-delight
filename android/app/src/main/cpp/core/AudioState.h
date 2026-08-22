@@ -82,6 +82,27 @@ public:
     }
 
     // =============================================
+    // IMMERSIVE ENABLE
+    // =============================================
+
+    inline void setImmersiveEnabled(
+        bool value
+    ) {
+
+        mImmersiveEnabled.store(
+            value,
+            std::memory_order_release
+        );
+    }
+
+    inline bool isImmersiveEnabled() const {
+
+        return mImmersiveEnabled.load(
+            std::memory_order_acquire
+        );
+    }
+
+    // =============================================
     // EXCLUSIVE MODE
     // =============================================
 
@@ -302,6 +323,9 @@ private:
 
     std::atomic<bool>
         mLimiterEnabled{true};
+
+    std::atomic<bool>
+        mImmersiveEnabled{false};
 
     std::atomic<bool>
         mExclusiveMode{false};

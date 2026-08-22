@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 namespace pristine { namespace dsp {
 
 class CrossfeedProcessor {

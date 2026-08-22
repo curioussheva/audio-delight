@@ -1,4 +1,5 @@
 #include "SincResampler.h"
+#include "LinearResampler.h"
 #include <vector>
 #include <cmath>
 #include <algorithm>
@@ -79,8 +80,8 @@ int32_t SincResampler::process(const float* input, int32_t inputFrames, float* o
     // Real implementation would use the sinc coefficients.
 
     // STUB: fallback to linear
-    LinearResampler linear;
-    linear.configure({pImpl->inputRate, pImpl->outputRate, ch, ResamplerType::LINEAR});
+    dsp::LinearResampler linear;
+    linear.configure(pImpl->inputRate, pImpl->outputRate, ch);
     int32_t frames = linear.process(input, inputFrames, output, maxOutputFrames);
     pImpl->pos = 0.0; // dummy
     return frames;

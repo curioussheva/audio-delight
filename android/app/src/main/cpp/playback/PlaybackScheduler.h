@@ -41,7 +41,7 @@ private:
     void requestTransition(bool manual, uint64_t current);
 
 private:
-    std::shared_ptr<PlaybackState> state_;
+    std::shared_ptr<PlaybackState> playbackState_;
     std::shared_ptr<TrackQueue> queue_;
     std::shared_ptr<PlaybackEventDispatcher> events_;
 

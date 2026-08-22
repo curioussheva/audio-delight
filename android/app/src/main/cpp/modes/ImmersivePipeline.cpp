@@ -2,6 +2,23 @@
 
 namespace pristine {
 
+namespace {
+
+// =====================================================
+// FREQUENCY -> BRAINWAVE BAND MAPPING
+// Standard psychoacoustic band boundaries.
+// =====================================================
+
+audio::dsp::BrainwaveType mapFrequencyToBrainwaveType(float hz) {
+    if (hz < 4.0f)  return audio::dsp::BrainwaveType::DELTA;
+    if (hz < 8.0f)  return audio::dsp::BrainwaveType::THETA;
+    if (hz < 13.0f) return audio::dsp::BrainwaveType::ALPHA;
+    if (hz < 30.0f) return audio::dsp::BrainwaveType::BETA;
+    return audio::dsp::BrainwaveType::GAMMA;
+}
+
+} // namespace
+
 // =====================================================
 // PREPARE
 // =====================================================
@@ -16,14 +33,6 @@ void ImmersivePipeline::prepare(
     mSampleRate = sampleRate;
 
     mSolfeggio.prepare(sampleRate);
-
-    mBrainwave.prepare(sampleRate);
-
-    mHarmonic.prepare(sampleRate);
-
-    mSpatial.prepare(sampleRate);
-
-    mBinaural.prepare(sampleRate);
 
     mPrepared = true;
 }
@@ -46,8 +55,12 @@ void ImmersivePipeline::updateParameters(
         params.resonanceIntensity
     );
 
-    mBrainwave.setBeatFrequency(
-        params.brainwaveFreq
+    mBrainwave.setType(
+        mapFrequencyToBrainwaveType(params.brainwaveFreq)
+    );
+
+    mBrainwave.setVolume(
+        params.resonanceIntensity
     );
 }
 
@@ -102,10 +115,11 @@ void ImmersivePipeline::process(
     // BRAINWAVE GENERATOR
     // =========================================
 
-    mBrainwave.process(
+    mBrainwave.generate(
         left,
         right,
-        numFrames
+        numFrames,
+        static_cast<float>(mSampleRate)
     );
 
     // =========================================

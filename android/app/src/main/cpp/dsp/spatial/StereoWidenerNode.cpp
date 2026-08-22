@@ -34,4 +34,17 @@ void StereoWidenerNode::setWidth(
     mWidth = width;
 }
 
+// =====================================================
+// APPLY CONFIG
+// =====================================================
+
+void StereoWidenerNode::applyConfig(
+    const DSPConfig& config
+) {
+
+    setWidth(
+        config.stereoWidth
+    );
+}
+
 } // namespace pristine

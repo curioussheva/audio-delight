@@ -7,7 +7,7 @@ PlaybackScheduler::PlaybackScheduler(
     std::shared_ptr<TrackQueue> queue,
     std::shared_ptr<PlaybackEventDispatcher> events
 )
-    : state_(std::move(state))
+    : playbackState_(std::move(state))
     , queue_(std::move(queue))
     , events_(std::move(events)) {}
 
@@ -85,7 +85,7 @@ void PlaybackScheduler::evaluateTransition(uint64_t current, uint64_t total) {
 
 void PlaybackScheduler::requestPrebuffer() {
     prebufferPending_.store(true, std::memory_order_release);
-    state_.store(SchedulerState::Prebuffering, std::memory_order_release);
+    state_.store(SchedulerState::PrebufferRequested, std::memory_order_release);
 
     if (events_) {
         events_->dispatch(PrebufferRequestedEvent{});

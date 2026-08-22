@@ -12,7 +12,7 @@ namespace pristine::decoder {
  
 class PCMDecoder : public AudioDecoder {
 public:
-    PCMDecoder();
+    explicit PCMDecoder(const DecodeConfig& config = {});
     ~PCMDecoder() override;
 
 protected:
@@ -23,8 +23,12 @@ protected:
     bool onSeekToFrame(uint64_t frame) override;
 
     AudioFormat onGetInputFormat() const override;
-    DecoderCapabilities onGetCapabilities() const override;
-    double onGetDuration() const override;
+
+    bool isSeekable() const override;
+    DecoderCapabilities getCapabilities() const override;
+    double getPositionSeconds() const override;
+    uint64_t getPositionFrames() const override;
+    double getDurationSeconds() const override;
 
 private:
     struct WavHeader {
@@ -44,6 +48,7 @@ private:
     std::FILE* file_ = nullptr;
 
     AudioFormat format_;
+    uint16_t bitsPerSample_ = 0;
 
     uint64_t dataOffset_ = 0;
     uint64_t dataSize_ = 0;

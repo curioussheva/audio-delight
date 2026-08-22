@@ -16,7 +16,7 @@ namespace pristine::decoder {
 
 class FFmpegDecoder final : public AudioDecoder {
 public:
-    FFmpegDecoder();
+    explicit FFmpegDecoder(const DecodeConfig& config = {});
     ~FFmpegDecoder() override;
 
     FFmpegDecoder(const FFmpegDecoder&) = delete;
@@ -79,7 +79,7 @@ private:
 
     DecodeResult decodeFrame();
 
-    static AudioFormat::SampleFormat
+    static SampleFormat
     convertSampleFormat(
         int ffmpegFormat
     );

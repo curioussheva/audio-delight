@@ -15,10 +15,7 @@ void AudioModeManager::setMode(
     ProcessingMode mode
 ) noexcept {
 
-    state.processingMode.store(
-        mode,
-        std::memory_order_release
-    );
+    state.setProcessingMode(mode);
 
     switch (mode) {
 
@@ -26,12 +23,9 @@ void AudioModeManager::setMode(
         // BIT PERFECT
         // =========================================
 
-        case ProcessingMode::BIT_PERFECT:
+        case ProcessingMode::BitPerfect:
 
-            state.isDSPEnabled.store(
-                false,
-                std::memory_order_release
-            );
+            state.setDSPEnabled(false);
 
             break;
 
@@ -41,10 +35,7 @@ void AudioModeManager::setMode(
 
         case ProcessingMode::DSP:
 
-            state.isDSPEnabled.store(
-                true,
-                std::memory_order_release
-            );
+            state.setDSPEnabled(true);
 
             break;
 
@@ -52,12 +43,9 @@ void AudioModeManager::setMode(
         // IMMERSIVE
         // =========================================
 
-        case ProcessingMode::IMMERSIVE:
+        case ProcessingMode::Immersive:
 
-            state.isDSPEnabled.store(
-                true,
-                std::memory_order_release
-            );
+            state.setDSPEnabled(true);
 
             break;
     }
@@ -72,9 +60,7 @@ AudioModeManager::getMode(
     const AudioState& state
 ) const noexcept {
 
-    return state.processingMode.load(
-        std::memory_order_acquire
-    );
+    return state.processingMode();
 }
 
 // =====================================================
@@ -87,7 +73,7 @@ bool AudioModeManager::isBitPerfect(
 
     return
         getMode(state) ==
-        ProcessingMode::BIT_PERFECT;
+        ProcessingMode::BitPerfect;
 }
 
 // =====================================================
@@ -113,7 +99,7 @@ bool AudioModeManager::isImmersiveMode(
 
     return
         getMode(state) ==
-        ProcessingMode::IMMERSIVE;
+        ProcessingMode::Immersive;
 }
 
 } // namespace pristine

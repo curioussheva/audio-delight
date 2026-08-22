@@ -69,6 +69,13 @@ enum class SchedulerState {
 // EVENTS
 // =====================================================
 
+struct PrebufferRequestedEvent {};
+
+struct TransitionRequestedEvent {
+    bool manual = false;
+    uint64_t triggerFrame = 0;
+};
+
 struct TransitionEvent {
 
     TransitionMode mode =

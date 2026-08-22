@@ -144,10 +144,13 @@ struct DSPParameters {
     bool limiterEnabled =
         true;
 
+    ProcessingMode processingMode =
+        ProcessingMode::DSP;
+
     // =============================================
     // IMMERSIVE AUDIO LAB
     // =============================================
-
+ 
     float solfeggioFreq =
         528.0f;
 

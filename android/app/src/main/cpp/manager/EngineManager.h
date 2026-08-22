@@ -15,7 +15,7 @@ public:
 
     AudioEngine& engine();
 
-    PlaybackController&
+    playback::PlaybackController&
     playback();
 
     AudioState&
@@ -79,7 +79,7 @@ private:
 
     AudioEngine mEngine;
 
-    PlaybackController mPlayback;
+    playback::PlaybackController mPlayback;
 };
 
 } // namespace pristine 

@@ -55,7 +55,7 @@ public:
     // =====================================================
 
     std::shared_ptr<PlaybackState> state() const noexcept;
-    std::shared_ptr<PlaybackMetrics> metrics() const noexcept;
+    std::shared_ptr<MetricsCollector> metrics() const noexcept;
     std::shared_ptr<PlaybackClock> clock() const noexcept;
     std::shared_ptr<PCMQueue> pcmQueue() const noexcept;
 
@@ -87,7 +87,7 @@ private:
     // =====================================================
 
     std::shared_ptr<PlaybackState> state_;
-    std::shared_ptr<PlaybackMetrics> metrics_;
+    std::shared_ptr<MetricsCollector> metrics_;
     std::shared_ptr<PlaybackClock> clock_;
     std::shared_ptr<PCMQueue> pcmQueue_;
 

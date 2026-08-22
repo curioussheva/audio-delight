@@ -27,6 +27,29 @@ enum class CommandSource {
     Unknown
 };
 
+// =====================================================
+// COMMAND RESULT & COMMAND TYPE
+// =====================================================
+
+enum class TransportCommand {
+    Play,
+    Pause,
+    Stop,
+    Seek,
+    Next,
+    Previous,
+    BluetoothPlay,
+    HeadsetPlay,
+    AndroidAutoPlay,
+    NotificationPlay
+};
+
+enum class TransportResult {
+    OK,
+    AlreadyInState,
+    Error
+};
+
 struct TransportRequest {
     TransportCommand command;
     double seekPosition = 0.0;

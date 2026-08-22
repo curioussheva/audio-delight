@@ -156,6 +156,32 @@ void AudioEngine::setLimiterEnabled(
 }
 
 // =====================================================
+// IMMERSIVE ENABLE
+// =====================================================
+
+void AudioEngine::setImmersiveEnabled(
+    bool enabled
+) {
+
+    mState.setImmersiveEnabled(enabled);
+}
+
+// =====================================================
+// VISUALIZER
+// =====================================================
+
+void AudioEngine::getVisualizerData(
+    float* dst,
+    int32_t size
+) const {
+
+    mCallback.visualizerBuffer().read(
+        dst,
+        size
+    );
+}
+
+// =====================================================
 // MASTER GAIN
 // =====================================================
 

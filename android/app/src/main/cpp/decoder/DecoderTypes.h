@@ -249,6 +249,20 @@ struct DecodeResult {
     }
 };
 
+struct PCMView {
+    float* data = nullptr;
+    int32_t frames = 0;
+    int32_t channels = 2;
+    bool interleaved = true;
+};
+
+struct DecodedChunk {
+    PCMView pcm;
+    int64_t pts = -1;
+    bool endOfStream = false;
+    bool discontinuity = false;
+};
+
 // =====================================================
 // SEEK
 // =====================================================

@@ -114,6 +114,10 @@ public:
     [[nodiscard]]
     size_t currentIndex() const;
 
+
+    [[nodiscard]]
+    std::vector<TrackInfo>
+    tracks() const;
 private:
 
     [[nodiscard]]

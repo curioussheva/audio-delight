@@ -11,6 +11,7 @@
 #include "AudioPipeline.h"
 #include "AudioState.h"
 #include "AudioTypes.h"
+#include "../visualizer/VisualizerBuffer.h"
 
 namespace pristine {
 
@@ -49,6 +50,15 @@ public:
         oboe::Result error
     ) override;
 
+    // =============================================
+    // VISUALIZER
+    // =============================================
+
+    const VisualizerBuffer&
+    visualizerBuffer() const noexcept {
+        return mVisualizer;
+    }
+
 private:
 
     // =============================================
@@ -66,6 +76,8 @@ private:
 
     AudioState&
         mState;
+        
+    VisualizerBuffer mVisualizer;
 
     // =============================================
     // TEMP BUFFERS

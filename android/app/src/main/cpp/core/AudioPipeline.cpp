@@ -57,7 +57,7 @@ void AudioPipeline::process(
         params.processingMode
     ) {
 
-        case ProcessingMode::BIT_PERFECT:
+        case ProcessingMode::BitPerfect:
 
             processBitPerfect(
                 left,
@@ -78,7 +78,7 @@ void AudioPipeline::process(
 
             break;
 
-        case ProcessingMode::IMMERSIVE:
+        case ProcessingMode::Immersive:
 
             processImmersive(
                 left,

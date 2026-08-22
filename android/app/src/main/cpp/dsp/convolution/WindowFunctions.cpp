@@ -1,6 +1,7 @@
 #include "WindowFunctions.h"
 #include <cmath>
 #include <algorithm>
+#include <vector>
 
 namespace audio {
 

@@ -61,8 +61,8 @@ bool StreamResampler::required()
 // =====================================================
 
 bool StreamResampler::process(
-    const DecodedChunk& input,
-    DecodedChunk& output
+    const decoder::DecodedChunk& input,
+    decoder::DecodedChunk& output
 ) {
 
     if (!mRequired) {

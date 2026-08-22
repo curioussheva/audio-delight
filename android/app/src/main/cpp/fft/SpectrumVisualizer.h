@@ -7,6 +7,7 @@ namespace audio {
 class SpectrumVisualizer {
 public:
     explicit SpectrumVisualizer(int fftSize = 2048, int sampleRate = 48000);
+    ~SpectrumVisualizer();
     void feed(const float* left, const float* right, int numSamples);
     std::vector<float> getSpectrum(); // dB values, size fftSize/2+1
     void setUpdateRateHz(float hz);
