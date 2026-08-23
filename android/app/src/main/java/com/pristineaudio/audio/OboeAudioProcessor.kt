@@ -3,8 +3,8 @@ package com.pristineaudio.audio
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
 
-@ReactModule(name = OboeAudioProcessorModule.NAME)
-class OboeAudioProcessorModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
+@ReactModule(name = OboeAudioProcessor.NAME)
+class OboeAudioProcessor(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
     companion object {
         const val NAME = "OboeAudioProcessor"
     }

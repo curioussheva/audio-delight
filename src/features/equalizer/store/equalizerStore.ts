@@ -15,21 +15,19 @@ import { NativeDSPModule } from "@/features/equalizer/api/nativeInterface";
 
 const getCurrentSessionId = async (): Promise<number> => {
   try {
-    // 1. Coba ambil langsung dari TrackPlayer (Paling Akurat untuk RNTP)
-    const TrackPlayer = require("react-native-track-player").default;
-    const playerSessionId = await TrackPlayer.getAudioSessionId();
-
-    if (playerSessionId && playerSessionId !== 0 && playerSessionId !== -1) {
-      console.log(
-        `[EQ Store] Found Real Session ID from RNTP: ${playerSessionId}`,
-      );
-      return playerSessionId;
+    if (!NativeDSPModule?.createAudioSession) {
+      console.warn("[EQ Store] createAudioSession not available");
+      return -1;
     }
-
-    // 2. Fallback ke AudioManager (ID yang kamu dapat 11753 tadi)
-    const sessionId = await (audioEngine as any).getAudioSessionId?.();
-    return sessionId || -1;
+    const result = await NativeDSPModule.createAudioSession();
+    const sessionId = result?.sessionId ?? -1;
+    if (sessionId > 0) {
+      console.log(`[EQ Store] Got Session ID from native: ${sessionId}`);
+      return sessionId;
+    }
+    return -1;
   } catch (error) {
+    console.warn("[EQ Store] getCurrentSessionId failed:", error);
     return -1;
   }
 };
@@ -46,7 +44,8 @@ const applyAllEffectsToNative = async (state: any) => {
 
   if (finalSessionId <= 0) {
     // Fallback terakhir: minta ke NativeModule kita untuk cari ID yang aktif
-    finalSessionId = await NativeDSPModule.getActiveAudioSessionId();
+    const sessionResult = await NativeDSPModule.createAudioSession();
+finalSessionId = sessionResult?.sessionId ?? 0;
   }
 
   if (finalSessionId <= 0) return false;
@@ -192,23 +191,22 @@ export const useEqualizerStore = create<EqualizerStore>()(
       },
 
       setBandGain: (index: number, gain: number) => {
-        const clampedGain = Math.min(12, Math.max(-12, gain));
-        const newBands = get().bands.map((b, i) =>
-          i === index ? { ...b, gain: clampedGain } : b,
-        );
-        set({ bands: newBands, activePresetId: "custom" });
+  const clampedGain = Math.min(12, Math.max(-12, gain));
+  const newBands = get().bands.map((b, i) =>
+    i === index ? { ...b, gain: clampedGain } : b,
+  );
+  set({ bands: newBands, activePresetId: "custom" });
 
-        const { isEQEnabled, audioSessionId } = get();
-        if (
-          isEQEnabled &&
-          audioSessionId !== -1 &&
-          NativeDSPModule?.setEqualizer
-        ) {
-          // Kotlin setEqualizer tidak konversi, jadi kita konversi di sini
-          const millibels = Math.round(clampedGain * 100);
-          NativeDSPModule.setEqualizer(index, millibels, audioSessionId);
-        }
-      },
+  const { isEQEnabled, audioSessionId } = get();
+  if (
+    isEQEnabled &&
+    audioSessionId !== -1 &&
+    NativeDSPModule?.setEqualizer
+  ) {
+    // Native setEqualizer sekarang menerima dB langsung
+    void NativeDSPModule.setEqualizer(index, clampedGain, audioSessionId);
+  }
+},
 
       setBandsGain: async (gains: number[]) => {
         const newBands = get().bands.map((b, i) => ({

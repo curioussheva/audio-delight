@@ -3,8 +3,8 @@ package com.pristineaudio.audio
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
 
-@ReactModule(name = NativePristineAudioModule.NAME)
-class NativePristineAudioModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
+@ReactModule(name = NativePristineAudio.NAME)
+class NativePristineAudio(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
     companion object {
         const val NAME = "NativePristineAudio"
     }

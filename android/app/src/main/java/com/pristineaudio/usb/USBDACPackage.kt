@@ -8,10 +8,10 @@ import com.pristineaudio.dsp.NativeDSPModule
 import com.pristineaudio.NativeVisualizerBridge
 import com.pristineaudio.MediaStoreModule
 import com.pristineaudio.USBDACModule
-import com.pristineaudio.audio.NativePristineAudioModule
+import com.pristineaudio.audio.NativePristineAudio
 import com.pristineaudio.audio.NativePlaybackModule
 import com.pristineaudio.audio.NativeDeviceModule
-import com.pristineaudio.audio.OboeAudioProcessorModule
+import com.pristineaudio.audio.OboeAudioProcessor
 
 class USBDACPackage : ReactPackage {
     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
@@ -20,10 +20,10 @@ class USBDACPackage : ReactPackage {
             NativeDSPModule(reactContext),
             NativeVisualizerBridge(reactContext),
             MediaStoreModule(reactContext),
-            NativePristineAudioModule(reactContext),
+            NativePristineAudio(reactContext),
             NativePlaybackModule(reactContext),
             NativeDeviceModule(reactContext),
-            OboeAudioProcessorModule(reactContext)
+            OboeAudioProcessor(reactContext)
         )
     }
 

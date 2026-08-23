@@ -4,11 +4,10 @@ import TrackPlayer, {
   AppKilledPlaybackBehavior,
 } from "react-native-track-player";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
 import { Song } from "@/shared/types/audio";
 import { requestAudioPermissions } from "@/shared/utils/permissions";
 import USBDACService from "@/features/hardware/api/USBDACModule";
-import NativeDSPModule from "@/features/visualizer/native/NativeDSPModule";
+import NativeDSPModule from "@/features/equalizer/api/nativeInterface";
 import {
   startVisualizer,
   stopVisualizer,
@@ -40,7 +39,6 @@ export class AudioEngine {
   }
 
   // ─── Lifecycle ───────────────────────────────────────
-
   async initialize(): Promise<void> {
     if (this.isInitialized) return;
 
@@ -90,47 +88,29 @@ export class AudioEngine {
     }
   }
 
-  // ─── DSP & Bit-Perfect Logic (Fungsi yang sebelumnya Hilang) ───
-
-  /**
-   * Mengaktifkan/Matikan Mode Bit-Perfect (Hardware Exclusive)
-   */
+  // ─── DSP & Bit-Perfect Logic ─────────────────────────
   async toggleExclusiveMode(enabled: boolean): Promise<void> {
     this.isExclusive = enabled;
     console.log(`🚀 [AudioEngine] Exclusive Mode: ${enabled ? "ON" : "OFF"}`);
-
     if (enabled) {
-      // Matikan semua FX saat masuk mode Bit-Perfect
       await this.releaseAllFX();
-      // Integrasi dengan USBDACService jika tersedia di Native
-      if (USBDACService) {
-        // Logika internal USBDAC bisa dipanggil di sini
-      }
     }
   }
 
-  /**
-   * Menghapus semua efek audio dari session saat ini
-   */
   async releaseAllFX(): Promise<void> {
-    const id = await this.refreshSessionId();
-    if (id && NativeDSPModule) {
+    if (NativeDSPModule?.releaseAllFX) {
       try {
-        await (NativeDSPModule as any).releaseAllFX?.(id);
-        stopVisualizer();
-        this.isVisualizerRunning = false;
+        await NativeDSPModule.releaseAllFX();
         console.log("🔌 [AudioEngine] All FX Released (Bypass)");
       } catch (e) {
         console.warn("Failed to release FX", e);
       }
     }
+    stopVisualizer();
+    this.isVisualizerRunning = false;
   }
 
-  /**
-   * Menerapkan seluruh preset DSP yang tersimpan
-   */
   public async applyDSP(sessionId: number): Promise<void> {
-    // Jangan terapkan DSP jika dalam mode Bit-Perfect
     if (this.isExclusive) return;
 
     const mode = await AsyncStorage.getItem("audio_mode_preference");
@@ -138,8 +118,8 @@ export class AudioEngine {
       try {
         const bassStrength =
           (await AsyncStorage.getItem("dsp_bass_strength")) || "0";
-        await (NativeDSPModule as any).setBassBoost(
-          parseInt(bassStrength),
+        await NativeDSPModule.setBassBoost(
+          parseInt(bassStrength, 10),
           sessionId,
         );
         console.log(`💎 [AudioEngine] DSP Applied to Session ${sessionId}`);
@@ -150,46 +130,54 @@ export class AudioEngine {
   }
 
   // ─── Kontrol Efek Spesifik ──────────────────────────
-
   async setEqBand(bandId: number, gain: number): Promise<void> {
+    if (this.isExclusive || !NativeDSPModule) return;
     const id = await this.refreshSessionId();
-    if (id && !this.isExclusive && NativeDSPModule) {
-      await (NativeDSPModule as any).setEqBand?.(bandId, gain, id);
+    if (id) {
+      await NativeDSPModule.setEqualizer(bandId, gain, id);
     }
   }
 
   async setBassBoost(strength: number): Promise<void> {
+    if (this.isExclusive || !NativeDSPModule) return;
     const id = await this.refreshSessionId();
-    if (id && !this.isExclusive && NativeDSPModule) {
-      await (NativeDSPModule as any).setBassBoost?.(strength, id);
+    if (id) {
+      await NativeDSPModule.setBassBoost(strength, id);
     }
   }
 
   async setVirtualizer(strength: number): Promise<void> {
+    if (this.isExclusive || !NativeDSPModule) return;
     const id = await this.refreshSessionId();
-    if (id && !this.isExclusive && NativeDSPModule) {
-      await (NativeDSPModule as any).setVirtualizer(strength, id);
+    if (id) {
+      await NativeDSPModule.setVirtualizer(strength, id);
     }
   }
 
   async setReverbPreset(preset: number): Promise<void> {
+    if (this.isExclusive || !NativeDSPModule) return;
     const id = await this.refreshSessionId();
-    if (id && !this.isExclusive && NativeDSPModule) {
-      await (NativeDSPModule as any).setReverbPreset?.(preset, id);
+    if (id) {
+      await NativeDSPModule.setReverbPreset(preset, id);
     }
   }
 
   // ─── Lifecycle & Playback ───────────────────────────
-
   private async refreshSessionId(): Promise<number | null> {
     try {
-      const id = await (TrackPlayer as any).getAudioSessionId?.();
-      if (typeof id === "number" && id > 0) {
+      if (!NativeDSPModule?.createAudioSession) {
+        console.warn("[AudioEngine] createAudioSession not available");
+        return null;
+      }
+      const result = await NativeDSPModule.createAudioSession();
+      const id = result?.sessionId ?? null;
+      if (id && id > 0) {
         this.sessionId = id;
         return id;
       }
       return null;
     } catch (err) {
+      console.warn("[AudioEngine] refreshSessionId failed:", err);
       return null;
     }
   }
@@ -199,12 +187,11 @@ export class AudioEngine {
 
     await TrackPlayer.play();
 
-    // Sync DSP & Visualizer setelah play (delay sedikit agar session ID stabil)
+    // Sync DSP & Visualizer setelah play
     setTimeout(async () => {
       const sessionId = await this.refreshSessionId();
       if (!sessionId) return;
 
-      // Jika Bit-Perfect aktif, kita bypass semua langkah di bawah
       if (this.isExclusive) {
         console.log("💎 [AudioEngine] Playback: Bit-Perfect (No FX)");
         return;
@@ -238,7 +225,6 @@ export class AudioEngine {
   }
 
   // ─── Utils ──────────────────────────────────────────
-
   async setQueue(songs: Song[], startIndex = 0): Promise<void> {
     if (!this.isInitialized) await this.initialize();
     if (songs.length === 0) return;
@@ -253,8 +239,8 @@ export class AudioEngine {
       duration: s.duration,
       artwork: s.artwork,
     }));
-
     await TrackPlayer.add(tracks);
+
     if (startIndex >= 0 && startIndex < songs.length) {
       await TrackPlayer.skip(startIndex);
     }

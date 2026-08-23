@@ -55,34 +55,92 @@ export const USBDACService = {
     if (!USBDACModule) return [];
     return await USBDACModule.detectDACs();
   },
-  setExclusiveMode: async (_dacId: string, enabled: boolean): Promise<{ success: boolean; active: boolean }> => {
-    if (!NativeDSPModule) return { success: false, active: false };
+
+  setExclusiveMode: async (
+    _dacId: string,
+    enabled: boolean,
+  ): Promise<{ success: boolean; active: boolean }> => {
+    if (!USBDACModule) return { success: false, active: false };
     try {
-      await NativeDSPModule.setExclusiveMode(enabled);
-      return { success: true, active: enabled };
-    } catch { return { success: false, active: false }; }
+      // USBDACModule native method expects (dacId, enable)
+      const result = await USBDACModule.setExclusiveMode(_dacId, enabled);
+      return { success: result?.success ?? true, active: result?.active ?? enabled };
+    } catch {
+      return { success: false, active: false };
+    }
   },
+
   isExclusiveModeActive: async (): Promise<boolean> => {
-    if (!NativeDSPModule) return false;
+    if (!USBDACModule) return false;
     try {
-      const result = await NativeDSPModule.createAudioSession();
-      return result?.isNew === false;
-    } catch { return false; }
+      return await USBDACModule.isExclusiveModeActive();
+    } catch {
+      return false;
+    }
   },
-  getRecommendedSettings: async (_dacId: string): Promise<RecommendedSettings> => {
-    return { sampleRate: 48000, bitDepth: 24, exclusiveMode: false, exclusiveModeRecommended: false, bufferSize: 512, dsdMode: "off" };
+
+  getRecommendedSettings: async (
+    _dacId: string,
+  ): Promise<RecommendedSettings> => {
+    if (!USBDACModule) {
+      return {
+        sampleRate: 48000,
+        bitDepth: 24,
+        exclusiveMode: false,
+        exclusiveModeRecommended: false,
+        bufferSize: 512,
+        dsdMode: "off",
+      };
+    }
+    try {
+      const s = await USBDACModule.getRecommendedSettings(_dacId);
+      return {
+        sampleRate: s?.sampleRate ?? 48000,
+        bitDepth: s?.bitDepth ?? 24,
+        exclusiveMode: false,
+        exclusiveModeRecommended: s?.exclusiveModeRecommended ?? false,
+        bufferSize: s?.bufferSize ?? 512,
+        dsdMode: s?.dsdMode ?? "off",
+      };
+    } catch {
+      return {
+        sampleRate: 48000,
+        bitDepth: 24,
+        exclusiveMode: false,
+        exclusiveModeRecommended: false,
+        bufferSize: 512,
+        dsdMode: "off",
+      };
+    }
   },
+
   addListener: (callback: (dac: DACInfo) => void): (() => void) => {
     const emitter = getEmitter();
     if (!emitter) return () => {};
-    const sub = emitter.addListener("onDACConnected", callback);
+    const sub = emitter.addListener("onDACChange", callback);
     return () => sub.remove();
   },
-  createAudioSession: async (): Promise<number> => 0,
+
+  createAudioSession: async (): Promise<number> => {
+    if (!USBDACModule) return 0;
+    try {
+      const result = await USBDACModule.createAudioSession();
+      return result?.sessionId ?? 0;
+    } catch {
+      return 0;
+    }
+  },
+
   setEqualizerGains: async (gains: number[]): Promise<boolean> => {
     if (!NativeDSPModule) return false;
-    gains.forEach((gain, index) => NativeDSPModule.setEqualizerBand(index, gain));
-    return true;
+    try {
+      for (let i = 0; i < gains.length; i++) {
+        await NativeDSPModule.setEqualizer(i, gains[i], 0); // 0 = default session
+      }
+      return true;
+    } catch {
+      return false;
+    }
   },
 };
 
