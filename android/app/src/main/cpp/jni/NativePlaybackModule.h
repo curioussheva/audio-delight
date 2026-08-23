@@ -1,6 +1,10 @@
 #pragma once
 #include <jni.h>
 
+namespace pristine::playback {
+class PlaybackController;
+}
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -15,3 +19,6 @@ JNIEXPORT jint JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeG
 #ifdef __cplusplus
 }
 #endif
+
+// Call this from JNI_OnLoad to initialize playback controller
+void initPlaybackModule(pristine::playback::PlaybackController* controller);
