@@ -129,6 +129,13 @@ endif()
 # SHARED LIBRARY
 # =====================================================
 
+
+# =====================================================
+# REACT NATIVE / JSI
+# =====================================================
+
+find_package(ReactAndroid CONFIG REQUIRED)
+
 add_library(pristine-audio SHARED ${ALL_SRCS})
 
 # =====================================================
@@ -285,6 +292,7 @@ target_link_libraries(pristine-audio
     PRIVATE
         android
         log
+        ReactAndroid::jsi
 )
 
 # =====================================================
