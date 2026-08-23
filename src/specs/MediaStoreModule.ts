@@ -2,7 +2,7 @@ import type { TurboModule } from 'react-native';
 import { TurboModuleRegistry } from 'react-native';
 
 export interface Spec extends TurboModule {
-  scanMediaStore(): Promise<Object[]>;
+  scanMediaStore(): Promise<object[]>;
   getAlbumArt(albumId: string): Promise<string>;
 }
 

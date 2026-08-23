@@ -4,6 +4,14 @@ import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.uimanager.ViewManager
+import com.pristineaudio.dsp.NativeDSPModule
+import com.pristineaudio.NativeVisualizerBridge
+import com.pristineaudio.MediaStoreModule
+import com.pristineaudio.USBDACModule
+import com.pristineaudio.audio.NativePristineAudioModule
+import com.pristineaudio.audio.NativePlaybackModule
+import com.pristineaudio.audio.NativeDeviceModule
+import com.pristineaudio.audio.OboeAudioProcessorModule
 
 class USBDACPackage : ReactPackage {
     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
@@ -11,7 +19,11 @@ class USBDACPackage : ReactPackage {
             USBDACModule(reactContext),
             NativeDSPModule(reactContext),
             NativeVisualizerBridge(reactContext),
-            MediaStoreModule(reactContext)
+            MediaStoreModule(reactContext),
+            NativePristineAudioModule(reactContext),
+            NativePlaybackModule(reactContext),
+            NativeDeviceModule(reactContext),
+            OboeAudioProcessorModule(reactContext)
         )
     }
 

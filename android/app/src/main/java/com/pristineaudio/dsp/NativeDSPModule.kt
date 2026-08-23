@@ -1,8 +1,10 @@
-package com.pristineaudio
+package com.pristineaudio.dsp
 
+import android.content.Context
+import android.media.AudioManager
+import android.util.Log
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
-import android.util.Log
 
 @ReactModule(name = NativeDSPModule.NAME)
 class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
@@ -16,9 +18,8 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
 
     init {
         engineAvailable = try {
-            System.loadLibrary("pristineaudio_engine")
-            bootEngineNative()
-            Log.d(TAG, "Oboe Engine booted successfully")
+            System.loadLibrary("pristine-audio")
+            Log.d(TAG, "pristine-audio loaded")
             true
         } catch (e: UnsatisfiedLinkError) {
             Log.e(TAG, "Native library tidak tersedia: ${e.message}")
@@ -31,7 +32,8 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
 
     override fun getName() = NAME
 
-    private external fun bootEngineNative()
+    // ===================== JNI EXTERNAL FUNCTIONS =====================
+
     private external fun setNativeMasterGain(gain: Float)
     private external fun setNativeStereoWide(width: Float)
     private external fun setNativeEqualizerBand(band: Int, gain: Float)
@@ -39,11 +41,25 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     private external fun setNativeBalance(balance: Float)
     private external fun toggleNativeExclusiveMode(enabled: Boolean)
 
+    // Additional JNI functions (were missing before)
+    private external fun setNativeDSPEnabled(enabled: Boolean)
+    private external fun setNativeLimiterEnabled(enabled: Boolean)
+    private external fun setNativeSolfeggioFreq(freq: Float)
+    private external fun setNativeBrainwaveFreq(freq: Float)
+    private external fun setNativeResonanceIntensity(intensity: Float)
+    private external fun setNativeImmersiveEnabled(enabled: Boolean)
+
+    // ===================== REACT METHODS =====================
+
     @ReactMethod
     fun setEqualizer(band: Int, level: Float, sessionId: Int, promise: Promise) {
         if (!engineAvailable) { promise.resolve(false); return }
-        try { setNativeEqualizerBand(band, level); promise.resolve(true) }
-        catch (e: Exception) { promise.reject("DSP_ERROR", e.message) }
+        try {
+            setNativeEqualizerBand(band, level)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("DSP_ERROR", e.message)
+        }
     }
 
     @ReactMethod
@@ -54,39 +70,56 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
                 setNativeEqualizerBand(i, gains.getDouble(i).toFloat())
             }
             promise.resolve(true)
-        } catch (e: Exception) { promise.reject("DSP_ERROR", e.message) }
+        } catch (e: Exception) {
+            promise.reject("DSP_ERROR", e.message)
+        }
     }
 
     @ReactMethod
     fun setBassBoost(strength: Float, sessionId: Int, promise: Promise) {
         if (!engineAvailable) { promise.resolve(false); return }
-        try { setNativeBassBoost(strength); promise.resolve(true) }
-        catch (e: Exception) { promise.reject("DSP_ERROR", e.message) }
+        try {
+            setNativeBassBoost(strength)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("DSP_ERROR", e.message)
+        }
     }
 
     @ReactMethod
     fun setVirtualizer(strength: Float, sessionId: Int, promise: Promise) {
         if (!engineAvailable) { promise.resolve(false); return }
-        try { setNativeStereoWide(strength / 1000.0f); promise.resolve(true) }
-        catch (e: Exception) { promise.reject("DSP_ERROR", e.message) }
+        try {
+            setNativeStereoWide(strength / 1000.0f)
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("DSP_ERROR", e.message)
+        }
     }
 
     @ReactMethod
     fun setReverbPreset(preset: Int, sessionId: Int, promise: Promise) {
+        // Reverb tidak didukung oleh engine C++ saat ini
         promise.resolve(false)
     }
 
     @ReactMethod
     fun releaseAllFX(promise: Promise) {
+        // Tidak ada alokasi efek khusus; bisa dianggap sukses
         promise.resolve(true)
     }
 
     @ReactMethod
     fun createAudioSession(promise: Promise) {
-        val result = Arguments.createMap()
-        result.putInt("sessionId", 0)
-        result.putBoolean("isNew", false)
-        promise.resolve(result)
+        try {
+            val sessionId = generateAudioSessionId()
+            val result = Arguments.createMap()
+            result.putInt("sessionId", sessionId)
+            result.putBoolean("isNew", true)
+            promise.resolve(result)
+        } catch (e: Exception) {
+            promise.reject("DSP_ERROR", e.message)
+        }
     }
 
     @ReactMethod
@@ -102,5 +135,44 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     @ReactMethod
     fun setExclusiveMode(enabled: Boolean) {
         if (engineAvailable) toggleNativeExclusiveMode(enabled)
+    }
+
+    // ===================== ADDITIONAL REACT METHODS =====================
+
+    @ReactMethod
+    fun setDSPEnabled(enabled: Boolean) {
+        if (engineAvailable) setNativeDSPEnabled(enabled)
+    }
+
+    @ReactMethod
+    fun setLimiterEnabled(enabled: Boolean) {
+        if (engineAvailable) setNativeLimiterEnabled(enabled)
+    }
+
+    @ReactMethod
+    fun setSolfeggioFreq(freq: Float) {
+        if (engineAvailable) setNativeSolfeggioFreq(freq)
+    }
+
+    @ReactMethod
+    fun setBrainwaveFreq(freq: Float) {
+        if (engineAvailable) setNativeBrainwaveFreq(freq)
+    }
+
+    @ReactMethod
+    fun setResonanceIntensity(intensity: Float) {
+        if (engineAvailable) setNativeResonanceIntensity(intensity)
+    }
+
+    @ReactMethod
+    fun setImmersiveEnabled(enabled: Boolean) {
+        if (engineAvailable) setNativeImmersiveEnabled(enabled)
+    }
+
+    // ===================== PRIVATE HELPER =====================
+
+    private fun generateAudioSessionId(): Int {
+        val audioManager = reactApplicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        return audioManager.generateAudioSessionId()
     }
 }

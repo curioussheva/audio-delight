@@ -261,3 +261,103 @@ Ringkasan pola berulang selama Fase 2 (detail lengkap tiap kejadian ada di chang
 8. **File yang "sudah bersih" bisa regresi diam-diam** — jangan asumsikan status lama masih berlaku setelah ada perubahan struktural di file yang di-include-nya. Selalu scan ulang.
 9. **Silent wiring gaps** — fungsi lengkap tapi tidak dipanggil dari mana pun, tidak akan ketahuan lewat `clangd`. Baru ketahuan lewat `grep -rln "namaFungsi"` yang hasilnya cuma 1 (definisinya sendiri).
 
+
+########### update 3 ###########
+
+# Status Build `pristine-audio` — Ringkasan Aktif
+
+Status per 22 Agustus 2026. Untuk detail forensik lengkap (kenapa tiap bug terjadi, histori investigasi), lihat `build-fix-changelog.md`. File ini hanya untuk kerja sehari-hari: apa yang masih perlu dikerjakan.
+
+**Cara verifikasi:**
+```bash
+scripts/check.sh <path/file.cpp>       # cek satu/beberapa file
+scripts/check.sh                        # cek semua file (skip oboe/), lihat daftar via:
+scripts/check.sh 2>&1 | grep "^=== "    # ringkasan cepat file mana saja yang masih error
+```
+
+---
+
+## ✅ BUILD NATIVE C++ (`pristine-audio`) — SELESAI, TERVALIDASI CI
+
+Build CI (GitHub Actions, toolchain NDK asli) berhasil **tanpa fatal error** — tidak ada lagi `BUILD FAILED`. Semua Fase 0-3, migrasi namespace, dan fix `CMakeLists.txt` (FFmpeg exclude + JSI linking) sudah tervalidasi lewat build sungguhan, bukan cuma `clangd` lokal.
+
+82 file `.cpp` total di project — semuanya sekarang compile bersih di toolchain asli (`decoder/FFmpegDecoder.cpp` dikecualikan otomatis dari build saat FFmpeg tidak tersedia, sesuai desain; bukan kegagalan).
+
+### 🧹 Sisa: warning kosmetik (tidak blocking, area C++ — ditunda, prioritas sekarang di UI/JS)
+
+- `fft/FFTPlan.h:18` — private field `mCfg` tidak terpakai
+- `fft/SpectrumAnalyzer.h:16` — private field `mSampleRate` tidak terpakai
+- `fft/SpectrumVisualizer.cpp` / `fft/WaveformVisualizer.cpp` — `Impl` dideklarasikan `class` di header tapi didefinisikan `struct` di `.cpp` (valid tapi berpotensi masalah linker di ABI Microsoft C++, tidak relevan untuk Android/NDK)
+- `fft/WaveformVisualizer.cpp:10` — urutan inisialisasi member constructor `Impl` tidak sesuai urutan deklarasi (`windowSize` diinisialisasi setelah `buffer` padahal dideklarasikan sebelumnya)
+- `playback/PlaybackState.h:59,63` — move constructor/move assignment implicitly deleted karena field `atomic<PlaybackStatus>`. **Bukan hasil kerja sesi ini** — sudah ada sejak awal, tidak terkait migrasi namespace maupun fix lain.
+
+Tidak ada lagi item Fase 0-3, migrasi arsitektur, atau limitation lingkungan yang berstatus terbuka.
+
+---
+
+## Riwayat pencapaian (ringkas, urut mundur)
+
+1. **Fix `CMakeLists.txt` — link `ReactAndroid::jsi`** (22 Agustus 2026) — `pristine-audio` target ternyata tidak punya wiring JSI/ReactAndroid sama sekali meski Gradle sudah mengirim `REACT_ANDROID_DIR` (terlihat sebagai unused-variable warning di log CI). Ditambahkan `find_package(ReactAndroid CONFIG REQUIRED)` sebelum `add_library` + `ReactAndroid::jsi` ke `target_link_libraries`, meniru pola yang sudah terbukti bekerja di target Skia pada project yang sama. **Tervalidasi CI**: build berikutnya tidak lagi menunjukkan error `jsi/jsi.h` file not found sama sekali, dan build selesai tanpa `BUILD FAILED`.
+2. **Migrasi namespace `audio::`→`pristine::`** (22 Agustus 2026) — 30 file dimigrasi penuh: `devices/*` (7 file + rename file `AudioDeviceInfo.h`→`AudioDeviceDescriptor.h` karena collision nama struct), `fft/*` (11 file), `usb/*` (4 file), `dsp/convolution/WindowFunctions.cpp` (1 file, plus fix `createHanningWindow` dkk yang sudah lama ditunda), `dsp/immersive/*` (10 file). Plus fix qualifier di 3 file konsumen: `modes/ImmersivePipeline.h/.cpp`, `dsp/immersive/FFTResonanceAnalyzer.h`, `jni/NativeDeviceModule.cpp`. **Tervalidasi CI**: seluruh file yang dimigrasi berhasil dikompail di toolchain asli.
+3. **Fix `CMakeLists.txt` — FFmpeg conditional exclude** (22 Agustus 2026) — FFmpeg detection dipindah sebelum `add_library`, `FFmpegDecoder.cpp` di-exclude otomatis dari `ALL_SRCS` kalau FFmpeg tidak ditemukan (reuse mekanisme `EXCLUDED_SRCS` yang sudah ada untuk test files). **Tervalidasi CI**: warning custom muncul persis sesuai desain, `FFmpegDecoder.cpp.o` tidak lagi ada di daftar file yang dikompail, build tidak lagi gagal di titik ini.
+4. **Validasi CI eksternal pertama** (21 Agustus 2026) — build GitHub Actions mengonfirmasi akurasi kerja `clangd` lokal: satu-satunya kegagalan sebelum fix #3 adalah `FFmpegDecoder.cpp`, persis sesuai prediksi.
+5. **Fase 3 direklasifikasi** (21 Agustus 2026) — klaim lama "belum diimplementasikan" ternyata salah; `TransportResult`/`TransportCommand`/`PlaybackEventDispatcher` sudah lengkap, hanya perlu 4 fix konkret level Fase 2 (`TransportState.h` alias, duplicate member `state_`, `TrackQueue::tracks()`, `PlaybackManager` type/order fix).
+6. **Fase 2 utama** (20-21 Agustus 2026) — root-cause fixes besar: `dsp/BiquadFilter.h` (file salah isi total), `PlaybackController` qualifier (6 file + regresi 3-lapis `EngineManager.cpp`), decoder module (5 file), resampler adapter pattern, visualizer pImpl destructor, file kosong total (`NativeDeviceModule.h`, `LatencyProfiler.h`), `dsp/OutputStage.cpp` instance-API wrapper, `modes/*` desain standalone.
+
+Detail lengkap tiap item ada di `build-fix-changelog.md`.
+
+---
+
+## 🕳️ Silent wiring gaps (bukan compile error — tidak kena `clangd`)
+
+Masih berlaku, belum ditindaklanjuti (bukan prioritas — fokus proyek saat ini bergeser ke area UI/JS, dicatat untuk tahap integrasi native nanti):
+- `initPlaybackModule(pristine::playback::PlaybackController*)` di `jni/NativePlaybackModule.cpp` — `gPlaybackController` global tidak pernah di-set dari inisialisasi engine manapun.
+- `createResampler(ResamplerType)` di `resampler/AudioResampler.cpp` — tidak dideklarasikan di header manapun, tidak dipanggil dari manapun.
+
+---
+
+## Catatan proses — pola yang perlu diwaspadai ke depan
+
+Ringkasan pola berulang selama seluruh proses perbaikan build (detail lengkap tiap kejadian ada di changelog):
+
+1. **File kosong total (0 byte)** — `jni/NativeDeviceModule.h`, `profiling/LatencyProfiler.h`. Selalu `ls -la`/`wc -l` file yang dicurigai.
+2. **File isi salah/tertukar** — `modes/BitPerfectPipeline.h`/`.cpp` (isi tertukar total), `dsp/BiquadFilter.h` (isi salah, copy dari class lain).
+3. **Qualifier namespace hilang** — pola paling sering. Cek definisi existing dulu via grep sebelum menyimpulkan "belum diimplementasikan".
+4. **"Undeclared identifier" bisa berarti include hilang total** — bukan cuma qualifier.
+5. **Dua hierarchy class yang tidak nyambung** — solusi: adapter/instance-API, jangan ubah desain asli.
+6. **Base class pure virtual tidak cocok dengan override di subclass** — cek pure virtual publik, bukan cuma pola `onXxx()` protected.
+7. **Constructor mismatch bisa berarti masalah desain**, bukan cuma parameter yang salah.
+8. **File yang "sudah bersih" bisa regresi diam-diam** — selalu scan ulang setelah perubahan struktural di file yang di-include.
+9. **Silent wiring gaps** — fungsi lengkap tapi tidak dipanggil dari mana pun, tidak ketahuan lewat `clangd`.
+10. **Klaim status lama bisa stale/salah** — verifikasi ulang dari nol (grep, baca file langsung) sebelum percaya catatan sesi sebelumnya, terutama untuk klaim "X belum diimplementasikan" atau "Y file kena masalah Z".
+11. **Namespace collision saat migrasi** — sebelum menggabungkan dua namespace, grep semua nama type di kedua sisi dan cross-check; struct dengan nama sama tapi field berbeda (seperti `AudioDeviceInfo`) butuh rename, bukan sekadar namespace merge.
+12. **Bug di luar `clangd`** — `CMakeLists.txt`/build-config issues (seperti FFmpeg exclude) tidak akan pernah terdeteksi oleh `scripts/check.sh`; perlu baca log CI/build asli untuk kategori masalah ini.
+
+## 🕳️ Silent wiring gaps (bukan compile error — tidak kena `clangd`)
+
+Ditemukan fungsi yang sudah diimplementasikan lengkap tapi **tidak pernah dipanggil dari manapun** di seluruh project. Bukan bug yang perlu diperbaiki sekarang, tapi perlu diingat saat masuk tahap integrasi end-to-end:
+
+- `initPlaybackModule(pristine::playback::PlaybackController*)` di `jni/NativePlaybackModule.cpp` — `gPlaybackController` global tidak pernah di-set dari inisialisasi engine manapun.
+- `createResampler(ResamplerType)` di `resampler/AudioResampler.cpp` — tidak dideklarasikan di header manapun, tidak dipanggil dari manapun. Decoder pipeline saat ini menggunakan `dsp::LinearResampler` langsung via `StreamResampler`, bukan lewat factory ini.
+
+---
+
+## ✅ Migrasi namespace `audio::`→`pristine::` — SELESAI (22 Agustus 2026)
+
+Migrasi dilakukan setelah semua Fase 2/3 tuntas, sesuai urutan yang direncanakan. Detail lengkap eksekusi (termasuk collision `AudioDeviceInfo`) ada di `build-fix-changelog.md`.
+
+---
+
+## Catatan proses — pola yang perlu diwaspadai ke depan
+
+Ringkasan pola berulang selama Fase 2 (detail lengkap tiap kejadian ada di changelog). Cek pola ini dulu sebelum investigasi error dari nol:
+
+1. **File kosong total (0 byte)** — beberapa header ternyata kosong sama sekali padahal di-`#include` dan dipakai. Selalu `ls -la`/`wc -l` file yang dicurigai sebelum menyimpulkan "belum diimplementasikan". Ditemukan di: `jni/NativeDeviceModule.h`, `profiling/LatencyProfiler.h`.
+2. **File isi salah/tertukar** — isi `.h` dan `.cpp` bisa benar-benar tertukar berdasarkan nama file (bukan sekadar typo path). Ditemukan di: `modes/BitPerfectPipeline.h`/`.cpp`. Juga ada kasus header salah isi total (copy dari class lain): `dsp/BiquadFilter.h`.
+3. **Qualifier namespace hilang** — error "no_member"/"unknown_type" sering berarti struct/method **sudah ada** tapi di namespace lain, butuh qualifier — bukan belum diimplementasikan. Cek definisi existing dulu via grep sebelum menulis ulang apa pun. Pola paling sering terjadi antara `pristine::` (level luar) dan submodule (`pristine::decoder`, `pristine::playback`, `pristine::dsp`, `audio::dsp`).
+4. **"Undeclared identifier" bisa berarti include hilang total** — bukan cuma qualifier. Kalau nambah qualifier saja masih gagal dengan "use of undeclared identifier 'namespace_name'", cek dulu apakah header sumbernya di-`#include` sama sekali.
+5. **Dua hierarchy class yang tidak nyambung** — kadang ada dua desain berbeda untuk tujuan mirip (mis. class stateless/static vs stateful yang diharapkan caller; class polymorphic interface vs class standalone). Solusi: tambah adapter/instance-API, jangan ubah desain asli yang sudah dipakai di tempat lain.
+6. **Base class pure virtual tidak cocok dengan override di subclass** — kalau subclass "abstract, tidak bisa di-`new`", cek pure virtual **publik** di base (bukan cuma pola `onXxx()` yang protected).
+7. **Constructor mismatch bisa berarti masalah desain, bukan cuma parameter** — sebelum menambah parameter constructor untuk "memperbaiki" mismatch, cek dulu apakah desain class yang dituju memang dimaksudkan menerima dependency itu, atau itu cuma asumsi lama di call site yang sudah usang.
+8. **File yang "sudah bersih" bisa regresi diam-diam** — jangan asumsikan status lama masih berlaku setelah ada perubahan struktural di file yang di-include-nya. Selalu scan ulang.
+9. **Silent wiring gaps** — fungsi lengkap tapi tidak dipanggil dari mana pun, tidak akan ketahuan lewat `clangd`. Baru ketahuan lewat `grep -rln "namaFungsi"` yang hasilnya cuma 1 (definisinya sendiri).

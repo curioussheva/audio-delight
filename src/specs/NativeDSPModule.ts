@@ -8,7 +8,7 @@ export interface Spec extends TurboModule {
   setVirtualizer(strength: number, sessionId: number): Promise<boolean>;
   setReverbPreset(preset: number, sessionId: number): Promise<boolean>;
   releaseAllFX(): Promise<boolean>;
-  createAudioSession(): Promise<Object>;
+  createAudioSession(): Promise<object>;
   setMasterGain(gain: number): void;
   setBalance(balance: number): void;
   setExclusiveMode(enabled: boolean): void;
