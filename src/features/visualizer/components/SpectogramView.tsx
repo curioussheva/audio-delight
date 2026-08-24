@@ -175,11 +175,7 @@ export const SpectogramView = React.memo(
         return;
       }
 
-      const initialized = visualizerService.initialize(handleFFTData);
-      if (!initialized) {
-        console.warn("[SpectogramView] Failed to initialize visualizer");
-        return;
-      }
+      visualizerService.setDataCallback(handleFFTData);
 
       visualizerService.start(audioSessionId);
       isServiceStarted.current = true;

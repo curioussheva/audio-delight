@@ -92,8 +92,7 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
   useEffect(() => {
     if (isServiceInitialized.current) return;
 
-    const success = visualizerService.initialize((newData: number[]) => {
-      // Dipanggil dari JS thread — set SharedValue via runOnUI
+    visualizerService.setDataCallback((newData: number[]) => {
       if (!newData || newData.length === 0) return;
 
       frameCount.current++;
@@ -111,6 +110,7 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
         }
       })();
     });
+const success = true;
 
     if (success) {
       isServiceInitialized.current = true;
