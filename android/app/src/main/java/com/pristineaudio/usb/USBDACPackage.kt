@@ -19,7 +19,8 @@ class USBDACPackage : ReactPackage {
             NativeDSPModule(reactContext),
             NativeVisualizerBridge(reactContext),
             MediaStoreModule(reactContext),
-            NativePristineAudio(reactContext),
+            // TEMP DEBUG: dicomment untuk bisection root cause PlatformConstants crash
+            // NativePristineAudio(reactContext),
             NativePlaybackModule(reactContext),
             NativeDeviceModule(reactContext)
         )
