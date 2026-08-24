@@ -1,8 +1,5 @@
 // src/features/visualizer/native/VisualizerBridge.ts
-
 import { NativeModules } from "react-native";
-
-const Platform = require("react-native").Platform;
 
 export type FftData = number[];
 
@@ -18,21 +15,37 @@ const NativeVisualizerBridge = NativeModules.NativeVisualizerBridge as
   | NativeVisualizerBridgeType
   | undefined;
 
-if (Platform.OS === "android" && !NativeVisualizerBridge) {
-  console.warn(
-    "[VisualizerBridge] NativeVisualizerBridge tidak ditemukan. " +
+// Lazy Platform access — jangan panggil Platform.OS di top-level module scope,
+// itu trigger TurboModuleRegistry.getEnforcing('PlatformConstants') sebelum
+// native runtime siap kalau file ini ke-import lebih awal di rantai boot.
+const getPlatformOS = (): string => {
+  try {
+    return require("react-native").Platform.OS;
+  } catch {
+    return "android";
+  }
+};
+
+let warnedMissing = false;
+const warnIfMissing = () => {
+  if (warnedMissing) return;
+  if (getPlatformOS() === "android" && !NativeVisualizerBridge) {
+    console.warn(
+      "[VisualizerBridge] NativeVisualizerBridge tidak ditemukan. " +
       "Pastikan sudah terdaftar di USBDACPackage.kt dan MainApplication.kt",
-  );
-}
+    );
+    warnedMissing = true;
+  }
+};
 
 // Karena native TIDAK mengirim event, seluruh akses data FFT
 // harus melalui visualizerService (polling getFFTData).
 // File ini hanya menyediakan helper start/stop tipis.
-
 export const startVisualizer = async (
   audioSessionId: number,
 ): Promise<boolean> => {
-  if (Platform.OS !== "android") return false;
+  warnIfMissing();
+  if (getPlatformOS() !== "android") return false;
   if (!NativeVisualizerBridge) {
     console.warn("[VisualizerBridge] Cannot start: module not available");
     return false;
@@ -49,7 +62,7 @@ export const startVisualizer = async (
 };
 
 export const stopVisualizer = (): void => {
-  if (Platform.OS !== "android") return;
+  if (getPlatformOS() !== "android") return;
   if (!NativeVisualizerBridge) return;
   try {
     NativeVisualizerBridge.stopVisualizer();
@@ -59,7 +72,5 @@ export const stopVisualizer = (): void => {
 };
 
 export const isVisualizerAvailable = (): boolean => {
-  return Platform.OS === "android" && !!NativeVisualizerBridge;
+  return getPlatformOS() === "android" && !!NativeVisualizerBridge;
 };
-
-export default NativeVisualizerBridge;

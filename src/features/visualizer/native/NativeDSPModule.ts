@@ -1,6 +1,5 @@
 // src/features/visualizer/native/NativeDSPModule.ts
 import { NativeModules } from "react-native";
-const Platform = require("react-native").Platform;
 
 interface NativeDSPModuleType {
   // Equalizer
@@ -24,11 +23,26 @@ const NativeDSPModule = NativeModules.NativeDSPModule as
   | NativeDSPModuleType
   | undefined;
 
-if (require("react-native").Platform.OS === "android" && !NativeDSPModule) {
-  console.warn(
-    "[NativeDSPModule] Not available. Check USBDACPackage registration.",
-  );
-}
+// Lazy Platform access — sama seperti VisualizerBridge.ts, jangan panggil
+// Platform.OS di top-level module scope.
+const getPlatformOS = (): string => {
+  try {
+    return require("react-native").Platform.OS;
+  } catch {
+    return "android";
+  }
+};
+
+let warnedMissing = false;
+const warnIfMissing = () => {
+  if (warnedMissing) return;
+  if (getPlatformOS() === "android" && !NativeDSPModule) {
+    console.warn(
+      "[NativeDSPModule] Not available. Check USBDACPackage registration.",
+    );
+    warnedMissing = true;
+  }
+};
 
 // Wrapper dengan error handling
 export const DSPModule = {
@@ -37,6 +51,7 @@ export const DSPModule = {
     level: number,
     sessionId: number,
   ): Promise<boolean> => {
+    warnIfMissing();
     if (!NativeDSPModule) return false;
     try {
       return await NativeDSPModule.setEqualizer(band, level, sessionId);
