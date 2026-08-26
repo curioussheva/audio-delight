@@ -184,6 +184,21 @@ jobs:
         run: ./gradlew clean
 
       # ============================================
+      # 15b. Bundle JS (sebelum build)
+      # ============================================
+      - name: Bundle JS
+        run: |
+          mkdir -p android/app/src/main/assets
+          npx react-native bundle \
+            --platform android \
+            --dev false \
+            --entry-file index.tsx \
+            --bundle-output android/app/src/main/assets/index.android.bundle \
+            --assets-dest /tmp/rn-assets
+          echo "=== Bundle size ==="
+          ls -la android/app/src/main/assets/index.android.bundle
+
+      # ============================================
       # 16. Build APK
       # ============================================
       - name: Build Debug APK
@@ -274,8 +289,45 @@ jobs:
             echo ""
             echo "=== Start app ==="
             adb shell am start -n com.pristineaudio.app/com.pristineaudio.app.MainActivity
-            sleep 20
+
+            echo ""
+            echo "=== Polling for activity resumed state (up to 120s) ==="
+            RESUMED=""
+            for i in $(seq 1 12); do
+              sleep 10
+              if adb shell dumpsys activity activities 2>/dev/null | grep -q "mResumedActivity.*com.pristineaudio.app"; then
+                echo "✅ Activity resumed after ~${i}0s"
+                RESUMED="yes"
+                break
+              fi
+              echo "…still waiting (${i}0s elapsed)"
+            done
+            if [ -z "$RESUMED" ]; then
+              echo "⚠️ Activity never reached resumed state within 120s"
+            fi
+
+            echo ""
+            echo "=== mResumedActivity dump ==="
+            adb shell dumpsys activity activities 2>/dev/null | grep -A5 "mResumedActivity" || echo "No mResumedActivity info"
+
+            echo ""
+            echo "=== Process check ==="
+            APP_PID=$(adb shell pidof -s com.pristineaudio.app || true)
+            echo "App PID: ${APP_PID:-not running}"
+
             adb logcat -d > logcat-full.log || true
+
+            echo ""
+            echo "=== Process-specific log (app PID only) ==="
+            if [ -n "$APP_PID" ]; then
+              adb logcat -d --pid="$APP_PID" > logcat-app-only.log || true
+              cat logcat-app-only.log | tail -200
+            else
+              echo "App process not found — likely crashed or never started. Falling back to full log tail."
+              tail -200 logcat-full.log
+            fi
+
+            echo ""
             echo "=== PlatformConstants errors ==="
             grep -B 5 -A 20 "PlatformConstants" logcat-full.log || echo "No PlatformConstants errors"
             echo ""
@@ -287,7 +339,6 @@ jobs:
             echo ""
             echo "=== ReactNativeJS errors ==="
             grep -B 2 -A 10 "ReactNativeJS" logcat-full.log | head -80 || echo "No JS errors"
-
 
       - name: Upload Logcat Output
         uses: actions/upload-artifact@v4
@@ -324,4 +375,3 @@ jobs:
         with:
           name: PristineAudio-Debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
- 
