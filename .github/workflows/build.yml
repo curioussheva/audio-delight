@@ -266,11 +266,14 @@ jobs:
             adb wait-for-device
             sleep 5
             adb install android/app/build/outputs/apk/debug/app-debug.apk
+            echo "=== List installed package ==="
+            adb shell pm list packages | grep -i pristine
+            echo ""
             echo "=== Resolve activity name ==="
-            adb shell cmd package resolve-activity --brief com.pristineaudio
+            adb shell cmd package resolve-activity --brief com.pristineaudio.app
             echo ""
             echo "=== Start app ==="
-            adb shell am start -n com.pristineaudio/com.pristineaudio.app.MainActivity
+            adb shell am start -n com.pristineaudio.app/com.pristineaudio.app.MainActivity
             sleep 20
             adb logcat -d > logcat-full.log || true
             echo "=== PlatformConstants errors ==="
@@ -284,6 +287,7 @@ jobs:
             echo ""
             echo "=== ReactNativeJS errors ==="
             grep -B 2 -A 10 "ReactNativeJS" logcat-full.log | head -80 || echo "No JS errors"
+
 
       - name: Upload Logcat Output
         uses: actions/upload-artifact@v4
