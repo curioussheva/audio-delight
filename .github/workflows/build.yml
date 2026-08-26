@@ -266,7 +266,11 @@ jobs:
             adb wait-for-device
             sleep 5
             adb install android/app/build/outputs/apk/debug/app-debug.apk
-            adb shell am start -n com.pristineaudio/.MainActivity
+            echo "=== Resolve activity name ==="
+            adb shell cmd package resolve-activity --brief com.pristineaudio
+            echo ""
+            echo "=== Start app ==="
+            adb shell am start -n com.pristineaudio/com.pristineaudio.app.MainActivity
             sleep 20
             adb logcat -d > logcat-full.log || true
             echo "=== PlatformConstants errors ==="
@@ -315,4 +319,5 @@ jobs:
         if: success()
         with:
           name: PristineAudio-Debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk 
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+ 

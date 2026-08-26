@@ -458,3 +458,221 @@ TrackPlayer (dependency) tidak support New Architecture Cek issue di repo lovega
 ---
 
 Roadmap ini disusun berdasarkan assessment arsitektur per 23 Agustus 2026. Update terakhir: penambahan initPlaybackModule di Onload.cpp sudah terkonfirmasi.
+
+###### update 1 ######
+
+Roadmap Migrasi New Architecture (TurboModule) — pristine-audio
+
+Status: 26 Agustus 2026
+Versi React Native: 0.83.10
+Target: Migrasi seluruh layer (C++ JNI, Kotlin, TS Specs, Features JS) ke New Architecture (TurboModule) penuh
+Progress: Build native sukses, error runtime PlatformConstants masih dalam investigasi
+
+---
+
+📊 Ringkasan Progress
+
+Fase Status Keterangan
+Fase 1 — Audit ✅ Selesai Semua modul terpetakan
+Fase 2 — Codegen Setup ✅ Selesai Codegen jalan di CI, build sukses
+Fase 3 — Migrasi Kotlin ✅ Selesai Semua module extends TurboModule
+Fase 3b — Fix Package Registration ✅ Selesai USBDACPackage sudah benar
+Fase 3c — TS Specs ✅ Selesai 5 specs ada, 2 baru dibuat
+Fase 4 — Migrasi Features JS ⏳ Tunda Belum dikerjakan (tidak blocking build)
+Fase 5 — Verifikasi Runtime 🔴 Sedang Dikerjakan Error PlatformConstants
+Fase 6 — Debug Runtime 🔴 Blokir Activity name salah di workflow
+
+---
+
+🔴 BLOKIR SAAT INI: Error PlatformConstants (Runtime)
+
+Gejala
+
+· Build APK sukses
+· App crash/redscreen saat startup
+· Error: TurboModuleRegistry.getEnforcing<Spec>('PlatformConstants') returned null
+
+Investigasi yang Sudah Dilakukan
+
+1. Cek Build Log — ✅ Tidak ada masalah
+
+· Tidak ada error Kotlin (e:)
+· Tidak ada warning dari com/pristineaudio/
+· Tidak ada UnsatisfiedLinkError
+· System.loadLibrary("pristine-audio") berhasil di semua modul
+
+2. Emulator di CI — ✅ Berhasil boot
+
+· aosp_atd + pixel_5 + software rendering berhasil
+· APK terinstall sukses
+· Tapi: activity name salah — com.pristineaudio/.MainActivity tidak ada
+
+3. Error yang ditemukan di logcat:
+
+```
+Error type 3
+Error: Activity class {com.pristineaudio/com.pristineaudio.MainActivity} does not exist.
+```
+
+Ini bukan error PlatformConstants — hanya activity name salah. App belum pernah start, jadi error PlatformConstants belum tertangkap.
+
+---
+
+Langkah Berikutnya (Prioritas)
+
+Prioritas 1: Fix Activity Name di Workflow
+
+```yaml
+# SALAH:
+adb shell am start -n com.pristineaudio/.MainActivity
+
+# BENAR:
+adb shell am start -n com.pristineaudio/com.pristineaudio.app.MainActivity
+```
+
+Prioritas 2: Jalankan Ulang CI
+
+Setelah activity name fix, app akan start dan logcat akan menangkap error PlatformConstants yang sebenarnya.
+
+Prioritas 3: Analisis Error PlatformConstants
+
+Setelah logcat tertangkap, kemungkinan root cause:
+
+Hipotesis Bukti yang dicari
+Modul baru (NativePristineAudio, NativePlaybackModule, NativeDeviceModule) mengganggu inisialisasi Stack trace menunjuk ke module kita
+System.loadLibrary dipanggil terlalu awal Stack trace UnsatisfiedLinkError
+Package registration crash Stack trace di createNativeModules
+TurboModuleRegistry.getEnforcing dipanggil sebelum registry siap Stack trace di JS bundle
+
+---
+
+Yang Sudah Selesai (Detail)
+
+Fase 3 — Migrasi Kotlin
+
+7 file Kotlin diubah:
+
+File Perubahan
+dsp/NativeDSPModule.kt + TurboModule
+visualizer/NativeVisualizerBridge.kt + TurboModule
+media/MediaStoreModule.kt + TurboModule
+usb/USBDACModule.kt + TurboModule
+audio/NativePristineAudio.kt + TurboModule, fix Double→Long
+audio/NativePlaybackModule.kt + TurboModule, fix Double→Long
+audio/NativeDeviceModule.kt + TurboModule
+
+Fase 3b — Package Registration
+
+· USBDACPackage.kt — hapus OboeAudioProcessor (file tidak ada)
+· Semua module terdaftar di USBDACPackage
+
+Fase 3c — TS Specs
+
+· 5 specs existing: NativeDSPModule, NativePristineAudio, NativeVisualizerBridge, USBDACModule, MediaStoreModule
+· 2 specs baru: NativePlaybackModule, NativeDeviceModule
+
+Commit History
+
+```
+ef0abb61 docs: pindahkan dokumentasi ke folder docs/
+12334fc7 feat: tambah TS spec untuk NativeDeviceModule dan NativePlaybackModule
+eeab6e2e feat: migrasi TurboModule - tambah extends TurboModule + fix package registration
+```
+
+---
+
+Yang Masih Perlu Dikerjakan
+
+Prioritas Tugas Status
+1 Fix activity name di workflow 🔴 Segera
+2 Jalankan CI, dapatkan logcat error 🔴 Segera
+3 Analisis error PlatformConstants ⏳ Menunggu logcat
+4 Fix root cause ⏳ Menunggu analisis
+5 Migrasi Features JS (8 file) ⏳ Tunda sampai native stabil
+6 Test manual semua fitur ⏳ Tunda
+
+---
+
+Checklist Verifikasi Runtime
+
+Setelah app berhasil start di emulator, cek:
+
+☐ Tidak ada UnsatisfiedLinkError
+☐ Tidak ada TurboModuleRegistry.getEnforcing(...) returned null
+☐ Tidak ada NoSuchMethodError
+☐ Tidak ada TypeError: Cannot read property 'xxx' of undefined
+☐ PlatformConstants bisa diakses
+☐ Modul kita (NativeDSPModule, dll) bisa diakses
+
+---
+
+Ringkasan Teknis
+
+Yang Sudah Benar
+
+· ✅ Library name pristine-audio konsisten di semua layer
+· ✅ Onload.cpp wire initPlaybackModule dengan benar
+· ✅ USBDACPackage terdaftar di MainApplication.kt
+· ✅ Semua Kotlin module extends TurboModule
+· ✅ TS Specs lengkap untuk semua modul
+· ✅ Build native sukses di CI
+
+Yang Masih Bermasalah
+
+· ❌ Activity name di workflow salah (com.pristineaudio/.MainActivity vs com.pristineaudio.app.MainActivity)
+· ❌ Error PlatformConstants belum tertangkap (belum bisa start app)
+· ❌ Features JS masih pakai NativeModules (Old Architecture)
+
+---
+
+Roadmap ini update per 26 Agustus 2026 10:36 UTC. Next update setelah logcat error PlatformConstants tertangkap.
+
+---
+
+📊 Statistik File per Layer (Update 26 Agustus 2026)
+
+Layer Jumlah File Status Migrasi
+C++ Source (.cpp) 82 ✅ Compile bersih, tidak perlu diubah
+C++ Header (.h) 115 ✅ Compile bersih, tidak perlu diubah
+C++ Total 197 ✅ Tervalidasi CI
+Kotlin (.kt) 11 ✅ Semua extends TurboModule
+TS Specs (.ts) 7 ✅ Lengkap (5 existing + 2 baru)
+Features JS (.ts/.tsx) 120 ❌ 8 file perlu migrasi, 112 tidak tersentuh
+
+---
+
+Progress Checklist Final
+
+Item Status
+☐ Semua modul Kotlin extends TurboModule ✅ Selesai (7/7 file)
+☐ Semua TS Specs match dengan Kotlin method ✅ Selesai (7 specs)
+☐ Codegen berjalan tanpa error ✅ Selesai (build CI sukses)
+☐ Build sukses ✅ Selesai (assembleDebug sukses)
+☐ Semua features JS pakai TurboModuleRegistry ❌ Belum (8 file masih NativeModules)
+☐ Test manual semua fitur ❌ Belum (terblokir PlatformConstants)
+☐ Tidak ada error di logcat ❌ Belum (belum bisa start app)
+
+---
+
+Estimasi Effort Revisi (Berdasarkan Progress Aktual)
+
+Fase Estimasi Awal Aktual Sisa
+Fase 1 — Audit 1 jam ✅ 1 jam 0
+Fase 2 — Codegen 2-3 jam ✅ 2 jam 0
+Fase 3 — Migrasi Kotlin 4-6 jam ✅ 3 jam 0
+Fase 4 — Migrasi Features JS 2-3 jam ⏳ Belum 2-3 jam
+Fase 5 — Verifikasi + Debug 4-8 jam 🔴 4 jam terpakai (emulator + activity fix) 2-4 jam
+Total 13-21 jam ±10 jam terpakai ±4-7 jam sisa
+
+---
+
+Next Action (Urutan Prioritas)
+
+1. Fix activity name di workflow → com.pristineaudio/com.pristineaudio.app.MainActivity
+2. Push & jalankan CI → dapatkan logcat error PlatformConstants
+3. Analisis error → tentukan root cause
+4. Fix root cause → kemungkinan di package registration atau JS bundle init
+5. Setelah native stabil → migrasi 8 file Features JS (Fase 4)
+6. Test manual semua fitur → Equalizer, Visualizer, USB DAC, Library, Player
+
+---
