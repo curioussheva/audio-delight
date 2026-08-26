@@ -1,9 +1,10 @@
 // src/features/library/api/m3u.ts
-import RNFS from "react-native-fs";
+import * as FileSystem from "expo-file-system";
 
 export const parseM3U = async (filePath: string) => {
   try {
-    const content = await RNFS.readFile(filePath, "utf8");
+    // Replaced RNFS.readFile with Expo's readAsStringAsync (UTF-8 is the default)
+    const content = await FileSystem.readAsStringAsync(filePath);
     const lines = content.split("\n");
     const tracks: string[] = [];
 
@@ -24,3 +25,4 @@ export const parseM3U = async (filePath: string) => {
     return null;
   }
 };
+ 
