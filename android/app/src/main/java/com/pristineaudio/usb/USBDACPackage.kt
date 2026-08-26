@@ -11,6 +11,7 @@ import com.pristineaudio.USBDACModule
 import com.pristineaudio.audio.NativePristineAudio
 import com.pristineaudio.audio.NativePlaybackModule
 import com.pristineaudio.audio.NativeDeviceModule
+// HAPUS: import com.pristineaudio.audio.OboeAudioProcessor
 
 class USBDACPackage : ReactPackage {
     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
@@ -20,13 +21,13 @@ class USBDACPackage : ReactPackage {
             NativeVisualizerBridge(reactContext),
             MediaStoreModule(reactContext),
             NativePristineAudio(reactContext),
-            NativePlaybackModule(reactContext)
-            // TEMP DEBUG: dicomment untuk bisection root cause PlatformConstants crash
-            // NativeDeviceModule(reactContext)
+            NativePlaybackModule(reactContext),
+            NativeDeviceModule(reactContext)
+            // HAPUS: OboeAudioProcessor(reactContext)
         )
     }
 
     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {
         return emptyList()
     }
-}
+} 

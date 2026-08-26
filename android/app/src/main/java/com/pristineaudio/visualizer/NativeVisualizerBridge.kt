@@ -2,11 +2,14 @@ package com.pristineaudio
 
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
+import com.facebook.react.turbomodule.core.interfaces.TurboModule
 import android.media.audiofx.Visualizer
 import android.util.Log
 
 @ReactModule(name = NativeVisualizerBridge.NAME)
-class NativeVisualizerBridge(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
+class NativeVisualizerBridge(reactContext: ReactApplicationContext) : 
+    ReactContextBaseJavaModule(reactContext),
+    TurboModule {
 
     private var nativeAvailable = false
     private var visualizer: Visualizer? = null

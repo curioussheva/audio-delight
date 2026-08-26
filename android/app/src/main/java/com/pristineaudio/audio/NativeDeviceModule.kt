@@ -2,9 +2,13 @@ package com.pristineaudio.audio
 
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
+import com.facebook.react.turbomodule.core.interfaces.TurboModule
 
 @ReactModule(name = NativeDeviceModule.NAME)
-class NativeDeviceModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
+class NativeDeviceModule(reactContext: ReactApplicationContext) : 
+    ReactContextBaseJavaModule(reactContext),
+    TurboModule {
+
     companion object {
         const val NAME = "NativeDeviceModule"
     }
@@ -13,7 +17,8 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) : ReactContextBa
         System.loadLibrary("pristine-audio")
     }
 
-    private external fun nativeGetDevices(): Array<Any>
+    // Stub JNI belum diimplementasikan — jangan panggil dulu
+    // private external fun nativeGetDevices(): Array<Any>
     private external fun nativeSetActiveDevice(deviceId: String): Boolean
 
     override fun getName() = NAME
