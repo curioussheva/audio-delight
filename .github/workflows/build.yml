@@ -292,19 +292,7 @@ jobs:
 
             echo ""
             echo "=== Polling for activity resumed state (up to 120s) ==="
-            RESUMED=""
-            for i in $(seq 1 12); do
-              sleep 10
-              if adb shell dumpsys activity activities 2>/dev/null | grep -q "mResumedActivity.*com.pristineaudio.app"; then
-                echo "✅ Activity resumed after ~${i}0s"
-                RESUMED="yes"
-                break
-              fi
-              echo "…still waiting (${i}0s elapsed)"
-            done
-            if [ -z "$RESUMED" ]; then
-              echo "⚠️ Activity never reached resumed state within 120s"
-            fi
+            bash -c 'RESUMED=""; for i in $(seq 1 12); do sleep 10; if adb shell dumpsys activity activities 2>/dev/null | grep -q "mResumedActivity.*com.pristineaudio.app"; then echo "Activity resumed after ~${i}0s"; RESUMED="yes"; break; fi; echo "...still waiting (${i}0s elapsed)"; done; if [ -z "$RESUMED" ]; then echo "Activity never reached resumed state within 120s"; fi'
 
             echo ""
             echo "=== mResumedActivity dump ==="
@@ -312,20 +300,13 @@ jobs:
 
             echo ""
             echo "=== Process check ==="
-            APP_PID=$(adb shell pidof -s com.pristineaudio.app || true)
-            echo "App PID: ${APP_PID:-not running}"
+            bash -c 'APP_PID=$(adb shell pidof -s com.pristineaudio.app || true); echo "App PID: ${APP_PID:-not running}"; echo "$APP_PID" > /tmp/app_pid.txt'
 
             adb logcat -d > logcat-full.log || true
 
             echo ""
             echo "=== Process-specific log (app PID only) ==="
-            if [ -n "$APP_PID" ]; then
-              adb logcat -d --pid="$APP_PID" > logcat-app-only.log || true
-              cat logcat-app-only.log | tail -200
-            else
-              echo "App process not found — likely crashed or never started. Falling back to full log tail."
-              tail -200 logcat-full.log
-            fi
+            bash -c 'APP_PID=$(cat /tmp/app_pid.txt 2>/dev/null); if [ -n "$APP_PID" ]; then adb logcat -d --pid="$APP_PID" > logcat-app-only.log || true; tail -200 logcat-app-only.log; else echo "App process not found - likely crashed or never started. Falling back to full log tail."; tail -200 logcat-full.log; fi'
 
             echo ""
             echo "=== PlatformConstants errors ==="
