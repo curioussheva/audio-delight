@@ -5,12 +5,9 @@ import android.media.AudioManager
 import android.util.Log
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
-import com.facebook.react.turbomodule.core.interfaces.TurboModule
 
 @ReactModule(name = NativeDSPModule.NAME)
-class NativeDSPModule(reactContext: ReactApplicationContext) : 
-    ReactContextBaseJavaModule(reactContext),
-    TurboModule {
+class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
     private var engineAvailable = false
 
@@ -66,17 +63,17 @@ class NativeDSPModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
-    fun setFullEqualizer(gains: DoubleArray, sessionId: Int, promise: Promise) {
-    if (!engineAvailable) { promise.resolve(false); return }
-    try {
-        for (i in 0 until minOf(gains.size, 10)) {
-            setNativeEqualizerBand(i, gains[i].toFloat())
+    fun setFullEqualizer(gains: ReadableArray, sessionId: Int, promise: Promise) {
+        if (!engineAvailable) { promise.resolve(false); return }
+        try {
+            for (i in 0 until minOf(gains.size(), 10)) {
+                setNativeEqualizerBand(i, gains.getDouble(i).toFloat())
+            }
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("DSP_ERROR", e.message)
         }
-        promise.resolve(true)
-    } catch (e: Exception) {
-        promise.reject("DSP_ERROR", e.message)
     }
-}
 
     @ReactMethod
     fun setBassBoost(strength: Float, sessionId: Int, promise: Promise) {

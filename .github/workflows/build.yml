@@ -198,6 +198,33 @@ jobs:
             -DJS_RUNTIME=hermes | tee build.log
 
       # ============================================
+      # 16b. Show Kotlin errors (on failure)
+      # ============================================
+      - name: Show Kotlin errors
+        if: failure()
+        run: |
+          echo "=== Kotlin errors (e:) from build.log ==="
+          grep -E "^e:" android/build.log || echo "No 'e:' errors found"
+          echo ""
+          echo "=== Kotlin compiler error files ==="
+          find android/app/build -name "*.log" -exec grep -l "error" {} \; 2>/dev/null | head -10
+          echo ""
+          echo "=== Error context from build.log ==="
+          grep -B 2 -A 5 "compilation error\|Unresolved reference\|Type mismatch\|Cannot access" android/build.log | head -80 || echo "No specific error patterns found"
+
+      # ============================================
+      # 16c. Show Kotlin compiler reports (on failure)
+      # ============================================
+      - name: Show Kotlin compiler reports
+        if: failure()
+        run: |
+          echo "=== Gradle problems report ==="
+          find android/build -name "*.html" -path "*problems*" 2>/dev/null | head -5
+          echo ""
+          echo "=== Kotlin reports directory ==="
+          find android/app/build -path "*kotlin*" -type d 2>/dev/null | head -10
+
+      # ============================================
       # 17. Verify APK exists
       # ============================================
       - name: Verify APK exists
@@ -216,7 +243,8 @@ jobs:
 
       - name: Extract warnings/errors
         if: always()
-        run: grep -E "warning|error|w:" android/build.log > android/build-issues.log || true
+        run: |
+          grep -E "warning|error|w:|e:" android/build.log > android/build-issues.log || true
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -231,4 +259,4 @@ jobs:
         if: success()
         with:
           name: PristineAudio-Debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk 

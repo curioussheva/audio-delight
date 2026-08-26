@@ -7,12 +7,9 @@ import android.util.Log
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
 import com.facebook.react.modules.core.DeviceEventManagerModule
-import com.facebook.react.turbomodule.core.interfaces.TurboModule
 
 @ReactModule(name = USBDACModule.NAME)
-class USBDACModule(reactContext: ReactApplicationContext) : 
-    ReactContextBaseJavaModule(reactContext),
-    TurboModule {
+class USBDACModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
     private val audioManager = reactContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private var equalizer: android.media.audiofx.Equalizer? = null

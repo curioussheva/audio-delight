@@ -2,13 +2,9 @@ package com.pristineaudio.audio
 
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
-import com.facebook.react.turbomodule.core.interfaces.TurboModule
 
 @ReactModule(name = NativePlaybackModule.NAME)
-class NativePlaybackModule(reactContext: ReactApplicationContext) : 
-    ReactContextBaseJavaModule(reactContext),
-    TurboModule {
-
+class NativePlaybackModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
     companion object {
         const val NAME = "NativePlaybackModule"
     }
@@ -30,6 +26,6 @@ class NativePlaybackModule(reactContext: ReactApplicationContext) :
     @ReactMethod fun pause() { nativePause() }
     @ReactMethod fun stop() { nativeStop() }
     @ReactMethod fun seek(positionMs: Double) { nativeSeek(positionMs.toLong()) }
-    @ReactMethod fun getPosition(): Long = nativeGetPosition()
+    @ReactMethod fun getPosition(): Double = nativeGetPosition().toDouble()
     @ReactMethod fun getStatus(): Int = nativeGetStatus()
 }

@@ -8,11 +8,9 @@ import android.provider.MediaStore
 import android.media.MediaMetadataRetriever
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
-import com.facebook.react.turbomodule.core.interfaces.TurboModule
 
-class MediaStoreModule(reactContext: ReactApplicationContext) : 
-    ReactContextBaseJavaModule(reactContext),
-    TurboModule {
+class MediaStoreModule(private val reactContext: ReactApplicationContext) :
+    ReactContextBaseJavaModule(reactContext) {
 
     companion object { const val NAME = "MediaStoreModule" }
     override fun getName() = NAME

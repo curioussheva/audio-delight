@@ -2,13 +2,9 @@ package com.pristineaudio.audio
 
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
-import com.facebook.react.turbomodule.core.interfaces.TurboModule
 
 @ReactModule(name = NativePristineAudio.NAME)
-class NativePristineAudio(reactContext: ReactApplicationContext) : 
-    ReactContextBaseJavaModule(reactContext),
-    TurboModule {
-
+class NativePristineAudio(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
     companion object {
         const val NAME = "NativePristineAudio"
     }
@@ -29,15 +25,9 @@ class NativePristineAudio(reactContext: ReactApplicationContext) :
 
     @ReactMethod fun startEngine() { nativeStart() }
     @ReactMethod fun stopEngine() { nativeStop() }
-    @ReactMethod fun pushAudio(data: ReadableArray, size: Int) {
-    val floatArray = FloatArray(data.size())
-    for (i in 0 until data.size()) {
-        floatArray[i] = data.getDouble(i).toFloat()
-    }
-    nativePushAudio(floatArray, size)
-}
+    @ReactMethod fun pushAudio(data: FloatArray, size: Int) { nativePushAudio(data, size) }
     @ReactMethod fun isRunning(): Boolean = nativeIsRunning()
     @ReactMethod fun getLatency(): Float = nativeGetLatency()
-    @ReactMethod fun getUnderruns(): Long = nativeGetUnderruns()
-    @ReactMethod fun getOverruns(): Long = nativeGetOverruns()
+    @ReactMethod fun getUnderruns(): Double = nativeGetUnderruns().toDouble()
+    @ReactMethod fun getOverruns(): Double = nativeGetOverruns().toDouble()
 }
