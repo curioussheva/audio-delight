@@ -248,6 +248,40 @@ jobs:
           test -f android/app/build/outputs/apk/debug/app-debug.apk
 
       # ============================================
+      # 17b. Run on emulator and capture logcat
+      # ============================================
+      - name: Run on emulator
+        if: success()
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_6
+          script: |
+            adb install android/app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -n com.pristineaudio/.MainActivity
+            sleep 20
+            adb logcat -d > logcat-full.log || true
+            echo "=== PlatformConstants errors ==="
+            grep -B 5 -A 20 "PlatformConstants" logcat-full.log || echo "No PlatformConstants errors"
+            echo ""
+            echo "=== TurboModule errors ==="
+            grep -B 5 -A 20 "TurboModule" logcat-full.log | head -100 || echo "No TurboModule errors"
+            echo ""
+            echo "=== FATAL errors ==="
+            grep -B 2 -A 10 "FATAL\|AndroidRuntime" logcat-full.log | head -80 || echo "No FATAL errors"
+            echo ""
+            echo "=== ReactNativeJS errors ==="
+            grep -B 2 -A 10 "ReactNativeJS" logcat-full.log | head -80 || echo "No JS errors"
+
+      - name: Upload Logcat Output
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Logcat-Output
+          path: logcat-full.log
+
+      # ============================================
       # 18. Upload logs
       # ============================================
       - uses: actions/upload-artifact@v4
@@ -274,4 +308,4 @@ jobs:
         if: success()
         with:
           name: PristineAudio-Debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk 
+          path: android/app/build/outputs/apk/debug/app-debug.apk
