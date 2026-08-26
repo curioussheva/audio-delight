@@ -225,6 +225,21 @@ jobs:
           find android/app/build -path "*kotlin*" -type d 2>/dev/null | head -10
 
       # ============================================
+      # 16d. Check TurboModule issues (Opsi 1)
+      # ============================================
+      - name: Check TurboModule issues
+        if: always()
+        run: |
+          echo "=== TurboModule related warnings ==="
+          grep -iE "turbomodule|platformconstants|newarch|reactmodule" android/build.log || echo "No TurboModule warnings found"
+          echo ""
+          echo "=== Module registration issues ==="
+          grep -iE "moduleregistry|package.*register|ReactPackage|BaseReactPackage" android/build.log || echo "No module registration issues found"
+          echo ""
+          echo "=== JNI / native library issues ==="
+          grep -iE "System.loadLibrary|UnsatisfiedLinkError|JNI_OnLoad|native library" android/build.log || echo "No JNI/native library issues found"
+
+      # ============================================
       # 17. Verify APK exists
       # ============================================
       - name: Verify APK exists
