@@ -12,8 +12,14 @@ jobs:
       NODE_ENV: development
 
     steps:
+      # ============================================
+      # 1. Checkout
+      # ============================================
       - uses: actions/checkout@v4
 
+      # ============================================
+      # 2. Setup Node + PNPM
+      # ============================================
       - uses: pnpm/action-setup@v4
         with:
           version: 9.0.0
@@ -22,17 +28,25 @@ jobs:
         with:
           node-version: 20
 
+      # ============================================
+      # 3. Install dependencies
+      # ============================================
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      # ============================================
+      # 4. Setup Java + Android SDK
+      # ============================================
+      - uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: "temurin"
 
       - uses: android-actions/setup-android@v3
 
+      # ============================================
+      # 5. Setup Oboe
+      # ============================================
       - name: Setup Oboe
         run: |
           OBOE_DIR="android/app/src/main/cpp/oboe"
@@ -40,38 +54,94 @@ jobs:
           curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz \
           | tar -xz --strip-components=1 -C "$OBOE_DIR"
 
-      - name: Clean native cache
+      # ============================================
+      # 6. Inject Gradle init script (KRITIS)
+      # ============================================
+      - name: Inject Gradle init script
         run: |
-          rm -rf android/.cxx
-          rm -rf android/build
+          mkdir -p $GRADLE_USER_HOME/init.d
+          cat > $GRADLE_USER_HOME/init.d/rn-plugins.gradle << 'EOF'
+          beforeSettings { settings ->
+              settings.pluginManagement {
+                  repositories {
+                      google()
+                      mavenCentral()
+                      gradlePluginPortal()
+                  }
+                  includeBuild("${workspace}/node_modules/@react-native/gradle-plugin")
+                  includeBuild("${workspace}/node_modules/expo-modules-autolinking/android/expo-gradle-plugin")
+              }
+          }
+          EOF
+          # Replace ${workspace} dengan path sebenarnya
+          sed -i "s|\${workspace}|${{ github.workspace }}|g" $GRADLE_USER_HOME/init.d/rn-plugins.gradle
+          echo "=== Gradle init script ==="
+          cat $GRADLE_USER_HOME/init.d/rn-plugins.gradle
 
-      - name: Apply patches
+      # ============================================
+      # 7. Patch RN Gradle Plugin
+      # ============================================
+      - name: Patch RN Gradle Plugin
+        run: |
+          FILE=node_modules/@react-native/gradle-plugin/settings.gradle.kts
+          if grep -q "foojay-resolver-convention" "$FILE"; then
+            sed -i '/foojay-resolver-convention/d' "$FILE"
+            echo "✅ Patched foojay"
+          else
+            echo "✅ Already patched"
+          fi
+
+      # ============================================
+      # 8. Apply patches
+      # ============================================
+      - name: Apply PristineAudio patches
         run: bash scripts/patch-pristine.sh
 
       # ============================================
-      # TEST 1: Codegen CLI langsung
+      # 9. TEST 1: Codegen CLI langsung
       # ============================================
-      - name: Test Codegen CLI
+      - name: Test 1 - Codegen CLI
         run: |
-          echo "=== Test 1: Codegen CLI ==="
+          echo "=== codegenConfig dari package.json ==="
+          node -e "const p = require('./package.json'); console.log(JSON.stringify(p.codegenConfig, null, 2))"
+          echo ""
+          echo "=== Specs di src/ ==="
+          ls -la src/*.ts 2>/dev/null || echo "No .ts files in src/"
+          echo ""
+          echo "=== Specs di src/specs/ ==="
+          ls -la src/specs/*.ts 2>/dev/null || echo "No .ts files in src/specs/"
+          echo ""
+          echo "=== Jalankan Codegen CLI (search-path: src) ==="
           node node_modules/@react-native/codegen/lib/cli/combine/combine-js-to-schema-cli.js \
             --platform android \
             --project-root . \
             --search-path src \
-            --output-file /tmp/codegen-schema.json || echo "CLI FAILED"
+            --output-file /tmp/codegen-schema.json 2>&1 || echo "CLI EXIT CODE: $?"
           echo ""
-          echo "=== Schema output (kalau ada) ==="
-          head -50 /tmp/codegen-schema.json 2>/dev/null || echo "No schema generated"
+          echo "=== Schema output ==="
+          head -100 /tmp/codegen-schema.json 2>/dev/null || echo "No schema generated"
+          echo ""
+          echo "=== Jalankan Codegen CLI (search-path: src/specs) ==="
+          node node_modules/@react-native/codegen/lib/cli/combine/combine-js-to-schema-cli.js \
+            --platform android \
+            --project-root . \
+            --search-path src/specs \
+            --output-file /tmp/codegen-schema-2.json 2>&1 || echo "CLI EXIT CODE: $?"
+          echo ""
+          echo "=== Schema output (specs) ==="
+          head -100 /tmp/codegen-schema-2.json 2>/dev/null || echo "No schema generated"
 
       # ============================================
-      # TEST 2: Gradle Codegen
+      # 10. TEST 2: Gradle Codegen
       # ============================================
-      - name: Test Gradle Codegen
+      - name: Test 2 - Gradle Codegen
         working-directory: android
         run: |
-          echo "=== Test 2: Gradle Codegen ==="
-          chmod +x gradlew
+          echo "=== Bersihkan hasil codegen lama ==="
           rm -rf app/build/generated/source/codegen
+          echo ""
+          echo "=== Jalankan Gradle Codegen ==="
+          chmod +x gradlew
           ./gradlew generateCodegenArtifactsFromSchema \
             --no-daemon \
             --rerun-tasks \
@@ -80,13 +150,13 @@ jobs:
             -PhermesEnabled=true 2>&1 | tee codegen.log
           echo ""
           echo "=== Codegen task status ==="
-          grep -E "generateCodegen|SKIPPED|No modules" codegen.log || echo "No codegen task found"
+          grep -E "generateCodegen|SKIPPED|No modules|BUILD" codegen.log || echo "No matching output"
           echo ""
           echo "=== Generated files ==="
-          find app/build/generated/source/codegen -type f 2>/dev/null | head -20 || echo "No generated files"
+          find app/build/generated/source/codegen -type f 2>/dev/null | head -30 || echo "No generated files"
 
       # ============================================
-      # UPLOAD LOGS
+      # 11. Upload logs
       # ============================================
       - uses: actions/upload-artifact@v4
         if: always()
