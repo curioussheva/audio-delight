@@ -121,13 +121,5 @@
     "node": ">=20.19.0",
     "pnpm": ">=9.0.0"
   },
-  "codegenConfig": {
-    "name": "PristineAudioSpec",
-    "type": "modules",
-    "jsSrcsDir": "src/specs",
-    "android": {
-      "javaPackageName": "com.pristineaudio.app"
-    }
-  },
   "packageManager": "pnpm@9.0.0"
-} 
+}
