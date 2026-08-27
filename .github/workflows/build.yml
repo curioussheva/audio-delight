@@ -1,8 +1,8 @@
 name: Build PristineAudio APK (Debug)
 
 on:
-  push:
-    branches: ["pristinev2"]
+  # push:
+  #   branches: ["pristinev2"]
   workflow_dispatch:
 
 jobs:
