@@ -28,6 +28,7 @@ react {
     )
 
     bundleCommand = "export:embed"
+    debuggableVariants = []
 
     autolinkLibrariesWithApp()
 }
@@ -104,4 +105,5 @@ dependencies {
     implementation "androidx.media3:media3-common:$media3Version"
     implementation "androidx.media3:media3-exoplayer:$media3Version"
     implementation "androidx.media3:media3-decoder:$media3Version"
-} 
+}
+ 
