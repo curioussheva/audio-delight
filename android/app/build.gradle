@@ -27,6 +27,11 @@ react {
             .execute(null, rootDir).text.trim()
     )
 
+    libraryName = "pristineaudio"
+    codegenJavaPackageName = "com.pristineaudio.app"
+    jsRoot = file("../src/specs")
+
+
     bundleCommand = "export:embed"
     debuggableVariants = []
 

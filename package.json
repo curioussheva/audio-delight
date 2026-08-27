@@ -123,10 +123,11 @@
   },
   "codegenConfig": {
     "name": "PristineAudioSpec",
+    "type": "modules",
     "jsSrcsDir": "src/specs",
     "android": {
-      "package": "com.pristineaudio.app"
+      "javaPackageName": "com.pristineaudio.app"
     }
   },
   "packageManager": "pnpm@9.0.0"
-}
+} 
