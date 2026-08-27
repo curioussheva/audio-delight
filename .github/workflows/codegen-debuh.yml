@@ -1,0 +1,97 @@
+name: Codegen Debug
+
+on:
+  workflow_dispatch:
+
+jobs:
+  codegen:
+    runs-on: ubuntu-latest
+
+    env:
+      GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
+      NODE_ENV: development
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.0.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Setup Oboe
+        run: |
+          OBOE_DIR="android/app/src/main/cpp/oboe"
+          mkdir -p "$OBOE_DIR"
+          curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz \
+          | tar -xz --strip-components=1 -C "$OBOE_DIR"
+
+      - name: Clean native cache
+        run: |
+          rm -rf android/.cxx
+          rm -rf android/build
+
+      - name: Apply patches
+        run: bash scripts/patch-pristine.sh
+
+      # ============================================
+      # TEST 1: Codegen CLI langsung
+      # ============================================
+      - name: Test Codegen CLI
+        run: |
+          echo "=== Test 1: Codegen CLI ==="
+          node node_modules/@react-native/codegen/lib/cli/combine/combine-js-to-schema-cli.js \
+            --platform android \
+            --project-root . \
+            --search-path src \
+            --output-file /tmp/codegen-schema.json || echo "CLI FAILED"
+          echo ""
+          echo "=== Schema output (kalau ada) ==="
+          head -50 /tmp/codegen-schema.json 2>/dev/null || echo "No schema generated"
+
+      # ============================================
+      # TEST 2: Gradle Codegen
+      # ============================================
+      - name: Test Gradle Codegen
+        working-directory: android
+        run: |
+          echo "=== Test 2: Gradle Codegen ==="
+          chmod +x gradlew
+          rm -rf app/build/generated/source/codegen
+          ./gradlew generateCodegenArtifactsFromSchema \
+            --no-daemon \
+            --rerun-tasks \
+            -PnewArchEnabled=true \
+            -PreactNativeNewArch=true \
+            -PhermesEnabled=true 2>&1 | tee codegen.log
+          echo ""
+          echo "=== Codegen task status ==="
+          grep -E "generateCodegen|SKIPPED|No modules" codegen.log || echo "No codegen task found"
+          echo ""
+          echo "=== Generated files ==="
+          find app/build/generated/source/codegen -type f 2>/dev/null | head -20 || echo "No generated files"
+
+      # ============================================
+      # UPLOAD LOGS
+      # ============================================
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Codegen-Debug-Log
+          path: |
+            android/codegen.log
+            /tmp/codegen-schema.json
