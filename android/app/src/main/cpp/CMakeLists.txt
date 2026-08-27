@@ -136,6 +136,20 @@ endif()
 
 find_package(ReactAndroid CONFIG REQUIRED)
 
+# =====================================================
+# CODEGEN-GENERATED JNI
+# =====================================================
+
+set(CODEGEN_JNI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../build/generated/source/codegen/jni")
+
+if(EXISTS "${CODEGEN_JNI_DIR}/CMakeLists.txt")
+    message(STATUS "Found Codegen JNI at ${CODEGEN_JNI_DIR}")
+    add_subdirectory("${CODEGEN_JNI_DIR}" codegen EXCLUDE_FROM_ALL)
+    set(CODEGEN_LIB react_codegen_PristineAudioSpec)
+else()
+    message(WARNING "Codegen JNI not found at ${CODEGEN_JNI_DIR}")
+endif()
+
 add_library(pristine-audio SHARED ${ALL_SRCS})
 
 # =====================================================
@@ -293,6 +307,7 @@ target_link_libraries(pristine-audio
         android
         log
         ReactAndroid::jsi
+        ${CODEGEN_LIB}
 )
 
 # =====================================================
