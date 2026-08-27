@@ -278,7 +278,7 @@ jobs:
       - name: Start Metro
         if: success()
         run: |
-          nohup npx expo start --port 8081 --android > metro.log 2>&1 &
+          nohup npx expo start --port 8081 > metro.log 2>&1 &
           echo "Metro starting, waiting for it to be ready..."
           for i in $(seq 1 30); do
             if curl -s http://localhost:8081/status > /dev/null 2>&1; then
@@ -314,8 +314,8 @@ jobs:
             echo "=== Resolve activity name ==="
             adb shell cmd package resolve-activity --brief com.pristineaudio.app
             echo ""
-            echo "=== Start app ==="
-            adb shell am start -n com.pristineaudio.app/com.pristineaudio.app.MainActivity
+            echo "=== Start app via deep link (mimics tapping Connect in Dev Launcher) ==="
+            adb shell am start -a android.intent.action.VIEW -d "exp://10.0.2.2:8081" com.pristineaudio.app
 
             echo ""
             echo "=== Polling for activity resumed state (up to 120s) ==="
@@ -393,3 +393,4 @@ jobs:
         with:
           name: PristineAudio-Debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
+ 
