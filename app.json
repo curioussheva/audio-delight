@@ -93,7 +93,8 @@
             "usesCleartextTraffic": true,
             "extraMavenRepos": [
               "../../node_modules/react-native-track-player/android/repo"
-            ]
+            ],
+            "enableBridgeless": false
           },
           "ios": {
             "deploymentTarget": "15.1",
