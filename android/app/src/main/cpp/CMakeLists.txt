@@ -140,7 +140,7 @@ find_package(ReactAndroid CONFIG REQUIRED)
 # CODEGEN-GENERATED JNI
 # =====================================================
 
-set(CODEGEN_JNI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../build/generated/source/codegen/jni")
+set(CODEGEN_JNI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/generated/source/codegen/jni")
 
 if(EXISTS "${CODEGEN_JNI_DIR}/CMakeLists.txt")
     message(STATUS "Found Codegen JNI at ${CODEGEN_JNI_DIR}")
