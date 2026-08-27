@@ -167,8 +167,14 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
+          # Bersihkan hasil Codegen lama
+          rm -rf app/build/generated/source/codegen
+          rm -rf app/build/generated/autolinking
+          
+          # Force re-run
           ./gradlew generateCodegenArtifactsFromSchema \
             --no-daemon \
+            --rerun-tasks \
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
             -PhermesEnabled=true
@@ -182,15 +188,6 @@ jobs:
       - name: Gradle clean
         working-directory: android
         run: ./gradlew clean
-
-      # NOTE: Manual "Bundle JS" step removed here (was step 15b).
-      # JS bundling is now handled automatically by the react { } block
-      # in android/app/build.gradle via bundleCommand = "export:embed"
-      # + debuggableVariants = [], which correctly resolves the
-      # expo-router/entry entrypoint. Running react-native bundle
-      # manually with --entry-file index.tsx was both wrong (this repo
-      # uses expo-router, not a plain index.tsx entry) and redundant
-      # with what Gradle now does automatically during assembleDebug.
 
       # ============================================
       # 16. Build APK
@@ -270,11 +267,6 @@ jobs:
       # ============================================
       # 17a. Start Metro dev server in background
       # ============================================
-      # expo-dev-client always tries to connect to Metro at app cold
-      # start (BridgelessDevSupportManager -> ws://10.0.2.2:8081), even
-      # with an embedded bundle present. 10.0.2.2 is the emulator's
-      # standard alias for the CI runner's localhost, so starting Metro
-      # here lets the app connect automatically without adb reverse.
       - name: Start Metro
         if: success()
         run: |
@@ -315,7 +307,7 @@ jobs:
             adb shell cmd package resolve-activity --brief com.pristineaudio.app
             echo ""
             echo "=== Start app via deep link (mimics tapping Connect in Dev Launcher) ==="
-            adb shell am start -a android.intent.action.VIEW -d "exp://10.0.2.2:8081" com.pristineaudio.app
+            adb shell am start -a android.intent.action.VIEW -d "pristineaudio://expo-development-client/?url=http%3A%2F%2F10.0.2.2%3A8081" com.pristineaudio.app
 
             echo ""
             echo "=== Polling for activity resumed state (up to 120s) ==="
@@ -393,4 +385,3 @@ jobs:
         with:
           name: PristineAudio-Debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
- 
