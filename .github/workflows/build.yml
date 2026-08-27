@@ -183,20 +183,14 @@ jobs:
         working-directory: android
         run: ./gradlew clean
 
-      # ============================================
-      # 15b. Bundle JS (sebelum build)
-      # ============================================
-      - name: Bundle JS
-        run: |
-          mkdir -p android/app/src/main/assets
-          npx react-native bundle \
-            --platform android \
-            --dev false \
-            --entry-file index.tsx \
-            --bundle-output android/app/src/main/assets/index.android.bundle \
-            --assets-dest /tmp/rn-assets
-          echo "=== Bundle size ==="
-          ls -la android/app/src/main/assets/index.android.bundle
+      # NOTE: Manual "Bundle JS" step removed here (was step 15b).
+      # JS bundling is now handled automatically by the react { } block
+      # in android/app/build.gradle via bundleCommand = "export:embed"
+      # + debuggableVariants = [], which correctly resolves the
+      # expo-router/entry entrypoint. Running react-native bundle
+      # manually with --entry-file index.tsx was both wrong (this repo
+      # uses expo-router, not a plain index.tsx entry) and redundant
+      # with what Gradle now does automatically during assembleDebug.
 
       # ============================================
       # 16. Build APK
@@ -211,6 +205,17 @@ jobs:
             -PreactNativeNewArch=true \
             -PhermesEnabled=true \
             -DJS_RUNTIME=hermes | tee build.log
+
+      # ============================================
+      # 16a. Verify JS bundling task actually ran
+      # ============================================
+      - name: Verify JS bundle task ran
+        run: |
+          echo "=== Looking for bundle/export:embed task in build.log ==="
+          grep -iE "bundleDebugJsAndAssets|export:embed|createBundle" android/build.log || echo "WARNING: no JS bundling task found in build.log"
+          echo ""
+          echo "=== Checking for embedded bundle output ==="
+          find android/app/build -iname "*.bundle" -o -iname "index.android.bundle" 2>/dev/null || echo "WARNING: no bundle output file found"
 
       # ============================================
       # 16b. Show Kotlin errors (on failure)
@@ -240,7 +245,7 @@ jobs:
           find android/app/build -path "*kotlin*" -type d 2>/dev/null | head -10
 
       # ============================================
-      # 16d. Check TurboModule issues (Opsi 1)
+      # 16d. Check TurboModule issues
       # ============================================
       - name: Check TurboModule issues
         if: always()
@@ -263,7 +268,29 @@ jobs:
           test -f android/app/build/outputs/apk/debug/app-debug.apk
 
       # ============================================
-      # 17b. Run on emulator and capture logcat (OPTIMIZED)
+      # 17a. Start Metro dev server in background
+      # ============================================
+      # expo-dev-client always tries to connect to Metro at app cold
+      # start (BridgelessDevSupportManager -> ws://10.0.2.2:8081), even
+      # with an embedded bundle present. 10.0.2.2 is the emulator's
+      # standard alias for the CI runner's localhost, so starting Metro
+      # here lets the app connect automatically without adb reverse.
+      - name: Start Metro
+        if: success()
+        run: |
+          nohup npx expo start --port 8081 --android > metro.log 2>&1 &
+          echo "Metro starting, waiting for it to be ready..."
+          for i in $(seq 1 30); do
+            if curl -s http://localhost:8081/status > /dev/null 2>&1; then
+              echo "Metro is up after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+          curl -s http://localhost:8081/status || echo "WARNING: Metro did not respond to /status"
+
+      # ============================================
+      # 17b. Run on emulator and capture logcat
       # ============================================
       - name: Run on emulator
         if: success()
@@ -327,6 +354,16 @@ jobs:
         with:
           name: Logcat-Output
           path: logcat-full.log
+
+      # ============================================
+      # 17c. Upload Metro log
+      # ============================================
+      - name: Upload Metro log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Metro-Log
+          path: metro.log
 
       # ============================================
       # 18. Upload logs
