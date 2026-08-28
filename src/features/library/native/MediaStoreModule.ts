@@ -1,6 +1,5 @@
-import { NativeModules } from "react-native";
+import MediaStoreModule from "../../../specs/MediaStoreModule";
 
-const { MediaStoreModule } = NativeModules;
 
 export interface NativeSong {
   id: string;

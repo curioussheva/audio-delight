@@ -1,4 +1,4 @@
-import { NativeModules } from "react-native";
+import NativeDSPModule from "../../../specs/NativeDSPModule";
 
 export interface NativeDSPInterface {
   // Equalizer & effects
@@ -26,7 +26,6 @@ export interface NativeDSPInterface {
   setImmersiveEnabled(enabled: boolean): void;
 }
 
-const { NativeDSPModule } = NativeModules;
 
 if (!NativeDSPModule) {
   console.error("NativeDSPModule tidak ditemukan! Pastikan library native sudah ter-load.");

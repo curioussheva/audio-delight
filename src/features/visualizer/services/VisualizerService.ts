@@ -3,10 +3,11 @@
 import {
   AppState,
   AppStateStatus,
-  NativeModules,
+
   Platform,
 } from "react-native";
 import type { SharedValue } from "react-native-reanimated";
+import NativeVisualizerBridgeSpec from "../../../specs/NativeVisualizerBridge";
 
 // ============================================================================
 // Types
@@ -31,7 +32,7 @@ interface VisualizerConfig {
 // Module Resolution
 // ============================================================================
 
-const NativeVisualizerBridge = NativeModules.NativeVisualizerBridge as
+const NativeVisualizerBridge = NativeVisualizerBridgeSpec as
   | NativeVisualizerBridgeType
   | undefined;
 

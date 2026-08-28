@@ -1,10 +1,9 @@
 import TrackPlayer, { Event, State } from "react-native-track-player";
-import { NativeModules } from "react-native";
+import NativeDSPModule from "../../../specs/NativeDSPModule";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { visualizerService } from "@/features/visualizer/services/VisualizerService";
 
-const { NativeDSPModule } = NativeModules;
 
 // Lazy Platform access
 const getPlatformOS = () => {

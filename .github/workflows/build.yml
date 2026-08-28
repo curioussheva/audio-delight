@@ -174,6 +174,24 @@ jobs:
             -PhermesEnabled=true
 
       # ============================================
+      # 14a. Locate autolinking-generated artifacts
+      # ============================================
+      - name: Locate autolinking artifacts
+        working-directory: android
+        run: |
+          echo "=== Searching for autolinking output ==="
+          find app/build -iname "*autolink*" 2>/dev/null || echo "none found"
+          echo ""
+          echo "=== Searching for Android-autolinking.cmake anywhere ==="
+          find . -iname "Android-autolinking.cmake" 2>/dev/null || echo "none found"
+          echo ""
+          echo "=== Full tree of build/generated (depth 4) ==="
+          find app/build/generated -maxdepth 4 2>/dev/null || echo "app/build/generated does not exist yet"
+          echo ""
+          echo "=== Searching for appmodules references anywhere in build ==="
+          grep -rl "appmodules" app/build 2>/dev/null || echo "none found"
+
+      # ============================================
       # 15. Clean after codegen
       # ============================================
       - name: Clean after codegen

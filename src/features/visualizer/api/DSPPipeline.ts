@@ -1,9 +1,8 @@
-import { NativeModules } from "react-native";
+import USBDACModule from "../../../specs/USBDACModule";
 import { EqualizerBand } from "@/shared/types/dsp";
 import NativeDSPModule from "@/features/visualizer/native/NativeDSPModule";
 import USBDACService from "@/features/hardware/api/USBDACModule"; // ← TAMBAH
 
-const { USBDACModule } = NativeModules;
 
 export class DSPPipeline {
   private static currentMode: "bit-perfect" | "dsp" = "dsp";

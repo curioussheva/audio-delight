@@ -1,4 +1,6 @@
-import { NativeModules, NativeEventEmitter } from "react-native";
+import { NativeEventEmitter } from "react-native";
+import USBDACModule from "../../../specs/USBDACModule";
+import NativeDSPModule from "../../../specs/NativeDSPModule";
 
 export interface DACCapabilities {
   dsdNative: boolean;
@@ -42,7 +44,6 @@ export interface RecommendedSettings {
   dsdMode: "native" | "dop" | "off";
 }
 
-const { USBDACModule, NativeDSPModule } = NativeModules;
 
 let _emitter: NativeEventEmitter | null = null;
 const getEmitter = () => {

@@ -1,5 +1,5 @@
 // src/features/visualizer/native/NativeDSPModule.ts
-import { NativeModules } from "react-native";
+import NativeDSPModuleSpec from "../../../specs/NativeDSPModule";
 
 interface NativeDSPModuleType {
   // Equalizer
@@ -19,7 +19,7 @@ interface NativeDSPModuleType {
   releaseAllFX(): Promise<boolean>;
 }
 
-const NativeDSPModule = NativeModules.NativeDSPModule as
+const NativeDSPModule = NativeDSPModuleSpec as
   | NativeDSPModuleType
   | undefined;
 

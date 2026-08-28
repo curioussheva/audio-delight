@@ -676,3 +676,444 @@ Next Action (Urutan Prioritas)
 6. Test manual semua fitur → Equalizer, Visualizer, USB DAC, Library, Player
 
 ---
+
+##### update 2 ######
+
+---
+
+Roadmap Migrasi New Architecture (TurboModule) — pristine-audio
+
+Status: 28 Agustus 2026
+Versi React Native: 0.83.10
+Target: Migrasi seluruh layer ke New Architecture penuh
+Progress: Semua layer sudah dimigrasi, runtime error PlatformConstants dalam investigasi final
+
+---
+
+📊 Ringkasan Progress
+
+Fase Status Keterangan
+Fase 1 — Audit ✅ Selesai Semua modul terpetakan
+Fase 2 — Codegen Setup ✅ Selesai Codegen berhasil generate specs
+Fase 3 — Migrasi Kotlin ✅ Selesai 7 module extends TurboModule
+Fase 3b — Package Registration ✅ Selesai USBDACPackage sudah benar
+Fase 3c — TS Specs ✅ Selesai 7 specs lengkap
+Fase 4 — Migrasi Features JS ✅ Selesai 8 file sudah pakai TurboModuleRegistry
+Fase 5 — Build & Runtime 🔴 Blokir PlatformConstants error — root cause ditemukan
+
+---
+
+🔴 Root Cause PlatformConstants (DITEMUKAN)
+
+Chain Lengkap
+
+```
+Codegen berhasil generate source di android/app/build/generated/source/codegen/jni/
+    ↓
+CMakeLists.txt path SALAH (../build/ bukan ../../../build/)
+    ↓
+CMake tidak menemukan Codegen JNI
+    ↓
+libpristine-audio.so tidak ter-link dengan react_codegen_PristineAudioSpec
+    ↓
+libappmodules.so tidak ter-generate
+    ↓
+Registry TurboModule tidak lengkap
+    ↓
+PlatformConstants tidak ditemukan
+    ↓
+Error: TurboModuleRegistry.getEnforcing('PlatformConstants')
+```
+
+Fix yang Sudah Di-Commit
+
+```cmake
+# SEBELUM (SALAH):
+set(CODEGEN_JNI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../build/generated/source/codegen/jni")
+
+# SESUDAH (BENAR):
+set(CODEGEN_JNI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/generated/source/codegen/jni")
+```
+
+---
+
+✅ Yang Sudah Selesai
+
+Layer Jumlah File Status
+C++ (.cpp + .h) 197 ✅ Compile bersih + Codegen include fixed
+Kotlin (.kt) 11 ✅ Semua extends TurboModule
+TS Specs (.ts) 7 ✅ Lengkap + Codegen berhasil generate
+Features JS 8 (dari 120) ✅ Migrasi ke TurboModuleRegistry
+
+---
+
+Commit History Terbaru
+
+```
+f1eee62b fix: nonaktifkan Bridgeless Mode (tidak efektif, tapi dicatat)
+7b590a4b fix: include Codegen JNI di CMakeLists (path fix diperlukan)
+ded619f1 debug: pindah specs ke src/specs/ + update codegen-debug workflow
+ef0abb61 docs: pindahkan dokumentasi ke folder docs/
+12334fc7 feat: tambah TS spec untuk NativeDeviceModule dan NativePlaybackModule
+eeab6e2e feat: migrasi TurboModule - tambah extends TurboModule + fix package registration
+```
+
+---
+
+Yang Perlu Dilakukan Berikutnya
+
+Prioritas Tugas Status
+1 Push fix CMakeLists path (naik 3 level) ✅ Sudah di-commit
+2 CI build — cek Found Codegen JNI di log ⏳ Menunggu hasil
+3 Install APK di device — cek PlatformConstants hilang ⏳ Menunggu build
+4 Test manual semua fitur (Equalizer, Visualizer, dll) ⏳ Setelah runtime bersih
+
+---
+
+Checklist Final
+
+Item Status
+Semua modul Kotlin extends TurboModule ✅ Selesai (7/7)
+Semua TS Specs match dengan Kotlin ✅ Selesai (7 specs)
+Codegen berjalan tanpa error ✅ Selesai
+Build sukses ✅ Selesai
+Semua Features JS pakai TurboModuleRegistry ✅ Selesai (8 file)
+CMakeLists include Codegen JNI ✅ Selesai (path fixed)
+Runtime bebas PlatformConstants error ❌ Menunggu CI dengan fix terbaru
+Test manual semua fitur ⏳ Setelah runtime bersih
+
+---
+
+Referensi Cepat (Pelajaran dari Sesi Ini)
+
+Item Nilai Benar
+applicationId com.pristineaudio.app
+Activity name com.pristineaudio.app/.MainActivity
+Deep link scheme pristineaudio
+Deep link format pristineaudio://expo-development-client/?url=...
+Codegen JNI path android/app/build/generated/source/codegen/jni
+CMake relative path dari cpp/ ../../../build/generated/source/codegen/jni
+Specs lokasi src/specs/ (subfolder agar match src/**/*.ts)
+
+---
+
+Roadmap ini update per 28 Agustus 2026. Fix terakhir: CMakeLists path Codegen JNI.
+
+---
+
+---
+Lampiran Roadmap Migrasi New Architecture
+
+---
+
+Lampiran 1: Daftar File Lengkap dengan Status
+
+C++ Source Files (82 .cpp)
+
+Direktori File Status
+core/ AudioBufferController.cpp ✅ Compile bersih
+ AudioCallback.cpp ✅ Compile bersih
+ AudioEngine.cpp ✅ Compile bersih
+ AudioMetrics.cpp ✅ Compile bersih
+ AudioModeManager.cpp ✅ Compile bersih
+ AudioPipeline.cpp ✅ Compile bersih
+ AudioStreamController.cpp ✅ Compile bersih
+decoder/ AudioDecoder.cpp ✅ Compile bersih
+ DecoderFactory.cpp ✅ Compile bersih
+ DecoderWorker.cpp ✅ Compile bersih
+ DecoderUtils.cpp ✅ Compile bersih
+ FFmpegDecoder.cpp ⚠️ Exclude otomatis (FFmpeg tidak tersedia)
+ PCMDecoder.cpp ✅ Compile bersih
+ StreamResampler.cpp ✅ Compile bersih
+devices/ AudioDeviceManager.cpp ✅ Compile bersih
+ AudioRouteManager.cpp ✅ Compile bersih
+dsp/ BiquadFilter.cpp ✅ Compile bersih
+ DSPChain.cpp ✅ Compile bersih
+ EQProcessor.cpp ✅ Compile bersih
+ OutputStage.cpp ✅ Compile bersih
+dsp/convolution/ ConvolverNode.cpp ✅ Compile bersih
+ FFTConvolver.cpp ✅ Compile bersih
+ FIRFilter.cpp ✅ Compile bersih
+ IRLoader.cpp ✅ Compile bersih
+ PartitionedConvolver.cpp ✅ Compile bersih
+ WindowFunctions.cpp ✅ Compile bersih
+dsp/dynamics/ LimiterNode.cpp ✅ Compile bersih
+dsp/filters/ StateVariableFilter.cpp ✅ Compile bersih
+dsp/graph/ DSPGraph.cpp ✅ Compile bersih
+dsp/headphone/ CrossfeedProcessor.cpp ✅ Compile bersih
+ HeadphoneCorrection.cpp ✅ Compile bersih
+dsp/immersive/ BinauralRenderer.cpp ✅ Compile bersih
+ BrainwaveGenerator.cpp ✅ Compile bersih
+ FFTResonanceAnalyzer.cpp ✅ Compile bersih
+ HarmonicExciter.cpp ✅ Compile bersih
+ SolfeggioResonator.cpp ✅ Compile bersih
+ SpatialFieldProcessor.cpp ✅ Compile bersih
+dsp/spatial/ StereoWidenerNode.cpp ✅ Compile bersih
+dsp/tone/ EQNode.cpp ✅ Compile bersih
+ GainNode.cpp ✅ Compile bersih
+fft/ FFTPlan.cpp ✅ Compile bersih
+ FFTProcessor.cpp ✅ Compile bersih
+ SpectrumAnalyzer.cpp ✅ Compile bersih
+ SpectrumVisualizer.cpp ✅ Compile bersih
+ WaveformVisualizer.cpp ✅ Compile bersih
+jni/ JSIInstaller.cpp ✅ Compile bersih (CI)
+ NativeAudioFeed.cpp ✅ Compile bersih
+ NativeDSPModule.cpp ✅ Compile bersih
+ NativeDeviceModule.cpp ✅ Compile bersih
+ NativePlaybackModule.cpp ✅ Compile bersih
+ NativePristineAudio.cpp ✅ Compile bersih
+ NativeVisualizerModule.cpp ✅ Compile bersih
+ Onload.cpp ✅ Compile bersih + wire initPlaybackModule
+manager/ EngineManager.cpp ✅ Compile bersih
+modes/ BitPerfectPipeline.cpp ✅ Compile bersih
+ DSPPipeline.cpp ✅ Compile bersih
+ ImmersivePipeline.cpp ✅ Compile bersih
+playback/ DecodedAudioQueue.cpp ✅ Compile bersih
+ FadeEngine.cpp ✅ Compile bersih
+ PCMQueue.cpp ✅ Compile bersih
+ PlaybackClock.cpp ✅ Compile bersih
+ PlaybackController.cpp ✅ Compile bersih
+ PlaybackManager.cpp ✅ Compile bersih
+ PlaybackScheduler.cpp ✅ Compile bersih
+ PrebufferManager.cpp ✅ Compile bersih
+ TrackQueue.cpp ✅ Compile bersih
+profiling/ CPUProfiler.cpp ✅ Compile bersih
+ DSPBenchmark.cpp ✅ Compile bersih
+ LatencyProfiler.cpp ✅ Compile bersih
+realtime/ CallbackTimer.cpp ✅ Compile bersih
+resampler/ AudioResampler.cpp ✅ Compile bersih
+ LinearResampler.cpp ✅ Compile bersih
+ SincResampler.cpp ✅ Compile bersih
+session/ AudioFocusManager.cpp ✅ Compile bersih
+ AudioSessionManager.cpp ✅ Compile bersih
+ NoisyReceiverHandler.cpp ✅ Compile bersih
+ TransportControls.cpp ✅ Compile bersih
+usb/ USBClockSync.cpp ✅ Compile bersih
+ USBDACCapabilities.cpp ✅ Compile bersih
+ USBDeviceManager.cpp ✅ Compile bersih
+ USBStreamSession.cpp ✅ Compile bersih
+visualizer/ VisualizerBuffer.cpp ✅ Compile bersih
+
+C++ Header Files (115 .h) — Semua ✅
+
+Kotlin Files (11 .kt)
+
+File Status
+app/MainActivity.kt ✅ Compile bersih
+app/MainApplication.kt ✅ Compile bersih + USBDACPackage terdaftar
+audio/NativePristineAudio.kt ✅ Extends TurboModule
+audio/NativePlaybackModule.kt ✅ Extends TurboModule
+audio/NativeDeviceModule.kt ✅ Extends TurboModule
+dsp/DSPController.kt ✅ Tidak perlu migrasi (helper)
+dsp/NativeDSPModule.kt ✅ Extends TurboModule
+media/MediaStoreModule.kt ✅ Extends TurboModule
+usb/USBDACModule.kt ✅ Extends TurboModule
+usb/USBDACPackage.kt ✅ Semua module terdaftar
+visualizer/NativeVisualizerBridge.kt ✅ Extends TurboModule
+
+TS Specs (7 .ts)
+
+File Status
+src/specs/MediaStoreModule.ts ✅ Codegen berhasil
+src/specs/NativeDSPModule.ts ✅ Codegen berhasil
+src/specs/NativeDeviceModule.ts ✅ Codegen berhasil
+src/specs/NativePlaybackModule.ts ✅ Codegen berhasil
+src/specs/NativePristineAudio.ts ✅ Codegen berhasil
+src/specs/NativeVisualizerBridge.ts ✅ Codegen berhasil
+src/specs/USBDACModule.ts ✅ Codegen berhasil
+
+Features JS yang Dimigrasi (8 file)
+
+File Status
+features/equalizer/api/nativeInterface.ts ✅ TurboModuleRegistry
+features/hardware/api/USBDACModule.ts ✅ TurboModuleRegistry
+features/library/native/MediaStoreModule.ts ✅ TurboModuleRegistry
+features/player/api/playback.ts ✅ TurboModuleRegistry
+features/visualizer/api/DSPPipeline.ts ✅ TurboModuleRegistry
+features/visualizer/native/NativeDSPModule.ts ✅ TurboModuleRegistry
+features/visualizer/native/VisualizerBridge.ts ✅ TurboModuleRegistry
+features/visualizer/services/VisualizerService.ts ✅ TurboModuleRegistry
+
+---
+
+Lampiran 2: Dokumentasi yang Ada
+
+Dokumen Lokasi Fungsi Masih Relevan?
+build-fix-changelog.md docs/ Arsip forensik perbaikan C++ compile ✅ Relevan — referensi root cause C++
+build-fix-status.md docs/ Ringkasan aktif status C++ ✅ Relevan — status file C++
+kt-post-native-refactor-todolist.md docs/ Peta kerja bridge Kotlin↔JNI↔TS ⚠️ Sebagian selesai, sebagian tercakup di roadmap ini
+native-bridge-roadmap.md docs/ Roadmap bridge NativeDeviceModule & NativePlaybackModule ✅ Relevan — masih perlu dikerjakan
+new-arch-roadmap.md docs/ Roadmap migrasi TurboModule ✅ Dokumen utama saat ini
+ui-js-post-native-refactor-todolist.md docs/ Peta risiko UI/JS ✅ Relevan — fitur UI belum di-test manual
+roadmap.md docs/ Roadmap umum project ⚠️ Perlu update dengan progres terbaru
+
+---
+
+Lampiran 3: Concern & Kendala
+
+# Kendala Status Dampak
+1 Bridgeless Mode mandatory di Expo 55 — enableBridgeless=false tidak berpengaruh ❌ Tidak bisa dimatikan PlatformConstants error harus di-fix via CMakeLists, bukan via config
+2 CMakeLists path Codegen salah — ../build/ seharusnya ../../../build/ ✅ Sudah di-fix Root cause libappmodules.so tidak ter-generate
+3 expo-dev-client cold start butuh deep link — am start biasa tidak cukup ✅ Sudah di-handle di workflow CI perlu deep link pristineaudio://expo-development-client/?url=...
+4 Workflow CI headless butuh instrumentasi ekstra — polling activity, logcat per-PID, Metro health-check ✅ Sudah di-implement Build CI ±10 menit lebih lama
+5 libappmodules.so warning konsisten — SoLoader recovery step berulang 🔴 Akar masalah yang sama dengan #2 Setelah #2 fix, warning ini harusnya hilang
+6 Klaim status stale — dokumen bilang "sudah beres" padahal belum ⚠️ Pola berulang Selalu verifikasi via log/grep sebelum lanjut
+7 Nama package/activity/scheme tidak konsisten — com.pristineaudio vs com.pristineaudio.app, exp:// vs pristineaudio:// ✅ Sudah di-dokumentasi Referensi cepat di roadmap
+8 Bare workflow tanpa expo prebuild — sinkronisasi manual konfigurasi native ⚠️ Perlu disiplin Selalu cek app.json, AndroidManifest.xml, build.gradle
+9 react { } Gradle plugin default behavior — debuggableVariants = [] tanpa dokumentasi jelas ✅ Sudah di-handle bundleCommand = "export:embed" di-set
+10 Codegen CLI tidak menemukan specs — karena glob src/**/*.ts butuh subfolder ✅ Sudah di-fix Specs dipindah ke src/specs/
+
+---
+
+Lampiran ini menyertai new-arch-roadmap.md update 28 Agustus 2026.
+
+---
+Insight FullTurboModuleMigration
+---
+
+Insight Opsi B — Full TurboModule Migration
+
+---
+
+Apa yang Perlu Diubah
+
+Saat ini project pakai interop layer (Old Architecture JNIEXPORT + ReactContextBaseJavaModule). Full TurboModule butuh:
+
+Layer Sekarang (Interop) Target (Full TurboModule)
+C++ JNI JNIEXPORT void JNICALL Java_... registerNatives via JSI
+Kotlin ReactContextBaseJavaModule + TurboModule TurboModule via Codegen interface
+Registrasi USBDACPackage (Old Architecture) Onload.cpp JSI registration
+Codegen Generate headers (include only) Generate C++ class yang harus di-inherit
+
+---
+
+Scope Kerja
+
+1. C++ JNI — 7 Module Perlu Rewrite
+
+File Fungsi JNI Sekarang Target
+NativeDSPModule.cpp 12 JNIEXPORT functions 1 class NativeDSPModuleSpecJSI
+NativePristineAudio.cpp 7 JNIEXPORT 1 class
+NativePlaybackModule.cpp 6 JNIEXPORT 1 class
+NativeDeviceModule.cpp 2 JNIEXPORT 1 class
+NativeVisualizerModule.cpp 4 JNIEXPORT 1 class
+NativeAudioFeed.cpp 2 JNIEXPORT 1 class
+JSIInstaller.cpp Placeholder Full installer
+
+Pola untuk setiap module:
+
+```cpp
+// SEBELUM:
+extern "C" JNIEXPORT void JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_setNativeMasterGain(
+    JNIEnv*, jobject, jfloat gain) {
+    EngineManager::get().setMasterGain(gain);
+}
+
+// SESUDAH:
+#include <PristineAudioSpec.h>
+
+class NativeDSPModuleSpecJSI : public PristineAudioSpecJSI {
+public:
+    void setMasterGain(double gain) override {
+        EngineManager::get().setMasterGain((float)gain);
+    }
+    // ... implement semua method dari generated interface
+};
+```
+
+2. Registrasi di Onload.cpp
+
+```cpp
+// Tambahkan:
+#include <PristineAudioSpec.h>
+
+JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
+    // ... existing init
+    
+    // Register TurboModules
+    auto installer = facebook::react::TurboModuleRegistry::getInstance();
+    installer->registerModule<NativeDSPModuleSpecJSI>("NativeDSPModule");
+    installer->registerModule<NativePristineAudioSpecJSI>("NativePristineAudio");
+    // ... semua module
+}
+```
+
+3. Kotlin — Sederhanakan
+
+```kotlin
+// SEBELUM:
+class NativeDSPModule(reactContext: ReactApplicationContext) :
+    ReactContextBaseJavaModule(reactContext),
+    TurboModule {
+    private external fun setNativeMasterGain(gain: Float)  // ← JNI lookup
+    // ...
+}
+
+// SESUDAH:
+class NativeDSPModule : TurboModule {
+    // Tidak perlu external fun — Codegen interface handle semua
+    // Tidak perlu ReactContextBaseJavaModule
+}
+```
+
+Tapi ini butuh Codegen untuk generate Kotlin interface juga — saat ini Codegen hanya generate C++ header, bukan Kotlin.
+
+4. package.json — Tambah Codegen Android Kotlin
+
+```json
+"codegenConfig": {
+  "android": {
+    "javaPackageName": "com.pristineaudio.app",
+    "kotlinPackageName": "com.pristineaudio.specs"
+  }
+}
+```
+
+---
+
+Estimasi Effort
+
+Modul JNI Functions Estimasi
+NativeDSPModule 12 2-3 jam
+NativePristineAudio 7 1-2 jam
+NativePlaybackModule 6 1 jam
+NativeDeviceModule 2 30 menit
+NativeVisualizerModule 4 1 jam
+NativeAudioFeed 2 30 menit
+JSIInstaller - 1 jam
+Onload.cpp registrasi - 1 jam
+Kotlin updates 7 file 2 jam
+Testing - 3-4 jam
+Total  14-17 jam
+
+---
+
+Risiko
+
+Risiko Mitigasi
+Codegen interface tidak match dengan method kita Baca generated header, implementasi sesuai
+JSI type conversion kompleks (Promise, Array) Gunakan jsi::Value helpers
+Build error di tengah Iterasi per module, test per module
+Reanimated v4 butuh New Architecture Full TurboModule mendukung New Architecture
+
+---
+
+Kenapa Ini Solusi yang Benar
+
+Aspek Interop (Sekarang) Full TurboModule
+PlatformConstants ❌ Tidak ter-register ✅ Auto-register via JSI
+Performance ⚠️ Bridge overhead ✅ Native call langsung
+Codegen ⚠️ Header only ✅ Full C++ binding
+Reanimated v4 ⚠️ Mungkin bermasalah ✅ Full support
+Masa depan ❌ Akan deprecated ✅ Standard RN 0.83+
+
+---
+
+Rekomendasi
+
+Opsi B adalah solusi yang benar jangka panjang, tapi butuh 2-3 hari kerja fokus. Kalau mau unblock cepat dulu (test fitur), lakukan Opsi A (nonaktifkan New Architecture), lalu jadwalkan Opsi B sebagai kerja terpisah.
+
+---
+
+Mau mulai Opsi B sekarang, atau unblock dulu dengan Opsi A sambil siapkan Opsi B?
