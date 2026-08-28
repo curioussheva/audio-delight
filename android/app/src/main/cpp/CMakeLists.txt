@@ -14,6 +14,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)  # Strict standard compliance
 
 # =====================================================
+# REACT NATIVE CMake UTILITIES (defines target_compile_reactnative_options)
+# =====================================================
+
+if(NOT DEFINED REACT_ANDROID_DIR)
+    # Fallback manual path (relative from android/app/src/main/cpp/ to root/node_modules)
+    set(REACT_ANDROID_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../node_modules/react-native/ReactAndroid")
+endif()
+include(${REACT_ANDROID_DIR}/cmake-utils/ReactNative-application.cmake)
+
+# =====================================================
 # BUILD TYPE DEFAULT
 # =====================================================
 
@@ -124,11 +134,6 @@ if(EXISTS "${OBOE_DIR}/CMakeLists.txt")
 else()
     message(FATAL_ERROR "Oboe not found at ${OBOE_DIR}/CMakeLists.txt. Please run: curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz | tar -xz --strip-components=1 -C ${OBOE_DIR}")
 endif()
-
-# =====================================================
-# SHARED LIBRARY
-# =====================================================
-
 
 # =====================================================
 # REACT NATIVE / JSI
@@ -330,3 +335,44 @@ endif()
 # =====================================================
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# =====================================================
+# APPMODULES TARGET (ditambahkan oleh workflow, dipertahankan di sini)
+# =====================================================
+# Catatan: Blok berikut biasanya ditambahkan oleh React Native untuk New Architecture.
+# Pastikan sudah ada di repository (bukan hanya di workflow CI) agar build lokal juga sukses.
+
+set(AUTOLINKING_CMAKE "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/generated/autolinking/src/main/jni/Android-autolinking.cmake")
+
+if(EXISTS "${AUTOLINKING_CMAKE}")
+    message(STATUS "Found autolinking cmake at ${AUTOLINKING_CMAKE}")
+    include("${AUTOLINKING_CMAKE}")
+else()
+    message(WARNING "Autolinking cmake not found — appmodules will be built without third-party TurboModules")
+    set(AUTOLINKED_LIBRARIES "")
+endif()
+
+set(PRISTINE_AUDIO_SPEC_LIB "")
+if(EXISTS "${CODEGEN_JNI_DIR}/CMakeLists.txt")
+    add_subdirectory("${CODEGEN_JNI_DIR}" pristineaudiospec_codegen_build EXCLUDE_FROM_ALL)
+    set(PRISTINE_AUDIO_SPEC_LIB react_codegen_PristineAudioSpec)
+endif()
+
+add_library(appmodules SHARED
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../src/main/jni/OnLoad.cpp"
+)
+
+target_include_directories(appmodules PRIVATE
+    "${CODEGEN_JNI_DIR}"
+)
+
+target_link_libraries(appmodules
+    PRIVATE
+        ${AUTOLINKED_LIBRARIES}
+        ${PRISTINE_AUDIO_SPEC_LIB}
+        ReactAndroid::reactnative
+        ReactAndroid::jsi
+        fbjni::fbjni
+        android
+        log
+) 
