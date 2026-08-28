@@ -170,6 +170,26 @@ jobs:
           fi
 
       # ============================================
+      # 13b. Dump app's own Codegen spec CMakeLists.txt
+      # ============================================
+      - name: Show Codegen spec CMakeLists content
+        if: always()
+        working-directory: android
+        run: |
+          FILE="app/build/generated/source/codegen/jni/CMakeLists.txt"
+          if [ -f "$FILE" ]; then
+            echo "=== Found at: $FILE ==="
+            cat "$FILE"
+          else
+            echo "Not found at $FILE"
+            echo "=== Searching elsewhere ==="
+            find app/build/generated/source/codegen -iname "CMakeLists.txt" 2>/dev/null || echo "none found"
+          fi
+          echo ""
+          echo "=== PristineAudioSpec.h (first 60 lines) ==="
+          find app/build/generated/source/codegen -iname "PristineAudioSpec.h" -exec head -60 {} \; 2>/dev/null || echo "not found"
+
+      # ============================================
       # 14. Upload logs
       # ============================================
       - uses: actions/upload-artifact@v4
