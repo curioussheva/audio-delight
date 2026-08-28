@@ -1,5 +1,5 @@
+import NativeVisualizerBridgeSpec from "../../../specs/NativeVisualizerBridge";
 // src/features/visualizer/native/VisualizerBridge.ts
-import { NativeModules } from "react-native";
 
 export type FftData = number[];
 
@@ -11,7 +11,7 @@ interface NativeVisualizerBridgeType {
   removeListeners(count: number): void;
 }
 
-const NativeVisualizerBridge = NativeModules.NativeVisualizerBridge as
+const NativeVisualizerBridge = NativeVisualizerBridgeSpec as
   | NativeVisualizerBridgeType
   | undefined;
 
