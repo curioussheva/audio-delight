@@ -338,17 +338,15 @@ add_library(appmodules SHARED
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../src/main/jni/OnLoad.cpp"
 )
 
-# Cari direktori folly secara otomatis (dibutuhkan oleh OnLoad.cpp)
-find_path(FOLLY_INCLUDE_DIR folly/folly-config.h
-    PATHS
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../node_modules/react-native/ReactCommon"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../node_modules/react-native/third-party"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../node_modules/react-native"
+# Cari direktori include folly di prefab cache Gradle
+file(GLOB FOLLY_INCLUDE_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../.gradle/caches/*/transforms/*/transformed/folly-*/prefab/modules/folly/include"
 )
-
-if(NOT FOLLY_INCLUDE_DIR)
-    message(FATAL_ERROR "folly/folly-config.h tidak ditemukan")
+list(LENGTH FOLLY_INCLUDE_DIR FOLLY_INCLUDE_COUNT)
+if(FOLLY_INCLUDE_COUNT EQUAL 0)
+    message(FATAL_ERROR "folly prefab include dir tidak ditemukan")
 endif()
+list(GET FOLLY_INCLUDE_DIR 0 FOLLY_INCLUDE_DIR)
 
 target_include_directories(appmodules PRIVATE
     "${CODEGEN_JNI_DIR}"
