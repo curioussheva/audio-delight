@@ -190,6 +190,28 @@ jobs:
           find app/build/generated/source/codegen -iname "PristineAudioSpec.h" -exec head -60 {} \; 2>/dev/null || echo "not found"
 
       # ============================================
+      # 13c. Show autolinking.cpp / autolinking.h content
+      # ============================================
+      - name: Show autolinking.cpp and autolinking.h content
+        if: always()
+        working-directory: android
+        run: |
+          DIR="app/build/generated/autolinking/src/main/jni"
+          if [ -f "$DIR/autolinking.h" ]; then
+            echo "=== autolinking.h ==="
+            cat "$DIR/autolinking.h"
+          else
+            echo "autolinking.h not found at $DIR"
+          fi
+          echo ""
+          if [ -f "$DIR/autolinking.cpp" ]; then
+            echo "=== autolinking.cpp ==="
+            cat "$DIR/autolinking.cpp"
+          else
+            echo "autolinking.cpp not found at $DIR"
+          fi
+
+      # ============================================
       # 14. Upload logs
       # ============================================
       - uses: actions/upload-artifact@v4
