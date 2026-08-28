@@ -139,6 +139,7 @@ endif()
 # =====================================================
 
 find_package(ReactAndroid CONFIG REQUIRED)
+find_package(fbjni REQUIRED CONFIG)
 
 # =====================================================
 # CODEGEN-GENERATED JNI
