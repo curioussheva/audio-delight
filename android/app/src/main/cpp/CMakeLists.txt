@@ -338,12 +338,21 @@ add_library(appmodules SHARED
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../src/main/jni/OnLoad.cpp"
 )
 
-# Dapatkan include directories dari ReactAndroid::reactnative (termasuk folly)
-get_target_property(REACT_NATIVE_INCLUDE_DIRS ReactAndroid::reactnative INTERFACE_INCLUDE_DIRECTORIES)
+# Cari direktori folly secara otomatis (dibutuhkan oleh OnLoad.cpp)
+find_path(FOLLY_INCLUDE_DIR folly/folly-config.h
+    PATHS
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../node_modules/react-native/ReactCommon"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../node_modules/react-native/third-party"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../node_modules/react-native"
+)
+
+if(NOT FOLLY_INCLUDE_DIR)
+    message(FATAL_ERROR "folly/folly-config.h tidak ditemukan")
+endif()
 
 target_include_directories(appmodules PRIVATE
     "${CODEGEN_JNI_DIR}"
-    ${REACT_NATIVE_INCLUDE_DIRS}
+    ${FOLLY_INCLUDE_DIR}
 )
 
 target_link_libraries(appmodules
