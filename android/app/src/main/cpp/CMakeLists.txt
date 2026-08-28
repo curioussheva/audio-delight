@@ -14,14 +14,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)  # Strict standard compliance
 
 # =====================================================
-# REACT NATIVE CMake UTILITIES (defines target_compile_reactnative_options)
+# Minimal compatibility function for autolinking libraries
+# (replaces include(ReactNative-application.cmake))
 # =====================================================
 
-if(NOT DEFINED REACT_ANDROID_DIR)
-    # Fallback manual path (relative from android/app/src/main/cpp/ to root/node_modules)
-    set(REACT_ANDROID_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../node_modules/react-native/ReactAndroid")
-endif()
-include(${REACT_ANDROID_DIR}/cmake-utils/ReactNative-application.cmake)
+function(target_compile_reactnative_options target)
+    # Intentionally empty – enough to satisfy third-party CMake files
+endfunction()
 
 # =====================================================
 # BUILD TYPE DEFAULT
@@ -193,7 +192,6 @@ target_include_directories(pristine-audio
         jni
 )
 
-
 # =====================================================
 # FFMPEG DECODER (link only -- detection already done above)
 # =====================================================
@@ -337,10 +335,8 @@ endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # =====================================================
-# APPMODULES TARGET (ditambahkan oleh workflow, dipertahankan di sini)
+# APPMODULES TARGET (pastikan hanya satu blok ini di file)
 # =====================================================
-# Catatan: Blok berikut biasanya ditambahkan oleh React Native untuk New Architecture.
-# Pastikan sudah ada di repository (bukan hanya di workflow CI) agar build lokal juga sukses.
 
 set(AUTOLINKING_CMAKE "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/generated/autolinking/src/main/jni/Android-autolinking.cmake")
 
@@ -375,4 +371,4 @@ target_link_libraries(appmodules
         fbjni::fbjni
         android
         log
-) 
+)
