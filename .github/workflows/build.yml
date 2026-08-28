@@ -1,8 +1,11 @@
 name: Build PristineAudio APK (Debug)
 
 on:
-  push:
-    branches: ["pristinev2"]
+  # on: push dimatikan sementara selama investigasi libappmodules.so /
+  # PlatformConstants — pakai Autolinking Debug workflow (workflow_dispatch)
+  # untuk iterasi cepat, dan workflow_dispatch di sini kalau perlu full build.
+  # push:
+  #   branches: ["pristinev2"]
   workflow_dispatch:
 
 jobs:
@@ -174,22 +177,8 @@ jobs:
             -PhermesEnabled=true
 
       # ============================================
-      # 14a. Locate autolinking-generated artifacts
+      # 14a. (moved after assembleDebug — see 16a)
       # ============================================
-      - name: Locate autolinking artifacts
-        working-directory: android
-        run: |
-          echo "=== Searching for autolinking output ==="
-          find app/build -iname "*autolink*" 2>/dev/null || echo "none found"
-          echo ""
-          echo "=== Searching for Android-autolinking.cmake anywhere ==="
-          find . -iname "Android-autolinking.cmake" 2>/dev/null || echo "none found"
-          echo ""
-          echo "=== Full tree of build/generated (depth 4) ==="
-          find app/build/generated -maxdepth 4 2>/dev/null || echo "app/build/generated does not exist yet"
-          echo ""
-          echo "=== Searching for appmodules references anywhere in build ==="
-          grep -rl "appmodules" app/build 2>/dev/null || echo "none found"
 
       # ============================================
       # 15. Clean after codegen
@@ -225,7 +214,29 @@ jobs:
             -DJS_RUNTIME=hermes | tee build.log
 
       # ============================================
-      # 16a. Verify JS bundling task actually ran
+      # 16a. Locate autolinking-generated artifacts (post-build)
+      # ============================================
+      - name: Locate autolinking artifacts
+        if: always()
+        working-directory: android
+        run: |
+          echo "=== Searching for autolinking output ==="
+          find app/build -iname "*autolink*" 2>/dev/null || echo "none found"
+          echo ""
+          echo "=== Searching for Android-autolinking.cmake anywhere ==="
+          find . -iname "Android-autolinking.cmake" 2>/dev/null || echo "none found"
+          echo ""
+          echo "=== Full tree of build/generated (depth 5) ==="
+          find app/build/generated -maxdepth 5 2>/dev/null || echo "app/build/generated does not exist"
+          echo ""
+          echo "=== Searching for appmodules references anywhere in build ==="
+          grep -rl "appmodules" app/build 2>/dev/null || echo "none found"
+          echo ""
+          echo "=== generateAutolinkingNewArchitectureFiles task in build.log ==="
+          grep -n "generateAutolinkingNewArchitectureFiles\|Autolinking" build.log || echo "task not found in build.log"
+
+      # ============================================
+      # 16b. Verify JS bundling task actually ran
       # ============================================
       - name: Verify JS bundle task ran
         run: |
