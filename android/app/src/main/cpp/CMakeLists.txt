@@ -140,6 +140,7 @@ endif()
 
 find_package(ReactAndroid CONFIG REQUIRED)
 find_package(fbjni REQUIRED CONFIG)
+find_package(folly REQUIRED CONFIG)
 
 # =====================================================
 # CODEGEN-GENERATED JNI
@@ -370,6 +371,7 @@ target_link_libraries(appmodules
         ReactAndroid::reactnative
         ReactAndroid::jsi
         fbjni::fbjni
+        folly::folly
         android
         log
 )
