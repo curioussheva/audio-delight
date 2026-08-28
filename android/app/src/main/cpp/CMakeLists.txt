@@ -14,15 +14,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)  # Strict standard compliance
 
 # =====================================================
-# Minimal compatibility function for autolinking libraries
-# (replaces include(ReactNative-application.cmake))
-# =====================================================
-
-function(target_compile_reactnative_options target)
-    # Intentionally empty – enough to satisfy third-party CMake files
-endfunction()
-
-# =====================================================
 # BUILD TYPE DEFAULT
 # =====================================================
 
@@ -139,8 +130,6 @@ endif()
 # =====================================================
 
 find_package(ReactAndroid CONFIG REQUIRED)
-find_package(fbjni REQUIRED CONFIG)
-find_package(folly REQUIRED CONFIG)
 
 # =====================================================
 # CODEGEN-GENERATED JNI
@@ -193,6 +182,7 @@ target_include_directories(pristine-audio
         utils
         jni
 )
+
 
 # =====================================================
 # FFMPEG DECODER (link only -- detection already done above)
@@ -306,7 +296,7 @@ target_precompile_headers(pristine-audio
 )
 
 # =====================================================
-# LINK LIBRARIES
+# LINK LIBRARIES (pristine-audio)
 # =====================================================
 
 target_link_libraries(pristine-audio
@@ -337,7 +327,19 @@ endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # =====================================================
-# APPMODULES TARGET (pastikan hanya satu blok ini di file)
+# REACT NATIVE CMake UTILITIES
+# (must be included after pristine-audio target is fully defined,
+#  but before appmodules / autolinking)
+# =====================================================
+
+if(NOT DEFINED REACT_ANDROID_DIR)
+    # Fallback manual path (relative from android/app/src/main/cpp/ to root/node_modules)
+    set(REACT_ANDROID_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../node_modules/react-native/ReactAndroid")
+endif()
+include(${REACT_ANDROID_DIR}/cmake-utils/ReactNative-application.cmake)
+
+# =====================================================
+# APPMODULES TARGET
 # =====================================================
 
 set(AUTOLINKING_CMAKE "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/generated/autolinking/src/main/jni/Android-autolinking.cmake")
@@ -371,7 +373,6 @@ target_link_libraries(appmodules
         ReactAndroid::reactnative
         ReactAndroid::jsi
         fbjni::fbjni
-        folly::folly
         android
         log
 )
