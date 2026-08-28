@@ -11,7 +11,16 @@ project(pristine-audio VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)  # Strict standard compliance
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# =====================================================
+# Minimal compatibility for third-party autolinking libraries
+# (menggantikan ReactNative-application.cmake)
+# =====================================================
+
+function(target_compile_reactnative_options target)
+    # no-op – cukup agar CMake tidak error saat library pihak ketiga memanggil fungsi ini
+endfunction()
 
 # =====================================================
 # BUILD TYPE DEFAULT
@@ -31,7 +40,7 @@ set(CMAKE_CXX_FLAGS_DEBUG   "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g3 -fno-omit-frame-po
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O3 -g -DNDEBUG")
 
 # =====================================================
-# SOURCE COLLECTION (WITH DEPENDS)
+# SOURCE COLLECTION
 # =====================================================
 
 file(GLOB_RECURSE ALL_SRCS CONFIGURE_DEPENDS
@@ -58,25 +67,20 @@ file(GLOB_RECURSE ALL_SRCS CONFIGURE_DEPENDS
 # =====================================================
 
 set(EXCLUDED_SRCS "")
-
-# Exclude test files if any
 file(GLOB_RECURSE TEST_SRCS "tests/*.cpp" "*_test.cpp" "*Test.cpp")
 if(TEST_SRCS)
     list(APPEND EXCLUDED_SRCS ${TEST_SRCS})
 endif()
 
 # =====================================================
-# FFMPEG DETECTION (BEFORE add_library, so we can
-# conditionally exclude decoder/FFmpegDecoder.cpp)
+# FFMPEG DETECTION
 # =====================================================
 
 option(ENABLE_FFMPEG "Enable FFmpeg decoder support" ON)
-
 set(PRISTINE_FFMPEG_AVAILABLE FALSE)
 
 if(ENABLE_FFMPEG)
     find_package(PkgConfig QUIET)
-
     if(PkgConfig_FOUND)
         pkg_check_modules(FFMPEG QUIET
             libavcodec>=58.0
@@ -85,17 +89,14 @@ if(ENABLE_FFMPEG)
             libavutil>=56.0
         )
     endif()
-
     if(FFMPEG_FOUND)
         set(PRISTINE_FFMPEG_AVAILABLE TRUE)
     else()
         message(STATUS "FFmpeg not found via pkg-config, trying manual find...")
-
         find_library(AVCODEC_LIB avcodec PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
         find_library(AVFORMAT_LIB avformat PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
         find_library(SWRESAMPLE_LIB swresample PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
         find_library(AVUTIL_LIB avutil PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
-
         if(AVCODEC_LIB AND AVFORMAT_LIB)
             set(PRISTINE_FFMPEG_AVAILABLE TRUE)
         endif()
@@ -112,11 +113,10 @@ if(EXCLUDED_SRCS)
 endif()
 
 # =====================================================
-# OBOE SETUP (BEFORE adding library)
+# OBOE SETUP
 # =====================================================
 
 set(OBOE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/oboe")
-
 if(EXISTS "${OBOE_DIR}/CMakeLists.txt")
     message(STATUS "Found Oboe subdirectory at ${OBOE_DIR}")
     add_subdirectory(${OBOE_DIR} oboe EXCLUDE_FROM_ALL)
@@ -130,13 +130,13 @@ endif()
 # =====================================================
 
 find_package(ReactAndroid CONFIG REQUIRED)
+find_package(fbjni CONFIG REQUIRED)
 
 # =====================================================
 # CODEGEN-GENERATED JNI
 # =====================================================
 
 set(CODEGEN_JNI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/generated/source/codegen/jni")
-
 if(EXISTS "${CODEGEN_JNI_DIR}/CMakeLists.txt")
     message(STATUS "Found Codegen JNI at ${CODEGEN_JNI_DIR} — include headers only")
     set(CODEGEN_LIB "")
@@ -146,7 +146,6 @@ endif()
 
 add_library(pristine-audio SHARED ${ALL_SRCS})
 
-# Include Codegen JNI headers (setelah target dibuat)
 if(EXISTS "${CODEGEN_JNI_DIR}")
     target_include_directories(pristine-audio PRIVATE "${CODEGEN_JNI_DIR}")
 endif()
@@ -183,9 +182,8 @@ target_include_directories(pristine-audio
         jni
 )
 
-
 # =====================================================
-# FFMPEG DECODER (link only -- detection already done above)
+# FFMPEG DECODER
 # =====================================================
 
 if(PRISTINE_FFMPEG_AVAILABLE)
@@ -215,17 +213,11 @@ target_compile_options(pristine-audio
         -Wno-unused-parameter
         -Wno-unused-variable
         -Wno-missing-field-initializers
-        
-        # Performance
         -ffast-math
         -fstrict-aliasing
-        
-        # Binary size
         -fvisibility=hidden
         -ffunction-sections
         -fdata-sections
-        
-        # Security
         -fstack-protector-strong
         -D_FORTIFY_SOURCE=2
 )
@@ -237,15 +229,12 @@ target_compile_options(pristine-audio
 if(ANDROID_ABI STREQUAL "arm64-v8a")
     target_compile_options(pristine-audio PRIVATE -march=armv8-a+fp+simd)
     target_compile_definitions(pristine-audio PRIVATE ARM_NEON=1 __ARM_NEON=1)
-    
 elseif(ANDROID_ABI STREQUAL "armeabi-v7a")
     target_compile_options(pristine-audio PRIVATE -mfloat-abi=softfp -mfpu=neon-vfpv4 -marm)
     target_compile_definitions(pristine-audio PRIVATE ARM_NEON=1 __ARM_NEON=1)
-    
 elseif(ANDROID_ABI STREQUAL "x86_64")
     target_compile_options(pristine-audio PRIVATE -msse4.2 -mavx2)
     target_compile_definitions(pristine-audio PRIVATE X86_SSE=1 X86_AVX2=1)
-    
 elseif(ANDROID_ABI STREQUAL "x86")
     target_compile_options(pristine-audio PRIVATE -msse4.2)
     target_compile_definitions(pristine-audio PRIVATE X86_SSE=1)
@@ -258,15 +247,14 @@ endif()
 target_link_options(pristine-audio
     PRIVATE
         -Wl,--gc-sections
-        -Wl,--exclude-libs,ALL  # Hide symbols from static libs
-        -Wl,-z,relro,-z,now     # Security hardening
+        -Wl,--exclude-libs,ALL
+        -Wl,-z,relro,-z,now
 )
 
 # =====================================================
 # CONDITIONAL DEFINITIONS
 # =====================================================
 
-# Oboe logging hanya di Debug
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(pristine-audio PRIVATE OBOE_ENABLE_LOGGING=1)
 else()
@@ -281,7 +269,7 @@ target_compile_definitions(pristine-audio
 )
 
 # =====================================================
-# PRECOMPILED HEADERS (Speed up build)
+# PRECOMPILED HEADERS
 # =====================================================
 
 target_precompile_headers(pristine-audio
@@ -321,22 +309,10 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel"
 endif()
 
 # =====================================================
-# EXPORT COMPILE COMMANDS (for IDE support)
+# EXPORT COMPILE COMMANDS
 # =====================================================
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-# =====================================================
-# REACT NATIVE CMake UTILITIES
-# (must be included after pristine-audio target is fully defined,
-#  but before appmodules / autolinking)
-# =====================================================
-
-if(NOT DEFINED REACT_ANDROID_DIR)
-    # Fallback manual path (relative from android/app/src/main/cpp/ to root/node_modules)
-    set(REACT_ANDROID_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../node_modules/react-native/ReactAndroid")
-endif()
-include(${REACT_ANDROID_DIR}/cmake-utils/ReactNative-application.cmake)
 
 # =====================================================
 # APPMODULES TARGET
@@ -362,8 +338,12 @@ add_library(appmodules SHARED
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../src/main/jni/OnLoad.cpp"
 )
 
+# Dapatkan include directories dari ReactAndroid::reactnative (termasuk folly)
+get_target_property(REACT_NATIVE_INCLUDE_DIRS ReactAndroid::reactnative INTERFACE_INCLUDE_DIRECTORIES)
+
 target_include_directories(appmodules PRIVATE
     "${CODEGEN_JNI_DIR}"
+    ${REACT_NATIVE_INCLUDE_DIRS}
 )
 
 target_link_libraries(appmodules
