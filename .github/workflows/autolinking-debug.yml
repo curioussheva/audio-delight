@@ -212,6 +212,30 @@ jobs:
           fi
 
       # ============================================
+      # 13d. Strip reanimated/worklets from autolinking cmake (diagnostic isolation)
+      # ============================================
+      # react-native-reanimated's own CMakeLists.txt requires folly-config.h
+      # in a way that only resolves correctly inside the standard RN template
+      # build, not via a manual add_subdirectory like ours. This is unrelated
+      # to the appmodules/PlatformConstants wiring we're testing. Stripping it
+      # here isolates whether our core wiring (rncore + PristineAudioSpec +
+      # the other simpler autolinked packages) compiles and links cleanly.
+      - name: Strip reanimated/worklets from autolinking cmake
+        working-directory: android
+        run: |
+          FILE="app/build/generated/autolinking/src/main/jni/Android-autolinking.cmake"
+          if [ -f "$FILE" ]; then
+            sed -i '/rnreanimated_autolinked_build/d' "$FILE"
+            sed -i '/rnworklets_autolinked_build/d' "$FILE"
+            sed -i '/react_codegen_rnreanimated/d' "$FILE"
+            sed -i '/react_codegen_rnworklets/d' "$FILE"
+            echo "=== Patched Android-autolinking.cmake ==="
+            cat "$FILE"
+          else
+            echo "Android-autolinking.cmake not found — nothing to strip"
+          fi
+
+      # ============================================
       # 14. Write new OnLoad.cpp for appmodules target
       # ============================================
       - name: Write appmodules OnLoad.cpp
@@ -391,3 +415,4 @@ jobs:
         with:
           name: Autolinking-Debug-Log
           path: android/autolinking.log
+ 
