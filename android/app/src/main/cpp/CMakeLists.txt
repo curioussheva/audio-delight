@@ -315,7 +315,8 @@ target_include_directories(appmodules PRIVATE
   ${_FBJNI_INCLUDES}
 )
 
-# Propagasi ke setiap library autolink
+# Propagasi include saja — JANGAN target_link_libraries ke autolinked targets
+# (mereka sudah pakai plain signature di CMakeLists codegen-nya)
 if(AUTOLINKED_LIBRARIES)
   foreach(lib ${AUTOLINKED_LIBRARIES})
     if(TARGET ${lib})
@@ -326,12 +327,14 @@ if(AUTOLINKED_LIBRARIES)
         "${AUTOLINKING_JNI_DIR}"
         "${CODEGEN_JNI_DIR}"
       )
-      if(COMMAND target_compile_reactnative_options)
-        target_compile_reactnative_options(${lib} PRIVATE)
-      endif()
-      if(TARGET fbjni::fbjni)
-        target_link_libraries(${lib} PRIVATE fbjni::fbjni)
-      endif()
+      # Hanya set compile definitions/options, tanpa link
+      target_compile_definitions(${lib} PRIVATE
+        FOLLY_NO_CONFIG=1
+        FOLLY_MOBILE=1
+        FOLLY_USE_LIBCPP=1
+        RN_SERIALIZABLE_STATE=1
+      )
+      target_compile_options(${lib} PRIVATE -fexceptions -frtti)
     endif()
   endforeach()
 endif()
