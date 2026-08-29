@@ -98,7 +98,7 @@ if(TEST_SRCS)
 endif()
 
 # =====================================================
-# FFmpeg
+# FFmpeg (path sudah diperbaiki)
 # =====================================================
 
 option(ENABLE_FFMPEG "Enable FFmpeg decoder support" ON)
@@ -151,7 +151,7 @@ else()
 endif()
 
 # =====================================================
-# ReactAndroid / fbjni
+# ReactAndroid / fbjni / JSI
 # =====================================================
 
 find_package(ReactAndroid CONFIG REQUIRED)
@@ -167,6 +167,14 @@ if(TARGET ReactAndroid::jsi)
   get_target_property(_JSI_INCLUDES ReactAndroid::jsi INTERFACE_INCLUDE_DIRECTORIES)
   if(NOT _JSI_INCLUDES)
     set(_JSI_INCLUDES "")
+  endif()
+endif()
+
+set(_FBJNI_INCLUDES "")
+if(TARGET fbjni::fbjni)
+  get_target_property(_FBJNI_INCLUDES fbjni::fbjni INTERFACE_INCLUDE_DIRECTORIES)
+  if(NOT _FBJNI_INCLUDES)
+    set(_FBJNI_INCLUDES "")
   endif()
 endif()
 
@@ -195,6 +203,7 @@ target_include_directories(pristine-audio PRIVATE
   fft devices usb realtime session profiling visualizer utils jni
   ${_RN_INCLUDES}
   ${_JSI_INCLUDES}
+  ${_FBJNI_INCLUDES}
 )
 
 if(EXISTS "${CODEGEN_JNI_DIR}")
@@ -264,7 +273,7 @@ target_precompile_headers(pristine-audio PRIVATE
 
 target_link_libraries(pristine-audio
   PUBLIC  ${OBOE_LIB}
-  PRIVATE android log ReactAndroid::jsi ReactAndroid::reactnative
+  PRIVATE android log ReactAndroid::jsi ReactAndroid::reactnative fbjni::fbjni
 )
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
@@ -297,12 +306,13 @@ add_library(appmodules SHARED
   "${CMAKE_CURRENT_SOURCE_DIR}/../../../src/main/jni/OnLoad.cpp"
 )
 
-# Include path penting: codegen + autolinking + RN + JSI
+# Include: codegen + autolinking + RN + JSI + fbjni
 target_include_directories(appmodules PRIVATE
   "${CODEGEN_JNI_DIR}"
   "${AUTOLINKING_JNI_DIR}"
   ${_RN_INCLUDES}
   ${_JSI_INCLUDES}
+  ${_FBJNI_INCLUDES}
 )
 
 # Propagasi ke setiap library autolink
@@ -312,11 +322,15 @@ if(AUTOLINKED_LIBRARIES)
       target_include_directories(${lib} PRIVATE
         ${_RN_INCLUDES}
         ${_JSI_INCLUDES}
+        ${_FBJNI_INCLUDES}
         "${AUTOLINKING_JNI_DIR}"
         "${CODEGEN_JNI_DIR}"
       )
       if(COMMAND target_compile_reactnative_options)
         target_compile_reactnative_options(${lib} PRIVATE)
+      endif()
+      if(TARGET fbjni::fbjni)
+        target_link_libraries(${lib} PRIVATE fbjni::fbjni)
       endif()
     endif()
   endforeach()
@@ -334,4 +348,4 @@ target_link_libraries(appmodules PRIVATE
   fbjni::fbjni
   android
   log
-)
+) 
