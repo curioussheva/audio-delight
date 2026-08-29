@@ -338,15 +338,25 @@ add_library(appmodules SHARED
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../src/main/jni/OnLoad.cpp"
 )
 
-# Cari direktori include folly di prefab cache Gradle
-file(GLOB FOLLY_INCLUDE_DIR
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../.gradle/caches/*/transforms/*/transformed/folly-*/prefab/modules/folly/include"
-)
-list(LENGTH FOLLY_INCLUDE_DIR FOLLY_INCLUDE_COUNT)
-if(FOLLY_INCLUDE_COUNT EQUAL 0)
-    message(FATAL_ERROR "folly prefab include dir tidak ditemukan")
+# Coba cari paket prefab folly_runtime terlebih dahulu
+find_package(folly_runtime CONFIG QUIET)
+
+if(TARGET folly_runtime::folly_runtime)
+    set(FOLLY_LIB folly_runtime::folly_runtime)
+    get_target_property(FOLLY_INCLUDE_DIR folly_runtime::folly_runtime INTERFACE_INCLUDE_DIRECTORIES)
+else()
+    # Fallback: cari header folly/folly-config.h secara rekursif di prefab cache
+    file(GLOB_RECURSE FOLLY_CONFIG_HEADER
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../.gradle/caches/*/transforms/*/transformed/*/prefab/modules/*/include/folly/folly-config.h"
+    )
+    if(NOT FOLLY_CONFIG_HEADER)
+        message(FATAL_ERROR "folly prefab module tidak ditemukan")
+    endif()
+    list(GET FOLLY_CONFIG_HEADER 0 FOLLY_CONFIG_HEADER_FIRST)
+    get_filename_component(FOLLY_INCLUDE_DIR "${FOLLY_CONFIG_HEADER_FIRST}" DIRECTORY) # .../include/folly
+    get_filename_component(FOLLY_INCLUDE_DIR "${FOLLY_INCLUDE_DIR}" DIRECTORY)          # .../include
+    set(FOLLY_LIB "")
 endif()
-list(GET FOLLY_INCLUDE_DIR 0 FOLLY_INCLUDE_DIR)
 
 target_include_directories(appmodules PRIVATE
     "${CODEGEN_JNI_DIR}"
@@ -360,6 +370,7 @@ target_link_libraries(appmodules
         ReactAndroid::reactnative
         ReactAndroid::jsi
         fbjni::fbjni
+        ${FOLLY_LIB}
         android
         log
 )
