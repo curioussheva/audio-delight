@@ -1,5 +1,5 @@
 # =====================================================
-# PristineAudio Native Engine — RN 0.83 (official flags)
+# PristineAudio Native Engine — RN 0.83
 # =====================================================
 
 cmake_minimum_required(VERSION 3.22.1)
@@ -10,24 +10,22 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # =====================================================
-# React Native paths + official flags (seperti worklets)
+# React Native path + official flags
 # =====================================================
 
-# REACT_NATIVE_DIR biasanya di-inject Gradle; fallback jika belum ada
 if(NOT DEFINED REACT_NATIVE_DIR)
-  # dari android/app/src/main/cpp → naik ke root project → node_modules/react-native
   get_filename_component(REACT_NATIVE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../node_modules/react-native"
     ABSOLUTE)
 endif()
 
-# Folly flags resmi RN
+# Folly flags (resmi)
 if(EXISTS "${REACT_NATIVE_DIR}/ReactAndroid/cmake-utils/folly-flags.cmake")
   include("${REACT_NATIVE_DIR}/ReactAndroid/cmake-utils/folly-flags.cmake")
   add_compile_options(${folly_FLAGS})
   message(STATUS "Using official folly-flags.cmake")
 else()
-  message(WARNING "folly-flags.cmake not found, using fallback defines")
+  message(WARNING "folly-flags.cmake not found — using fallback")
   add_compile_definitions(
     FOLLY_NO_CONFIG=1
     FOLLY_MOBILE=1
@@ -37,13 +35,11 @@ else()
   )
 endif()
 
-# target_compile_reactnative_options resmi (RN >= 0.80)
-# Jangan override dengan stub kosong — biarkan library autolink memanggil yang resmi
+# target_compile_reactnative_options (resmi, RN >= 0.80)
 if(EXISTS "${REACT_NATIVE_DIR}/ReactCommon/cmake-utils/react-native-flags.cmake")
   include("${REACT_NATIVE_DIR}/ReactCommon/cmake-utils/react-native-flags.cmake")
   message(STATUS "Using official react-native-flags.cmake")
 else()
-  # Fallback minimal jika file tidak ada
   function(target_compile_reactnative_options target)
     set(visibility PRIVATE)
     if(ARGC GREATER 1)
@@ -55,11 +51,14 @@ else()
     if(TARGET ReactAndroid::reactnative)
       target_link_libraries(${target} ${visibility} ReactAndroid::reactnative)
     endif()
+    if(TARGET ReactAndroid::jsi)
+      target_link_libraries(${target} ${visibility} ReactAndroid::jsi)
+    endif()
   endfunction()
 endif()
 
 # =====================================================
-# BUILD TYPE
+# Build type
 # =====================================================
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -70,7 +69,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG -fomit-fram
 set(CMAKE_CXX_FLAGS_DEBUG   "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g3 -fno-omit-frame-pointer")
 
 # =====================================================
-# SOURCES
+# Sources
 # =====================================================
 
 file(GLOB_RECURSE ALL_SRCS CONFIGURE_DEPENDS
@@ -99,7 +98,7 @@ if(TEST_SRCS)
 endif()
 
 # =====================================================
-# FFMPEG (path sudah diperbaiki)
+# FFmpeg
 # =====================================================
 
 option(ENABLE_FFMPEG "Enable FFmpeg decoder support" ON)
@@ -139,7 +138,7 @@ if(EXCLUDED_SRCS)
 endif()
 
 # =====================================================
-# OBOE
+# Oboe
 # =====================================================
 
 set(OBOE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/oboe")
@@ -152,7 +151,7 @@ else()
 endif()
 
 # =====================================================
-# REACT NATIVE / JSI
+# ReactAndroid / fbjni
 # =====================================================
 
 find_package(ReactAndroid CONFIG REQUIRED)
@@ -163,22 +162,30 @@ if(NOT _RN_INCLUDES)
   set(_RN_INCLUDES "")
 endif()
 
+set(_JSI_INCLUDES "")
+if(TARGET ReactAndroid::jsi)
+  get_target_property(_JSI_INCLUDES ReactAndroid::jsi INTERFACE_INCLUDE_DIRECTORIES)
+  if(NOT _JSI_INCLUDES)
+    set(_JSI_INCLUDES "")
+  endif()
+endif()
+
 # =====================================================
-# CODEGEN
+# Generated paths
 # =====================================================
 
-set(CODEGEN_JNI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/generated/source/codegen/jni")
-if(EXISTS "${CODEGEN_JNI_DIR}/CMakeLists.txt")
-  message(STATUS "Found Codegen JNI at ${CODEGEN_JNI_DIR}")
-else()
-  message(WARNING "Codegen JNI not found at ${CODEGEN_JNI_DIR}")
-endif()
+set(CODEGEN_JNI_DIR
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/generated/source/codegen/jni")
+set(AUTOLINKING_JNI_DIR
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/generated/autolinking/src/main/jni")
+set(AUTOLINKING_CMAKE
+  "${AUTOLINKING_JNI_DIR}/Android-autolinking.cmake")
+
+# =====================================================
+# Target: pristine-audio
+# =====================================================
 
 add_library(pristine-audio SHARED ${ALL_SRCS})
-
-if(EXISTS "${CODEGEN_JNI_DIR}")
-  target_include_directories(pristine-audio PRIVATE "${CODEGEN_JNI_DIR}")
-endif()
 
 target_include_directories(pristine-audio PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
@@ -187,11 +194,12 @@ target_include_directories(pristine-audio PRIVATE
   dsp/filters dsp/convolution dsp/immersive dsp/headphone
   fft devices usb realtime session profiling visualizer utils jni
   ${_RN_INCLUDES}
+  ${_JSI_INCLUDES}
 )
 
-# =====================================================
-# FFMPEG link
-# =====================================================
+if(EXISTS "${CODEGEN_JNI_DIR}")
+  target_include_directories(pristine-audio PRIVATE "${CODEGEN_JNI_DIR}")
+endif()
 
 if(PRISTINE_FFMPEG_AVAILABLE)
   if(FFMPEG_FOUND)
@@ -205,10 +213,6 @@ if(PRISTINE_FFMPEG_AVAILABLE)
     target_compile_definitions(pristine-audio PRIVATE ENABLE_FFMPEG=1)
   endif()
 endif()
-
-# =====================================================
-# COMPILER OPTIONS
-# =====================================================
 
 target_compile_options(pristine-audio PRIVATE
   -Wall -Wextra
@@ -238,10 +242,7 @@ target_link_options(pristine-audio PRIVATE
   -Wl,--gc-sections -Wl,--exclude-libs,ALL -Wl,-z,relro,-z,now
 )
 
-# =====================================================
-# DEFINITIONS (tanpa generator expression)
-# =====================================================
-
+# Tanpa generator expression
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   target_compile_definitions(pristine-audio PRIVATE
     OBOE_ENABLE_LOGGING=1 DEBUG_BUILD=1)
@@ -252,23 +253,14 @@ endif()
 
 target_compile_definitions(pristine-audio PRIVATE PRISTINE_AUDIO_ENGINE=1)
 
-# Official RN flags untuk target ini juga
 if(COMMAND target_compile_reactnative_options)
   target_compile_reactnative_options(pristine-audio PRIVATE)
 endif()
-
-# =====================================================
-# PCH
-# =====================================================
 
 target_precompile_headers(pristine-audio PRIVATE
   <cstdint> <vector> <memory> <atomic>
   core/AudioTypes.h core/AudioConstants.h utils/AudioMath.h
 )
-
-# =====================================================
-# LINK pristine-audio
-# =====================================================
 
 target_link_libraries(pristine-audio
   PUBLIC  ${OBOE_LIB}
@@ -284,17 +276,14 @@ endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # =====================================================
-# APPMODULES
+# Target: appmodules
 # =====================================================
-
-set(AUTOLINKING_CMAKE
-  "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/generated/autolinking/src/main/jni/Android-autolinking.cmake")
 
 if(EXISTS "${AUTOLINKING_CMAKE}")
   message(STATUS "Found autolinking cmake at ${AUTOLINKING_CMAKE}")
   include("${AUTOLINKING_CMAKE}")
 else()
-  message(WARNING "Autolinking cmake not found")
+  message(WARNING "Autolinking cmake not found at ${AUTOLINKING_CMAKE}")
   set(AUTOLINKED_LIBRARIES "")
 endif()
 
@@ -308,22 +297,26 @@ add_library(appmodules SHARED
   "${CMAKE_CURRENT_SOURCE_DIR}/../../../src/main/jni/OnLoad.cpp"
 )
 
+# Include path penting: codegen + autolinking + RN + JSI
 target_include_directories(appmodules PRIVATE
   "${CODEGEN_JNI_DIR}"
+  "${AUTOLINKING_JNI_DIR}"
   ${_RN_INCLUDES}
+  ${_JSI_INCLUDES}
 )
 
-# Propagasi include + flags ke setiap autolinked target
+# Propagasi ke setiap library autolink
 if(AUTOLINKED_LIBRARIES)
   foreach(lib ${AUTOLINKED_LIBRARIES})
     if(TARGET ${lib})
-      target_include_directories(${lib} PRIVATE ${_RN_INCLUDES})
+      target_include_directories(${lib} PRIVATE
+        ${_RN_INCLUDES}
+        ${_JSI_INCLUDES}
+        "${AUTOLINKING_JNI_DIR}"
+        "${CODEGEN_JNI_DIR}"
+      )
       if(COMMAND target_compile_reactnative_options)
         target_compile_reactnative_options(${lib} PRIVATE)
-      else()
-        target_compile_definitions(${lib} PRIVATE
-          FOLLY_NO_CONFIG=1 FOLLY_MOBILE=1 FOLLY_USE_LIBCPP=1 RN_SERIALIZABLE_STATE=1)
-        target_link_libraries(${lib} PRIVATE ReactAndroid::reactnative ReactAndroid::jsi)
       endif()
     endif()
   endforeach()
@@ -341,4 +334,4 @@ target_link_libraries(appmodules PRIVATE
   fbjni::fbjni
   android
   log
-) 
+)
