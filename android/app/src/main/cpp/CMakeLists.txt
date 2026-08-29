@@ -229,6 +229,9 @@ target_compile_options(pristine-audio PRIVATE
   -Wno-unused-parameter -Wno-unused-variable
   -Wno-unused-private-field
   -Wno-missing-field-initializers
+  -Wno-mismatched-tags
+  -Wno-reorder-ctor
+  -Wno-defaulted-function-deleted
   -ffast-math -fstrict-aliasing -fvisibility=hidden
   -ffunction-sections -fdata-sections
   -fstack-protector-strong -D_FORTIFY_SOURCE=2
