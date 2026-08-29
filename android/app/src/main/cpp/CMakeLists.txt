@@ -115,13 +115,13 @@ if(ENABLE_FFMPEG)
   else()
     message(STATUS "FFmpeg not found via pkg-config, trying manual find...")
     find_library(AVCODEC_LIB avcodec
-      PATHS \( {CMAKE_SOURCE_DIR}/../libs/ffmpeg/ \){ANDROID_ABI} NO_DEFAULT_PATH)
+      PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
     find_library(AVFORMAT_LIB avformat
-      PATHS \( {CMAKE_SOURCE_DIR}/../libs/ffmpeg/ \){ANDROID_ABI} NO_DEFAULT_PATH)
+      PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
     find_library(SWRESAMPLE_LIB swresample
-      PATHS \( {CMAKE_SOURCE_DIR}/../libs/ffmpeg/ \){ANDROID_ABI} NO_DEFAULT_PATH)
+      PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
     find_library(AVUTIL_LIB avutil
-      PATHS \( {CMAKE_SOURCE_DIR}/../libs/ffmpeg/ \){ANDROID_ABI} NO_DEFAULT_PATH)
+      PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
     if(AVCODEC_LIB AND AVFORMAT_LIB)
       set(PRISTINE_FFMPEG_AVAILABLE TRUE)
     endif()
@@ -226,7 +226,9 @@ endif()
 target_compile_options(pristine-audio PRIVATE
   -Wall -Wextra
   -Werror=return-type -Werror=uninitialized
-  -Wno-unused-parameter -Wno-unused-variable -Wno-missing-field-initializers
+  -Wno-unused-parameter -Wno-unused-variable
+  -Wno-unused-private-field
+  -Wno-missing-field-initializers
   -ffast-math -fstrict-aliasing -fvisibility=hidden
   -ffunction-sections -fdata-sections
   -fstack-protector-strong -D_FORTIFY_SOURCE=2
@@ -306,7 +308,6 @@ add_library(appmodules SHARED
   "${CMAKE_CURRENT_SOURCE_DIR}/../../../src/main/jni/OnLoad.cpp"
 )
 
-# Include: codegen + autolinking + RN + JSI + fbjni
 target_include_directories(appmodules PRIVATE
   "${CODEGEN_JNI_DIR}"
   "${AUTOLINKING_JNI_DIR}"
@@ -315,8 +316,6 @@ target_include_directories(appmodules PRIVATE
   ${_FBJNI_INCLUDES}
 )
 
-# Propagasi include saja — JANGAN target_link_libraries ke autolinked targets
-# (mereka sudah pakai plain signature di CMakeLists codegen-nya)
 if(AUTOLINKED_LIBRARIES)
   foreach(lib ${AUTOLINKED_LIBRARIES})
     if(TARGET ${lib})
@@ -327,7 +326,6 @@ if(AUTOLINKED_LIBRARIES)
         "${AUTOLINKING_JNI_DIR}"
         "${CODEGEN_JNI_DIR}"
       )
-      # Hanya set compile definitions/options, tanpa link
       target_compile_definitions(${lib} PRIVATE
         FOLLY_NO_CONFIG=1
         FOLLY_MOBILE=1
