@@ -1,5 +1,5 @@
 # =====================================================
-# PristineAudio Native Engine — Enhanced
+# PristineAudio Native Engine — Enhanced (RN 0.83 fix)
 # =====================================================
 
 cmake_minimum_required(VERSION 3.22.1)
@@ -14,12 +14,38 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # =====================================================
-# Minimal compatibility for third-party autolinking libraries
-# (menggantikan ReactNative-application.cmake)
+# React Native compatibility helper
+# Dipanggil oleh library autolink (reanimated, screens, dll)
 # =====================================================
 
 function(target_compile_reactnative_options target)
-    # no-op – cukup agar CMake tidak error saat library pihak ketiga memanggil fungsi ini
+    # Visibility opsional (PRIVATE/PUBLIC), default PRIVATE
+    set(visibility PRIVATE)
+    if(ARGC GREATER 1)
+        set(visibility ${ARGV1})
+    endif()
+
+    target_compile_options(${target} ${visibility}
+        -fexceptions
+        -frtti
+        -std=c++20
+    )
+
+    target_compile_definitions(${target} ${visibility}
+        FOLLY_NO_CONFIG=1
+        FOLLY_MOBILE=1
+        FOLLY_USE_LIBCPP=1
+        FOLLY_HAVE_CLOCK_GETTIME=1
+        FOLLY_HAVE_PTHREAD=1
+        RN_SERIALIZABLE_STATE=1
+    )
+
+    if(TARGET ReactAndroid::reactnative)
+        target_link_libraries(${target} ${visibility} ReactAndroid::reactnative)
+    endif()
+    if(TARGET ReactAndroid::jsi)
+        target_link_libraries(${target} ${visibility} ReactAndroid::jsi)
+    endif()
 endfunction()
 
 # =====================================================
@@ -122,7 +148,7 @@ if(EXISTS "${OBOE_DIR}/CMakeLists.txt")
     add_subdirectory(${OBOE_DIR} oboe EXCLUDE_FROM_ALL)
     set(OBOE_LIB oboe)
 else()
-    message(FATAL_ERROR "Oboe not found at ${OBOE_DIR}/CMakeLists.txt. Please run: curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz | tar -xz --strip-components=1 -C ${OBOE_DIR}")
+    message(FATAL_ERROR "Oboe not found at ${OBOE_DIR}/CMakeLists.txt")
 endif()
 
 # =====================================================
@@ -132,13 +158,19 @@ endif()
 find_package(ReactAndroid CONFIG REQUIRED)
 find_package(fbjni CONFIG REQUIRED)
 
+# Ambil include dirs dari ReactAndroid agar tersedia untuk semua target
+get_target_property(_RN_INCLUDES ReactAndroid::reactnative INTERFACE_INCLUDE_DIRECTORIES)
+if(NOT _RN_INCLUDES)
+    set(_RN_INCLUDES "")
+endif()
+
 # =====================================================
 # CODEGEN-GENERATED JNI
 # =====================================================
 
 set(CODEGEN_JNI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/generated/source/codegen/jni")
 if(EXISTS "${CODEGEN_JNI_DIR}/CMakeLists.txt")
-    message(STATUS "Found Codegen JNI at ${CODEGEN_JNI_DIR} — include headers only")
+    message(STATUS "Found Codegen JNI at ${CODEGEN_JNI_DIR}")
     set(CODEGEN_LIB "")
 else()
     message(WARNING "Codegen JNI not found at ${CODEGEN_JNI_DIR}")
@@ -180,6 +212,7 @@ target_include_directories(pristine-audio
         visualizer
         utils
         jni
+        ${_RN_INCLUDES}
 )
 
 # =====================================================
@@ -220,6 +253,8 @@ target_compile_options(pristine-audio
         -fdata-sections
         -fstack-protector-strong
         -D_FORTIFY_SOURCE=2
+        -fexceptions
+        -frtti
 )
 
 # =====================================================
@@ -252,20 +287,29 @@ target_link_options(pristine-audio
 )
 
 # =====================================================
-# CONDITIONAL DEFINITIONS
+# CONDITIONAL DEFINITIONS (tanpa generator expression)
 # =====================================================
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_definitions(pristine-audio PRIVATE OBOE_ENABLE_LOGGING=1)
+    target_compile_definitions(pristine-audio PRIVATE
+        OBOE_ENABLE_LOGGING=1
+        DEBUG_BUILD=1
+    )
 else()
-    target_compile_definitions(pristine-audio PRIVATE OBOE_ENABLE_LOGGING=0)
+    target_compile_definitions(pristine-audio PRIVATE
+        OBOE_ENABLE_LOGGING=0
+        RELEASE_BUILD=1
+    )
 endif()
 
 target_compile_definitions(pristine-audio
     PRIVATE
         PRISTINE_AUDIO_ENGINE=1
-        \( < \)<CONFIG:Debug>:DEBUG_BUILD=1>
-        \( < \)<CONFIG:Release>:RELEASE_BUILD=1>
+        FOLLY_NO_CONFIG=1
+        FOLLY_MOBILE=1
+        FOLLY_USE_LIBCPP=1
+        FOLLY_HAVE_CLOCK_GETTIME=1
+        FOLLY_HAVE_PTHREAD=1
 )
 
 # =====================================================
@@ -294,6 +338,7 @@ target_link_libraries(pristine-audio
         android
         log
         ReactAndroid::jsi
+        ReactAndroid::reactnative
         ${CODEGEN_LIB}
 )
 
@@ -338,17 +383,43 @@ add_library(appmodules SHARED
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../src/main/jni/OnLoad.cpp"
 )
 
-# Di RN 0.76+ Folly sudah tersedia melalui ReactAndroid::reactnative
-# Tidak perlu find_package(folly_runtime) lagi
 target_include_directories(appmodules PRIVATE
     "${CODEGEN_JNI_DIR}"
+    ${_RN_INCLUDES}
+)
+
+# Pastikan autolinked libraries juga mendapat include + flags React Native
+if(AUTOLINKED_LIBRARIES)
+    foreach(lib ${AUTOLINKED_LIBRARIES})
+        if(TARGET ${lib})
+            target_include_directories(${lib} PRIVATE ${_RN_INCLUDES})
+            target_compile_definitions(${lib} PRIVATE
+                FOLLY_NO_CONFIG=1
+                FOLLY_MOBILE=1
+                FOLLY_USE_LIBCPP=1
+                FOLLY_HAVE_CLOCK_GETTIME=1
+                FOLLY_HAVE_PTHREAD=1
+                RN_SERIALIZABLE_STATE=1
+            )
+            target_link_libraries(${lib} PRIVATE ReactAndroid::reactnative ReactAndroid::jsi)
+        endif()
+    endforeach()
+endif()
+
+target_compile_definitions(appmodules PRIVATE
+    FOLLY_NO_CONFIG=1
+    FOLLY_MOBILE=1
+    FOLLY_USE_LIBCPP=1
+    FOLLY_HAVE_CLOCK_GETTIME=1
+    FOLLY_HAVE_PTHREAD=1
+    RN_SERIALIZABLE_STATE=1
 )
 
 target_link_libraries(appmodules
     PRIVATE
         ${AUTOLINKED_LIBRARIES}
         ${PRISTINE_AUDIO_SPEC_LIB}
-        ReactAndroid::reactnative   # umbrella target (sudah termasuk Folly, glog, dll)
+        ReactAndroid::reactnative
         ReactAndroid::jsi
         fbjni::fbjni
         android
