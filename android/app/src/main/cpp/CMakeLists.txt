@@ -93,10 +93,10 @@ if(ENABLE_FFMPEG)
         set(PRISTINE_FFMPEG_AVAILABLE TRUE)
     else()
         message(STATUS "FFmpeg not found via pkg-config, trying manual find...")
-        find_library(AVCODEC_LIB avcodec PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
-        find_library(AVFORMAT_LIB avformat PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
-        find_library(SWRESAMPLE_LIB swresample PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
-        find_library(AVUTIL_LIB avutil PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
+        find_library(AVCODEC_LIB avcodec PATHS \( {CMAKE_SOURCE_DIR}/../libs/ffmpeg/ \){ANDROID_ABI} NO_DEFAULT_PATH)
+        find_library(AVFORMAT_LIB avformat PATHS \( {CMAKE_SOURCE_DIR}/../libs/ffmpeg/ \){ANDROID_ABI} NO_DEFAULT_PATH)
+        find_library(SWRESAMPLE_LIB swresample PATHS \( {CMAKE_SOURCE_DIR}/../libs/ffmpeg/ \){ANDROID_ABI} NO_DEFAULT_PATH)
+        find_library(AVUTIL_LIB avutil PATHS \( {CMAKE_SOURCE_DIR}/../libs/ffmpeg/ \){ANDROID_ABI} NO_DEFAULT_PATH)
         if(AVCODEC_LIB AND AVFORMAT_LIB)
             set(PRISTINE_FFMPEG_AVAILABLE TRUE)
         endif()
@@ -264,8 +264,8 @@ endif()
 target_compile_definitions(pristine-audio
     PRIVATE
         PRISTINE_AUDIO_ENGINE=1
-        $<$<CONFIG:Debug>:DEBUG_BUILD=1>
-        $<$<CONFIG:Release>:RELEASE_BUILD=1>
+        \( < \)<CONFIG:Debug>:DEBUG_BUILD=1>
+        \( < \)<CONFIG:Release>:RELEASE_BUILD=1>
 )
 
 # =====================================================
@@ -338,39 +338,19 @@ add_library(appmodules SHARED
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../src/main/jni/OnLoad.cpp"
 )
 
-# Coba cari paket prefab folly_runtime terlebih dahulu
-find_package(folly_runtime CONFIG QUIET)
-
-if(TARGET folly_runtime::folly_runtime)
-    set(FOLLY_LIB folly_runtime::folly_runtime)
-    get_target_property(FOLLY_INCLUDE_DIR folly_runtime::folly_runtime INTERFACE_INCLUDE_DIRECTORIES)
-else()
-    # Fallback: cari header folly/folly-config.h secara rekursif di prefab cache
-    file(GLOB_RECURSE FOLLY_CONFIG_HEADER
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../.gradle/caches/*/transforms/*/transformed/*/prefab/modules/*/include/folly/folly-config.h"
-    )
-    if(NOT FOLLY_CONFIG_HEADER)
-        message(FATAL_ERROR "folly prefab module tidak ditemukan")
-    endif()
-    list(GET FOLLY_CONFIG_HEADER 0 FOLLY_CONFIG_HEADER_FIRST)
-    get_filename_component(FOLLY_INCLUDE_DIR "${FOLLY_CONFIG_HEADER_FIRST}" DIRECTORY) # .../include/folly
-    get_filename_component(FOLLY_INCLUDE_DIR "${FOLLY_INCLUDE_DIR}" DIRECTORY)          # .../include
-    set(FOLLY_LIB "")
-endif()
-
+# Di RN 0.76+ Folly sudah tersedia melalui ReactAndroid::reactnative
+# Tidak perlu find_package(folly_runtime) lagi
 target_include_directories(appmodules PRIVATE
     "${CODEGEN_JNI_DIR}"
-    ${FOLLY_INCLUDE_DIR}
 )
 
 target_link_libraries(appmodules
     PRIVATE
         ${AUTOLINKED_LIBRARIES}
         ${PRISTINE_AUDIO_SPEC_LIB}
-        ReactAndroid::reactnative
+        ReactAndroid::reactnative   # umbrella target (sudah termasuk Folly, glog, dll)
         ReactAndroid::jsi
         fbjni::fbjni
-        ${FOLLY_LIB}
         android
         log
-)
+) 
