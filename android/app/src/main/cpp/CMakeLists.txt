@@ -204,6 +204,7 @@ target_include_directories(pristine-audio PRIVATE
   ${_RN_INCLUDES}
   ${_JSI_INCLUDES}
   ${_FBJNI_INCLUDES}
+  ${AUTOLINKING_JNI_DIR}
 )
 
 if(EXISTS "${CODEGEN_JNI_DIR}")
@@ -232,6 +233,7 @@ target_compile_options(pristine-audio PRIVATE
   -Wno-mismatched-tags
   -Wno-reorder-ctor
   -Wno-defaulted-function-deleted
+  -Wno-macro-redefined
   -ffast-math -fstrict-aliasing -fvisibility=hidden
   -ffunction-sections -fdata-sections
   -fstack-protector-strong -D_FORTIFY_SOURCE=2
@@ -256,7 +258,6 @@ target_link_options(pristine-audio PRIVATE
   -Wl,--gc-sections -Wl,--exclude-libs,ALL -Wl,-z,relro,-z,now
 )
 
-# Tanpa generator expression
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   target_compile_definitions(pristine-audio PRIVATE
     OBOE_ENABLE_LOGGING=1 DEBUG_BUILD=1)
@@ -352,4 +353,4 @@ target_link_libraries(appmodules PRIVATE
   fbjni::fbjni
   android
   log
-) 
+)
