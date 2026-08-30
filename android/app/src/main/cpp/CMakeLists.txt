@@ -86,11 +86,19 @@ file(GLOB_RECURSE ALL_SRCS CONFIGURE_DEPENDS
   "profiling/*.cpp"
   "visualizer/*.cpp"
   "utils/*.cpp"
-  "jni/*.cpp"
 )
 
-# Jangan compile Onload.cpp dari jni/ untuk pristine-audio
-list(REMOVE_ITEM ALL_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/jni/Onload.cpp")
+# Tambahkan file-file JNI yang diperlukan oleh pristine-audio secara eksplisit
+# (tanpa OnLoad.cpp)
+list(APPEND ALL_SRCS
+  jni/JSIInstaller.cpp
+  jni/NativeAudioFeed.cpp
+  jni/NativeDSPModule.cpp
+  jni/NativeDeviceModule.cpp
+  jni/NativePlaybackModule.cpp
+  jni/NativePristineAudio.cpp
+  jni/NativeVisualizerModule.cpp
+)
 
 set(EXCLUDED_SRCS "")
 file(GLOB_RECURSE TEST_SRCS "tests/*.cpp" "*_test.cpp" "*Test.cpp")
@@ -311,7 +319,7 @@ endif()
 
 add_library(appmodules SHARED
   "${CMAKE_CURRENT_SOURCE_DIR}/jni/OnLoad.cpp"
-) 
+)
 
 target_include_directories(appmodules PRIVATE
   "${CODEGEN_JNI_DIR}"
