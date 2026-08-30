@@ -311,10 +311,8 @@ else()
   set(AUTOLINKED_LIBRARIES "")
 endif()
 
-set(PRISTINE_AUDIO_SPEC_LIB "")
 if(EXISTS "${CODEGEN_JNI_DIR}/CMakeLists.txt")
   add_subdirectory("${CODEGEN_JNI_DIR}" pristineaudiospec_codegen_build EXCLUDE_FROM_ALL)
-  set(PRISTINE_AUDIO_SPEC_LIB react_codegen_PristineAudioSpec)
 
   if(TARGET react_codegen_PristineAudioSpec)
     target_include_directories(react_codegen_PristineAudioSpec PRIVATE
@@ -323,7 +321,7 @@ if(EXISTS "${CODEGEN_JNI_DIR}/CMakeLists.txt")
       ${_FBJNI_INCLUDES}
     )
   endif()
-endif() 
+endif()
 
 add_library(appmodules SHARED
   "${CMAKE_CURRENT_SOURCE_DIR}/jni/OnLoad.cpp"
@@ -337,8 +335,18 @@ target_include_directories(appmodules PRIVATE
   ${_FBJNI_INCLUDES}
 )
 
+if(EXISTS "${CODEGEN_JNI_DIR}")
+  target_sources(appmodules PRIVATE
+    "${CODEGEN_JNI_DIR}/PristineAudioSpec-generated.cpp"
+    "${CODEGEN_JNI_DIR}/react/renderer/components/PristineAudioSpec/ComponentDescriptors.cpp"
+    "${CODEGEN_JNI_DIR}/react/renderer/components/PristineAudioSpec/EventEmitters.cpp"
+    "${CODEGEN_JNI_DIR}/react/renderer/components/PristineAudioSpec/Props.cpp"
+    "${CODEGEN_JNI_DIR}/react/renderer/components/PristineAudioSpec/ShadowNodes.cpp"
+    "${CODEGEN_JNI_DIR}/react/renderer/components/PristineAudioSpec/States.cpp"
+  )
+endif()
+
 if(AUTOLINKED_LIBRARIES)
-  # Ambil path direktori libs dari target prefab
   get_target_property(_JSI_LIB_PATH ReactAndroid::jsi LOCATION)
   get_filename_component(_JSI_LIB_DIR "${_JSI_LIB_PATH}" DIRECTORY)
 
@@ -379,7 +387,6 @@ if(COMMAND target_compile_reactnative_options)
 endif()
 
 target_link_libraries(appmodules PRIVATE
-  ${PRISTINE_AUDIO_SPEC_LIB}
   ReactAndroid::reactnative
   ReactAndroid::jsi
   fbjni::fbjni
