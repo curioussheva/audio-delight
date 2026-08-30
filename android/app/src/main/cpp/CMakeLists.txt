@@ -335,6 +335,13 @@ target_include_directories(appmodules PRIVATE
   ${_FBJNI_INCLUDES}
 )
 
+# Tambahkan autolinking.cpp dan codegen files ke appmodules
+if(EXISTS "${AUTOLINKING_JNI_DIR}")
+  target_sources(appmodules PRIVATE
+    "${AUTOLINKING_JNI_DIR}/autolinking.cpp"
+  )
+endif()
+
 if(EXISTS "${CODEGEN_JNI_DIR}")
   target_sources(appmodules PRIVATE
     "${CODEGEN_JNI_DIR}/PristineAudioSpec-generated.cpp"
