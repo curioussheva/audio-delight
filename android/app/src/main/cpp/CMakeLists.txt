@@ -364,23 +364,25 @@ if(EXISTS "${CODEGEN_JNI_DIR}")
 endif()
 
 if(AUTOLINKED_LIBRARIES)
-  # 1. Beri include dirs dan link libraries yang benar ke target autolinked
-  foreach(lib ${AUTOLINKED_LIBRARIES})
-    if(TARGET ${lib})
-      target_include_directories(${lib} PRIVATE
-        ${_RN_INCLUDES}
-        ${_JSI_INCLUDES}
-        ${_FBJNI_INCLUDES}
-        "${AUTOLINKING_JNI_DIR}"
-        "${CODEGEN_JNI_DIR}"
-      )
+# 1. Beri include dirs dan link libraries langsung ke target autolinked
+foreach(lib ${AUTOLINKED_LIBRARIES})
+  if(TARGET ${lib})
+    target_include_directories(${lib} PRIVATE
+      ${_RN_INCLUDES}
+      ${_JSI_INCLUDES}
+      ${_FBJNI_INCLUDES}
+      "${AUTOLINKING_JNI_DIR}"
+      "${CODEGEN_JNI_DIR}"
+    )
 
-      # Ganti link libraries dengan target prefab yang benar
-      set_target_properties(${lib} PROPERTIES
-        INTERFACE_LINK_LIBRARIES "ReactAndroid::reactnative;ReactAndroid::jsi;fbjni::fbjni"
-      )
-    endif()
-  endforeach()
+    # Link langsung ke target prefab
+    target_link_libraries(${lib} PRIVATE
+      ReactAndroid::reactnative
+      ReactAndroid::jsi
+      fbjni::fbjni
+    )
+  endif()
+endforeach() 
 
   # 2. Tambahkan source files dan include directories dari library autolinked ke appmodules
   foreach(lib ${AUTOLINKED_LIBRARIES})
