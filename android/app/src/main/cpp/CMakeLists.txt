@@ -364,7 +364,7 @@ if(EXISTS "${CODEGEN_JNI_DIR}")
 endif()
 
 if(AUTOLINKED_LIBRARIES)
-  # 1. Beri include dirs ke target autolinked
+  # 1. Beri include dirs dan link libraries yang benar ke target autolinked
   foreach(lib ${AUTOLINKED_LIBRARIES})
     if(TARGET ${lib})
       target_include_directories(${lib} PRIVATE
@@ -373,6 +373,11 @@ if(AUTOLINKED_LIBRARIES)
         ${_FBJNI_INCLUDES}
         "${AUTOLINKING_JNI_DIR}"
         "${CODEGEN_JNI_DIR}"
+      )
+
+      # Ganti link libraries dengan target prefab yang benar
+      set_target_properties(${lib} PROPERTIES
+        INTERFACE_LINK_LIBRARIES "ReactAndroid::reactnative;ReactAndroid::jsi;fbjni::fbjni"
       )
     endif()
   endforeach()
@@ -401,7 +406,7 @@ if(AUTOLINKED_LIBRARIES)
       endif()
     endif()
   endforeach()
-endif()
+endif() 
 
 target_link_libraries(appmodules PRIVATE
   ReactAndroid::reactnative
