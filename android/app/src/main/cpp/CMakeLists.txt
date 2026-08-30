@@ -19,7 +19,6 @@ if(NOT DEFINED REACT_NATIVE_DIR)
     ABSOLUTE)
 endif()
 
-# Folly flags (resmi)
 if(EXISTS "${REACT_NATIVE_DIR}/ReactAndroid/cmake-utils/folly-flags.cmake")
   include("${REACT_NATIVE_DIR}/ReactAndroid/cmake-utils/folly-flags.cmake")
   add_compile_options(${folly_FLAGS})
@@ -35,7 +34,6 @@ else()
   )
 endif()
 
-# target_compile_reactnative_options (resmi, RN >= 0.80)
 if(EXISTS "${REACT_NATIVE_DIR}/ReactCommon/cmake-utils/react-native-flags.cmake")
   include("${REACT_NATIVE_DIR}/ReactCommon/cmake-utils/react-native-flags.cmake")
   message(STATUS "Using official react-native-flags.cmake")
@@ -91,6 +89,9 @@ file(GLOB_RECURSE ALL_SRCS CONFIGURE_DEPENDS
   "jni/*.cpp"
 )
 
+# Jangan compile Onload.cpp dari jni/ untuk pristine-audio
+list(REMOVE_ITEM ALL_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/jni/Onload.cpp")
+
 set(EXCLUDED_SRCS "")
 file(GLOB_RECURSE TEST_SRCS "tests/*.cpp" "*_test.cpp" "*Test.cpp")
 if(TEST_SRCS)
@@ -98,7 +99,7 @@ if(TEST_SRCS)
 endif()
 
 # =====================================================
-# FFmpeg (path sudah diperbaiki)
+# FFmpeg
 # =====================================================
 
 option(ENABLE_FFMPEG "Enable FFmpeg decoder support" ON)
@@ -353,4 +354,4 @@ target_link_libraries(appmodules PRIVATE
   fbjni::fbjni
   android
   log
-)
+) 
