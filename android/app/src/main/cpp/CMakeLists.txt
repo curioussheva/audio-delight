@@ -354,28 +354,37 @@ if(EXISTS "${CODEGEN_JNI_DIR}")
 endif()
 
 if(AUTOLINKED_LIBRARIES)
-  # Tambahkan source files dan include directories dari library autolinked ke appmodules
+  # 1. Beri include dirs ke target autolinked
   foreach(lib ${AUTOLINKED_LIBRARIES})
     if(TARGET ${lib})
-      # Ambil source files dari target
+      target_include_directories(${lib} PRIVATE
+        ${_RN_INCLUDES}
+        ${_JSI_INCLUDES}
+        ${_FBJNI_INCLUDES}
+        "${AUTOLINKING_JNI_DIR}"
+        "${CODEGEN_JNI_DIR}"
+      )
+    endif()
+  endforeach()
+
+  # 2. Tambahkan source files dan include directories dari library autolinked ke appmodules
+  foreach(lib ${AUTOLINKED_LIBRARIES})
+    if(TARGET ${lib})
       get_target_property(_AUTOLINK_SOURCES ${lib} SOURCES)
       if(_AUTOLINK_SOURCES)
         target_sources(appmodules PRIVATE ${_AUTOLINK_SOURCES})
       endif()
 
-      # Ambil include directories dari target
       get_target_property(_AUTOLINK_INCLUDES ${lib} INTERFACE_INCLUDE_DIRECTORIES)
       if(_AUTOLINK_INCLUDES)
         target_include_directories(appmodules PRIVATE ${_AUTOLINK_INCLUDES})
       endif()
 
-      # Ambil compile definitions
       get_target_property(_AUTOLINK_DEFS ${lib} INTERFACE_COMPILE_DEFINITIONS)
       if(_AUTOLINK_DEFS)
         target_compile_definitions(appmodules PRIVATE ${_AUTOLINK_DEFS})
       endif()
 
-      # Ambil compile options
       get_target_property(_AUTOLINK_OPTS ${lib} INTERFACE_COMPILE_OPTIONS)
       if(_AUTOLINK_OPTS)
         target_compile_options(appmodules PRIVATE ${_AUTOLINK_OPTS})
