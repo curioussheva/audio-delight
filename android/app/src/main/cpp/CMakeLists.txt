@@ -379,7 +379,6 @@ if(COMMAND target_compile_reactnative_options)
 endif()
 
 target_link_libraries(appmodules PRIVATE
-  ${AUTOLINKED_LIBRARIES}
   ${PRISTINE_AUDIO_SPEC_LIB}
   ReactAndroid::reactnative
   ReactAndroid::jsi
