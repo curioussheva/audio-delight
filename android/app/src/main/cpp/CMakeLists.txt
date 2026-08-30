@@ -310,8 +310,8 @@ if(EXISTS "${CODEGEN_JNI_DIR}/CMakeLists.txt")
 endif()
 
 add_library(appmodules SHARED
-  "${CMAKE_CURRENT_SOURCE_DIR}/../../../src/main/jni/OnLoad.cpp"
-)
+  "${CMAKE_CURRENT_SOURCE_DIR}/jni/OnLoad.cpp"
+) 
 
 target_include_directories(appmodules PRIVATE
   "${CODEGEN_JNI_DIR}"
