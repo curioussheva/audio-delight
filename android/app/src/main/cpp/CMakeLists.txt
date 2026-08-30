@@ -387,6 +387,16 @@ if(AUTOLINKED_LIBRARIES)
       )
     endif()
   endforeach()
+
+  # Tambahkan include dirs dari library autolinked ke appmodules
+  foreach(lib ${AUTOLINKED_LIBRARIES})
+    if(TARGET ${lib})
+      get_target_property(_AUTOLINK_INCLUDES ${lib} INTERFACE_INCLUDE_DIRECTORIES)
+      if(_AUTOLINK_INCLUDES)
+        target_include_directories(appmodules PRIVATE ${_AUTOLINK_INCLUDES})
+      endif()
+    endif()
+  endforeach()
 endif()
 
 if(COMMAND target_compile_reactnative_options)
