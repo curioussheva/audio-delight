@@ -354,53 +354,34 @@ if(EXISTS "${CODEGEN_JNI_DIR}")
 endif()
 
 if(AUTOLINKED_LIBRARIES)
-  get_target_property(_JSI_LIB_PATH ReactAndroid::jsi LOCATION)
-  get_filename_component(_JSI_LIB_DIR "${_JSI_LIB_PATH}" DIRECTORY)
-
-  get_target_property(_REACT_LIB_PATH ReactAndroid::reactnative LOCATION)
-  get_filename_component(_REACT_LIB_DIR "${_REACT_LIB_PATH}" DIRECTORY)
-
-  get_target_property(_FBJNI_LIB_PATH fbjni::fbjni LOCATION)
-  get_filename_component(_FBJNI_LIB_DIR "${_FBJNI_LIB_PATH}" DIRECTORY)
-
+  # Tambahkan source files dan include directories dari library autolinked ke appmodules
   foreach(lib ${AUTOLINKED_LIBRARIES})
     if(TARGET ${lib})
-      target_include_directories(${lib} PRIVATE
-        ${_RN_INCLUDES}
-        ${_JSI_INCLUDES}
-        ${_FBJNI_INCLUDES}
-        "${AUTOLINKING_JNI_DIR}"
-        "${CODEGEN_JNI_DIR}"
-      )
-      target_compile_definitions(${lib} PRIVATE
-        FOLLY_NO_CONFIG=1
-        FOLLY_MOBILE=1
-        FOLLY_USE_LIBCPP=1
-        RN_SERIALIZABLE_STATE=1
-      )
-      target_compile_options(${lib} PRIVATE -fexceptions -frtti)
+      # Ambil source files dari target
+      get_target_property(_AUTOLINK_SOURCES ${lib} SOURCES)
+      if(_AUTOLINK_SOURCES)
+        target_sources(appmodules PRIVATE ${_AUTOLINK_SOURCES})
+      endif()
 
-      target_link_directories(${lib} PRIVATE
-        ${_JSI_LIB_DIR}
-        ${_REACT_LIB_DIR}
-        ${_FBJNI_LIB_DIR}
-      )
-    endif()
-  endforeach()
-
-  # Tambahkan include dirs dari library autolinked ke appmodules
-  foreach(lib ${AUTOLINKED_LIBRARIES})
-    if(TARGET ${lib})
+      # Ambil include directories dari target
       get_target_property(_AUTOLINK_INCLUDES ${lib} INTERFACE_INCLUDE_DIRECTORIES)
       if(_AUTOLINK_INCLUDES)
         target_include_directories(appmodules PRIVATE ${_AUTOLINK_INCLUDES})
       endif()
+
+      # Ambil compile definitions
+      get_target_property(_AUTOLINK_DEFS ${lib} INTERFACE_COMPILE_DEFINITIONS)
+      if(_AUTOLINK_DEFS)
+        target_compile_definitions(appmodules PRIVATE ${_AUTOLINK_DEFS})
+      endif()
+
+      # Ambil compile options
+      get_target_property(_AUTOLINK_OPTS ${lib} INTERFACE_COMPILE_OPTIONS)
+      if(_AUTOLINK_OPTS)
+        target_compile_options(appmodules PRIVATE ${_AUTOLINK_OPTS})
+      endif()
     endif()
   endforeach()
-endif()
-
-if(COMMAND target_compile_reactnative_options)
-  target_compile_reactnative_options(appmodules PRIVATE)
 endif()
 
 target_link_libraries(appmodules PRIVATE
