@@ -330,6 +330,16 @@ target_include_directories(appmodules PRIVATE
 )
 
 if(AUTOLINKED_LIBRARIES)
+  # Ambil path direktori libs dari target prefab
+  get_target_property(_JSI_LIB_PATH ReactAndroid::jsi LOCATION)
+  get_filename_component(_JSI_LIB_DIR "${_JSI_LIB_PATH}" DIRECTORY)
+
+  get_target_property(_REACT_LIB_PATH ReactAndroid::reactnative LOCATION)
+  get_filename_component(_REACT_LIB_DIR "${_REACT_LIB_PATH}" DIRECTORY)
+
+  get_target_property(_FBJNI_LIB_PATH fbjni::fbjni LOCATION)
+  get_filename_component(_FBJNI_LIB_DIR "${_FBJNI_LIB_PATH}" DIRECTORY)
+
   foreach(lib ${AUTOLINKED_LIBRARIES})
     if(TARGET ${lib})
       target_include_directories(${lib} PRIVATE
@@ -346,6 +356,12 @@ if(AUTOLINKED_LIBRARIES)
         RN_SERIALIZABLE_STATE=1
       )
       target_compile_options(${lib} PRIVATE -fexceptions -frtti)
+
+      target_link_directories(${lib} PRIVATE
+        ${_JSI_LIB_DIR}
+        ${_REACT_LIB_DIR}
+        ${_FBJNI_LIB_DIR}
+      )
     endif()
   endforeach()
 endif()
