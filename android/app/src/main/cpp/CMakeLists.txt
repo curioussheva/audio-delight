@@ -306,6 +306,16 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if(EXISTS "${AUTOLINKING_CMAKE}")
   message(STATUS "Found autolinking cmake at ${AUTOLINKING_CMAKE}")
   include("${AUTOLINKING_CMAKE}")
+
+  # Hapus INTERFACE_LINK_LIBRARIES yang bermasalah dari target autolinked
+  foreach(lib ${AUTOLINKED_LIBRARIES})
+    if(TARGET ${lib})
+      set_target_properties(${lib} PROPERTIES
+        INTERFACE_LINK_LIBRARIES ""
+        LINK_LIBRARIES ""
+      )
+    endif()
+  endforeach()
 else()
   message(WARNING "Autolinking cmake not found at ${AUTOLINKING_CMAKE}")
   set(AUTOLINKED_LIBRARIES "")
@@ -333,7 +343,7 @@ target_include_directories(appmodules PRIVATE
   ${_RN_INCLUDES}
   ${_JSI_INCLUDES}
   ${_FBJNI_INCLUDES}
-)
+) 
 
 # Tambahkan autolinking.cpp dan codegen files ke appmodules
 if(EXISTS "${AUTOLINKING_JNI_DIR}")
