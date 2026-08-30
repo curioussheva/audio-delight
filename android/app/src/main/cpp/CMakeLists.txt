@@ -315,7 +315,15 @@ set(PRISTINE_AUDIO_SPEC_LIB "")
 if(EXISTS "${CODEGEN_JNI_DIR}/CMakeLists.txt")
   add_subdirectory("${CODEGEN_JNI_DIR}" pristineaudiospec_codegen_build EXCLUDE_FROM_ALL)
   set(PRISTINE_AUDIO_SPEC_LIB react_codegen_PristineAudioSpec)
-endif()
+
+  if(TARGET react_codegen_PristineAudioSpec)
+    target_include_directories(react_codegen_PristineAudioSpec PRIVATE
+      ${_RN_INCLUDES}
+      ${_JSI_INCLUDES}
+      ${_FBJNI_INCLUDES}
+    )
+  endif()
+endif() 
 
 add_library(appmodules SHARED
   "${CMAKE_CURRENT_SOURCE_DIR}/jni/OnLoad.cpp"
