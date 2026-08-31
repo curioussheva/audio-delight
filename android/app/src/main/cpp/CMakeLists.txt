@@ -86,10 +86,10 @@ file(GLOB_RECURSE ALL_SRCS CONFIGURE_DEPENDS
   "profiling/*.cpp"
   "visualizer/*.cpp"
   "utils/*.cpp"
+  "resampler/*.cpp"
 )
 
 # Tambahkan file-file JNI yang diperlukan oleh pristine-audio secara eksplisit
-# (tanpa OnLoad.cpp)
 list(APPEND ALL_SRCS
   jni/JSIInstaller.cpp
   jni/NativeAudioFeed.cpp
@@ -107,39 +107,42 @@ if(TEST_SRCS)
 endif()
 
 # =====================================================
-# FFmpeg
+# FFmpeg Prebuilt
 # =====================================================
 
 option(ENABLE_FFMPEG "Enable FFmpeg decoder support" ON)
 set(PRISTINE_FFMPEG_AVAILABLE FALSE)
 
 if(ENABLE_FFMPEG)
-  find_package(PkgConfig QUIET)
-  if(PkgConfig_FOUND)
-    pkg_check_modules(FFMPEG QUIET
-      libavcodec>=58.0 libavformat>=58.0 libswresample>=3.0 libavutil>=56.0)
-  endif()
-  if(FFMPEG_FOUND)
-    set(PRISTINE_FFMPEG_AVAILABLE TRUE)
-  else()
-    message(STATUS "FFmpeg not found via pkg-config, trying manual find...")
-    find_library(AVCODEC_LIB avcodec
-      PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
-    find_library(AVFORMAT_LIB avformat
-      PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
-    find_library(SWRESAMPLE_LIB swresample
-      PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
-    find_library(AVUTIL_LIB avutil
-      PATHS ${CMAKE_SOURCE_DIR}/../libs/ffmpeg/${ANDROID_ABI} NO_DEFAULT_PATH)
-    if(AVCODEC_LIB AND AVFORMAT_LIB)
-      set(PRISTINE_FFMPEG_AVAILABLE TRUE)
+    set(FFMPEG_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/libs/ffmpeg/${ANDROID_ABI}")
+
+    if(EXISTS "${FFMPEG_ROOT}/include")
+        message(STATUS "FFmpeg found at ${FFMPEG_ROOT}")
+        set(PRISTINE_FFMPEG_AVAILABLE TRUE)
+
+        include_directories("${FFMPEG_ROOT}/include")
+
+        add_library(avcodec SHARED IMPORTED)
+        set_target_properties(avcodec PROPERTIES IMPORTED_LOCATION "${FFMPEG_ROOT}/lib/libavcodec.so")
+
+        add_library(avformat SHARED IMPORTED)
+        set_target_properties(avformat PROPERTIES IMPORTED_LOCATION "${FFMPEG_ROOT}/lib/libavformat.so")
+
+        add_library(avutil SHARED IMPORTED)
+        set_target_properties(avutil PROPERTIES IMPORTED_LOCATION "${FFMPEG_ROOT}/lib/libavutil.so")
+
+        add_library(swresample SHARED IMPORTED)
+        set_target_properties(swresample PROPERTIES IMPORTED_LOCATION "${FFMPEG_ROOT}/lib/libswresample.so")
+
+        set(FFMPEG_LIBRARIES avcodec avformat avutil swresample)
+    else()
+        message(WARNING "FFmpeg not found at ${FFMPEG_ROOT}")
     endif()
-  endif()
 endif()
 
 if(NOT PRISTINE_FFMPEG_AVAILABLE)
-  message(WARNING "FFmpeg not found — excluding decoder/FFmpegDecoder.cpp")
-  list(APPEND EXCLUDED_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/decoder/FFmpegDecoder.cpp")
+    message(WARNING "FFmpeg not found — excluding decoder/FFmpegDecoder.cpp")
+    list(APPEND EXCLUDED_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/decoder/FFmpegDecoder.cpp")
 endif()
 
 if(EXCLUDED_SRCS)
@@ -209,7 +212,7 @@ target_include_directories(pristine-audio PRIVATE
   core manager modes playback decoder
   dsp dsp/graph dsp/tone dsp/spatial dsp/dynamics
   dsp/filters dsp/convolution dsp/immersive dsp/headphone
-  fft devices usb realtime session profiling visualizer utils jni
+  fft devices usb realtime session profiling visualizer utils jni resampler
   ${_RN_INCLUDES}
   ${_JSI_INCLUDES}
   ${_FBJNI_INCLUDES}
@@ -221,16 +224,8 @@ if(EXISTS "${CODEGEN_JNI_DIR}")
 endif()
 
 if(PRISTINE_FFMPEG_AVAILABLE)
-  if(FFMPEG_FOUND)
-    target_include_directories(pristine-audio PRIVATE ${FFMPEG_INCLUDE_DIRS})
-    target_link_libraries(pristine-audio ${FFMPEG_LIBRARIES})
     target_compile_definitions(pristine-audio PRIVATE ENABLE_FFMPEG=1)
-    target_compile_options(pristine-audio PRIVATE ${FFMPEG_CFLAGS_OTHER})
-  else()
-    target_link_libraries(pristine-audio
-      ${AVCODEC_LIB} ${AVFORMAT_LIB} ${SWRESAMPLE_LIB} ${AVUTIL_LIB})
-    target_compile_definitions(pristine-audio PRIVATE ENABLE_FFMPEG=1)
-  endif()
+    target_link_libraries(pristine-audio PRIVATE ${FFMPEG_LIBRARIES})
 endif()
 
 target_compile_options(pristine-audio PRIVATE
@@ -307,7 +302,6 @@ if(EXISTS "${AUTOLINKING_CMAKE}")
   message(STATUS "Found autolinking cmake at ${AUTOLINKING_CMAKE}")
   include("${AUTOLINKING_CMAKE}")
 
-  # Hapus INTERFACE_LINK_LIBRARIES yang bermasalah dari target autolinked
   foreach(lib ${AUTOLINKED_LIBRARIES})
     if(TARGET ${lib})
       set_target_properties(${lib} PROPERTIES
@@ -343,9 +337,8 @@ target_include_directories(appmodules PRIVATE
   ${_RN_INCLUDES}
   ${_JSI_INCLUDES}
   ${_FBJNI_INCLUDES}
-) 
+)
 
-# Tambahkan autolinking.cpp dan codegen files ke appmodules
 if(EXISTS "${AUTOLINKING_JNI_DIR}")
   target_sources(appmodules PRIVATE
     "${AUTOLINKING_JNI_DIR}/autolinking.cpp"
@@ -364,27 +357,24 @@ if(EXISTS "${CODEGEN_JNI_DIR}")
 endif()
 
 if(AUTOLINKED_LIBRARIES)
-# 1. Beri include dirs dan link libraries langsung ke target autolinked
-foreach(lib ${AUTOLINKED_LIBRARIES})
-  if(TARGET ${lib})
-    target_include_directories(${lib} PRIVATE
-      ${_RN_INCLUDES}
-      ${_JSI_INCLUDES}
-      ${_FBJNI_INCLUDES}
-      "${AUTOLINKING_JNI_DIR}"
-      "${CODEGEN_JNI_DIR}"
-    )
+  foreach(lib ${AUTOLINKED_LIBRARIES})
+    if(TARGET ${lib})
+      target_include_directories(${lib} PRIVATE
+        ${_RN_INCLUDES}
+        ${_JSI_INCLUDES}
+        ${_FBJNI_INCLUDES}
+        "${AUTOLINKING_JNI_DIR}"
+        "${CODEGEN_JNI_DIR}"
+      )
 
-    # Link langsung ke target prefab
-    target_link_libraries(${lib}
-      ReactAndroid::reactnative
-      ReactAndroid::jsi
-      fbjni::fbjni
-    )
-  endif()
-endforeach() 
+      target_link_libraries(${lib}
+        ReactAndroid::reactnative
+        ReactAndroid::jsi
+        fbjni::fbjni
+      )
+    endif()
+  endforeach()
 
-  # 2. Tambahkan source files dan include directories dari library autolinked ke appmodules
   foreach(lib ${AUTOLINKED_LIBRARIES})
     if(TARGET ${lib})
       get_target_property(_AUTOLINK_SOURCES ${lib} SOURCES)
@@ -408,7 +398,7 @@ endforeach()
       endif()
     endif()
   endforeach()
-endif() 
+endif()
 
 target_link_libraries(appmodules PRIVATE
   ReactAndroid::reactnative

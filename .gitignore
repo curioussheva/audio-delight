@@ -89,4 +89,4 @@ __tests__/
 expo-env.d.ts
 
 # JANGAN ignore lockfile
-!pnpm-lock.yaml
+!pnpm-lock.yamltmp/
