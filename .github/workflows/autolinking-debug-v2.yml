@@ -55,7 +55,15 @@ jobs:
             "cmake;3.22.1"
 
       # ============================================
-      # 5a. Build FFmpeg for Android
+      # 5a. Install nasm (required by FFmpeg)
+      # ============================================
+      - name: Install nasm
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm
+
+      # ============================================
+      # 5b. Build FFmpeg for Android
       # ============================================
       - name: Build FFmpeg for Android
         run: |
