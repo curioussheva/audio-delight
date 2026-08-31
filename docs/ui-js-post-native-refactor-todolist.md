@@ -187,3 +187,193 @@ grep -rln "NativeXxxModule" src/features/
 ## Catatan
 
 Dokumen ini dibuat tanpa membaca isi file JS/TS/Kotlin — murni dari pengetahuan perubahan native (dicatat lengkap di `build-fix-changelog.md`) dan struktur `tree` yang sudah dilihat. Setiap klaim "kemungkinan besar" di atas perlu dikonfirmasi lewat command yang disarankan sebelum diasumsikan benar.
+
+---
+---
+
+Berikut adalah versi terbaru dari ui-js-post-native-refactor-todolist.md yang sudah diperbarui sesuai kemajuan per 31 Agustus 2026.
+
+---
+---
+
+Insight & Todolist — Penyesuaian UI/JS Pasca Perombakan Native
+
+Status per 31 Agustus 2026
+Dokumen ini sudah memverifikasi build native sukses dan mencatat error runtime pertama yang muncul (RNTP UnsatisfiedLinkError). Fokus sekarang beralih ke integrasi JS/TS dan verifikasi runtime.
+
+---
+
+🎯 TL;DR — Prioritas (direvisi 31 Agustus 2026)
+
+1. Build native sudah selesai — libappmodules.so terproduksi, tidak ada error CMake/C++.
+2. Masalah runtime pertama: RNTP — react-native-track-player belum ter-load native library-nya (UnsatisfiedLinkError). Harus diperbaiki sebelum fitur player bisa berjalan.
+3. Lakukan inventarisasi bridge (Langkah 0 di bawah) — Petakan JNIEXPORT → Kotlin external fun → TS spec → pemakaian di features/.
+4. Perbaiki gap yang ditemukan — Terutama untuk modul yang belum punya TS spec atau Kotlin wrapper.
+5. Testing manual per fitur — Setelah semua terhubung, verifikasi Equalizer, Visualizer, USB DAC, Library, Player.
+
+---
+
+🗺️ Langkah 0 — Inventarisasi Permukaan JNI (WAJIB dilakukan duluan)
+
+Jalankan command berikut untuk memetakan gap antara native dan JS:
+
+A. Semua fungsi JNIEXPORT yang diekspos ke Java:
+
+```bash
+grep -rn "JNIEXPORT" android/app/src/main/cpp/jni/*.cpp
+```
+
+B. Semua native module Kotlin dengan external fun:
+
+```bash
+grep -rn "external fun" android/app/src/main/java/com/pristineaudio/
+```
+
+C. Semua TurboModule spec di TS:
+
+```bash
+for f in src/specs/*.ts; do echo "=== $f ==="; cat "$f"; done
+```
+
+D. Bandingkan hasil A, B, C. Buat tabel: nama fungsi native → ada di Kotlin? → ada di TS spec? → dipakai di features/? Fungsi yang berhenti di kolom pertama/kedua adalah kapabilitas yang belum terjangkau dari UI.
+
+E. Modul native yang kemungkinan besar belum ter-bridge:
+
+· session/TransportControls, AudioFocusManager, AudioSessionManager, NoisyReceiverHandler
+· playback/PlaybackScheduler, PrebufferManager, FadeEngine
+· dsp/immersive/* (BrainwaveGenerator, HarmonicExciter, SpatialFieldProcessor, BinauralRenderer, SolfeggioResonator, FFTResonanceAnalyzer)
+· usb/USBClockSync, USBDACCapabilities
+· profiling/CPUProfiler, DSPBenchmark, LatencyProfiler (kemungkinan internal, tidak perlu bridge)
+
+---
+
+🔴 Item Prioritas Tinggi — Perlu Penanganan Segera
+
+0. Error Runtime: react-native-track-player (RNTP)
+
+Gejala:
+
+```
+java.lang.UnsatisfiedLinkError: No implementation found for void com.lovegaoshi.kotlinaudio.player.AudioPlayer.nativeInitEngine(int, int)
+```
+
+Penyebab:
+Library native RNTP tidak ter-load atau tidak ter-link dengan benar dalam mode New Architecture.
+
+Langkah perbaikan:
+
+· Cek package RNTP terdaftar di MainApplication.kt.
+· Pastikan System.loadLibrary("react-native-track-player") dipanggil.
+· Periksa apakah RNTP versi yang digunakan mendukung New Architecture. Jika tidak, pertimbangkan update atau nonaktifkan New Architecture untuk modul tersebut.
+
+---
+
+1. Playback bridge — initPlaybackModule wiring
+
+Temuan: jni/NativePlaybackModule.cpp membutuhkan initPlaybackModule(PlaybackController*) sebelum fungsi playback lain bisa berfungsi. Fungsi ini kemungkinan belum dipanggil di Onload.cpp.
+
+Cara cek:
+
+```bash
+grep -rn "initPlaybackModule" android/app/src/main/cpp
+cat android/app/src/main/cpp/jni/Onload.cpp
+```
+
+Jika belum di-wire, ini harus diperbaiki di sisi native terlebih dahulu.
+
+---
+
+2. Mapping enum PlaybackStatus
+
+Native:
+
+```cpp
+enum class PlaybackStatus {
+    Stopped, Playing, Paused, Buffering, Seeking, Completed, Error
+};
+```
+
+Cek di TS:
+
+```bash
+grep -rn "PlaybackStatus\|nativeGetStatus" src/specs/ src/features/player/
+```
+
+Pastikan urutan angka sesuai.
+
+---
+
+🟡 Item Prioritas Sedang — Sanity Check
+
+3. AudioDeviceDescriptor dan stub nativeGetDevices()
+
+NativeDeviceModule.cpp masih mengembalikan array kosong. Perlu dipastikan apakah UI sudah siap menerima data device yang sebenarnya.
+
+Cara cek:
+
+```bash
+grep -rn "AudioDeviceInfo\|AudioDeviceDescriptor" src/
+grep -n "nativeGetDevices" android/app/src/main/cpp/jni/NativeDeviceModule.cpp
+```
+
+4. Namespace migration audio:: → pristine::
+
+Tidak berdampak langsung ke JS selama JNI export names tetap. Tidak perlu dicek kecuali ada bukti masalah.
+
+5. DSPPipeline/ImmersivePipeline standalone
+
+Tidak berdampak langsung, tapi perlu 1x cek pada fitur yang bergantung pada mode processing.
+
+Cara cek:
+
+```bash
+grep -rn "ProcessingMode\|BitPerfect\|Immersive" src/features/equalizer/ src/features/visualizer/ src/specs/
+```
+
+---
+
+🟢 Item Prioritas Rendah
+
+· createResampler() unused — tidak perlu disentuh.
+· Fix dsp/OutputStage.cpp, BiquadFilter.h — internal DSP, tidak ada JNI surface.
+
+---
+
+📋 Todolist Terstruktur (update 31 Agustus 2026)
+
+Tahap 0 — Verifikasi Runtime Awal
+
+☐ Selesaikan error RNTP (UnsatisfiedLinkError)
+☐ Pastikan aplikasi bisa start tanpa crash
+☐ Cek logcat untuk error PlatformConstants atau TurboModule
+
+Tahap 1 — Inventarisasi Faktual
+
+☐ Jalankan command A-D, buat tabel gap
+☐ Tentukan kapabilitas yang perlu di-bridge
+
+Tahap 2 — Audit Bridge untuk Modul yang Sudah Punya Spec
+
+☐ NativeDSPModule
+☐ NativeVisualizerBridge
+☐ USBDACModule
+☐ MediaStoreModule
+
+Tahap 3 — Verifikasi Item Spesifik
+
+☐ initPlaybackModule wiring
+☐ Mapping PlaybackStatus
+
+Tahap 4 — Testing Manual
+
+☐ Player: play/pause/seek
+☐ Equalizer: band gain, presets
+☐ Visualizer: spectrum data
+☐ USB DAC: device list
+☐ Library: scan and load files
+
+---
+
+Catatan
+
+Dokumen ini diperbarui berdasarkan build native yang sudah sukses dan error runtime pertama (RNTP). Semua langkah di atas harus dilakukan untuk memastikan integrasi penuh antara native dan UI/JS.

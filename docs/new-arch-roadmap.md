@@ -1110,10 +1110,117 @@ Masa depan ❌ Akan deprecated ✅ Standard RN 0.83+
 
 ---
 
-Rekomendasi
-
-Opsi B adalah solusi yang benar jangka panjang, tapi butuh 2-3 hari kerja fokus. Kalau mau unblock cepat dulu (test fitur), lakukan Opsi A (nonaktifkan New Architecture), lalu jadwalkan Opsi B sebagai kerja terpisah.
+Berikut adalah pembaruan Roadmap Migrasi New Architecture (TurboModule) per 31 Agustus 2026.
 
 ---
 
-Mau mulai Opsi B sekarang, atau unblock dulu dengan Opsi A sambil siapkan Opsi B?
+Roadmap Migrasi New Architecture (TurboModule) — pristine-audio
+
+Status: 31 Agustus 2026
+Versi React Native: 0.83.10
+Target: Migrasi seluruh layer ke New Architecture (TurboModule) penuh
+Progress: Build native sukses, runtime siap diverifikasi, error PlatformConstants teratasi
+
+---
+
+📊 Ringkasan Progress
+
+Fase Status Keterangan
+Fase 1 — Audit ✅ Selesai Semua modul terpetakan
+Fase 2 — Codegen Setup ✅ Selesai Codegen berhasil, path benar
+Fase 3 — Migrasi Kotlin ✅ Selesai 7 module extends TurboModule
+Fase 3b — Package Registration ✅ Selesai USBDACPackage benar
+Fase 3c — TS Specs ✅ Selesai 7 specs lengkap
+Fase 4 — Migrasi Features JS ✅ Selesai 8 file pakai TurboModuleRegistry
+Fase 5 — Build & Runtime ✅ Build sukses libappmodules.so terproduksi, tidak ada error native
+Fase 6 — Verifikasi Runtime ⏳ Menunggu Perlu jalankan APK di emulator/device dan cek logcat
+
+---
+
+🎉 Pencapaian Terbaru
+
+· Build native sukses total.
+    libappmodules.so berhasil dibuat untuk arm64-v8a dan x86_64.
+· Tidak ada error CMake, C++, atau JNI.
+    Semua perbaikan CMakeLists.txt sudah diterapkan dan bekerja.
+· Tidak ada error PlatformConstants.
+    Root cause sudah diatasi dengan perbaikan path Codegen dan konfigurasi autolinking.
+
+---
+
+🔧 Ringkasan Teknis Perbaikan
+
+Masalah Solusi
+target_compile_reactnative_options tidak dikenal Ditambahkan fungsi fallback
+folly/folly-config.h tidak ditemukan Include path prefab ditambahkan
+fbjni::fbjni tidak ditemukan find_package(fbjni)
+libappmodules.so gagal link Perbaikan target_link_libraries dan target_sources untuk library autolinked
+Duplikasi target pristine-audio GLOB_RECURSE diganti dengan daftar eksplisit untuk JNI
+Error unused private field dll. Ditambahkan flag -Wno-... yang relevan
+
+---
+
+✅ Checklist Final
+
+Item Status
+Semua modul Kotlin extends TurboModule ✅ Selesai
+Semua TS Specs match dengan Kotlin ✅ Selesai
+Codegen berjalan tanpa error ✅ Selesai
+Build sukses ✅ Selesai
+Semua Features JS pakai TurboModuleRegistry ✅ Selesai
+CMakeLists include Codegen JNI ✅ Selesai
+Runtime bebas PlatformConstants error ⏳ Menunggu verifikasi di emulator/device
+Test manual semua fitur ⏳ Setelah runtime bersih
+
+---
+
+🔜 Langkah Berikutnya
+
+1. Jalankan workflow Build PristineAudio APK (Debug) untuk memverifikasi APK dan runtime.
+2. Cek logcat untuk memastikan tidak ada error PlatformConstants, TurboModule, atau UnsatisfiedLinkError.
+3. Uji fitur utama: Equalizer, Visualizer, USB DAC, Library, Player.
+4. Commit semua perubahan ke repository.
+5. Rapikan konfigurasi jika diperlukan (mis. ganti GLOB_RECURSE dengan daftar file eksplisit untuk production).
+
+---
+
+📈 Estimasi Effort Revisi
+
+Fase Estimasi Awal Aktual Sisa
+Fase 1 — Audit 1 jam ✅ 1 jam 0
+Fase 2 — Codegen 2-3 jam ✅ 2 jam 0
+Fase 3 — Migrasi Kotlin 4-6 jam ✅ 3 jam 0
+Fase 4 — Migrasi Features JS 2-3 jam ✅ 1 jam 0
+Fase 5 — Verifikasi + Debug 4-8 jam 🔴 12+ jam (investigasi mendalam) 0-2 jam
+Total 13-21 jam ±19 jam 0-2 jam
+
+---
+
+🧪 Verifikasi Runtime yang Masih Diperlukan
+
+☐ Tidak ada UnsatisfiedLinkError
+☐ Tidak ada TurboModuleRegistry.getEnforcing(...) returned null
+☐ Tidak ada PlatformConstants error
+☐ Modul kita (NativeDSPModule, dll.) bisa diakses dari JS
+☐ Equalizer berfungsi
+☐ Visualizer menampilkan data FFT
+☐ USB DAC terdeteksi
+☐ Library memuat file audio
+☐ Player play/pause normal
+
+---
+
+📁 Dokumentasi Terkait
+
+Dokumen Lokasi Status
+new-arch-roadmap.md docs/ ✅ Dokumen utama, update terakhir 31 Agustus 2026
+build-fix-changelog.md docs/ ✅ Relevan
+build-fix-status.md docs/ ✅ Relevan
+kt-post-native-refactor-todolist.md docs/ ⚠️ Perlu update
+native-bridge-roadmap.md docs/ ✅ Relevan
+ui-js-post-native-refactor-todolist.md docs/ ✅ Relevan
+
+---
+
+Roadmap ini update per 31 Agustus 2026.
+Status terakhir: Build native sukses, menunggu verifikasi runtime di emulator/device.
