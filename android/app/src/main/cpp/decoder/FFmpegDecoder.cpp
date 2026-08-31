@@ -27,8 +27,8 @@ FFmpegDecoder::~FFmpegDecoder() {
 
 bool FFmpegDecoder::onOpen(
     const std::string& uri,
-    const AudioFormat* /*hint*/
-) {
+    const AudioFormat* /*hint*/) {
+
     cleanup();
 
     if (avformat_open_input(
@@ -89,26 +89,20 @@ void FFmpegDecoder::onClose() {
 // =====================================================
 
 DecodeResult FFmpegDecoder::onDecode(
-    uint32_t maxFrames
-) {
-    DecodeResult result;
+    uint32_t maxFrames) {
 
+    DecodeResult result;
     result.samples.reserve(
-        maxFrames *
-        codecCtx_->ch_layout.nb_channels);
+        maxFrames * codecCtx_->ch_layout.nb_channels);
 
     while (result.framesDecoded < maxFrames) {
 
-        int readResult =
-            av_read_frame(
-                formatCtx_,
-                packet_);
+        int readResult = av_read_frame(
+            formatCtx_,
+            packet_);
 
         if (readResult < 0) {
-
-            result.status =
-                DecodeStatus::Eof;
-
+            result.status = DecodeStatus::EndOfStream;
             break;
         }
 
@@ -121,78 +115,60 @@ DecodeResult FFmpegDecoder::onDecode(
                 codecCtx_,
                 packet_) < 0) {
             av_packet_unref(packet_);
-
-            result.status =
-                DecodeStatus::Error;
-
+            result.status = DecodeStatus::Error;
             return result;
         }
 
         av_packet_unref(packet_);
 
         while (true) {
-
-            int receiveResult =
-                avcodec_receive_frame(
-                    codecCtx_,
-                    frame_);
+            int receiveResult = avcodec_receive_frame(
+                codecCtx_,
+                frame_);
 
             if (receiveResult == AVERROR(EAGAIN))
                 break;
 
             if (receiveResult == AVERROR_EOF) {
-                result.status =
-                    DecodeStatus::Eof;
+                result.status = DecodeStatus::EndOfStream;
                 return result;
             }
 
             if (receiveResult < 0) {
-                result.status =
-                    DecodeStatus::Error;
+                result.status = DecodeStatus::Error;
                 return result;
             }
 
-            const int outSamples =
-                swr_get_out_samples(
-                    swrCtx_,
-                    frame_->nb_samples);
+            const int outSamples = swr_get_out_samples(
+                swrCtx_,
+                frame_->nb_samples);
 
-            const int channels =
-                codecCtx_->ch_layout.nb_channels;
+            const int channels = codecCtx_->ch_layout.nb_channels;
 
             std::vector<float> temp(
                 outSamples * channels);
 
             uint8_t* out[] = {
-                reinterpret_cast<uint8_t*>(
-                    temp.data())
+                reinterpret_cast<uint8_t*>(temp.data())
             };
 
-            int converted =
-                swr_convert(
-                    swrCtx_,
-                    out,
-                    outSamples,
-                    const_cast<const uint8_t**>(
-                        frame_->extended_data),
-                    frame_->nb_samples);
+            int converted = swr_convert(
+                swrCtx_,
+                out,
+                outSamples,
+                const_cast<const uint8_t**>(frame_->extended_data),
+                frame_->nb_samples);
 
             if (converted > 0) {
-
-                temp.resize(
-                    converted *
-                    channels);
+                temp.resize(converted * channels);
 
                 result.samples.insert(
                     result.samples.end(),
                     temp.begin(),
                     temp.end());
 
-                result.framesDecoded +=
-                    converted;
-
-                currentFrame_ +=
-                    converted;
+                result.framesDecoded += converted;
+                currentFrame_ += converted;
             }
 
             if (result.framesDecoded >= maxFrames)
@@ -206,10 +182,9 @@ DecodeResult FFmpegDecoder::onDecode(
     result.status =
         result.framesDecoded > 0
             ? DecodeStatus::Success
-            : DecodeStatus::Eof;
+            : DecodeStatus::EndOfStream;
 
-    result.framePosition =
-        currentFrame_;
+    result.framePosition = currentFrame_;
 
     return result;
 }
@@ -219,15 +194,13 @@ DecodeResult FFmpegDecoder::onDecode(
 // =====================================================
 
 bool FFmpegDecoder::onSeek(
-    double positionSeconds
-) {
+    double positionSeconds) {
+
     if (!formatCtx_)
         return false;
 
     int64_t timestamp =
-        static_cast<int64_t>(
-            positionSeconds *
-            AV_TIME_BASE);
+        static_cast<int64_t>(positionSeconds * AV_TIME_BASE);
 
     if (av_seek_frame(
             formatCtx_,
@@ -237,23 +210,20 @@ bool FFmpegDecoder::onSeek(
         return false;
     }
 
-    avcodec_flush_buffers(
-        codecCtx_);
+    avcodec_flush_buffers(codecCtx_);
 
     currentFrame_ =
         static_cast<uint64_t>(
-            positionSeconds *
-            codecCtx_->sample_rate);
+            positionSeconds * codecCtx_->sample_rate);
 
     return true;
 }
 
 bool FFmpegDecoder::onSeekToFrame(
-    uint64_t frame
-) {
+    uint64_t frame) {
+
     return onSeek(
-        static_cast<double>(frame) /
-        codecCtx_->sample_rate);
+        static_cast<double>(frame) / codecCtx_->sample_rate);
 }
 
 // =====================================================
@@ -261,37 +231,38 @@ bool FFmpegDecoder::onSeekToFrame(
 // =====================================================
 
 AudioFormat FFmpegDecoder::onGetInputFormat() const {
-
     AudioFormat format;
 
     if (!codecCtx_)
         return format;
 
-    format.sampleRate =
-        codecCtx_->sample_rate;
+    format.sampleRate = codecCtx_->sample_rate;
+    format.channels = codecCtx_->ch_layout.nb_channels;
+    format.sampleFormat = convertSampleFormat(codecCtx_->sample_fmt);
+    format.durationSeconds = getDurationSeconds();
 
-    format.channels =
-        codecCtx_->ch_layout.nb_channels;
-
-    format.bitsPerSample =
-        32;
-
-    format.sampleFormat =
-        SampleFormat::F32;
-
-    format.durationSeconds =
-        onGetDuration();
+    // Map channel count to ChannelLayout
+    switch (format.channels) {
+        case 1: format.channelLayout = ChannelLayout::Mono; break;
+        case 2: format.channelLayout = ChannelLayout::Stereo; break;
+        case 6: format.channelLayout = ChannelLayout::Surround5_1; break;
+        case 8: format.channelLayout = ChannelLayout::Surround7_1; break;
+        default: format.channelLayout = ChannelLayout::Unknown; break;
+    }
 
     return format;
 }
 
-DecoderCapabilities FFmpegDecoder::onGetCapabilities() const {
-
+DecoderCapabilities FFmpegDecoder::getCapabilities() const {
     DecoderCapabilities caps;
 
     caps.supportsSeeking = true;
+    caps.supportsStreaming = true;
     caps.supportsGapless = true;
-
+    caps.supportsMetadata = true;
+    caps.supportsEmbeddedArtwork = false;
+    caps.maxChannels = 8;
+    caps.maxSampleRate = 192000;
     caps.supportedFormats = {
         "mp3",
         "aac",
@@ -305,14 +276,27 @@ DecoderCapabilities FFmpegDecoder::onGetCapabilities() const {
     return caps;
 }
 
-double FFmpegDecoder::onGetDuration() const {
-
+double FFmpegDecoder::getDurationSeconds() const {
     if (!formatCtx_)
         return 0.0;
 
-    return static_cast<double>(
-        formatCtx_->duration) /
-        AV_TIME_BASE;
+    return static_cast<double>(formatCtx_->duration) / AV_TIME_BASE;
+}
+
+// =====================================================
+// POSITION
+// =====================================================
+
+double FFmpegDecoder::getPositionSeconds() const {
+    return static_cast<double>(currentFrame_) / codecCtx_->sample_rate;
+}
+
+uint64_t FFmpegDecoder::getPositionFrames() const {
+    return currentFrame_;
+}
+
+bool FFmpegDecoder::isSeekable() const {
+    return formatCtx_ != nullptr;
 }
 
 // =====================================================
@@ -320,20 +304,16 @@ double FFmpegDecoder::onGetDuration() const {
 // =====================================================
 
 bool FFmpegDecoder::setupCodec() {
-
     AVStream* stream =
         formatCtx_->streams[audioStreamIndex_];
 
     const AVCodec* codec =
-        avcodec_find_decoder(
-            stream->codecpar->codec_id);
+        avcodec_find_decoder(stream->codecpar->codec_id);
 
     if (!codec)
         return false;
 
-    codecCtx_ =
-        avcodec_alloc_context3(codec);
-
+    codecCtx_ = avcodec_alloc_context3(codec);
     if (!codecCtx_)
         return false;
 
@@ -344,23 +324,18 @@ bool FFmpegDecoder::setupCodec() {
     }
 
     return avcodec_open2(
-               codecCtx_,
-               codec,
-               nullptr) >= 0;
+        codecCtx_,
+        codec,
+        nullptr) >= 0;
 }
 
 bool FFmpegDecoder::setupResampler() {
-
-    swrCtx_ =
-        swr_alloc();
-
+    swrCtx_ = swr_alloc();
     if (!swrCtx_)
         return false;
 
     AVChannelLayout stereo;
-    av_channel_layout_default(
-        &stereo,
-        2);
+    av_channel_layout_default(&stereo, 2);
 
     swr_alloc_set_opts2(
         &swrCtx_,
@@ -373,12 +348,10 @@ bool FFmpegDecoder::setupResampler() {
         0,
         nullptr);
 
-    return swr_init(
-               swrCtx_) >= 0;
+    return swr_init(swrCtx_) >= 0;
 }
 
 void FFmpegDecoder::cleanup() {
-
     if (packet_) {
         av_packet_free(&packet_);
     }
@@ -388,8 +361,7 @@ void FFmpegDecoder::cleanup() {
     }
 
     if (codecCtx_) {
-        avcodec_free_context(
-            &codecCtx_);
+        avcodec_free_context(&codecCtx_);
     }
 
     if (swrCtx_) {
@@ -397,8 +369,7 @@ void FFmpegDecoder::cleanup() {
     }
 
     if (formatCtx_) {
-        avformat_close_input(
-            &formatCtx_);
+        avformat_close_input(&formatCtx_);
     }
 
     audioStreamIndex_ = -1;
@@ -409,40 +380,15 @@ void FFmpegDecoder::cleanup() {
 // HELPERS
 // =====================================================
 
-SampleFormat
-FFmpegDecoder::convertSampleFormat(
-    int ffFormat
-) {
+SampleFormat FFmpegDecoder::convertSampleFormat(int ffFormat) {
     switch (ffFormat) {
-        case AV_SAMPLE_FMT_U8:
-            return SampleFormat::U8;
-
-        case AV_SAMPLE_FMT_S16:
-            return SampleFormat::S16;
-
-        case AV_SAMPLE_FMT_S32:
-            return SampleFormat::S32;
-
-        case AV_SAMPLE_FMT_FLT:
-            return SampleFormat::F32;
-
-        case AV_SAMPLE_FMT_DBL:
-            return SampleFormat::F64;
-
-        default:
-            return SampleFormat::Unknown;
+        case AV_SAMPLE_FMT_U8:  return SampleFormat::U8;
+        case AV_SAMPLE_FMT_S16: return SampleFormat::S16;
+        case AV_SAMPLE_FMT_S32: return SampleFormat::S32;
+        case AV_SAMPLE_FMT_FLT: return SampleFormat::F32;
+        case AV_SAMPLE_FMT_DBL: return SampleFormat::F64;
+        default:                return SampleFormat::Unknown;
     }
 }
 
-int64_t FFmpegDecoder::getChannelLayout(
-    int channels
-) {
-    AVChannelLayout layout;
-    av_channel_layout_default(
-        &layout,
-        channels);
-
-    return layout.u.mask;
-}
-
-} // namespace pristine::decoder 
+} // namespace pristine::decoder
