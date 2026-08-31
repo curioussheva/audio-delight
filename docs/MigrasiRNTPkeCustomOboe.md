@@ -133,3 +133,36 @@ Kompleksitas migrasi UI Lakukan bertahap, fitur per fitur
 ---
 
 Dokumen ini akan menjadi panduan utama dalam menggantikan RNTP dengan solusi custom. Silakan beri masukan jika ada bagian yang perlu disesuaikan.
+
+---
+
+---
+
+## ✅ Checkpoint 31 Agustus 2026 (Sore)
+
+**Status:** Build native sukses dengan FFmpeg terintegrasi. Siap verifikasi runtime.
+
+### Pencapaian
+
+- ✅ `libappmodules.so` terproduksi untuk `arm64-v8a` dan `x86_64`.
+- ✅ FFmpeg prebuilt berhasil di-build via `scripts/build-ffmpeg-android.sh` dan di-cache di workflow.
+- ✅ `FFmpegDecoder.cpp` berhasil dikompilasi tanpa error.
+- ✅ Seluruh error C++/CMake/autolinking yang sebelumnya muncul sudah teratasi.
+- ✅ Workflow `Autolinking Debug V2` sudah efisien dengan cache FFmpeg.
+- ✅ Workflow `Build PristineAudio APK (Debug)` sudah ditambahkan langkah FFmpeg + cache.
+
+### Langkah Berikutnya
+
+1. Jalankan workflow `Build PristineAudio APK (Debug)` untuk verifikasi runtime.
+2. Cek logcat: error `PlatformConstants` dan `TurboModule` diharapkan hilang.
+3. Cek error RNTP `UnsatisfiedLinkError`; jika masih muncul, lanjut ke migrasi RNTP → Custom Oboe Playback Service (Tahap 2).
+4. Uji fitur player dasar: play/pause/seek, queue, notifikasi media.
+
+### Dokumen Terkait
+
+- `docs/migrasi-rntp-custom-oboe-implementation.md` — roadmap penggantian RNTP.
+- `docs/ui-js-post-native-refactor-todolist.md` — peta integrasi UI/JS.
+
+---
+
+**Roadmap ini update per 31 Agustus 2026 sore.**

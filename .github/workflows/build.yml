@@ -34,7 +34,7 @@ jobs:
           node-version: 20
 
       # ============================================
-      # 3. Install dependencies (generate lockfile)
+      # 3. Install dependencies
       # ============================================
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
@@ -78,7 +78,7 @@ jobs:
       - uses: android-actions/setup-android@v3
 
       # ============================================
-      # 7. Install NDK + CMake (STABLE)
+      # 7. Install NDK + CMake
       # ============================================
       - name: Install NDK + CMake
         run: |
@@ -87,17 +87,43 @@ jobs:
             "cmake;3.22.1"
 
       # ============================================
-      # 8. Configure local.properties
+      # 8. Install nasm (required by FFmpeg)
+      # ============================================
+      - name: Install nasm
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm
+
+      # ============================================
+      # 9. Cache FFmpeg build
+      # ============================================
+      - name: Cache FFmpeg build
+        id: cache-ffmpeg
+        uses: actions/cache@v4
+        with:
+          path: android/app/src/main/cpp/libs/ffmpeg
+          key: ffmpeg-android-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-android.sh') }}
+
+      # ============================================
+      # 10. Build FFmpeg for Android (only if cache missed)
+      # ============================================
+      - name: Build FFmpeg for Android
+        if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
+        run: |
+          bash scripts/build-ffmpeg-android.sh
+
+      # ============================================
+      # 11. Configure local.properties
       # ============================================
       - name: Configure Android paths
         run: |
           cat > android/local.properties << EOF
-          ndk.dir=$ANDROID_HOME/ndk/27.1.12297006
+          sdk.dir=$ANDROID_HOME
           cmake.dir=$ANDROID_HOME/cmake/3.22.1
           EOF
 
       # ============================================
-      # 9. Verify SDK tools (debug helper)
+      # 12. Verify SDK tools (debug helper)
       # ============================================
       - name: Verify CMake & NDK
         run: |
@@ -107,7 +133,7 @@ jobs:
           ls -la $ANDROID_HOME/cmake
 
       # ============================================
-      # 10. Inject Gradle init (RN + Expo fix)
+      # 13. Inject Gradle init script
       # ============================================
       - name: Inject Gradle init script
         run: |
@@ -127,7 +153,7 @@ jobs:
           EOF
 
       # ============================================
-      # 11. Setup Oboe (native audio)
+      # 14. Setup Oboe (native audio)
       # ============================================
       - name: Setup Oboe
         run: |
@@ -137,7 +163,7 @@ jobs:
           | tar -xz --strip-components=1 -C "$OBOE_DIR"
 
       # ============================================
-      # 12. Clean native cache
+      # 15. Clean native cache
       # ============================================
       - name: Clean native cache
         run: |
@@ -147,7 +173,7 @@ jobs:
           rm -rf android/build
 
       # ============================================
-      # 13. Apply patches
+      # 16. Apply patches
       # ============================================
       - name: Apply PristineAudio patches
         run: bash scripts/patch-pristine.sh
@@ -164,7 +190,7 @@ jobs:
           echo "✅ RNTP patch verified"
 
       # ============================================
-      # 14. Generate Codegen
+      # 17. Generate Codegen
       # ============================================
       - name: Generate Codegen
         working-directory: android
@@ -177,11 +203,7 @@ jobs:
             -PhermesEnabled=true
 
       # ============================================
-      # 14a. (moved after assembleDebug — see 16a)
-      # ============================================
-
-      # ============================================
-      # 15. Clean after codegen
+      # 18. Clean after codegen
       # ============================================
       - name: Clean after codegen
         run: rm -rf android/.cxx
@@ -190,17 +212,8 @@ jobs:
         working-directory: android
         run: ./gradlew clean
 
-      # NOTE: Manual "Bundle JS" step removed here (was step 15b).
-      # JS bundling is now handled automatically by the react { } block
-      # in android/app/build.gradle via bundleCommand = "export:embed"
-      # + debuggableVariants = [], which correctly resolves the
-      # expo-router/entry entrypoint. Running react-native bundle
-      # manually with --entry-file index.tsx was both wrong (this repo
-      # uses expo-router, not a plain index.tsx entry) and redundant
-      # with what Gradle now does automatically during assembleDebug.
-
       # ============================================
-      # 16. Build APK
+      # 19. Build APK
       # ============================================
       - name: Build Debug APK
         working-directory: android
@@ -214,7 +227,7 @@ jobs:
             -DJS_RUNTIME=hermes | tee build.log
 
       # ============================================
-      # 16a. Locate autolinking-generated artifacts (post-build)
+      # 20. Locate autolinking-generated artifacts (post-build)
       # ============================================
       - name: Locate autolinking artifacts
         if: always()
@@ -236,7 +249,7 @@ jobs:
           grep -n "generateAutolinkingNewArchitectureFiles\|Autolinking" build.log || echo "task not found in build.log"
 
       # ============================================
-      # 16b. Verify JS bundling task actually ran
+      # 21. Verify JS bundling task actually ran
       # ============================================
       - name: Verify JS bundle task ran
         run: |
@@ -247,7 +260,7 @@ jobs:
           find android/app/build -iname "*.bundle" -o -iname "index.android.bundle" 2>/dev/null || echo "WARNING: no bundle output file found"
 
       # ============================================
-      # 16b. Show Kotlin errors (on failure)
+      # 22. Show Kotlin errors (on failure)
       # ============================================
       - name: Show Kotlin errors
         if: failure()
@@ -262,7 +275,7 @@ jobs:
           grep -B 2 -A 5 "compilation error\|Unresolved reference\|Type mismatch\|Cannot access" android/build.log | head -80 || echo "No specific error patterns found"
 
       # ============================================
-      # 16c. Show Kotlin compiler reports (on failure)
+      # 23. Show Kotlin compiler reports (on failure)
       # ============================================
       - name: Show Kotlin compiler reports
         if: failure()
@@ -274,7 +287,7 @@ jobs:
           find android/app/build -path "*kotlin*" -type d 2>/dev/null | head -10
 
       # ============================================
-      # 16d. Check TurboModule issues
+      # 24. Check TurboModule issues
       # ============================================
       - name: Check TurboModule issues
         if: always()
@@ -289,7 +302,7 @@ jobs:
           grep -iE "System.loadLibrary|UnsatisfiedLinkError|JNI_OnLoad|native library" android/build.log || echo "No JNI/native library issues found"
 
       # ============================================
-      # 17. Verify APK exists
+      # 25. Verify APK exists
       # ============================================
       - name: Verify APK exists
         if: success()
@@ -297,13 +310,8 @@ jobs:
           test -f android/app/build/outputs/apk/debug/app-debug.apk
 
       # ============================================
-      # 17a. Start Metro dev server in background
+      # 26. Start Metro dev server in background
       # ============================================
-      # expo-dev-client always tries to connect to Metro at app cold
-      # start (BridgelessDevSupportManager -> ws://10.0.2.2:8081), even
-      # with an embedded bundle present. 10.0.2.2 is the emulator's
-      # standard alias for the CI runner's localhost, so starting Metro
-      # here lets the app connect automatically without adb reverse.
       - name: Start Metro
         if: success()
         run: |
@@ -319,7 +327,7 @@ jobs:
           curl -s http://localhost:8081/status || echo "WARNING: Metro did not respond to /status"
 
       # ============================================
-      # 17b. Run on emulator and capture logcat
+      # 27. Run on emulator and capture logcat
       # ============================================
       - name: Run on emulator
         if: success()
@@ -393,7 +401,7 @@ jobs:
           path: logcat-full.log
 
       # ============================================
-      # 17c. Upload Metro log
+      # 28. Upload Metro log
       # ============================================
       - name: Upload Metro log
         uses: actions/upload-artifact@v4
@@ -403,7 +411,7 @@ jobs:
           path: metro.log
 
       # ============================================
-      # 18. Upload logs
+      # 29. Upload logs
       # ============================================
       - uses: actions/upload-artifact@v4
         if: always()
@@ -423,10 +431,11 @@ jobs:
           path: android/build-issues.log
 
       # ============================================
-      # 19. Upload APK
+      # 30. Upload APK
       # ============================================
       - uses: actions/upload-artifact@v4
         if: success()
         with:
           name: PristineAudio-Debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          
