@@ -73,17 +73,21 @@ for ARCH in "${ARCHS[@]}"; do
     SRC_LIB="$WORK_DIR/ffmpeg-android-maker/output/lib/$ARCH"
 
     DEST="$OUTPUT_BASE/$ARCH"
-    mkdir -p "$DEST"
+    DEST_INCLUDE="$DEST/include"
+    DEST_LIB="$DEST/lib"
+    mkdir -p "$DEST_INCLUDE" "$DEST_LIB"
 
     if [ -d "$SRC_INCLUDE" ] && [ -d "$SRC_LIB" ]; then
-        cp -R "$SRC_INCLUDE" "$DEST/"
-        cp -R "$SRC_LIB" "$DEST/"
+        cp -R "$SRC_INCLUDE/." "$DEST_INCLUDE/"
+        cp -R "$SRC_LIB/." "$DEST_LIB/"
         echo "✅ FFmpeg for $ARCH copied to $DEST"
     else
-        echo "❌ Missing output for $ARCH"
+        echo "❌ Missing output for $ARCH:"
+        echo "  include: $SRC_INCLUDE"
+        echo "  lib: $SRC_LIB"
         exit 1
     fi
-done
+done 
 
 echo ""
 echo "🎉 FFmpeg Android build selesai!" 
