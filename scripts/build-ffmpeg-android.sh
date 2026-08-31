@@ -3,24 +3,44 @@
 set -euo pipefail
 
 # ============================================
+# Tentukan Android SDK & NDK
+# ============================================
+if [ -z "${ANDROID_SDK_HOME:-}" ]; then
+    if [ -n "${ANDROID_HOME:-}" ]; then
+        export ANDROID_SDK_HOME="$ANDROID_HOME"
+    elif [ -n "${ANDROID_SDK_ROOT:-}" ]; then
+        export ANDROID_SDK_HOME="$ANDROID_SDK_ROOT"
+    else
+        echo "❌ ANDROID_SDK_HOME is not defined. Exiting."
+        exit 1
+    fi
+fi
+
+if [ -z "${ANDROID_NDK_HOME:-}" ]; then
+    # Cari NDK di dalam SDK
+    NDK_DIR=$(find "$ANDROID_SDK_HOME/ndk" -maxdepth 1 -type d -name "27.1.12297006" 2>/dev/null | head -1)
+    if [ -n "$NDK_DIR" ]; then
+        export ANDROID_NDK_HOME="$NDK_DIR"
+    else
+        echo "❌ NDK 27.1.12297006 not found in $ANDROID_SDK_HOME/ndk. Exiting."
+        exit 1
+    fi
+fi
+
+echo "Using ANDROID_SDK_HOME=$ANDROID_SDK_HOME"
+echo "Using ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+
+# ============================================
 # Script: Build FFmpeg untuk Android
 # Menggunakan ffmpeg-android-maker
 # ============================================
 
-# Versi FFmpeg (bisa disesuaikan)
 FFMPEG_VERSION="6.1.2"
-
-# Arsitektur target
 ARCHS=("arm64-v8a" "armeabi-v7a" "x86" "x86_64")
-
-# API level minimum
 MIN_API=24
-
-# Output base
 OUTPUT_BASE="android/app/src/main/cpp/libs/ffmpeg"
-
-# Buat direktori kerja
 WORK_DIR="./tmp/ffmpeg-build"
+
 mkdir -p "$WORK_DIR" "$OUTPUT_BASE"
 
 # Clone ffmpeg-android-maker
@@ -60,13 +80,10 @@ for ARCH in "${ARCHS[@]}"; do
         cp -R "$SRC_LIB" "$DEST/"
         echo "✅ FFmpeg for $ARCH copied to $DEST"
     else
-        echo "❌ Missing output for $ARCH:"
-        echo "  include: $SRC_INCLUDE"
-        echo "  lib: $SRC_LIB"
+        echo "❌ Missing output for $ARCH"
         exit 1
     fi
 done
 
 echo ""
-echo "🎉 FFmpeg Android build selesai!"
-echo "Output folder: $OUTPUT_BASE" 
+echo "🎉 FFmpeg Android build selesai!" 
