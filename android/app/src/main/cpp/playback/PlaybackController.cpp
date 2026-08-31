@@ -28,6 +28,7 @@ bool PlaybackController::initialize() {
     clock_ = std::make_shared<PlaybackClock>();
     metrics_ = std::make_shared<MetricsCollector>();
     state_ = std::make_shared<PlaybackState>();
+    queue_ = std::make_shared<TrackQueue>();
 
     initialized_.store(true, std::memory_order_release);
     return true;
@@ -46,6 +47,7 @@ void PlaybackController::shutdown() {
     clock_.reset();
     metrics_.reset();
     state_.reset();
+    queue_.reset();
 }
 
 // =====================================================
@@ -61,7 +63,6 @@ std::shared_ptr<PlaybackState> PlaybackController::state() const noexcept {
 }
 
 std::shared_ptr<MetricsCollector> PlaybackController::metrics() const noexcept {
-
     return metrics_;
 }
 
@@ -71,6 +72,40 @@ std::shared_ptr<PlaybackClock> PlaybackController::clock() const noexcept {
 
 std::shared_ptr<PCMQueue> PlaybackController::pcmQueue() const noexcept {
     return pcmQueue_;
+}
+
+std::shared_ptr<TrackQueue> PlaybackController::queue() const noexcept {
+    return queue_;
+}
+
+// =====================================================
+// QUEUE & NAVIGATION
+// =====================================================
+
+bool PlaybackController::next() {
+    if (!queue_) return false;
+    auto track = queue_->next();
+    if (track) {
+        return loadTrack(*track);
+    }
+    return false;
+}
+
+bool PlaybackController::previous() {
+    if (!queue_) return false;
+    auto track = queue_->previous();
+    if (track) {
+        return loadTrack(*track);
+    }
+    return false;
+}
+
+void PlaybackController::setShuffle(bool enabled) {
+    if (queue_) queue_->setShuffleMode(enabled ? ShuffleMode::On : ShuffleMode::Off);
+}
+
+void PlaybackController::setRepeatMode(RepeatMode mode) {
+    if (queue_) queue_->setRepeatMode(mode);
 }
 
 // =====================================================
@@ -145,33 +180,19 @@ void PlaybackController::render(float* output,
                                 uint32_t sampleRate) noexcept {
     if (!output || frames == 0) return;
 
-    // 1. pull PCM from queue (NO LOCK)
     const size_t requested = frames * channels;
-
     size_t readFrames = pcmQueue_->read(output, frames);
 
-    // 2. if underrun → fill silence
     if (readFrames < frames) {
         const size_t offset = readFrames * channels;
         const size_t remaining = (frames - readFrames) * channels;
-
-        std::fill(output + offset,
-                  output + offset + remaining,
-                  0.0f);
+        std::fill(output + offset, output + offset + remaining, 0.0f);
     }
 
-    // 3. advance clock
     clock_->advanceFrames(frames);
 
-    // 4. update metrics (cheap atomic ops inside)
     if (metrics_) {
         metrics_->recordFrameRendered(frames);
-    }
-
-    // 5. optional state sync (VERY LIGHT)
-    const bool isPlaying = playing_.load(std::memory_order_relaxed);
-    if (!isPlaying) {
-        // optional: could mute output or fade
     }
 }
 
@@ -211,16 +232,11 @@ void PlaybackController::stopDecoder() {
     decoderWorker_.reset();
 }
 
-// =====================================================
-// INTERNAL STATE UPDATE
-// =====================================================
-
 void PlaybackController::updatePlaybackState() {
     if (!state_)
         return;
 
-    const bool isPlaying =
-        playing_.load(std::memory_order_acquire);
+    const bool isPlaying = playing_.load(std::memory_order_acquire);
 
     state_->setStatus(
         isPlaying
@@ -231,8 +247,4 @@ void PlaybackController::updatePlaybackState() {
     state_->setCurrentTrack(currentTrack_);
 }
 
-// =====================================================
-// END
-// =====================================================
-
-} // namespace pristine::playback 
+} // namespace pristine::playback
