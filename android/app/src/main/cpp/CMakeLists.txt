@@ -376,7 +376,7 @@ foreach(lib ${AUTOLINKED_LIBRARIES})
     )
 
     # Link langsung ke target prefab
-    target_link_libraries(${lib} PRIVATE
+    target_link_libraries(${lib}
       ReactAndroid::reactnative
       ReactAndroid::jsi
       fbjni::fbjni
