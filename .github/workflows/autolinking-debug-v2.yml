@@ -55,6 +55,13 @@ jobs:
             "cmake;3.22.1"
 
       # ============================================
+      # 5a. Build FFmpeg for Android
+      # ============================================
+      - name: Build FFmpeg for Android
+        run: |
+          bash scripts/build-ffmpeg-android.sh
+
+      # ============================================
       # 6. Configure local.properties (tanpa ndk.dir)
       # ============================================
       - name: Configure Android paths
@@ -211,7 +218,6 @@ jobs:
       # ============================================
       # 14. Write OnLoad.cpp for appmodules target (RN 0.83)
       # ============================================
-      
 
       # ============================================
       # 15. Generate app's own Codegen spec
