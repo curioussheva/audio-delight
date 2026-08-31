@@ -13,6 +13,10 @@ import {
   stopVisualizer,
 } from "@/features/visualizer/native/VisualizerBridge";
 
+import { RNTP_ENABLED } from "./rntpEnabled";
+
+
+
 interface AudioEngineConfig {
   minBufferMs?: number;
   maxBufferMs?: number;
@@ -41,6 +45,12 @@ export class AudioEngine {
   // ─── Lifecycle ───────────────────────────────────────
   async initialize(): Promise<void> {
     if (this.isInitialized) return;
+    
+    if (!RNTP_ENABLED) {
+    console.log("💤 [AudioEngine] RNTP disabled, skipping TrackPlayer setup");
+    this.isInitialized = true;
+    return;
+  }
 
     try {
       await TrackPlayer.setupPlayer({

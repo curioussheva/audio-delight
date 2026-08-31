@@ -36,9 +36,15 @@ import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useLibraryStore } from "@/features/library/store/libraryStore";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
 import { BackgroundScanTask } from "@/features/library/services/BackgroundScanTask";
+import { RNTP_ENABLED } from "@/features/player/api/rntpEnabled";
+
 
 // Register Playback Service
-TrackPlayer.registerPlaybackService(() => playbackService);
+if (RNTP_ENABLED) {
+  TrackPlayer.registerPlaybackService(() => playbackService);
+} else {
+  console.log("RNTP disabled, skipping registerPlaybackService");
+} 
 SplashScreen.preventAutoHideAsync();
 
 type AppInitState = "initializing" | "loading" | "ready" | "error";

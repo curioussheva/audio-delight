@@ -4,15 +4,22 @@ import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
 
 @ReactModule(name = NativePlaybackModule.NAME)
-class NativePlaybackModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
+class NativePlaybackModule(reactContext: ReactApplicationContext) :
+    ReactContextBaseJavaModule(reactContext) {
+
     companion object {
         const val NAME = "NativePlaybackModule"
+
+        @Volatile
+        var instance: NativePlaybackModule? = null
     }
 
     init {
         System.loadLibrary("pristine-audio")
+        instance = this
     }
 
+    // Native methods
     private external fun nativePlay()
     private external fun nativePause()
     private external fun nativeStop()
@@ -29,6 +36,7 @@ class NativePlaybackModule(reactContext: ReactApplicationContext) : ReactContext
 
     override fun getName() = NAME
 
+    // React methods
     @ReactMethod fun play() { nativePlay() }
     @ReactMethod fun pause() { nativePause() }
     @ReactMethod fun stop() { nativeStop() }
@@ -42,4 +50,17 @@ class NativePlaybackModule(reactContext: ReactApplicationContext) : ReactContext
     @ReactMethod fun getQueue(): Array<String> = nativeGetQueue()
     @ReactMethod fun setQueue(uris: Array<String>) { nativeSetQueue(uris) }
     @ReactMethod fun getCurrentTrack(): String = nativeGetCurrentTrack()
-}
+
+    // Service-friendly methods (tanpa React)
+    fun playFromService() = nativePlay()
+    fun pauseFromService() = nativePause()
+    fun stopFromService() = nativeStop()
+    fun seekFromService(positionMs: Long) = nativeSeek(positionMs)
+    fun nextFromService() = nativeNext()
+    fun previousFromService() = nativePrevious()
+    fun setShuffleFromService(enabled: Boolean) = nativeSetShuffle(enabled)
+    fun setRepeatModeFromService(mode: Int) = nativeSetRepeatMode(mode)
+    fun getQueueFromService(): Array<String> = nativeGetQueue()
+    fun setQueueFromService(uris: Array<String>) = nativeSetQueue(uris)
+    fun getCurrentTrackFromService(): String = nativeGetCurrentTrack()
+} 

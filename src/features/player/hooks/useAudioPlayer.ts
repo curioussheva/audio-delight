@@ -10,6 +10,7 @@ import TrackPlayer, {
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
 import { Song } from "@/shared/types/audio";
+import { RNTP_ENABLED } from "../api/rntpEnabled";
 
 /**
  * Hook kustom untuk mengelola pemutaran audio dan sinkronisasi dengan Native DSP (Equalizer).
@@ -37,6 +38,10 @@ export const useAudioPlayer = () => {
    * dan mengirimkannya ke store Equalizer agar efek DSP aktif.
    */
   const syncAudioSession = useCallback(async () => {
+    if (!RNTP_ENABLED) {
+      console.log("RNTP disabled, syncAudioSession skipped");
+      return;
+    }
     try {
       // @ts-ignore - getAudioSessionId tersedia di Android untuk RNTP
       const sessionId = await TrackPlayer.getAudioSessionId();
@@ -49,17 +54,36 @@ export const useAudioPlayer = () => {
     }
   }, [setAudioSessionId]);
 
-  // 1. Setup Awal Track Player
+  // Setup awal Track Player
   useEffect(() => {
     const setupPlayer = async () => {
-      if (isReady.current) return;
+      if (!RNTP_ENABLED) {
+        console.log("RNTP disabled, skipping setup");
+        isReady.current = false; // atau true tergantung kebutuhan
+        return;
+      }
 
       try {
         await TrackPlayer.setupPlayer({
-          autoHandleInterruptions: true,
+          minBuffer: 100,
+          maxBuffer: 300,
+          playBuffer: 2,
+          backBuffer: 60,
+          waitForBuffer: true,
         });
 
         await TrackPlayer.updateOptions({
+          android: {
+            appKilledPlaybackBehavior: 0, // default stop
+            alwaysPauseOnInterruption: true,
+            notificationCapabilities: [
+              Capability.Play,
+              Capability.Pause,
+              Capability.SkipToNext,
+              Capability.SkipToPrevious,
+              Capability.SeekTo,
+            ],
+          },
           capabilities: [
             Capability.Play,
             Capability.Pause,
@@ -72,29 +96,23 @@ export const useAudioPlayer = () => {
             Capability.Play,
             Capability.Pause,
             Capability.SkipToNext,
-            Capability.SkipToPrevious,
           ],
         });
 
         isReady.current = true;
-        // Coba sinkronisasi session ID pertama kali
-        syncAudioSession();
+        console.log("🎵 [Player] TrackPlayer ready");
       } catch (error) {
         console.error("Gagal setup TrackPlayer:", error);
+        isReady.current = false;
       }
     };
 
     setupPlayer();
-
-    return () => {
-      // Cleanup jika diperlukan (biasanya di level App root)
-    };
-  }, [syncAudioSession]);
+  }, []);
 
   // 2. Listener Event: Sinkronisasi ulang saat lagu berganti
   useTrackPlayerEvents([Event.PlaybackActiveTrackChanged], (event) => {
     if (event.type === Event.PlaybackActiveTrackChanged && event.track) {
-      // Beri sedikit delay agar engine audio Android siap memberikan Session ID baru
       setTimeout(syncAudioSession, 500);
     }
   });
@@ -102,9 +120,12 @@ export const useAudioPlayer = () => {
   // 3. Fungsi Load & Play Lagu
   const loadSong = useCallback(
     async (song: Song) => {
-      try {
-        if (!isReady.current) return;
+      if (!isReady.current || !RNTP_ENABLED) {
+        console.log("RNTP disabled or not ready, loadSong skipped");
+        return;
+      }
 
+      try {
         await TrackPlayer.reset();
         await TrackPlayer.add({
           id: song.id,
@@ -119,7 +140,6 @@ export const useAudioPlayer = () => {
         setCurrentSong(song);
         setIsPlaying(true);
 
-        // Sinkronisasi DSP untuk lagu yang baru dimuat
         setTimeout(syncAudioSession, 800);
       } catch (error) {
         console.error("Error memuat lagu:", error);
@@ -130,19 +150,28 @@ export const useAudioPlayer = () => {
 
   // 4. Kontrol Transport (Play, Pause, Toggle)
   const play = useCallback(async () => {
-    if (!isReady.current) return;
+    if (!isReady.current || !RNTP_ENABLED) {
+      console.log("RNTP disabled or not ready, play skipped");
+      return;
+    }
     await TrackPlayer.play();
     setIsPlaying(true);
   }, [setIsPlaying]);
 
   const pause = useCallback(async () => {
-    if (!isReady.current) return;
+    if (!isReady.current || !RNTP_ENABLED) {
+      console.log("RNTP disabled or not ready, pause skipped");
+      return;
+    }
     await TrackPlayer.pause();
     setIsPlaying(false);
   }, [setIsPlaying]);
 
   const togglePlayPause = useCallback(async () => {
-    if (!isReady.current) return;
+    if (!isReady.current || !RNTP_ENABLED) {
+      console.log("RNTP disabled or not ready, toggle skipped");
+      return;
+    }
     if (playbackState.state === State.Playing) {
       await pause();
     } else {
@@ -152,18 +181,27 @@ export const useAudioPlayer = () => {
 
   // 5. Seek & Skip
   const seek = useCallback(async (position: number) => {
-    if (!isReady.current) return;
-    await TrackPlayer.seekTo(position); // posisi dalam detik
+    if (!isReady.current || !RNTP_ENABLED) {
+      console.log("RNTP disabled or not ready, seek skipped");
+      return;
+    }
+    await TrackPlayer.seekTo(position);
   }, []);
 
   const skipToNext = useCallback(async () => {
-    if (!isReady.current) return;
+    if (!isReady.current || !RNTP_ENABLED) {
+      console.log("RNTP disabled or not ready, skipToNext skipped");
+      return;
+    }
     await TrackPlayer.skipToNext();
     playNext();
   }, [playNext]);
 
   const skipToPrevious = useCallback(async () => {
-    if (!isReady.current) return;
+    if (!isReady.current || !RNTP_ENABLED) {
+      console.log("RNTP disabled or not ready, skipToPrevious skipped");
+      return;
+    }
     await TrackPlayer.skipToPrevious();
     playPrevious();
   }, [playPrevious]);
@@ -195,4 +233,4 @@ export const useAudioPlayer = () => {
     duration: progress.duration,
     isLoading: !isReady.current,
   };
-};
+}; 

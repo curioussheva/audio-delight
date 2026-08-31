@@ -78,6 +78,17 @@
                 <action android:name="android.intent.action.MEDIA_BUTTON"/>
             </intent-filter>
         </service>
+        
+        <!-- Custom Oboe Playback Service (Pengganti RNTP) -->
+        <service
+            android:name="com.pristineaudio.playback.PlaybackService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="true">
+          
+            <intent-filter>
+                <action android:name="androidx.media.MediaBrowserServiceCompat"/>
+            </intent-filter>
+        </service>
 
         <!-- ===================== -->
         <!-- MAIN ACTIVITY -->

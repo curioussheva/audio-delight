@@ -10,6 +10,7 @@ import TrackPlayer, {
 import { usePlayerStore } from "../store/playerStore";
 import { Song } from "@/shared/types/audio";
 import { LibraryScanner } from "@/features/library/api/scanner";
+import { RNTP_ENABLED } from "../api/rntpEnabled";
 
 // Helper untuk konversi URI
 const normalizeUri = (uri: string): string => {
@@ -45,12 +46,32 @@ export const useTrackPlayerHandler = () => {
 
   // Setup TrackPlayer
   useEffect(() => {
-    const setup = async () => {
-      if (isInitializedRef.current) return;
+    const setupPlayer = async () => {
+      if (!RNTP_ENABLED) {
+        console.log("RNTP disabled, skipping setup");
+        return;
+      }
 
       try {
-        await TrackPlayer.setupPlayer();
+        await TrackPlayer.setupPlayer({
+          minBuffer: 100,
+          maxBuffer: 300,
+          playBuffer: 2,
+          backBuffer: 60,
+          waitForBuffer: true,
+        });
+
         await TrackPlayer.updateOptions({
+          android: {
+            alwaysPauseOnInterruption: true,
+            notificationCapabilities: [
+              Capability.Play,
+              Capability.Pause,
+              Capability.SkipToNext,
+              Capability.SkipToPrevious,
+              Capability.SeekTo,
+            ],
+          },
           capabilities: [
             Capability.Play,
             Capability.Pause,
@@ -63,17 +84,18 @@ export const useTrackPlayerHandler = () => {
             Capability.Play,
             Capability.Pause,
             Capability.SkipToNext,
-            Capability.SkipToPrevious,
           ],
         });
+
         isInitializedRef.current = true;
         console.log("[TrackPlayer] Setup complete");
       } catch (error) {
         console.error("[TrackPlayer] Setup failed:", error);
+        isInitializedRef.current = false;
       }
     };
 
-    setup();
+    setupPlayer();
   }, []);
 
   // Handle track player events
@@ -85,6 +107,10 @@ export const useTrackPlayerHandler = () => {
       Event.PlaybackProgressUpdated,
     ],
     async (event) => {
+      if (!RNTP_ENABLED) {
+        return;
+      }
+
       switch (event.type) {
         case Event.PlaybackError:
           const now = Date.now();
@@ -151,6 +177,11 @@ export const useTrackPlayerHandler = () => {
     song: Song,
     queueSongs?: Song[],
   ): Promise<boolean> => {
+    if (!RNTP_ENABLED) {
+      console.log("RNTP disabled, playSong skipped");
+      return false;
+    }
+
     // Validasi song object
     if (!song || !song.id) {
       console.error("[TrackPlayer] Cannot play song: invalid song object");
@@ -236,6 +267,11 @@ export const useTrackPlayerHandler = () => {
   };
 
   const togglePlay = async () => {
+    if (!RNTP_ENABLED) {
+      console.log("RNTP disabled, togglePlay skipped");
+      return;
+    }
+
     try {
       const playbackState = await TrackPlayer.getPlaybackState();
       const state = playbackState?.state;
@@ -245,7 +281,6 @@ export const useTrackPlayerHandler = () => {
       } else if (state === State.Paused || state === State.Ready) {
         await TrackPlayer.play();
       } else {
-        // Jika tidak ada track yang sedang dimainkan, coba play current song
         const { currentSong: storeSong } = usePlayerStore.getState();
         if (storeSong) {
           await playSong(storeSong);
@@ -257,6 +292,11 @@ export const useTrackPlayerHandler = () => {
   };
 
   const seek = async (position: number) => {
+    if (!RNTP_ENABLED) {
+      console.log("RNTP disabled, seek skipped");
+      return;
+    }
+
     try {
       await TrackPlayer.seekTo(position);
     } catch (error) {
@@ -265,6 +305,11 @@ export const useTrackPlayerHandler = () => {
   };
 
   const playNext = async () => {
+    if (!RNTP_ENABLED) {
+      console.log("RNTP disabled, playNext skipped");
+      return;
+    }
+
     try {
       const queue = await TrackPlayer.getQueue();
       const currentTrack = await TrackPlayer.getActiveTrack();
@@ -273,7 +318,6 @@ export const useTrackPlayerHandler = () => {
       if (currentIndex < queue.length - 1) {
         await TrackPlayer.skipToNext();
       } else {
-        // End of queue, maybe loop or stop
         console.log("[TrackPlayer] End of queue");
       }
     } catch (error) {
@@ -282,6 +326,11 @@ export const useTrackPlayerHandler = () => {
   };
 
   const playPrevious = async () => {
+    if (!RNTP_ENABLED) {
+      console.log("RNTP disabled, playPrevious skipped");
+      return;
+    }
+
     try {
       const position = await TrackPlayer.getPosition();
       if (position > 3) {
@@ -295,6 +344,11 @@ export const useTrackPlayerHandler = () => {
   };
 
   const getPlaybackState = async () => {
+    if (!RNTP_ENABLED) {
+      console.log("RNTP disabled, getPlaybackState returns null");
+      return null;
+    }
+
     try {
       return await TrackPlayer.getPlaybackState();
     } catch (error) {
@@ -311,4 +365,4 @@ export const useTrackPlayerHandler = () => {
     playPrevious,
     getPlaybackState,
   };
-};
+}; 
