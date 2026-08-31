@@ -55,7 +55,7 @@ jobs:
             "cmake;3.22.1"
 
       # ============================================
-      # 5a. Install nasm (required by FFmpeg)
+      # 6. Install nasm (required by FFmpeg)
       # ============================================
       - name: Install nasm
         run: |
@@ -63,14 +63,36 @@ jobs:
           sudo apt-get install -y nasm
 
       # ============================================
-      # 5b. Build FFmpeg for Android
+      # 7. Cache FFmpeg build
+      # ============================================
+      - name: Cache FFmpeg build
+        id: cache-ffmpeg
+        uses: actions/cache@v4
+        with:
+          path: android/app/src/main/cpp/libs/ffmpeg
+          key: ffmpeg-android-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-android.sh') }}
+
+      # ============================================
+      # 8. Build FFmpeg for Android (only if cache missed)
       # ============================================
       - name: Build FFmpeg for Android
+        if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
         run: |
           bash scripts/build-ffmpeg-android.sh
 
       # ============================================
-      # 6. Configure local.properties (tanpa ndk.dir)
+      # 9. Verify FFmpeg output
+      # ============================================
+      - name: Verify FFmpeg output
+        run: |
+          echo "=== FFmpeg output structure ==="
+          find android/app/src/main/cpp/libs/ffmpeg -maxdepth 3 -type d | sort
+          echo ""
+          echo "=== FFmpeg libs ==="
+          find android/app/src/main/cpp/libs/ffmpeg -name "*.so" | sort
+
+      # ============================================
+      # 10. Configure local.properties
       # ============================================
       - name: Configure Android paths
         run: |
@@ -80,7 +102,7 @@ jobs:
           EOF
 
       # ============================================
-      # 7. Inject Gradle init script (RN + Expo fix)
+      # 11. Inject Gradle init script
       # ============================================
       - name: Inject Gradle init script
         run: |
@@ -100,7 +122,7 @@ jobs:
           EOF
 
       # ============================================
-      # 8. Setup Oboe (needed for CMake configure)
+      # 12. Setup Oboe
       # ============================================
       - name: Setup Oboe
         run: |
@@ -110,7 +132,7 @@ jobs:
           | tar -xz --strip-components=1 -C "$OBOE_DIR"
 
       # ============================================
-      # 9. Patch RN Gradle Plugin (fix foojay bug)
+      # 13. Patch RN Gradle Plugin
       # ============================================
       - name: Patch RN Gradle Plugin
         run: |
@@ -123,15 +145,13 @@ jobs:
           fi
 
       # ============================================
-      # 10. Apply PristineAudio patches
+      # 14. Apply PristineAudio patches
       # ============================================
       - name: Apply PristineAudio patches
         run: bash scripts/patch-pristine.sh
 
-      # (CMakeLists diambil dari repo — jangan rewrite di CI)
-
       # ============================================
-      # 11. Run generateAutolinkingNewArchitectureFiles
+      # 15. Run generateAutolinkingNewArchitectureFiles
       # ============================================
       - name: Run generateAutolinkingNewArchitectureFiles
         working-directory: android
@@ -148,7 +168,7 @@ jobs:
           grep -E "generateAutolinkingNewArchitectureFiles|BUILD SUCCESSFUL|BUILD FAILED|SKIPPED|UP-TO-DATE" autolinking.log || echo "No matching output"
 
       # ============================================
-      # 12. Locate and inspect autolinking artifacts
+      # 16. Locate autolinking artifacts
       # ============================================
       - name: Locate autolinking artifacts
         if: always()
@@ -167,7 +187,7 @@ jobs:
           grep -rl "appmodules" app/build 2>/dev/null || echo "none found"
 
       # ============================================
-      # 13. Dump content of autolinking cmake file (if found)
+      # 17. Dump autolinking cmake content
       # ============================================
       - name: Show autolinking cmake content
         if: always()
@@ -182,7 +202,7 @@ jobs:
           fi
 
       # ============================================
-      # 13b. Dump app's own Codegen spec CMakeLists.txt
+      # 18. Dump Codegen spec CMakeLists
       # ============================================
       - name: Show Codegen spec CMakeLists content
         if: always()
@@ -194,15 +214,13 @@ jobs:
             cat "$FILE"
           else
             echo "Not found at $FILE"
-            echo "=== Searching elsewhere ==="
-            find app/build/generated/source/codegen -iname "CMakeLists.txt" 2>/dev/null || echo "none found"
           fi
           echo ""
           echo "=== PristineAudioSpec.h (first 60 lines) ==="
           find app/build/generated/source/codegen -iname "PristineAudioSpec.h" -exec head -60 {} \; 2>/dev/null || echo "not found"
 
       # ============================================
-      # 13c. Show autolinking.cpp / autolinking.h content
+      # 19. Show autolinking.cpp / autolinking.h
       # ============================================
       - name: Show autolinking.cpp and autolinking.h content
         if: always()
@@ -224,11 +242,7 @@ jobs:
           fi
 
       # ============================================
-      # 14. Write OnLoad.cpp for appmodules target (RN 0.83)
-      # ============================================
-
-      # ============================================
-      # 15. Generate app's own Codegen spec
+      # 20. Generate Codegen
       # ============================================
       - name: Generate Codegen
         working-directory: android
@@ -243,7 +257,7 @@ jobs:
           find app/build/generated/source/codegen -iname "PristineAudioSpec.h" || echo "NOT FOUND"
 
       # ============================================
-      # 15b. Clean native caches before full build
+      # 21. Clean native caches
       # ============================================
       - name: Clean CMake & native caches
         working-directory: android
@@ -254,9 +268,9 @@ jobs:
           echo "✅ Native caches cleaned"
 
       # ============================================
-      # 16. Full build — test appmodules compiles and links
+      # 22. Full build
       # ============================================
-      - name: Build Debug APK (test appmodules target)
+      - name: Build Debug APK
         working-directory: android
         run: |
           ./gradlew assembleDebug \
@@ -268,7 +282,7 @@ jobs:
           echo "exit code: $?"
 
       # ============================================
-      # 17. Filter build log for appmodules-specific results
+      # 23. Filter build log
       # ============================================
       - name: Show appmodules build result
         if: always()
@@ -290,7 +304,7 @@ jobs:
           find app/build -iname "libappmodules.so" || echo "libappmodules.so NOT produced"
 
       # ============================================
-      # 18. Upload appmodules build log
+      # 24. Upload logs
       # ============================================
       - uses: actions/upload-artifact@v4
         if: always()
@@ -298,9 +312,6 @@ jobs:
           name: Appmodules-Build-Log
           path: android/appmodules-build.log
 
-      # ============================================
-      # 19. Upload autolinking log
-      # ============================================
       - uses: actions/upload-artifact@v4
         if: always()
         with:
