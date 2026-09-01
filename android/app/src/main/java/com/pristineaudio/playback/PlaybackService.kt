@@ -5,7 +5,7 @@ import android.os.Bundle
 import androidx.media.MediaBrowserServiceCompat
 import androidx.media.MediaBrowserServiceCompat.BrowserRoot
 import androidx.media.MediaBrowserServiceCompat.Result
-import androidx.media.MediaBrowserCompat.MediaItem
+import androidx.media.MediaBrowserCompat
 
 class PlaybackService : MediaBrowserServiceCompat() {
 
@@ -30,13 +30,12 @@ class PlaybackService : MediaBrowserServiceCompat() {
         clientUid: Int,
         rootHints: Bundle?
     ): BrowserRoot? {
-        // Untuk sekarang izinkan semua client
         return BrowserRoot("root", null)
     }
 
     override fun onLoadChildren(
         parentId: String,
-        result: Result<MutableList<MediaItem>>
+        result: Result<MutableList<MediaBrowserCompat.MediaItem>>
     ) {
         // TODO: ambil daftar antrian dari PlaybackController / TrackQueue
         result.sendResult(mutableListOf())
@@ -63,4 +62,4 @@ class PlaybackService : MediaBrowserServiceCompat() {
         mediaSessionManager.release()
         super.onDestroy()
     }
-} 
+}

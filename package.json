@@ -76,7 +76,6 @@
     "react-native-screens": "~4.23.0",
     "react-native-svg": "15.15.3",
     "react-native-tab-view": "^3.5.2",
-    "react-native-track-player": "lovegaoshi/react-native-track-player#chore/rn0.83",
     "react-native-worklets": "0.7.4",
     "zustand": "^4.5.5"
   },
@@ -122,12 +121,12 @@
     "pnpm": ">=9.0.0"
   },
   "codegenConfig": {
-  "name": "PristineAudioSpec",
-  "type": "modules",
-  "jsSrcsDir": "src",
-  "android": {
-    "javaPackageName": "com.pristineaudio.app"
-  }
-},
+    "name": "PristineAudioSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.pristineaudio.app"
+    }
+  },
   "packageManager": "pnpm@9.0.0"
-} 
+}

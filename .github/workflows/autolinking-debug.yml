@@ -147,8 +147,6 @@ jobs:
       # ============================================
       # 14. Apply PristineAudio patches
       # ============================================
-      - name: Apply PristineAudio patches
-        run: bash scripts/patch-pristine.sh
 
       # ============================================
       # 15. Run generateAutolinkingNewArchitectureFiles

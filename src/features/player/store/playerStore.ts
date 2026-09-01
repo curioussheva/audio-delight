@@ -2,12 +2,12 @@
 
 import { create } from "zustand";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import TrackPlayer from "react-native-track-player";
 import { audioEngine } from "@/features/player/api/engine";
 import { Song } from "@/shared/types/audio";
 import { LibraryScanner } from "@/features/library/api/scanner";
 import { SongQueries } from "@/shared/lib/sqlite";
 import { db } from "@/shared/lib/sqlite";
+import NativePlaybackService from "@/specs/NativePlaybackService";
 
 export interface LyricLine {
   time: number;
@@ -27,7 +27,6 @@ const KEYS = {
   LAST_POSITION: "last_position",
 } as const;
 
-// Throttle position save
 let _positionSaveTimer: ReturnType<typeof setTimeout> | null = null;
 const savePositionThrottled = (position: number) => {
   if (_positionSaveTimer) return;
@@ -38,10 +37,6 @@ const savePositionThrottled = (position: number) => {
     _positionSaveTimer = null;
   }, 5000);
 };
-
-// ─────────────────────────────────────────────
-// Store Interface
-// ─────────────────────────────────────────────
 
 export interface PlayerState {
   currentSong: Song | null;
@@ -89,10 +84,6 @@ export interface PlayerState {
   resetFloatingPlayerVisibility: () => void;
   setAudioSessionId: (id: number | null) => void;
 }
-
-// ─────────────────────────────────────────────
-// Store
-// ─────────────────────────────────────────────
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   currentSong: null,
@@ -150,20 +141,17 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           });
 
           try {
-            const tracks = restoredQueue
-              .map(songToTrack)
-              .filter((t) => !!t.url);
-            if (tracks.length > 0) {
-              await TrackPlayer.reset();
-              await TrackPlayer.add(tracks);
-              const songIndex = restoredQueue.findIndex(
-                (s) => s.id === currentSong.id,
-              );
-              if (songIndex >= 0) await TrackPlayer.skip(songIndex);
-              if (lastPosition > 0) await TrackPlayer.seekTo(lastPosition);
+            const uris = restoredQueue
+              .map((s) => s.uri)
+              .filter((uri) => !!uri);
+            if (uris.length > 0) {
+              NativePlaybackService.setQueue(uris);
+              if (lastPosition > 0) {
+                NativePlaybackService.seek(lastPosition * 1000);
+              }
             }
           } catch (e) {
-            console.warn("[Player] TrackPlayer restore failed:", e);
+            console.warn("[Player] Custom playback restore failed:", e);
           }
         }
       }
@@ -195,16 +183,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       return false;
     }
 
-    const songIndex = targetQueue.findIndex((s) => s.id === playableSong.id);
-    const skipIndex = songIndex !== -1 ? songIndex : 0;
-
     try {
-      await TrackPlayer.reset();
-      const tracks = targetQueue.map(songToTrack).filter((t) => !!t.url);
-      await TrackPlayer.add(tracks);
+      const uris = targetQueue.map((s) => s.uri).filter((uri) => !!uri);
+      if (uris.length === 0) {
+        set({ playError: "No valid URIs" });
+        return false;
+      }
 
-      await TrackPlayer.skip(skipIndex);
-      await TrackPlayer.play();
+      NativePlaybackService.setQueue(uris);
+      NativePlaybackService.play();
 
       set({
         currentSong: playableSong,
@@ -214,7 +201,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         playError: null,
       });
 
-      // Save to storage
       AsyncStorage.setItem(KEYS.LAST_SONG_ID, playableSong.id).catch(() => {});
       AsyncStorage.setItem(
         KEYS.LAST_QUEUE_IDS,
@@ -271,8 +257,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setIsPlaying: async (isPlaying: boolean) => {
     try {
-      if (isPlaying) await TrackPlayer.play();
-      else await TrackPlayer.pause();
+      if (isPlaying) NativePlaybackService.play();
+      else NativePlaybackService.pause();
       set({ isPlaying });
     } catch (error) {
       console.error("[Player] setIsPlaying failed:", error);
@@ -283,7 +269,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   seek: async (pos: number) => {
     try {
-      await TrackPlayer.seekTo(pos);
+      NativePlaybackService.seek(pos * 1000);
       set({ position: pos });
     } catch (error) {
       console.error("[Player] Seek failed:", error);
@@ -303,7 +289,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setPlaybackSpeed: async (speed: number) => {
     try {
-      await TrackPlayer.setRate(speed);
+      console.warn("[Player] setPlaybackSpeed belum didukung custom service");
       set({ playbackSpeed: speed });
       await AsyncStorage.setItem(KEYS.SPEED, speed.toString());
     } catch (error) {
@@ -403,16 +389,6 @@ const getSongsByIds = (ids: string[]): Song[] => {
   }
 };
 
-const songToTrack = (s: Song) => ({
-  id: s.id,
-  url: s.uri,
-  title: s.title || "Unknown Title",
-  artist: s.artist || "Unknown Artist",
-  album: s.album || "",
-  duration: s.duration || 0,
-  artwork: s.artwork,
-});
-
 const recoverUri = async (song: Song): Promise<Song> => {
   try {
     const freshSong = await LibraryScanner.getSongById(song.id);
@@ -423,5 +399,4 @@ const recoverUri = async (song: Song): Promise<Song> => {
   return { ...song, uri: `content://media/external/audio/media/${song.id}` };
 };
 
-// Bootstrap
-usePlayerStore.getState().initStore();
+usePlayerStore.getState().initStore(); 

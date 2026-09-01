@@ -86,9 +86,6 @@ jobs:
           curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz \
           | tar -xz --strip-components=1 -C "$OBOE_DIR"
 
-      - name: Apply PristineAudio patches
-        run: bash scripts/patch-pristine.sh
-
       - name: Generate Codegen
         working-directory: android
         run: |

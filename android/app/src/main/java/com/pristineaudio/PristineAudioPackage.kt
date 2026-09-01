@@ -5,10 +5,10 @@ import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.uimanager.ViewManager
 
-import com.pristineaudio.usb.USBDACModule
+import com.pristineaudio.USBDACModule
 import com.pristineaudio.dsp.NativeDSPModule
-import com.pristineaudio.visualizer.NativeVisualizerBridge
-import com.pristineaudio.media.MediaStoreModule
+import com.pristineaudio.NativeVisualizerBridge
+import com.pristineaudio.MediaStoreModule
 import com.pristineaudio.audio.NativePristineAudio
 import com.pristineaudio.audio.NativePlaybackModule
 import com.pristineaudio.audio.NativeDeviceModule

@@ -29,7 +29,7 @@ import LoadingScreen from "@/shared/components/ui/LoadingScreen";
 import { AudioPropertyToast } from "@/features/player/components/AudioPropertyToast";
 
 // Core Engine & Stores
-import TrackPlayer from "react-native-track-player";
+
 import { audioEngine } from "@/features/player/api/engine";
 import { playbackService } from "@/features/player/api/playback";
 import { usePlayerStore } from "@/features/player/store/playerStore";
@@ -40,11 +40,8 @@ import { RNTP_ENABLED } from "@/features/player/api/rntpEnabled";
 
 
 // Register Playback Service
-if (RNTP_ENABLED) {
-  TrackPlayer.registerPlaybackService(() => playbackService);
-} else {
-  console.log("RNTP disabled, skipping registerPlaybackService");
-} 
+// Custom playback service is used, no RNTP registration needed
+console.log("RNTP disabled, custom playback service will be used");
 SplashScreen.preventAutoHideAsync();
 
 type AppInitState = "initializing" | "loading" | "ready" | "error";

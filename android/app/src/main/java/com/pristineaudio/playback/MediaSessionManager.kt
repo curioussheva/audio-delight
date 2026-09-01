@@ -21,25 +21,7 @@ class MediaSessionManager(private val service: PlaybackService) {
 
     private val context: Context = service
 
-    private val mediaSession: MediaSessionCompat =
-        MediaSessionCompat(context, "PristineAudio").apply {
-            setCallback(sessionCallback)
-            setFlags(
-                MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
-                    MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
-            )
-        }
-
-    private val playbackStateBuilder = PlaybackStateCompat.Builder()
-        .setActions(
-            PlaybackStateCompat.ACTION_PLAY or
-                PlaybackStateCompat.ACTION_PAUSE or
-                PlaybackStateCompat.ACTION_PLAY_PAUSE or
-                PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
-                PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
-                PlaybackStateCompat.ACTION_SEEK_TO
-        )
-
+    // 1. Definisikan callback terlebih dahulu
     private val sessionCallback = object : MediaSessionCompat.Callback() {
         override fun onPlay() {
             PlaybackNativeBridge.play()
@@ -58,7 +40,6 @@ class MediaSessionManager(private val service: PlaybackService) {
         }
 
         override fun onSeekTo(pos: Long) {
-            // pos dalam ms, kirim langsung ke bridge
             PlaybackNativeBridge.seek(pos)
         }
 
@@ -66,6 +47,26 @@ class MediaSessionManager(private val service: PlaybackService) {
             PlaybackNativeBridge.stop()
         }
     }
+
+    // 2. Setelah callback ada, baru buat mediaSession
+    private val mediaSession: MediaSessionCompat =
+        MediaSessionCompat(context, "PristineAudio").apply {
+            setCallback(sessionCallback)
+            setFlags(
+                MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
+                    MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
+            )
+        }
+
+    private val playbackStateBuilder = PlaybackStateCompat.Builder()
+        .setActions(
+            PlaybackStateCompat.ACTION_PLAY or
+                PlaybackStateCompat.ACTION_PAUSE or
+                PlaybackStateCompat.ACTION_PLAY_PAUSE or
+                PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+                PlaybackStateCompat.ACTION_SEEK_TO
+        )
 
     fun startForeground() {
         createNotificationChannel()
@@ -105,7 +106,6 @@ class MediaSessionManager(private val service: PlaybackService) {
                     .setShowActionsInCompactView(0, 1, 2)
             )
 
-        // Tambahkan tombol aksi dengan PendingIntent
         builder.addAction(
             android.R.drawable.ic_media_previous,
             "Previous",

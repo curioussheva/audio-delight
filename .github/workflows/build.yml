@@ -175,8 +175,6 @@ jobs:
       # ============================================
       # 16. Apply patches
       # ============================================
-      - name: Apply PristineAudio patches
-        run: bash scripts/patch-pristine.sh
 
       - name: Patch AndroidManifest
         run: |
