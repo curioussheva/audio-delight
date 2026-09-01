@@ -453,3 +453,127 @@ UI/JS 🔄 Masih menggunakan RNTP guard, belum migrasi penuh
 ---
 
 Dokumen ini akan terus diperbarui seiring progres migrasi. Silakan commit jika sudah sesuai.
+
+---
+
+Berikut adalah pembaruan untuk docs/new-arch-roadmap.md yang mencerminkan kondisi terbaru per 1 September 2026.
+
+---
+
+Roadmap Migrasi New Architecture (TurboModule) — pristine-audio
+
+Status: 1 September 2026
+Versi React Native: 0.83.10
+Target: Migrasi seluruh layer ke New Architecture (TurboModule) penuh
+Progress: Build native stabil, RNTP dinonaktifkan, custom playback service dibangun, UI/JS migrasi hampir selesai
+
+---
+
+📊 Ringkasan Progress
+
+Fase Status Keterangan
+Fase 1 — Audit ✅ Selesai Semua modul terpetakan
+Fase 2 — Codegen Setup ✅ Selesai Codegen berhasil, path benar
+Fase 3 — Migrasi Kotlin ✅ Selesai 7 module extends TurboModule
+Fase 3b — Package Registration ✅ Selesai PristineAudioPackage menggantikan USBDACPackage
+Fase 3c — TS Specs ✅ Selesai 7 specs lengkap
+Fase 4 — Migrasi Features JS ✅ Selesai 8 file pakai TurboModuleRegistry
+Fase 5 — Build & Runtime ✅ Build sukses libappmodules.so terproduksi, FFmpeg terintegrasi
+Fase 6 — RNTP Replacement 🔄 Sedang berjalan Custom playback service dibuat, UI/JS dimigrasi
+Fase 7 — Verifikasi Runtime ⏳ Menunggu Perlu uji fitur dan media session
+
+---
+
+🎉 Pencapaian Terbaru
+
+· Build native sukses total
+    libappmodules.so berhasil dibuat untuk arm64-v8a dan x86_64.
+    FFmpeg prebuilt terintegrasi, FFmpegDecoder.cpp aktif.
+· RNTP berhasil dinonaktifkan
+    Aplikasi tidak lagi crash karena UnsatisfiedLinkError.
+    RNTP_ENABLED = false sementara, menunggu penghapusan total.
+· Custom playback service dibangun
+  · PlaybackService.kt
+  · MediaSessionManager.kt
+  · PlaybackNativeBridge.kt
+  · NativePlaybackService.kt
+  · PristineAudioPackage.kt (menggantikan USBDACPackage)
+· Migrasi UI/JS hampir selesai
+    Semua referensi react-native-track-player di src/ telah diganti dengan NativePlaybackService.
+    Hanya tersisa deklarasi tipe di globals.d.ts dan referensi di package.json yang akan segera dihapus.
+· Workflow CI dipisah
+  · build-dev.yml
+  · build-preview.yml
+  · runtime-test.yml
+  · autolinking-debug.yml
+
+---
+
+✅ Checklist Final
+
+Item Status
+Semua modul Kotlin extends TurboModule ✅ Selesai
+Semua TS Specs match dengan Kotlin ✅ Selesai
+Codegen berjalan tanpa error ✅ Selesai
+Build sukses ✅ Selesai
+Semua Features JS pakai TurboModuleRegistry ✅ Selesai
+CMakeLists include Codegen JNI ✅ Selesai
+FFmpeg terintegrasi ✅ Selesai
+RNTP dinonaktifkan ✅ Selesai
+Custom playback service dibuat ✅ Selesai
+UI/JS migrasi ke NativePlaybackService ✅ Selesai
+RNTP dihapus dari package.json ⏳ Perlu dieksekusi
+Media button receiver untuk custom service ⏳ Perlu dibuat
+Test manual semua fitur ⏳ Menunggu runtime stabil
+
+---
+
+🔜 Langkah Berikutnya
+
+1. Hapus total RNTP
+   · pnpm remove react-native-track-player
+   · Hapus deklarasi di globals.d.ts
+   · Hapus script patch scripts/patch-pristine.sh dan scripts/custom-rntp/
+   · Hapus langkah patch dari workflow
+   · Hapus referensi di app.json
+2. Tambahkan media button receiver untuk custom service.
+3. Jalankan runtime-test untuk memverifikasi:
+   · Tidak ada error PlatformConstants, UnsatisfiedLinkError, TurboModule.
+   · Custom service berjalan dan notifikasi muncul.
+   · Fitur play/pause/seek/next/previous berfungsi.
+4. Uji fitur utama:
+   · Equalizer
+   · Visualizer
+   · USB DAC
+   · Library
+   · Player
+5. Rapikan konfigurasi dan dokumentasi.
+
+---
+
+📈 Estimasi Effort Revisi
+
+Fase Estimasi Awal Aktual Sisa
+Fase 1 — Audit 1 jam ✅ 1 jam 0
+Fase 2 — Codegen 2-3 jam ✅ 2 jam 0
+Fase 3 — Migrasi Kotlin 4-6 jam ✅ 3 jam 0
+Fase 4 — Migrasi Features JS 2-3 jam ✅ 1 jam 0
+Fase 5 — Verifikasi + Debug 4-8 jam ✅ 12+ jam (investigasi mendalam) 0-2 jam
+Fase 6 — RNTP Replacement 2-3 minggu 🔄 1 hari (kerangka) 1-2 minggu
+Total 13-21 jam ±19 jam 1-2 minggu
+
+---
+
+📁 Dokumentasi Terkait
+
+Dokumen Lokasi Status
+new-arch-roadmap.md docs/ ✅ Dokumen utama, update terakhir 1 September 2026
+ui-js-post-native-refactor-todolist.md docs/ ✅ Relevan
+MigrasiRNTPkeCustomOboe.md docs/ ✅ Relevan
+build-fix-changelog.md docs/ ✅ Relevan
+build-fix-status.md docs/ ✅ Relevan
+
+---
+
+Roadmap ini update per 1 September 2026.
+Status terakhir: Build native stabil, RNTP digantikan custom service, menunggu verifikasi runtime dan pembersihan total.

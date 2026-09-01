@@ -170,67 +170,69 @@ export default function RootLayout() {
     }, 200);
   }, [contentOpacity]);
 
-  // --- 6. Conditional Rendering ---
-
-  if (appState === "error") {
-    return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorTitle}>System Engine Failure</Text>
-        <Text style={styles.errorMessage}>{errorMessage}</Text>
-        <TouchableOpacity
-          style={styles.retryButton}
-          onPress={() => {
-            setAppState("initializing");
-            hasInitialized.current = false;
-            performInitialization();
-          }}
-        >
-          <Text style={styles.retryText}>Retry Initialize</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  // Menampilkan LoadingScreen selama fase inisialisasi & loading
-  if (appState === "initializing" || appState === "loading") {
-    return (
-     <GestureHandlerRootView style={{ flex: 1 }}>
-        <LoadingScreen onLoadingComplete={handleLoadingComplete} />
-      </GestureHandlerRootView>
-    );
-  }
-
+// Awal return di RootLayout
+if (appState === "error") {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}> 
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
-        <SafeAreaProvider>
-          <Animated.View
-            style={[styles.container, { opacity: contentOpacity }]}
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorTitle}>System Engine Failure</Text>
+          <Text style={styles.errorMessage}>{errorMessage}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => {
+              setAppState("initializing");
+              hasInitialized.current = false;
+              performInitialization();
+            }}
           >
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: "#000" },
-              }}
-            >
-              <Stack.Screen name="index" />
-              <Stack.Screen name="(drawer)" />
-              <Stack.Screen
-                name="player/index"
-                options={{
-                  presentation: "modal",
-                  animation: "slide_from_bottom",
-                  gestureEnabled: true,
-                  gestureDirection: "vertical",
-                }}
-              />
-            </Stack>
-            <AudioPropertyToast />
-          </Animated.View>
-        </SafeAreaProvider>
+            <Text style={styles.retryText}>Retry Initialize</Text>
+          </TouchableOpacity>
+        </View>
       </ThemeProvider>
-   </GestureHandlerRootView> 
+    </GestureHandlerRootView>
   );
+}
+
+if (appState === "initializing" || appState === "loading") {
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <LoadingScreen onLoadingComplete={handleLoadingComplete} />
+      </ThemeProvider>
+    </GestureHandlerRootView>
+  );
+}
+
+return (
+  <GestureHandlerRootView style={{ flex: 1 }}>
+    <ThemeProvider>
+      <SafeAreaProvider>
+        <Animated.View style={[styles.container, { opacity: contentOpacity }]}>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: "#000" },
+            }}
+          >
+            <Stack.Screen name="index" />
+            <Stack.Screen name="(drawer)" />
+            <Stack.Screen
+              name="player/index"
+              options={{
+                presentation: "modal",
+                animation: "slide_from_bottom",
+                gestureEnabled: true,
+                gestureDirection: "vertical",
+              }}
+            />
+          </Stack>
+          <AudioPropertyToast />
+        </Animated.View>
+      </SafeAreaProvider>
+    </ThemeProvider>
+  </GestureHandlerRootView>
+);
 }
 
 const styles = StyleSheet.create({

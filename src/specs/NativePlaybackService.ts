@@ -10,13 +10,13 @@ export interface Spec extends TurboModule {
   next(): void;
   previous(): void;
   seek(positionMs: number): void;
-  getPosition(): number;
-  getStatus(): number;
   setShuffle(enabled: boolean): void;
   setRepeatMode(mode: number): void;
-  getQueue(): string[];
   setQueue(uris: string[]): void;
-  getCurrentTrack(): string;
+  getPosition(): Promise<number>;
+  getStatus(): Promise<number>;
+  getQueue(): Promise<string[]>;
+  getCurrentTrack(): Promise<string>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('NativePlaybackService');

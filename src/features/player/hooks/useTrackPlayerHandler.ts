@@ -52,7 +52,7 @@ export const useTrackPlayerHandler = () => {
 
   const togglePlay = useCallback(async () => {
     await initialize();
-    const status = NativePlaybackService.getStatus();
+    const status = await NativePlaybackService.getStatus();
     if (status === 1) {
       NativePlaybackService.pause();
       setIsPlaying(false);
@@ -80,7 +80,8 @@ export const useTrackPlayerHandler = () => {
 
   const getPlaybackState = useCallback(async () => {
     await initialize();
-    return { state: NativePlaybackService.getStatus() };
+    const status = await NativePlaybackService.getStatus();
+    return { state: status };
   }, [initialize]);
 
   return {

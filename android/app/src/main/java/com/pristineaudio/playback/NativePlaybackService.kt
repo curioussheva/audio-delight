@@ -32,6 +32,9 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
     fun pause() = PlaybackNativeBridge.pause()
 
     @ReactMethod
+    fun stop() = PlaybackNativeBridge.stop()
+
+    @ReactMethod
     fun next() = PlaybackNativeBridge.next()
 
     @ReactMethod
@@ -41,26 +44,32 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
     fun seek(positionMs: Double) = PlaybackNativeBridge.seek(positionMs.toLong())
 
     @ReactMethod
-    fun getQueue(): Array<String>? = PlaybackNativeBridge.getQueue()
+    fun setShuffle(enabled: Boolean) = PlaybackNativeBridge.setShuffle(enabled)
+
+    @ReactMethod
+    fun setRepeatMode(mode: Int) = PlaybackNativeBridge.setRepeatMode(mode)
 
     @ReactMethod
     fun setQueue(uris: Array<String>) = PlaybackNativeBridge.setQueue(uris)
 
     @ReactMethod
-    fun getCurrentTrack(): String? = PlaybackNativeBridge.getCurrentTrack()
-    
-    @ReactMethod
-    fun stop() = PlaybackNativeBridge.stop()
+    fun getPosition(promise: Promise) {
+        promise.resolve(PlaybackNativeBridge.getPosition().toDouble())
+    }
 
     @ReactMethod
-    fun getPosition(): Double = PlaybackNativeBridge.getPosition().toDouble()
+    fun getStatus(promise: Promise) {
+        promise.resolve(PlaybackNativeBridge.getStatus())
+    }
 
     @ReactMethod
-    fun getStatus(): Int = PlaybackNativeBridge.getStatus()
+    fun getQueue(promise: Promise) {
+        val queue = PlaybackNativeBridge.getQueue()
+        promise.resolve(queue?.toList() ?: emptyList<Any>())
+    }
 
     @ReactMethod
-    fun setShuffle(enabled: Boolean) = PlaybackNativeBridge.setShuffle(enabled)
-
-    @ReactMethod
-    fun setRepeatMode(mode: Int) = PlaybackNativeBridge.setRepeatMode(mode)
+    fun getCurrentTrack(promise: Promise) {
+        promise.resolve(PlaybackNativeBridge.getCurrentTrack() ?: "")
+    }
 }

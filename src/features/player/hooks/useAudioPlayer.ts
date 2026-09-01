@@ -55,25 +55,25 @@ export const useAudioPlayer = () => {
     }
   }, []);
 
-  // Polling status & progress
-  useEffect(() => {
-    if (!isReady.current) return;
+// Polling status & progress
+useEffect(() => {
+  if (!isReady.current) return;
 
-    const interval = setInterval(async () => {
-      try {
-        const status = NativePlaybackService.getStatus();
-        setIsPlaying(status === 1); // asumsi 1 = playing
-        const pos = NativePlaybackService.getPosition();
-        setPosition(pos / 1000);
-        setPositionStore(pos / 1000);
-        setDurationStore(duration);
-      } catch (error) {
-        // silent
-      }
-    }, 500);
+  const interval = setInterval(async () => {
+    try {
+      const status = await NativePlaybackService.getStatus();
+      setIsPlaying(status === 1);
+      const pos = await NativePlaybackService.getPosition();
+      setPosition(pos / 1000);
+      setPositionStore(pos / 1000);
+      setDurationStore(duration);
+    } catch (error) {
+      // silent
+    }
+  }, 500);
 
-    return () => clearInterval(interval);
-  }, [duration, setPositionStore, setDurationStore]);
+  return () => clearInterval(interval);
+}, [duration, setPositionStore, setDurationStore]);
 
   // 3. Fungsi Load & Play Lagu
   const loadSong = useCallback(
