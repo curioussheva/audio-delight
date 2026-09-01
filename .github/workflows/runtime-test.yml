@@ -62,6 +62,23 @@ jobs:
           cmake.dir=$ANDROID_HOME/cmake/3.22.1
           EOF
 
+      - name: Inject Gradle init script
+        run: |
+          mkdir -p $GRADLE_USER_HOME/init.d
+          cat > $GRADLE_USER_HOME/init.d/rn-plugins.gradle << EOF
+          beforeSettings { settings ->
+              settings.pluginManagement {
+                  repositories {
+                      google()
+                      mavenCentral()
+                      gradlePluginPortal()
+                  }
+                  includeBuild("${{ github.workspace }}/node_modules/@react-native/gradle-plugin")
+                  includeBuild("${{ github.workspace }}/node_modules/expo-modules-autolinking/android/expo-gradle-plugin")
+              }
+          }
+          EOF
+
       - name: Setup Oboe
         run: |
           OBOE_DIR="android/app/src/main/cpp/oboe"
@@ -120,4 +137,4 @@ jobs:
         if: always()
         with:
           name: Logcat-Output
-          path: logcat-full.log
+          path: logcat-full.log 
