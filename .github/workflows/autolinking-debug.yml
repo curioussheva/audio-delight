@@ -55,17 +55,54 @@ jobs:
             "cmake;3.22.1"
 
       # ============================================
-      # 6. Configure local.properties
+      # 6. Install nasm (required by FFmpeg)
+      # ============================================
+      - name: Install nasm
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm
+
+      # ============================================
+      # 7. Cache FFmpeg build
+      # ============================================
+      - name: Cache FFmpeg build
+        id: cache-ffmpeg
+        uses: actions/cache@v4
+        with:
+          path: android/app/src/main/cpp/libs/ffmpeg
+          key: ffmpeg-android-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-android.sh') }}
+
+      # ============================================
+      # 8. Build FFmpeg for Android (only if cache missed)
+      # ============================================
+      - name: Build FFmpeg for Android
+        if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
+        run: |
+          bash scripts/build-ffmpeg-android.sh
+
+      # ============================================
+      # 9. Verify FFmpeg output
+      # ============================================
+      - name: Verify FFmpeg output
+        run: |
+          echo "=== FFmpeg output structure ==="
+          find android/app/src/main/cpp/libs/ffmpeg -maxdepth 3 -type d | sort
+          echo ""
+          echo "=== FFmpeg libs ==="
+          find android/app/src/main/cpp/libs/ffmpeg -name "*.so" | sort
+
+      # ============================================
+      # 10. Configure local.properties
       # ============================================
       - name: Configure Android paths
         run: |
           cat > android/local.properties << EOF
-          ndk.dir=$ANDROID_HOME/ndk/27.1.12297006
+          sdk.dir=$ANDROID_HOME
           cmake.dir=$ANDROID_HOME/cmake/3.22.1
           EOF
 
       # ============================================
-      # 7. Inject Gradle init script (RN + Expo fix)
+      # 11. Inject Gradle init script
       # ============================================
       - name: Inject Gradle init script
         run: |
@@ -85,7 +122,7 @@ jobs:
           EOF
 
       # ============================================
-      # 8. Setup Oboe (needed for CMake configure)
+      # 12. Setup Oboe
       # ============================================
       - name: Setup Oboe
         run: |
@@ -95,7 +132,7 @@ jobs:
           | tar -xz --strip-components=1 -C "$OBOE_DIR"
 
       # ============================================
-      # 9. Patch RN Gradle Plugin (fix foojay bug)
+      # 13. Patch RN Gradle Plugin
       # ============================================
       - name: Patch RN Gradle Plugin
         run: |
@@ -108,19 +145,14 @@ jobs:
           fi
 
       # ============================================
-      # 10. Apply PristineAudio patches
+      # 14. Apply PristineAudio patches
       # ============================================
       - name: Apply PristineAudio patches
         run: bash scripts/patch-pristine.sh
 
       # ============================================
-      # 11. Run generateAutolinkingNewArchitectureFiles directly
+      # 15. Run generateAutolinkingNewArchitectureFiles
       # ============================================
-      # This is the specific Gradle task (confirmed present in prior full
-      # assembleDebug build logs) responsible for producing the autolinking
-      # CMake artifact that normally feeds into libappmodules.so. Running it
-      # standalone (rather than via full assembleDebug) isolates whether it
-      # runs at all, and if so, exactly what it produces and where.
       - name: Run generateAutolinkingNewArchitectureFiles
         working-directory: android
         run: |
@@ -136,7 +168,7 @@ jobs:
           grep -E "generateAutolinkingNewArchitectureFiles|BUILD SUCCESSFUL|BUILD FAILED|SKIPPED|UP-TO-DATE" autolinking.log || echo "No matching output"
 
       # ============================================
-      # 12. Locate and inspect autolinking artifacts
+      # 16. Locate autolinking artifacts
       # ============================================
       - name: Locate autolinking artifacts
         if: always()
@@ -155,7 +187,7 @@ jobs:
           grep -rl "appmodules" app/build 2>/dev/null || echo "none found"
 
       # ============================================
-      # 13. Dump content of autolinking cmake file (if found)
+      # 17. Dump autolinking cmake content
       # ============================================
       - name: Show autolinking cmake content
         if: always()
@@ -170,7 +202,7 @@ jobs:
           fi
 
       # ============================================
-      # 13b. Dump app's own Codegen spec CMakeLists.txt
+      # 18. Dump Codegen spec CMakeLists
       # ============================================
       - name: Show Codegen spec CMakeLists content
         if: always()
@@ -182,15 +214,13 @@ jobs:
             cat "$FILE"
           else
             echo "Not found at $FILE"
-            echo "=== Searching elsewhere ==="
-            find app/build/generated/source/codegen -iname "CMakeLists.txt" 2>/dev/null || echo "none found"
           fi
           echo ""
           echo "=== PristineAudioSpec.h (first 60 lines) ==="
           find app/build/generated/source/codegen -iname "PristineAudioSpec.h" -exec head -60 {} \; 2>/dev/null || echo "not found"
 
       # ============================================
-      # 13c. Show autolinking.cpp / autolinking.h content
+      # 19. Show autolinking.cpp / autolinking.h
       # ============================================
       - name: Show autolinking.cpp and autolinking.h content
         if: always()
@@ -212,143 +242,7 @@ jobs:
           fi
 
       # ============================================
-      # 13d. Strip reanimated/worklets from autolinking cmake (diagnostic isolation)
-      # ============================================
-      # react-native-reanimated's own CMakeLists.txt requires folly-config.h
-      # in a way that only resolves correctly inside the standard RN template
-      # build, not via a manual add_subdirectory like ours. This is unrelated
-      # to the appmodules/PlatformConstants wiring we're testing. Stripping it
-      # here isolates whether our core wiring (rncore + PristineAudioSpec +
-      # the other simpler autolinked packages) compiles and links cleanly.
-      - name: Strip reanimated/worklets from autolinking cmake
-        working-directory: android
-        run: |
-          FILE="app/build/generated/autolinking/src/main/jni/Android-autolinking.cmake"
-          if [ -f "$FILE" ]; then
-            sed -i '/rnreanimated_autolinked_build/d' "$FILE"
-            sed -i '/rnworklets_autolinked_build/d' "$FILE"
-            sed -i '/react_codegen_rnreanimated/d' "$FILE"
-            sed -i '/react_codegen_rnworklets/d' "$FILE"
-            echo "=== Patched Android-autolinking.cmake ==="
-            cat "$FILE"
-          else
-            echo "Android-autolinking.cmake not found — nothing to strip"
-          fi
-
-      # ============================================
-      # 14. Write new OnLoad.cpp for appmodules target
-      # ============================================
-      - name: Write appmodules OnLoad.cpp
-        run: |
-          mkdir -p android/app/src/main/jni
-          cat > android/app/src/main/jni/OnLoad.cpp << 'ONLOAD_EOF'
-          #include <DefaultComponentsRegistry.h>
-          #include <DefaultTurboModuleManagerDelegate.h>
-          #include <ReactCommon/CallInvokerHolder.h>
-          #include <autolinking.h>
-          #include <fbjni/fbjni.h>
-          #include <react/renderer/componentregistry/ComponentDescriptorProviderRegistry.h>
-          #include <rncore.h>
-
-          #include "PristineAudioSpec.h"
-
-          namespace facebook::react {
-
-          std::shared_ptr<TurboModule> appModulesModuleProvider(
-              const std::string& moduleName,
-              const JavaTurboModule::InitParams& params) {
-            auto pristineAudioModule = PristineAudioSpec_ModuleProvider(moduleName, params);
-            if (pristineAudioModule != nullptr) {
-              return pristineAudioModule;
-            }
-            return autolinking_ModuleProvider(moduleName, params);
-          }
-
-          std::shared_ptr<TurboModule> appModulesClassModuleProvider(
-              const std::string& moduleName,
-              const JavaTurboModule::InitParams& params) {
-            return rncore_ModuleProvider(moduleName, params);
-          }
-
-          std::shared_ptr<TurboModule> appModulesCxxModuleProvider(
-              const std::string& moduleName,
-              const std::shared_ptr<CallInvoker>& jsInvoker) {
-            return autolinking_cxxModuleProvider(moduleName, jsInvoker);
-          }
-
-          void appModulesRegisterComponentDescriptorsFromEntryPoint(
-              std::shared_ptr<const ComponentDescriptorProviderRegistry> registry) {
-            autolinking_registerProviders(registry);
-          }
-
-          } // namespace facebook::react
-
-          extern "C" JNIEXPORT void JNICALL
-          Java_com_facebook_react_defaults_DefaultReactNativeHost_00024Companion_loadReactNative(
-              JNIEnv* env,
-              jobject thiz) {
-            facebook::react::DefaultTurboModuleManagerDelegate::setModuleProvidersFunction(
-                &facebook::react::appModulesModuleProvider,
-                &facebook::react::appModulesClassModuleProvider,
-                &facebook::react::appModulesCxxModuleProvider);
-            facebook::react::DefaultComponentsRegistry::
-                setComponentDescriptorProviderRegistryFunction(
-                    &facebook::react::appModulesRegisterComponentDescriptorsFromEntryPoint);
-          }
-          ONLOAD_EOF
-          echo "=== OnLoad.cpp written ==="
-          cat android/app/src/main/jni/OnLoad.cpp
-
-      # ============================================
-      # 15. Patch CMakeLists.txt with appmodules target
-      # ============================================
-      - name: Append appmodules target to CMakeLists.txt
-        run: |
-          cat >> android/app/src/main/cpp/CMakeLists.txt << 'CMAKE_EOF'
-
-          # =====================================================
-          # APPMODULES TARGET (appended by Autolinking Debug workflow)
-          # =====================================================
-          set(AUTOLINKING_CMAKE "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/generated/autolinking/src/main/jni/Android-autolinking.cmake")
-
-          if(EXISTS "${AUTOLINKING_CMAKE}")
-              message(STATUS "Found autolinking cmake at ${AUTOLINKING_CMAKE}")
-              include("${AUTOLINKING_CMAKE}")
-          else()
-              message(WARNING "Autolinking cmake not found — appmodules will be built without third-party TurboModules")
-              set(AUTOLINKED_LIBRARIES "")
-          endif()
-
-          set(PRISTINE_AUDIO_SPEC_LIB "")
-          if(EXISTS "${CODEGEN_JNI_DIR}/CMakeLists.txt")
-              add_subdirectory("${CODEGEN_JNI_DIR}" pristineaudiospec_codegen_build EXCLUDE_FROM_ALL)
-              set(PRISTINE_AUDIO_SPEC_LIB react_codegen_PristineAudioSpec)
-          endif()
-
-          add_library(appmodules SHARED
-              "${CMAKE_CURRENT_SOURCE_DIR}/../../../src/main/jni/OnLoad.cpp"
-          )
-
-          target_include_directories(appmodules PRIVATE
-              "${CODEGEN_JNI_DIR}"
-          )
-
-          target_link_libraries(appmodules
-              PRIVATE
-                  ${AUTOLINKED_LIBRARIES}
-                  ${PRISTINE_AUDIO_SPEC_LIB}
-                  ReactAndroid::reactnative
-                  ReactAndroid::jsi
-                  fbjni::fbjni
-                  android
-                  log
-          )
-          CMAKE_EOF
-          echo "=== CMakeLists.txt after patch (last 60 lines) ==="
-          tail -60 android/app/src/main/cpp/CMakeLists.txt
-
-      # ============================================
-      # 16. Generate app's own Codegen spec (PristineAudioSpec.h)
+      # 20. Generate Codegen
       # ============================================
       - name: Generate Codegen
         working-directory: android
@@ -363,9 +257,20 @@ jobs:
           find app/build/generated/source/codegen -iname "PristineAudioSpec.h" || echo "NOT FOUND"
 
       # ============================================
-      # 17. Full build — test appmodules compiles and links
+      # 21. Clean native caches
       # ============================================
-      - name: Build Debug APK (test appmodules target)
+      - name: Clean CMake & native caches
+        working-directory: android
+        run: |
+          ./gradlew clean || true
+          rm -rf app/.cxx app/build/.cxx
+          rm -rf $GRADLE_USER_HOME/caches/transforms-* || true
+          echo "✅ Native caches cleaned"
+
+      # ============================================
+      # 22. Full build
+      # ============================================
+      - name: Build Debug APK
         working-directory: android
         run: |
           ./gradlew assembleDebug \
@@ -377,7 +282,7 @@ jobs:
           echo "exit code: $?"
 
       # ============================================
-      # 18. Filter build log for appmodules-specific results
+      # 23. Filter build log
       # ============================================
       - name: Show appmodules build result
         if: always()
@@ -399,7 +304,7 @@ jobs:
           find app/build -iname "libappmodules.so" || echo "libappmodules.so NOT produced"
 
       # ============================================
-      # 19. Upload appmodules build log
+      # 24. Upload logs
       # ============================================
       - uses: actions/upload-artifact@v4
         if: always()
@@ -407,12 +312,8 @@ jobs:
           name: Appmodules-Build-Log
           path: android/appmodules-build.log
 
-      # ============================================
-      # 14. Upload logs
-      # ============================================
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: Autolinking-Debug-Log
           path: android/autolinking.log
- 

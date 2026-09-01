@@ -1,0 +1,100 @@
+name: Build Preview APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
+      NODE_ENV: development
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.0.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+          cache: gradle
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install NDK + CMake
+        run: |
+          yes | sdkmanager \
+            "ndk;27.1.12297006" \
+            "cmake;3.22.1"
+
+      - name: Install nasm
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm
+
+      - name: Cache FFmpeg build
+        id: cache-ffmpeg
+        uses: actions/cache@v4
+        with:
+          path: android/app/src/main/cpp/libs/ffmpeg
+          key: ffmpeg-android-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-android.sh') }}
+
+      - name: Build FFmpeg for Android
+        if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
+        run: bash scripts/build-ffmpeg-android.sh
+
+      - name: Configure Android paths
+        run: |
+          cat > android/local.properties << EOF
+          sdk.dir=$ANDROID_HOME
+          cmake.dir=$ANDROID_HOME/cmake/3.22.1
+          EOF
+
+      - name: Setup Oboe
+        run: |
+          OBOE_DIR="android/app/src/main/cpp/oboe"
+          mkdir -p "$OBOE_DIR"
+          curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz \
+          | tar -xz --strip-components=1 -C "$OBOE_DIR"
+
+      - name: Apply PristineAudio patches
+        run: bash scripts/patch-pristine.sh
+
+      - name: Generate Codegen
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew generateCodegenArtifactsFromSchema \
+            --no-daemon \
+            -PnewArchEnabled=true \
+            -PreactNativeNewArch=true \
+            -PhermesEnabled=true
+
+      - name: Build Preview APK (Release)
+        working-directory: android
+        run: |
+          ./gradlew assembleRelease \
+            --no-daemon \
+            -PnewArchEnabled=true \
+            -PreactNativeNewArch=true \
+            -PhermesEnabled=true \
+            -DJS_RUNTIME=hermes | tee build-preview.log
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: PristineAudio-Preview
+          path: android/app/build/outputs/apk/release/app-release.apk

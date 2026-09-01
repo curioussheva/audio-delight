@@ -377,3 +377,79 @@ Tahap 4 — Testing Manual
 Catatan
 
 Dokumen ini diperbarui berdasarkan build native yang sudah sukses dan error runtime pertama (RNTP). Semua langkah di atas harus dilakukan untuk memastikan integrasi penuh antara native dan UI/JS.
+
+---
+
+---
+
+Insight & Todolist — Penyesuaian UI/JS Pasca Perombakan Native
+
+Status per 1 September 2026
+Build native sukses, error RNTP sudah di-bypass, aplikasi bisa booting tanpa crash. Fokus sekarang: menyelesaikan penggantian RNTP dengan custom playback service berbasis Oboe.
+
+---
+
+🎯 TL;DR — Prioritas (revisi 1 September 2026)
+
+1. ✅ Build native stabil, libappmodules.so terproduksi, FFmpeg terintegrasi.
+2. ✅ RNTP dinonaktifkan sementara (RNTP_ENABLED = false) → aplikasi tidak crash saat startup.
+3. 🔄 Sedang membangun custom playback service (PlaybackService, MediaSessionManager, PlaybackNativeBridge) untuk menggantikan RNTP secara permanen.
+4. Selanjutnya: sambungkan custom service ke UI/JS, lalu hapus ketergantungan RNTP.
+5. Testing manual fitur player, equalizer, visualizer, dll.
+
+---
+
+📊 Kondisi Terkini
+
+Komponen Status
+NativePlaybackModule (Oboe bridge) ✅ Aktif, sudah punya queue management
+PlaybackService (Foreground) 🔄 Sedang dibuat
+MediaSessionManager 🔄 Sedang dibuat
+PlaybackNativeBridge 🔄 Sedang dibuat
+NativePlaybackService (TurboModule) 🔄 Sedang dibuat
+RNTP ⏸️ Dinonaktifkan sementara (RNTP_ENABLED = false)
+FFmpeg ✅ Terintegrasi, FFmpegDecoder aktif
+UI/JS 🔄 Masih menggunakan RNTP guard, belum migrasi penuh
+
+---
+
+🔴 Langkah Selanjutnya
+
+1. Selesaikan custom playback service
+
+☐ Pastikan PlaybackService.kt, MediaSessionManager.kt, PlaybackNativeBridge.kt, dan NativePlaybackService.kt sudah benar dan terdaftar.
+☐ Hubungkan PlaybackNativeBridge dengan NativePlaybackModule.instance agar kontrol dari service berfungsi.
+☐ Daftarkan NativePlaybackService di USBDACPackage.
+☐ Tambahkan spec TS src/specs/NativePlaybackService.ts.
+
+2. Migrasi UI dari RNTP ke custom service
+
+☐ Ganti pemanggilan TrackPlayer.play(), pause(), seekTo(), dll. di engine.ts dengan NativePlaybackService.
+☐ Update useAudioPlayer.ts dan useTrackPlayerHandler.ts untuk memakai custom service.
+☐ Hapus RNTP_ENABLED guard setelah migrasi selesai.
+☐ Hapus dependensi react-native-track-player dari package.json.
+
+3. Testing manual
+
+☐ Player: play/pause/seek/next/previous
+☐ Notifikasi media dan kontrol lock screen
+☐ Audio focus (pause saat panggilan masuk)
+☐ Queue management (shuffle, repeat)
+☐ Integrasi equalizer dan visualizer
+
+---
+
+🧾 Checklist Terbaru
+
+☑ Build native sukses
+☑ FFmpeg terintegrasi
+☑ RNTP dinonaktifkan sementara
+☑ Aplikasi booting tanpa crash
+☐ Custom playback service selesai
+☐ UI/JS migrasi ke custom service
+☐ RNTP dihapus
+☐ Testing fitur player lengkap
+
+---
+
+Dokumen ini akan terus diperbarui seiring progres migrasi. Silakan commit jika sudah sesuai.
