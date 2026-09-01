@@ -71,7 +71,7 @@ jobs:
           cmake.dir=$ANDROID_HOME/cmake/3.22.1
           EOF
 
-      # 10. Inject Gradle init script (RN + Expo fix)
+      # 10. Inject Gradle init script
       - name: Inject Gradle init script
         run: |
           mkdir -p $GRADLE_USER_HOME/init.d
@@ -89,7 +89,18 @@ jobs:
           }
           EOF
 
-      # 11. Setup Oboe
+      # 11. Patch RN Gradle Plugin (fix foojay bug)
+      - name: Patch RN Gradle Plugin
+        run: |
+          FILE=node_modules/@react-native/gradle-plugin/settings.gradle.kts
+          if grep -q "foojay-resolver-convention" "$FILE"; then
+            sed -i '/foojay-resolver-convention/d' "$FILE"
+            echo "✅ Patched foojay"
+          else
+            echo "✅ Already patched"
+          fi
+
+      # 12. Setup Oboe
       - name: Setup Oboe
         run: |
           OBOE_DIR="android/app/src/main/cpp/oboe"
@@ -97,8 +108,11 @@ jobs:
           curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz \
           | tar -xz --strip-components=1 -C "$OBOE_DIR"
 
+      # 13. Apply PristineAudio patches
+      - name: Apply PristineAudio patches
+        run: bash scripts/patch-pristine.sh
 
-      # 13. Generate Codegen
+      # 14. Generate Codegen
       - name: Generate Codegen
         working-directory: android
         run: |
@@ -109,7 +123,7 @@ jobs:
             -PreactNativeNewArch=true \
             -PhermesEnabled=true
 
-      # 14. Build Debug APK
+      # 15. Build Debug APK
       - name: Build Debug APK
         working-directory: android
         run: |
@@ -120,7 +134,7 @@ jobs:
             -PhermesEnabled=true \
             -DJS_RUNTIME=hermes | tee build.log
 
-      # 15. Upload APK
+      # 16. Upload APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         if: success()

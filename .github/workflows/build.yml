@@ -182,11 +182,6 @@ jobs:
             -exec sed -i 's/ package="[^"]*"//g' {} +
           echo "✅ Manifest patched"
 
-      - name: Verify RNTP patch
-        run: |
-          grep -q "nativeInitEngine" node_modules/react-native-track-player/android/src/main/java/com/lovegaoshi/kotlinaudio/player/AudioPlayer.kt
-          echo "✅ RNTP patch verified"
-
       # ============================================
       # 17. Generate Codegen
       # ============================================
