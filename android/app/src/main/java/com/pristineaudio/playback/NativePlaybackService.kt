@@ -53,9 +53,9 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
     fun setQueue(uris: ReadableArray) {
         val list = ArrayList<String>()
         for (i in 0 until uris.size()) {
-        list.add(uris.getString(i))
+            list.add(uris.getString(i))
         }
-      PlaybackNativeBridge.setQueue(list.toTypedArray())
+        PlaybackNativeBridge.setQueue(list.toTypedArray())
     }
 
     @ReactMethod
@@ -71,7 +71,7 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun getQueue(promise: Promise) {
         val queue = PlaybackNativeBridge.getQueue()
-        promise.resolve(queue?.toList() ?: emptyList<Any>())
+        promise.resolve(queue?.toList() ?: emptyList<String>())
     }
 
     @ReactMethod
