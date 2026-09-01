@@ -109,8 +109,6 @@ jobs:
           | tar -xz --strip-components=1 -C "$OBOE_DIR"
 
       # 13. Apply PristineAudio patches
-      - name: Apply PristineAudio patches
-        run: bash scripts/patch-pristine.sh
 
       # 14. Generate Codegen
       - name: Generate Codegen
