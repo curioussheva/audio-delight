@@ -50,7 +50,13 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
     fun setRepeatMode(mode: Int) = PlaybackNativeBridge.setRepeatMode(mode)
 
     @ReactMethod
-    fun setQueue(uris: Array<String>) = PlaybackNativeBridge.setQueue(uris)
+    fun setQueue(uris: ReadableArray) {
+        val list = ArrayList<String>()
+        for (i in 0 until uris.size()) {
+        list.add(uris.getString(i))
+        }
+      PlaybackNativeBridge.setQueue(list.toTypedArray())
+    }
 
     @ReactMethod
     fun getPosition(promise: Promise) {

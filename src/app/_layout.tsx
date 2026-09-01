@@ -170,7 +170,6 @@ export default function RootLayout() {
     }, 200);
   }, [contentOpacity]);
 
-// Awal return di RootLayout
 if (appState === "error") {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -192,7 +191,7 @@ if (appState === "error") {
       </ThemeProvider>
     </GestureHandlerRootView>
   );
-}
+} 
 
 if (appState === "initializing" || appState === "loading") {
   return (
