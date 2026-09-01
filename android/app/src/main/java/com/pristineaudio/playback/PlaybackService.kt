@@ -1,13 +1,10 @@
 package com.pristineaudio.playback
 
+import android.app.Service
 import android.content.Intent
-import android.os.Bundle
-import androidx.media.MediaBrowserServiceCompat
-import androidx.media.MediaBrowserServiceCompat.BrowserRoot
-import androidx.media.MediaBrowserServiceCompat.Result
-import androidx.media.MediaBrowserCompat
+import android.os.IBinder
 
-class PlaybackService : MediaBrowserServiceCompat() {
+class PlaybackService : Service() {
 
     companion object {
         const val ACTION_PLAY = "com.pristineaudio.playback.PLAY"
@@ -23,22 +20,6 @@ class PlaybackService : MediaBrowserServiceCompat() {
     override fun onCreate() {
         super.onCreate()
         mediaSessionManager = MediaSessionManager(this)
-    }
-
-    override fun onGetRoot(
-        clientPackageName: String,
-        clientUid: Int,
-        rootHints: Bundle?
-    ): BrowserRoot? {
-        return BrowserRoot("root", null)
-    }
-
-    override fun onLoadChildren(
-        parentId: String,
-        result: Result<MutableList<MediaBrowserCompat.MediaItem>>
-    ) {
-        // TODO: ambil daftar antrian dari PlaybackController / TrackQueue
-        result.sendResult(mutableListOf())
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -62,4 +43,6 @@ class PlaybackService : MediaBrowserServiceCompat() {
         mediaSessionManager.release()
         super.onDestroy()
     }
+
+    override fun onBind(intent: Intent?): IBinder? = null
 }
