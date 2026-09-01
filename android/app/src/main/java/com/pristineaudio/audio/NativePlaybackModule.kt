@@ -63,4 +63,6 @@ class NativePlaybackModule(reactContext: ReactApplicationContext) :
     fun getQueueFromService(): Array<String> = nativeGetQueue()
     fun setQueueFromService(uris: Array<String>) = nativeSetQueue(uris)
     fun getCurrentTrackFromService(): String = nativeGetCurrentTrack()
+    fun getPositionFromService(): Double = nativeGetPosition().toDouble()
+    fun getStatusFromService(): Int = nativeGetStatus()
 } 

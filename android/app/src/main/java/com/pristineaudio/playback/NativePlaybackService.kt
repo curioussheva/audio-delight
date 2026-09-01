@@ -48,4 +48,19 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun getCurrentTrack(): String? = PlaybackNativeBridge.getCurrentTrack()
+    
+    @ReactMethod
+    fun stop() = PlaybackNativeBridge.stop()
+
+    @ReactMethod
+    fun getPosition(): Double = PlaybackNativeBridge.getPosition().toDouble()
+
+    @ReactMethod
+    fun getStatus(): Int = PlaybackNativeBridge.getStatus()
+
+    @ReactMethod
+    fun setShuffle(enabled: Boolean) = PlaybackNativeBridge.setShuffle(enabled)
+
+    @ReactMethod
+    fun setRepeatMode(mode: Int) = PlaybackNativeBridge.setRepeatMode(mode)
 }

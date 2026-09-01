@@ -2,10 +2,6 @@ package com.pristineaudio.playback
 
 import com.pristineaudio.audio.NativePlaybackModule
 
-/**
- * Jembatan untuk memanggil kontrol playback native dari service/media session
- * tanpa perlu ReactContext.
- */
 object PlaybackNativeBridge {
 
     fun play() {
@@ -50,5 +46,13 @@ object PlaybackNativeBridge {
 
     fun getCurrentTrack(): String? {
         return NativePlaybackModule.instance?.getCurrentTrackFromService()
+    }
+
+    fun getPosition(): Long {
+    return NativePlaybackModule.instance?.getPositionFromService()?.toLong() ?: 0L
+    }
+
+    fun getStatus(): Int {
+    return NativePlaybackModule.instance?.getStatusFromService() ?: 0
     }
 }

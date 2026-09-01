@@ -1,21 +1,12 @@
-import TrackPlayer, {
-  Capability,
-  RepeatMode,
-  AppKilledPlaybackBehavior,
-} from "react-native-track-player";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Song } from "@/shared/types/audio";
 import { requestAudioPermissions } from "@/shared/utils/permissions";
-import USBDACService from "@/features/hardware/api/USBDACModule";
 import NativeDSPModule from "@/features/equalizer/api/nativeInterface";
 import {
   startVisualizer,
   stopVisualizer,
 } from "@/features/visualizer/native/VisualizerBridge";
-
-import { RNTP_ENABLED } from "./rntpEnabled";
-
-
+import NativePlaybackService from "@/specs/NativePlaybackService";
 
 interface AudioEngineConfig {
   minBufferMs?: number;
@@ -31,6 +22,12 @@ const DEFAULT_CONFIG: Required<AudioEngineConfig> = {
 
 type RepeatModeType = "off" | "all" | "track";
 
+const REPEAT_MODE_MAP: Record<RepeatModeType, number> = {
+  off: 0,
+  all: 1,
+  track: 2,
+};
+
 export class AudioEngine {
   private isInitialized = false;
   private sessionId: number | null = null;
@@ -42,63 +39,20 @@ export class AudioEngine {
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
 
-  // ─── Lifecycle ───────────────────────────────────────
   async initialize(): Promise<void> {
     if (this.isInitialized) return;
-    
-    if (!RNTP_ENABLED) {
-    console.log("💤 [AudioEngine] RNTP disabled, skipping TrackPlayer setup");
-    this.isInitialized = true;
-    return;
-  }
 
     try {
-      await TrackPlayer.setupPlayer({
-        minBuffer: 100,
-        maxBuffer: 300,
-        playBuffer: 2,
-        backBuffer: 60,
-        waitForBuffer: true,
-      });
-
-      await TrackPlayer.updateOptions({
-        android: {
-          appKilledPlaybackBehavior:
-            AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
-          alwaysPauseOnInterruption: true,
-          notificationCapabilities: [
-            Capability.Play,
-            Capability.Pause,
-            Capability.SkipToNext,
-            Capability.SkipToPrevious,
-            Capability.SeekTo,
-          ],
-        },
-        capabilities: [
-          Capability.Play,
-          Capability.Pause,
-          Capability.SkipToNext,
-          Capability.SkipToPrevious,
-          Capability.Stop,
-          Capability.SeekTo,
-        ],
-        compactCapabilities: [
-          Capability.Play,
-          Capability.Pause,
-          Capability.SkipToNext,
-        ],
-      });
-
+      NativePlaybackService.startService();
       await this.refreshSessionId();
       this.isInitialized = true;
-      console.log("💎 [AudioEngine] High-Res Engine Ready");
+      console.log("💎 [AudioEngine] Custom Oboe Engine Ready");
     } catch (error) {
       console.error("❌ [AudioEngine] Setup Failed:", error);
       throw error;
     }
   }
 
-  // ─── DSP & Bit-Perfect Logic ─────────────────────────
   async toggleExclusiveMode(enabled: boolean): Promise<void> {
     this.isExclusive = enabled;
     console.log(`🚀 [AudioEngine] Exclusive Mode: ${enabled ? "ON" : "OFF"}`);
@@ -139,7 +93,6 @@ export class AudioEngine {
     }
   }
 
-  // ─── Kontrol Efek Spesifik ──────────────────────────
   async setEqBand(bandId: number, gain: number): Promise<void> {
     if (this.isExclusive || !NativeDSPModule) return;
     const id = await this.refreshSessionId();
@@ -172,7 +125,6 @@ export class AudioEngine {
     }
   }
 
-  // ─── Lifecycle & Playback ───────────────────────────
   private async refreshSessionId(): Promise<number | null> {
     try {
       if (!NativeDSPModule?.createAudioSession) {
@@ -195,9 +147,8 @@ export class AudioEngine {
   async play(): Promise<void> {
     if (!this.isInitialized) await this.initialize();
 
-    await TrackPlayer.play();
+    NativePlaybackService.play();
 
-    // Sync DSP & Visualizer setelah play
     setTimeout(async () => {
       const sessionId = await this.refreshSessionId();
       if (!sessionId) return;
@@ -223,64 +174,51 @@ export class AudioEngine {
   }
 
   async pause(): Promise<void> {
-    await TrackPlayer.pause();
+    NativePlaybackService.pause();
     stopVisualizer();
     this.isVisualizerRunning = false;
   }
 
   async stop(): Promise<void> {
-    await TrackPlayer.stop();
+    NativePlaybackService.stop();
     stopVisualizer();
     this.isVisualizerRunning = false;
   }
 
-  // ─── Utils ──────────────────────────────────────────
   async setQueue(songs: Song[], startIndex = 0): Promise<void> {
     if (!this.isInitialized) await this.initialize();
     if (songs.length === 0) return;
 
-    await TrackPlayer.reset();
-    const tracks = songs.map((s) => ({
-      id: s.id,
-      url: s.uri,
-      title: s.title,
-      artist: s.artist,
-      album: s.album || "",
-      duration: s.duration,
-      artwork: s.artwork,
-    }));
-    await TrackPlayer.add(tracks);
-
-    if (startIndex >= 0 && startIndex < songs.length) {
-      await TrackPlayer.skip(startIndex);
+    const uris = songs.map((s) => s.uri);
+    NativePlaybackService.setQueue(uris);
+    if (startIndex > 0) {
+      // TODO: implement start index support in native queue
     }
   }
 
   async seekTo(positionSeconds: number): Promise<void> {
-    await TrackPlayer.seekTo(positionSeconds);
+    NativePlaybackService.seek(positionSeconds * 1000);
   }
 
   async setRepeatMode(mode: RepeatModeType): Promise<void> {
-    const repeat =
-      mode === "track"
-        ? RepeatMode.Track
-        : mode === "all"
-          ? RepeatMode.Queue
-          : RepeatMode.Off;
-    await TrackPlayer.setRepeatMode(repeat);
+    const nativeMode = REPEAT_MODE_MAP[mode] ?? 0;
+    NativePlaybackService.setRepeatMode(nativeMode);
   }
 
   async setPlaybackRate(rate: number): Promise<void> {
-    await TrackPlayer.setRate(rate);
+    // native belum mendukung; bisa diabaikan atau dikembangkan nanti
+    console.log("setPlaybackRate not implemented yet", rate);
   }
 
   async getPlaybackState() {
-    return await TrackPlayer.getState();
+    return {
+      state: NativePlaybackService.getStatus(),
+    };
   }
 
   async destroy(): Promise<void> {
     await this.releaseAllFX();
-    await TrackPlayer.reset();
+    NativePlaybackService.stopService();
     this.isInitialized = false;
   }
 }

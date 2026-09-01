@@ -10,7 +10,7 @@ import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ExpoReactHostFactory
-import com.pristineaudio.USBDACPackage
+import com.pristineaudio.PristineAudioPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -18,7 +18,7 @@ class MainApplication : Application(), ReactApplication {
     ExpoReactHostFactory.getDefaultReactHost(
       context = applicationContext,
       packageList = PackageList(this).packages.apply {
-        add(USBDACPackage())
+        add(PristineAudioPackage())
       }
     )
   }
@@ -33,4 +33,4 @@ class MainApplication : Application(), ReactApplication {
     super.onConfigurationChanged(newConfig)
     ApplicationLifecycleDispatcher.onConfigurationChanged(this, newConfig)
   }
-} 
+}
