@@ -36,12 +36,10 @@ import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useLibraryStore } from "@/features/library/store/libraryStore";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
 import { BackgroundScanTask } from "@/features/library/services/BackgroundScanTask";
-import { RNTP_ENABLED } from "@/features/player/api/rntpEnabled";
 
 
 // Register Playback Service
-// Custom playback service is used, no RNTP registration needed
-console.log("RNTP disabled, custom playback service will be used");
+
 SplashScreen.preventAutoHideAsync();
 
 type AppInitState = "initializing" | "loading" | "ready" | "error";

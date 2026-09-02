@@ -8,11 +8,22 @@
 
 static pristine::playback::PlaybackController* gPlaybackController = nullptr;
 
-// Lazy getter — jika belum diinisialisasi, ambil dari EngineManager
+// Lazy getter + auto-init engine & controller
 static pristine::playback::PlaybackController* getController() {
     if (!gPlaybackController) {
         gPlaybackController = &pristine::EngineManager::get().playback();
     }
+
+    // Pastikan PlaybackController siap
+    if (!gPlaybackController->isInitialized()) {
+        gPlaybackController->initialize();
+    }
+
+    // Pastikan AudioEngine berjalan
+    if (!pristine::EngineManager::get().engine().isRunning()) {
+        pristine::EngineManager::get().start();
+    }
+
     return gPlaybackController;
 }
 

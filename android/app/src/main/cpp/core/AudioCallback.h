@@ -5,13 +5,17 @@
 #pragma once
 
 #include <oboe/Oboe.h>
-
 #include "AudioBufferController.h"
+#include "AudioConstants.h"
 #include "AudioMetrics.h"
 #include "AudioPipeline.h"
 #include "AudioState.h"
 #include "AudioTypes.h"
 #include "../visualizer/VisualizerBuffer.h"
+
+namespace pristine::playback {
+class PlaybackController;
+}
 
 namespace pristine {
 
@@ -22,9 +26,7 @@ namespace pristine {
 
 class AudioCallback
     : public oboe::AudioStreamCallback {
-
 public:
-
     AudioCallback(
         AudioBufferController& buffer,
         AudioPipeline& pipeline,
@@ -51,6 +53,22 @@ public:
     ) override;
 
     // =============================================
+    // PLAYBACK SOURCE
+    // =============================================
+
+    void setPlaybackController(
+        playback::PlaybackController* controller
+    ) noexcept {
+        mPlaybackController = controller;
+    }
+
+    void setSampleRate(
+        int32_t sampleRate
+    ) noexcept {
+        mSampleRate = sampleRate;
+    }
+
+    // =============================================
     // VISUALIZER
     // =============================================
 
@@ -60,7 +78,6 @@ public:
     }
 
 private:
-
     // =============================================
     // REFERENCES
     // =============================================
@@ -76,8 +93,21 @@ private:
 
     AudioState&
         mState;
-        
+
     VisualizerBuffer mVisualizer;
+
+    // =============================================
+    // PLAYBACK SOURCE
+    // =============================================
+
+    playback::PlaybackController*
+        mPlaybackController{nullptr};
+
+    int32_t mSampleRate{kDefaultSampleRate};
+
+    float mScratchInterleaved[
+        kMaxFramesPerCallback * 2
+    ];
 
     // =============================================
     // TEMP BUFFERS
@@ -112,4 +142,4 @@ private:
     ) noexcept;
 };
 
-} // namespace pristine
+} // namespace pristine 

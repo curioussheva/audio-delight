@@ -3,12 +3,11 @@
 // =====================================================
 
 #include "AudioCallback.h"
-
 #include <algorithm>
 #include <cmath>
 #include <cstring>
-
 #include "AudioConstants.h"
+#include "../playback/PlaybackController.h"
 
 namespace pristine {
 
@@ -26,7 +25,6 @@ AudioCallback::AudioCallback(
       mPipeline(pipeline),
       mMetrics(metrics),
       mState(state) {
-
     std::memset(
         mLeft,
         0,
@@ -37,6 +35,12 @@ AudioCallback::AudioCallback(
         mRight,
         0,
         sizeof(mRight)
+    );
+
+    std::memset(
+        mScratchInterleaved,
+        0,
+        sizeof(mScratchInterleaved)
     );
 }
 
@@ -50,7 +54,6 @@ AudioCallback::onAudioReady(
     void* audioData,
     int32_t numFrames
 ) {
-
     auto* output =
         static_cast<float*>(
             audioData
@@ -63,14 +66,13 @@ AudioCallback::onAudioReady(
     if (
         numFrames <= 0 ||
         numFrames >
-        kMaxFramesPerCallback
+            kMaxFramesPerCallback
     ) {
-
         std::memset(
             output,
             0,
             sizeof(float) *
-            numFrames * 2
+                numFrames * 2
         );
 
         return
@@ -85,17 +87,42 @@ AudioCallback::onAudioReady(
     updateParameters();
 
     // =============================================
-    // READ BUFFER
+    // READ SOURCE
     // =============================================
 
-    const uint64_t readFrames =
-        mBufferController.popStereo(
-            mLeft,
-            mRight,
-            static_cast<uint32_t>(
-                numFrames
-            )
+    uint64_t readFrames = 0;
+
+    if (
+        mPlaybackController &&
+        mPlaybackController->isInitialized()
+    ) {
+        mPlaybackController->render(
+            mScratchInterleaved,
+            static_cast<uint32_t>(numFrames),
+            2,
+            static_cast<uint32_t>(mSampleRate)
         );
+
+        for (
+            int32_t i = 0;
+            i < numFrames;
+            ++i
+        ) {
+            mLeft[i]  = mScratchInterleaved[i * 2];
+            mRight[i] = mScratchInterleaved[i * 2 + 1];
+        }
+
+        readFrames = static_cast<uint64_t>(numFrames);
+    } else {
+        readFrames =
+            mBufferController.popStereo(
+                mLeft,
+                mRight,
+                static_cast<uint32_t>(
+                    numFrames
+                )
+            );
+    }
 
     // =============================================
     // UNDERRUN
@@ -103,11 +130,10 @@ AudioCallback::onAudioReady(
 
     if (
         readFrames <
-        static_cast<uint64_t>(
-            numFrames
-        )
+            static_cast<uint64_t>(
+                numFrames
+            )
     ) {
-
         mMetrics.recordUnderrun();
 
         std::fill(
@@ -130,7 +156,6 @@ AudioCallback::onAudioReady(
     if (
         mState.isDSPEnabled()
     ) {
-
         mPipeline.process(
             mLeft,
             mRight,
@@ -148,7 +173,6 @@ AudioCallback::onAudioReady(
         i < numFrames;
         ++i
     ) {
-
         float l =
             zapDenormal(
                 mLeft[i]
@@ -197,7 +221,6 @@ void AudioCallback::onErrorAfterClose(
     oboe::AudioStream*,
     oboe::Result
 ) {
-
     mState.setRunning(false);
 }
 
@@ -206,7 +229,6 @@ void AudioCallback::onErrorAfterClose(
 // =====================================================
 
 void AudioCallback::updateParameters() {
-
     mParams.masterGain = mState.masterGain();
     mParams.balance = mState.balance();
     mParams.stereoWidth = mState.stereoWidth();
@@ -225,12 +247,11 @@ void AudioCallback::updateParameters() {
 inline float AudioCallback::zapDenormal(
     float x
 ) noexcept {
-
     return
         (std::fabs(x) <
-         kDenormalThreshold)
-        ? 0.0f
-        : x;
+            kDenormalThreshold)
+            ? 0.0f
+            : x;
 }
 
 // =====================================================
@@ -240,7 +261,6 @@ inline float AudioCallback::zapDenormal(
 inline float AudioCallback::softClip(
     float x
 ) noexcept {
-
     return
         x /
         (

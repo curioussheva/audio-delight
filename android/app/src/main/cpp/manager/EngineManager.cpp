@@ -71,6 +71,12 @@ void EngineManager::start() {
     const bool exclusiveMode =
         mState.exclusiveMode();
 
+    if (!mPlayback.isInitialized()) {
+        mPlayback.initialize();
+    }
+
+    mEngine.setPlaybackController(&mPlayback);
+
     mEngine.start(
         exclusiveMode
     );

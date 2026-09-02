@@ -104,7 +104,6 @@
     "doctor": {
       "reactNativeDirectoryCheck": {
         "exclude": [
-          "react-native-track-player",
           "react-native-quick-sqlite"
         ]
       }

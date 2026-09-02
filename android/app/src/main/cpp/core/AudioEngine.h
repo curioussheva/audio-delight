@@ -6,7 +6,6 @@
 #pragma once
 
 #include <memory>
-
 #include "AudioBufferController.h"
 #include "AudioCallback.h"
 #include "AudioMetrics.h"
@@ -16,11 +15,14 @@
 #include "AudioStreamController.h"
 #include "AudioTypes.h"
 
+namespace pristine::playback {
+class PlaybackController;
+}
+
 namespace pristine {
 
 class AudioEngine {
 public:
-
     AudioEngine();
     ~AudioEngine();
 
@@ -35,6 +37,14 @@ public:
     void stop();
 
     bool isRunning() const;
+
+    // =============================================
+    // PLAYBACK SOURCE
+    // =============================================
+
+    void setPlaybackController(
+        playback::PlaybackController* controller
+    );
 
     // =============================================
     // INPUT
@@ -135,16 +145,13 @@ public:
     void reset();
 
 private:
-
     AudioState mState;
-
     AudioMetrics mMetrics;
 
     AudioBufferController
         mBufferController;
 
     AudioPipeline mPipeline;
-
     AudioCallback mCallback;
 
     AudioStreamController

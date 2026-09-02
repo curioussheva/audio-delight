@@ -577,3 +577,59 @@ build-fix-status.md docs/ ✅ Relevan
 
 Roadmap ini update per 1 September 2026.
 Status terakhir: Build native stabil, RNTP digantikan custom service, menunggu verifikasi runtime dan pembersihan total.
+
+---
+
+Berikut ringkasan progres terbaru:
+
+✅ Yang Sudah Selesai
+
+· Build native stabil
+  · libappmodules.so terproduksi untuk arm64-v8a dan x86_64.
+  · FFmpeg terintegrasi, FFmpegDecoder aktif.
+· Aplikasi booting tanpa crash
+  · Error PlatformConstants dan UnsatisfiedLinkError sudah hilang.
+  · RNTP dinonaktifkan sementara (RNTP_ENABLED = false).
+· Migrasi UI/JS ke custom playback service
+  · engine.ts, useAudioPlayer.ts, useTrackPlayerHandler.ts, useAudioProgress.ts, playerStore.ts sudah memakai NativePlaybackService.
+  · Tidak ada lagi pemakaian react-native-track-player di src/.
+· Custom playback service
+  · PlaybackService.kt, MediaSessionManager.kt, PlaybackNativeBridge.kt, NativePlaybackService.kt dibuat.
+  · PlaybackService sudah menggunakan Service biasa agar tidak bergantung pada MediaBrowserCompat.
+  · PendingIntent sudah diberi flag FLAG_IMMUTABLE untuk Android 12+.
+· Workflow CI
+  · Sudah dipisah: build-dev.yml, build-preview.yml, runtime-test.yml, autolinking-debug.yml.
+  · Cache FFmpeg diterapkan.
+
+🔄 Sedang Dikerjakan / Perlu Diterapkan
+
+· Menghubungkan PlaybackController ke AudioEngine
+    Akar masalah waiting for audio: AudioEngine masih membaca dari AudioBufferController, bukan dari PlaybackController.
+    Perubahan yang sudah disiapkan:
+  · AudioCallback diberi pointer ke PlaybackController dan method setPlaybackController.
+  · AudioEngine memiliki method setPlaybackController untuk meneruskan pointer ke callback.
+  · EngineManager::start() memanggil mEngine.setPlaybackController(&mPlayback) dan mPlayback.initialize().
+  Status: Kode sudah disiapkan, tinggal ditempel ke file, commit, build ulang.
+
+⏭️ Langkah Berikutnya
+
+1. Terapkan perubahan audio engine
+   · Edit AudioCallback.h/.cpp, AudioEngine.h/.cpp, EngineManager.cpp.
+   · Commit & push.
+   · Build ulang.
+2. Uji audio
+   · Play lagu, pastikan suara keluar.
+   · Cek visualizer, equalizer, dan progress.
+3. Pembersihan RNTP total
+   · pnpm remove react-native-track-player
+   · Hapus referensi di app.json, workflow, dan scripts/.
+4. Pengujian fitur
+   · Player, equalizer, visualizer, USB DAC, library.
+5. Update dokumentasi
+   · new-arch-roadmap.md dan ui-js-post-native-refactor-todolist.md.
+
+🎯 Fokus Sekarang
+
+Selesaikan integrasi PlaybackController → AudioEngine. Itu kunci untuk mengeluarkan audio. Setelah itu, baru lanjut pembersihan dan pengujian menyeluruh.
+
+Silakan terapkan perubahan audio engine yang sudah disiapkan, lalu kabari hasilnya. Kalau ada error saat kompilasi, kita akan lihat log berikutnya. 🚀

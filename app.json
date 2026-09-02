@@ -91,9 +91,6 @@
             "newArchEnabled": true,
             "ndkVersion": "27.1.12297006",
             "usesCleartextTraffic": true,
-            "extraMavenRepos": [
-              "../../node_modules/react-native-track-player/android/repo"
-            ],
             "enableBridgeless": false
           },
           "ios": {

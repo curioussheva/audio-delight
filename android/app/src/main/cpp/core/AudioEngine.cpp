@@ -3,6 +3,7 @@
 // =====================================================
 
 #include "AudioEngine.h"
+#include "../playback/PlaybackController.h"
 
 namespace pristine {
 
@@ -58,6 +59,10 @@ bool AudioEngine::start(
         mStreamController.framesPerBurst()
     );
 
+    mCallback.setSampleRate(
+        mStreamController.sampleRate()
+    );
+
     if (
         !mStreamController.start()
     ) {
@@ -95,6 +100,17 @@ void AudioEngine::stop() {
 bool AudioEngine::isRunning() const {
 
     return mState.isRunning();
+}
+
+// =====================================================
+// SET PLAYBACK CONTROLLER
+// =====================================================
+
+void AudioEngine::setPlaybackController(
+    playback::PlaybackController* controller
+) {
+
+    mCallback.setPlaybackController(controller);
 }
 
 // =====================================================
