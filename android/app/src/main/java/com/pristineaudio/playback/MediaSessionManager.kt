@@ -126,14 +126,14 @@ class MediaSessionManager(private val service: PlaybackService) {
     }
 
     private fun pendingIntentForAction(action: String): PendingIntent {
-        val intent = Intent(context, PlaybackService::class.java).apply {
-            this.action = action
-        }
-        return PendingIntent.getService(
-            context,
-            action.hashCode(),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT
-        )
+    val intent = Intent(context, PlaybackService::class.java).apply {
+        this.action = action
     }
+    return PendingIntent.getService(
+        context,
+        action.hashCode(),
+        intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+} 
 } 
