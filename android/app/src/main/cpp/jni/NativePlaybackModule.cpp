@@ -8,54 +8,73 @@
 
 static pristine::playback::PlaybackController* gPlaybackController = nullptr;
 
+// Lazy getter — jika belum diinisialisasi, ambil dari EngineManager
+static pristine::playback::PlaybackController* getController() {
+    if (!gPlaybackController) {
+        gPlaybackController = &pristine::EngineManager::get().playback();
+    }
+    return gPlaybackController;
+}
+
 extern "C" {
 
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativePlay(JNIEnv*, jobject) {
-    if (gPlaybackController) gPlaybackController->play();
+    auto* controller = getController();
+    if (controller) controller->play();
 }
 
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativePause(JNIEnv*, jobject) {
-    if (gPlaybackController) gPlaybackController->pause();
+    auto* controller = getController();
+    if (controller) controller->pause();
 }
 
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeStop(JNIEnv*, jobject) {
-    if (gPlaybackController) gPlaybackController->stop();
+    auto* controller = getController();
+    if (controller) controller->stop();
 }
 
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSeek(JNIEnv*, jobject, jlong positionMs) {
-    if (gPlaybackController) gPlaybackController->seek(static_cast<double>(positionMs) / 1000.0);
+    auto* controller = getController();
+    if (controller) controller->seek(static_cast<double>(positionMs) / 1000.0);
 }
 
 JNIEXPORT jlong JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetPosition(JNIEnv*, jobject) {
-    if (!gPlaybackController) return 0;
-    return static_cast<jlong>(gPlaybackController->state()->getPosition().positionMs);
+    auto* controller = getController();
+    if (!controller) return 0;
+    return static_cast<jlong>(controller->state()->getPosition().positionMs);
 }
 
 JNIEXPORT jint JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetStatus(JNIEnv*, jobject) {
-    if (!gPlaybackController) return 0;
-    return static_cast<jint>(gPlaybackController->state()->getStatus());
+    auto* controller = getController();
+    if (!controller) return 0;
+    return static_cast<jint>(controller->state()->getStatus());
 }
 
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeNext(JNIEnv*, jobject) {
-    if (gPlaybackController) gPlaybackController->next();
+    auto* controller = getController();
+    if (controller) controller->next();
 }
 
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativePrevious(JNIEnv*, jobject) {
-    if (gPlaybackController) gPlaybackController->previous();
+    auto* controller = getController();
+    if (controller) controller->previous();
 }
 
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSetShuffle(JNIEnv*, jobject, jboolean enabled) {
-    if (gPlaybackController) gPlaybackController->setShuffle(enabled);
+    auto* controller = getController();
+    if (controller) controller->setShuffle(enabled);
 }
 
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSetRepeatMode(JNIEnv*, jobject, jint mode) {
-    if (gPlaybackController) gPlaybackController->setRepeatMode(static_cast<pristine::playback::RepeatMode>(mode));
+    auto* controller = getController();
+    if (controller) controller->setRepeatMode(static_cast<pristine::playback::RepeatMode>(mode));
 }
 
 JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetQueue(JNIEnv* env, jobject) {
-    if (!gPlaybackController) return env->NewObjectArray(0, env->FindClass("java/lang/String"), nullptr);
+    auto* controller = getController();
+    if (!controller) return env->NewObjectArray(0, env->FindClass("java/lang/String"), nullptr);
 
-    auto queue = gPlaybackController->queue()->tracks();
+    auto queue = controller->queue()->tracks();
     jobjectArray result = env->NewObjectArray(queue.size(), env->FindClass("java/lang/String"), nullptr);
     for (size_t i = 0; i < queue.size(); ++i) {
         jstring str = env->NewStringUTF(queue[i].uri.c_str());
@@ -66,7 +85,8 @@ JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativePlaybackModule
 }
 
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSetQueue(JNIEnv* env, jobject, jobjectArray uris) {
-    if (!gPlaybackController) return;
+    auto* controller = getController();
+    if (!controller) return;
 
     jsize length = env->GetArrayLength(uris);
     std::vector<pristine::playback::TrackInfo> tracks;
@@ -79,12 +99,13 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeS
         env->ReleaseStringUTFChars(js, cstr);
         env->DeleteLocalRef(js);
     }
-    gPlaybackController->queue()->setTracks(tracks);
+    controller->queue()->setTracks(tracks);
 }
 
 JNIEXPORT jstring JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetCurrentTrack(JNIEnv* env, jobject) {
-    if (!gPlaybackController) return env->NewStringUTF("");
-    auto track = gPlaybackController->queue()->current();
+    auto* controller = getController();
+    if (!controller) return env->NewStringUTF("");
+    auto track = controller->queue()->current();
     if (track) {
         return env->NewStringUTF(track->uri.c_str());
     }
@@ -95,4 +116,4 @@ JNIEXPORT jstring JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nati
 
 void initPlaybackModule(pristine::playback::PlaybackController* controller) {
     gPlaybackController = controller;
-}
+} 
