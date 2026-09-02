@@ -50,32 +50,35 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
     fun setRepeatMode(mode: Int) = PlaybackNativeBridge.setRepeatMode(mode)
 
     @ReactMethod
-    fun setQueue(uris: ReadableArray) {
-        val list = ArrayList<String>()
-        for (i in 0 until uris.size()) {
-            list.add(uris.getString(i))
+fun setQueue(uris: ReadableArray) {
+    val list = ArrayList<String>()
+    for (i in 0 until uris.size()) {
+        val uri = uris.getString(i)
+        if (uri != null) {
+            list.add(uri)
         }
-        PlaybackNativeBridge.setQueue(list.toTypedArray())
     }
+    PlaybackNativeBridge.setQueue(list.toTypedArray())
+}
 
     @ReactMethod
-    fun getPosition(promise: Promise) {
-        promise.resolve(PlaybackNativeBridge.getPosition().toDouble())
-    }
+fun getPosition(promise: Promise) {
+    promise.resolve(PlaybackNativeBridge.getPosition().toDouble())
+}
 
-    @ReactMethod
-    fun getStatus(promise: Promise) {
-        promise.resolve(PlaybackNativeBridge.getStatus())
-    }
+@ReactMethod
+fun getStatus(promise: Promise) {
+    promise.resolve(PlaybackNativeBridge.getStatus())
+}
 
-    @ReactMethod
-    fun getQueue(promise: Promise) {
-        val queue = PlaybackNativeBridge.getQueue()
-        promise.resolve(queue?.toList() ?: emptyList<String>())
-    }
+@ReactMethod
+fun getQueue(promise: Promise) {
+    val queue = PlaybackNativeBridge.getQueue()
+    promise.resolve(queue?.toList() ?: emptyList<String>())
+}
 
-    @ReactMethod
-    fun getCurrentTrack(promise: Promise) {
-        promise.resolve(PlaybackNativeBridge.getCurrentTrack() ?: "")
-    }
+@ReactMethod
+fun getCurrentTrack(promise: Promise) {
+    promise.resolve(PlaybackNativeBridge.getCurrentTrack() ?: "")
+}
 }
