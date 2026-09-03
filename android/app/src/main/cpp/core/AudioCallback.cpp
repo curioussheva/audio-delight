@@ -3,11 +3,12 @@
 // =====================================================
 
 #include "AudioCallback.h"
+#include "AudioConstants.h"
+#include "../playback/PlaybackController.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstring>
-#include "AudioConstants.h"
-#include "../playback/PlaybackController.h"
 
 namespace pristine {
 
@@ -25,23 +26,10 @@ AudioCallback::AudioCallback(
       mPipeline(pipeline),
       mMetrics(metrics),
       mState(state) {
-    std::memset(
-        mLeft,
-        0,
-        sizeof(mLeft)
-    );
 
-    std::memset(
-        mRight,
-        0,
-        sizeof(mRight)
-    );
-
-    std::memset(
-        mScratchInterleaved,
-        0,
-        sizeof(mScratchInterleaved)
-    );
+    std::memset(mLeft, 0, sizeof(mLeft));
+    std::memset(mRight, 0, sizeof(mRight));
+    std::memset(mScratchInterleaved, 0, sizeof(mScratchInterleaved));
 }
 
 // =====================================================
@@ -54,163 +42,59 @@ AudioCallback::onAudioReady(
     void* audioData,
     int32_t numFrames
 ) {
-    auto* output =
-        static_cast<float*>(
-            audioData
-        );
+    auto* output = static_cast<float*>(audioData);
 
-    // =============================================
-    // SAFETY
-    // =============================================
-
-    if (
-        numFrames <= 0 ||
-        numFrames >
-            kMaxFramesPerCallback
-    ) {
-        std::memset(
-            output,
-            0,
-            sizeof(float) *
-                numFrames * 2
-        );
-
-        return
-            oboe::DataCallbackResult
-                ::Continue;
+    if (numFrames <= 0 || numFrames > kMaxFramesPerCallback) {
+        std::memset(output, 0, sizeof(float) * numFrames * 2);
+        return oboe::DataCallbackResult::Continue;
     }
 
     // =============================================
-    // UPDATE DSP PARAMS
+    // Jika PlaybackController tersedia, gunakan sebagai sumber audio
+    // =============================================
+
+    if (mPlaybackController) {
+        mPlaybackController->render(
+            output,
+            static_cast<uint32_t>(numFrames),
+            2,                // stereo
+            mSampleRate       // sample rate dari AudioStreamController
+        );
+        return oboe::DataCallbackResult::Continue;
+    }
+
+    // =============================================
+    // FALLBACK: AudioBufferController
     // =============================================
 
     updateParameters();
 
-    // =============================================
-    // READ SOURCE
-    // =============================================
-
-    uint64_t readFrames = 0;
-
-    if (
-        mPlaybackController &&
-        mPlaybackController->isInitialized()
-    ) {
-        mPlaybackController->render(
-            mScratchInterleaved,
-            static_cast<uint32_t>(numFrames),
-            2,
-            static_cast<uint32_t>(mSampleRate)
-        );
-
-        for (
-            int32_t i = 0;
-            i < numFrames;
-            ++i
-        ) {
-            mLeft[i]  = mScratchInterleaved[i * 2];
-            mRight[i] = mScratchInterleaved[i * 2 + 1];
-        }
-
-        readFrames = static_cast<uint64_t>(numFrames);
-    } else {
-        readFrames =
-            mBufferController.popStereo(
-                mLeft,
-                mRight,
-                static_cast<uint32_t>(
-                    numFrames
-                )
-            );
-    }
-
-    // =============================================
-    // UNDERRUN
-    // =============================================
-
-    if (
-        readFrames <
-            static_cast<uint64_t>(
-                numFrames
-            )
-    ) {
-        mMetrics.recordUnderrun();
-
-        std::fill(
-            mLeft + readFrames,
-            mLeft + numFrames,
-            0.0f
-        );
-
-        std::fill(
-            mRight + readFrames,
-            mRight + numFrames,
-            0.0f
-        );
-    }
-
-    // =============================================
-    // DSP PROCESS
-    // =============================================
-
-    if (
-        mState.isDSPEnabled()
-    ) {
-        mPipeline.process(
-            mLeft,
-            mRight,
-            numFrames,
-            mParams
-        );
-    }
-
-    // =============================================
-    // INTERLEAVE OUTPUT
-    // =============================================
-
-    for (
-        int32_t i = 0;
-        i < numFrames;
-        ++i
-    ) {
-        float l =
-            zapDenormal(
-                mLeft[i]
-            );
-
-        float r =
-            zapDenormal(
-                mRight[i]
-            );
-
-        l = softClip(l);
-        r = softClip(r);
-
-        output[i * 2]     = l;
-        output[i * 2 + 1] = r;
-    }
-
-    // =============================================
-    // VISUALIZER
-    // =============================================
-
-    mVisualizer.write(
+    const uint64_t readFrames = mBufferController.popStereo(
         mLeft,
         mRight,
-        numFrames
+        static_cast<uint32_t>(numFrames)
     );
 
-    // =============================================
-    // METRICS
-    // =============================================
+    if (readFrames < static_cast<uint64_t>(numFrames)) {
+        mMetrics.recordUnderrun();
 
-    mMetrics.updateBufferedSamples(
-        mBufferController.availableFrames()
-    );
+        std::fill(mLeft + readFrames, mLeft + numFrames, 0.0f);
+        std::fill(mRight + readFrames, mRight + numFrames, 0.0f);
+    }
 
-    return
-        oboe::DataCallbackResult
-            ::Continue;
+    if (mState.isDSPEnabled()) {
+        mPipeline.process(mLeft, mRight, numFrames, mParams);
+    }
+
+    for (int32_t i = 0; i < numFrames; ++i) {
+        output[i * 2]     = softClip(zapDenormal(mLeft[i]));
+        output[i * 2 + 1] = softClip(zapDenormal(mRight[i]));
+    }
+
+    mVisualizer.write(mLeft, mRight, numFrames);
+    mMetrics.updateBufferedSamples(mBufferController.availableFrames());
+
+    return oboe::DataCallbackResult::Continue;
 }
 
 // =====================================================
@@ -244,29 +128,16 @@ void AudioCallback::updateParameters() {
 // ZAP DENORMAL
 // =====================================================
 
-inline float AudioCallback::zapDenormal(
-    float x
-) noexcept {
-    return
-        (std::fabs(x) <
-            kDenormalThreshold)
-            ? 0.0f
-            : x;
+inline float AudioCallback::zapDenormal(float x) noexcept {
+    return (std::fabs(x) < kDenormalThreshold) ? 0.0f : x;
 }
 
 // =====================================================
 // SOFT CLIP
 // =====================================================
 
-inline float AudioCallback::softClip(
-    float x
-) noexcept {
-    return
-        x /
-        (
-            1.0f +
-            std::fabs(x)
-        );
+inline float AudioCallback::softClip(float x) noexcept {
+    return x / (1.0f + std::fabs(x));
 }
 
-} // namespace pristine 
+} // namespace pristine

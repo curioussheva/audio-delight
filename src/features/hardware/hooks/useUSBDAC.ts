@@ -28,34 +28,7 @@ export const useUSBDAC = (): UseUSBDACReturn => {
   const [config, setConfig] = useState<DACConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadSavedConfig();
-
-    const unsubscribe = USBDACService.addListener((dac) => {
-      if (dac) {
-        setCurrentDAC(dac);
-        if (config?.dacId === dac.id && config.exclusiveMode) {
-          activateExclusiveMode(dac.id);
-        }
-      } else {
-        setCurrentDAC(null);
-        setIsExclusiveMode(false);
-      }
-    });
-
-    // ✅ addExclusiveModeListener dihapus — tidak ada di USBDACService.
-    // isExclusiveMode di-sync via checkExclusiveMode() saat load config
-    // dan saat activate/deactivate exclusive mode.
-
-    if (Platform.OS === "android") {
-      scanDACs();
-    }
-
-    return () => {
-      unsubscribe();
-    };
-  }, [config?.dacId]);
-
+  // Fungsi untuk memuat konfigurasi tersimpan
   const loadSavedConfig = async () => {
     try {
       const saved = await AsyncStorage.getItem(STORAGE_KEY);
@@ -69,6 +42,7 @@ export const useUSBDAC = (): UseUSBDACReturn => {
     }
   };
 
+  // Fungsi untuk menyimpan konfigurasi
   const saveConfig = async (newConfig: DACConfig) => {
     try {
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newConfig));
@@ -78,21 +52,62 @@ export const useUSBDAC = (): UseUSBDACReturn => {
     }
   };
 
-  const scanDACs = useCallback(async () => {
-    setLoading(true);
+  // Cek status exclusive mode
+  const checkExclusiveMode = useCallback(async () => {
     try {
-      const detected = await USBDACService.detectDACs();
-      setDacs(detected);
-      if (detected.length === 1 && !currentDAC) {
-        await handleSelectDAC(detected[0].id);
+      const active = await USBDACService.isExclusiveModeActive();
+      setIsExclusiveMode(active);
+      return active;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  // Aktivasi exclusive mode
+  const activateExclusiveMode = useCallback(
+    async (dacId: string): Promise<boolean> => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await USBDACService.setExclusiveMode(dacId, true);
+        if (result.success) {
+          setIsExclusiveMode(true);
+          if (config) await saveConfig({ ...config, exclusiveMode: true });
+          return true;
+        }
+        return false;
+      } catch (e: any) {
+        setError(e.message);
+        return false;
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
+    },
+    [config],
+  );
+
+  // Nonaktifkan exclusive mode
+  const deactivateExclusiveMode = useCallback(async (): Promise<boolean> => {
+    if (!currentDAC) return false;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await USBDACService.setExclusiveMode(currentDAC.id, false);
+      if (result.success) {
+        setIsExclusiveMode(false);
+        if (config) await saveConfig({ ...config, exclusiveMode: false });
+        return true;
+      }
+      return false;
+    } catch (e: any) {
+      setError(e.message);
+      return false;
     } finally {
       setLoading(false);
     }
-  }, [currentDAC]);
+  }, [currentDAC, config]);
 
+  // Pilih DAC dan atur konfigurasi awal
   const handleSelectDAC = useCallback(
     async (dacId: string) => {
       const selected = dacs.find((d) => d.id === dacId);
@@ -118,61 +133,26 @@ export const useUSBDAC = (): UseUSBDACReturn => {
         await activateExclusiveMode(dacId);
       }
     },
-    [dacs],
+    [dacs, activateExclusiveMode],
   );
 
-  const checkExclusiveMode = useCallback(async () => {
-    try {
-      const active = await USBDACService.isExclusiveModeActive();
-      setIsExclusiveMode(active);
-      return active;
-    } catch {
-      return false;
-    }
-  }, []);
-
-  const activateExclusiveMode = useCallback(
-    async (dacId: string): Promise<boolean> => {
-      setLoading(true);
-      setError(null);
-      try {
-        const result = await USBDACService.setExclusiveMode(dacId, true);
-        if (result.success) {
-          setIsExclusiveMode(true);
-          if (config) await saveConfig({ ...config, exclusiveMode: true });
-          return true;
-        }
-        return false;
-      } catch (e: any) {
-        setError(e.message);
-        return false;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [config],
-  );
-
-  const deactivateExclusiveMode = useCallback(async (): Promise<boolean> => {
-    if (!currentDAC) return false;
+  // Scan DAC yang tersedia
+  const scanDACs = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
-      const result = await USBDACService.setExclusiveMode(currentDAC.id, false);
-      if (result.success) {
-        setIsExclusiveMode(false);
-        if (config) await saveConfig({ ...config, exclusiveMode: false });
-        return true;
+      const detected = await USBDACService.detectDACs();
+      setDacs(detected);
+      if (detected.length === 1 && !currentDAC) {
+        await handleSelectDAC(detected[0].id);
       }
-      return false;
-    } catch (e: any) {
-      setError(e.message);
-      return false;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
     }
-  }, [currentDAC, config]);
+  }, [currentDAC, handleSelectDAC]);
 
+  // Toggle exclusive mode
   const toggleExclusiveMode = useCallback(async (): Promise<boolean> => {
     if (!currentDAC) {
       setError("No DAC selected");
@@ -188,6 +168,7 @@ export const useUSBDAC = (): UseUSBDACReturn => {
     deactivateExclusiveMode,
   ]);
 
+  // Atur sample rate
   const setSampleRate = useCallback(
     async (rate: number | "auto"): Promise<boolean> => {
       if (!config || !currentDAC) return false;
@@ -200,6 +181,32 @@ export const useUSBDAC = (): UseUSBDACReturn => {
     },
     [config, currentDAC],
   );
+
+  // Efek utama: muat konfigurasi, daftarkan listener, dan scan
+  useEffect(() => {
+    loadSavedConfig();
+
+    const unsubscribe = USBDACService.addListener((dac) => {
+      if (dac) {
+        setCurrentDAC(dac);
+        // Perbaikan: gunakan null check penuh
+        if (config && config.dacId === dac.id && config.exclusiveMode) {
+          activateExclusiveMode(dac.id);
+        }
+      } else {
+        setCurrentDAC(null);
+        setIsExclusiveMode(false);
+      }
+    });
+
+    if (Platform.OS === "android") {
+      scanDACs();
+    }
+
+    return () => {
+      unsubscribe();
+    };
+  }, [config]); // ← dependency diubah menjadi [config]
 
   return {
     dacs,
@@ -214,4 +221,4 @@ export const useUSBDAC = (): UseUSBDACReturn => {
     setSampleRate,
     checkExclusiveMode,
   };
-};
+}; 
