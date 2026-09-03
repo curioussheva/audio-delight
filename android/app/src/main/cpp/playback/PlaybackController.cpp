@@ -130,6 +130,17 @@ bool PlaybackController::play() {
     if (!initialized_.load(std::memory_order_acquire))
         return false;
 
+    if (!decoderWorker_) {
+        if (!queue_) return false;
+
+        auto track = queue_->current();
+        if (!track) return false;
+
+        if (!loadTrack(*track)) {
+            return false;
+        }
+    }
+
     playing_.store(true, std::memory_order_release);
 
     if (decoderWorker_) {
