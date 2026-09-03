@@ -48,7 +48,35 @@ class NativePlaybackModule(reactContext: ReactApplicationContext) :
     @ReactMethod fun setShuffle(enabled: Boolean) { nativeSetShuffle(enabled) }
     @ReactMethod fun setRepeatMode(mode: Int) { nativeSetRepeatMode(mode) }
     @ReactMethod fun getQueue(): Array<String> = nativeGetQueue()
-    @ReactMethod fun setQueue(uris: Array<String>) { nativeSetQueue(uris) }
+    @ReactMethod fun setQueue(uris: ReadableArray) {
+    val list = ArrayList<String>()
+    for (i in 0 until uris.size()) {
+        val uri = uris.getString(i)
+        if (uri != null) {
+            list.add(resolveContentUri(uri))
+        }
+    }
+    nativeSetQueue(list.toTypedArray())
+}
+
+private fun resolveContentUri(uriString: String): String {
+    if (!uriString.startsWith("content://")) {
+        return uriString
+    }
+    return try {
+        val uri = android.net.Uri.parse(uriString)
+        val pfd = reactApplicationContext.contentResolver
+            .openFileDescriptor(uri, "r")
+        if (pfd != null) {
+            val fd = pfd.detachFd()
+            "/proc/self/fd/$fd"
+        } else {
+            uriString
+        }
+    } catch (e: Exception) {
+        uriString
+    }
+}
     @ReactMethod fun getCurrentTrack(): String = nativeGetCurrentTrack()
 
     // Service-friendly methods (tanpa React)

@@ -189,7 +189,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         set({ playError: "No valid URIs" });
         return false;
       }
-
+console.log("🔍 [DEBUG] URIs dikirim ke native:", JSON.stringify(uris.slice(0, 3)));
       NativePlaybackService.setQueue(uris);
       NativePlaybackService.play();
 
