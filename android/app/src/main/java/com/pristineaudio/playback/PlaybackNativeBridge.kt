@@ -58,4 +58,12 @@ object PlaybackNativeBridge {
         android.util.Log.d("PlaybackNativeBridge", "getCurrentTrack() called")
         return NativePlaybackModule.instance?.getCurrentTrackFromService()
     }
+    
+    fun getPosition(): Long {
+    return NativePlaybackModule.instance?.getPositionFromService()?.toLong() ?: 0L
+    }
+
+    fun getStatus(): Int {
+    return NativePlaybackModule.instance?.getStatusFromService() ?: 0
+    }
 } 
