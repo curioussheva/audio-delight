@@ -61,8 +61,7 @@
       ]
     }
   ]
-}
-
+},
     "web": {
       "favicon": "./assets/images/favicon.png"
     },
