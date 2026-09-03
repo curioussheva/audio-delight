@@ -3,6 +3,7 @@
 #include "../decoder/FFmpegDecoder.h"
 
 #include <algorithm>
+#include <android/log.h>
 
 namespace pristine::playback {
 
@@ -23,6 +24,8 @@ PlaybackController::~PlaybackController() {
 bool PlaybackController::initialize() {
     if (initialized_.load(std::memory_order_acquire))
         return true;
+
+    __android_log_print(ANDROID_LOG_DEBUG, "PlaybackController", "initialize called");
 
     pcmQueue_ = std::make_shared<PCMQueue>(48000 * 10); // ~10 sec buffer
     clock_ = std::make_shared<PlaybackClock>();
@@ -116,6 +119,8 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
     if (!initialized_.load(std::memory_order_acquire))
         return false;
 
+    __android_log_print(ANDROID_LOG_DEBUG, "PlaybackController", "loadTrack: %s", track.uri.c_str());
+
     stopDecoder();
 
     currentTrack_ = track;
@@ -129,6 +134,10 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
 bool PlaybackController::play() {
     if (!initialized_.load(std::memory_order_acquire))
         return false;
+
+    __android_log_print(ANDROID_LOG_DEBUG, "PlaybackController",
+                        "play() called, queue=%d, decoder=%d",
+                        queue_ != nullptr, decoderWorker_ != nullptr);
 
     if (!decoderWorker_) {
         if (!queue_) return false;
@@ -194,6 +203,9 @@ void PlaybackController::render(float* output,
     const size_t requested = frames * channels;
     size_t readFrames = pcmQueue_->read(output, frames);
 
+    __android_log_print(ANDROID_LOG_DEBUG, "PlaybackController",
+                        "render readFrames=%zu/%u", readFrames, frames);
+
     if (readFrames < frames) {
         const size_t offset = readFrames * channels;
         const size_t remaining = (frames - readFrames) * channels;
@@ -228,7 +240,10 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
             }
         );
 
-        return decoderWorker_->start(track.uri, 0.0);
+        bool ok = decoderWorker_->start(track.uri, 0.0);
+        __android_log_print(ANDROID_LOG_DEBUG, "PlaybackController",
+                            "startDecoder ok=%d, uri=%s", ok ? 1 : 0, track.uri.c_str());
+        return ok;
     }
     catch (...) {
         return false;
@@ -258,4 +273,4 @@ void PlaybackController::updatePlaybackState() {
     state_->setCurrentTrack(currentTrack_);
 }
 
-} // namespace pristine::playback
+} // namespace pristine::playback 

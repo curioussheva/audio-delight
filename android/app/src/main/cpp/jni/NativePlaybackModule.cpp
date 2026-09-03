@@ -13,15 +13,16 @@ static pristine::playback::PlaybackController* getController() {
     if (!gPlaybackController) {
         gPlaybackController = &pristine::EngineManager::get().playback();
     }
+    __android_log_print(ANDROID_LOG_DEBUG, "NativePlaybackModule", "getController: controller=%p", (void*)gPlaybackController);
 
-    // Pastikan PlaybackController siap
     if (!gPlaybackController->isInitialized()) {
         gPlaybackController->initialize();
+        __android_log_print(ANDROID_LOG_DEBUG, "NativePlaybackModule", "controller initialized");
     }
 
-    // Pastikan AudioEngine berjalan
     if (!pristine::EngineManager::get().engine().isRunning()) {
         pristine::EngineManager::get().start();
+        __android_log_print(ANDROID_LOG_DEBUG, "NativePlaybackModule", "engine started");
     }
 
     return gPlaybackController;
@@ -30,6 +31,7 @@ static pristine::playback::PlaybackController* getController() {
 extern "C" {
 
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativePlay(JNIEnv*, jobject) {
+    __android_log_print(ANDROID_LOG_DEBUG, "NativePlaybackModule", "nativePlay called");
     auto* controller = getController();
     if (controller) controller->play();
 }
@@ -100,6 +102,8 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeS
     if (!controller) return;
 
     jsize length = env->GetArrayLength(uris);
+    __android_log_print(ANDROID_LOG_DEBUG, "NativePlaybackModule", "nativeSetQueue, length=%d", (int)length);
+
     std::vector<pristine::playback::TrackInfo> tracks;
     for (jsize i = 0; i < length; ++i) {
         jstring js = (jstring) env->GetObjectArrayElement(uris, i);
@@ -127,4 +131,4 @@ JNIEXPORT jstring JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nati
 
 void initPlaybackModule(pristine::playback::PlaybackController* controller) {
     gPlaybackController = controller;
-} 
+}

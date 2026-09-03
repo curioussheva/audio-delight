@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <android/log.h>
 
 namespace pristine {
 
@@ -54,6 +55,8 @@ AudioCallback::onAudioReady(
     // =============================================
 
     if (mPlaybackController) {
+        __android_log_print(ANDROID_LOG_DEBUG, "AudioCallback",
+                            "using PlaybackController, frames=%d", (int)numFrames);
         mPlaybackController->render(
             output,
             static_cast<uint32_t>(numFrames),
@@ -61,6 +64,9 @@ AudioCallback::onAudioReady(
             mSampleRate       // sample rate dari AudioStreamController
         );
         return oboe::DataCallbackResult::Continue;
+    } else {
+        __android_log_print(ANDROID_LOG_DEBUG, "AudioCallback",
+                            "using AudioBufferController fallback");
     }
 
     // =============================================
@@ -140,4 +146,4 @@ inline float AudioCallback::softClip(float x) noexcept {
     return x / (1.0f + std::fabs(x));
 }
 
-} // namespace pristine
+} // namespace pristine 

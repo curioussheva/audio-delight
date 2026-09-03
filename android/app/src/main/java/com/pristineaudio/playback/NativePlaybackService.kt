@@ -2,6 +2,7 @@ package com.pristineaudio.playback
 
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
+import java.io.File
 
 @ReactModule(name = NativePlaybackService.NAME)
 class NativePlaybackService(reactContext: ReactApplicationContext) :
@@ -50,35 +51,63 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
     fun setRepeatMode(mode: Int) = PlaybackNativeBridge.setRepeatMode(mode)
 
     @ReactMethod
-fun setQueue(uris: ReadableArray) {
-    val list = ArrayList<String>()
-    for (i in 0 until uris.size()) {
-        val uri = uris.getString(i)
-        if (uri != null) {
-            list.add(uri)
+    fun setQueue(uris: ReadableArray) {
+        val list = ArrayList<String>()
+        for (i in 0 until uris.size()) {
+            val raw = uris.getString(i) ?: continue
+            val path = resolveContentUriToPath(raw)
+            android.util.Log.d("NativePlaybackService", "setQueue raw=$raw path=$path")
+            list.add(path)
         }
+        PlaybackNativeBridge.setQueue(list.toTypedArray())
     }
-    PlaybackNativeBridge.setQueue(list.toTypedArray())
-}
 
     @ReactMethod
-fun getPosition(promise: Promise) {
-    promise.resolve(PlaybackNativeBridge.getPosition().toDouble())
-}
+    fun getPosition(promise: Promise) {
+        promise.resolve(PlaybackNativeBridge.getPosition().toDouble())
+    }
 
-@ReactMethod
-fun getStatus(promise: Promise) {
-    promise.resolve(PlaybackNativeBridge.getStatus())
-}
+    @ReactMethod
+    fun getStatus(promise: Promise) {
+        promise.resolve(PlaybackNativeBridge.getStatus())
+    }
 
-@ReactMethod
-fun getQueue(promise: Promise) {
-    val queue = PlaybackNativeBridge.getQueue()
-    promise.resolve(queue?.toList() ?: emptyList<String>())
-}
+    @ReactMethod
+    fun getQueue(promise: Promise) {
+        val queue = PlaybackNativeBridge.getQueue()
+        promise.resolve(queue?.toList() ?: emptyList<String>())
+    }
 
-@ReactMethod
-fun getCurrentTrack(promise: Promise) {
-    promise.resolve(PlaybackNativeBridge.getCurrentTrack() ?: "")
-}
-}
+    @ReactMethod
+    fun getCurrentTrack(promise: Promise) {
+        promise.resolve(PlaybackNativeBridge.getCurrentTrack() ?: "")
+    }
+
+    private fun resolveContentUriToPath(uriString: String): String {
+        if (!uriString.startsWith("content://")) return uriString
+
+        return try {
+            val resolver = reactApplicationContext.contentResolver
+            val uri = android.net.Uri.parse(uriString)
+
+            resolver.query(uri, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idx = cursor.getColumnIndex(android.provider.MediaStore.MediaColumns.DATA)
+                    if (idx >= 0) {
+                        val path = cursor.getString(idx)
+                        if (path != null) return path
+                    }
+                }
+            }
+
+            val inputStream = resolver.openInputStream(uri) ?: return uriString
+            val file = File(reactApplicationContext.cacheDir, "audio_${System.currentTimeMillis()}.cache")
+            file.outputStream().use { output ->
+                inputStream.copyTo(output)
+            }
+            file.absolutePath
+        } catch (e: Exception) {
+            uriString
+        }
+    }
+} 
