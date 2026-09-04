@@ -8,6 +8,8 @@ extern "C" {
 #include <libavutil/samplefmt.h>
 }
 
+#include <android/log.h>
+
 namespace pristine::decoder {
 
 // =====================================================
@@ -31,17 +33,24 @@ bool FFmpegDecoder::onOpen(
 
     cleanup();
 
+    __android_log_print(ANDROID_LOG_DEBUG, "FFmpegDecoder",
+                        "onOpen: %s", uri.c_str());
+
     if (avformat_open_input(
             &formatCtx_,
             uri.c_str(),
             nullptr,
             nullptr) < 0) {
+        __android_log_print(ANDROID_LOG_ERROR, "FFmpegDecoder",
+                            "onOpen: avformat_open_input failed");
         return false;
     }
 
     if (avformat_find_stream_info(
             formatCtx_,
             nullptr) < 0) {
+        __android_log_print(ANDROID_LOG_ERROR, "FFmpegDecoder",
+                            "onOpen: avformat_find_stream_info failed");
         cleanup();
         return false;
     }
@@ -56,16 +65,22 @@ bool FFmpegDecoder::onOpen(
             0);
 
     if (audioStreamIndex_ < 0) {
+        __android_log_print(ANDROID_LOG_ERROR, "FFmpegDecoder",
+                            "onOpen: no audio stream found");
         cleanup();
         return false;
     }
 
     if (!setupCodec()) {
+        __android_log_print(ANDROID_LOG_ERROR, "FFmpegDecoder",
+                            "onOpen: setupCodec failed");
         cleanup();
         return false;
     }
 
     if (!setupResampler()) {
+        __android_log_print(ANDROID_LOG_ERROR, "FFmpegDecoder",
+                            "onOpen: setupResampler failed");
         cleanup();
         return false;
     }
@@ -73,7 +88,14 @@ bool FFmpegDecoder::onOpen(
     frame_ = av_frame_alloc();
     packet_ = av_packet_alloc();
 
-    return frame_ && packet_;
+    if (!frame_ || !packet_) {
+        cleanup();
+        return false;
+    }
+
+    __android_log_print(ANDROID_LOG_DEBUG, "FFmpegDecoder",
+                        "onOpen: success");
+    return true;
 }
 
 // =====================================================
@@ -93,7 +115,7 @@ DecodeResult FFmpegDecoder::onDecode(
 
     DecodeResult result;
     result.samples.reserve(
-        maxFrames * codecCtx_->ch_layout.nb_channels);
+        maxFrames * 2); // asumsi stereo
 
     while (result.framesDecoded < maxFrames) {
 
@@ -102,6 +124,7 @@ DecodeResult FFmpegDecoder::onDecode(
             packet_);
 
         if (readResult < 0) {
+            // EOF atau error
             result.status = DecodeStatus::EndOfStream;
             break;
         }
@@ -143,7 +166,7 @@ DecodeResult FFmpegDecoder::onDecode(
                 swrCtx_,
                 frame_->nb_samples);
 
-            const int channels = codecCtx_->ch_layout.nb_channels;
+            const int channels = 2; // output stereo
 
             std::vector<float> temp(
                 outSamples * channels);
@@ -178,6 +201,10 @@ DecodeResult FFmpegDecoder::onDecode(
         if (result.framesDecoded >= maxFrames)
             break;
     }
+
+    __android_log_print(ANDROID_LOG_DEBUG, "FFmpegDecoder",
+                        "onDecode: framesDecoded=%u, status=%d",
+                        result.framesDecoded, (int)result.status);
 
     result.status =
         result.framesDecoded > 0
@@ -337,11 +364,15 @@ bool FFmpegDecoder::setupResampler() {
     AVChannelLayout stereo;
     av_channel_layout_default(&stereo, 2);
 
+    __android_log_print(ANDROID_LOG_DEBUG, "FFmpegDecoder",
+                        "setupResampler: input_rate=%d, output_rate=%d",
+                        codecCtx_->sample_rate, config().targetSampleRate);
+
     swr_alloc_set_opts2(
         &swrCtx_,
         &stereo,
         AV_SAMPLE_FMT_FLT,
-        codecCtx_->sample_rate,
+        config().targetSampleRate,   // ← gunakan target sample rate (misal 48000)
         &codecCtx_->ch_layout,
         codecCtx_->sample_fmt,
         codecCtx_->sample_rate,
