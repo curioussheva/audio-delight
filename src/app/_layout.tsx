@@ -28,15 +28,11 @@ import LoadingScreen from "@/shared/components/ui/LoadingScreen";
 import { AudioPropertyToast } from "@/features/player/components/AudioPropertyToast";
 
 // Core Engine & Stores
-import { audioEngine } from "@/features/player/api/engine";
-import { playbackService } from "@/features/player/api/playback";
+import { audioEngine } from "@/features/player/api/engine"; // ✅ hanya import audioEngine
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useLibraryStore } from "@/features/library/store/libraryStore";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
 import { BackgroundScanTask } from "@/features/library/services/BackgroundScanTask";
-
-// Register Playback Service
-// (asumsi sudah ada registration di tempat lain, atau di sini)
 
 SplashScreen.preventAutoHideAsync();
 
@@ -47,7 +43,7 @@ export default function RootLayout() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const hasInitialized = useRef(false);
-  const hasTriggeredDummyPlay = useRef(false); // 🔥 guard untuk dummy autoplay
+  const hasTriggeredDummyPlay = useRef(false);
 
   // --- 1. Store Selectors ---
   const initStore = usePlayerStore((s) => s.initStore);
@@ -96,14 +92,12 @@ export default function RootLayout() {
     try {
       console.log("[BOOT] 5. _layout performInitialization start");
 
-      // A. Driver & Base Store Init
       console.log("[BOOT] 6. audioEngine.initialize() calling...");
       await audioEngine.initialize();
       console.log("[BOOT] 7. audioEngine.initialize() done");
       await initStore();
       console.log("[BOOT] 8. initStore() done");
 
-      // B. Load Preferences (Audio Mode & DSP)
       const savedMode = await AsyncStorage.getItem("audio_mode_preference");
       const eqStore = useEqualizerStore.getState();
 
@@ -114,12 +108,9 @@ export default function RootLayout() {
         await setAudioMode("dsp");
       }
 
-      // C. INITIAL QUICK SCAN
       if (!hasCompletedInitialScan) {
         console.log("[App] First install detected, performing initial scan...");
         try {
-          // Asumsi scan sudah di-trigger oleh store atau service lain
-          // Jika tidak, panggil scanner di sini
           setInitialScanCompleted();
           console.log("[App] Initial scan successful.");
         } catch (scanError) {
@@ -143,7 +134,6 @@ export default function RootLayout() {
     setInitialScanCompleted,
   ]);
 
-  // --- 5. Lifecycle Hooks ---
   useEffect(() => {
     if (!hasInitialized.current) {
       hasInitialized.current = true;
@@ -152,10 +142,9 @@ export default function RootLayout() {
   }, [performInitialization]);
 
   // ============================================================
-  // 🔥🔥🔥 DUMMY AUTOPLAY UNTUK DEBUG (PAKAI PATH ABSOLUT) 🔥🔥🔥
+  // 🔥 DUMMY AUTOPLAY UNTUK DEBUG (PAKAI PATH ABSOLUT) 🔥
   // ============================================================
   useEffect(() => {
-    // Hanya jalan sekali: saat appState === "ready" dan belum pernah dipicu
     if (appState !== "ready" || hasTriggeredDummyPlay.current) return;
     hasTriggeredDummyPlay.current = true;
 
@@ -163,29 +152,29 @@ export default function RootLayout() {
       try {
         console.log("[DUMMY] 🔥 Triggering autoplay with ABSOLUTE PATH...");
 
-        // 🔥 Hardcoded absolute path — sesuai dengan file yang di-push di workflow
         const testTrack = {
           id: "test_001",
           uri: "/storage/emulated/0/Music/test.mp3",
           title: "SoundHelix Test Tone",
           artist: "SoundHelix",
           album: "Debug",
-          duration: 18000, // ~18 detik
+          duration: 18000,
         };
 
         console.log("[DUMMY] Track:", testTrack);
 
-        // Gunakan playbackService langsung (paling reliable)
-        if (!playbackService) {
-          console.error("[DUMMY] playbackService is null!");
+        // ✅ Gunakan audioEngine.playbackService (jika tersedia)
+        const service = audioEngine.playbackService;
+        if (!service) {
+          console.error("[DUMMY] ❌ audioEngine.playbackService is null!");
           return;
         }
 
         console.log("[DUMMY] Setting queue...");
-        await playbackService.setQueue([testTrack]);
+        await service.setQueue([testTrack]);
 
         console.log("[DUMMY] Calling play()...");
-        await playbackService.play();
+        await service.play();
 
         console.log("[DUMMY] ✅ Play command sent. Check audio logs!");
       } catch (e) {
@@ -193,7 +182,6 @@ export default function RootLayout() {
       }
     };
 
-    // Delay 3 detik agar semua komponen dan engine benar-benar siap
     const timer = setTimeout(autoPlayTestTrack, 3000);
     return () => clearTimeout(timer);
   }, [appState]);
@@ -224,7 +212,7 @@ export default function RootLayout() {
               onPress={() => {
                 setAppState("initializing");
                 hasInitialized.current = false;
-                hasTriggeredDummyPlay.current = false; // reset guard
+                hasTriggeredDummyPlay.current = false;
                 performInitialization();
               }}
             >
