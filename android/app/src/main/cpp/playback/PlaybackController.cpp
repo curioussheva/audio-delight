@@ -200,16 +200,22 @@ void PlaybackController::render(float* output,
                                 uint32_t sampleRate) noexcept {
     if (!output || frames == 0) return;
 
-    const size_t requested = frames * channels;
-    size_t readFrames = pcmQueue_->read(output, frames);
+    const size_t requestedSamples =
+        static_cast<size_t>(frames) * channels;
+
+    const size_t readSamples =
+        pcmQueue_->read(output, requestedSamples);
 
     __android_log_print(ANDROID_LOG_DEBUG, "PlaybackController",
-                        "render readFrames=%zu/%u", readFrames, frames);
+                        "render readSamples=%zu/%zu (frames=%u ch=%u)",
+                        readSamples, requestedSamples, frames, channels);
 
-    if (readFrames < frames) {
-        const size_t offset = readFrames * channels;
-        const size_t remaining = (frames - readFrames) * channels;
-        std::fill(output + offset, output + offset + remaining, 0.0f);
+    if (readSamples < requestedSamples) {
+        std::fill(
+            output + readSamples,
+            output + requestedSamples,
+            0.0f
+        );
     }
 
     clock_->advanceFrames(frames);
