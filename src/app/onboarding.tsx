@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   Platform,
   Alert,
   BackHandler,
+  PermissionsAndroid,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -14,6 +15,7 @@ import { useRouter } from "expo-router";
 import { useTheme } from "@/context/ThemeContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
+import * as MediaLibrary from "expo-media-library";
 import { Image } from "expo-image";
 import { DSPPipeline } from "@/features/visualizer/api/DSPPipeline";
 
@@ -120,19 +122,61 @@ export default function OnboardingScreen() {
     setIsSubmitting(true);
 
     try {
+      console.log(`[Onboarding] Requesting permissions...`);
+
+      // 🟢 1. Request Permission Media & Notifikasi
+      if (Platform.OS === "android") {
+        // Media Library Permission
+        const { status: mediaStatus } = await MediaLibrary.requestPermissionsAsync();
+        if (mediaStatus !== "granted") {
+          Alert.alert(
+            "Izin Diperlukan",
+            "PristineAudio memerlukan izin akses media penyimpanan untuk memindai dan memutar file lagu di HP kamu.",
+            [{ text: "OK", onPress: () => setIsSubmitting(false) }]
+          );
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          return;
+        }
+
+        // Notification Permission (Android 13+ / API 33+)
+        if (Platform.Version >= 33) {
+          const hasNotifPermission = await PermissionsAndroid.check(
+            PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+          );
+
+          if (!hasNotifPermission) {
+            console.log("[Onboarding] Requesting POST_NOTIFICATIONS...");
+            await PermissionsAndroid.request(
+              PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+            );
+          }
+        }
+      } else if (Platform.OS === "ios") {
+        const { status: mediaStatus } = await MediaLibrary.requestPermissionsAsync();
+        if (mediaStatus !== "granted") {
+          Alert.alert(
+            "Izin Diperlukan",
+            "PristineAudio memerlukan izin akses ke Media Library kamu.",
+            [{ text: "OK", onPress: () => setIsSubmitting(false) }]
+          );
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          return;
+        }
+      }
+
       console.log(`[Onboarding] Finishing with mode: ${selectedMode}`);
 
-      // Save preferences
+      // 🟢 2. Simpan Preferensi
       await AsyncStorage.setItem("audio_mode_preference", selectedMode);
       await AsyncStorage.setItem("has_onboarded", "true");
 
-      // Set DSP processing mode
+      // 🟢 3. Set Processing Mode
       await DSPPipeline.setProcessingMode(selectedMode);
 
       // Success haptic feedback
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      // Small delay for better UX
+      // 🟢 4. Navigasi ke Library
       setTimeout(() => {
         router.replace("/(drawer)/(tabs)/library");
       }, 100);
@@ -144,9 +188,6 @@ export default function OnboardingScreen() {
         [{ text: "OK", onPress: () => setIsSubmitting(false) }],
       );
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      // Don't reset isSubmitting if navigation succeeded
-      // setIsSubmitting(false);
     }
   };
 
@@ -301,4 +342,5 @@ const styles = StyleSheet.create({
   },
   nextButtonText: { fontSize: 16, fontWeight: "700" },
   hintText: { fontSize: 12, marginTop: 12, textAlign: "center" },
-}); 
+});
+ 

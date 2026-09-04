@@ -6,11 +6,10 @@ configureReanimatedLogger({ level: ReanimatedLogLevel.warn, strict: false });
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Stack } from "expo-router";
-
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SplashScreen from "expo-splash-screen";
+import * as MediaLibrary from "expo-media-library";
 import {
   Animated,
   StyleSheet,
@@ -28,7 +27,7 @@ import LoadingScreen from "@/shared/components/ui/LoadingScreen";
 import { AudioPropertyToast } from "@/features/player/components/AudioPropertyToast";
 
 // Core Engine & Stores
-import { audioEngine } from "@/features/player/api/engine"; // ✅ hanya import audioEngine
+import { audioEngine } from "@/features/player/api/engine";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useLibraryStore } from "@/features/library/store/libraryStore";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
@@ -36,7 +35,7 @@ import { BackgroundScanTask } from "@/features/library/services/BackgroundScanTa
 
 SplashScreen.preventAutoHideAsync();
 
-type AppInitState = "initializing" | "loading" | "ready" | "error";
+type AppInitState = "initializing" | "permission_denied" | "loading" | "ready" | "error";
 
 export default function RootLayout() {
   const [appState, setAppState] = useState<AppInitState>("initializing");
@@ -48,11 +47,7 @@ export default function RootLayout() {
   // --- 1. Store Selectors ---
   const initStore = usePlayerStore((s) => s.initStore);
   const setAudioMode = usePlayerStore((s) => s.setAudioMode);
-  const {
-    isAutoScanEnabled,
-    hasCompletedInitialScan,
-    setInitialScanCompleted,
-  } = useLibraryStore();
+  const isAutoScanEnabled = useLibraryStore((s) => s.isAutoScanEnabled);
 
   // --- 2. Master Audio Sync (DSP Guard) ---
   useEffect(() => {
@@ -68,7 +63,7 @@ export default function RootLayout() {
     return unsub;
   }, []);
 
-  // --- 3. Background Task Orchestrator ---
+  // --- 3. Background Task Registrar (Android Task Scheduler) ---
   useEffect(() => {
     if (appState !== "ready" || Platform.OS !== "android") return;
 
@@ -87,16 +82,36 @@ export default function RootLayout() {
     syncBackgroundTask();
   }, [isAutoScanEnabled, appState]);
 
-  // --- 4. Core Initialization Logic ---
+  // --- 4. Core Initialization Logic (Engine & Permission Gatekeeper) ---
   const performInitialization = useCallback(async () => {
     try {
-      console.log("[BOOT] 5. _layout performInitialization start");
+      console.log("[BOOT] 1. _layout performInitialization start");
 
-      console.log("[BOOT] 6. audioEngine.initialize() calling...");
+      // 🔴 A. Cek & Request Permission File Media (Android/iOS)
+      if (Platform.OS === "android") {
+        console.log("[BOOT] Checking media permissions...");
+        const { status } = await MediaLibrary.getPermissionsAsync();
+
+        if (status !== "granted") {
+          console.log("[BOOT] Requesting media permissions...");
+          const request = await MediaLibrary.requestPermissionsAsync();
+
+          if (request.status !== "granted") {
+            console.warn("[BOOT] Media permission denied.");
+            setAppState("permission_denied");
+            return; // Tahan startup jika tidak ada izin file
+          }
+        }
+        console.log("[BOOT] ✅ Media Permission Granted!");
+      }
+
+      // 🟢 B. Inisialisasi Audio Engine & Player Store
+      console.log("[BOOT] 2. audioEngine.initialize() calling...");
       await audioEngine.initialize();
-      console.log("[BOOT] 7. audioEngine.initialize() done");
+      console.log("[BOOT] 3. audioEngine.initialize() done");
+      
       await initStore();
-      console.log("[BOOT] 8. initStore() done");
+      console.log("[BOOT] 4. initStore() done");
 
       const savedMode = await AsyncStorage.getItem("audio_mode_preference");
       const eqStore = useEqualizerStore.getState();
@@ -108,31 +123,19 @@ export default function RootLayout() {
         await setAudioMode("dsp");
       }
 
-      if (!hasCompletedInitialScan) {
-        console.log("[App] First install detected, performing initial scan...");
-        try {
-          setInitialScanCompleted();
-          console.log("[App] Initial scan successful.");
-        } catch (scanError) {
-          console.error("[App] Initial scan failed:", scanError);
-        }
-      }
-
-      console.log("[App] Core Initialization Success.");
+      // 🟢 C. Core Setup Selesai
+      // Note: Panggilan Scanning DISENGAJA TIDAK ADA di sini.
+      // Scanner dihandle penuh oleh `useScanManager` di layar utama.
+      console.log("[BOOT] ✅ Core Initialization Success.");
       setAppState("loading");
     } catch (error) {
-      console.error("[App] Initialization Fatal Error:", error);
+      console.error("[BOOT] ❌ Initialization Fatal Error:", error);
       setErrorMessage(
         error instanceof Error ? error.message : "Pristine Engine Failure",
       );
       setAppState("error");
     }
-  }, [
-    initStore,
-    setAudioMode,
-    hasCompletedInitialScan,
-    setInitialScanCompleted,
-  ]);
+  }, [initStore, setAudioMode]);
 
   useEffect(() => {
     if (!hasInitialized.current) {
@@ -163,7 +166,6 @@ export default function RootLayout() {
 
         console.log("[DUMMY] Track:", testTrack);
 
-        // ✅ Gunakan audioEngine.playbackService (jika tersedia)
         const service = audioEngine.playbackService;
         if (!service) {
           console.error("[DUMMY] ❌ audioEngine.playbackService is null!");
@@ -200,6 +202,32 @@ export default function RootLayout() {
     }, 200);
   }, [contentOpacity]);
 
+  // --- UI STATE: PERMISSION DENIED ---
+  if (appState === "permission_denied") {
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <ThemeProvider>
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorTitle}>Akses Storage Diperlukan</Text>
+            <Text style={styles.errorMessage}>
+              PristineAudio membutuhkan izin membaca file media di perangkat kamu untuk memindai dan memutar lagu.
+            </Text>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={() => {
+                setAppState("initializing");
+                performInitialization();
+              }}
+            >
+              <Text style={styles.retryText}>Berikan Izin Akses</Text>
+            </TouchableOpacity>
+          </View>
+        </ThemeProvider>
+      </GestureHandlerRootView>
+    );
+  }
+
+  // --- UI STATE: SYSTEM ERROR ---
   if (appState === "error") {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -224,6 +252,7 @@ export default function RootLayout() {
     );
   }
 
+  // --- UI STATE: INITIALIZING / LOADING ---
   if (appState === "initializing" || appState === "loading") {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -234,6 +263,7 @@ export default function RootLayout() {
     );
   }
 
+  // --- UI STATE: READY ---
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
@@ -279,6 +309,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "bold",
     marginBottom: 10,
+    textAlign: "center",
   },
   errorMessage: {
     color: "#888",
@@ -294,4 +325,5 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   retryText: { color: "#00D4AA", fontWeight: "bold", fontSize: 16 },
-}); 
+});
+ 

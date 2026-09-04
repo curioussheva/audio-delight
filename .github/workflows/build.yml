@@ -1,11 +1,6 @@
-name: Build PristineAudio APK (Debug)
+Name: Build PristineAudio APK (Debug)
 
 on:
-  # on: push dimatikan sementara selama investigasi libappmodules.so /
-  # PlatformConstants — pakai Autolinking Debug workflow (workflow_dispatch)
-  # untuk iterasi cepat, dan workflow_dispatch di sini kalau perlu full build.
-  # push:
-  #   branches: ["pristinev2"]
   workflow_dispatch:
 
 jobs:
@@ -23,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # ============================================
-      # 2. Setup Node + PNPM (without cache)
+      # 2. Setup Node + PNPM (dengan cache)
       # ============================================
       - uses: pnpm/action-setup@v4
         with:
@@ -32,14 +27,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: pnpm
 
       # ============================================
       # 3. Install dependencies
       # ============================================
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
-      # Fix native bindings
       - name: Rebuild native deps
         run: pnpm rebuild @shopify/react-native-skia
 
@@ -49,11 +44,11 @@ jobs:
       - name: Patch RN Gradle Plugin
         run: |
           FILE=node_modules/@react-native/gradle-plugin/settings.gradle.kts
-          if grep -q "foojay-resolver-convention" "$FILE"; then
+          if [ -f "$FILE" ] && grep -q "foojay-resolver-convention" "$FILE"; then
             sed -i '/foojay-resolver-convention/d' "$FILE"
             echo "✅ Patched foojay"
           else
-            echo "✅ Already patched"
+            echo "✅ Already patched or file not found"
           fi
 
       # ============================================
@@ -109,8 +104,7 @@ jobs:
       # ============================================
       - name: Build FFmpeg for Android
         if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
-        run: |
-          bash scripts/build-ffmpeg-android.sh
+        run: bash scripts/build-ffmpeg-android.sh
 
       # ============================================
       # 11. Configure local.properties
@@ -123,7 +117,7 @@ jobs:
           EOF
 
       # ============================================
-      # 12. Verify SDK tools (debug helper)
+      # 12. Verify SDK tools
       # ============================================
       - name: Verify CMake & NDK
         run: |
@@ -163,19 +157,8 @@ jobs:
           | tar -xz --strip-components=1 -C "$OBOE_DIR"
 
       # ============================================
-      # 15. Clean native cache
+      # 15. Apply AndroidManifest patches
       # ============================================
-      - name: Clean native cache
-        run: |
-          rm -rf node_modules/react-native-worklets/android/.cxx
-          rm -rf node_modules/react-native-worklets/android/build
-          rm -rf android/.cxx
-          rm -rf android/build
-
-      # ============================================
-      # 16. Apply patches
-      # ============================================
-
       - name: Patch AndroidManifest
         run: |
           find node_modules -path "*/android/src/main/AndroidManifest.xml" \
@@ -183,12 +166,23 @@ jobs:
           echo "✅ Manifest patched"
 
       # ============================================
+      # 16. Clean build & native caches BEFORE Codegen
+      # ============================================
+      - name: Clean build & native cache
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew clean || true
+          rm -rf ../node_modules/react-native-worklets/android/.cxx
+          rm -rf ../node_modules/react-native-worklets/android/build
+          rm -rf .cxx app/.cxx app/build
+
+      # ============================================
       # 17. Generate Codegen
       # ============================================
       - name: Generate Codegen
         working-directory: android
         run: |
-          chmod +x gradlew
           ./gradlew generateCodegenArtifactsFromSchema \
             --no-daemon \
             -PnewArchEnabled=true \
@@ -196,31 +190,20 @@ jobs:
             -PhermesEnabled=true
 
       # ============================================
-      # 18. Clean after codegen
-      # ============================================
-      - name: Clean after codegen
-        run: rm -rf android/.cxx
-
-      - name: Gradle clean
-        working-directory: android
-        run: ./gradlew clean
-
-      # ============================================
-      # 19. Build APK
+      # 18. Build Debug APK (2>&1 captures errors)
       # ============================================
       - name: Build Debug APK
         working-directory: android
         run: |
-          chmod +x gradlew
           ./gradlew assembleDebug \
             --no-daemon \
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
             -PhermesEnabled=true \
-            -DJS_RUNTIME=hermes | tee build.log
+            -DJS_RUNTIME=hermes 2>&1 | tee build.log
 
       # ============================================
-      # 20. Locate autolinking-generated artifacts (post-build)
+      # 19. Locate autolinking-generated artifacts
       # ============================================
       - name: Locate autolinking artifacts
         if: always()
@@ -231,56 +214,17 @@ jobs:
           echo ""
           echo "=== Searching for Android-autolinking.cmake anywhere ==="
           find . -iname "Android-autolinking.cmake" 2>/dev/null || echo "none found"
-          echo ""
-          echo "=== Full tree of build/generated (depth 5) ==="
-          find app/build/generated -maxdepth 5 2>/dev/null || echo "app/build/generated does not exist"
-          echo ""
-          echo "=== Searching for appmodules references anywhere in build ==="
-          grep -rl "appmodules" app/build 2>/dev/null || echo "none found"
-          echo ""
-          echo "=== generateAutolinkingNewArchitectureFiles task in build.log ==="
-          grep -n "generateAutolinkingNewArchitectureFiles\|Autolinking" build.log || echo "task not found in build.log"
 
       # ============================================
-      # 21. Verify JS bundling task actually ran
+      # 20. Verify JS bundling task ran
       # ============================================
       - name: Verify JS bundle task ran
         run: |
-          echo "=== Looking for bundle/export:embed task in build.log ==="
+          echo "=== Looking for bundle task in build.log ==="
           grep -iE "bundleDebugJsAndAssets|export:embed|createBundle" android/build.log || echo "WARNING: no JS bundling task found in build.log"
-          echo ""
-          echo "=== Checking for embedded bundle output ==="
-          find android/app/build -iname "*.bundle" -o -iname "index.android.bundle" 2>/dev/null || echo "WARNING: no bundle output file found"
 
       # ============================================
-      # 22. Show Kotlin errors (on failure)
-      # ============================================
-      - name: Show Kotlin errors
-        if: failure()
-        run: |
-          echo "=== Kotlin errors (e:) from build.log ==="
-          grep -E "^e:" android/build.log || echo "No 'e:' errors found"
-          echo ""
-          echo "=== Kotlin compiler error files ==="
-          find android/app/build -name "*.log" -exec grep -l "error" {} \; 2>/dev/null | head -10
-          echo ""
-          echo "=== Error context from build.log ==="
-          grep -B 2 -A 5 "compilation error\|Unresolved reference\|Type mismatch\|Cannot access" android/build.log | head -80 || echo "No specific error patterns found"
-
-      # ============================================
-      # 23. Show Kotlin compiler reports (on failure)
-      # ============================================
-      - name: Show Kotlin compiler reports
-        if: failure()
-        run: |
-          echo "=== Gradle problems report ==="
-          find android/build -name "*.html" -path "*problems*" 2>/dev/null | head -5
-          echo ""
-          echo "=== Kotlin reports directory ==="
-          find android/app/build -path "*kotlin*" -type d 2>/dev/null | head -10
-
-      # ============================================
-      # 24. Check TurboModule issues
+      # 21. Check TurboModule & JNI Issues
       # ============================================
       - name: Check TurboModule issues
         if: always()
@@ -288,39 +232,43 @@ jobs:
           echo "=== TurboModule related warnings ==="
           grep -iE "turbomodule|platformconstants|newarch|reactmodule" android/build.log || echo "No TurboModule warnings found"
           echo ""
-          echo "=== Module registration issues ==="
-          grep -iE "moduleregistry|package.*register|ReactPackage|BaseReactPackage" android/build.log || echo "No module registration issues found"
-          echo ""
           echo "=== JNI / native library issues ==="
           grep -iE "System.loadLibrary|UnsatisfiedLinkError|JNI_OnLoad|native library" android/build.log || echo "No JNI/native library issues found"
 
       # ============================================
-      # 25. Verify APK exists
+      # 22. Verify APK exists
       # ============================================
       - name: Verify APK exists
         if: success()
-        run: |
-          test -f android/app/build/outputs/apk/debug/app-debug.apk
+        run: test -f android/app/build/outputs/apk/debug/app-debug.apk
 
       # ============================================
-      # 26. Start Metro dev server in background
+      # 23. Start Metro dev server
       # ============================================
       - name: Start Metro
         if: success()
         run: |
           nohup npx expo start --port 8081 > metro.log 2>&1 &
-          echo "Metro starting, waiting for it to be ready..."
+          echo "Waiting for Metro..."
           for i in $(seq 1 30); do
             if curl -s http://localhost:8081/status > /dev/null 2>&1; then
-              echo "Metro is up after ${i}s"
+              echo "Metro ready after ${i}s"
               break
             fi
             sleep 1
           done
-          curl -s http://localhost:8081/status || echo "WARNING: Metro did not respond to /status"
 
       # ============================================
-      # 27. Run on emulator and capture logcat
+      # 24. Enable KVM Hardware Acceleration
+      # ============================================
+      - name: Enable KVM
+        if: success()
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm-rules.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+
+      # ============================================
+      # 25. Run on emulator & capture logcat
       # ============================================
       - name: Run on emulator
         if: success()
@@ -332,60 +280,29 @@ jobs:
           profile: pixel_5
           cores: 2
           disable-animations: true
-          disable-linux-hw-accel: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -accel off -no-metrics -camera-back none -camera-front none -memory 2048
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -memory 2048
           script: |
             adb wait-for-device
-            sleep 5
+            sleep 3
             adb install android/app/build/outputs/apk/debug/app-debug.apk
-            echo "=== List installed package ==="
-            adb shell pm list packages | grep -i pristine
-            echo ""
-            echo "=== Resolve activity name ==="
-            adb shell cmd package resolve-activity --brief com.pristineaudio.app
-            echo ""
-            echo "=== Start app via deep link (mimics tapping Connect in Dev Launcher) ==="
+            
+            # Start app via deep link
             adb shell am start -a android.intent.action.VIEW -d "pristineaudio://expo-development-client/?url=http%3A%2F%2F10.0.2.2%3A8081" com.pristineaudio.app
 
-            echo ""
-            echo "=== Polling for activity resumed state (up to 120s) ==="
-            bash -c 'RESUMED=""; for i in $(seq 1 12); do sleep 10; if adb shell dumpsys activity activities 2>/dev/null | grep -q "mResumedActivity.*com.pristineaudio.app"; then echo "Activity resumed after ~${i}0s"; RESUMED="yes"; break; fi; echo "...still waiting (${i}0s elapsed)"; done; if [ -z "$RESUMED" ]; then echo "Activity never reached resumed state within 120s"; fi'
+            # Wait for JS bundle & execution
+            sleep 30
 
-            echo ""
-            echo "=== mResumedActivity dump ==="
-            adb shell dumpsys activity activities 2>/dev/null | grep -A5 "mResumedActivity" || echo "No mResumedActivity info"
-
-            echo ""
-            echo "=== Extra wait for JS bundle to finish loading (60s) ==="
-            sleep 60
-
-            echo ""
-            echo "=== Extra wait for JS bundle to finish loading (60s) ==="
-            sleep 60
-
-            echo ""
-            echo "=== Process check ==="
-            bash -c 'APP_PID=$(adb shell pidof -s com.pristineaudio.app || true); echo "App PID: ${APP_PID:-not running}"; echo "$APP_PID" > /tmp/app_pid.txt'
-
+            # Capture logs
             adb logcat -d > logcat-full.log || true
 
-            echo ""
-            echo "=== Process-specific log (app PID only) ==="
-            bash -c 'APP_PID=$(cat /tmp/app_pid.txt 2>/dev/null); if [ -n "$APP_PID" ]; then adb logcat -d --pid="$APP_PID" > logcat-app-only.log || true; tail -200 logcat-app-only.log; else echo "App process not found - likely crashed or never started. Falling back to full log tail."; tail -200 logcat-full.log; fi'
+            echo "=== PlatformConstants / TurboModule errors ==="
+            grep -B 2 -A 10 "PlatformConstants\|TurboModule\|UnsatisfiedLinkError" logcat-full.log || echo "No PlatformConstants/TurboModule errors found"
+            echo "=== FATAL / Crash ==="
+            grep -B 2 -A 10 "FATAL\|AndroidRuntime" logcat-full.log || echo "No FATAL errors"
 
-            echo ""
-            echo "=== PlatformConstants errors ==="
-            grep -B 5 -A 20 "PlatformConstants" logcat-full.log || echo "No PlatformConstants errors"
-            echo ""
-            echo "=== TurboModule errors ==="
-            grep -B 5 -A 20 "TurboModule" logcat-full.log | head -100 || echo "No TurboModule errors"
-            echo ""
-            echo "=== FATAL errors ==="
-            grep -B 2 -A 10 "FATAL\|AndroidRuntime" logcat-full.log | head -80 || echo "No FATAL errors"
-            echo ""
-            echo "=== ReactNativeJS errors ==="
-            grep -B 2 -A 10 "ReactNativeJS" logcat-full.log | head -80 || echo "No JS errors"
-
+      # ============================================
+      # 26. Upload Artifacts
+      # ============================================
       - name: Upload Logcat Output
         uses: actions/upload-artifact@v4
         if: always()
@@ -393,9 +310,6 @@ jobs:
           name: Logcat-Output
           path: logcat-full.log
 
-      # ============================================
-      # 28. Upload Metro log
-      # ============================================
       - name: Upload Metro log
         uses: actions/upload-artifact@v4
         if: always()
@@ -403,32 +317,17 @@ jobs:
           name: Metro-Log
           path: metro.log
 
-      # ============================================
-      # 29. Upload logs
-      # ============================================
-      - uses: actions/upload-artifact@v4
+      - name: Upload Build Log
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: Full-Build-Log
           path: android/build.log
 
-      - name: Extract warnings/errors
-        if: always()
-        run: |
-          grep -E "warning|error|w:|e:" android/build.log > android/build-issues.log || true
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: Build-Issues
-          path: android/build-issues.log
-
-      # ============================================
-      # 30. Upload APK
-      # ============================================
-      - uses: actions/upload-artifact@v4
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
         if: success()
         with:
           name: PristineAudio-Debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
-          
+ 

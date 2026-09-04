@@ -15,7 +15,7 @@ jobs:
       # 1. Checkout
       - uses: actions/checkout@v4
 
-      # 2. Setup Node + PNPM
+      # 2. Setup Node + PNPM (dengan cache pnpm)
       - uses: pnpm/action-setup@v4
         with:
           version: 9.0.0
@@ -23,10 +23,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: pnpm
 
       # 3. Install dependencies
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       # 4. Setup Java + Android SDK
       - uses: actions/setup-java@v4
@@ -108,9 +109,7 @@ jobs:
           curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz \
           | tar -xz --strip-components=1 -C "$OBOE_DIR"
 
-      # 13. Apply PristineAudio patches
-
-      # 14. Generate Codegen
+      # 13. Generate Codegen
       - name: Generate Codegen
         working-directory: android
         run: |
@@ -121,7 +120,7 @@ jobs:
             -PreactNativeNewArch=true \
             -PhermesEnabled=true
 
-      # 15. Build Debug APK
+      # 14. Build Debug APK
       - name: Build Debug APK
         working-directory: android
         run: |
@@ -130,12 +129,21 @@ jobs:
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
             -PhermesEnabled=true \
-            -DJS_RUNTIME=hermes | tee build.log
+            -DJS_RUNTIME=hermes 2>&1 | tee build.log
 
-      # 16. Upload APK
+      # 15. Upload Build Log on Failure
+      - name: Upload Build Log
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: Build-Log
+          path: android/build.log
+
+      # 16. Upload APK on Success
       - name: Upload APK
         uses: actions/upload-artifact@v4
         if: success()
         with:
           name: PristineAudio-Debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk 
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+ 

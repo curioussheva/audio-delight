@@ -22,26 +22,34 @@ export function useScanManager() {
 
   // ── Initial Scan hanya jika library kosong ──────────────────────────────────
   useEffect(() => {
-    if (hasInitialized.current) return;
-    hasInitialized.current = true;
+  if (hasInitialized.current) return;
+  hasInitialized.current = true;
 
-    const timer = setTimeout(async () => {
-      const currentStore = useLibraryStore.getState();
+  const timer = setTimeout(async () => {
+    const currentStore = useLibraryStore.getState();
 
-      if (currentStore.tracks.length === 0) {
-        console.log(
-          "[useScanManager] Fresh/empty library → Running initial Quick Scan",
-        );
-        await UnifiedScanService.autoScan().catch(console.warn);
-      } else {
-        console.log(
-          "[useScanManager] Library already exists → Skipping initial auto scan",
-        );
+    if (currentStore.tracks.length === 0) {
+      console.log(
+        "[useScanManager] Fresh/empty library → Running initial MANUAL (DEEP) Scan",
+      );
+      
+      setIsLocked(true); // 🔒 Kunci state lokal UI
+      try {
+        await UnifiedScanService.manualScan();
+      } catch (err) {
+        console.warn("[useScanManager] Initial scan error:", err);
+      } finally {
+        setIsLocked(false); // 🔓 Pastikan selalu di-unlock setelah selesai/error
       }
-    }, 1500);
+    } else {
+      console.log(
+        "[useScanManager] Library already exists → Skipping initial scan",
+      );
+    }
+  }, 1000);
 
-    return () => clearTimeout(timer);
-  }, []);
+  return () => clearTimeout(timer);
+}, []);
 
   // ── Quick Diff saat App Resume ──────────────────────────────────────────────
   useEffect(() => {

@@ -161,16 +161,27 @@ export class AudioEngine {
       const mode = await AsyncStorage.getItem("audio_mode_preference");
       if (mode !== "bit-perfect") {
         await this.applyDSP(sessionId);
-
-        if (!this.isVisualizerRunning) {
-          const hasPermission = await requestAudioPermissions();
-          if (hasPermission) {
-            startVisualizer(sessionId);
-            this.isVisualizerRunning = true;
-          }
-        }
       }
     }, 400);
+  }
+
+  /**
+   * Panggil HANYA saat komponen Visualizer aktif di layar
+   */
+  async enableVisualizer(): Promise<boolean> {
+    if (this.isExclusive || this.isVisualizerRunning) return false;
+
+    // Pastikan Session ID ada sebelum mengaktifkan visualizer
+    const sessionId = this.sessionId ?? (await this.refreshSessionId());
+    if (!sessionId) return false;
+
+    const hasPermission = await requestAudioPermissions();
+    if (hasPermission) {
+      startVisualizer(sessionId);
+      this.isVisualizerRunning = true;
+      return true;
+    }
+    return false;
   }
 
   async pause(): Promise<void> {
@@ -192,7 +203,8 @@ export class AudioEngine {
     const uris = songs.map((s) => s.uri);
     NativePlaybackService.setQueue(uris);
     if (startIndex > 0) {
-      // TODO: implement start index support in native queue
+      // Panggil metode native skipTo/playIndex jika sudah diimplementasikan di C++/Java
+      // NativePlaybackService.skipTo(startIndex);
     }
   }
 
@@ -206,7 +218,6 @@ export class AudioEngine {
   }
 
   async setPlaybackRate(rate: number): Promise<void> {
-    // native belum mendukung; bisa diabaikan atau dikembangkan nanti
     console.log("setPlaybackRate not implemented yet", rate);
   }
 
@@ -224,3 +235,4 @@ export class AudioEngine {
 }
 
 export const audioEngine = new AudioEngine();
+ 

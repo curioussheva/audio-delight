@@ -6,7 +6,9 @@ configureReanimatedLogger({ level: ReanimatedLogLevel.warn, strict: false });
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Stack } from "expo-router";
+
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SplashScreen from "expo-splash-screen";
 import {
@@ -26,7 +28,7 @@ import LoadingScreen from "@/shared/components/ui/LoadingScreen";
 import { AudioPropertyToast } from "@/features/player/components/AudioPropertyToast";
 
 // Core Engine & Stores
-import { audioEngine } from "@/features/player/api/engine";
+import { audioEngine } from "@/features/player/api/engine"; // ✅ hanya import audioEngine
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useLibraryStore } from "@/features/library/store/libraryStore";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
@@ -39,15 +41,18 @@ type AppInitState = "initializing" | "loading" | "ready" | "error";
 export default function RootLayout() {
   const [appState, setAppState] = useState<AppInitState>("initializing");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isOnboarded, setIsOnboarded] = useState<boolean>(false);
-
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const hasInitialized = useRef(false);
+  const hasTriggeredDummyPlay = useRef(false);
 
   // --- 1. Store Selectors ---
   const initStore = usePlayerStore((s) => s.initStore);
   const setAudioMode = usePlayerStore((s) => s.setAudioMode);
-  const isAutoScanEnabled = useLibraryStore((s) => s.isAutoScanEnabled);
+  const {
+    isAutoScanEnabled,
+    hasCompletedInitialScan,
+    setInitialScanCompleted,
+  } = useLibraryStore();
 
   // --- 2. Master Audio Sync (DSP Guard) ---
   useEffect(() => {
@@ -63,7 +68,7 @@ export default function RootLayout() {
     return unsub;
   }, []);
 
-  // --- 3. Background Task Registrar (Android) ---
+  // --- 3. Background Task Orchestrator ---
   useEffect(() => {
     if (appState !== "ready" || Platform.OS !== "android") return;
 
@@ -82,16 +87,17 @@ export default function RootLayout() {
     syncBackgroundTask();
   }, [isAutoScanEnabled, appState]);
 
-  // --- 4. Core Initialization Logic (Tanpa Permission / Scanner) ---
+  // --- 4. Core Initialization Logic ---
   const performInitialization = useCallback(async () => {
     try {
-      console.log("[BOOT] 1. Initializing Audio Engine & Stores...");
+      console.log("[BOOT] 5. _layout performInitialization start");
 
-      // 🟢 A. Inisialisasi Audio Engine & Player Store
+      console.log("[BOOT] 6. audioEngine.initialize() calling...");
       await audioEngine.initialize();
+      console.log("[BOOT] 7. audioEngine.initialize() done");
       await initStore();
+      console.log("[BOOT] 8. initStore() done");
 
-      // 🟢 B. Load Preferensi Mode Audio
       const savedMode = await AsyncStorage.getItem("audio_mode_preference");
       const eqStore = useEqualizerStore.getState();
 
@@ -102,20 +108,31 @@ export default function RootLayout() {
         await setAudioMode("dsp");
       }
 
-      // 🟢 C. Cek Status Onboarding
-      const onboardedValue = await AsyncStorage.getItem("has_onboarded");
-      setIsOnboarded(onboardedValue === "true");
+      if (!hasCompletedInitialScan) {
+        console.log("[App] First install detected, performing initial scan...");
+        try {
+          setInitialScanCompleted();
+          console.log("[App] Initial scan successful.");
+        } catch (scanError) {
+          console.error("[App] Initial scan failed:", scanError);
+        }
+      }
 
-      console.log("[BOOT] ✅ Engine & Store initialization success.");
+      console.log("[App] Core Initialization Success.");
       setAppState("loading");
     } catch (error) {
-      console.error("[BOOT] ❌ Initialization Fatal Error:", error);
+      console.error("[App] Initialization Fatal Error:", error);
       setErrorMessage(
         error instanceof Error ? error.message : "Pristine Engine Failure",
       );
       setAppState("error");
     }
-  }, [initStore, setAudioMode]);
+  }, [
+    initStore,
+    setAudioMode,
+    hasCompletedInitialScan,
+    setInitialScanCompleted,
+  ]);
 
   useEffect(() => {
     if (!hasInitialized.current) {
@@ -123,12 +140,10 @@ export default function RootLayout() {
       performInitialization();
     }
   }, [performInitialization]);
-  
-    // ============================================================
+
+  // ============================================================
   // 🔥 DUMMY AUTOPLAY UNTUK DEBUG (PAKAI PATH ABSOLUT) 🔥
   // ============================================================
-  const hasTriggeredDummyPlay = useRef(false);
-
   useEffect(() => {
     if (appState !== "ready" || hasTriggeredDummyPlay.current) return;
     hasTriggeredDummyPlay.current = true;
@@ -146,12 +161,22 @@ export default function RootLayout() {
           duration: 18000,
         };
 
-        const service = audioEngine.playbackService;
-        if (!service) return;
+        console.log("[DUMMY] Track:", testTrack);
 
+        // ✅ Gunakan audioEngine.playbackService (jika tersedia)
+        const service = audioEngine.playbackService;
+        if (!service) {
+          console.error("[DUMMY] ❌ audioEngine.playbackService is null!");
+          return;
+        }
+
+        console.log("[DUMMY] Setting queue...");
         await service.setQueue([testTrack]);
+
+        console.log("[DUMMY] Calling play()...");
         await service.play();
-        console.log("[DUMMY] ✅ Play command sent.");
+
+        console.log("[DUMMY] ✅ Play command sent. Check audio logs!");
       } catch (e) {
         console.error("[DUMMY] ❌ Autoplay error:", e);
       }
@@ -175,7 +200,6 @@ export default function RootLayout() {
     }, 200);
   }, [contentOpacity]);
 
-  // --- UI STATE: SYSTEM ERROR ---
   if (appState === "error") {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -188,6 +212,7 @@ export default function RootLayout() {
               onPress={() => {
                 setAppState("initializing");
                 hasInitialized.current = false;
+                hasTriggeredDummyPlay.current = false;
                 performInitialization();
               }}
             >
@@ -199,7 +224,6 @@ export default function RootLayout() {
     );
   }
 
-  // --- UI STATE: INITIALIZING / LOADING ---
   if (appState === "initializing" || appState === "loading") {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -210,7 +234,6 @@ export default function RootLayout() {
     );
   }
 
-  // --- UI STATE: READY ---
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
@@ -222,12 +245,7 @@ export default function RootLayout() {
                 contentStyle: { backgroundColor: "#000" },
               }}
             >
-              {/* Jika belum Onboarding, arahkan ke Onboarding Screen */}
-              {!isOnboarded ? (
-                <Stack.Screen name="onboarding/index" />
-              ) : (
-                <Stack.Screen name="index" />
-              )}
+              <Stack.Screen name="index" />
               <Stack.Screen name="(drawer)" />
               <Stack.Screen
                 name="player/index"
@@ -261,7 +279,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "bold",
     marginBottom: 10,
-    textAlign: "center",
   },
   errorMessage: {
     color: "#888",
@@ -277,4 +294,4 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   retryText: { color: "#00D4AA", fontWeight: "bold", fontSize: 16 },
-});
+}); 

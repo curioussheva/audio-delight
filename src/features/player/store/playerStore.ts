@@ -5,8 +5,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { audioEngine } from "@/features/player/api/engine";
 import { Song } from "@/shared/types/audio";
 import { LibraryScanner } from "@/features/library/api/scanner";
-import { SongQueries } from "@/shared/lib/sqlite";
-import { db } from "@/shared/lib/sqlite";
+import { SongQueries, db } from "@/shared/lib/sqlite";
 import NativePlaybackService from "@/specs/NativePlaybackService";
 
 export interface LyricLine {
@@ -134,25 +133,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           const currentSong =
             restoredQueue.find((s) => s.id === lastSongId) ?? restoredQueue[0];
 
+          // 🟢 Cukup pulihkan state di React/Zustand. 
+          // JANGAN panggil NativePlaybackService.setQueue di sini agar tidak memicu permission leak.
           set({
             queue: restoredQueue,
             currentSong,
             position: lastPosition,
           });
-
-          try {
-            const uris = restoredQueue
-              .map((s) => s.uri)
-              .filter((uri) => !!uri);
-            if (uris.length > 0) {
-              NativePlaybackService.setQueue(uris);
-              if (lastPosition > 0) {
-                NativePlaybackService.seek(lastPosition * 1000);
-              }
-            }
-          } catch (e) {
-            console.warn("[Player] Custom playback restore failed:", e);
-          }
         }
       }
     } catch (e) {
@@ -189,7 +176,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         set({ playError: "No valid URIs" });
         return false;
       }
-console.log("🔍 [DEBUG] URIs dikirim ke native:", JSON.stringify(uris.slice(0, 3)));
+      console.log("🔍 [DEBUG] URIs dikirim ke native:", JSON.stringify(uris.slice(0, 3)));
       NativePlaybackService.setQueue(uris);
       NativePlaybackService.play();
 
@@ -399,4 +386,5 @@ const recoverUri = async (song: Song): Promise<Song> => {
   return { ...song, uri: `content://media/external/audio/media/${song.id}` };
 };
 
-usePlayerStore.getState().initStore(); 
+// 🔴 BARIS usePlayerStore.getState().initStore() YANG LAMA SUDAH DIHAPUS DARI SINI
+ 
