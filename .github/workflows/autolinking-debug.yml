@@ -1,4 +1,4 @@
-Name: Autolinking Debug
+name: Autolinking Debug
 
 on:
   workflow_dispatch:

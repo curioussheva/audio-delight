@@ -1,7 +1,11 @@
-Name: Runtime Test
+name: Runtime Test 
 
 on:
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   runtime-test:
@@ -162,6 +166,7 @@ jobs:
         with:
           name: Logcat-Full
           path: logcat-full.log
+          retention-days: 7
 
       # 19. Upload Audio Debug Log
       - name: Upload Audio Debug Log
@@ -170,6 +175,7 @@ jobs:
         with:
           name: Audio-Debug-Log
           path: audio-debug.log
+          retention-days: 7
 
       # 20. Upload Build Log
       - name: Upload Build Log
@@ -178,4 +184,4 @@ jobs:
         with:
           name: Build-Log
           path: android/build.log
- 
+          retention-days: 7

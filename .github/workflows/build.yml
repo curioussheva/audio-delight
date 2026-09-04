@@ -1,4 +1,4 @@
-Name: Build PristineAudio APK (Debug)
+name: Build PristineAudio APK (Debug)
 
 on:
   workflow_dispatch:

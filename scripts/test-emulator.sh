@@ -1,19 +1,19 @@
-#!/usr/bin/env bash
+#!/bin/bash
 set -e
 
 adb wait-for-device
 adb logcat -c
 
-# Stream logcat di background Host Runner
+# Start logcat streaming in background
 adb logcat -v time -s FFmpegDecoder:V PlaybackController:V AudioCallback:V NativePlaybackModule:V > /tmp/audio.log 2>&1 &
 LOGCAT_PID=$!
 
-# Install APK dari Host ke Emulator
+# Install APK
 adb install android/app/build/outputs/apk/debug/app-debug.apk
 
-# Download MP3 di Host VM, lalu push ke internal storage Emulator
+# Download & push test MP3
 adb shell mkdir -p /sdcard/Music
-echo "⬇️ Downloading test MP3 on Runner Host..."
+echo "⬇️ Downloading test MP3..."
 curl -L -o /tmp/test.mp3 "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
 
 if [ -f /tmp/test.mp3 ]; then
@@ -21,25 +21,29 @@ if [ -f /tmp/test.mp3 ]; then
   echo "✅ Test MP3 pushed to /sdcard/Music/test.mp3"
   adb shell ls -l /sdcard/Music/test.mp3
 else
-  echo "❌ Failed to download test MP3 on Host"
+  echo "❌ Failed to download test MP3"
   exit 1
 fi
 
-# Launch App
+# Launch MainActivity
 adb shell am start -n com.pristineaudio.app/.MainActivity
 
+# Wait for PlaybackController init
 echo "⏳ Waiting for PlaybackController initialize..."
 timeout 60 adb logcat -s PlaybackController:I -m 1 || echo "⚠️ PlaybackController not initialized in time"
 
+# Let audio play for 45 seconds
 echo "⏳ Sleeping 45s to capture playback logs..."
 sleep 45
 
+# Stop logcat
 kill $LOGCAT_PID || true
 
-# Dump log
+# Save logs
 cat /tmp/audio.log > audio-debug.log
 adb logcat -d -v time > logcat-full.log
 
+# Print errors
 echo "=== UnsatisfiedLinkError ==="
 grep -B 5 -A 20 "UnsatisfiedLinkError" logcat-full.log || echo "No UnsatisfiedLinkError"
 echo "=== Fatal / Crash ==="
