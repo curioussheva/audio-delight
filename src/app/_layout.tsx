@@ -1,4 +1,3 @@
-
 import { configureReanimatedLogger, ReanimatedLogLevel } from "react-native-reanimated";
 
 console.log("[BOOT] 0. _layout module loaded");
@@ -29,7 +28,6 @@ import LoadingScreen from "@/shared/components/ui/LoadingScreen";
 import { AudioPropertyToast } from "@/features/player/components/AudioPropertyToast";
 
 // Core Engine & Stores
-
 import { audioEngine } from "@/features/player/api/engine";
 import { playbackService } from "@/features/player/api/playback";
 import { usePlayerStore } from "@/features/player/store/playerStore";
@@ -37,8 +35,8 @@ import { useLibraryStore } from "@/features/library/store/libraryStore";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
 import { BackgroundScanTask } from "@/features/library/services/BackgroundScanTask";
 
-
 // Register Playback Service
+// (asumsi sudah ada registration di tempat lain, atau di sini)
 
 SplashScreen.preventAutoHideAsync();
 
@@ -49,6 +47,7 @@ export default function RootLayout() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const hasInitialized = useRef(false);
+  const hasTriggeredDummyPlay = useRef(false); // 🔥 guard untuk dummy autoplay
 
   // --- 1. Store Selectors ---
   const initStore = usePlayerStore((s) => s.initStore);
@@ -60,7 +59,6 @@ export default function RootLayout() {
   } = useLibraryStore();
 
   // --- 2. Master Audio Sync (DSP Guard) ---
-  // Memastikan jika Bit-Perfect aktif, EQ dipaksa mati secara sistem
   useEffect(() => {
     const unsub = usePlayerStore.subscribe((state) => {
       if (state.audioMode === "bit-perfect") {
@@ -114,16 +112,14 @@ export default function RootLayout() {
         eqStore.setEQEnabled(false);
       } else {
         await setAudioMode("dsp");
-        // EQ akan mengikuti state terakhir yang tersimpan di store
       }
 
-      // C. INITIAL QUICK SCAN (Hanya sekali seumur hidup app)
+      // C. INITIAL QUICK SCAN
       if (!hasCompletedInitialScan) {
         console.log("[App] First install detected, performing initial scan...");
         try {
-          // Ganti dengan fungsi scan library asli Anda jika sudah siap
-          // await libraryScanner.scanAll();
-
+          // Asumsi scan sudah di-trigger oleh store atau service lain
+          // Jika tidak, panggil scanner di sini
           setInitialScanCompleted();
           console.log("[App] Initial scan successful.");
         } catch (scanError) {
@@ -155,6 +151,54 @@ export default function RootLayout() {
     }
   }, [performInitialization]);
 
+  // ============================================================
+  // 🔥🔥🔥 DUMMY AUTOPLAY UNTUK DEBUG (PAKAI PATH ABSOLUT) 🔥🔥🔥
+  // ============================================================
+  useEffect(() => {
+    // Hanya jalan sekali: saat appState === "ready" dan belum pernah dipicu
+    if (appState !== "ready" || hasTriggeredDummyPlay.current) return;
+    hasTriggeredDummyPlay.current = true;
+
+    const autoPlayTestTrack = async () => {
+      try {
+        console.log("[DUMMY] 🔥 Triggering autoplay with ABSOLUTE PATH...");
+
+        // 🔥 Hardcoded absolute path — sesuai dengan file yang di-push di workflow
+        const testTrack = {
+          id: "test_001",
+          uri: "/storage/emulated/0/Music/test.mp3",
+          title: "SoundHelix Test Tone",
+          artist: "SoundHelix",
+          album: "Debug",
+          duration: 18000, // ~18 detik
+        };
+
+        console.log("[DUMMY] Track:", testTrack);
+
+        // Gunakan playbackService langsung (paling reliable)
+        if (!playbackService) {
+          console.error("[DUMMY] playbackService is null!");
+          return;
+        }
+
+        console.log("[DUMMY] Setting queue...");
+        await playbackService.setQueue([testTrack]);
+
+        console.log("[DUMMY] Calling play()...");
+        await playbackService.play();
+
+        console.log("[DUMMY] ✅ Play command sent. Check audio logs!");
+      } catch (e) {
+        console.error("[DUMMY] ❌ Autoplay error:", e);
+      }
+    };
+
+    // Delay 3 detik agar semua komponen dan engine benar-benar siap
+    const timer = setTimeout(autoPlayTestTrack, 3000);
+    return () => clearTimeout(timer);
+  }, [appState]);
+
+  // --- UI Handlers ---
   const handleLoadingComplete = useCallback(() => {
     SplashScreen.hideAsync().catch(() => {});
 
@@ -168,68 +212,69 @@ export default function RootLayout() {
     }, 200);
   }, [contentOpacity]);
 
-if (appState === "error") {
-  return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorTitle}>System Engine Failure</Text>
-          <Text style={styles.errorMessage}>{errorMessage}</Text>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={() => {
-              setAppState("initializing");
-              hasInitialized.current = false;
-              performInitialization();
-            }}
-          >
-            <Text style={styles.retryText}>Retry Initialize</Text>
-          </TouchableOpacity>
-        </View>
-      </ThemeProvider>
-    </GestureHandlerRootView>
-  );
-} 
-
-if (appState === "initializing" || appState === "loading") {
-  return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider>
-        <LoadingScreen onLoadingComplete={handleLoadingComplete} />
-      </ThemeProvider>
-    </GestureHandlerRootView>
-  );
-}
-
-return (
-  <GestureHandlerRootView style={{ flex: 1 }}>
-    <ThemeProvider>
-      <SafeAreaProvider>
-        <Animated.View style={[styles.container, { opacity: contentOpacity }]}>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: "#000" },
-            }}
-          >
-            <Stack.Screen name="index" />
-            <Stack.Screen name="(drawer)" />
-            <Stack.Screen
-              name="player/index"
-              options={{
-                presentation: "modal",
-                animation: "slide_from_bottom",
-                gestureEnabled: true,
-                gestureDirection: "vertical",
+  if (appState === "error") {
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <ThemeProvider>
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorTitle}>System Engine Failure</Text>
+            <Text style={styles.errorMessage}>{errorMessage}</Text>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={() => {
+                setAppState("initializing");
+                hasInitialized.current = false;
+                hasTriggeredDummyPlay.current = false; // reset guard
+                performInitialization();
               }}
-            />
-          </Stack>
-          <AudioPropertyToast />
-        </Animated.View>
-      </SafeAreaProvider>
-    </ThemeProvider>
-  </GestureHandlerRootView>
-);
+            >
+              <Text style={styles.retryText}>Retry Initialize</Text>
+            </TouchableOpacity>
+          </View>
+        </ThemeProvider>
+      </GestureHandlerRootView>
+    );
+  }
+
+  if (appState === "initializing" || appState === "loading") {
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <ThemeProvider>
+          <LoadingScreen onLoadingComplete={handleLoadingComplete} />
+        </ThemeProvider>
+      </GestureHandlerRootView>
+    );
+  }
+
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <SafeAreaProvider>
+          <Animated.View style={[styles.container, { opacity: contentOpacity }]}>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: "#000" },
+              }}
+            >
+              <Stack.Screen name="index" />
+              <Stack.Screen name="(drawer)" />
+              <Stack.Screen
+                name="player/index"
+                options={{
+                  presentation: "modal",
+                  animation: "slide_from_bottom",
+                  gestureEnabled: true,
+                  gestureDirection: "vertical",
+                }}
+              />
+            </Stack>
+            <AudioPropertyToast />
+          </Animated.View>
+        </SafeAreaProvider>
+      </ThemeProvider>
+    </GestureHandlerRootView>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -261,4 +306,4 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   retryText: { color: "#00D4AA", fontWeight: "bold", fontSize: 16 },
-});
+}); 

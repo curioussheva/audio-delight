@@ -25,7 +25,7 @@ bool PlaybackController::initialize() {
     if (initialized_.load(std::memory_order_acquire))
         return true;
 
-    __android_log_print(ANDROID_LOG_DEBUG, "PlaybackController", "initialize called");
+    __android_log_print(ANDROID_LOG_INFO, "PlaybackController", "initialize called");
 
     pcmQueue_ = std::make_shared<PCMQueue>(48000 * 10); // ~10 sec buffer
     clock_ = std::make_shared<PlaybackClock>();
@@ -119,7 +119,7 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
     if (!initialized_.load(std::memory_order_acquire))
         return false;
 
-    __android_log_print(ANDROID_LOG_DEBUG, "PlaybackController", "loadTrack: %s", track.uri.c_str());
+    __android_log_print(ANDROID_LOG_INFO, "PlaybackController", "loadTrack: %s", track.uri.c_str());
 
     stopDecoder();
 
@@ -135,7 +135,7 @@ bool PlaybackController::play() {
     if (!initialized_.load(std::memory_order_acquire))
         return false;
 
-    __android_log_print(ANDROID_LOG_DEBUG, "PlaybackController",
+    __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                         "play() called, queue=%d, decoder=%d",
                         queue_ != nullptr, decoderWorker_ != nullptr);
 
@@ -206,7 +206,7 @@ void PlaybackController::render(float* output,
     const size_t readSamples =
         pcmQueue_->read(output, requestedSamples);
 
-    __android_log_print(ANDROID_LOG_DEBUG, "PlaybackController",
+    __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                         "render readSamples=%zu/%zu (frames=%u ch=%u)",
                         readSamples, requestedSamples, frames, channels);
 
@@ -247,7 +247,7 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
         );
 
         bool ok = decoderWorker_->start(track.uri, 0.0);
-        __android_log_print(ANDROID_LOG_DEBUG, "PlaybackController",
+        __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                             "startDecoder ok=%d, uri=%s", ok ? 1 : 0, track.uri.c_str());
         return ok;
     }

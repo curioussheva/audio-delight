@@ -10,6 +10,7 @@ jobs:
     env:
       GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
       NODE_ENV: development
+      EXPO_NO_DEV_SERVER: 1
 
     steps:
       # 1. Checkout
@@ -119,7 +120,12 @@ jobs:
             -PreactNativeNewArch=true \
             -PhermesEnabled=true
 
-      # 14. Build Debug APK
+      # 14. Export Expo Bundle (Embedded)
+      - name: Export Expo Bundle
+        run: |
+          npx expo export --platform android --output-dir dist || echo "⚠️ Expo export skipped, relying on gradle"
+
+      # 15. Build Debug APK
       - name: Build Debug APK
         working-directory: android
         run: |
@@ -127,12 +133,10 @@ jobs:
             --no-daemon \
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
-            -PhermesEnabled=true \
-            -DJS_RUNTIME=hermes | tee build.log
+            -PhermesEnabled=true
 
-      # 15. Run on emulator
-      - name: Run on emulator
-        if: success()
+      # 16. Run on emulator + Capture Logs
+      - name: Run on emulator & capture logs
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
@@ -145,25 +149,57 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -accel off -no-metrics -camera-back none -camera-front none -memory 2048
           script: |
             adb wait-for-device
-            sleep 5
+            adb logcat -c
+
+            # 🔥 START streaming log audio di background
+            adb logcat -v time -s FFmpegDecoder:V PlaybackController:V AudioCallback:V NativePlaybackModule:V > /tmp/audio.log 2>&1 &
+            LOGCAT_PID=$!
+
+            # Install APK
             adb install android/app/build/outputs/apk/debug/app-debug.apk
-            adb shell am start -a android.intent.action.VIEW -d "pristineaudio://expo-development-client/?url=http%3A%2F%2F10.0.2.2%3A8081" com.pristineaudio.app
-            sleep 30
 
-            # Simpan log lengkap
-            adb logcat -d > logcat-full.log
+            # ============================================================
+            # 🔥 KRUSIAL: Download & push test MP3 dengan PATH ABSOLUT
+            # ============================================================
+            adb shell mkdir -p /sdcard/Music
+            echo "⬇️ Downloading test MP3..."
+            curl -L -o /tmp/test.mp3 "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+            if [ -f /tmp/test.mp3 ]; then
+              adb push /tmp/test.mp3 /sdcard/Music/test.mp3
+              echo "✅ Test MP3 pushed to /sdcard/Music/test.mp3"
+              adb shell ls -l /sdcard/Music/test.mp3
+            else
+              echo "❌ Failed to download test MP3"
+              exit 1
+            fi
 
-            # Simpan log audio spesifik
-            adb logcat -d -s FFmpegDecoder:V PlaybackController:V AudioCallback:V NativePlaybackModule:V PlaybackNativeBridge:V NativePlaybackService:V > audio-debug.log
+            # Launch MainActivity (bundle already embedded)
+            adb shell am start -n com.pristineaudio.app/.MainActivity
 
-            echo "=== PlatformConstants ==="
-            grep -B 5 -A 20 "PlatformConstants" logcat-full.log || echo "No PlatformConstants errors"
+            # Tunggu hingga PlaybackController terinisialisasi (maks 60 detik)
+            echo "⏳ Waiting for PlaybackController initialize..."
+            timeout 60 adb logcat -s PlaybackController:I -m 1 || echo "⚠️ PlaybackController not initialized in time"
+
+            # Tunggu 45 detik agar dummy autoplay sempat jalan + audio bermain/berhenti
+            echo "⏳ Sleeping 45s to capture playback logs..."
+            sleep 45
+
+            # Hentikan logcat streaming
+            kill $LOGCAT_PID || true
+
+            # Simpan log
+            cat /tmp/audio.log > audio-debug.log
+            adb logcat -d -v time > logcat-full.log
+
+            # Tampilkan error penting di console
             echo "=== UnsatisfiedLinkError ==="
             grep -B 5 -A 20 "UnsatisfiedLinkError" logcat-full.log || echo "No UnsatisfiedLinkError"
-            echo "=== TurboModule ==="
-            grep -B 5 -A 20 "TurboModule" logcat-full.log | head -100 || echo "No TurboModule errors"
+            echo "=== Fatal / Crash ==="
+            grep -B 5 -A 20 "FATAL" logcat-full.log || echo "No FATAL errors"
+            echo "=== Decoder errors ==="
+            grep -B 5 -A 20 "FFmpeg\|Decoder" logcat-full.log | head -100 || echo "No decoder errors"
 
-      # 16. Upload Logcat Full
+      # 17. Upload Logcat Full
       - name: Upload Logcat Full
         uses: actions/upload-artifact@v4
         if: always()
@@ -171,10 +207,18 @@ jobs:
           name: Logcat-Full
           path: logcat-full.log
 
-      # 17. Upload Audio Debug Log
+      # 18. Upload Audio Debug Log
       - name: Upload Audio Debug Log
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: Audio-Debug-Log
-          path: audio-debug.log 
+          path: audio-debug.log
+
+      # 19. Upload Build Log (opsional)
+      - name: Upload Build Log
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: Build-Log
+          path: android/build.log 
