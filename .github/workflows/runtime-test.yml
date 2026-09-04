@@ -148,22 +148,24 @@ jobs:
           disable-linux-hw-accel: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -accel off -no-metrics -camera-back none -camera-front none -memory 2048
           script: |
+            #!/bin/bash
+            set -e
+
             adb wait-for-device
             adb logcat -c
 
-            # 🔥 START streaming log audio di background
+            # Start logcat streaming in background
             adb logcat -v time -s FFmpegDecoder:V PlaybackController:V AudioCallback:V NativePlaybackModule:V > /tmp/audio.log 2>&1 &
             LOGCAT_PID=$!
 
             # Install APK
             adb install android/app/build/outputs/apk/debug/app-debug.apk
 
-            # ============================================================
-            # 🔥 KRUSIAL: Download & push test MP3 dengan PATH ABSOLUT
-            # ============================================================
+            # Download & push test MP3
             adb shell mkdir -p /sdcard/Music
             echo "⬇️ Downloading test MP3..."
             curl -L -o /tmp/test.mp3 "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+
             if [ -f /tmp/test.mp3 ]; then
               adb push /tmp/test.mp3 /sdcard/Music/test.mp3
               echo "✅ Test MP3 pushed to /sdcard/Music/test.mp3"
@@ -173,25 +175,25 @@ jobs:
               exit 1
             fi
 
-            # Launch MainActivity (bundle already embedded)
+            # Launch MainActivity
             adb shell am start -n com.pristineaudio.app/.MainActivity
 
-            # Tunggu hingga PlaybackController terinisialisasi (maks 60 detik)
+            # Wait for PlaybackController init
             echo "⏳ Waiting for PlaybackController initialize..."
             timeout 60 adb logcat -s PlaybackController:I -m 1 || echo "⚠️ PlaybackController not initialized in time"
 
-            # Tunggu 45 detik agar dummy autoplay sempat jalan + audio bermain/berhenti
+            # Let audio play for 45 seconds
             echo "⏳ Sleeping 45s to capture playback logs..."
             sleep 45
 
-            # Hentikan logcat streaming
+            # Stop logcat
             kill $LOGCAT_PID || true
 
-            # Simpan log
+            # Save logs
             cat /tmp/audio.log > audio-debug.log
             adb logcat -d -v time > logcat-full.log
 
-            # Tampilkan error penting di console
+            # Print errors
             echo "=== UnsatisfiedLinkError ==="
             grep -B 5 -A 20 "UnsatisfiedLinkError" logcat-full.log || echo "No UnsatisfiedLinkError"
             echo "=== Fatal / Crash ==="
