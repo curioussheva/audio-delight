@@ -148,9 +148,8 @@ jobs:
           disable-linux-hw-accel: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -accel off -no-metrics -camera-back none -camera-front none -memory 2048
           script: |
-            #!/bin/bash
+            bash -c '
             set -e
-
             adb wait-for-device
             adb logcat -c
 
@@ -200,6 +199,7 @@ jobs:
             grep -B 5 -A 20 "FATAL" logcat-full.log || echo "No FATAL errors"
             echo "=== Decoder errors ==="
             grep -B 5 -A 20 "FFmpeg\|Decoder" logcat-full.log | head -100 || echo "No decoder errors"
+            '
 
       # 17. Upload Logcat Full
       - name: Upload Logcat Full
