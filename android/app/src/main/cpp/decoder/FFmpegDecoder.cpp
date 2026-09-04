@@ -372,7 +372,7 @@ bool FFmpegDecoder::setupResampler() {
         &swrCtx_,
         &stereo,
         AV_SAMPLE_FMT_FLT,
-        config().targetSampleRate,   // ← gunakan target sample rate (misal 48000)
+        config().targetSampleRate,   // ← ubah dari codecCtx_->sample_rate menjadi targetSampleRate
         &codecCtx_->ch_layout,
         codecCtx_->sample_fmt,
         codecCtx_->sample_rate,

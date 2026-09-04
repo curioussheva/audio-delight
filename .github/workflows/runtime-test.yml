@@ -124,14 +124,30 @@ jobs:
             adb install android/app/build/outputs/apk/debug/app-debug.apk
             adb shell am start -a android.intent.action.VIEW -d "pristineaudio://expo-development-client/?url=http%3A%2F%2F10.0.2.2%3A8081" com.pristineaudio.app
             sleep 30
+
+            # Simpan log lengkap
             adb logcat -d > logcat-full.log
+
+            # Simpan log audio spesifik
+            adb logcat -d -s FFmpegDecoder:V PlaybackController:V AudioCallback:V NativePlaybackModule:V PlaybackNativeBridge:V NativePlaybackService:V > audio-debug.log
+
+            echo "=== PlatformConstants ==="
             grep -B 5 -A 20 "PlatformConstants" logcat-full.log || echo "No PlatformConstants errors"
+            echo "=== UnsatisfiedLinkError ==="
             grep -B 5 -A 20 "UnsatisfiedLinkError" logcat-full.log || echo "No UnsatisfiedLinkError"
+            echo "=== TurboModule ==="
             grep -B 5 -A 20 "TurboModule" logcat-full.log | head -100 || echo "No TurboModule errors"
 
-      - name: Upload Logcat
+      - name: Upload Logcat Full
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: Logcat-Output
-          path: logcat-full.log 
+          name: Logcat-Full
+          path: logcat-full.log
+
+      - name: Upload Audio Debug Log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Audio-Debug-Log
+          path: audio-debug.log 
