@@ -328,8 +328,9 @@ if(EXISTS "${CODEGEN_JNI_DIR}/CMakeLists.txt")
   endif()
 endif()
 
+# appmodules — TANPA OnLoad.cpp (hanya untuk React Native TurboModules)
 add_library(appmodules SHARED
-  "${CMAKE_CURRENT_SOURCE_DIR}/jni/OnLoad.cpp"
+  # OnLoad.cpp tidak termasuk di sini — hanya pristine-audio yang membutuhkannya
 )
 
 target_include_directories(appmodules PRIVATE
