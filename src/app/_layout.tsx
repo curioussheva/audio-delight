@@ -91,6 +91,8 @@ export default function RootLayout() {
   // --- 4. Core Initialization Logic ---
   const performInitialization = useCallback(async () => {
     try {
+      console.log("[BOOT] 🔍 NativeModules keys:", Object.keys(NativeModules).join(", "));
+      
       console.log("[BOOT] 5. _layout performInitialization start");
 
       // 🔥 FORCE LOAD NATIVE LIBRARY VIA JS
@@ -166,51 +168,54 @@ export default function RootLayout() {
     }
   }, [performInitialization]);
 
-  // ============================================================
-  // 🔥 DUMMY AUTOPLAY UNTUK DEBUG (PAKAI PATH ABSOLUT) 🔥
-  // ============================================================
-  useEffect(() => {
-    if (appState !== "ready" || hasTriggeredDummyPlay.current) return;
-    hasTriggeredDummyPlay.current = true;
+// ============================================================
+// 🔥 DUMMY AUTOPLAY UNTUK DEBUG (PAKAI NATIVEMODULES LANGSUNG)
+// ============================================================
+useEffect(() => {
+  if (appState !== "ready" || hasTriggeredDummyPlay.current) return;
+  hasTriggeredDummyPlay.current = true;
 
-    const autoPlayTestTrack = async () => {
-      try {
-        console.log("[DUMMY] 🔥 Triggering autoplay with ABSOLUTE PATH...");
+  const autoPlayTestTrack = async () => {
+    try {
+      console.log("[DUMMY] 🔥 Triggering autoplay via NativePlaybackModule...");
 
-        const testTrack = {
-          id: "test_001",
-          uri: "/storage/emulated/0/Music/test.mp3",
-          title: "SoundHelix Test Tone",
-          artist: "SoundHelix",
-          album: "Debug",
-          duration: 18000,
-        };
-
-        console.log("[DUMMY] Track:", testTrack);
-
-        // ✅ Gunakan audioEngine.playbackService (jika tersedia)
-        const service = audioEngine.playbackService;
-        if (!service) {
-          console.error("[DUMMY] ❌ audioEngine.playbackService is null!");
-          return;
-        }
-
-        console.log("[DUMMY] Setting queue...");
-        await service.setQueue([testTrack]);
-
-        console.log("[DUMMY] Calling play()...");
-        await service.play();
-
-        console.log("[DUMMY] ✅ Play command sent. Check audio logs!");
-      } catch (e) {
-        console.error("[DUMMY] ❌ Autoplay error:", e);
+      // Ambil NativePlaybackModule langsung
+      const playbackModule = NativeModules.NativePlaybackModule;
+      if (!playbackModule) {
+        console.error("[DUMMY] ❌ NativePlaybackModule not found!");
+        console.log("[DUMMY] Available NativeModules:", Object.keys(NativeModules).join(", "));
+        return;
       }
-    };
 
-    const timer = setTimeout(autoPlayTestTrack, 3000);
-    return () => clearTimeout(timer);
-  }, [appState]);
+      // Track test
+      const testTrack = {
+        id: "test_001",
+        uri: "/storage/emulated/0/Music/test.mp3",
+        title: "SoundHelix Test Tone",
+        artist: "SoundHelix",
+        album: "Debug",
+        duration: 18000,
+      };
 
+      console.log("[DUMMY] Track:", testTrack);
+
+      // Set queue via native
+      console.log("[DUMMY] Calling nativeSetQueue...");
+      await playbackModule.nativeSetQueue([testTrack]);
+
+      console.log("[DUMMY] Calling nativePlay...");
+      await playbackModule.nativePlay();
+
+      console.log("[DUMMY] ✅ Play command sent via NativePlaybackModule!");
+    } catch (e) {
+      console.error("[DUMMY] ❌ Autoplay error:", e);
+    }
+  };
+
+  const timer = setTimeout(autoPlayTestTrack, 5000);
+  return () => clearTimeout(timer);
+}, [appState]);
+ 
   // --- UI Handlers ---
   const handleLoadingComplete = useCallback(() => {
     SplashScreen.hideAsync().catch(() => {});
