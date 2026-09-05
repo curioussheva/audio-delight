@@ -61,7 +61,7 @@ jobs:
             "cmake;3.22.1"
 
       # ============================================
-      # 6. Install nasm (required by FFmpeg)
+      # 6. Install nasm
       # ============================================
       - name: Install nasm
         run: |
@@ -69,7 +69,7 @@ jobs:
           sudo apt-get install -y nasm
 
       # ============================================
-      # 7. Cache FFmpeg build
+      # 7. Cache FFmpeg
       # ============================================
       - name: Cache FFmpeg build
         id: cache-ffmpeg
@@ -79,7 +79,7 @@ jobs:
           key: ffmpeg-android-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-android.sh') }}
 
       # ============================================
-      # 8. Build FFmpeg for Android (only if cache missed)
+      # 8. Build FFmpeg
       # ============================================
       - name: Build FFmpeg for Android
         if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
@@ -139,7 +139,7 @@ jobs:
           | tar -xz --strip-components=1 -C "$OBOE_DIR"
 
       # ============================================
-      # 13. Clean all caches (termasuk assets lama)
+      # 13. Clean all caches
       # ============================================
       - name: Clean all caches
         working-directory: android
@@ -180,18 +180,16 @@ jobs:
             -PhermesEnabled=true
 
       # ============================================
-      # 16. 🔥 Export & embed Expo bundle
+      # 16. Export & embed Expo bundle
       # ============================================
       - name: Export & embed Expo bundle
         run: |
           echo "📦 Exporting Expo bundle..."
           npx expo export --platform android --output-dir dist --dev true
 
-          # Bersihkan assets lama
           rm -rf android/app/src/main/assets/*
           mkdir -p android/app/src/main/assets
 
-          # Cari file bundle yang dihasilkan (hash berubah-ubah)
           BUNDLE_FILE=$(find dist/_expo/static/js/android -name "*.js" | head -1)
           if [ -n "$BUNDLE_FILE" ]; then
             cp "$BUNDLE_FILE" android/app/src/main/assets/index.android.bundle
@@ -199,22 +197,20 @@ jobs:
             BUNDLE_SIZE=$(wc -c < android/app/src/main/assets/index.android.bundle)
             echo "✅ Bundle size: $BUNDLE_SIZE bytes"
 
-            # 🔥 Verifikasi konten bundle (pastikan kode terbaru ada)
             if grep -q "DUMMY" android/app/src/main/assets/index.android.bundle; then
               echo "✅ 'DUMMY' found in bundle — kode terbaru ter-embed!"
             else
-              echo "⚠️ 'DUMMY' NOT found — mungkin bundle masih lama. Cek 5 baris pertama:"
+              echo "⚠️ 'DUMMY' NOT found — bundle mungkin masih lama"
               head -5 android/app/src/main/assets/index.android.bundle
-              # Kita lanjutkan, tapi beri peringatan
             fi
           else
-            echo "❌ Bundle not found in dist/_expo/static/js/android!"
+            echo "❌ Bundle not found!"
             find dist -name "*.js" || true
             exit 1
           fi
 
       # ============================================
-      # 17. Build Debug APK (dengan bundle embedded)
+      # 17. Build Debug APK (TANPA flag dev server)
       # ============================================
       - name: Build Debug APK
         working-directory: android
@@ -223,12 +219,12 @@ jobs:
             --no-daemon \
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
-            -PhermesEnabled=true \
-            -PreactNativeDevServerPort= \
-            -PreactNativeDevServerEnabled=false
+            -PhermesEnabled=true
+          # Biarkan default: dev server enabled agar resource tersedia,
+          # tapi bundle tetap dari assets sehingga app tidak connect ke Metro.
 
       # ============================================
-      # 18. Enable KVM (hardware acceleration)
+      # 18. Enable KVM
       # ============================================
       - name: Enable KVM
         run: |
@@ -251,7 +247,7 @@ jobs:
           script: ./scripts/test-emulator.sh
 
       # ============================================
-      # 20. Upload log artifacts
+      # 20. Upload artifacts
       # ============================================
       - name: Upload Logcat Full
         uses: actions/upload-artifact@v4
