@@ -61,7 +61,7 @@ jobs:
             "cmake;3.22.1"
 
       # ============================================
-      # 6. Install nasm
+      # 6. Install nasm (required by FFmpeg)
       # ============================================
       - name: Install nasm
         run: |
@@ -69,7 +69,7 @@ jobs:
           sudo apt-get install -y nasm
 
       # ============================================
-      # 7. Cache FFmpeg
+      # 7. Cache FFmpeg build
       # ============================================
       - name: Cache FFmpeg build
         id: cache-ffmpeg
@@ -79,7 +79,7 @@ jobs:
           key: ffmpeg-android-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-android.sh') }}
 
       # ============================================
-      # 8. Build FFmpeg
+      # 8. Build FFmpeg for Android (only if cache missed)
       # ============================================
       - name: Build FFmpeg for Android
         if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
@@ -139,7 +139,7 @@ jobs:
           | tar -xz --strip-components=1 -C "$OBOE_DIR"
 
       # ============================================
-      # 13. Clean all caches
+      # 13. Clean all caches (termasuk assets lama)
       # ============================================
       - name: Clean all caches
         working-directory: android
@@ -167,7 +167,7 @@ jobs:
             -PhermesEnabled=true
 
       # ============================================
-      # 15. Generate Autolinking
+      # 15. Run generateAutolinkingNewArchitectureFiles
       # ============================================
       - name: Run generateAutolinkingNewArchitectureFiles
         working-directory: android
@@ -180,16 +180,18 @@ jobs:
             -PhermesEnabled=true
 
       # ============================================
-      # 16. Export & embed Expo bundle
+      # 16. 🔥 Export & embed Expo bundle (PRODUCTION MODE)
       # ============================================
       - name: Export & embed Expo bundle
         run: |
-          echo "📦 Exporting Expo bundle..."
-          npx expo export --platform android --output-dir dist --dev true
+          echo "📦 Exporting Expo bundle (production)..."
+          npx expo export --platform android --output-dir dist --dev false
 
+          # Bersihkan assets lama
           rm -rf android/app/src/main/assets/*
           mkdir -p android/app/src/main/assets
 
+          # Cari file bundle yang dihasilkan
           BUNDLE_FILE=$(find dist/_expo/static/js/android -name "*.js" | head -1)
           if [ -n "$BUNDLE_FILE" ]; then
             cp "$BUNDLE_FILE" android/app/src/main/assets/index.android.bundle
@@ -197,14 +199,15 @@ jobs:
             BUNDLE_SIZE=$(wc -c < android/app/src/main/assets/index.android.bundle)
             echo "✅ Bundle size: $BUNDLE_SIZE bytes"
 
+            # 🔥 Verifikasi konten bundle
             if grep -q "DUMMY" android/app/src/main/assets/index.android.bundle; then
               echo "✅ 'DUMMY' found in bundle — kode terbaru ter-embed!"
             else
-              echo "⚠️ 'DUMMY' NOT found — bundle mungkin masih lama"
+              echo "⚠️ 'DUMMY' NOT found — mungkin bundle masih lama"
               head -5 android/app/src/main/assets/index.android.bundle
             fi
           else
-            echo "❌ Bundle not found!"
+            echo "❌ Bundle not found in dist/_expo/static/js/android!"
             find dist -name "*.js" || true
             exit 1
           fi
@@ -220,11 +223,33 @@ jobs:
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
             -PhermesEnabled=true
-          # Biarkan default: dev server enabled agar resource tersedia,
-          # tapi bundle tetap dari assets sehingga app tidak connect ke Metro.
+          # Tidak pakai flag dev server — biarkan default agar resource tersedia
 
       # ============================================
-      # 18. Enable KVM
+      # 18. 🔥 Verify bundle in APK
+      # ============================================
+      - name: Verify bundle in APK
+        run: |
+          APK_PATH="android/app/build/outputs/apk/debug/app-debug.apk"
+          if [ -f "$APK_PATH" ]; then
+            echo "✅ APK found: $APK_PATH"
+            echo "=== Checking for index.android.bundle in APK ==="
+            if unzip -l "$APK_PATH" | grep -q "index.android.bundle"; then
+              echo "✅ index.android.bundle FOUND in APK!"
+              unzip -l "$APK_PATH" | grep "index.android.bundle"
+            else
+              echo "❌ index.android.bundle NOT found in APK!"
+              echo "=== Assets in APK ==="
+              unzip -l "$APK_PATH" | grep "assets/" | head -20
+              exit 1
+            fi
+          else
+            echo "❌ APK not found!"
+            exit 1
+          fi
+
+      # ============================================
+      # 19. Enable KVM (hardware acceleration)
       # ============================================
       - name: Enable KVM
         run: |
@@ -232,7 +257,7 @@ jobs:
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
 
       # ============================================
-      # 19. Run on emulator & capture logs
+      # 20. Run on emulator & capture logs
       # ============================================
       - name: Run on emulator & capture logs
         uses: reactivecircus/android-emulator-runner@v2
@@ -247,7 +272,7 @@ jobs:
           script: ./scripts/test-emulator.sh
 
       # ============================================
-      # 20. Upload artifacts
+      # 21. Upload artifacts
       # ============================================
       - name: Upload Logcat Full
         uses: actions/upload-artifact@v4
