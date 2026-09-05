@@ -17,10 +17,8 @@ jobs:
       EXPO_NO_DEV_SERVER: 1
 
     steps:
-      # 1. Checkout
       - uses: actions/checkout@v4
 
-      # 2. Setup Node + PNPM
       - uses: pnpm/action-setup@v4
         with:
           version: 9.0.0
@@ -30,11 +28,9 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      # 3. Install dependencies
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # 4. Setup Java + Android SDK
       - uses: actions/setup-java@v4
         with:
           java-version: "17"
@@ -43,20 +39,17 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
-      # 5. Install NDK + CMake
       - name: Install NDK + CMake
         run: |
           yes | sdkmanager \
             "ndk;27.1.12297006" \
             "cmake;3.22.1"
 
-      # 6. Install nasm
       - name: Install nasm
         run: |
           sudo apt-get update
           sudo apt-get install -y nasm
 
-      # 7. Cache FFmpeg
       - name: Cache FFmpeg build
         id: cache-ffmpeg
         uses: actions/cache@v4
@@ -64,12 +57,10 @@ jobs:
           path: android/app/src/main/cpp/libs/ffmpeg
           key: ffmpeg-android-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-android.sh') }}
 
-      # 8. Build FFmpeg
       - name: Build FFmpeg for Android
         if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
         run: bash scripts/build-ffmpeg-android.sh
 
-      # 9. Configure Android paths
       - name: Configure Android paths
         run: |
           cat > android/local.properties << EOF
@@ -77,7 +68,6 @@ jobs:
           cmake.dir=$ANDROID_HOME/cmake/3.22.1
           EOF
 
-      # 10. Inject Gradle init script
       - name: Inject Gradle init script
         run: |
           mkdir -p $GRADLE_USER_HOME/init.d
@@ -95,7 +85,6 @@ jobs:
           }
           EOF
 
-      # 11. Patch RN Gradle Plugin
       - name: Patch RN Gradle Plugin
         run: |
           FILE=node_modules/@react-native/gradle-plugin/settings.gradle.kts
@@ -106,7 +95,6 @@ jobs:
             echo "✅ Already patched"
           fi
 
-      # 12. Setup Oboe
       - name: Setup Oboe
         run: |
           OBOE_DIR="android/app/src/main/cpp/oboe"
@@ -114,7 +102,6 @@ jobs:
           curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz \
           | tar -xz --strip-components=1 -C "$OBOE_DIR"
 
-      # 13. Clean CMake & native caches
       - name: Clean CMake & native caches
         working-directory: android
         run: |
@@ -123,7 +110,6 @@ jobs:
           rm -rf app/.cxx app/build/.cxx
           echo "✅ Native caches cleaned"
 
-      # 14. Generate Codegen
       - name: Generate Codegen
         working-directory: android
         run: |
@@ -134,7 +120,6 @@ jobs:
             -PreactNativeNewArch=true \
             -PhermesEnabled=true
 
-      # 15. Generate Autolinking
       - name: Run generateAutolinkingNewArchitectureFiles
         working-directory: android
         run: |
@@ -145,24 +130,25 @@ jobs:
             -PreactNativeNewArch=true \
             -PhermesEnabled=true
 
-      # 16. 🔥 Export Expo bundle & salin ke assets
+      # 🔥 EXPORT & COPY BUNDLE
       - name: Export Expo bundle
         run: |
           echo "📦 Exporting Expo bundle..."
           npx expo export --platform android --output-dir dist --dev true
-          
-          if [ -f dist/index.android.bundle ]; then
+
+          BUNDLE_FILE=$(find dist/_expo/static/js/android -name "*.js" | head -1)
+          if [ -n "$BUNDLE_FILE" ]; then
             mkdir -p android/app/src/main/assets
-            cp dist/index.android.bundle android/app/src/main/assets/index.android.bundle
+            cp "$BUNDLE_FILE" android/app/src/main/assets/index.android.bundle
+            echo "✅ Bundle copied from $BUNDLE_FILE"
             echo "✅ Bundle size: $(wc -c < android/app/src/main/assets/index.android.bundle) bytes"
             ls -la android/app/src/main/assets/
           else
-            echo "❌ Bundle not found in dist/!"
-            ls -la dist/ || true
+            echo "❌ Bundle not found in dist/_expo/static/js/android!"
+            find dist -name "*.js" || true
             exit 1
           fi
 
-      # 17. Build Debug APK (dengan bundle embedded)
       - name: Build Debug APK
         working-directory: android
         run: |
@@ -174,13 +160,11 @@ jobs:
             -PreactNativeDevServerPort= \
             -PreactNativeDevServerEnabled=false
 
-      # 18. Enable KVM
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm-rules.rules
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
 
-      # 19. Run on emulator & capture logs
       - name: Run on emulator & capture logs
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -193,7 +177,6 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none -memory 2048
           script: ./scripts/test-emulator.sh
 
-      # 20. Upload Logcat Full
       - name: Upload Logcat Full
         uses: actions/upload-artifact@v4
         if: always()
@@ -202,7 +185,6 @@ jobs:
           path: logcat-full.log
           retention-days: 7
 
-      # 21. Upload Audio Debug Log
       - name: Upload Audio Debug Log
         uses: actions/upload-artifact@v4
         if: always()
@@ -211,7 +193,6 @@ jobs:
           path: audio-debug.log
           retention-days: 7
 
-      # 22. Upload Build Log
       - name: Upload Build Log
         uses: actions/upload-artifact@v4
         if: failure()
