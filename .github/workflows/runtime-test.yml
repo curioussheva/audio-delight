@@ -20,7 +20,7 @@ jobs:
       # 1. Checkout
       - uses: actions/checkout@v4
 
-      # 2. Setup Node + PNPM (dengan cache)
+      # 2. Setup Node + PNPM
       - uses: pnpm/action-setup@v4
         with:
           version: 9.0.0
@@ -114,7 +114,7 @@ jobs:
           curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz \
           | tar -xz --strip-components=1 -C "$OBOE_DIR"
 
-      # 13. Clean CMake & native caches (untuk memastikan build bersih)
+      # 13. Clean CMake & native caches
       - name: Clean CMake & native caches
         working-directory: android
         run: |
@@ -134,7 +134,7 @@ jobs:
             -PreactNativeNewArch=true \
             -PhermesEnabled=true
 
-      # 15. Run generateAutolinkingNewArchitectureFiles
+      # 15. Generate Autolinking
       - name: Run generateAutolinkingNewArchitectureFiles
         working-directory: android
         run: |
@@ -145,17 +145,20 @@ jobs:
             -PreactNativeNewArch=true \
             -PhermesEnabled=true
 
-      # 16. 🔥 EMBED EXPO BUNDLE (kunci utama)
-      - name: Embed Expo bundle
+      # 16. 🔥 Export Expo bundle & salin ke assets
+      - name: Export Expo bundle
         run: |
-          echo "📦 Embedding Expo bundle..."
-          npx expo export:embed --platform android
+          echo "📦 Exporting Expo bundle..."
+          npx expo export --platform android --output-dir dist --dev true
           
-          # Verifikasi bundle
-          if [ -f android/app/src/main/assets/index.android.bundle ]; then
+          if [ -f dist/index.android.bundle ]; then
+            mkdir -p android/app/src/main/assets
+            cp dist/index.android.bundle android/app/src/main/assets/index.android.bundle
             echo "✅ Bundle size: $(wc -c < android/app/src/main/assets/index.android.bundle) bytes"
+            ls -la android/app/src/main/assets/
           else
-            echo "❌ Bundle not found! Aborting."
+            echo "❌ Bundle not found in dist/!"
+            ls -la dist/ || true
             exit 1
           fi
 
@@ -171,7 +174,7 @@ jobs:
             -PreactNativeDevServerPort= \
             -PreactNativeDevServerEnabled=false
 
-      # 18. Enable KVM Hardware Acceleration
+      # 18. Enable KVM
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm-rules.rules
@@ -215,4 +218,4 @@ jobs:
         with:
           name: Build-Log
           path: android/build.log
-          retention-days: 7
+          retention-days: 7 
