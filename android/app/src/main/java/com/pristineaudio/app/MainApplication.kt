@@ -14,23 +14,28 @@ import com.pristineaudio.PristineAudioPackage
 
 class MainApplication : Application(), ReactApplication {
 
-  override val reactHost: ReactHost by lazy {
-    ExpoReactHostFactory.getDefaultReactHost(
-      context = applicationContext,
-      packageList = PackageList(this).packages.apply {
-        add(PristineAudioPackage())
-      }
-    )
-  }
+    // 🔥 LOAD NATIVE LIBRARY SAAT APLIKASI START
+    init {
+        System.loadLibrary("pristine-audio")
+    }
 
-  override fun onCreate() {
-    super.onCreate()
-    loadReactNative(this)
-    ApplicationLifecycleDispatcher.onApplicationCreate(this)
-  }
+    override val reactHost: ReactHost by lazy {
+        ExpoReactHostFactory.getDefaultReactHost(
+            context = applicationContext,
+            packageList = PackageList(this).packages.apply {
+                add(PristineAudioPackage())
+            }
+        )
+    }
 
-  override fun onConfigurationChanged(newConfig: Configuration) {
-    super.onConfigurationChanged(newConfig)
-    ApplicationLifecycleDispatcher.onConfigurationChanged(this, newConfig)
-  }
+    override fun onCreate() {
+        super.onCreate()
+        loadReactNative(this)
+        ApplicationLifecycleDispatcher.onApplicationCreate(this)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        ApplicationLifecycleDispatcher.onConfigurationChanged(this, newConfig)
+    }
 }
