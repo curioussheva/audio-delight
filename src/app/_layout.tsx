@@ -29,7 +29,7 @@ import LoadingScreen from "@/shared/components/ui/LoadingScreen";
 import { AudioPropertyToast } from "@/features/player/components/AudioPropertyToast";
 
 // Core Engine & Stores
-import { audioEngine } from "@/features/player/api/engine"; // ✅ hanya import audioEngine
+import { audioEngine } from "@/features/player/api/engine";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useLibraryStore } from "@/features/library/store/libraryStore";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
@@ -91,32 +91,22 @@ export default function RootLayout() {
   // --- 4. Core Initialization Logic ---
   const performInitialization = useCallback(async () => {
     try {
-      console.log("[BOOT] 🔍 NativeModules keys:", Object.keys(NativeModules).join(", "));
-      
       console.log("[BOOT] 5. _layout performInitialization start");
 
-      // 🔥 FORCE LOAD NATIVE LIBRARY VIA JS
-      console.log("[BOOT] Loading native library via JS...");
-      try {
-        // Panggil method dummy untuk memicu load library
-        const pristine = NativeModules.PristineAudio;
-        if (pristine) {
-          // Coba panggil method yang tersedia (getVersion, getState, atau method lain)
-          if (typeof pristine.getVersion === 'function') {
-            const version = await pristine.getVersion();
-            console.log("[BOOT] Native library version:", version);
-          } else if (typeof pristine.getState === 'function') {
-            const state = await pristine.getState();
-            console.log("[BOOT] Native library state:", state);
-          } else {
-            // Fallback: panggil method apa pun yang ada
-            console.log("[BOOT] Native module available:", Object.keys(pristine));
-          }
-        } else {
-          console.warn("[BOOT] ❌ PristineAudio native module not found!");
+      // 🔥 TAMPILKAN SEMUA NATIVE MODULES
+      console.log("[BOOT] 🔍 NativeModules keys:", Object.keys(NativeModules).join(", "));
+
+      // 🔥 COBA PANGGIL NATIVEPLAYBACKMODULE LANGSUNG
+      const playbackModule = NativeModules.NativePlaybackModule;
+      if (playbackModule) {
+        console.log("[BOOT] ✅ NativePlaybackModule found, keys:", Object.keys(playbackModule));
+        // Coba panggil metode dummy jika ada
+        if (typeof playbackModule.getState === 'function') {
+          const state = await playbackModule.getState();
+          console.log("[BOOT] NativePlaybackModule state:", state);
         }
-      } catch (e) {
-        console.warn("[BOOT] ⚠️ Failed to call native method:", e);
+      } else {
+        console.warn("[BOOT] ❌ NativePlaybackModule NOT found");
       }
 
       console.log("[BOOT] 6. audioEngine.initialize() calling...");
@@ -168,54 +158,58 @@ export default function RootLayout() {
     }
   }, [performInitialization]);
 
-// ============================================================
-// 🔥 DUMMY AUTOPLAY UNTUK DEBUG (PAKAI NATIVEMODULES LANGSUNG)
-// ============================================================
-useEffect(() => {
-  if (appState !== "ready" || hasTriggeredDummyPlay.current) return;
-  hasTriggeredDummyPlay.current = true;
-
-  const autoPlayTestTrack = async () => {
-    try {
-      console.log("[DUMMY] 🔥 Triggering autoplay via NativePlaybackModule...");
-
-      // Ambil NativePlaybackModule langsung
-      const playbackModule = NativeModules.NativePlaybackModule;
-      if (!playbackModule) {
-        console.error("[DUMMY] ❌ NativePlaybackModule not found!");
-        console.log("[DUMMY] Available NativeModules:", Object.keys(NativeModules).join(", "));
-        return;
-      }
-
-      // Track test
-      const testTrack = {
-        id: "test_001",
-        uri: "/storage/emulated/0/Music/test.mp3",
-        title: "SoundHelix Test Tone",
-        artist: "SoundHelix",
-        album: "Debug",
-        duration: 18000,
-      };
-
-      console.log("[DUMMY] Track:", testTrack);
-
-      // Set queue via native
-      console.log("[DUMMY] Calling nativeSetQueue...");
-      await playbackModule.nativeSetQueue([testTrack]);
-
-      console.log("[DUMMY] Calling nativePlay...");
-      await playbackModule.nativePlay();
-
-      console.log("[DUMMY] ✅ Play command sent via NativePlaybackModule!");
-    } catch (e) {
-      console.error("[DUMMY] ❌ Autoplay error:", e);
+  // ============================================================
+  // 🔥 DUMMY AUTOPLAY UNTUK DEBUG — VIA NATIVEMODULES LANGSUNG
+  // ============================================================
+  useEffect(() => {
+    console.log("[DUMMY] 🔄 useEffect triggered, appState=", appState);
+    if (appState !== "ready" || hasTriggeredDummyPlay.current) {
+      console.log("[DUMMY] Skipping: appState not ready or already triggered");
+      return;
     }
-  };
+    hasTriggeredDummyPlay.current = true;
 
-  const timer = setTimeout(autoPlayTestTrack, 5000);
-  return () => clearTimeout(timer);
-}, [appState]);
- 
+    const autoPlayTestTrack = async () => {
+      try {
+        console.log("[DUMMY] 🔥 Triggering autoplay via NativePlaybackModule...");
+
+        const module = NativeModules.NativePlaybackModule;
+        if (!module) {
+          console.error("[DUMMY] ❌ NativePlaybackModule not found!");
+          console.log("[DUMMY] Available NativeModules:", Object.keys(NativeModules).join(", "));
+          return;
+        }
+        console.log("[DUMMY] ✅ NativePlaybackModule found");
+
+        const testTrack = {
+          id: "test_001",
+          uri: "/storage/emulated/0/Music/test.mp3",
+          title: "SoundHelix Test Tone",
+          artist: "SoundHelix",
+          album: "Debug",
+          duration: 18000,
+        };
+
+        console.log("[DUMMY] Track:", testTrack);
+
+        console.log("[DUMMY] Calling nativeSetQueue...");
+        await module.nativeSetQueue([testTrack]);
+        console.log("[DUMMY] ✅ nativeSetQueue done");
+
+        console.log("[DUMMY] Calling nativePlay...");
+        await module.nativePlay();
+        console.log("[DUMMY] ✅ nativePlay done");
+
+        console.log("[DUMMY] ✅ Play command sent via NativePlaybackModule!");
+      } catch (e) {
+        console.error("[DUMMY] ❌ Autoplay error:", e);
+      }
+    };
+
+    const timer = setTimeout(autoPlayTestTrack, 5000);
+    return () => clearTimeout(timer);
+  }, [appState]);
+
   // --- UI Handlers ---
   const handleLoadingComplete = useCallback(() => {
     SplashScreen.hideAsync().catch(() => {});
