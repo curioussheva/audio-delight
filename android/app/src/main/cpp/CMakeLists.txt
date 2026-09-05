@@ -91,6 +91,7 @@ file(GLOB_RECURSE ALL_SRCS CONFIGURE_DEPENDS
 
 # Tambahkan file-file JNI yang diperlukan oleh pristine-audio secara eksplisit
 list(APPEND ALL_SRCS
+  jni/OnLoad.cpp
   jni/JSIInstaller.cpp
   jni/NativeAudioFeed.cpp
   jni/NativeDSPModule.cpp
