@@ -24,7 +24,7 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
 
-    <!-- Advanced FS (biarin dulu sesuai request kamu) -->
+    <!-- Advanced FS -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
 
     <!-- System -->
@@ -36,10 +36,7 @@
     <!-- FEATURES -->
     <!-- ===================== -->
 
-    <!-- USB DAC support -->
     <uses-feature android:name="android.hardware.usb.host" android:required="false"/>
-
-    <!-- Audio output wajib -->
     <uses-feature android:name="android.hardware.audio.output" android:required="true"/>
 
     <!-- ===================== -->
@@ -65,21 +62,9 @@
         <meta-data android:name="expo.modules.updates.EXPO_UPDATES_LAUNCH_WAIT_MS" android:value="0"/>
 
         <!-- ===================== -->
-        <!-- TRACK PLAYER SERVICE -->
+        <!-- CUSTOM PLAYBACK SERVICE (Oboe) -->
         <!-- ===================== -->
 
-        <service
-            android:name="com.doublesymmetry.trackplayer.service.MusicService"
-            android:foregroundServiceType="mediaPlayback"
-            android:exported="true"
-            tools:replace="android:foregroundServiceType">
-
-            <intent-filter>
-                <action android:name="android.intent.action.MEDIA_BUTTON"/>
-            </intent-filter>
-        </service>
-        
-        <!-- Custom Oboe Playback Service (Pengganti RNTP) -->
         <service
             android:name="com.pristineaudio.playback.PlaybackService"
             android:foregroundServiceType="mediaPlayback"
@@ -99,17 +84,15 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="portrait"
-            android:theme="@style/Theme.App.SplashScreen"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"
             android:windowSoftInputMode="adjustResize"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode">
 
-            <!-- Launcher -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
 
-            <!-- Deep link -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
@@ -117,22 +100,15 @@
                 <data android:scheme="pristineaudio"/>
             </intent-filter>
 
-            <!-- USB attach -->
             <intent-filter>
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"/>
             </intent-filter>
 
-            <!-- Device filter -->
             <meta-data
                 android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
                 android:resource="@xml/device_filter"/>
         </activity>
 
-        <!-- Media button receiver -->
-        <receiver
-            android:name="com.doublesymmetry.trackplayer.receiver.MediaButtonReceiver"
-            android:exported="true"/>
-
     </application>
 
-</manifest>
+</manifest> 
