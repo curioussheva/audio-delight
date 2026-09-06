@@ -61,7 +61,6 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-dev-client",
       [
         "expo-splash-screen",
         {
@@ -130,5 +129,4 @@
       }
     }
   }
-}
- 
+} 
