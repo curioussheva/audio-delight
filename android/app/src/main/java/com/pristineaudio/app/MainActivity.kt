@@ -33,13 +33,7 @@ class MainActivity : ReactActivity() {
                 super.loadApp(appKey)
                 Log.d("PristineApp", "🔴 loadApp finished")
             }
-
-            override fun onCreate(savedInstanceState: Bundle?) {
-                Log.d("PristineApp", "🔴 Delegate onCreate called")
-                super.onCreate(savedInstanceState)
-                Log.d("PristineApp", "🔴 Delegate onCreate finished")
-            }
         }
         return ReactActivityDelegateWrapper(this, BuildConfig.IS_NEW_ARCHITECTURE_ENABLED, delegate)
     }
-} 
+}

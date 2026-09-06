@@ -5,10 +5,13 @@ import android.content.res.Configuration
 import android.util.Log
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
-import com.facebook.react.ReactHost
-import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
+import com.facebook.react.ReactNativeHost
+import com.facebook.react.ReactPackage
+import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.load
+import com.facebook.react.defaults.DefaultReactNativeHost
+import com.facebook.soloader.SoLoader
 import expo.modules.ApplicationLifecycleDispatcher
-import expo.modules.ExpoReactHostFactory
+import expo.modules.ReactNativeHostWrapper
 import com.pristineaudio.PristineAudioPackage
 
 class MainApplication : Application(), ReactApplication {
@@ -19,21 +22,32 @@ class MainApplication : Application(), ReactApplication {
         Log.d("PristineApp", "Library pristine-audio loaded")
     }
 
-    override val reactHost: ReactHost by lazy {
-        Log.d("PristineApp", "Creating ReactHost via lazy")
-        ExpoReactHostFactory.getDefaultReactHost(
-            context = applicationContext,
-            packageList = PackageList(this).packages.apply {
-                add(PristineAudioPackage())
-            }
-        )
-    }
+    private val reactNativeHost: ReactNativeHost = ReactNativeHostWrapper(
+        this,
+        object : DefaultReactNativeHost(this) {
+            override fun getPackages(): List<ReactPackage> =
+                PackageList(this).packages.apply {
+                    add(PristineAudioPackage())
+                }
+
+            override fun getJSMainModuleName(): String = "index"
+
+            override fun getUseDeveloperSupport(): Boolean = BuildConfig.DEBUG
+
+            override val isNewArchEnabled: Boolean = BuildConfig.IS_NEW_ARCHITECTURE_ENABLED
+            override val isHermesEnabled: Boolean = BuildConfig.IS_HERMES_ENABLED
+        }
+    )
+
+    override fun getReactNativeHost(): ReactNativeHost = reactNativeHost
 
     override fun onCreate() {
         super.onCreate()
         Log.d("PristineApp", "MainApplication onCreate called")
-        loadReactNative(this)
-        Log.d("PristineApp", "loadReactNative completed")
+        SoLoader.init(this, false)
+        if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
+            load()
+        }
         ApplicationLifecycleDispatcher.onApplicationCreate(this)
         Log.d("PristineApp", "ApplicationLifecycleDispatcher completed")
     }
@@ -42,4 +56,4 @@ class MainApplication : Application(), ReactApplication {
         super.onConfigurationChanged(newConfig)
         ApplicationLifecycleDispatcher.onConfigurationChanged(this, newConfig)
     }
-} 
+}
