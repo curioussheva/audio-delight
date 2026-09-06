@@ -16,17 +16,30 @@ class MainActivity : ReactActivity() {
         Log.d("PristineApp", "MainActivity onCreate finished")
     }
 
-    override fun getMainComponentName(): String = "main"
+    override fun getMainComponentName(): String {
+        Log.d("PristineApp", "getMainComponentName called, returning 'main'")
+        return "main"
+    }
 
     override fun createReactActivityDelegate(): ReactActivityDelegate {
-        return ReactActivityDelegateWrapper(
+        Log.d("PristineApp", "createReactActivityDelegate called")
+        val delegate = object : DefaultReactActivityDelegate(
             this,
-            BuildConfig.IS_NEW_ARCHITECTURE_ENABLED,
-            object : DefaultReactActivityDelegate(
-                this,
-                mainComponentName,
-                fabricEnabled
-            ) {}
-        )
+            mainComponentName,
+            fabricEnabled
+        ) {
+            override fun loadApp(appKey: String?) {
+                Log.d("PristineApp", "🔴 loadApp called with appKey: $appKey")
+                super.loadApp(appKey)
+                Log.d("PristineApp", "🔴 loadApp finished")
+            }
+
+            override fun onCreate(savedInstanceState: Bundle?) {
+                Log.d("PristineApp", "🔴 Delegate onCreate called")
+                super.onCreate(savedInstanceState)
+                Log.d("PristineApp", "🔴 Delegate onCreate finished")
+            }
+        }
+        return ReactActivityDelegateWrapper(this, BuildConfig.IS_NEW_ARCHITECTURE_ENABLED, delegate)
     }
-}
+} 
