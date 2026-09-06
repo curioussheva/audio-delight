@@ -139,7 +139,7 @@ jobs:
           | tar -xz --strip-components=1 -C "$OBOE_DIR"
 
       # ============================================
-      # 13. Clean all caches (termasuk assets lama)
+      # 13. Clean all caches
       # ============================================
       - name: Clean all caches
         working-directory: android
@@ -180,26 +180,18 @@ jobs:
             -PhermesEnabled=true
 
       # ============================================
-      # 16. 🔥 Export & embed Expo bundle (PRODUCTION MODE)
+      # 16. 🔥 Embed Expo bundle langsung (production mode)
       # ============================================
-      - name: Export & embed Expo bundle
+      - name: Embed Expo bundle
         run: |
-          echo "📦 Exporting Expo bundle (production)..."
-          npx expo export --platform android --output-dir dist --dev false
+          echo "📦 Embedding Expo bundle (production)..."
+          npx expo export:embed --platform android --dev false
 
-          # Bersihkan assets lama
-          rm -rf android/app/src/main/assets/*
-          mkdir -p android/app/src/main/assets
-
-          # Cari file bundle yang dihasilkan
-          BUNDLE_FILE=$(find dist/_expo/static/js/android -name "*.js" | head -1)
-          if [ -n "$BUNDLE_FILE" ]; then
-            cp "$BUNDLE_FILE" android/app/src/main/assets/index.android.bundle
-            echo "✅ Bundle copied from $BUNDLE_FILE"
+          if [ -f android/app/src/main/assets/index.android.bundle ]; then
+            echo "✅ Bundle embedded successfully!"
             BUNDLE_SIZE=$(wc -c < android/app/src/main/assets/index.android.bundle)
             echo "✅ Bundle size: $BUNDLE_SIZE bytes"
 
-            # 🔥 Verifikasi konten bundle
             if grep -q "DUMMY" android/app/src/main/assets/index.android.bundle; then
               echo "✅ 'DUMMY' found in bundle — kode terbaru ter-embed!"
             else
@@ -207,13 +199,12 @@ jobs:
               head -5 android/app/src/main/assets/index.android.bundle
             fi
           else
-            echo "❌ Bundle not found in dist/_expo/static/js/android!"
-            find dist -name "*.js" || true
+            echo "❌ Bundle embedding failed!"
             exit 1
           fi
 
       # ============================================
-      # 17. Build Debug APK (TANPA flag dev server)
+      # 17. Build Debug APK
       # ============================================
       - name: Build Debug APK
         working-directory: android
@@ -223,7 +214,6 @@ jobs:
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
             -PhermesEnabled=true
-          # Tidak pakai flag dev server — biarkan default agar resource tersedia
 
       # ============================================
       # 18. 🔥 Verify bundle in APK
