@@ -180,12 +180,12 @@ jobs:
             -PhermesEnabled=true
 
       # ============================================
-      # 16. 🔥 Embed Expo bundle langsung (production mode)
+      # 16. 🔥 Embed Expo bundle dengan --bundle-output
       # ============================================
       - name: Embed Expo bundle
         run: |
           echo "📦 Embedding Expo bundle (production)..."
-          npx expo export:embed --platform android --dev false
+          npx expo export:embed --platform android --dev false --bundle-output android/app/src/main/assets/index.android.bundle
 
           if [ -f android/app/src/main/assets/index.android.bundle ]; then
             echo "✅ Bundle embedded successfully!"
