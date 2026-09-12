@@ -96,7 +96,7 @@
             "newArchEnabled": true,
             "ndkVersion": "27.1.12297006",
             "usesCleartextTraffic": true,
-            "enableBridgeless": false
+            "enableBridgeless": true
           },
           "ios": {
             "deploymentTarget": "15.1",
@@ -130,4 +130,4 @@
       }
     }
   }
-} 
+}
