@@ -91,7 +91,6 @@ file(GLOB_RECURSE ALL_SRCS CONFIGURE_DEPENDS
 
 # Tambahkan file-file JNI yang diperlukan oleh pristine-audio secara eksplisit
 list(APPEND ALL_SRCS
-  jni/OnLoad.cpp
   jni/JSIInstaller.cpp
   jni/NativeAudioFeed.cpp
   jni/NativeDSPModule.cpp
@@ -328,9 +327,9 @@ if(EXISTS "${CODEGEN_JNI_DIR}/CMakeLists.txt")
   endif()
 endif()
 
-# appmodules — TANPA OnLoad.cpp (hanya untuk React Native TurboModules)
+# appmodules — sekarang menyertakan OnLoad.cpp (registrasi TurboModule delegate + start EngineManager)
 add_library(appmodules SHARED
-  # OnLoad.cpp tidak termasuk di sini — hanya pristine-audio yang membutuhkannya
+  jni/OnLoad.cpp
 )
 
 target_include_directories(appmodules PRIVATE
@@ -339,6 +338,8 @@ target_include_directories(appmodules PRIVATE
   ${_RN_INCLUDES}
   ${_JSI_INCLUDES}
   ${_FBJNI_INCLUDES}
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}/manager
 )
 
 if(EXISTS "${AUTOLINKING_JNI_DIR}")
@@ -408,4 +409,6 @@ target_link_libraries(appmodules PRIVATE
   fbjni::fbjni
   android
   log
-) 
+  pristine-audio
+)
+ 
