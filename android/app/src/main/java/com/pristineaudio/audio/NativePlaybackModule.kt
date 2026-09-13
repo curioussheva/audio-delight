@@ -36,50 +36,101 @@ class NativePlaybackModule(reactContext: ReactApplicationContext) :
 
     override fun getName() = NAME
 
-    // React methods
-    @ReactMethod fun play() { nativePlay() }
-    @ReactMethod fun pause() { nativePause() }
-    @ReactMethod fun stop() { nativeStop() }
-    @ReactMethod fun seek(positionMs: Double) { nativeSeek(positionMs.toLong()) }
-    @ReactMethod fun getPosition(): Double = nativeGetPosition().toDouble()
-    @ReactMethod fun getStatus(): Int = nativeGetStatus()
-    @ReactMethod fun next() { nativeNext() }
-    @ReactMethod fun previous() { nativePrevious() }
-    @ReactMethod fun setShuffle(enabled: Boolean) { nativeSetShuffle(enabled) }
-    @ReactMethod fun setRepeatMode(mode: Int) { nativeSetRepeatMode(mode) }
-    @ReactMethod fun getQueue(): Array<String> = nativeGetQueue()
-    @ReactMethod fun setQueue(uris: ReadableArray) {
-    val list = ArrayList<String>()
-    for (i in 0 until uris.size()) {
-        val uri = uris.getString(i)
-        if (uri != null) {
-            list.add(resolveContentUri(uri))
-        }
+    // ========== React methods ==========
+    // Void return → safe untuk async
+    @ReactMethod
+    fun play() {
+        nativePlay()
     }
-    nativeSetQueue(list.toTypedArray())
-}
 
-private fun resolveContentUri(uriString: String): String {
-    if (!uriString.startsWith("content://")) {
-        return uriString
+    @ReactMethod
+    fun pause() {
+        nativePause()
     }
-    return try {
-        val uri = android.net.Uri.parse(uriString)
-        val pfd = reactApplicationContext.contentResolver
-            .openFileDescriptor(uri, "r")
-        if (pfd != null) {
-            val fd = pfd.detachFd()
-            "/proc/self/fd/$fd"
-        } else {
+
+    @ReactMethod
+    fun stop() {
+        nativeStop()
+    }
+
+    @ReactMethod
+    fun seek(positionMs: Double) {
+        nativeSeek(positionMs.toLong())
+    }
+
+    @ReactMethod
+    fun next() {
+        nativeNext()
+    }
+
+    @ReactMethod
+    fun previous() {
+        nativePrevious()
+    }
+
+    @ReactMethod
+    fun setShuffle(enabled: Boolean) {
+        nativeSetShuffle(enabled)
+    }
+
+    @ReactMethod
+    fun setRepeatMode(mode: Int) {
+        nativeSetRepeatMode(mode)
+    }
+
+    @ReactMethod
+    fun setQueue(uris: ReadableArray) {
+        val list = ArrayList<String>()
+        for (i in 0 until uris.size()) {
+            val uri = uris.getString(i)
+            if (uri != null) {
+                list.add(resolveContentUri(uri))
+            }
+        }
+        nativeSetQueue(list.toTypedArray())
+    }
+
+    // Non-void return → WAJIB isBlockingSynchronousMethod = true
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    fun getPosition(): Double = nativeGetPosition().toDouble()
+
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    fun getStatus(): Int = nativeGetStatus()
+
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    fun getQueue(): ReadableArray {
+        val queue = nativeGetQueue()
+        val array = Arguments.createArray()
+        for (item in queue) {
+            array.pushString(item)
+        }
+        return array
+    }
+
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    fun getCurrentTrack(): String = nativeGetCurrentTrack()
+
+    // ========== Helper ==========
+    private fun resolveContentUri(uriString: String): String {
+        if (!uriString.startsWith("content://")) {
+            return uriString
+        }
+        return try {
+            val uri = android.net.Uri.parse(uriString)
+            val pfd = reactApplicationContext.contentResolver
+                .openFileDescriptor(uri, "r")
+            if (pfd != null) {
+                val fd = pfd.detachFd()
+                "/proc/self/fd/$fd"
+            } else {
+                uriString
+            }
+        } catch (e: Exception) {
             uriString
         }
-    } catch (e: Exception) {
-        uriString
     }
-}
-    @ReactMethod fun getCurrentTrack(): String = nativeGetCurrentTrack()
 
-    // Service-friendly methods (tanpa React)
+    // ========== Service-friendly methods (tanpa React) ==========
     fun playFromService() = nativePlay()
     fun pauseFromService() = nativePause()
     fun stopFromService() = nativeStop()

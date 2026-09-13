@@ -913,3 +913,187 @@ C1 (testing per fitur) → C2 (media session) → C3 (bersihkan RNTP) → C4 (br
 Jangan loncat ke Fase C sebelum A3 tuntas (suara benar-benar keluar dan stabil) — kalau masih ada bug di jalur realtime playback, testing UI di Fase C bisa menghasilkan diagnosis yang salah arah.
 
 Insight Processing Mode (BitPerfect/DSP/Immersive) berjalan **paralel**, tidak menghalangi A1.3 — keduanya independen, tapi keputusan soal Immersive & transparansi bit-perfect baiknya diambil sebelum masuk C4 supaya tidak bikin scope creep di tengah bridging kapabilitas lain.
+
+---
+
+📊 Update Progress — Konsolidasi Native ⟷ JS/UI
+
+Status per 13 September 2026
+
+---
+
+🎯 TL;DR
+
+Terobosan besar tercapai: JS bundle berhasil berjalan di device! Blocker utama (PlatformConstants/TurboModule) sudah terlewati. Sekarang tinggal rebuild untuk verifikasi perbaikan terakhir, lalu fokus ke masalah audio (render readSamples=0).
+
+---
+
+✅ Yang Sudah Selesai
+
+Fase A — Native Engine
+
+Item Status Keterangan
+Patch wiring PlaybackController → AudioEngine ✅ Build sukses
+Fix linker error (PlaybackMetrics.cpp) ✅ File ditulis lengkap
+Fix PlaybackController::play() load track ✅ Sudah muat track jika decoderWorker_ null
+Konfirmasi satu jalur playback (PlaybackManager = dead code) ✅ Tidak ada tabrakan
+JNI_OnLoad → EngineManager::start() ✅ Log PristineJNI muncul
+libpristine-audio.so di-load ✅ Via System.loadLibrary di MainApplication
+
+Fase B — Environment & Build
+
+Item Status Keterangan
+Konfigurasi newArchEnabled=true + enableBridgeless=true ✅ Konsisten di gradle.properties & app.json
+Hapus expo-dev-client (production) ⚠️ Dihapus, tapi di-restore untuk debugging lokal
+Downgrade expo-dev-client ke ~55.0.40 ✅ Sesuai SDK 55
+Hapus RNTP dari AndroidManifest.xml ✅ MusicService & MediaButtonReceiver
+Hapus RNTP maven repo dari gradle.properties ✅ Sudah dibersihkan
+Fix tema MainActivity → AppCompat ✅ Tidak crash lagi
+Bundle production ter-embed (expo export:embed) ✅ DUMMY ditemukan di bundle
+
+Fase C — Debugging JS Berjalan
+
+Item Status Keterangan
+JS bundle ter-load ✅ [BOOT] 0. _layout module loaded muncul
+NativeModules dapat diakses ✅ Log keys bisa dibaca
+Fix NativePlaybackModule.kt @ReactMethod ✅ 4 method ditambah isBlockingSynchronousMethod = true
+Fix method name di _layout.tsx ✅ setQueue() & play() (tanpa prefix native)
+Kirim URI string array (bukan objek track) ✅ [testUri] sudah benar
+
+---
+
+⏳ Yang Sedang Dikerjakan
+
+1. Rebuild native (Kotlin berubah)
+
+Status: Menunggu eksekusi
+
+Langkah:
+
+```bash
+# Uninstall APK lama
+adb uninstall com.pristineaudio.app
+
+# Clean build cache (Kotlin berubah)
+cd android && ./gradlew --stop && cd ..
+rm -rf android/.gradle android/app/.cxx android/app/build
+
+# Rebuild & install
+npx expo run:android --device
+```
+
+2. Verifikasi log
+
+Ditunggu:
+
+```
+[DUMMY] ✅ setQueue done
+[DUMMY] ✅ play() done
+PlaybackController: loadTrack: /storage/emulated/0/Music/test.mp3
+PlaybackController: startDecoder ok=1
+PlaybackController: render readSamples=1764/1764
+```
+
+---
+
+🔴 Yang Masih Blocker
+
+1. render readSamples=0/1764
+
+Status: Belum di-debug (menunggu JS jalan)
+
+Kemungkinan penyebab:
+
+· ✅ ~~JS tidak jalan~~ → sudah teratasi
+· ⚠️ File MP3 tidak ada di /storage/emulated/0/Music/test.mp3
+· ⚠️ Izin storage tidak di-grant
+· ⚠️ FFmpeg gagal buka content:// (tapi ini path absolut, harusnya OK)
+· ⚠️ DecoderWorker tidak pernah start
+
+Langkah berikutnya: Setelah rebuild, cek log PlaybackController: loadTrack dan startDecoder ok=1.
+
+2. Status TurboModule NativePlaybackModule
+
+Status: Sudah diperbaiki di Kotlin, menunggu verifikasi
+
+Perbaikan:
+
+· getPosition(), getStatus(), getQueue(), getCurrentTrack() → ditambah isBlockingSynchronousMethod = true
+· getQueue() return ReadableArray (bukan Array<String>)
+
+---
+
+📋 Insight Arsitektur (Belum Dieksekusi)
+
+Processing Mode — 3 Mode Setara
+
+Mode processingMode exclusiveMode Status
+Exclusive (Bit-Perfect) 0 true Chain C++ siap, Kotlin/TS belum
+DSP 1 false Chain C++ siap, Kotlin/TS belum
+Immersive 2 false Chain C++ siap, UI tidak ada
+
+Gap:
+
+· setProcessingMode orphan di Kotlin/TS
+· Immersive = dead selection di JS
+· AudioStreamController::isExclusive() tidak sampai ke UI
+· Copy onboarding & settings sudah didraft, belum ditempel
+
+Modul Belum Ter-bridge (Backlog)
+
+· dsp/convolution/* — nol JNI surface
+· dsp/headphone/* — nol JNI surface
+· session/* — mungkin di-handle MediaSessionManager.kt
+· usb/* — mungkin diakses via UsbManager Android SDK
+· fft/* — kandidat dead code (visualizer sudah pakai VisualizerBuffer)
+
+---
+
+🗺️ Roadmap Setelah Rebuild Berhasil
+
+```
+[SEKARANG] Rebuild native + verifikasi log
+     ↓
+Audio keluar pertama kali (test.mp3)
+     ↓
+Debug kalau masih readSamples=0
+     ↓
+Perbaiki jalur content:// (dari MediaStore scan)
+     ↓
+Test manual via UI (tap lagu dari library)
+     ↓
+Fase B — Inventarisasi JNI + keputusan prioritas
+     ↓
+Fase C — Sinkronisasi UI (3 mode, media session, dll)
+     ↓
+Pembersihan RNTP total + bridge baru
+```
+
+---
+
+⚠️ Catatan Penting
+
+1. File MP3 — pastikan /storage/emulated/0/Music/test.mp3 ada di device:
+   ```bash
+   adb shell ls -l /storage/emulated/0/Music/test.mp3
+   ```
+2. Izin storage — cek apakah sudah di-grant saat onboarding. Kalau belum, audio tidak akan keluar.
+3. Debugging lokal vs CI — untuk iterasi cepat, gunakan USB debug, bukan GitHub Actions. Push ke CI hanya untuk verifikasi final.
+4. Dummy autoplay — jangan dihapus sampai audio keluar stabil.
+
+---
+
+🚀 Action Item Sekarang
+
+Prioritas #1: Rebuild native setelah fix NativePlaybackModule.kt & _layout.tsx.
+
+Prioritas #2: Kirim log adb logcat dengan filter:
+
+```bash
+adb logcat | grep -E "PristineApp|PristineJNI|PlaybackController|AudioCallback|BOOT|DUMMY|FFmpeg"
+```
+
+Prioritas #3: Konfirmasi apakah MP3 ada di device, dan izin storage granted.
+
+---
+

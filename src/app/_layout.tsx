@@ -162,53 +162,50 @@ export default function RootLayout() {
   // 🔥 DUMMY AUTOPLAY UNTUK DEBUG — VIA NATIVEMODULES LANGSUNG
   // ============================================================
   useEffect(() => {
-    console.log("[DUMMY] 🔄 useEffect triggered, appState=", appState);
-    if (appState !== "ready" || hasTriggeredDummyPlay.current) {
-      console.log("[DUMMY] Skipping: appState not ready or already triggered");
-      return;
-    }
-    hasTriggeredDummyPlay.current = true;
+  console.log("[DUMMY] 🔄 useEffect triggered, appState=", appState);
+  if (appState !== "ready" || hasTriggeredDummyPlay.current) return;
+  hasTriggeredDummyPlay.current = true;
 
-    const autoPlayTestTrack = async () => {
-      try {
-        console.log("[DUMMY] 🔥 Triggering autoplay via NativePlaybackModule...");
-
-        const module = NativeModules.NativePlaybackModule;
-        if (!module) {
-          console.error("[DUMMY] ❌ NativePlaybackModule not found!");
-          console.log("[DUMMY] Available NativeModules:", Object.keys(NativeModules).join(", "));
-          return;
-        }
-        console.log("[DUMMY] ✅ NativePlaybackModule found");
-
-        const testTrack = {
-          id: "test_001",
-          uri: "/storage/emulated/0/Music/test.mp3",
-          title: "SoundHelix Test Tone",
-          artist: "SoundHelix",
-          album: "Debug",
-          duration: 18000,
-        };
-
-        console.log("[DUMMY] Track:", testTrack);
-
-        console.log("[DUMMY] Calling nativeSetQueue...");
-        await module.nativeSetQueue([testTrack]);
-        console.log("[DUMMY] ✅ nativeSetQueue done");
-
-        console.log("[DUMMY] Calling nativePlay...");
-        await module.nativePlay();
-        console.log("[DUMMY] ✅ nativePlay done");
-
-        console.log("[DUMMY] ✅ Play command sent via NativePlaybackModule!");
-      } catch (e) {
-        console.error("[DUMMY] ❌ Autoplay error:", e);
+  const timer = setTimeout(async () => {
+    try {
+      console.log("[DUMMY] 🔥 Starting autoplay test...");
+      
+      const module = NativeModules.NativePlaybackModule;
+      if (!module) {
+        console.error("[DUMMY] ❌ NativePlaybackModule not found");
+        console.log("[DUMMY] Available NativeModules:", Object.keys(NativeModules).join(", "));
+        return;
       }
-    };
+      
+      console.log("[DUMMY] ✅ NativePlaybackModule found");
+      
+      // Kirim URI saja (bukan objek track)
+      const testUri = "/storage/emulated/0/Music/test.mp3";
+      console.log("[DUMMY] Setting queue with URI:", testUri);
+      await module.setQueue([testUri]);
+      console.log("[DUMMY] ✅ setQueue done");
 
-    const timer = setTimeout(autoPlayTestTrack, 5000);
-    return () => clearTimeout(timer);
-  }, [appState]);
+      console.log("[DUMMY] Calling play()...");
+      await module.play();
+      console.log("[DUMMY] ✅ play() done");
+
+      // Cek status setelah beberapa detik
+      setTimeout(() => {
+        try {
+          const status = module.getStatus();
+          const position = module.getPosition();
+          console.log("[DUMMY] Status:", status, "Position:", position);
+        } catch (e) {
+          console.warn("[DUMMY] Failed to get status:", e);
+        }
+      }, 3000);
+    } catch (e) {
+      console.error("[DUMMY] ❌ Error:", e);
+    }
+  }, 10000);
+
+  return () => clearTimeout(timer);
+}, [appState]); 
 
   // --- UI Handlers ---
   const handleLoadingComplete = useCallback(() => {
