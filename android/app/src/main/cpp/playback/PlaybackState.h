@@ -58,11 +58,11 @@ public:
 
     PlaybackState(
         PlaybackState&&
-    ) = default;
+    ) = delete;
 
     PlaybackState& operator=(
         PlaybackState&&
-    ) = default;
+    ) = delete;
 
     // =====================================
     // STATUS

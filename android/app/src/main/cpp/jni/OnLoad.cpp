@@ -11,7 +11,8 @@
 
 #include "PristineAudioSpec.h"
 #include "manager/EngineManager.h"
-
+ 
+#undef LOG_TAG
 #define LOG_TAG "PristineJNI"
 
 namespace facebook::react {
