@@ -98,7 +98,7 @@ class NativePlaybackModule(reactContext: ReactApplicationContext) :
     fun getStatus(): Int = nativeGetStatus()
 
     @ReactMethod(isBlockingSynchronousMethod = true)
-    fun getQueue(): ReadableArray {
+    fun getQueue(): WritableArray {
         val queue = nativeGetQueue()
         val array = Arguments.createArray()
         for (item in queue) {
