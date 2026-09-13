@@ -21,10 +21,20 @@ export function useScanManager() {
   const [isLocked, setIsLocked] = useState(false);
 
   // ── Initial Scan hanya jika library kosong ──────────────────────────────────
-  useEffect(() => {
+  
+  // ── Initial Scan — DISABLED SEMENTARA UNTUK DEBUGGING ─────────────────────
+useEffect(() => {
   if (hasInitialized.current) return;
   hasInitialized.current = true;
 
+  // 🔥 DISABLED: Uncomment untuk aktifkan kembali
+  console.log("[useScanManager] 🚫 Initial scan DISABLED (debug mode)");
+  return;
+
+  // ─────────────────────────────────────────────────────────────
+  // Kode asli (jangan dihapus, di-comment sementara):
+  // ─────────────────────────────────────────────────────────────
+  /*
   const timer = setTimeout(async () => {
     const currentStore = useLibraryStore.getState();
 
@@ -33,13 +43,13 @@ export function useScanManager() {
         "[useScanManager] Fresh/empty library → Running initial MANUAL (DEEP) Scan",
       );
       
-      setIsLocked(true); // 🔒 Kunci state lokal UI
+      setIsLocked(true);
       try {
         await UnifiedScanService.manualScan();
       } catch (err) {
         console.warn("[useScanManager] Initial scan error:", err);
       } finally {
-        setIsLocked(false); // 🔓 Pastikan selalu di-unlock setelah selesai/error
+        setIsLocked(false);
       }
     } else {
       console.log(
@@ -49,6 +59,7 @@ export function useScanManager() {
   }, 1000);
 
   return () => clearTimeout(timer);
+  */
 }, []);
 
   // ── Quick Diff saat App Resume ──────────────────────────────────────────────
@@ -191,3 +202,4 @@ export function useScanManager() {
     lastEnrichmentAt: store.lastEnrichmentAt,
   };
 }
+ 
