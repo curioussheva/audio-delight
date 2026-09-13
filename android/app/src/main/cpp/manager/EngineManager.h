@@ -8,7 +8,7 @@
 
 namespace pristine {
 
-class EngineManager {
+class __attribute__((visibility("default"))) EngineManager {
 public:
 
     static EngineManager& get();
