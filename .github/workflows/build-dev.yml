@@ -30,29 +30,32 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # 4. Setup Java + Android SDK
+      # 4. Setup Java
       - uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: "temurin"
           cache: gradle
 
+      # 5. Setup Android SDK — dengan packages kosong
       - uses: android-actions/setup-android@v3
+        with:
+          packages: ''
 
-      # 5. Install NDK + CMake
+      # 6. Install NDK + CMake (manual)
       - name: Install NDK + CMake
         run: |
           yes | sdkmanager \
             "ndk;27.1.12297006" \
             "cmake;3.22.1"
 
-      # 6. Install nasm
+      # 7. Install nasm
       - name: Install nasm
         run: |
           sudo apt-get update
           sudo apt-get install -y nasm
 
-      # 7. Cache FFmpeg build
+      # 8. Cache FFmpeg build
       - name: Cache FFmpeg build
         id: cache-ffmpeg
         uses: actions/cache@v4
@@ -60,12 +63,12 @@ jobs:
           path: android/app/src/main/cpp/libs/ffmpeg
           key: ffmpeg-android-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-android.sh') }}
 
-      # 8. Build FFmpeg for Android
+      # 9. Build FFmpeg for Android
       - name: Build FFmpeg for Android
         if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
         run: bash scripts/build-ffmpeg-android.sh
 
-      # 9. Configure Android paths
+      # 10. Configure Android paths
       - name: Configure Android paths
         run: |
           cat > android/local.properties << EOF
@@ -73,7 +76,7 @@ jobs:
           cmake.dir=$ANDROID_HOME/cmake/3.22.1
           EOF
 
-      # 10. Inject Gradle init script
+      # 11. Inject Gradle init script
       - name: Inject Gradle init script
         run: |
           mkdir -p $GRADLE_USER_HOME/init.d
@@ -91,7 +94,7 @@ jobs:
           }
           EOF
 
-      # 11. Patch RN Gradle Plugin (fix foojay bug)
+      # 12. Patch RN Gradle Plugin
       - name: Patch RN Gradle Plugin
         run: |
           FILE=node_modules/@react-native/gradle-plugin/settings.gradle.kts
@@ -102,7 +105,7 @@ jobs:
             echo "✅ Already patched"
           fi
 
-      # 12. Setup Oboe
+      # 13. Setup Oboe
       - name: Setup Oboe
         run: |
           OBOE_DIR="android/app/src/main/cpp/oboe"
@@ -110,7 +113,7 @@ jobs:
           curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz \
           | tar -xz --strip-components=1 -C "$OBOE_DIR"
 
-      # 13. Clean build cache (WAJIB karena C++ berubah)
+      # 14. Clean native caches
       - name: Clean native caches
         working-directory: android
         run: |
@@ -119,7 +122,7 @@ jobs:
           rm -rf app/.cxx app/build
           echo "✅ Native caches cleaned"
 
-      # 14. Generate Codegen
+      # 15. Generate Codegen
       - name: Generate Codegen
         working-directory: android
         run: |
@@ -129,7 +132,7 @@ jobs:
             -PreactNativeNewArch=true \
             -PhermesEnabled=true
 
-      # 15. 🔥 Embed Expo bundle ke assets
+      # 16. Embed Expo bundle
       - name: Embed Expo bundle
         run: |
           echo "📦 Embedding Expo bundle..."
@@ -140,14 +143,14 @@ jobs:
             SIZE=$(wc -c < android/app/src/main/assets/index.android.bundle)
             echo "✅ Bundle embedded: $SIZE bytes"
             if grep -q "DUMMY" android/app/src/main/assets/index.android.bundle; then
-              echo "✅ 'DUMMY' found in bundle (kode terbaru)"
+              echo "✅ 'DUMMY' found in bundle"
             fi
           else
             echo "❌ Bundle embedding failed!"
             exit 1
           fi
 
-      # 16. Build Debug APK
+      # 17. Build Debug APK
       - name: Build Debug APK
         working-directory: android
         run: |
@@ -158,7 +161,7 @@ jobs:
             -PhermesEnabled=true \
             -DJS_RUNTIME=hermes 2>&1 | tee build.log
 
-      # 17. Verify bundle in APK
+      # 18. Verify bundle in APK
       - name: Verify bundle in APK
         run: |
           APK="android/app/build/outputs/apk/debug/app-debug.apk"
@@ -170,7 +173,7 @@ jobs:
             exit 1
           fi
 
-      # 18. Upload Build Log on Failure
+      # 19. Upload Build Log on Failure
       - name: Upload Build Log
         uses: actions/upload-artifact@v4
         if: failure()
@@ -179,7 +182,7 @@ jobs:
           path: android/build.log
           retention-days: 7
 
-      # 19. Upload APK on Success
+      # 20. Upload APK on Success
       - name: Upload APK
         uses: actions/upload-artifact@v4
         if: success()
