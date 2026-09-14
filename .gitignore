@@ -90,3 +90,5 @@ expo-env.d.ts
 
 # JANGAN ignore lockfile
 !pnpm-lock.yamltmp/
+*.backup_*
+*.bak_*

@@ -1,23 +1,25 @@
-// src/features/library/api/m3u.ts
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 
 export const parseM3U = async (filePath: string) => {
   try {
-    // Replaced RNFS.readFile with Expo's readAsStringAsync (UTF-8 is the default)
     const content = await FileSystem.readAsStringAsync(filePath);
-    const lines = content.split("\n");
+    // Support Line Endings Windows (\r\n) dan Unix (\n)
+    const lines = content.split(/\r?\n/);
     const tracks: string[] = [];
 
     lines.forEach((line: string) => {
       const trimmed = line.trim();
-      // Lewati komentar M3U (#EXTINF dll) dan ambil path file
+      // Abaikan baris kosong dan baris komentar (#)
       if (trimmed && !trimmed.startsWith("#")) {
         tracks.push(trimmed);
       }
-    }); // Pastikan ada penutup bracket dan kurung di sini
+    });
+
+    const fileName = filePath.split("/").pop() || "";
 
     return {
-      name: filePath.split("/").pop()?.replace(".m3u", "") || "New Playlist",
+      // Hapus ekstensi .m3u maupun .m3u8
+      name: fileName.replace(/\.(m3u|m3u8)$/i, "") || "New Playlist",
       paths: tracks,
     };
   } catch (error) {

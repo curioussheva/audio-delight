@@ -116,36 +116,61 @@ void PlaybackController::setRepeatMode(RepeatMode mode) {
 // =====================================================
 
 bool PlaybackController::loadTrack(const TrackInfo& track) {
-    if (!initialized_.load(std::memory_order_acquire))
+    if (!initialized_.load(std::memory_order_acquire)) {
+        __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
+                            "loadTrack(): FAILED - not initialized");
         return false;
+    }
 
-    __android_log_print(ANDROID_LOG_INFO, "PlaybackController", "loadTrack: %s", track.uri.c_str());
+    __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                        "loadTrack(): START uri=%s", track.uri.c_str());
 
     stopDecoder();
-
     currentTrack_ = track;
-
     pcmQueue_->clear();
     clock_->reset();
 
-    return startDecoder(track);
+    bool result = startDecoder(track);
+    __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                        "loadTrack(): DONE startDecoder=%s",
+                        result ? "true" : "false");
+    return result;
 }
 
 bool PlaybackController::play() {
-    if (!initialized_.load(std::memory_order_acquire))
+    if (!initialized_.load(std::memory_order_acquire)) {
+        __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
+                            "play(): FAILED - not initialized");
         return false;
+    }
 
     __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
-                        "play() called, queue=%d, decoder=%d",
-                        queue_ != nullptr, decoderWorker_ != nullptr);
+                        "play(): decoderWorker_=%s, queue_=%s",
+                        decoderWorker_ ? "exists" : "null",
+                        queue_ ? "exists" : "null");
 
     if (!decoderWorker_) {
-        if (!queue_) return false;
+        if (!queue_) {
+            __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
+                                "play(): FAILED - queue_ null");
+            return false;
+        }
 
         auto track = queue_->current();
-        if (!track) return false;
+        if (!track) {
+            __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
+                                "play(): FAILED - queue_->current() null (size=%zu)",
+                                queue_->tracks().size());
+            return false;
+        }
+
+        __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                            "play(): track uri=%s, calling loadTrack",
+                            track->uri.c_str());
 
         if (!loadTrack(*track)) {
+            __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
+                                "play(): FAILED - loadTrack returned false");
             return false;
         }
     }
@@ -156,6 +181,8 @@ bool PlaybackController::play() {
         decoderWorker_->resume();
     }
 
+    __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                        "play(): SUCCESS");
     return true;
 }
 
@@ -231,6 +258,10 @@ void PlaybackController::render(float* output,
 
 bool PlaybackController::startDecoder(const TrackInfo& track) {
     try {
+        __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                            "startDecoder(): creating decoder for uri=%s",
+                            track.uri.c_str());
+
         decoderWorker_ = std::make_unique<decoder::DecoderWorker>(
             std::make_unique<decoder::FFmpegDecoder>()
         );
@@ -248,10 +279,18 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
 
         bool ok = decoderWorker_->start(track.uri, 0.0);
         __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
-                            "startDecoder ok=%d, uri=%s", ok ? 1 : 0, track.uri.c_str());
+                            "startDecoder(): ok=%d, uri=%s",
+                            ok ? 1 : 0, track.uri.c_str());
         return ok;
     }
+    catch (const std::exception& e) {
+        __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
+                            "startDecoder(): exception: %s", e.what());
+        return false;
+    }
     catch (...) {
+        __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
+                            "startDecoder(): unknown exception");
         return false;
     }
 }

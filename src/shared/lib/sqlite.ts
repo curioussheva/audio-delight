@@ -76,6 +76,15 @@ const SQLiteService = {
         );
       `);
 
+      // ── Tabel `playlists` — SATU-SATUNYA definisi skema untuk tabel ini.
+      // PlaylistService (features/playlist/api/service.ts) TIDAK BOLEH lagi
+      // membuat tabel ini dengan skema berbeda — dua CREATE TABLE
+      // (camelCase vs kolom berbeda) untuk tabel yang sama pernah
+      // menyebabkan mismatch (kolom `description`/`updatedAt` tidak
+      // ketemu, index dibuat ke kolom yang salah nama). Kolom
+      // `description` dan `updatedAt` ditambahkan lewat migration di
+      // bawah karena dibutuhkan PlaylistService tapi belum ada di
+      // skema awal ini.
       db.execute(`
         CREATE TABLE IF NOT EXISTS playlists (
           id        TEXT PRIMARY KEY NOT NULL,
@@ -87,6 +96,9 @@ const SQLiteService = {
         );
       `);
 
+      // ── Tabel `playlist_songs` — kolom snake_case (playlist_id, song_id)
+      // adalah bentuk kanonik. PlaylistService WAJIB memakai nama kolom
+      // ini persis, jangan diubah ke camelCase di sisi lain.
       db.execute(`
         CREATE TABLE IF NOT EXISTS playlist_songs (
           playlist_id TEXT,
@@ -147,6 +159,8 @@ const SQLiteService = {
         `CREATE INDEX IF NOT EXISTS idx_recent_plays_date  ON recent_plays(played_at);`,
         `CREATE INDEX IF NOT EXISTS idx_artist_cache_name  ON artist_cache(artist_name);`,
         `CREATE INDEX IF NOT EXISTS idx_artist_cache_mbid  ON artist_cache(mb_artist_id);`,
+        `CREATE INDEX IF NOT EXISTS idx_playlist_songs_playlist_id ON playlist_songs(playlist_id);`,
+        `CREATE INDEX IF NOT EXISTS idx_playlist_songs_song_id     ON playlist_songs(song_id);`,
       ];
 
       indexes.forEach((sql) => db.execute(sql));
@@ -205,6 +219,13 @@ const runMigrations = () => {
 
     // v4: artist_cache — tambah MBID (migrasi dari skema Last.fm lama)
     `ALTER TABLE artist_cache ADD COLUMN mb_artist_id TEXT;`,
+
+    // v5: playlists — kolom yang dibutuhkan PlaylistService
+    // (features/playlist/api/service.ts). Ditambahkan di sini, bukan
+    // dibuat ulang lewat CREATE TABLE terpisah, supaya skema
+    // `playlists` tetap satu sumber kebenaran.
+    `ALTER TABLE playlists ADD COLUMN description TEXT;`,
+    `ALTER TABLE playlists ADD COLUMN updatedAt INTEGER DEFAULT 0;`,
   ];
 
   for (const sql of migrations) {
@@ -300,3 +321,4 @@ export const SongQueries = {
 };
 
 export default SQLiteService;
+ 

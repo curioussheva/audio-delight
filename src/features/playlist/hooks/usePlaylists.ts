@@ -70,6 +70,7 @@ export const usePlaylists = () => {
     }
   }, []);
 
+  // Import dari isi mentah file M3U (raw string content, belum di-parse)
   const importM3U = useCallback(async (content: string) => {
     try {
       const newPlaylist = await PlaylistService.importM3U(content);
@@ -80,6 +81,26 @@ export const usePlaylists = () => {
       throw err;
     }
   }, []);
+
+  // Import dari hasil parseM3U() — array path lagu yang sudah di-parse,
+  // dipakai oleh handleImportM3U di playlist.tsx
+  const importM3UPaths = useCallback(
+    async (name: string, paths: string[], description?: string) => {
+      try {
+        const newPlaylist = await PlaylistService.importM3UPaths(
+          name,
+          paths,
+          description,
+        );
+        setPlaylists((prev) => [...prev, newPlaylist]);
+        return newPlaylist;
+      } catch (err: any) {
+        setError(err.message);
+        throw err;
+      }
+    },
+    [],
+  );
 
   const exportM3U = useCallback(async (playlist: Playlist) => {
     try {
@@ -103,7 +124,9 @@ export const usePlaylists = () => {
     removeFromPlaylist,
     deletePlaylist,
     importM3U,
+    importM3UPaths,
     exportM3U,
     refresh: loadPlaylists,
   };
 };
+ 

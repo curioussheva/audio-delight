@@ -31,9 +31,17 @@ static pristine::playback::PlaybackController* getController() {
 extern "C" {
 
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativePlay(JNIEnv*, jobject) {
-    __android_log_print(ANDROID_LOG_DEBUG, "NativePlaybackModule", "nativePlay called");
+    __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
+                        "nativePlay() called from JS");
     auto* controller = getController();
-    if (controller) controller->play();
+    if (!controller) {
+        __android_log_print(ANDROID_LOG_ERROR, "NativePlaybackModule",
+                            "nativePlay: controller null!");
+        return;
+    }
+    controller->play();
+    __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
+                        "nativePlay() returned");
 }
 
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativePause(JNIEnv*, jobject) {
@@ -97,24 +105,46 @@ JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativePlaybackModule
     return result;
 }
 
-JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSetQueue(JNIEnv* env, jobject, jobjectArray uris) {
+JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSetQueue(
+    JNIEnv* env, jobject, jobjectArray uris) {
+
+    __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
+                        "nativeSetQueue() called");
+
     auto* controller = getController();
-    if (!controller) return;
+    if (!controller) {
+        __android_log_print(ANDROID_LOG_ERROR, "NativePlaybackModule",
+                            "nativeSetQueue: controller null!");
+        return;
+    }
 
     jsize length = env->GetArrayLength(uris);
-    __android_log_print(ANDROID_LOG_DEBUG, "NativePlaybackModule", "nativeSetQueue, length=%d", (int)length);
+    __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
+                        "nativeSetQueue: length=%d", (int)length);
 
     std::vector<pristine::playback::TrackInfo> tracks;
     for (jsize i = 0; i < length; ++i) {
         jstring js = (jstring) env->GetObjectArrayElement(uris, i);
+        if (!js) continue;
+
         const char* cstr = env->GetStringUTFChars(js, nullptr);
+        if (!cstr) { env->DeleteLocalRef(js); continue; }
+
+        __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
+                            "nativeSetQueue: URI[%d] = %s", (int)i, cstr);
+
         pristine::playback::TrackInfo info;
         info.uri = cstr;
         tracks.push_back(info);
+
         env->ReleaseStringUTFChars(js, cstr);
         env->DeleteLocalRef(js);
     }
+
     controller->queue()->setTracks(tracks);
+    __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
+                        "nativeSetQueue: setTracks called with %zu tracks",
+                        tracks.size());
 }
 
 JNIEXPORT jstring JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetCurrentTrack(JNIEnv* env, jobject) {

@@ -1,123 +1,123 @@
 // src/app/playlist.tsx
-import React, { useState } from "react";
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-} from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "@/context/ThemeContext";
+import React, { useState, useCallback, useMemo } from "react";
+import { View, StyleSheet, Alert } from "react-native";
+import * as DocumentPicker from "expo-document-picker";
+
+import { useTheme } from "@/shared/context/ThemeContext";
 import { usePlaylists } from "@/features/playlist/hooks/usePlaylists";
-import { Playlist } from "@/features/playlist/types";
+import { PlaylistList, PlaylistItem } from "@/features/library/components/PlaylistList";
+import { parseM3U } from "@/features/library/api/m3u";
 
 export default function PlaylistsScreen() {
   const { theme } = useTheme();
-  const { colors, spacing } = theme;
+  const { colors } = theme;
 
-  const { playlists, deletePlaylist } = usePlaylists();
+  const { playlists, favoriteCount, createPlaylist, deletePlaylist, importM3UPaths } =
+    usePlaylists();
+  const [selectedPlaylist, setSelectedPlaylist] = useState<PlaylistItem | null>(null);
 
-  const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(
-    null,
+  // Playlist (dari usePlaylists) pakai field `songCount`, sementara
+  // PlaylistList/PlaylistRow mengharapkan `count` — mapping di sini
+  // supaya "X tracks" di tiap row tidak selalu menampilkan 0.
+  const playlistItems: PlaylistItem[] = useMemo(
+    () =>
+      playlists.map((p) => ({
+        id: p.id,
+        name: p.name,
+        count: p.songCount,
+      })),
+    [playlists],
   );
 
-  // Detail view
+  // ── Handler: Buat Playlist Baru ──────────────────────────────────────────
+  const handleCreateNew = useCallback(() => {
+    Alert.prompt(
+      "Buat Playlist Baru",
+      "Masukkan nama playlist",
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Buat",
+          onPress: (name?: string) => {
+            if (name && name.trim()) {
+              createPlaylist({ name: name.trim(), songIds: [] });
+            }
+          },
+        },
+      ],
+      "plain-text"
+    );
+  }, [createPlaylist]);
+
+  // ── Handler: Import File M3U / M3U8 ──────────────────────────────────────
+  const handleImportM3U = useCallback(async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["audio/x-mpegurl", "application/x-mpegurl", "text/plain"],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        return;
+      }
+
+      const file = result.assets[0];
+      const parsedData = await parseM3U(file.uri);
+
+      if (parsedData && parsedData.paths.length > 0) {
+        // Simpan playlist baru dari hasil parse M3U/M3U8 — tiap path
+        // lagu di-resolve ke songId di database lewat importM3UPaths
+        const newPlaylist = await importM3UPaths(
+          parsedData.name,
+          parsedData.paths,
+        );
+
+        const matchedCount = newPlaylist.songIds.length;
+        const skippedCount = parsedData.paths.length - matchedCount;
+
+        Alert.alert(
+          "Import Berhasil",
+          skippedCount > 0
+            ? `Playlist "${parsedData.name}" ditambahkan (${matchedCount} track cocok, ${skippedCount} track dilewati karena tidak ditemukan di library).`
+            : `Playlist "${parsedData.name}" berhasil ditambahkan (${matchedCount} track).`
+        );
+      } else {
+        Alert.alert("Import Gagal", "File M3U/M3U8 kosong atau format tidak valid.");
+      }
+    } catch (error) {
+      console.error("[M3U Import Error]:", error);
+      Alert.alert("Error", "Gagal membaca file M3U/M3U8.");
+    }
+  }, [importM3UPaths]);
+
+  // ── Handler: Klik Row Playlist ───────────────────────────────────────────
+  const handlePlaylistPress = useCallback((playlist: PlaylistItem) => {
+    setSelectedPlaylist(playlist);
+  }, []);
+
+  // ── Render Detail View ────────────────────────────────────────────────────
   if (selectedPlaylist) {
     return (
-      <View>
-        <Text>Detail Playlist (to be implemented)</Text>
+      <View style={[styles.container, { backgroundColor: colors.background.primary }]}>
+        {/* Implementasi Detail View Lagu di sini.
+            Catatan: selectedPlaylist saat ini cuma { id, name, count }
+            (bentuk PlaylistItem). Kalau detail view butuh daftar lagu
+            lengkap, ambil ulang lewat playlists.find(p => p.id === selectedPlaylist.id)
+            dari usePlaylists() — objek Playlist aslinya punya field
+            `songs`/`songIds` lengkap yang tidak ada di PlaylistItem. */}
       </View>
     );
   }
 
+  // ── Render Playlist List ──────────────────────────────────────────────────
   return (
-    <View
-      style={[styles.container, { backgroundColor: colors.background.primary }]}
-    >
-      {/* Header */}
-      <View
-        style={[
-          styles.header,
-          {
-            padding: spacing.lg,
-            borderBottomWidth: 1,
-            borderBottomColor: colors.background.tertiary,
-          },
-        ]}
-      >
-        <Text style={[styles.title, { color: colors.text.primary }]}>
-          Playlists
-        </Text>
-      </View>
-
-      {/* List */}
-      <FlatList
-        data={playlists}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[
-              styles.playlistItem,
-              {
-                padding: spacing.md,
-                borderBottomWidth: 1,
-                borderBottomColor: colors.background.tertiary,
-              },
-            ]}
-            onPress={() => setSelectedPlaylist(item)}
-            onLongPress={() => {
-              Alert.alert("Hapus Playlist", `Hapus "${item.name}"?`, [
-                { text: "Batal" },
-                {
-                  text: "Hapus",
-                  style: "destructive",
-                  onPress: () => deletePlaylist(item.id),
-                },
-              ]);
-            }}
-          >
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <View
-                style={[
-                  styles.playlistIcon,
-                  {
-                    backgroundColor: colors.primary[500] + "20",
-                    width: 50,
-                    height: 50,
-                    borderRadius: 8,
-                    justifyContent: "center",
-                    alignItems: "center",
-                    marginRight: spacing.md,
-                  },
-                ]}
-              >
-                <Ionicons name="list" size={24} color={colors.primary[500]} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={[styles.playlistName, { color: colors.text.primary }]}
-                >
-                  {item.name}
-                </Text>
-                <Text
-                  style={[
-                    styles.playlistMeta,
-                    { color: colors.text.secondary },
-                  ]}
-                >
-                  {item.songCount} lagu • {Math.floor(item.duration / 60)} menit
-                </Text>
-              </View>
-              <Ionicons
-                name="chevron-forward"
-                size={20}
-                color={colors.text.secondary}
-              />
-            </View>
-          </TouchableOpacity>
-        )}
+    <View style={[styles.container, { backgroundColor: colors.background.primary }]}>
+      <PlaylistList
+        playlists={playlistItems}
+        favoriteCount={favoriteCount || 0}
+        onPlaylistPress={handlePlaylistPress}
+        onCreateNew={handleCreateNew}
+        onImportM3U={handleImportM3U}
       />
     </View>
   );
@@ -127,30 +127,5 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-  },
-  playlistItem: {
-    // style di-inline
-  },
-  playlistIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 8,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  playlistName: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  playlistMeta: {
-    fontSize: 12,
-  },
 });
+ 

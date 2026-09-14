@@ -7,46 +7,40 @@ import {
 import { Song } from "@/shared/types/audio";
 
 class PlaylistService {
-  async initialize() {
-    // 1. Aktifkan Foreign Keys
+  // Cache promise inisialisasi supaya PRAGMA tidak diulang di setiap
+  // pemanggilan, tapi tetap aman dipanggil dari mana saja.
+  private initPromise: Promise<void> | null = null;
+
+  // PENTING: tabel `playlists` dan `playlist_songs` SUDAH dibuat oleh
+  // src/services/sqlite.ts (satu-satunya sumber skema untuk kedua
+  // tabel ini — lihat komentar di file itu). Method ini TIDAK BOLEH
+  // membuat ulang tabel dengan skema berbeda — itu penyebab bug
+  // sebelumnya (kolom description/updatedAt tidak ketemu, index
+  // dibuat ke nama kolom yang salah karena camelCase vs snake_case).
+  // Di sini cuma mengaktifkan foreign keys per koneksi.
+  async initialize(): Promise<void> {
     db.execute("PRAGMA foreign_keys = ON;");
+  }
 
-    // 2. Jalankan pembuatan tabel playlist (Songs diinisiasi di shared/lib/sqlite.ts)
-    db.execute(`
-      CREATE TABLE IF NOT EXISTS playlists (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        description TEXT,
-        createdAt INTEGER NOT NULL,
-        updatedAt INTEGER NOT NULL,
-        artwork TEXT,
-        songCount INTEGER DEFAULT 0,
-        duration INTEGER DEFAULT 0
-      );
-    `);
-
-    db.execute(`
-      CREATE TABLE IF NOT EXISTS playlist_songs (
-        playlistId TEXT NOT NULL,
-        songId TEXT NOT NULL,
-        position INTEGER NOT NULL,
-        FOREIGN KEY (playlistId) REFERENCES playlists (id) ON DELETE CASCADE,
-        FOREIGN KEY (songId) REFERENCES songs (id) ON DELETE CASCADE,
-        PRIMARY KEY (playlistId, songId)
-      );
-    `);
-
-    db.execute(
-      `CREATE INDEX IF NOT EXISTS idx_playlist_songs_playlistId ON playlist_songs(playlistId);`,
-    );
-    db.execute(
-      `CREATE INDEX IF NOT EXISTS idx_playlist_songs_songId ON playlist_songs(songId);`,
-    );
+  // Dipanggil di awal setiap method publik yang menyentuh tabel
+  // playlists/playlist_songs. Memoized supaya PRAGMA cuma jalan
+  // sekali secara nyata, tapi tetap aman terhadap urutan pemanggilan
+  // dari mana saja (mis. sebelum useEffect di usePlaylists selesai).
+  private ensureInitialized(): Promise<void> {
+    if (!this.initPromise) {
+      this.initPromise = this.initialize().catch((err) => {
+        this.initPromise = null;
+        throw err;
+      });
+    }
+    return this.initPromise;
   }
 
   // ===== METHOD DASAR =====
 
   async createPlaylist(dto: CreatePlaylistDTO): Promise<Playlist> {
+    await this.ensureInitialized();
+
     const id = Date.now().toString();
     const now = Date.now();
     const songIds = dto.songIds || [];
@@ -72,8 +66,8 @@ class PlaylistService {
       db.transaction((tx) => {
         songIds.forEach((songId, i) => {
           tx.execute(
-            "INSERT INTO playlist_songs (playlistId, songId, position) VALUES (?, ?, ?)",
-            [id, songId, i],
+            "INSERT INTO playlist_songs (playlist_id, song_id, position, addedAt) VALUES (?, ?, ?, ?)",
+            [id, songId, i, now],
           );
         });
       });
@@ -83,14 +77,16 @@ class PlaylistService {
   }
 
   async getAllPlaylists(): Promise<Playlist[]> {
+    await this.ensureInitialized();
+
     const result = db.execute("SELECT * FROM playlists ORDER BY name");
     const playlists: Playlist[] = result.rows?._array || [];
 
     for (const playlist of playlists) {
       const songResult = db.execute(
         `SELECT s.* FROM playlist_songs ps
-         JOIN songs s ON s.id = ps.songId
-         WHERE ps.playlistId = ?
+         JOIN songs s ON s.id = ps.song_id
+         WHERE ps.playlist_id = ?
          ORDER BY ps.position`,
         [playlist.id],
       );
@@ -107,6 +103,8 @@ class PlaylistService {
   }
 
   async getPlaylist(id: string): Promise<Playlist | null> {
+    await this.ensureInitialized();
+
     const result = db.execute("SELECT * FROM playlists WHERE id = ?", [id]);
     const playlist = result.rows?._array[0] as Playlist | undefined;
 
@@ -114,8 +112,8 @@ class PlaylistService {
 
     const songResult = db.execute(
       `SELECT s.* FROM playlist_songs ps
-       JOIN songs s ON s.id = ps.songId
-       WHERE ps.playlistId = ?
+       JOIN songs s ON s.id = ps.song_id
+       WHERE ps.playlist_id = ?
        ORDER BY ps.position`,
       [id],
     );
@@ -131,30 +129,35 @@ class PlaylistService {
   }
 
   async addToPlaylist(playlistId: string, songIds: string[]) {
+    await this.ensureInitialized();
+
     const playlist = await this.getPlaylist(playlistId);
     if (!playlist) throw new Error("Playlist not found");
 
     const currentCount = playlist.songs.length;
+    const now = Date.now();
 
     db.transaction((tx) => {
       songIds.forEach((songId, i) => {
         tx.execute(
-          "INSERT OR IGNORE INTO playlist_songs (playlistId, songId, position) VALUES (?, ?, ?)",
-          [playlistId, songId, currentCount + i],
+          "INSERT OR IGNORE INTO playlist_songs (playlist_id, song_id, position, addedAt) VALUES (?, ?, ?, ?)",
+          [playlistId, songId, currentCount + i, now],
         );
       });
 
       tx.execute(
         "UPDATE playlists SET songCount = songCount + ?, updatedAt = ? WHERE id = ?",
-        [songIds.length, Date.now(), playlistId],
+        [songIds.length, now, playlistId],
       );
     });
   }
 
   async removeFromPlaylist(playlistId: string, songId: string) {
+    await this.ensureInitialized();
+
     db.transaction((tx) => {
       tx.execute(
-        "DELETE FROM playlist_songs WHERE playlistId = ? AND songId = ?",
+        "DELETE FROM playlist_songs WHERE playlist_id = ? AND song_id = ?",
         [playlistId, songId],
       );
       tx.execute(
@@ -165,10 +168,13 @@ class PlaylistService {
   }
 
   async deletePlaylist(id: string) {
+    await this.ensureInitialized();
     db.execute("DELETE FROM playlists WHERE id = ?", [id]);
   }
 
   async updatePlaylist(id: string, dto: UpdatePlaylistDTO) {
+    await this.ensureInitialized();
+
     const updates: string[] = [];
     const values: any[] = [];
 
@@ -335,6 +341,30 @@ class PlaylistService {
 
   // ===== M3U IMPORT/EXPORT =====
 
+  // Menerima path lagu (URI) langsung — hasil parse M3U (lihat api/m3u.ts).
+  // Setiap path di-resolve ke songId lewat getSongByUri(); path yang
+  // tidak ketemu di tabel songs (belum di-scan/tidak dikenal) dilewati.
+  async importM3UPaths(
+    name: string,
+    paths: string[],
+    description?: string,
+  ): Promise<Playlist> {
+    const songIds: string[] = [];
+
+    for (const path of paths) {
+      const song = await this.getSongByUri(path);
+      if (song) songIds.push(song.id);
+    }
+
+    return this.createPlaylist({
+      name,
+      description: description ?? "Imported from M3U",
+      songIds,
+    });
+  }
+
+  // Menerima isi mentah file M3U (dipakai kalau caller sudah punya
+  // string content, bukan array path yang sudah di-parse).
   async importM3U(content: string): Promise<Playlist> {
     const lines = content.split("\n");
     const songIds: string[] = [];
@@ -460,3 +490,4 @@ class PlaylistService {
 }
 
 export default new PlaylistService();
+ 
