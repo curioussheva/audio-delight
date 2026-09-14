@@ -10,12 +10,13 @@ jobs:
     env:
       GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
       NODE_ENV: development
+      EXPO_NO_DEV_SERVER: 1
 
     steps:
       # 1. Checkout
       - uses: actions/checkout@v4
 
-      # 2. Setup Node + PNPM (dengan cache pnpm)
+      # 2. Setup Node + PNPM
       - uses: pnpm/action-setup@v4
         with:
           version: 9.0.0
@@ -59,7 +60,7 @@ jobs:
           path: android/app/src/main/cpp/libs/ffmpeg
           key: ffmpeg-android-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-android.sh') }}
 
-      # 8. Build FFmpeg for Android (only if cache missed)
+      # 8. Build FFmpeg for Android
       - name: Build FFmpeg for Android
         if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
         run: bash scripts/build-ffmpeg-android.sh
@@ -109,18 +110,44 @@ jobs:
           curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz \
           | tar -xz --strip-components=1 -C "$OBOE_DIR"
 
-      # 13. Generate Codegen
-      - name: Generate Codegen
+      # 13. Clean build cache (WAJIB karena C++ berubah)
+      - name: Clean native caches
         working-directory: android
         run: |
           chmod +x gradlew
+          ./gradlew clean || true
+          rm -rf app/.cxx app/build
+          echo "✅ Native caches cleaned"
+
+      # 14. Generate Codegen
+      - name: Generate Codegen
+        working-directory: android
+        run: |
           ./gradlew generateCodegenArtifactsFromSchema \
             --no-daemon \
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
             -PhermesEnabled=true
 
-      # 14. Build Debug APK
+      # 15. 🔥 Embed Expo bundle ke assets
+      - name: Embed Expo bundle
+        run: |
+          echo "📦 Embedding Expo bundle..."
+          npx expo export:embed --platform android --dev false \
+            --bundle-output android/app/src/main/assets/index.android.bundle
+
+          if [ -f android/app/src/main/assets/index.android.bundle ]; then
+            SIZE=$(wc -c < android/app/src/main/assets/index.android.bundle)
+            echo "✅ Bundle embedded: $SIZE bytes"
+            if grep -q "DUMMY" android/app/src/main/assets/index.android.bundle; then
+              echo "✅ 'DUMMY' found in bundle (kode terbaru)"
+            fi
+          else
+            echo "❌ Bundle embedding failed!"
+            exit 1
+          fi
+
+      # 16. Build Debug APK
       - name: Build Debug APK
         working-directory: android
         run: |
@@ -131,19 +158,32 @@ jobs:
             -PhermesEnabled=true \
             -DJS_RUNTIME=hermes 2>&1 | tee build.log
 
-      # 15. Upload Build Log on Failure
+      # 17. Verify bundle in APK
+      - name: Verify bundle in APK
+        run: |
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          if unzip -l "$APK" | grep -q "index.android.bundle"; then
+            echo "✅ index.android.bundle FOUND in APK"
+            unzip -l "$APK" | grep "index.android.bundle"
+          else
+            echo "❌ index.android.bundle NOT found!"
+            exit 1
+          fi
+
+      # 18. Upload Build Log on Failure
       - name: Upload Build Log
         uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: Build-Log
           path: android/build.log
+          retention-days: 7
 
-      # 16. Upload APK on Success
+      # 19. Upload APK on Success
       - name: Upload APK
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: PristineAudio-Debug
+          name: PristineAudio-Debug-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
- 
+          retention-days: 7 
