@@ -115,17 +115,36 @@ class NativePlaybackModule(reactContext: ReactApplicationContext) :
         if (!uriString.startsWith("content://")) {
             return uriString
         }
+
         return try {
             val uri = android.net.Uri.parse(uriString)
-            val pfd = reactApplicationContext.contentResolver
-                .openFileDescriptor(uri, "r")
-            if (pfd != null) {
-                val fd = pfd.detachFd()
-                "/proc/self/fd/$fd"
-            } else {
-                uriString
+            val resolver = reactApplicationContext.contentResolver
+
+            // 🔥 FIX: Copy ke cache dir (reliable, tidak ada race condition GC)
+            // detachFd() menyebabkan fd di-close oleh GC sebelum FFmpeg buka
+            val cacheDir = reactApplicationContext.cacheDir
+            val ext = resolver.getType(uri)?.substringAfterLast('/') ?: "tmp"
+            val cacheFile = java.io.File(cacheDir, "track_${uriString.hashCode()}.$ext")
+
+            if (!cacheFile.exists() || cacheFile.length() == 0L) {
+                resolver.openInputStream(uri)?.use { input ->
+                    cacheFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
             }
+
+            android.util.Log.d(
+                "NativePlaybackModule",
+                "resolveContentUri: $uriString → ${cacheFile.absolutePath} (${cacheFile.length()} bytes)"
+            )
+
+            cacheFile.absolutePath
         } catch (e: Exception) {
+            android.util.Log.e(
+                "NativePlaybackModule",
+                "resolveContentUri failed: $uriString", e
+            )
             uriString
         }
     }

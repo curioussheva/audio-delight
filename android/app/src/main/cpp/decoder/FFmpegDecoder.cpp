@@ -183,6 +183,12 @@ DecodeResult FFmpegDecoder::onDecode(
             if (converted > 0) {
     temp.resize(converted * channels);
 
+    // 🔥 FIX: turunkan gain 3 dB untuk headroom
+    constexpr float kGain = 0.707f;  // -3 dB
+    for (float& s : temp) {
+        s *= kGain;
+    }
+
     result.samples.insert(
         result.samples.end(),
         temp.begin(),
