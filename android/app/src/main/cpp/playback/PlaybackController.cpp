@@ -130,6 +130,11 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
     pcmQueue_->clear();
     clock_->reset();
 
+    // 🔥 FIX: set duration dari metadata track
+    if (state_ && track.durationMs > 0) {
+        state_->setDuration(static_cast<uint64_t>(track.durationMs));
+    }
+
     bool result = startDecoder(track);
     __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                         "loadTrack(): DONE startDecoder=%s",
@@ -176,6 +181,7 @@ bool PlaybackController::play() {
     }
 
     playing_.store(true, std::memory_order_release);
+    updatePlaybackState();  // 🔥 FIX
 
     if (decoderWorker_) {
         decoderWorker_->resume();
@@ -188,6 +194,7 @@ bool PlaybackController::play() {
 
 bool PlaybackController::pause() {
     playing_.store(false, std::memory_order_release);
+    updatePlaybackState();  // 🔥 FIX
 
     if (decoderWorker_) {
         decoderWorker_->pause();
@@ -203,6 +210,7 @@ bool PlaybackController::stop() {
 
     pcmQueue_->clear();
     clock_->reset();
+    updatePlaybackState();  // 🔥 FIX
 
     return true;
 }
@@ -236,7 +244,24 @@ void PlaybackController::render(float* output,
     __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                         "render readSamples=%zu/%zu (frames=%u ch=%u)",
                         readSamples, requestedSamples, frames, channels);
+// 🔥 DEBUG: cek nilai min/max/mean sampel
+static int renderDebugCount = 0;
+renderDebugCount++;
+if (renderDebugCount % 100 == 0 && readSamples > 0) {
+    float minV = 1e9f, maxV = -1e9f;
+    double sumAbs = 0.0;
+    for (size_t i = 0; i < readSamples; i++) {
+        float v = output[i];
+        if (v < minV) minV = v;
+        if (v > maxV) maxV = v;
+        sumAbs += (v < 0 ? -v : v);
+    }
+    float meanAbs = static_cast<float>(sumAbs / readSamples);
 
+    __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+        "SAMPLE min=%.4f max=%.4f mean_abs=%.4f (n=%zu)",
+        minV, maxV, meanAbs, readSamples);
+}
     if (readSamples < requestedSamples) {
         std::fill(
             output + readSamples,
@@ -246,6 +271,19 @@ void PlaybackController::render(float* output,
     }
 
     clock_->advanceFrames(frames);
+
+    // 🔥 FIX: sync position & duration ke state (untuk JS getPosition)
+    if (state_ && clock_ && sampleRate > 0) {
+        uint64_t framesPos = clock_->positionFrames();
+        uint64_t msPos = (framesPos * 1000ULL) / sampleRate;
+        state_->setPosition(msPos);
+
+        uint64_t framesDur = clock_->durationFrames();
+        if (framesDur > 0) {
+            uint64_t msDur = (framesDur * 1000ULL) / sampleRate;
+            state_->setDuration(msDur);
+        }
+    }
 
     if (metrics_) {
         metrics_->recordFrameRendered(frames);
@@ -281,6 +319,14 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
         __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                             "startDecoder(): ok=%d, uri=%s",
                             ok ? 1 : 0, track.uri.c_str());
+
+        if (!ok) {
+            // 🔥 FIX: reset decoder on failure
+            __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
+                                "startDecoder(): FAILED, resetting decoderWorker_");
+            decoderWorker_.reset();
+        }
+
         return ok;
     }
     catch (const std::exception& e) {

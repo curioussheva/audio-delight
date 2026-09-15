@@ -162,9 +162,7 @@ DecodeResult FFmpegDecoder::onDecode(
                 return result;
             }
 
-            const int outSamples = swr_get_out_samples(
-                swrCtx_,
-                frame_->nb_samples);
+            const int outSamples = swr_get_out_samples(swrCtx_, frame_->nb_samples) + 256;
 
             const int channels = 2; // output stereo
 
@@ -183,16 +181,34 @@ DecodeResult FFmpegDecoder::onDecode(
                 frame_->nb_samples);
 
             if (converted > 0) {
-                temp.resize(converted * channels);
+    temp.resize(converted * channels);
 
-                result.samples.insert(
-                    result.samples.end(),
-                    temp.begin(),
-                    temp.end());
+    result.samples.insert(
+        result.samples.end(),
+        temp.begin(),
+        temp.end());
 
-                result.framesDecoded += converted;
-                currentFrame_ += converted;
-            }
+    // ✅ FIX: framesDecoded = input frames (44.1k), currentFrame_ = output frames (48k)
+    result.framesDecoded += frame_->nb_samples;
+    currentFrame_ += converted;
+
+    // 🔥 DEBUG: log min/max setiap ~4096 output frames
+    static int64_t totalOut = 0;
+    totalOut += converted;
+    if (totalOut % 4096 < static_cast<int64_t>(converted) && !temp.empty()) {
+        float minV = 1e9f, maxV = -1e9f;
+        double sumAbs = 0.0;
+        for (float v : temp) {
+            if (v < minV) minV = v;
+            if (v > maxV) maxV = v;
+            sumAbs += (v < 0 ? -v : v);
+        }
+        float meanAbs = static_cast<float>(sumAbs / temp.size());
+        __android_log_print(ANDROID_LOG_INFO, "FFmpegDecoder",
+            "resample out: min=%.4f max=%.4f mean=%.4f (frames=%d)",
+            minV, maxV, meanAbs, converted);
+    }
+}
 
             if (result.framesDecoded >= maxFrames)
                 break;
@@ -245,7 +261,7 @@ bool FFmpegDecoder::onSeek(
 
     return true;
 }
-
+ 
 bool FFmpegDecoder::onSeekToFrame(
     uint64_t frame) {
 
