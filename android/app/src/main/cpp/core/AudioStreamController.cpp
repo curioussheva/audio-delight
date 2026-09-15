@@ -128,7 +128,7 @@ bool AudioStreamController::buildStream(
 
     builder.setChannelCount(2);
 
-    builder.setSampleRate(44100);
+    builder.setSampleRate(48000);
 
     builder.setFramesPerCallback(
         oboe::Unspecified

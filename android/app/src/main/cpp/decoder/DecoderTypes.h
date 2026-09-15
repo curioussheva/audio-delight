@@ -154,7 +154,7 @@ struct DecoderCapabilities {
 struct DecodeConfig {
 
     uint32_t targetSampleRate =
-        44100;
+        48000;
 
     uint32_t targetChannels =
         2;
