@@ -27,7 +27,9 @@ bool PlaybackController::initialize() {
 
     __android_log_print(ANDROID_LOG_INFO, "PlaybackController", "initialize called");
 
-    pcmQueue_ = std::make_shared<PCMQueue>(48000 * 10); // ~10 sec buffer
+    // 2^19 = 524288 float samples = ~5.5 sec stereo @ 48kHz
+    // WAJIB power of 2: PCMQueue pakai bitmask, bukan modulo!
+    pcmQueue_ = std::make_shared<PCMQueue>(1 << 19); // 2^19 = 524288 float = ~5.5 sec stereo @ 48kHz
     clock_ = std::make_shared<PlaybackClock>();
     metrics_ = std::make_shared<MetricsCollector>();
     state_ = std::make_shared<PlaybackState>();
