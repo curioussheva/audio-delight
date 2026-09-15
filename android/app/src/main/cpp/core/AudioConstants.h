@@ -74,7 +74,7 @@ constexpr float kBassShelfQ =
 // =====================================================
 
 constexpr int32_t kDefaultSampleRate =
-    48000;
+    44100;
 
 constexpr int32_t kDefaultChannelCount =
     2;
