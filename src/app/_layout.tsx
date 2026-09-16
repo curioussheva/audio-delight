@@ -97,7 +97,7 @@ export default function RootLayout() {
           console.log("[DUMMY] Available:", Object.keys(NativeModules).join(", "));
           return;
         }
-        const testUri = "/storage/emulated/0/Music/test.mp3";
+        const testUri = "/storage/emulated/0/Music/Enya_-_Dark_Sky_Island.flac"; 
         console.log("[DUMMY] Setting queue with URI:", testUri);
         await module.setQueue([testUri]);
         console.log("[DUMMY] ✅ setQueue done");

@@ -90,23 +90,32 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
             val resolver = reactApplicationContext.contentResolver
             val uri = android.net.Uri.parse(uriString)
 
-            resolver.query(uri, null, null, null, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val idx = cursor.getColumnIndex(android.provider.MediaStore.MediaColumns.DATA)
-                    if (idx >= 0) {
-                        val path = cursor.getString(idx)
-                        if (path != null) return path
-                    }
+            // 🔥 FIX: langsung copy ke cache (reliable, tanpa MediaStore query)
+            val ext = resolver.getType(uri)?.substringAfterLast('/') ?: "cache"
+            val file = File(
+                reactApplicationContext.cacheDir,
+                "audio_${uriString.hashCode()}.$ext"
+            )
+
+            if (!file.exists() || file.length() == 0L) {
+                val inputStream = resolver.openInputStream(uri)
+                    ?: return uriString
+                file.outputStream().use { output ->
+                    inputStream.copyTo(output)
                 }
             }
 
-            val inputStream = resolver.openInputStream(uri) ?: return uriString
-            val file = File(reactApplicationContext.cacheDir, "audio_${System.currentTimeMillis()}.cache")
-            file.outputStream().use { output ->
-                inputStream.copyTo(output)
-            }
+            android.util.Log.d(
+                "NativePlaybackService",
+                "resolveContentUriToPath: $uriString → ${file.absolutePath} (${file.length()} bytes)"
+            )
+
             file.absolutePath
         } catch (e: Exception) {
+            android.util.Log.e(
+                "NativePlaybackService",
+                "resolveContentUriToPath failed: $uriString", e
+            )
             uriString
         }
     }
