@@ -10,6 +10,7 @@ extern "C" {
 }
 
 #include <android/log.h>
+#include <cmath>
 
 namespace pristine::decoder {
 
@@ -163,6 +164,16 @@ DecodeResult FFmpegDecoder::onDecode(
                 return result;
             }
 
+            static bool formatLogged = false;
+            if (!formatLogged) {
+                __android_log_print(ANDROID_LOG_INFO, "FFmpegDecoder",
+                    "FORMAT CHECK: codecCtx_->sample_fmt=%d, frame_->format=%d, codecCtx_->sample_rate=%d, frame_->sample_rate=%d, nb_samples=%d",
+                    codecCtx_->sample_fmt, frame_->format,
+                    codecCtx_->sample_rate, frame_->sample_rate,
+                    frame_->nb_samples);
+                formatLogged = true;
+            }
+
             const int outSamples = swr_get_out_samples(swrCtx_, frame_->nb_samples) + 256;
 
             const int channels = 2; // output stereo
@@ -188,6 +199,24 @@ DecodeResult FFmpegDecoder::onDecode(
     constexpr float kGain = 0.707f;  // -3 dB
     for (float& s : temp) {
         s *= kGain;
+    }
+
+    // 🔥 NaN/Inf detection & cleanup
+    {
+        int nanCount = 0;
+        for (float& v : temp) {
+            if (std::isnan(v) || std::isinf(v)) {
+                nanCount++;
+                v = 0.0f;
+            }
+        }
+        static int totalNan = 0;
+        totalNan += nanCount;
+        if (nanCount > 0) {
+            __android_log_print(ANDROID_LOG_WARN, "FFmpegDecoder",
+                "NaN/Inf detected: %d of %zu samples cleaned (total=%d)",
+                nanCount, temp.size(), totalNan);
+        }
     }
 
     result.samples.insert(
