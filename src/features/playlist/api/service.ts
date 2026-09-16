@@ -289,6 +289,47 @@ class PlaylistService {
     return row ? this.mapRowToSong(row) : null;
   }
 
+  // Fallback matching untuk import M3U/M3U8 dari sumber eksternal
+  // (AIMP, SnapTube, dll). Path di file M3U eksternal biasanya berupa
+  // path filesystem absolut (/storage/emulated/0/...), sementara
+  // `songs.uri` hasil scan library Pristine (berbasis MediaStore di
+  // Android scoped storage) berbentuk content:// URI — dua skema ini
+  // TIDAK PERNAH match lewat exact string equality walau menunjuk ke
+  // file fisik yang sama. Fallback ke nama file (kolom `filename`,
+  // atau LIKE terhadap `uri`) supaya matching tetap berhasil lintas
+  // skema URI.
+  async getSongByPathOrFilename(path: string): Promise<Song | null> {
+    // 1. Coba exact match ke `uri` dulu (berhasil kalau kebetulan
+    // sama-sama pakai skema URI yang sama, atau untuk M3U yang
+    // di-export dari Pristine sendiri).
+    const exact = await this.getSongByUri(path);
+    if (exact) return exact;
+
+    // 2. Coba exact match ke `originalUri` — kalau library scanner
+    // menyimpan path filesystem asli di kolom ini (terpisah dari
+    // `uri` yang dipakai untuk akses runtime lewat content://),
+    // ini exact match yang jauh lebih andal daripada tebak nama
+    // file di langkah 3. Aman dijalankan meski kolom ini kosong
+    // untuk semua baris — query sekadar tidak match, tidak error.
+    const origResult = db.execute(
+      "SELECT * FROM songs WHERE originalUri = ? LIMIT 1",
+      [path],
+    );
+    const origRow = origResult.rows?._array[0];
+    if (origRow) return this.mapRowToSong(origRow);
+
+    // 3. Fallback terakhir: cocokkan lewat nama file saja.
+    const filename = path.split(/[\\/]/).pop();
+    if (!filename) return null;
+
+    const result = db.execute(
+      "SELECT * FROM songs WHERE filename = ? OR uri LIKE ? LIMIT 1",
+      [filename, `%${filename}`],
+    );
+    const row = result.rows?._array[0];
+    return row ? this.mapRowToSong(row) : null;
+  }
+
   async getSongById(id: string): Promise<Song | null> {
     const result = db.execute("SELECT * FROM songs WHERE id = ?", [id]);
     const row = result.rows?._array[0];
@@ -352,7 +393,7 @@ class PlaylistService {
     const songIds: string[] = [];
 
     for (const path of paths) {
-      const song = await this.getSongByUri(path);
+      const song = await this.getSongByPathOrFilename(path);
       if (song) songIds.push(song.id);
     }
 
@@ -372,7 +413,7 @@ class PlaylistService {
     for (const line of lines) {
       if (line && !line.startsWith("#")) {
         const uri = line.trim();
-        const song = await this.getSongByUri(uri);
+        const song = await this.getSongByPathOrFilename(uri);
         if (song) songIds.push(song.id);
       }
     }
