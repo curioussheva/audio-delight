@@ -3,6 +3,8 @@
 #include "../decoder/FFmpegDecoder.h"
 
 #include <algorithm>
+#include <thread>
+#include <chrono>
 #include <android/log.h>
 
 namespace pristine::playback {
@@ -128,6 +130,9 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
                         "loadTrack(): START uri=%s", track.uri.c_str());
 
     stopDecoder();
+    clearing_.store(true, std::memory_order_release);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
     currentTrack_ = track;
     pcmQueue_->clear();
     clock_->reset();
@@ -138,6 +143,7 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
     }
 
     bool result = startDecoder(track);
+    clearing_.store(false, std::memory_order_release);
     __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                         "loadTrack(): DONE startDecoder=%s",
                         result ? "true" : "false");
@@ -239,6 +245,12 @@ void PlaybackController::render(float* output,
 
     const size_t requestedSamples =
         static_cast<size_t>(frames) * channels;
+
+    // 🔥 RACE FIX
+    if (clearing_.load(std::memory_order_acquire)) {
+        std::fill(output, output + requestedSamples, 0.0f);
+        return;
+    }
 
     const size_t readSamples =
         pcmQueue_->read(output, requestedSamples);

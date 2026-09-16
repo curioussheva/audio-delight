@@ -62,6 +62,7 @@ private:
     std::shared_ptr<MetricsCollector> metrics_;
     std::shared_ptr<PlaybackClock> clock_;
     std::shared_ptr<PCMQueue> pcmQueue_;
+    std::atomic<bool> clearing_{false};
     std::shared_ptr<TrackQueue> queue_;
 
     std::unique_ptr<decoder::DecoderWorker> decoderWorker_;

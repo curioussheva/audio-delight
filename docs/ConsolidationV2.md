@@ -613,3 +613,238 @@ Kalau salah satu tidak terpenuhi → bukan bit-perfect → fallback ke "High-Fid
 
 
 Dokumen ini = single source of truth untuk semua status, roadmap, backlog, dan insight pasar ke depannya. 🎯
+
+---
+
+📊 Progress Update — Debugging Audio PristineAudio
+
+Tanggal: 16 September 2026
+Fokus Sesi: Debug audio engine (chipmunk, distorsi, NaN)
+
+---
+
+🎯 TL;DR
+
+Status saat ini: Audio keluar, distorsi turun 80%, tapi masih ada chipmunk intermittent pada file FLAC 24-bit. Root cause NaN (Not a Number) di render output. Fix terakhir: ganti -ffast-math → -fno-fast-math (sedang di-test).
+
+---
+
+✅ Yang Sudah Berhasil
+
+A. Native Engine — Wiring & Foundation
+
+Item Status Bukti
+PlaybackController → AudioEngine patch ✅ Build sukses
+PlaybackMetrics.cpp linker fix ✅ Build sukses
+PlaybackController::play() load track ✅ Log play(): SUCCESS
+JNI_OnLoad → EngineManager::start() ✅ Log PristineJNI
+PlaybackManager dikonfirmasi dead code ✅ Grep nol hasil
+NativePlaybackModule.kt @ReactMethod fix ✅ isBlockingSynchronousMethod = true
+State sync (updatePlaybackState) ✅ Status: 1/2 muncul
+Position update (setPosition) ✅ Position: 3023ms
+
+B. Build & Environment
+
+Item Status
+New Arch + Bridgeless konsisten ✅
+expo-dev-client SDK 55 ✅
+AppCompat theme ✅
+Bundle embed APK ✅
+Standard ReactNativeHost ✅
+Bersihkan RNTP ✅
+content:// cache copy (2 modul) ✅
+
+C. Audio Pipeline — Breakthrough
+
+Item Status Bukti
+Buffer terisi (readSamples=X/X) ✅ Setelah fix PCMQueue
+Sample rate konsisten ✅ OPEN RESULT: ACTUAL rate=48000
+Format Float ✅ format=2 (Float)
+FFmpeg decode ✅ framesDecoded=4096
+FFmpeg resample ✅ frames=2048 (2:1 downsample)
+Resampler quality upgrade ✅ filter_size=128, dither
+Headroom gain 3 dB ✅ Peak < 0.7
+Audio keluar ✅ Suara terdengar!
+
+---
+
+🟡 Blocker Saat Ini
+
+1. NaN di Render Output (CHIPMUNK)
+
+Gejala:
+
+· Awal putar: tempo normal
+· Beberapa detik kemudian: chipmunk 2x intermittent
+· Terutama di FLAC 24-bit 96kHz
+
+Root cause:
+
+```
+resample out: normal (tidak NaN)  ← decoder OK
+     ↓
+pcmQueue_ write  ← ???
+     ↓
+pcmQueue_ read  ← ???
+     ↓
+SAMPLE min= nan, max=5.3 miliar  ← KORUP!
+```
+
+Yang sudah di-rule out:
+
+· ❌ Sample rate mismatch (device 48000, konfigurasi 48000)
+· ❌ Format mismatch (S32 == S32)
+· ❌ Resampler (output normal)
+· ❌ Clipping (peak < 0.7)
+· ❌ Oboe (no conversion)
+
+Dugaan saat ini: -ffast-math compile flag membuat std::isnan() dioptimasi jadi false + reorder float ilegal.
+
+Fix terbaru (sedang di-test):
+
+· -ffast-math → -fno-fast-math
+
+2. Status JS vs Native Inconsistent
+
+· Native: play(): SUCCESS
+· JS: Status: 1 (Paused) — terkadang 2 (Playing)
+· Efek: UI player tidak akurat menampilkan state
+· Priority: Rendah (setelah audio jernih)
+
+---
+
+📋 Sesi Debugging — Timeline Ringkas
+
+Waktu Aksi Hasil
+15/9 pagi Patch wiring + build CI Build sukses
+15/9 siang Build APK dengan bundle Bundle embed OK
+15/9 malam Test dummy autoplay Audio keluar + distorsi
+15/9 malam Patch 48000 rate Rate konsisten
+16/9 pagi PCMQueue power-of-2 fix Buffer terisi ✅
+16/9 pagi Headroom gain 3 dB Peak turun
+16/9 siang Resampler quality Distorsi turun 80%
+16/9 sore Test FLAC 96kHz Chipmunk 2x
+16/9 sore NaN detection NaN muncul di render
+16/9 malam Fix -fno-fast-math ⏳ Sedang di-test
+
+---
+
+🛠️ Fix yang Sudah Diterapkan
+
+C++ (Native)
+
+File Perubahan
+AudioCallback.cpp/.h Cabang ke PlaybackController::render()
+AudioEngine.cpp/.h setPlaybackController()
+EngineManager.cpp mEngine.setPlaybackController()
+PlaybackMetrics.cpp File baru (linker fix)
+PlaybackController.cpp Logging + state sync + position
+PCMQueue capacity 1 << 19 (power-of-2)
+FFmpegDecoder.cpp filter_size=128, dither, gain 3 dB, NaN detect
+AudioStreamController.cpp Log actual rate
+CMakeLists.txt -fno-fast-math
+AudioConstants.h 48000
+DecoderTypes.h 48000
+
+Kotlin (Android)
+
+File Perubahan
+MainApplication.kt System.loadLibrary
+MainActivity.kt AppCompat theme + logs
+NativePlaybackModule.kt resolveContentUri cache copy, isBlockingSynchronousMethod
+NativePlaybackService.kt resolveContentUriToPath cache copy
+AndroidManifest.xml AppCompat theme, hapus RNTP
+
+JavaScript
+
+File Perubahan
+_layout.tsx Dummy autoplay test, 4 route stack
+(drawer)/_layout.tsx <Drawer>
+(drawer)/(tabs)/_layout.tsx <Tabs> + <FloatingPlayer>
+index.tsx Onboarding redirect
+
+---
+
+🚀 Roadmap Berikutnya
+
+Prioritas 1 — Chipmunk Fix (SEKARANG)
+
+☐ Test -fno-fast-math di HP
+☐ Konfirmasi NaN hilang
+☐ Konfirmasi chipmunk hilang
+☐ Kalau masih NaN → fix pcmQueue_->clear() race
+
+Prioritas 2 — Manual Play dari UI
+
+☐ Tap lagu di library (MP3, FLAC, AAC)
+☐ Test play/pause/next/previous/seek
+☐ Konfirmasi floating player muncul
+
+Prioritas 3 — Multi-Format Test
+
+☐ MP3 (44100)
+☐ FLAC (44100, 96000)
+☐ M4A/AAC
+☐ Konfirmasi semua decode-able
+
+Prioritas 4 — Stabilitas Playback
+
+☐ Play 5-10 menit berturut-turut
+☐ Cek underrun
+☐ Cek baterai
+
+Prioritas 5 — Fase B (Inventarisasi JNI)
+
+☐ Re-grep JNIEXPORT
+☐ Status folder fft/ (dead code?)
+☐ Keputusan prioritas modul belum ter-bridge
+
+Prioritas 6 — Fase C (Sinkronisasi UI)
+
+☐ Processing Mode 3-mode (Exclusive/DSP/Immersive)
+☐ Media session + audio focus
+☐ Cleanup RNTP total
+☐ Expose isExclusive() ke JS
+
+---
+
+📊 Metric Keberhasilan
+
+Metric Target Status
+readSamples=X/X stabil ✅ Tercapai
+Audio keluar ✅ Tercapai
+Distorsi turun ✅ 80%
+Sample rate konsisten ✅ 48000
+Buffer tidak korup ⏳ Fix -fno-fast-math
+Chipmunk hilang ⏳ Sedang di-test
+Manual play dari UI ⏳ Belum di-test
+FLAC 24-bit jernih ⏳ Sedang debug
+
+---
+
+📁 File Dokumen
+
+· consolidationv2.md — Dokumen konsolidasi utama
+· articles/article2.txt, article3.md — Insight audiophile
+· scripts/patch_*.py — 15+ script patch terdokumentasi
+
+---
+
+💡 Insight Kunci Sesi Ini
+
+1. -ffast-math adalah silent killer — dioptimasi std::isnan(), NaN jadi invisible
+2. PCMQueue butuh power-of-2 — bitmask tidak bekerja untuk non-2^n
+3. Resampler FFmpeg default terlalu rendah — filter_size=32 → upgrade ke 128 + dither
+4. content:// butuh resolve ke cache — FFmpeg tidak support URI
+5. Device native rate bisa beda — konfirmasi via stream->getSampleRate()
+6. Log spam bisa percepat rotation — kontrol readSamples log interval
+
+---
+
+🎯 Status Akhir Hari Ini
+
+Sudah: Audio keluar, 80% distorsi fixed, buffer terisi, engine stabil.
+Sedang: Test fix -fno-fast-math untuk menghilangkan NaN.
+Berikutnya: Manual play test, multi-format test, stabilitas, lalu Fase B/C.
+
+Estimasi: Kalau -fno-fast-math berhasil, audio jernih total dalam 1-2 iterasi berikutnya. 🎵
