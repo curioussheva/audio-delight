@@ -4,6 +4,8 @@
 
 #include "AudioStreamController.h"
 
+
+#include <android/log.h>
 #include <utility>
 
 namespace pristine {
