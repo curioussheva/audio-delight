@@ -84,7 +84,6 @@ export default function RootLayout() {
 
   // 🔥 DUMMY AUTOPLAY untuk DEBUG
   useEffect(() => {
-    console.log("[DUMMY] useEffect triggered, appState=", appState);
     if (appState !== "ready" || hasTriggeredDummyPlay.current) return;
     hasTriggeredDummyPlay.current = true;
 
@@ -92,32 +91,35 @@ export default function RootLayout() {
       try {
         console.log("[DUMMY] 🔥 Starting autoplay test...");
         const module = NativeModules.NativePlaybackModule;
-        if (!module) {
-          console.error("[DUMMY] ❌ NativePlaybackModule not found");
-          console.log("[DUMMY] Available:", Object.keys(NativeModules).join(", "));
-          return;
-        }
-        const testUri = "/storage/emulated/0/Music/Enya_-_Dark_Sky_Island.flac"; 
-        console.log("[DUMMY] Setting queue with URI:", testUri);
+        if (!module) return;
+
+        const testUri = "/storage/emulated/0/Music/test.mp3";  // ← FILE 18 detik
+
         await module.setQueue([testUri]);
         console.log("[DUMMY] ✅ setQueue done");
         await module.play();
         console.log("[DUMMY] ✅ play() done");
 
-        setTimeout(() => {
+        // 🔥 Monitor setiap 2 detik, 5 kali
+        let checkCount = 0;
+        const interval = setInterval(() => {
+          checkCount++;
           try {
             const status = module.getStatus();
             const position = module.getPosition();
-            console.log("[DUMMY] Status:", status, "Position:", position);
+            console.log(`[DUMMY] Check #${checkCount} - Status: ${status} Position: ${position}`);
           } catch (e) {}
-        }, 3000);
+          
+          if (checkCount >= 5) clearInterval(interval);
+        }, 2000);
+
       } catch (e) {
         console.error("[DUMMY] ❌ Error:", e);
       }
     }, 10000);
 
     return () => clearTimeout(timer);
-  }, [appState]);
+}, [appState]);
 
   const handleLoadingComplete = useCallback(() => {
     SplashScreen.hideAsync().catch(() => {});

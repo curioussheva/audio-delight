@@ -243,9 +243,14 @@ void PlaybackController::render(float* output,
     const size_t readSamples =
         pcmQueue_->read(output, requestedSamples);
 
-    __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
-                        "render readSamples=%zu/%zu (frames=%u ch=%u)",
-                        readSamples, requestedSamples, frames, channels);
+    // 🔥 SPAM CONTROL: log hanya tiap 5000 render
+    static int renderCount = 0;
+    renderCount++;
+    if (renderCount % 5000 == 0) {
+        __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                            "render readSamples=%zu/%zu (frames=%u ch=%u)",
+                            readSamples, requestedSamples, frames, channels);
+    }
 // 🔥 DEBUG: cek nilai min/max/mean sampel
 static int renderDebugCount = 0;
 renderDebugCount++;

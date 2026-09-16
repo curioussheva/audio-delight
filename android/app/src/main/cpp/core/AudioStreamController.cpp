@@ -52,7 +52,21 @@ bool AudioStreamController::open(
         stream;
 
     const auto result =
-        builder.openStream(stream);
+        builder.openStream(stream)
+
+    // 🔥 DEBUG: log actual stream rate
+    {
+        int32_t actualRate = mStream ? mStream->getSampleRate() : 0;
+        int32_t actualFrames = mStream ? mStream->getFramesPerBurst() : 0;
+        __android_log_print(ANDROID_LOG_INFO, "AudioStreamController",
+            "OPEN RESULT: ACTUAL rate=%d, framesPerBurst=%d",
+            actualRate, actualFrames);
+        if (actualRate != 48000) {
+            __android_log_print(ANDROID_LOG_ERROR, "AudioStreamController",
+                "❌ RATE MISMATCH! Actual=%d (expected 48000), ratio %.2fx",
+                actualRate, (float)actualRate / 48000.0f);
+        }
+    };
 
     if (
         result != oboe::Result::OK ||
