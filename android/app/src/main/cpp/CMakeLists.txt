@@ -238,7 +238,7 @@ target_compile_options(pristine-audio PRIVATE
   -Wno-reorder-ctor
   -Wno-defaulted-function-deleted
   -Wno-macro-redefined
-  -ffast-math -fstrict-aliasing -fvisibility=hidden
+  -fno-fast-math -fstrict-aliasing -fvisibility=hidden
   -ffunction-sections -fdata-sections
   -fstack-protector-strong -D_FORTIFY_SOURCE=2
   -fexceptions -frtti
