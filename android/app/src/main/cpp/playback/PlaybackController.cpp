@@ -256,6 +256,15 @@ void PlaybackController::render(float* output,
     const size_t readSamples =
         pcmQueue_->read(output, requestedSamples);
 
+    // 🔥 FLOW CONTROL: resume decoder kalau queue low
+    if (pcmQueue_ && decoderWorker_) {
+        size_t avail = pcmQueue_->availableFrames();
+        size_t cap = pcmQueue_->capacityFrames();
+        if (avail < cap * 30 / 100 && decoderWorker_->isPaused()) {
+            decoderWorker_->resume();
+        }
+    }
+
     // 🔥 SAFETY NET: cleanup NaN/Inf di render (untuk sisa race boundary)
     {
         int nanCount = 0;
@@ -349,6 +358,18 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
                         result.samples.data(),
                         result.samples.size()
                     );
+
+                    // 🔥 FLOW CONTROL: pause decoder kalau queue hampir penuh
+                    size_t avail = pcmQueue_->availableFrames();
+                    size_t cap = pcmQueue_->capacityFrames();
+                    if (avail > cap * 80 / 100) {
+                        if (decoderWorker_) {
+                            decoderWorker_->pause();
+                            __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                                "Decoder PAUSED (queue %zu%% full)",
+                                100 * avail / cap);
+                        }
+                    }
                 }
             }
         );
