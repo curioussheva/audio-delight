@@ -1,6 +1,11 @@
 #include "DecoderWorker.h"
 
 #include <chrono>
+#include <cerrno>
+#include <cstring>
+#include <sys/resource.h>
+#include <pthread.h>
+#include <unistd.h>
 
 namespace pristine::decoder {
 
@@ -150,6 +155,39 @@ AudioFormat DecoderWorker::getFormat() const {
 // =====================================================
 
 void DecoderWorker::workerLoop() {
+    // 🔥 FIX: Set thread priority ke AUDIO (-16) 
+    // Default = 0 (NORMAL). Decoder harus LEBIH TINGGI dari normal
+    // untuk mencegah starvation oleh audio callback thread.
+    {
+        // Prioritas audio untuk decoder (jangan URGENT karena hanya callback Oboe)
+        int priority = -16;  // ANDROID_PRIORITY_AUDIO
+        pid_t tid = gettid();
+        if (setpriority(PRIO_PROCESS, tid, priority) != 0) {
+            __android_log_print(ANDROID_LOG_WARN, "DecoderWorker",
+                "setpriority(%d) failed: %s", priority, strerror(errno));
+        } else {
+            __android_log_print(ANDROID_LOG_INFO, "DecoderWorker",
+                "Thread priority set to %d (AUDIO)", priority);
+        }
+        
+        // Set CPU affinity untuk hindari migration antar-core
+        cpu_set_t cpuset;
+        CPU_ZERO(&cpuset);
+        int ncpus = sysconf(_SC_NPROCESSORS_ONLN);
+        if (ncpus > 2) {
+            // Pakai core 2-3 (hindari core 0-1 untuk audio)
+            CPU_SET(2, &cpuset);
+            if (ncpus > 3) CPU_SET(3, &cpuset);
+        }
+        if (pthread_setaffinity_np(pthread_self(), sizeof(cpuset), &cpuset) != 0) {
+            __android_log_print(ANDROID_LOG_WARN, "DecoderWorker",
+                "setaffinity failed");
+        }
+    }
+    
+    __android_log_print(ANDROID_LOG_INFO, "DecoderWorker",
+        "workerLoop started");
+    
     while (!stopRequested_.load()) {
 
         // PAUSE HANDLING
@@ -185,8 +223,8 @@ void DecoderWorker::workerLoop() {
             std::this_thread::sleep_for(milliseconds(2));
         }
 
-        // yield ringan biar CPU tidak full spike
-        std::this_thread::yield();
+        // 🔥 FIX: micro-sleep 100us, jangan full yield
+        std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
 
     running_.store(false);

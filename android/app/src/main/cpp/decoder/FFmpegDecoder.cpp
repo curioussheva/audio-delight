@@ -240,9 +240,13 @@ DecodeResult FFmpegDecoder::onDecode(
             sumAbs += (v < 0 ? -v : v);
         }
         float meanAbs = static_cast<float>(sumAbs / temp.size());
-        __android_log_print(ANDROID_LOG_INFO, "FFmpegDecoder",
-            "resample out: min=%.4f max=%.4f mean=%.4f (frames=%d)",
-            minV, maxV, meanAbs, converted);
+        static int resampleLogCount = 0;
+        resampleLogCount++;
+        if (resampleLogCount % 500 == 0) {
+            __android_log_print(ANDROID_LOG_INFO, "FFmpegDecoder",
+                "resample out: min=%.4f max=%.4f mean=%.4f (frames=%d)",
+                minV, maxV, meanAbs, converted);
+        }
     }
 }
 
@@ -254,9 +258,13 @@ DecodeResult FFmpegDecoder::onDecode(
             break;
     }
 
-    __android_log_print(ANDROID_LOG_DEBUG, "FFmpegDecoder",
-                        "onDecode: framesDecoded=%u, status=%d",
-                        result.framesDecoded, (int)result.status);
+    static int decodeLogCount = 0;
+    decodeLogCount++;
+    if (decodeLogCount % 500 == 0) {
+        __android_log_print(ANDROID_LOG_INFO, "FFmpegDecoder",
+                            "onDecode: framesDecoded=%u, status=%d",
+                            result.framesDecoded, (int)result.status);
+    }
 
     result.status =
         result.framesDecoded > 0
