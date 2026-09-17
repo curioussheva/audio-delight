@@ -1,3 +1,4 @@
+#include <android/log.h>
 #include "DecoderWorker.h"
 
 #include <chrono>
@@ -170,19 +171,6 @@ void DecoderWorker::workerLoop() {
                 "Thread priority set to %d (AUDIO)", priority);
         }
         
-        // Set CPU affinity untuk hindari migration antar-core
-        cpu_set_t cpuset;
-        CPU_ZERO(&cpuset);
-        int ncpus = sysconf(_SC_NPROCESSORS_ONLN);
-        if (ncpus > 2) {
-            // Pakai core 2-3 (hindari core 0-1 untuk audio)
-            CPU_SET(2, &cpuset);
-            if (ncpus > 3) CPU_SET(3, &cpuset);
-        }
-        if (pthread_setaffinity_np(pthread_self(), sizeof(cpuset), &cpuset) != 0) {
-            __android_log_print(ANDROID_LOG_WARN, "DecoderWorker",
-                "setaffinity failed");
-        }
     }
     
     __android_log_print(ANDROID_LOG_INFO, "DecoderWorker",
