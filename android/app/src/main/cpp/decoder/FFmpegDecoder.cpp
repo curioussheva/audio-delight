@@ -451,14 +451,14 @@ bool FFmpegDecoder::setupResampler() {
     }
 
     // 🔥 FIX: Upgrade resampler quality (default terlalu rendah → distorsi)
-    av_opt_set_int(swrCtx_, "filter_size", 128, 0);        // default 32 → 128
+    av_opt_set_int(swrCtx_, "filter_size", 32, 0);  // 🔥 light CPU        // default 32 → 128
     av_opt_set_int(swrCtx_, "linear_interp", 0, 0);
     av_opt_set_int(swrCtx_, "dither_method", SWR_DITHER_TRIANGULAR_HIGHPASS, 0);
     av_opt_set_double(swrCtx_, "dither_scale", 1.0, 0);
 
     int init_ret = swr_init(swrCtx_);
     __android_log_print(ANDROID_LOG_INFO, "FFmpegDecoder",
-                        "setupResampler: swr_init ret=%d (filter_size=128, dither=triangular)",
+                        "setupResampler: swr_init ret=%d (filter_size=32, dither=triangular)",
                         init_ret);
     return init_ret >= 0;
 }

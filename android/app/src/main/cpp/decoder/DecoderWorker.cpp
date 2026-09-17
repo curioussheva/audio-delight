@@ -191,6 +191,15 @@ void DecoderWorker::workerLoop() {
         // DECODE
         auto result = decoder_->decode(chunkSize_);
 
+        // 🔥 DEBUG: log tiap 100 loop untuk trace
+        static int loopCount = 0;
+        loopCount++;
+        if (loopCount % 100 == 0) {
+            __android_log_print(ANDROID_LOG_INFO, "DecoderWorker",
+                "loop #%d: status=%d, frames=%u",
+                loopCount, (int)result.status, result.framesDecoded);
+        }
+
         if (result.status == DecodeStatus::Success) {
 
             if (decodeCallback_) {
@@ -198,11 +207,15 @@ void DecoderWorker::workerLoop() {
             }
 
         } else if (result.status == DecodeStatus::EndOfStream) {
+            __android_log_print(ANDROID_LOG_WARN, "DecoderWorker",
+                "EOF reached, exiting loop");
             if (eofCallback_) eofCallback_();
             break;
 
         } else if (result.status == DecodeStatus::Error ||
                    result.status == DecodeStatus::FatalError) {
+            __android_log_print(ANDROID_LOG_ERROR, "DecoderWorker",
+                "Error: %s", result.errorMessage.c_str());
             if (errorCallback_) errorCallback_(result.errorMessage);
             break;
 
@@ -212,9 +225,11 @@ void DecoderWorker::workerLoop() {
         }
 
         // 🔥 FIX: micro-sleep 100us, jangan full yield
-        std::this_thread::sleep_for(std::chrono::microseconds(100));
+        std::this_thread::sleep_for(std::chrono::microseconds(50));
     }
 
+    __android_log_print(ANDROID_LOG_INFO, "DecoderWorker",
+        "workerLoop EXITED");
     running_.store(false);
 }
 
