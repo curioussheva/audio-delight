@@ -198,7 +198,7 @@ DecodeResult FFmpegDecoder::onDecode(
             if (converted > 0) {
 
     // 🔥 FIX: turunkan gain 3 dB untuk headroom
-    constexpr float kGain = 0.707f;  // -3 dB
+    constexpr float kGain = 0.89f;  // -1 dB
     for (size_t i = 0; i < static_cast<size_t>(converted) * channels; ++i) {
         temp[i] *= kGain;
     }
@@ -451,16 +451,17 @@ bool FFmpegDecoder::setupResampler() {
     }
 
     // 🔥 FIX: Upgrade resampler quality (default terlalu rendah → distorsi)
-    // 🔥 filter_size=128 = high quality (default FFmpeg = 32)
+    // 🔥 filter_size=256 = high quality (default FFmpeg = 32)
     // NOTE: Turunkan ke 32/64 untuk performa di device low-end (fitur optimasi mendatang)
-    av_opt_set_int(swrCtx_, "filter_size", 128, 0);
+    av_opt_set_int(swrCtx_, "filter_size", 256, 0);
+    av_opt_set_double(swrCtx_, "cutoff", 0.95, 0);  // 🔥 anti-alias lebih agresif
     av_opt_set_int(swrCtx_, "linear_interp", 0, 0);
     av_opt_set_int(swrCtx_, "dither_method", SWR_DITHER_TRIANGULAR_HIGHPASS, 0);
-    av_opt_set_double(swrCtx_, "dither_scale", 1.0, 0);
+    av_opt_set_double(swrCtx_, "dither_scale", 0.5, 0);  // 🔥 turun dari 1.0
 
     int init_ret = swr_init(swrCtx_);
     __android_log_print(ANDROID_LOG_INFO, "FFmpegDecoder",
-                        "setupResampler: swr_init ret=%d (filter_size=128, dither=triangular)",
+                        "setupResampler: swr_init ret=%d (filter_size=256, cutoff=0.95, dither=0.5)",
                         init_ret);
     return init_ret >= 0;
 }
