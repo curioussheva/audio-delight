@@ -178,11 +178,14 @@ DecodeResult FFmpegDecoder::onDecode(
 
             const int channels = 2; // output stereo
 
-            std::vector<float> temp(
-                outSamples * channels);
+            const size_t neededSize = static_cast<size_t>(outSamples) * channels;
+            if (scratchBuffer_.size() < neededSize) {
+                scratchBuffer_.resize(neededSize * 2);
+            }
+            float* temp = scratchBuffer_.data();
 
             uint8_t* out[] = {
-                reinterpret_cast<uint8_t*>(temp.data())
+                reinterpret_cast<uint8_t*>(temp)
             };
 
             int converted = swr_convert(
@@ -221,8 +224,8 @@ DecodeResult FFmpegDecoder::onDecode(
 
     result.samples.insert(
         result.samples.end(),
-        temp.begin(),
-        temp.end());
+        temp,
+        temp + converted * channels);
 
     // ✅ FIX: framesDecoded = input frames (44.1k), currentFrame_ = output frames (48k)
     result.framesDecoded += frame_->nb_samples;

@@ -72,6 +72,8 @@ protected:
     bool isSeekable() const override;
 
 private:
+    std::vector<float> scratchBuffer_;  // 🔥 reusable
+
 
     bool setupCodec();
     bool setupResampler();
