@@ -93,7 +93,7 @@ export default function RootLayout() {
         const module = NativeModules.NativePlaybackModule;
         if (!module) return;
 
-        const testUri = "/storage/emulated/0/Music/Enya_-_Dark_Sky_Island.flac";  // ← FILE 18 detik
+        const testUri = "/storage/emulated/0/Music/The Rose - Leo Rojas.mp3";  // ← Leo Rojas test file
 
         await module.setQueue([testUri]);
         console.log("[DUMMY] ✅ setQueue done");

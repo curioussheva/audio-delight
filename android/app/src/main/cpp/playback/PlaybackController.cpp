@@ -3,6 +3,7 @@
 #include "../decoder/FFmpegDecoder.h"
 
 #include <algorithm>
+#include <cmath>
 #include <thread>
 #include <chrono>
 #include <android/log.h>
@@ -254,6 +255,24 @@ void PlaybackController::render(float* output,
 
     const size_t readSamples =
         pcmQueue_->read(output, requestedSamples);
+
+    // 🔥 SAFETY NET: cleanup NaN/Inf di render (untuk sisa race boundary)
+    {
+        int nanCount = 0;
+        for (size_t i = 0; i < readSamples; ++i) {
+            if (std::isnan(output[i]) || std::isinf(output[i])) {
+                output[i] = 0.0f;
+                nanCount++;
+            }
+        }
+        static int totalNan = 0;
+        totalNan += nanCount;
+        if (nanCount > 0) {
+            __android_log_print(ANDROID_LOG_WARN, "PlaybackController",
+                "render: cleaned %d NaN samples (total=%d)",
+                nanCount, totalNan);
+        }
+    }
 
     // 🔥 SPAM CONTROL: log hanya tiap 5000 render
     static int renderCount = 0;
