@@ -196,18 +196,18 @@ DecodeResult FFmpegDecoder::onDecode(
                 frame_->nb_samples);
 
             if (converted > 0) {
-    temp.resize(converted * channels);
 
     // 🔥 FIX: turunkan gain 3 dB untuk headroom
     constexpr float kGain = 0.707f;  // -3 dB
-    for (float& s : temp) {
-        s *= kGain;
+    for (size_t i = 0; i < static_cast<size_t>(converted) * channels; ++i) {
+        temp[i] *= kGain;
     }
 
     // 🔥 NaN/Inf detection & cleanup
     {
         int nanCount = 0;
-        for (float& v : temp) {
+        for (size_t i = 0; i < static_cast<size_t>(converted) * channels; ++i) {
+            float& v = temp[i];
             if (std::isnan(v) || std::isinf(v)) {
                 nanCount++;
                 v = 0.0f;
@@ -218,7 +218,7 @@ DecodeResult FFmpegDecoder::onDecode(
         if (nanCount > 0) {
             __android_log_print(ANDROID_LOG_WARN, "FFmpegDecoder",
                 "NaN/Inf detected: %d of %zu samples cleaned (total=%d)",
-                nanCount, temp.size(), totalNan);
+                nanCount, static_cast<size_t>(converted) * channels, totalNan);
         }
     }
 
@@ -234,15 +234,17 @@ DecodeResult FFmpegDecoder::onDecode(
     // 🔥 DEBUG: log min/max setiap ~4096 output frames
     static int64_t totalOut = 0;
     totalOut += converted;
-    if (totalOut % 4096 < static_cast<int64_t>(converted) && !temp.empty()) {
+    if (totalOut % 4096 < static_cast<int64_t>(converted) && converted > 0) {
         float minV = 1e9f, maxV = -1e9f;
         double sumAbs = 0.0;
-        for (float v : temp) {
+        const size_t debugN = static_cast<size_t>(converted) * channels;
+        for (size_t i = 0; i < debugN; ++i) {
+            float v = temp[i];
             if (v < minV) minV = v;
             if (v > maxV) maxV = v;
             sumAbs += (v < 0 ? -v : v);
         }
-        float meanAbs = static_cast<float>(sumAbs / temp.size());
+        float meanAbs = static_cast<float>(sumAbs / (static_cast<size_t>(converted) * channels));
         static int resampleLogCount = 0;
         resampleLogCount++;
         if (resampleLogCount % 500 == 0) {
