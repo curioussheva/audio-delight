@@ -228,10 +228,22 @@ bool PlaybackController::seek(double seconds) {
     if (!decoderWorker_)
         return false;
 
+    // 🩹 FIX (Prioritas 2): PCMQueue adalah SPSC lock-free ring buffer
+    // — HANYA aman diakses oleh 1 producer (decoder thread) + 1
+    // consumer (audio callback thread). clear() dari thread ketiga
+    // (JNI/seek caller) bisa menyebabkan writeIndex_/readIndex_ desync
+    // kalau kebetulan race dengan decoder thread yang masih write().
+    // Fix: pause producer dulu supaya tidak ada writer aktif saat clear.
+    decoderWorker_->pause();
+
     pcmQueue_->clear();
     clock_->seekToSeconds(seconds, 48000);
 
-    return decoderWorker_->seek(seconds);
+    bool ok = decoderWorker_->seek(seconds);
+
+    decoderWorker_->resume();
+
+    return ok;
 }
 
 // =====================================================

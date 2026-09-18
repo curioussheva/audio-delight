@@ -119,7 +119,15 @@ DecodeResult FFmpegDecoder::onDecode(
     result.samples.reserve(
         maxFrames * 2); // asumsi stereo
 
-    while (result.framesDecoded < maxFrames) {
+    // 🩹 FIX: counter output lokal — exit condition loop HARUS
+    // pakai domain output (targetSampleRate), bukan framesDecoded
+    // yang ada di domain input. Tanpa ini, file dengan rasio
+    // downsample besar (mis. 96kHz->48kHz = 2:1) menghasilkan
+    // output ~50% lebih sedikit dari yang diminta per panggilan,
+    // menyebabkan pcmQueue_ starved -> pulsing/chipmunk.
+    uint32_t outputFramesThisCall = 0;
+
+    while (outputFramesThisCall < maxFrames) {
 
         int readResult = av_read_frame(
             formatCtx_,
@@ -230,6 +238,8 @@ DecodeResult FFmpegDecoder::onDecode(
     // ✅ FIX: framesDecoded = input frames (44.1k), currentFrame_ = output frames (48k)
     result.framesDecoded += frame_->nb_samples;
     currentFrame_ += converted;
+    // FIX (Prioritas 1): counter output lokal — INI yang dipakai exit condition
+    outputFramesThisCall += static_cast<uint32_t>(converted);
 
     // 🔥 DEBUG: log min/max setiap ~4096 output frames
     static int64_t totalOut = 0;
@@ -255,11 +265,11 @@ DecodeResult FFmpegDecoder::onDecode(
     }
 }
 
-            if (result.framesDecoded >= maxFrames)
+            if (outputFramesThisCall >= maxFrames)
                 break;
         }
 
-        if (result.framesDecoded >= maxFrames)
+        if (outputFramesThisCall >= maxFrames)
             break;
     }
 

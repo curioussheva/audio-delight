@@ -189,7 +189,15 @@ void DecoderWorker::workerLoop() {
         if (stopRequested_.load()) break;
 
         // DECODE
-        auto result = decoder_->decode(chunkSize_);
+        // 🩹 FIX (Prioritas 3): mutex_ sebelumnya cuma melindungi
+        // seek(), TIDAK melindungi decode() di sini — artinya seek()
+        // dari thread lain bisa mengubah formatCtx_/codecCtx_/swrCtx_
+        // FFmpeg di tengah decode() masih jalan. Kunci mutex yang
+        // sama di sini supaya seek() dan decode() saling eksklusif.
+        auto result = [&]() {
+            std::lock_guard<std::mutex> lock(mutex_);
+            return decoder_->decode(chunkSize_);
+        }();
 
         // 🔥 DEBUG: log tiap 100 loop untuk trace
         static int loopCount = 0;
