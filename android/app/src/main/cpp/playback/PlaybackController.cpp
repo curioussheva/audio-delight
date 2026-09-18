@@ -256,11 +256,11 @@ void PlaybackController::render(float* output,
     const size_t readSamples =
         pcmQueue_->read(output, requestedSamples);
 
-    // 🔥 FLOW CONTROL: resume decoder kalau queue low
+    // 🔥 FIX 2: resume decoder kalau queue 50% (naik dari 30%)
     if (pcmQueue_ && decoderWorker_) {
         size_t avail = pcmQueue_->availableFrames();
         size_t cap = pcmQueue_->capacityFrames();
-        if (avail < cap * 30 / 100 && decoderWorker_->isPaused()) {
+        if (avail < cap * 50 / 100 && decoderWorker_->isPaused()) {
             decoderWorker_->resume();
         }
     }
@@ -354,20 +354,38 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
         decoderWorker_->setDecodeCallback(
             [this](decoder::DecodeResult&& result) {
                 if (pcmQueue_ && !result.samples.empty()) {
-                    pcmQueue_->write(
+                    size_t written = pcmQueue_->write(
                         result.samples.data(),
                         result.samples.size()
                     );
 
-                    // 🔥 FLOW CONTROL: pause decoder kalau queue hampir penuh
+                    // 🔥 FIX 1: detect data drop (silent overflow)
+                    if (written < result.samples.size()) {
+                        static int dropCount = 0;
+                        dropCount++;
+                        if (dropCount % 20 == 0) {
+                            __android_log_print(ANDROID_LOG_WARN, "PlaybackController",
+                                "DATA DROP: wrote %zu/%zu (queue %zu/%zu) [total drops=%d]",
+                                written, result.samples.size(),
+                                pcmQueue_->availableFrames(),
+                                pcmQueue_->capacityFrames(),
+                                dropCount);
+                        }
+                    }
+
+                    // 🔥 FIX 2: pause decoder kalau queue 70% (turun dari 80%)
                     size_t avail = pcmQueue_->availableFrames();
                     size_t cap = pcmQueue_->capacityFrames();
-                    if (avail > cap * 80 / 100) {
-                        if (decoderWorker_) {
+                    if (avail > cap * 70 / 100) {
+                        if (decoderWorker_ && !decoderWorker_->isPaused()) {
                             decoderWorker_->pause();
-                            __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
-                                "Decoder PAUSED (queue %zu%% full)",
-                                100 * avail / cap);
+                            static int pauseCount = 0;
+                            pauseCount++;
+                            if (pauseCount % 20 == 0) {
+                                __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                                    "Decoder PAUSED (queue %zu%% full) [total pauses=%d]",
+                                    100 * avail / cap, pauseCount);
+                            }
                         }
                     }
                 }
