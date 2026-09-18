@@ -74,6 +74,15 @@ void DecoderWorker::stop() {
 
 void DecoderWorker::pause() {
     paused_.store(true);
+    // 🩹 FIX (Prioritas 4): pause() sebelumnya cuma set flag lalu
+    // LANGSUNG return — tidak menunggu apa pun. Kalau caller (mis.
+    // PlaybackController::seek()) lanjut pcmQueue_->clear() sesaat
+    // setelah ini, decode+callback yang masih di tengah jalan bisa
+    // tetap write() ke queue yang baru saja di-reset -> desync.
+    // Ambil mutex_ yang sama dipakai workerLoop() supaya pause()
+    // benar-benar menunggu iterasi decode+callback aktif selesai
+    // dulu sebelum return ke caller.
+    std::lock_guard<std::mutex> lock(mutex_);
 }
 
 void DecoderWorker::resume() {
@@ -189,47 +198,49 @@ void DecoderWorker::workerLoop() {
         if (stopRequested_.load()) break;
 
         // DECODE
-        // 🩹 FIX (Prioritas 3): mutex_ sebelumnya cuma melindungi
-        // seek(), TIDAK melindungi decode() di sini — artinya seek()
-        // dari thread lain bisa mengubah formatCtx_/codecCtx_/swrCtx_
-        // FFmpeg di tengah decode() masih jalan. Kunci mutex yang
-        // sama di sini supaya seek() dan decode() saling eksklusif.
-        auto result = [&]() {
+        // 🩹 FIX (Prioritas 4): lock diperluas mencakup decodeCallback_()
+        // (yang memanggil pcmQueue_->write()). Sebelumnya callback ini
+        // dipanggil DI LUAR lock — artinya seek()/pause() bisa lanjut
+        // pcmQueue_->clear() di tengah write() sedang berjalan, walau
+        // decode() sendiri sudah selesai & lock sudah dilepas duluan.
+        // Sekarang decode() + callback jadi SATU critical section utuh.
+        {
             std::lock_guard<std::mutex> lock(mutex_);
-            return decoder_->decode(chunkSize_);
-        }();
 
-        // 🔥 DEBUG: log tiap 100 loop untuk trace
-        static int loopCount = 0;
-        loopCount++;
-        if (loopCount % 100 == 0) {
-            __android_log_print(ANDROID_LOG_INFO, "DecoderWorker",
-                "loop #%d: status=%d, frames=%u",
-                loopCount, (int)result.status, result.framesDecoded);
-        }
+            auto result = decoder_->decode(chunkSize_);
 
-        if (result.status == DecodeStatus::Success) {
-
-            if (decodeCallback_) {
-                decodeCallback_(std::move(result));
+            // 🔥 DEBUG: log tiap 100 loop untuk trace
+            static int loopCount = 0;
+            loopCount++;
+            if (loopCount % 100 == 0) {
+                __android_log_print(ANDROID_LOG_INFO, "DecoderWorker",
+                    "loop #%d: status=%d, frames=%u",
+                    loopCount, (int)result.status, result.framesDecoded);
             }
 
-        } else if (result.status == DecodeStatus::EndOfStream) {
-            __android_log_print(ANDROID_LOG_WARN, "DecoderWorker",
-                "EOF reached, exiting loop");
-            if (eofCallback_) eofCallback_();
-            break;
+            if (result.status == DecodeStatus::Success) {
 
-        } else if (result.status == DecodeStatus::Error ||
-                   result.status == DecodeStatus::FatalError) {
-            __android_log_print(ANDROID_LOG_ERROR, "DecoderWorker",
-                "Error: %s", result.errorMessage.c_str());
-            if (errorCallback_) errorCallback_(result.errorMessage);
-            break;
+                if (decodeCallback_) {
+                    decodeCallback_(std::move(result));
+                }
 
-        } else if (result.status == DecodeStatus::NeedMoreData) {
-            // streaming case → small sleep to avoid busy loop
-            std::this_thread::sleep_for(milliseconds(2));
+            } else if (result.status == DecodeStatus::EndOfStream) {
+                __android_log_print(ANDROID_LOG_WARN, "DecoderWorker",
+                    "EOF reached, exiting loop");
+                if (eofCallback_) eofCallback_();
+                break;
+
+            } else if (result.status == DecodeStatus::Error ||
+                       result.status == DecodeStatus::FatalError) {
+                __android_log_print(ANDROID_LOG_ERROR, "DecoderWorker",
+                    "Error: %s", result.errorMessage.c_str());
+                if (errorCallback_) errorCallback_(result.errorMessage);
+                break;
+
+            } else if (result.status == DecodeStatus::NeedMoreData) {
+                // streaming case → small sleep to avoid busy loop
+                std::this_thread::sleep_for(milliseconds(2));
+            }
         }
 
         // 🔥 FIX: micro-sleep 100us, jangan full yield
