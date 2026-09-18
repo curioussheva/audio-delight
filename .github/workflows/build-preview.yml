@@ -10,12 +10,13 @@ jobs:
     env:
       GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
       NODE_ENV: production
+      HUSKY: 0    # 🔥 FIX: skip husky install (devDependency)
 
     steps:
       # 1. Checkout
       - uses: actions/checkout@v4
 
-      # 2. Setup Node + PNPM (dengan cache pnpm)
+      # 2. Setup Node + PNPM
       - uses: pnpm/action-setup@v4
         with:
           version: 9.0.0
@@ -25,9 +26,9 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      # 3. Install dependencies
+      # 3. Install dependencies (HUSKY=0 sudah di env)
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       # 4. Setup Java + Android SDK
       - uses: actions/setup-java@v4
@@ -59,7 +60,7 @@ jobs:
           path: android/app/src/main/cpp/libs/ffmpeg
           key: ffmpeg-android-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-android.sh') }}
 
-      # 8. Build FFmpeg for Android (only if cache missed)
+      # 8. Build FFmpeg for Android
       - name: Build FFmpeg for Android
         if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
         run: bash scripts/build-ffmpeg-android.sh
@@ -90,7 +91,7 @@ jobs:
           }
           EOF
 
-      # 11. Patch RN Gradle Plugin (fix foojay bug)
+      # 11. Patch RN Gradle Plugin
       - name: Patch RN Gradle Plugin
         run: |
           FILE=node_modules/@react-native/gradle-plugin/settings.gradle.kts
@@ -120,7 +121,25 @@ jobs:
             -PreactNativeNewArch=true \
             -PhermesEnabled=true
 
-      # 14. Build Preview APK (Release)
+      # 14. Generate Autolinking
+      - name: Run generateAutolinkingNewArchitectureFiles
+        working-directory: android
+        run: |
+          ./gradlew generateAutolinkingNewArchitectureFiles \
+            --no-daemon \
+            -PnewArchEnabled=true \
+            -PreactNativeNewArch=true \
+            -PhermesEnabled=true
+
+      # 15. Clean native caches
+      - name: Clean native caches
+        working-directory: android
+        run: |
+          ./gradlew clean || true
+          rm -rf app/.cxx app/build
+          echo "✅ Native caches cleaned"
+
+      # 16. Build Preview APK (Release)
       - name: Build Preview APK (Release)
         working-directory: android
         run: |
@@ -131,7 +150,7 @@ jobs:
             -PhermesEnabled=true \
             -DJS_RUNTIME=hermes 2>&1 | tee build-preview.log
 
-      # 15. Upload Build Log on Failure
+      # 17. Upload Build Log on Failure
       - name: Upload Build Log
         uses: actions/upload-artifact@v4
         if: failure()
@@ -139,11 +158,10 @@ jobs:
           name: Build-Log-Release
           path: android/build-preview.log
 
-      # 16. Upload APK on Success
+      # 18. Upload APK on Success
       - name: Upload APK
         uses: actions/upload-artifact@v4
         if: success()
         with:
           name: PristineAudio-Preview
-          path: android/app/build/outputs/apk/release/*.apk
- 
+          path: android/app/build/outputs/apk/release/*.apk 
