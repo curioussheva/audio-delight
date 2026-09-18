@@ -319,7 +319,7 @@ private:
         mRunning{false};
 
     std::atomic<bool>
-        mDSPEnabled{true};
+        mDSPEnabled{false};  // 🔥 FIX: default DSP disabled
 
     std::atomic<bool>
         mLimiterEnabled{true};

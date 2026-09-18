@@ -145,7 +145,7 @@ struct DSPParameters {
         true;
 
     ProcessingMode processingMode =
-        ProcessingMode::DSP;
+        ProcessingMode::BitPerfect;  // 🔥 FIX: default bypass DSP
 
     // =============================================
     // IMMERSIVE AUDIO LAB
