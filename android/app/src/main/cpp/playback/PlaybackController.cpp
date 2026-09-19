@@ -32,7 +32,7 @@ bool PlaybackController::initialize() {
 
     // 2^19 = 524288 float samples = ~5.5 sec stereo @ 48kHz
     // WAJIB power of 2: PCMQueue pakai bitmask, bukan modulo!
-    pcmQueue_ = std::make_shared<PCMQueue>(1 << 19); // 2^19 = 524288 float = ~5.5 sec stereo @ 48kHz
+    pcmQueue_ = std::make_shared<PCMQueue>(1 << 21)  // 🔥 21.8s buffer; // 2^19 = 524288 float = ~5.5 sec stereo @ 48kHz
     clock_ = std::make_shared<PlaybackClock>();
     metrics_ = std::make_shared<MetricsCollector>();
     state_ = std::make_shared<PlaybackState>();
@@ -272,7 +272,7 @@ void PlaybackController::render(float* output,
     if (pcmQueue_ && decoderWorker_) {
         size_t avail = pcmQueue_->availableFrames();
         size_t cap = pcmQueue_->capacityFrames();
-        if (avail < cap * 50 / 100 && decoderWorker_->isPaused()) {
+        if (avail < cap * 40 / 100 && decoderWorker_->isPaused()) {
             decoderWorker_->resume();
         }
     }
@@ -388,7 +388,7 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
                     // 🔥 FIX 2: pause decoder kalau queue 70% (turun dari 80%)
                     size_t avail = pcmQueue_->availableFrames();
                     size_t cap = pcmQueue_->capacityFrames();
-                    if (avail > cap * 70 / 100) {
+                    if (avail > cap * 80 / 100) {
                         if (decoderWorker_ && !decoderWorker_->isPaused()) {
                             decoderWorker_->pause();
                             static int pauseCount = 0;
