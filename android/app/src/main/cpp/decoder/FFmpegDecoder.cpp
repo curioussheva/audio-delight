@@ -463,8 +463,14 @@ bool FFmpegDecoder::setupResampler() {
     // 🔥 FIX: Upgrade resampler quality (default terlalu rendah → distorsi)
     // 🔥 filter_size=128 = high quality (default FFmpeg = 32)
     // NOTE: Turunkan ke 32/64 untuk performa di device low-end (fitur optimasi mendatang)
-    // 🔥 Adaptive filter: filter lebih kecil untuk file >48k (CPU heavy)
-    int filterSize = codecCtx_->sample_rate > 48000 ? 64 : 128;
+    // FIX (Prioritas 7): filter_size KONSTAN 128 untuk semua rate.
+    // Sebelumnya adaptif (64 untuk >48kHz demi hemat CPU), tapi
+    // dikonfirmasi lewat A/B test filter_size=64 berkorelasi kuat
+    // dengan NaN residual di resampler untuk file hi-res (96kHz) —
+    // file 44.1kHz (filter_size=128) jauh lebih bersih pada durasi
+    // playback yang sama. Trade-off: CPU sedikit lebih berat untuk
+    // file hi-res, tapi menghilangkan sumber NaN yang terbukti.
+    int filterSize = 128;
     av_opt_set_int(swrCtx_, "filter_size", filterSize, 0);
     av_opt_set_double(swrCtx_, "cutoff", 0.97, 0);
     av_opt_set_int(swrCtx_, "linear_interp", 0, 0);
