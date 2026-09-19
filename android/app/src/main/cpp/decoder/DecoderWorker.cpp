@@ -82,7 +82,13 @@ void DecoderWorker::pause() {
     // Ambil mutex_ yang sama dipakai workerLoop() supaya pause()
     // benar-benar menunggu iterasi decode+callback aktif selesai
     // dulu sebelum return ke caller.
-    std::lock_guard<std::mutex> lock(mutex_);
+    //
+    // FIX (Prioritas 6): decodeMutex_ REKURSIF, bukan mutex_ lagi --
+    // kalau pause() ini dipanggil dari THREAD YANG SAMA yang sedang
+    // memegang decodeMutex_ (kasus backpressure dari decodeCallback_),
+    // recursive_mutex mengizinkan masuk ulang tanpa deadlock, karena
+    // memang tidak ada yang perlu ditunggu dari thread itu sendiri.
+    std::lock_guard<std::recursive_mutex> lock(decodeMutex_);
 }
 
 void DecoderWorker::resume() {
@@ -105,7 +111,8 @@ bool DecoderWorker::isPaused() const noexcept {
 bool DecoderWorker::seek(double positionSeconds) {
     if (!decoder_) return false;
 
-    std::lock_guard<std::mutex> lock(mutex_);
+    // FIX (Prioritas 6): decodeMutex_ (rekursif), bukan mutex_ lagi
+    std::lock_guard<std::recursive_mutex> lock(decodeMutex_);
 
     bool ok = decoder_->seek(positionSeconds);
     if (!ok) {
@@ -205,7 +212,8 @@ void DecoderWorker::workerLoop() {
         // decode() sendiri sudah selesai & lock sudah dilepas duluan.
         // Sekarang decode() + callback jadi SATU critical section utuh.
         {
-            std::lock_guard<std::mutex> lock(mutex_);
+            // FIX (Prioritas 6): decodeMutex_ (rekursif), bukan mutex_ lagi
+            std::lock_guard<std::recursive_mutex> lock(decodeMutex_);
 
             auto result = decoder_->decode(chunkSize_);
 

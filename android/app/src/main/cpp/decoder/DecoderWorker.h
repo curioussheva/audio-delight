@@ -123,6 +123,13 @@ private:
     EofCallback eofCallback_;
 
     mutable std::mutex mutex_;
+    // FIX (Prioritas 6): mutex REKURSIF terpisah, khusus melindungi
+    // decode()/decodeCallback_()/seek(). Direkursif karena
+    // decodeCallback_ (dipanggil dari DALAM lock ini, di workerLoop)
+    // bisa memicu decoderWorker_->pause() lewat backpressure internal
+    // -- dari THREAD YANG SAMA yang sedang memegang lock ini. mutex_
+    // di atas TETAP dipakai apa adanya untuk pauseCv_ (tidak diubah).
+    mutable std::recursive_mutex decodeMutex_;
     std::condition_variable pauseCv_;
 };
 
