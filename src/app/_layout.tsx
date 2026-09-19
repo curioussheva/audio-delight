@@ -21,9 +21,29 @@ import { audioEngine } from "@/features/player/api/engine";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
 
+// 🔥 DIAGNOSTICS
+import {
+  startAudioDiagnostics,
+  getAudioSnapshot,
+  printDiagnosticReport,
+  type AudioDiagnosticsHandle,
+} from "@/features/player/api/diagnostics";
+import { runAudioTestMatrix } from "@/features/player/api/testMatrix";
+
 SplashScreen.preventAutoHideAsync();
 
 type AppInitState = "initializing" | "loading" | "ready" | "error";
+
+// ─────────────────────────────────────────────
+// 🔥 CONFIG — UBAH INI UNTUK GANTI FILE TEST
+// ─────────────────────────────────────────────
+const DUMMY_TEST_URI = "/storage/emulated/0/Music/Enya_-_Dark_Sky_Island.flac";
+// Alternatif:
+// const DUMMY_TEST_URI = "/storage/emulated/0/Music/Enya_-_Dark_Sky_Island.flac";
+// const DUMMY_TEST_URI = "/storage/emulated/0/Music/Enya_-_Dark_Sky_Island.flac";
+
+const DUMMY_AUTOPLAY_DELAY_MS = 10000;
+const DIAGNOSTIC_INTERVAL_MS = 2000;
 
 export default function RootLayout() {
   const [appState, setAppState] = useState<AppInitState>("initializing");
@@ -31,6 +51,7 @@ export default function RootLayout() {
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const hasInitialized = useRef(false);
   const hasTriggeredDummyPlay = useRef(false);
+  const diagRef = useRef<AudioDiagnosticsHandle | null>(null);
 
   const initStore = usePlayerStore((s) => s.initStore);
   const setAudioMode = usePlayerStore((s) => s.setAudioMode);
@@ -82,45 +103,95 @@ export default function RootLayout() {
     }
   }, [performInitialization]);
 
-  // 🔥 DUMMY AUTOPLAY untuk DEBUG
+  // ============================================================
+  // 🔥 DIAGNOSTICS MONITOR (dev only)
+  // ============================================================
   useEffect(() => {
+    if (!__DEV__) return;
+    if (appState !== "ready") return;
+
+    console.log("[DIAG] 🔍 Starting audio diagnostics monitor...");
+    const diag = startAudioDiagnostics({
+      intervalMs: DIAGNOSTIC_INTERVAL_MS,
+      verbose: true,
+      speedLowThreshold: 0.5,
+      speedHighThreshold: 1.5,
+    });
+
+    diagRef.current = diag;
+
+    // 🔥 Expose ke global untuk trigger manual dari console
+    (global as any).__audioDiag = diag;
+    (global as any).__audioSnapshot = getAudioSnapshot;
+    (global as any).__audioReport = () => printDiagnosticReport(diag);
+    (global as any).__audioTestMatrix = runAudioTestMatrix;
+
+    console.log("[DIAG] ✅ Diagnostics started");
+    console.log(
+      "[DIAG] Available: __audioSnapshot(), __audioReport(), __audioTestMatrix()",
+    );
+
+    return () => {
+      console.log("[DIAG] 🛑 Stopping diagnostics monitor");
+      diag.stop();
+      diagRef.current = null;
+      delete (global as any).__audioDiag;
+      delete (global as any).__audioSnapshot;
+      delete (global as any).__audioReport;
+      delete (global as any).__audioTestMatrix;
+    };
+  }, [appState]);
+
+  // ============================================================
+  // 🔥 DUMMY AUTOPLAY untuk DEBUG (dev only)
+  // ============================================================
+  useEffect(() => {
+    if (!__DEV__) return;
     if (appState !== "ready" || hasTriggeredDummyPlay.current) return;
     hasTriggeredDummyPlay.current = true;
 
     const timer = setTimeout(async () => {
       try {
         console.log("[DUMMY] 🔥 Starting autoplay test...");
+        console.log("[DUMMY] URI:", DUMMY_TEST_URI);
+
         const module = NativeModules.NativePlaybackModule;
-        if (!module) return;
+        if (!module) {
+          console.error("[DUMMY] ❌ NativePlaybackModule not found");
+          return;
+        }
 
-        const testUri = "/storage/emulated/0/Music/Enya_-_Dark_Sky_Island.flac";  // ← MP3 44.1kHz test file
+        // Set queue
+        const t0 = Date.now();
+        await module.setQueue([DUMMY_TEST_URI]);
+        console.log(`[DUMMY] ✅ setQueue done (${Date.now() - t0}ms)`);
 
-        await module.setQueue([testUri]);
-        console.log("[DUMMY] ✅ setQueue done");
+        // Play
+        const t1 = Date.now();
         await module.play();
-        console.log("[DUMMY] ✅ play() done");
+        console.log(`[DUMMY] ✅ play() done (${Date.now() - t1}ms)`);
 
-        // 🔥 Monitor setiap 2 detik, 5 kali
-        let checkCount = 0;
-        const interval = setInterval(() => {
-          checkCount++;
+        // Monitor sekali (opsional — sudah ada [DIAG] monitor)
+        setTimeout(() => {
           try {
             const status = module.getStatus();
             const position = module.getPosition();
-            console.log(`[DUMMY] Check #${checkCount} - Status: ${status} Position: ${position}`);
-          } catch (e) {}
-          
-          if (checkCount >= 5) clearInterval(interval);
-        }, 2000);
-
+            console.log(
+              `[DUMMY] Initial state — Status: ${status}, Position: ${position}ms`,
+            );
+          } catch (e) {
+            console.warn("[DUMMY] getStatus error:", e);
+          }
+        }, 3000);
       } catch (e) {
         console.error("[DUMMY] ❌ Error:", e);
       }
-    }, 10000);
+    }, DUMMY_AUTOPLAY_DELAY_MS);
 
     return () => clearTimeout(timer);
-}, [appState]);
+  }, [appState]);
 
+  // Handle loading complete
   const handleLoadingComplete = useCallback(() => {
     SplashScreen.hideAsync().catch(() => {});
     setTimeout(() => {
@@ -133,6 +204,7 @@ export default function RootLayout() {
     }, 200);
   }, [contentOpacity]);
 
+  // ── UI STATE: ERROR ──────────────────────────────
   if (appState === "error") {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -145,6 +217,7 @@ export default function RootLayout() {
               onPress={() => {
                 setAppState("initializing");
                 hasInitialized.current = false;
+                hasTriggeredDummyPlay.current = false;
                 performInitialization();
               }}
             >
@@ -156,6 +229,7 @@ export default function RootLayout() {
     );
   }
 
+  // ── UI STATE: INITIALIZING / LOADING ─────────────
   if (appState === "initializing" || appState === "loading") {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -166,6 +240,7 @@ export default function RootLayout() {
     );
   }
 
+  // ── UI STATE: READY ──────────────────────────────
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
@@ -228,4 +303,4 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   retryText: { color: "#00D4AA", fontWeight: "bold", fontSize: 16 },
-}); 
+});  

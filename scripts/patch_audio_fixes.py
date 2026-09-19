@@ -55,14 +55,26 @@ class PatchResult:
         self.reason = ""
 
 
-def backup_file(path: pathlib.Path) -> pathlib.Path:
+def backup_file(repo: pathlib.Path, path: pathlib.Path) -> pathlib.Path:
+    """Simpan salinan file sebelum diubah ke <repo>/tmp/patch_backups/,
+    bukan di sebelah file aslinya — supaya source tree tetap bersih dari
+    file .bak_* yang menumpuk."""
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_path = path.with_name(f"{path.name}.bak_{ts}")
+    backup_dir = repo / "tmp" / "patch_backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    # nama di-flatten dari path relatif terhadap repo, supaya tidak ada
+    # tabrakan nama antar file dengan nama sama di folder berbeda
+    try:
+        rel = path.relative_to(repo)
+    except ValueError:
+        rel = pathlib.Path(path.name)
+    flat_name = str(rel).replace("/", "__").replace("\\", "__")
+    backup_path = backup_dir / f"{flat_name}.bak_{ts}"
     backup_path.write_bytes(path.read_bytes())
     return backup_path
 
 
-def apply_str_replace(path: pathlib.Path, old: str, new: str,
+def apply_str_replace(repo: pathlib.Path, path: pathlib.Path, old: str, new: str,
                        dry_run: bool, result: PatchResult) -> str:
     """Baca file, ganti SATU kemunculan `old` -> `new`. Return isi baru."""
     if not path.exists():
@@ -92,9 +104,9 @@ def apply_str_replace(path: pathlib.Path, old: str, new: str,
         result.applied = True
         return new_content
 
-    backup_path = backup_file(path)
+    backup_path = backup_file(repo, path)
     path.write_text(new_content, encoding="utf-8")
-    result.reason = f"Diterapkan. Backup: {backup_path.name}"
+    result.reason = f"Diterapkan. Backup: tmp/patch_backups/{backup_path.name}"
     result.applied = True
     return new_content
 
@@ -204,9 +216,9 @@ def patch_ffmpeg_decoder(repo: pathlib.Path, dry_run: bool) -> PatchResult:
         result.applied = True
         return result
 
-    backup_path = backup_file(path)
+    backup_path = backup_file(repo, path)
     path.write_text(new_content, encoding="utf-8")
-    result.reason = f"Diterapkan (3 patch). Backup: {backup_path.name}"
+    result.reason = f"Diterapkan (3 patch). Backup: tmp/patch_backups/{backup_path.name}"
     result.applied = True
     return result
 
@@ -255,7 +267,7 @@ def patch_playback_controller(repo: pathlib.Path, dry_run: bool) -> PatchResult:
         "}\n"
     )
 
-    apply_str_replace(path, old, new, dry_run, result)
+    apply_str_replace(repo, path, old, new, dry_run, result)
     return result
 
 
@@ -289,7 +301,7 @@ def patch_decoder_worker(repo: pathlib.Path, dry_run: bool) -> PatchResult:
         "        }();\n"
     )
 
-    apply_str_replace(path, old, new, dry_run, result)
+    apply_str_replace(repo, path, old, new, dry_run, result)
     return result
 
 
@@ -467,10 +479,232 @@ def patch_decoder_worker_pause_blocking(repo: pathlib.Path, dry_run: bool) -> Pa
         result.applied = True
         return result
 
-    backup_path = backup_file(path)
+    backup_path = backup_file(repo, path)
     path.write_text(new_content, encoding="utf-8")
-    result.reason = f"Diterapkan (2 patch). Backup: {backup_path.name}"
+    result.reason = f"Diterapkan (2 patch). Backup: tmp/patch_backups/{backup_path.name}"
     result.applied = True
+    return result
+
+
+# ----------------------------------------------------------------------
+# PRIORITAS 6 — KOREKSI Prioritas 4: root cause SEBENARNYA dari hang.
+#
+# decodeCallback_ (didefinisikan di PlaybackController::startDecoder())
+# punya logic BACKPRESSURE internal yang sudah ada sejak sebelum sesi
+# debugging ini: setelah pcmQueue_->write(...), kalau buffer > 70% penuh,
+# ia memanggil decoderWorker_->pause() -- DARI DALAM decodeCallback_ ITU
+# SENDIRI, yang dieksekusi di thread DECODER WORKER.
+#
+# Patch 4 memperluas lock (mutex_) untuk mencakup decode() + decodeCallback_()
+# sekaligus -- niatnya benar (melindungi write() dari race dengan clear()),
+# TAPI ini tanpa sengaja menjebak panggilan decoderWorker_->pause() itu di
+# DALAM scope lock yang sama. DecoderWorker::pause() (hasil Patch 4) sendiri
+# mencoba lock ulang mutex_ yang SAMA:
+#
+#     void DecoderWorker::pause() {
+#         paused_.store(true);
+#         std::lock_guard<std::mutex> lock(mutex_);   // <- mutex SAMA
+#     }
+#
+# std::mutex TIDAK reentrant -- thread yang sama mencoba lock ulang mutex
+# yang sedang ia pegang sendiri adalah undefined behavior, dan di
+# Android/pthread praktiknya SELALU deadlock permanen. Ini persis
+# menjelaskan gejala: audio berhenti total beberapa detik setelah play
+# (persis saat buffer pertama kali tembus 70%), tanpa log lanjutan sama
+# sekali -- workerLoop() macet total, bukan crash.
+#
+# FIX: pisahkan proteksi decode()/seek()/pause() ke mutex REKURSIF khusus
+# (decodeMutex_), terpisah dari mutex_ yang sudah dipakai untuk pause/resume
+# condition variable (supaya logic pauseCv_.wait() yang sudah ada tidak
+# perlu disentuh sama sekali -- itu perlu std::mutex biasa, tidak kompatibel
+# dengan recursive_mutex). Dengan recursive_mutex: thread lain (mis. JNI
+# seek thread) tetap diblokir sebagaimana mestinya menunggu decode selesai,
+# TAPI kalau pause() dipanggil dari thread yang SAMA yang sedang memegang
+# lock itu (kasus backpressure ini), ia bisa masuk ulang tanpa deadlock --
+# karena memang tidak ada yang perlu ditunggu (dia sendiri yang sedang
+# jalan).
+#
+# PRASYARAT: Patch 4 (decoder_worker_pause) harus sudah diterapkan lebih
+# dulu -- anchor di sini menyasar bentuk kode SETELAH Patch 4. Patch ini
+# MENGGANTIKAN Patch 5 (decoder_worker_narrow_lock) yang sebelumnya
+# didasarkan pada hipotesis keliru (eofCallback_/errorCallback_, yang
+# ternyata tidak pernah di-set sama sekali di codebase ini).
+# ----------------------------------------------------------------------
+
+def patch_decoder_worker_recursive_mutex(repo: pathlib.Path, dry_run: bool) -> PatchResult:
+    rel_h = "android/app/src/main/cpp/decoder/DecoderWorker.h"
+    rel_cpp = "android/app/src/main/cpp/decoder/DecoderWorker.cpp"
+    path_h = repo / rel_h
+    path_cpp = repo / rel_cpp
+    result = PatchResult(
+        "decoder_worker_recursive_mutex (Prioritas 6: recursive mutex — fix self-deadlock backpressure pause)",
+        path_cpp,
+    )
+
+    if not path_h.exists():
+        result.reason = f"File tidak ditemukan: {path_h}"
+        return result
+    if not path_cpp.exists():
+        result.reason = f"File tidak ditemukan: {path_cpp}"
+        return result
+
+    # --- Patch H: tambah member decodeMutex_ (recursive) di header ---
+    old_h = "    mutable std::mutex mutex_;\n"
+    new_h = (
+        "    mutable std::mutex mutex_;\n"
+        "    // FIX (Prioritas 6): mutex REKURSIF terpisah, khusus melindungi\n"
+        "    // decode()/decodeCallback_()/seek(). Direkursif karena\n"
+        "    // decodeCallback_ (dipanggil dari DALAM lock ini, di workerLoop)\n"
+        "    // bisa memicu decoderWorker_->pause() lewat backpressure internal\n"
+        "    // -- dari THREAD YANG SAMA yang sedang memegang lock ini. mutex_\n"
+        "    // di atas TETAP dipakai apa adanya untuk pauseCv_ (tidak diubah).\n"
+        "    mutable std::recursive_mutex decodeMutex_;\n"
+    )
+
+    # --- Patch S: DecoderWorker::seek() pakai decodeMutex_ ---
+    old_s = (
+        "bool DecoderWorker::seek(double positionSeconds) {\n"
+        "    if (!decoder_) return false;\n"
+        "\n"
+        "    std::lock_guard<std::mutex> lock(mutex_);\n"
+        "\n"
+        "    bool ok = decoder_->seek(positionSeconds);\n"
+    )
+    new_s = (
+        "bool DecoderWorker::seek(double positionSeconds) {\n"
+        "    if (!decoder_) return false;\n"
+        "\n"
+        "    // FIX (Prioritas 6): decodeMutex_ (rekursif), bukan mutex_ lagi\n"
+        "    std::lock_guard<std::recursive_mutex> lock(decodeMutex_);\n"
+        "\n"
+        "    bool ok = decoder_->seek(positionSeconds);\n"
+    )
+
+    # --- Patch W: workerLoop() decode block pakai decodeMutex_ ---
+    old_w = (
+        "        {\n"
+        "            std::lock_guard<std::mutex> lock(mutex_);\n"
+        "\n"
+        "            auto result = decoder_->decode(chunkSize_);\n"
+    )
+    new_w = (
+        "        {\n"
+        "            // FIX (Prioritas 6): decodeMutex_ (rekursif), bukan mutex_ lagi\n"
+        "            std::lock_guard<std::recursive_mutex> lock(decodeMutex_);\n"
+        "\n"
+        "            auto result = decoder_->decode(chunkSize_);\n"
+    )
+
+    # --- Patch P: DecoderWorker::pause() pakai decodeMutex_ ---
+    old_p = (
+        "    // dulu sebelum return ke caller.\n"
+        "    std::lock_guard<std::mutex> lock(mutex_);\n"
+        "}\n"
+    )
+    new_p = (
+        "    // dulu sebelum return ke caller.\n"
+        "    //\n"
+        "    // FIX (Prioritas 6): decodeMutex_ REKURSIF, bukan mutex_ lagi --\n"
+        "    // kalau pause() ini dipanggil dari THREAD YANG SAMA yang sedang\n"
+        "    // memegang decodeMutex_ (kasus backpressure dari decodeCallback_),\n"
+        "    // recursive_mutex mengizinkan masuk ulang tanpa deadlock, karena\n"
+        "    // memang tidak ada yang perlu ditunggu dari thread itu sendiri.\n"
+        "    std::lock_guard<std::recursive_mutex> lock(decodeMutex_);\n"
+        "}\n"
+    )
+
+    content_h = path_h.read_text(encoding="utf-8")
+    content_cpp = path_cpp.read_text(encoding="utf-8")
+
+    sub_results = []
+    ok = True
+    checks = (
+        ("H (header)", content_h, old_h),
+        ("S (seek)", content_cpp, old_s),
+        ("W (workerLoop)", content_cpp, old_w),
+        ("P (pause)", content_cpp, old_p),
+    )
+    for label, content, old in checks:
+        c = content.count(old)
+        if c != 1:
+            ok = False
+            sub_results.append(f"  [{label}] gagal (ditemukan {c}x, butuh tepat 1)")
+        else:
+            sub_results.append(f"  [{label}] ok")
+
+    if not ok:
+        result.reason = (
+            "Satu atau lebih anchor tidak match persis (lihat detail):\n"
+            + "\n".join(sub_results)
+            + "\n  -> Pastikan Patch 4 (decoder_worker_pause) sudah diterapkan "
+              "lebih dulu. Kalau sudah dan masih gagal, kemungkinan file "
+              "sudah berbeda -- perlu patch manual."
+        )
+        return result
+
+    new_content_h = content_h.replace(old_h, new_h, 1)
+    new_content_cpp = content_cpp.replace(old_s, new_s, 1)
+    new_content_cpp = new_content_cpp.replace(old_w, new_w, 1)
+    new_content_cpp = new_content_cpp.replace(old_p, new_p, 1)
+
+    if dry_run:
+        result.reason = "DRY-RUN — 4 patch cocok (1 header + 3 cpp), belum ditulis ke disk"
+        result.applied = True
+        return result
+
+    backup_h = backup_file(repo, path_h)
+    backup_cpp = backup_file(repo, path_cpp)
+    path_h.write_text(new_content_h, encoding="utf-8")
+    path_cpp.write_text(new_content_cpp, encoding="utf-8")
+    result.reason = (
+        f"Diterapkan (4 patch: 1 header + 3 cpp). "
+        f"Backup: tmp/patch_backups/{backup_h.name}, tmp/patch_backups/{backup_cpp.name}"
+    )
+    result.applied = True
+    return result
+
+
+
+# ----------------------------------------------------------------------
+# PRIORITAS 7 — FFmpegDecoder.cpp: filter_size adaptif (64 untuk file
+# >48kHz, demi hemat CPU) diduga jadi sumber NaN residual di resampler
+# untuk file hi-res (96kHz). Dikonfirmasi lewat A/B test: file 44.1kHz
+# (filter_size=128) jauh lebih bersih dari NaN dibanding 96kHz
+# (filter_size=64) pada durasi playback yang sama. Total NaN sudah turun
+# drastis sejak Patch 1-6 (dari ~1.3 juta ke ~235rb per sesi), tapi sisa
+# ini match persis dengan kondisi filter_size=64.
+#
+# Fix: samakan filter_size=128 untuk semua sample rate, buang logic
+# adaptive-nya. Trade-off: CPU sedikit lebih berat untuk file hi-res,
+# tapi menghilangkan sumber NaN yang terbukti berkorelasi kuat.
+# ----------------------------------------------------------------------
+
+def patch_ffmpeg_decoder_filter_size(repo: pathlib.Path, dry_run: bool) -> PatchResult:
+    rel = "android/app/src/main/cpp/decoder/FFmpegDecoder.cpp"
+    path = repo / rel
+    result = PatchResult(
+        "ffmpeg_decoder_filter_size (Prioritas 7: filter_size konstan 128 — fix NaN residual di file >48kHz)",
+        path,
+    )
+
+    old = (
+        "    // 🔥 Adaptive filter: filter lebih kecil untuk file >48k (CPU heavy)\n"
+        "    int filterSize = codecCtx_->sample_rate > 48000 ? 64 : 128;\n"
+        "    av_opt_set_int(swrCtx_, \"filter_size\", filterSize, 0);\n"
+    )
+    new = (
+        "    // FIX (Prioritas 7): filter_size KONSTAN 128 untuk semua rate.\n"
+        "    // Sebelumnya adaptif (64 untuk >48kHz demi hemat CPU), tapi\n"
+        "    // dikonfirmasi lewat A/B test filter_size=64 berkorelasi kuat\n"
+        "    // dengan NaN residual di resampler untuk file hi-res (96kHz) —\n"
+        "    // file 44.1kHz (filter_size=128) jauh lebih bersih pada durasi\n"
+        "    // playback yang sama. Trade-off: CPU sedikit lebih berat untuk\n"
+        "    // file hi-res, tapi menghilangkan sumber NaN yang terbukti.\n"
+        "    int filterSize = 128;\n"
+        "    av_opt_set_int(swrCtx_, \"filter_size\", filterSize, 0);\n"
+    )
+
+    apply_str_replace(repo, path, old, new, dry_run, result)
     return result
 
 
@@ -507,7 +741,7 @@ def patch_library_tsx(repo: pathlib.Path, dry_run: bool) -> PatchResult:
         "  }, [playSong]);\n"
     )
 
-    apply_str_replace(path, old, new, dry_run, result)
+    apply_str_replace(repo, path, old, new, dry_run, result)
     return result
 
 
@@ -520,6 +754,8 @@ ALL_PATCHES = {
     "playback_controller": patch_playback_controller,
     "decoder_worker": patch_decoder_worker,
     "decoder_worker_pause": patch_decoder_worker_pause_blocking,  # jalankan SETELAH decoder_worker
+    "decoder_worker_recursive_mutex": patch_decoder_worker_recursive_mutex,  # jalankan SETELAH decoder_worker_pause — fix self-deadlock backpressure
+    "ffmpeg_decoder_filter_size": patch_ffmpeg_decoder_filter_size,  # fix NaN residual di file >48kHz (independen, bisa jalan kapan saja)
     "library_tsx": patch_library_tsx,  # hanya jalan kalau --include-js
 }
 

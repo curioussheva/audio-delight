@@ -92,3 +92,4 @@ expo-env.d.ts
 !pnpm-lock.yamltmp/
 *.backup_*
 *.bak_*
+tmp/

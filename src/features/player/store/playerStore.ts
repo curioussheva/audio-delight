@@ -37,6 +37,29 @@ const savePositionThrottled = (position: number) => {
   }, 5000);
 };
 
+// ─────────────────────────────────────────────
+// 🔥 PERF TELEMETRY HELPER
+// Detect apakah native call sync/async + timing
+// ─────────────────────────────────────────────
+async function timedCall<T>(
+  label: string,
+  fn: () => T | Promise<T>,
+): Promise<T> {
+  const t0 = Date.now();
+  try {
+    const result = fn();
+    const isPromise = result && typeof (result as any).then === "function";
+    const final = isPromise ? await (result as Promise<T>) : (result as T);
+    const ms = Date.now() - t0;
+    console.log(`[PERF] ${label}: ${ms}ms (async=${!!isPromise})`);
+    return final;
+  } catch (e) {
+    const ms = Date.now() - t0;
+    console.error(`[PERF] ${label}: FAILED in ${ms}ms`, e);
+    throw e;
+  }
+}
+
 export interface PlayerState {
   currentSong: Song | null;
   queue: Song[];
@@ -133,7 +156,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           const currentSong =
             restoredQueue.find((s) => s.id === lastSongId) ?? restoredQueue[0];
 
-          // 🟢 Cukup pulihkan state di React/Zustand. 
+          // 🟢 Cukup pulihkan state di React/Zustand.
           // JANGAN panggil NativePlaybackService.setQueue di sini agar tidak memicu permission leak.
           set({
             queue: restoredQueue,
@@ -149,6 +172,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   // ── Core Playback ────────────────────────────────────────────────────────
   playSong: async (song: Song, newQueue?: Song[]): Promise<boolean> => {
+    const t0 = Date.now();
+
     if (!song?.id) {
       console.error("[Player] playSong: invalid song");
       set({ playError: "Invalid song" });
@@ -157,6 +182,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
     const state = get();
     if (state.currentSong?.id === song.id && state.isPlaying) {
+      console.log("[PERF] playSong: already playing same track, skip");
       return true;
     }
 
@@ -171,15 +197,29 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
 
     try {
+      // ── 1. Filter URIs ─────────────────────────────────
+      const tFilter0 = Date.now();
       const uris = targetQueue.map((s) => s.uri).filter((uri) => !!uri);
       if (uris.length === 0) {
         set({ playError: "No valid URIs" });
         return false;
       }
-      console.log("🔍 [DEBUG] URIs dikirim ke native:", JSON.stringify(uris.slice(0, 3)));
-      NativePlaybackService.setQueue(uris);
-      NativePlaybackService.play();
+      const tFilter = Date.now() - tFilter0;
+      console.log(
+        `[PERF] filter URIs: ${tFilter}ms (${uris.length}/${targetQueue.length} valid)`,
+      );
+      console.log(
+        "🔍 [DEBUG] URIs dikirim ke native:",
+        JSON.stringify(uris.slice(0, 3)),
+      );
 
+      // ── 2. setQueue (dengan await!) ────────────────────
+      await timedCall("setQueue", () => NativePlaybackService.setQueue(uris));
+
+      // ── 3. play (dengan await!) ────────────────────────
+      await timedCall("play", () => NativePlaybackService.play());
+
+      // ── 4. State update ────────────────────────────────
       set({
         currentSong: playableSong,
         queue: targetQueue,
@@ -197,9 +237,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
       SongQueries.incrementPlayCount?.(playableSong.id, 0);
 
+      const totalMs = Date.now() - t0;
+      console.log(`[PERF] playSong TOTAL: ${totalMs}ms`);
+
       return true;
     } catch (error: any) {
-      console.error("❌ [Player] playSong failed:", error);
+      const totalMs = Date.now() - t0;
+      console.error(`❌ [Player] playSong failed (${totalMs}ms):`, error);
       set({ playError: error?.message ?? "Playback failed" });
       return false;
     }
@@ -244,8 +288,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setIsPlaying: async (isPlaying: boolean) => {
     try {
-      if (isPlaying) NativePlaybackService.play();
-      else NativePlaybackService.pause();
+      if (isPlaying) {
+        await timedCall("play", () => NativePlaybackService.play());
+      } else {
+        await timedCall("pause", () => NativePlaybackService.pause());
+      }
       set({ isPlaying });
     } catch (error) {
       console.error("[Player] setIsPlaying failed:", error);
@@ -256,7 +303,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   seek: async (pos: number) => {
     try {
-      NativePlaybackService.seek(pos * 1000);
+      await timedCall("seek", () => NativePlaybackService.seek(pos * 1000));
       set({ position: pos });
     } catch (error) {
       console.error("[Player] Seek failed:", error);
@@ -323,8 +370,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setMainPlayerOpen: (open) => set({ isMainPlayerOpen: open }),
   setVisualizerOpen: (open) => set({ isVisualizerOpen: open }),
   setDrawerOpen: (open) => set({ isDrawerOpen: open }),
-  toggleMainPlayer: () =>
-    set((s) => ({ isMainPlayerOpen: !s.isMainPlayerOpen })),
+  toggleMainPlayer: () => set((s) => ({ isMainPlayerOpen: !s.isMainPlayerOpen })),
   resetFloatingPlayerVisibility: () =>
     set({
       isMainPlayerOpen: false,
@@ -384,7 +430,4 @@ const recoverUri = async (song: Song): Promise<Song> => {
     console.error("[Player] URI recovery failed:", e);
   }
   return { ...song, uri: `content://media/external/audio/media/${song.id}` };
-};
-
-// 🔴 BARIS usePlayerStore.getState().initStore() YANG LAMA SUDAH DIHAPUS DARI SINI
- 
+}; 

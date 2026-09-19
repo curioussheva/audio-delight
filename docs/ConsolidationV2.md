@@ -1349,3 +1349,243 @@ Next priority: Test manual play dari library, multi-format, stabilitas.
 Backlog: Performance mode, FD-based I/O, dynamic sample rate, bit-perfect USB DAC.
 
 Dokumen ini = single source of truth untuk semua status, roadmap, dan backlog. 🎵
+
+--------
+
+📂 File yang Bertanggungjawab per Layer
+
+Peta lengkap layer → file → fungsi. Untuk mempermudah debugging dan navigasi.
+
+---
+
+🗺️ Layer 1 — UI / JS
+
+File Peran Fungsi Kunci
+src/app/(drawer)/(tabs)/library.tsx Library UI handleSongPress(item, slice), onPress
+src/features/player/store/playerStore.ts State management playSong(track, queue), setQueue()
+src/features/player/api/engine.ts Engine wrapper JS audioEngine.initialize(), setQueue(), play()
+src/features/player/api/playback.ts Playback service (jika ada) —
+src/app/_layout.tsx Dummy autoplay (debug) setTimeout + module.setQueue/play
+
+---
+
+🗺️ Layer 2 — Kotlin (Android)
+
+File Peran Fungsi Kunci
+android/app/src/main/java/com/pristineaudio/playback/NativePlaybackService.kt React Native module (UI) setQueue(), play(), resolveContentUriToPath()
+android/app/src/main/java/com/pristineaudio/playback/PlaybackNativeBridge.kt Bridge ke singleton setQueue(), play(), pause()
+android/app/src/main/java/com/pristineaudio/audio/NativePlaybackModule.kt React module (dummy autoplay) setQueue(), play(), resolveContentUri()
+android/app/src/main/java/com/pristineaudio/playback/PlaybackService.kt Foreground service (kalau ada — notification, media session)
+android/app/src/main/java/com/pristineaudio/app/MainApplication.kt App entry System.loadLibrary("pristine-audio")
+android/app/src/main/java/com/pristineaudio/app/MainActivity.kt Activity React Native host
+
+---
+
+🗺️ Layer 3 — JNI Bridge
+
+File Peran Fungsi Kunci
+android/app/src/main/cpp/jni/NativePlaybackModule.cpp JNI untuk playback nativeSetQueue(), nativePlay(), nativePause(), getController()
+android/app/src/main/cpp/jni/NativeDSPModule.cpp JNI untuk DSP setProcessingMode(), setEQ(), dll
+android/app/src/main/cpp/jni/NativeVisualizerModule.cpp JNI untuk visualizer getFFTData()
+android/app/src/main/cpp/jni/NativePristineAudio.cpp JNI misc (engine API) initialize(), setProcessingMode()
+android/app/src/main/cpp/jni/NativeDeviceModule.cpp JNI device nativeGetDevices()
+android/app/src/main/cpp/jni/NativeAudioFeed.cpp RNTP fork (dead code?) feedFloatBuffer()
+android/app/src/main/cpp/jni/OnLoad.cpp JNI_OnLoad EngineManager::start()
+
+---
+
+🗺️ Layer 4 — EngineManager (Singleton)
+
+File Peran Fungsi Kunci
+android/app/src/main/cpp/manager/EngineManager.cpp Singleton orchestrator get(), start(), playback(), engine(), setProcessingMode()
+android/app/src/main/cpp/manager/EngineManager.h Header Deklarasi mPlayback, mEngine, mState
+
+---
+
+🗺️ Layer 5 — AudioEngine (High-Level)
+
+File Peran Fungsi Kunci
+android/app/src/main/cpp/core/AudioEngine.cpp High-level engine start(), stop(), setProcessingMode(), setPlaybackController()
+android/app/src/main/cpp/core/AudioEngine.h Header —
+android/app/src/main/cpp/core/AudioStreamController.cpp Oboe stream open(), start(), close(), sampleRate()
+android/app/src/main/cpp/core/AudioStreamController.h Header —
+
+---
+
+🗺️ Layer 6 — AudioCallback (Realtime Entry)
+
+File Peran Fungsi Kunci
+android/app/src/main/cpp/core/AudioCallback.cpp Oboe callback onAudioReady() → render or DSP process
+android/app/src/main/cpp/core/AudioCallback.h Header setSampleRate(), setPlaybackController()
+android/app/src/main/cpp/core/AudioPipeline.cpp DSP chain runner process(), processBitPerfect(), processDSP()
+android/app/src/main/cpp/core/AudioPipeline.h Header —
+android/app/src/main/cpp/core/AudioState.h State atomics isDSPEnabled(), processingMode(), setPosition()
+android/app/src/main/cpp/core/AudioTypes.h Type definitions ProcessingMode enum (BitPerfect/DSP/Immersive)
+android/app/src/main/cpp/core/AudioConstants.h Constants kDefaultSampleRate
+android/app/src/main/cpp/core/AudioConfig.h Config struct setSampleRate(), setProcessingMode()
+android/app/src/main/cpp/core/AudioBufferController.cpp Fallback audio popStereo() (legacy path)
+android/app/src/main/cpp/core/AudioMetrics.cpp Metrics recordFrameRendered()
+
+---
+
+🗺️ Layer 7 — PlaybackController (Orchestrator)
+
+File Peran Fungsi Kunci
+android/app/src/main/cpp/playback/PlaybackController.cpp Controller utama play(), pause(), loadTrack(), render(), startDecoder()
+android/app/src/main/cpp/playback/PlaybackController.h Header clearing_, pcmQueue_, decoderWorker_
+android/app/src/main/cpp/playback/PCMQueue.cpp SPSC queue write(), read(), availableFrames()
+android/app/src/main/cpp/playback/PCMQueue.h Header capacity_, mask_, atomic indices
+android/app/src/main/cpp/playback/PlaybackClock.cpp Position tracking advanceFrames(), positionFrames(), getPosition()
+android/app/src/main/cpp/playback/PlaybackClock.h Header —
+android/app/src/main/cpp/playback/TrackQueue.cpp Track list setTracks(), current(), next(), previous()
+android/app/src/main/cpp/playback/TrackQueue.h Header —
+android/app/src/main/cpp/playback/PlaybackState.h State setStatus(), setPosition(), getStatus()
+android/app/src/main/cpp/playback/PlaybackMetrics.cpp Metrics recordFrameRendered()
+android/app/src/main/cpp/playback/PlaybackMetrics.h Header —
+android/app/src/main/cpp/playback/PlaybackTypes.h Types TrackInfo, PlaybackStatus
+android/app/src/main/cpp/playback/PrebufferManager.cpp Prebuffer (dead?) —
+android/app/src/main/cpp/playback/PlaybackScheduler.cpp Scheduler (dead?) —
+android/app/src/main/cpp/playback/FadeEngine.cpp Fade in/out —
+android/app/src/main/cpp/playback/DecodedAudioQueue.cpp Alternative queue (dead?) —
+android/app/src/main/cpp/playback/PlaybackManager.cpp DEAD CODE Kandidat hapus
+
+---
+
+🗺️ Layer 8 — DecoderWorker (Producer Thread)
+
+File Peran Fungsi Kunci
+android/app/src/main/cpp/decoder/DecoderWorker.cpp Producer thread workerLoop(), start(), pause(), resume(), seek()
+android/app/src/main/cpp/decoder/DecoderWorker.h Header chunkSize_, running_, paused_
+
+---
+
+🗺️ Layer 9 — FFmpegDecoder (Decode + Resample)
+
+File Peran Fungsi Kunci
+android/app/src/main/cpp/decoder/FFmpegDecoder.cpp Decoder + resampler onOpen(), onDecode(), setupResampler(), swr_convert()
+android/app/src/main/cpp/decoder/FFmpegDecoder.h Header scratchBuffer_, codecCtx_, swrCtx_
+android/app/src/main/cpp/decoder/AudioDecoder.cpp Base class open(), decode(), close(), seek()
+android/app/src/main/cpp/decoder/AudioDecoder.h Header Virtual methods
+android/app/src/main/cpp/decoder/DecoderFactory.cpp Factory create() (MP3/FLAC/AAC)
+android/app/src/main/cpp/decoder/DecoderTypes.h Types DecodeResult, DecodeConfig, targetSampleRate
+android/app/src/main/cpp/decoder/PCMDecoder.cpp PCM fallback —
+android/app/src/main/cpp/decoder/StreamResampler.cpp Alt resampler (mungkin tidak dipakai)
+android/app/src/main/cpp/decoder/DecoderUtils.cpp Utilities —
+
+---
+
+🗺️ Layer 10 — DSP Chain (Opsional)
+
+File Peran
+android/app/src/main/cpp/dsp/DSPChain.cpp Chain orchestrator
+android/app/src/main/cpp/dsp/graph/DSPGraph.cpp Graph-based DSP
+android/app/src/main/cpp/dsp/BiquadFilter.cpp Biquad filter
+android/app/src/main/cpp/dsp/EQProcessor.cpp Equalizer
+android/app/src/main/cpp/dsp/OutputStage.cpp Output gain/limiter
+android/app/src/main/cpp/dsp/filters/StateVariableFilter.cpp SVF filter
+android/app/src/main/cpp/dsp/dynamics/LimiterNode.cpp Limiter
+android/app/src/main/cpp/dsp/tone/EQNode.cpp EQ node
+android/app/src/main/cpp/dsp/tone/GainNode.cpp Gain node
+android/app/src/main/cpp/dsp/spatial/StereoWidenerNode.cpp Stereo widening
+android/app/src/main/cpp/dsp/convolution/* Convolution (IR sim)
+android/app/src/main/cpp/dsp/immersive/* Immersive DSP
+android/app/src/main/cpp/dsp/headphone/* Headphone correction
+
+Status: Bypass saat ini (karena default mode = BitPerfect). Tidak dieksekusi.
+
+---
+
+🗺️ Layer 11 — Oboe → DAC → Output
+
+File Peran Fungsi Kunci
+android/app/src/main/cpp/oboe/ Library Oboe Low-level audio I/O
+android/app/src/main/cpp/core/AudioStreamController.cpp Oboe wrapper openStream(), builder.setSampleRate()
+android/app/src/main/cpp/core/AudioEngine.cpp Start/stop stream start(), stop()
+
+---
+
+🗺️ Pendukung (Cross-layer)
+
+File Peran
+android/app/src/main/cpp/CMakeLists.txt Build config (-fno-fast-math, -O2)
+android/app/src/main/java/com/pristineaudio/audio/NativePlaybackModule.kt Kotlin ↔ JNI bridge
+android/app/src/main/java/com/pristineaudio/app/MainApplication.kt System.loadLibrary
+android/app/src/main/cpp/utils/Logger.h Logging macro
+android/app/src/main/cpp/utils/AudioMath.h Math helpers
+
+---
+
+🎯 Mapping Cepat — Bug → File
+
+Bug File Utama
+Audio tidak keluar AudioCallback.cpp, AudioStreamController.cpp, PlaybackController.cpp
+Chipmunk AudioTypes.h (default mode), AudioState.h (DSP enabled), PlaybackController.cpp (flow control)
+Silence intermittent PCMQueue.cpp, DecoderWorker.cpp, PlaybackController.cpp (hysteresis)
+Distorsi/clipping FFmpegDecoder.cpp (gain, filter), AudioStreamController.cpp (format)
+NaN/garbage FFmpegDecoder.cpp (NaN cleanup), CMakeLists.txt (-fno-fast-math)
+Metallic FFmpegDecoder.cpp (filter_size, cutoff)
+Konten content:// gagal NativePlaybackService.kt (resolveContentUriToPath)
+Library slice 1195 library.tsx (handleSongPress)
+State JS not sync PlaybackController.cpp (updatePlaybackState)
+
+---
+
+📊 File Count per Layer
+
+Layer File Count
+1 (UI/JS) 4-5
+2 (Kotlin) 4-6
+3 (JNI) 7
+4 (Manager) 2
+5 (AudioEngine) 4
+6 (Callback + Pipeline) 9
+7 (PlaybackController) ~15
+8 (DecoderWorker) 2
+9 (FFmpegDecoder) 9
+10 (DSP) ~25
+11 (Oboe) (Library, skip)
+TOTAL project files ~80
+
+---
+
+🎯 Debug Priority — File yang Sering Disentuh
+
+Rank File Kenapa
+1 PlaybackController.cpp Orchestrator + flow control
+2 FFmpegDecoder.cpp Decode + resample + filter
+3 PCMQueue.cpp Queue (power-of-2 issue)
+4 AudioCallback.cpp Realtime entry + DSP gate
+5 AudioState.h Default DSP enabled (root cause)
+6 AudioTypes.h Default processing mode
+7 DecoderWorker.cpp Thread priority + loop
+8 AudioStreamController.cpp Oboe config
+9 NativePlaybackService.kt content:// resolve
+10 library.tsx Queue slice
+
+---
+
+💡 Insight
+
+Arsitektur berlapis dengan single responsibility:
+
+· Producer: DecoderWorker (thread) → FFmpegDecoder (logic)
+· Buffer: PCMQueue (lock-free SPSC)
+· Consumer: AudioCallback → render → Oboe
+· Orchestrator: PlaybackController (lifecycle)
+· Manager: EngineManager (singleton)
+
+Debug flow:
+
+1. JS → log Metro ([Player] playSong)
+2. Kotlin → log Logcat (NativePlaybackService)
+3. JNI → log NativePlaybackModule
+4. C++ → log per-layer dengan tag berbeda
+5. Oboe → log OboeAudio (library)
+
+Setiap layer punya log tag → bisa pinpoint lokasi bug.
+
+---
+
+Simpan peta ini sebagai referensi debugging! 🎯
+
+Setiap kali ada bug, kita bisa cek "layer mana yang salah" → "file mana" → "fungsi mana". 🎵
