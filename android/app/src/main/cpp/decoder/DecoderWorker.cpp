@@ -55,8 +55,6 @@ bool DecoderWorker::start(const std::string& uri, double startPosition) {
 }
 
 void DecoderWorker::stop() {
-    if (!running_.load()) return;
-
     stopRequested_.store(true);
     paused_.store(false);
     pauseCv_.notify_all();
@@ -70,7 +68,7 @@ void DecoderWorker::stop() {
     if (decoder_) {
         decoder_->close();
     }
-}
+} 
 
 void DecoderWorker::pause() {
     paused_.store(true);
