@@ -20,7 +20,6 @@ import { AudioPropertyToast } from "@/features/player/components/AudioPropertyTo
 import { audioEngine } from "@/features/player/api/engine";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
-import NativePlaybackService from "@/specs/NativePlaybackService";
 
 // 🔥 DIAGNOSTICS
 import {
@@ -145,8 +144,6 @@ export default function RootLayout() {
 
   // ============================================================
   // 🔥 DUMMY AUTOPLAY untuk DEBUG (dev only)
-  // 🔧 DIGANTI: NativePlaybackModule → NativePlaybackService
-  //    (jalur asli yang dipakai playerStore.ts / manual play library)
   // ============================================================
   useEffect(() => {
     if (!__DEV__) return;
@@ -158,26 +155,27 @@ export default function RootLayout() {
         console.log("[DUMMY] 🔥 Starting autoplay test...");
         console.log("[DUMMY] URI:", DUMMY_TEST_URI);
 
-        if (!NativePlaybackService) {
-          console.error("[DUMMY] ❌ NativePlaybackService not found");
+        const module = NativeModules.NativePlaybackModule;
+        if (!module) {
+          console.error("[DUMMY] ❌ NativePlaybackModule not found");
           return;
         }
 
         // Set queue
         const t0 = Date.now();
-        await NativePlaybackService.setQueue([DUMMY_TEST_URI]);
+        await module.setQueue([DUMMY_TEST_URI]);
         console.log(`[DUMMY] ✅ setQueue done (${Date.now() - t0}ms)`);
 
         // Play
         const t1 = Date.now();
-        await NativePlaybackService.play();
+        await module.play();
         console.log(`[DUMMY] ✅ play() done (${Date.now() - t1}ms)`);
 
         // Monitor sekali (opsional — sudah ada [DIAG] monitor)
-        setTimeout(async () => {
+        setTimeout(() => {
           try {
-            const status = await NativePlaybackService.getStatus();
-            const position = await NativePlaybackService.getPosition();
+            const status = module.getStatus();
+            const position = module.getPosition();
             console.log(
               `[DUMMY] Initial state — Status: ${status}, Position: ${position}ms`,
             );
@@ -305,4 +303,4 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   retryText: { color: "#00D4AA", fontWeight: "bold", fontSize: 16 },
-}); 
+});  

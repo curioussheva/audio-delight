@@ -158,26 +158,32 @@ bool PlaybackController::play() {
         return false;
     }
 
+    if (!queue_) {
+        __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
+                            "play(): FAILED - queue_ null");
+        return false;
+    }
+
+    auto track = queue_->current();
+    if (!track) {
+        __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
+                            "play(): FAILED - queue_->current() null (size=%zu)",
+                            queue_->tracks().size());
+        return false;
+    }
+
+    // 🔥 FIX: load track baru kalau decoder belum ada ATAU track berubah
+    // (sebelumnya cuma cek !decoderWorker_, jadi kalau decoder sudah ada
+    // dari track sebelumnya, track baru dari queue tidak pernah di-load)
+    bool needsLoad = !decoderWorker_ || track->uri != currentTrack_.uri;
+
     __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
-                        "play(): decoderWorker_=%s, queue_=%s",
+                        "play(): decoderWorker_=%s, needsLoad=%s, uri=%s",
                         decoderWorker_ ? "exists" : "null",
-                        queue_ ? "exists" : "null");
+                        needsLoad ? "true" : "false",
+                        track->uri.c_str());
 
-    if (!decoderWorker_) {
-        if (!queue_) {
-            __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
-                                "play(): FAILED - queue_ null");
-            return false;
-        }
-
-        auto track = queue_->current();
-        if (!track) {
-            __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
-                                "play(): FAILED - queue_->current() null (size=%zu)",
-                                queue_->tracks().size());
-            return false;
-        }
-
+    if (needsLoad) {
         __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                             "play(): track uri=%s, calling loadTrack",
                             track->uri.c_str());
@@ -199,7 +205,7 @@ bool PlaybackController::play() {
     __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                         "play(): SUCCESS");
     return true;
-}
+} 
 
 bool PlaybackController::pause() {
     playing_.store(false, std::memory_order_release);
