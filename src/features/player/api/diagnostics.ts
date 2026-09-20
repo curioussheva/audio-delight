@@ -138,7 +138,14 @@ export function startAudioDiagnostics(options?: {
       }
     }
 
-    if (verbose) {
+    // 🔥 Smart logging: hanya log saat penting
+    const shouldLog =
+      verbose &&
+      (snap.status === 2 ||                                   // PLAYING
+       snap.status !== lastStatus ||                          // Status change
+       (speed > 0 && Math.abs(speed - 1.0) > 0.5));          // Anomaly
+
+    if (shouldLog) {
       console.log(
         `[DIAG] ${snap.statusLabel} pos=${snap.positionMs}ms speed=${speed.toFixed(2)}x`,
       );

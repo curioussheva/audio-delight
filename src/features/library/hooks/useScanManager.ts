@@ -20,47 +20,38 @@ export function useScanManager() {
   const lastResumeScan = useRef(0); // ✅ useRef, bukan let — persist antar render
   const [isLocked, setIsLocked] = useState(false);
 
-  // ── Initial Scan hanya jika library kosong ──────────────────────────────────
-  
-  // ── Initial Scan — DISABLED SEMENTARA UNTUK DEBUGGING ─────────────────────
-useEffect(() => {
-  if (hasInitialized.current) return;
-  hasInitialized.current = true;
+// ── Initial Scan hanya jika library kosong ──────────────────────────────────
+  useEffect(() => {
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
 
-  // 🔥 DISABLED: Uncomment untuk aktifkan kembali
-  console.log("[useScanManager] 🚫 Initial scan DISABLED (debug mode)");
-  return;
+    const timer = setTimeout(async () => {
+      const currentStore = useLibraryStore.getState();
 
-  // ─────────────────────────────────────────────────────────────
-  // Kode asli (jangan dihapus, di-comment sementara):
-  // ─────────────────────────────────────────────────────────────
-  /*
-  const timer = setTimeout(async () => {
-    const currentStore = useLibraryStore.getState();
+      if (currentStore.tracks.length === 0) {
+        console.log(
+          "[useScanManager] Fresh/empty library → Running initial MANUAL (DEEP) Scan",
+        );
 
-    if (currentStore.tracks.length === 0) {
-      console.log(
-        "[useScanManager] Fresh/empty library → Running initial MANUAL (DEEP) Scan",
-      );
-      
-      setIsLocked(true);
-      try {
-        await UnifiedScanService.manualScan();
-      } catch (err) {
-        console.warn("[useScanManager] Initial scan error:", err);
-      } finally {
-        setIsLocked(false);
+        setIsLocked(true);
+        try {
+          await UnifiedScanService.manualScan((progress) => {
+            useLibraryStore.getState().updateManualScanProgress(progress);
+          });
+        } catch (err) {
+          console.warn("[useScanManager] Initial scan error:", err);
+        } finally {
+          setIsLocked(false);
+        }
+      } else {
+        console.log(
+          "[useScanManager] Library already exists → Skipping initial scan",
+        );
       }
-    } else {
-      console.log(
-        "[useScanManager] Library already exists → Skipping initial scan",
-      );
-    }
-  }, 1000);
+    }, 1000);
 
-  return () => clearTimeout(timer);
-  */
-}, []);
+    return () => clearTimeout(timer);
+  }, []); 
 
   // ── Quick Diff saat App Resume ──────────────────────────────────────────────
   useEffect(() => {
@@ -201,5 +192,4 @@ useEffect(() => {
     autoScanProgress: store.autoScanProgress,
     lastEnrichmentAt: store.lastEnrichmentAt,
   };
-}
- 
+} 

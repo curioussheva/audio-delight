@@ -1,5 +1,4 @@
 import { configureReanimatedLogger, ReanimatedLogLevel } from "react-native-reanimated";
-import { NativeModules } from "react-native";
 
 console.log("[BOOT] 0. _layout module loaded");
 const Platform = require("react-native").Platform;
@@ -20,7 +19,6 @@ import { AudioPropertyToast } from "@/features/player/components/AudioPropertyTo
 import { audioEngine } from "@/features/player/api/engine";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
-import NativePlaybackService from "@/specs/NativePlaybackService";
 
 // 🔥 DIAGNOSTICS
 import {
@@ -30,28 +28,18 @@ import {
   type AudioDiagnosticsHandle,
 } from "@/features/player/api/diagnostics";
 import { runAudioTestMatrix } from "@/features/player/api/testMatrix";
-
+ 
 SplashScreen.preventAutoHideAsync();
 
 type AppInitState = "initializing" | "loading" | "ready" | "error";
 
-// ─────────────────────────────────────────────
-// 🔥 CONFIG — UBAH INI UNTUK GANTI FILE TEST
-// ─────────────────────────────────────────────
-const DUMMY_TEST_URI = "/storage/emulated/0/Music/Enya_-_Dark_Sky_Island.flac";
-// Alternatif:
-// const DUMMY_TEST_URI = "/storage/emulated/0/Music/Enya_-_Dark_Sky_Island.flac";
-// const DUMMY_TEST_URI = "/storage/emulated/0/Music/Enya_-_Dark_Sky_Island.flac";
-
-const DUMMY_AUTOPLAY_DELAY_MS = 10000;
-const DIAGNOSTIC_INTERVAL_MS = 2000;
+const DIAGNOSTIC_INTERVAL_MS = 5000;
 
 export default function RootLayout() {
   const [appState, setAppState] = useState<AppInitState>("initializing");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const hasInitialized = useRef(false);
-  const hasTriggeredDummyPlay = useRef(false);
   const diagRef = useRef<AudioDiagnosticsHandle | null>(null);
 
   const initStore = usePlayerStore((s) => s.initStore);
@@ -72,37 +60,47 @@ export default function RootLayout() {
   }, []);
 
   // Init
-  const performInitialization = useCallback(async () => {
+const performInitialization = useCallback(async () => {
+  try {
+    console.log("[BOOT] 1. Initializing Audio Engine & Stores...");
+    await audioEngine.initialize();
+    await initStore();
+
+    // 🔥 FIX: Clear old audio cache (anti penumpukan)
     try {
-      console.log("[BOOT] 1. Initializing Audio Engine & Stores...");
-      await audioEngine.initialize();
-      await initStore();
-
-      const savedMode = await AsyncStorage.getItem("audio_mode_preference");
-      const eqStore = useEqualizerStore.getState();
-
-      if (savedMode === "bit-perfect") {
-        await setAudioMode("bit-perfect");
-        eqStore.setEQEnabled(false);
+      const { NativeModules } = require("react-native");
+      const svc = NativeModules.NativePlaybackService;
+      if (svc?.clearCache) {
+        const deleted = await svc.clearCache();
+        console.log(`[BOOT] 🧹 Cleared ${deleted} cache files`);
       } else {
-        await setAudioMode("dsp");
+        console.log("[BOOT] ⚠️ clearCache not available (Kotlin belum rebuild)");
       }
-
-      console.log("[BOOT] ✅ Engine & Store initialization success.");
-      setAppState("loading");
-    } catch (error) {
-      console.error("[BOOT] ❌ Initialization Fatal Error:", error);
-      setErrorMessage(error instanceof Error ? error.message : "Engine Failure");
-      setAppState("error");
+    } catch (e) {
+      console.warn("[BOOT] Cache cleanup skipped:", e);
     }
-  }, [initStore, setAudioMode]);
 
-  useEffect(() => {
-    if (!hasInitialized.current) {
-      hasInitialized.current = true;
-      performInitialization();
+    const savedMode = await AsyncStorage.getItem("audio_mode_preference");
+    const eqStore = useEqualizerStore.getState();
+
+    if (savedMode === "bit-perfect") {
+      await setAudioMode("bit-perfect");
+      eqStore.setEQEnabled(false);
+    } else {
+      await setAudioMode("dsp");
     }
-  }, [performInitialization]);
+
+    console.log("[BOOT] ✅ Engine & Store initialization success.");
+    setAppState("loading");
+  } catch (error) {
+    console.error("[BOOT] ❌ Initialization Fatal Error:", error);
+    setErrorMessage(error instanceof Error ? error.message : "Engine Failure");
+    setAppState("error");
+  }
+}, [initStore, setAudioMode]);
+
+
+
 
   // ============================================================
   // 🔥 DIAGNOSTICS MONITOR (dev only)
@@ -143,56 +141,6 @@ export default function RootLayout() {
     };
   }, [appState]);
 
-  // ============================================================
-  // 🔥 DUMMY AUTOPLAY untuk DEBUG (dev only)
-  // 🔧 DIGANTI: NativePlaybackModule → NativePlaybackService
-  //    (jalur asli yang dipakai playerStore.ts / manual play library)
-  // ============================================================
-  useEffect(() => {
-    if (!__DEV__) return;
-    if (appState !== "ready" || hasTriggeredDummyPlay.current) return;
-    hasTriggeredDummyPlay.current = true;
-
-    const timer = setTimeout(async () => {
-      try {
-        console.log("[DUMMY] 🔥 Starting autoplay test...");
-        console.log("[DUMMY] URI:", DUMMY_TEST_URI);
-
-        if (!NativePlaybackService) {
-          console.error("[DUMMY] ❌ NativePlaybackService not found");
-          return;
-        }
-
-        // Set queue
-        const t0 = Date.now();
-        await NativePlaybackService.setQueue([DUMMY_TEST_URI]);
-        console.log(`[DUMMY] ✅ setQueue done (${Date.now() - t0}ms)`);
-
-        // Play
-        const t1 = Date.now();
-        await NativePlaybackService.play();
-        console.log(`[DUMMY] ✅ play() done (${Date.now() - t1}ms)`);
-
-        // Monitor sekali (opsional — sudah ada [DIAG] monitor)
-        setTimeout(async () => {
-          try {
-            const status = await NativePlaybackService.getStatus();
-            const position = await NativePlaybackService.getPosition();
-            console.log(
-              `[DUMMY] Initial state — Status: ${status}, Position: ${position}ms`,
-            );
-          } catch (e) {
-            console.warn("[DUMMY] getStatus error:", e);
-          }
-        }, 3000);
-      } catch (e) {
-        console.error("[DUMMY] ❌ Error:", e);
-      }
-    }, DUMMY_AUTOPLAY_DELAY_MS);
-
-    return () => clearTimeout(timer);
-  }, [appState]);
-
   // Handle loading complete
   const handleLoadingComplete = useCallback(() => {
     SplashScreen.hideAsync().catch(() => {});
@@ -219,7 +167,6 @@ export default function RootLayout() {
               onPress={() => {
                 setAppState("initializing");
                 hasInitialized.current = false;
-                hasTriggeredDummyPlay.current = false;
                 performInitialization();
               }}
             >

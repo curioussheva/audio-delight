@@ -93,3 +93,5 @@ expo-env.d.ts
 *.backup_*
 *.bak_*
 tmp/
+*.bak
+*.bak_*

@@ -232,7 +232,7 @@ export default function LibraryScreen() {
 
     try {
       await manualRescan((progress) => {
-        // Tidak perlu setScanning lagi karena sudah di dalam useScanManager
+        useLibraryStore.getState().updateManualScanProgress(progress);
       });
 
       await refreshLibrary(false);
@@ -241,7 +241,7 @@ export default function LibraryScreen() {
       console.error("Manual scan failed:", error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
-  };
+  }; 
 
   const handleEnhanceMetadata = () => {
     if (unenrichedCount === 0) return;
@@ -410,9 +410,17 @@ export default function LibraryScreen() {
     }
 
     if (tracks.length === 0) {
-      return <EmptyLibrary colors={colors} onScan={handleManualRescan} />;
+      return (
+        <EmptyLibrary
+          colors={colors}
+          onScan={handleManualRescan}
+          isScanning={isManualScanning || isAutoScanning}
+          scanProgress={manualScanProgress?.current ?? 0}
+          scanTotal={manualScanProgress?.total ?? 0}
+        />
+      );
     }
-
+ 
     switch (activeTab) {
       case "song":
         return (
