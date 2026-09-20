@@ -82,41 +82,50 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
     fun getCurrentTrack(promise: Promise) {
         promise.resolve(PlaybackNativeBridge.getCurrentTrack() ?: "")
     }
+    
+    @ReactMethod
+fun updateMetadata(title: String, artist: String, album: String, durationMs: Double) {
+    PlaybackNativeBridge.updateMetadata(title, artist, album, durationMs.toLong())
+}
+
+@ReactMethod
+fun updatePlaybackState(isPlaying: Boolean, positionMs: Double) {
+    PlaybackNativeBridge.updatePlaybackState(isPlaying, positionMs.toLong())
+}
 
     private fun resolveContentUriToPath(uriString: String): String {
-        if (!uriString.startsWith("content://")) return uriString
+    if (!uriString.startsWith("content://")) return uriString
 
-        return try {
-            val resolver = reactApplicationContext.contentResolver
-            val uri = android.net.Uri.parse(uriString)
+    return try {
+        val resolver = reactApplicationContext.contentResolver
+        val uri = android.net.Uri.parse(uriString)
 
-            // 🔥 FIX: langsung copy ke cache (reliable, tanpa MediaStore query)
-            val ext = resolver.getType(uri)?.substringAfterLast('/') ?: "cache"
-            val file = File(
-                reactApplicationContext.cacheDir,
-                "audio_${uriString.hashCode()}.$ext"
-            )
+        val ext = resolver.getType(uri)?.substringAfterLast('/') ?: "cache"
+        val file = File(
+            reactApplicationContext.cacheDir,
+            "audio_${uriString.hashCode()}.$ext"
+        )
 
-            if (!file.exists() || file.length() == 0L) {
-                val inputStream = resolver.openInputStream(uri)
-                    ?: return uriString
-                file.outputStream().use { output ->
-                    inputStream.copyTo(output)
-                }
+        if (!file.exists() || file.length() == 0L) {
+            val inputStream = resolver.openInputStream(uri)
+                ?: return uriString
+            file.outputStream().use { output ->
+                inputStream.copyTo(output)
             }
-
-            android.util.Log.d(
-                "NativePlaybackService",
-                "resolveContentUriToPath: $uriString → ${file.absolutePath} (${file.length()} bytes)"
-            )
-
-            file.absolutePath
-        } catch (e: Exception) {
-            android.util.Log.e(
-                "NativePlaybackService",
-                "resolveContentUriToPath failed: $uriString", e
-            )
-            uriString
         }
+
+        android.util.Log.d(
+            "NativePlaybackService",
+            "resolveContentUriToPath: $uriString → ${file.absolutePath} (${file.length()} bytes)"
+        )
+
+        file.absolutePath
+    } catch (e: Exception) {
+        android.util.Log.e(
+            "NativePlaybackService",
+            "resolveContentUriToPath failed: $uriString", e
+        )
+        uriString
     }
+}
 } 

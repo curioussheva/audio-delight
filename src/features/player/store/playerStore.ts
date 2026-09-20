@@ -190,10 +190,22 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
     console.log(`▶️ [Player] playSong: "${playableSong.title}"`);
 
-    const targetQueue = newQueue ?? state.queue;
+    let targetQueue = newQueue ?? state.queue;
     if (targetQueue.length === 0) {
       set({ playError: "Queue is empty" });
       return false;
+    }
+
+    // 🔥 FIX: native TrackQueue::setTracks() selalu set currentIndex=0.
+    // Kalau lagu yang di-tap tidak berada di index 0 (misal karena
+    // slice ±N di library.tsx), native akan load track yang SALAH.
+    // Reorder queue di sini supaya lagu yang di-tap selalu index 0.
+    const tapIndex = targetQueue.findIndex((s) => s.id === playableSong.id);
+    if (tapIndex > 0) {
+      targetQueue = [
+        ...targetQueue.slice(tapIndex),
+        ...targetQueue.slice(0, tapIndex),
+      ];
     }
 
     try {
@@ -219,7 +231,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       // ── 3. play (dengan await!) ────────────────────────
       await timedCall("play", () => NativePlaybackService.play());
 
-      // ── 4. State update ────────────────────────────────
+// ── 4. State update ────────────────────────────────
       set({
         currentSong: playableSong,
         queue: targetQueue,
@@ -227,6 +239,18 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         position: 0,
         playError: null,
       });
+
+      // 🔥 NEW: update MediaSession metadata (lock screen notification)
+      NativePlaybackService.updateMetadata(
+        playableSong.title ?? "Unknown Title",
+        playableSong.artist ?? "Unknown Artist",
+        playableSong.album ?? "",
+        (playableSong.duration ?? 0) * 1000,
+      ).catch((e: any) => console.warn("[Player] updateMetadata failed:", e));
+
+      NativePlaybackService.updatePlaybackState(true, 0).catch((e: any) =>
+        console.warn("[Player] updatePlaybackState failed:", e),
+      );
 
       AsyncStorage.setItem(KEYS.LAST_SONG_ID, playableSong.id).catch(() => {});
       AsyncStorage.setItem(
@@ -248,7 +272,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       return false;
     }
   },
-
+ 
   skipToIndex: async (index: number) => {
     const { queue } = get();
     const song = queue[index];
@@ -294,11 +318,17 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         await timedCall("pause", () => NativePlaybackService.pause());
       }
       set({ isPlaying });
+
+      // 🔥 NEW: sync playback state ke MediaSession
+      const pos = get().position;
+      NativePlaybackService.updatePlaybackState(isPlaying, pos * 1000).catch(
+        () => {},
+      );
     } catch (error) {
       console.error("[Player] setIsPlaying failed:", error);
     }
   },
-
+ 
   togglePlay: async () => get().setIsPlaying(!get().isPlaying),
 
   seek: async (pos: number) => {

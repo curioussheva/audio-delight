@@ -66,4 +66,13 @@ object PlaybackNativeBridge {
     fun getStatus(): Int {
     return NativePlaybackModule.instance?.getStatusFromService() ?: 0
     }
+    
+    fun updateMetadata(title: String, artist: String, album: String, durationMs: Long) {
+    android.util.Log.d("PlaybackNativeBridge", "updateMetadata($title) called")
+    PlaybackService.instance?.updateMetadata(title, artist, album, durationMs)
+    }
+
+    fun updatePlaybackState(isPlaying: Boolean, positionMs: Long) {
+    PlaybackService.instance?.updatePlaybackState(isPlaying, positionMs)
+    }
 } 

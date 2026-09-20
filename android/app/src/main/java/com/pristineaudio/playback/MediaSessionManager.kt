@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import androidx.core.app.NotificationCompat
@@ -21,7 +22,9 @@ class MediaSessionManager(private val service: PlaybackService) {
 
     private val context: Context = service
 
-    // 1. Definisikan callback terlebih dahulu
+    private var lastTitle: String = "PristineAudio"
+    private var lastArtist: String = "Playing..."
+
     private val sessionCallback = object : MediaSessionCompat.Callback() {
         override fun onPlay() {
             PlaybackNativeBridge.play()
@@ -48,7 +51,6 @@ class MediaSessionManager(private val service: PlaybackService) {
         }
     }
 
-    // 2. Setelah callback ada, baru buat mediaSession
     private val mediaSession: MediaSessionCompat =
         MediaSessionCompat(context, "PristineAudio").apply {
             setCallback(sessionCallback)
@@ -79,6 +81,44 @@ class MediaSessionManager(private val service: PlaybackService) {
         mediaSession.release()
     }
 
+    // 🔥 NEW: update metadata (judul, artist, durasi) + refresh notifikasi
+    fun updateMetadata(title: String, artist: String, album: String, durationMs: Long) {
+        lastTitle = title
+        lastArtist = artist
+
+        val metadata = MediaMetadataCompat.Builder()
+            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
+            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
+            .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album)
+            .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationMs)
+            .build()
+
+        mediaSession.setMetadata(metadata)
+        mediaSession.isActive = true
+
+        refreshNotification()
+    }
+
+    // 🔥 NEW: update playback state (playing/paused, posisi) untuk slider lock screen
+    fun updatePlaybackState(isPlaying: Boolean, positionMs: Long) {
+        val state = playbackStateBuilder
+            .setState(
+                if (isPlaying) PlaybackStateCompat.STATE_PLAYING
+                else PlaybackStateCompat.STATE_PAUSED,
+                positionMs,
+                1.0f
+            )
+            .build()
+
+        mediaSession.setPlaybackState(state)
+    }
+
+    private fun refreshNotification() {
+        val notification = buildNotification()
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(NOTIFICATION_ID, notification)
+    }
+
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -97,8 +137,8 @@ class MediaSessionManager(private val service: PlaybackService) {
     private fun buildNotification(): Notification {
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_media_play)
-            .setContentTitle("PristineAudio")
-            .setContentText("Playing...")
+            .setContentTitle(lastTitle)
+            .setContentText(lastArtist)
             .setOngoing(true)
             .setStyle(
                 MediaStyle()
@@ -126,14 +166,14 @@ class MediaSessionManager(private val service: PlaybackService) {
     }
 
     private fun pendingIntentForAction(action: String): PendingIntent {
-    val intent = Intent(context, PlaybackService::class.java).apply {
-        this.action = action
+        val intent = Intent(context, PlaybackService::class.java).apply {
+            this.action = action
+        }
+        return PendingIntent.getService(
+            context,
+            action.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
-    return PendingIntent.getService(
-        context,
-        action.hashCode(),
-        intent,
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
-} 
 } 
