@@ -80,6 +80,35 @@ const performInitialization = useCallback(async () => {
       console.warn("[BOOT] Cache cleanup skipped:", e);
     }
 
+    // 🔥 FIX: Reset stuck scan state (anti macet)
+    try {
+      const { UnifiedScanService } = require("@/features/library/services/UnifiedScanService");
+      const libraryStore = require("@/features/library/store/libraryStore").useLibraryStore.getState();
+      
+      let didReset = false;
+      
+      if (UnifiedScanService?.isRunning) {
+        console.warn("[BOOT] 🚨 Reset UnifiedScanService.isRunning");
+        UnifiedScanService.isRunning = false;
+        UnifiedScanService.currentMode = null;
+        UnifiedScanService.abortController = null;
+        didReset = true;
+      }
+      
+      if (libraryStore?.isManualScanning || libraryStore?.isAutoScanning) {
+        console.warn("[BOOT] 🚨 Reset store scan state");
+        libraryStore.finishManualScan?.();
+        libraryStore.finishAutoScan?.();
+        didReset = true;
+      }
+      
+      if (didReset) {
+        console.log("[BOOT] ✅ Stuck scan state reset");
+      }
+    } catch (e) {
+      console.warn("[BOOT] Scan reset skipped:", e);
+    }
+
     const savedMode = await AsyncStorage.getItem("audio_mode_preference");
     const eqStore = useEqualizerStore.getState();
 

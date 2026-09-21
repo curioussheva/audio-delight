@@ -400,3 +400,58 @@ Fokus Sprint 2: Config UI + Processing mode 3-mode.
 Salin todo.md di atas, commit, dan mulai dari Prioritas #1 (library fix)! 🎯
 
 Setelah OpenSL test selesai, tap lagu di library — kirim log [PERF] + resolveContentUriToPath. 🎵
+
+---
+
+
+# 📋 Progress TODO — Sesi Debug PristineAudio
+
+## ✅ SELESAI (Priority #1 — Library Fix)
+- [x] **Bug 1**: `PlaybackController::play()` — hanya load track baru kalau `decoderWorker_` null → fix bandingkan `track->uri` vs `currentTrack_.uri`
+- [x] **Bug 2**: `DecoderWorker::stop()` — early-return kalau `running_` false, `join()` tidak pernah terpanggil → hapus guard tersebut
+- [x] **Bug 3**: `TrackQueue::setTracks()` selalu `currentIndex=0`, tidak sesuai slice ±N di `library.tsx` → fix reorder queue di JS (`playerStore.ts`)
+- [x] Verifikasi `NativePlaybackModule` vs `NativePlaybackService` — konfirmasi jalur aktif, `NativePlaybackModule` di-backup jadi `.bak` + comment di `PristineAudioPackage.kt`
+- [x] Dummy autoplay dihapus dari `_layout.tsx` (tidak perlu lagi, testing pakai data Library asli)
+- [x] Audio dari Library **terbukti keluar dengan benar**
+
+## ✅ SELESAI (MediaSession / Lock Screen)
+- [x] `MediaSessionManager.kt` — tambah `updateMetadata()` + `updatePlaybackState()`, notifikasi tidak lagi hardcoded
+- [x] `PlaybackService.kt` — expose singleton `instance`
+- [x] `PlaybackNativeBridge.kt` — forward ke `PlaybackService.instance`
+- [x] `NativePlaybackService.kt` — tambah `@ReactMethod` untuk kedua fungsi
+- [x] `playerStore.ts` — panggil `updateMetadata`/`updatePlaybackState` setelah play & saat pause/resume
+
+## ✅ SELESAI (Crash Fix)
+- [x] `MainActivity.kt` — `super.onCreate(null)` untuk cegah crash `IllegalStateException: Screen fragments should never be restored`
+
+## ✅ SELESAI (Cleanup)
+- [x] `ScannerService.ts`, `useMediaScanner.ts` → dijadikan `.bak` (orphan, tidak dipakai)
+- [x] `ScanStatusBar.tsx` diaktifkan kembali di `library.tsx`
+- [x] `useScanManager.ts` initial scan diaktifkan kembali + wiring progress
+
+## 🔴 PERLU DIKERJAKAN SEKARANG
+
+- [ ] **Fix TypeScript error `Spec` interface** — `src/specs/NativePlaybackService.ts` belum punya deklarasi `updateMetadata`/`updatePlaybackState`, menyebabkan 3 error `tsc` di `playerStore.ts:290,300,374`
+- [ ] **Commit revert `ScanDiffEngine.ts`** — kembali ke versi tanpa `BEGIN TRANSACTION` (yang terbukti hang), sudah divalidasi jalan (507 detik, selesai)
+
+## 🟡 DITUNDA / PERLU RISET
+
+- [ ] **Optimasi kecepatan scan** — `BEGIN TRANSACTION` raw SQL terbukti menyebabkan hang. Perlu riset API transaction resmi `react-native-quick-sqlite` (kemungkinan `db.transaction(callback)` bukan raw SQL string) sebelum coba lagi
+- [ ] Progress UI di `EmptyLibrary.tsx` + `LibraryTabBar.tsx` — sudah dibuat, **belum divalidasi visual** karena scan sempat gagal berkali-kali (perlu screenshot ulang setelah revert stabil)
+- [ ] `clearCache` di `_layout.tsx` — dipanggil dari JS tapi native method belum ada (`NativePlaybackService.kt` belum punya `clearCache`), cache dir bisa numpuk terus
+
+## 🟢 BACKLOG (dari todo.md awal, belum disentuh sesi ini)
+
+- [ ] Native Cleanup — hapus `PlaybackManager.cpp/.h`, `NativeAudioFeed.cpp`, `fft/`, dll (dead code candidates)
+- [ ] Visualizer (Fase 1-3: indicator, waveform, spectrum)
+- [ ] AudioConfig UI (Fase 1-3: JNI setter, sliders, auto-detect) — `audioConfig.ts` masih orphan/dokumentasi
+- [ ] Fase C — Processing Mode 3-mode (Exclusive/DSP/Immersive)
+- [ ] Media session audio focus (di luar metadata — interrupsi panggilan telp, dll)
+- [ ] Pembersihan RNTP total (`react-native-track-player` sudah tidak dipakai?)
+- [ ] Glitch chipmunk di audio dummy Enya (item debug terpisah yang disebut di awal sesi)
+- [ ] Cek isi `PlaybackNativeBridge` — sudah pernah dibaca, tapi belum ada audit menyeluruh
+- [ ] Komentar header salah di `api/scanner.ts` (`services/LibraryScanner.ts` → seharusnya `api/scanner.ts`)
+
+---
+
+Mau lanjut ke item 🔴 pertama (fix `Spec` interface)?
