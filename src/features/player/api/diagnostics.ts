@@ -109,10 +109,17 @@ export function startAudioDiagnostics(options?: {
     const now = snap.timestamp;
     const elapsed = (now - lastTime) / 1000;
     const deltaPos = (snap.positionMs - lastPosition) / 1000;
-    const speed = elapsed > 0 ? deltaPos / elapsed : 0;
 
-    // Detect state change
-    if (snap.status !== lastStatus) {
+    // 🔥 FIX Bug #3: skip speed calc saat glitch-prone
+    const MIN_ELAPSED_S = 0.3;
+    const MAX_SPEED = 3.0;
+    const MIN_SPEED = -0.5;
+
+    const isStateChange = snap.status !== lastStatus;
+    const suspiciousDrop = deltaPos < MIN_SPEED;
+    const tooShortWindow = elapsed < MIN_ELAPSED_S;
+
+    if (isStateChange) {
       events.push({
         type: "STATE_CHANGE",
         detail: `${lastStatus} → ${snap.status} (${snap.statusLabel})`,
@@ -121,8 +128,18 @@ export function startAudioDiagnostics(options?: {
       lastStatus = snap.status;
     }
 
-    // Detect speed issues (only saat playing)
-    if (snap.status === 2) {
+    // Track change / seek / window pendek → reset baseline, skip speed
+    if (suspiciousDrop || tooShortWindow) {
+      lastPosition = snap.positionMs;
+      lastTime = now;
+      return;
+    }
+
+    const speed = elapsed > 0 ? deltaPos / elapsed : 0;
+    const speedInRange = speed >= MIN_SPEED && speed <= MAX_SPEED;
+
+    // 🔥 FIX: status 1 = PLAYING (bukan 2)
+    if (snap.status === 1 && speedInRange) {
       if (speed < speedLow && speed >= 0) {
         events.push({
           type: "SLOW",
@@ -138,12 +155,11 @@ export function startAudioDiagnostics(options?: {
       }
     }
 
-    // 🔥 Smart logging: hanya log saat penting
     const shouldLog =
       verbose &&
-      (snap.status === 2 ||                                   // PLAYING
-       snap.status !== lastStatus ||                          // Status change
-       (speed > 0 && Math.abs(speed - 1.0) > 0.5));          // Anomaly
+      speedInRange &&
+      (snap.status === 1 || isStateChange ||
+        (speed > 0 && Math.abs(speed - 1.0) > 0.5));
 
     if (shouldLog) {
       console.log(

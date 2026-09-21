@@ -10,14 +10,19 @@ import { useLibraryStore } from "../store/libraryStore";
 import { ScanProgress } from "../types/scan";
 import { MetadataEnricher } from "../services/MetadataEnricher";
 
-// Minimum interval antara resume scan — cegah spam saat app bolak-balik background
-const RESUME_SCAN_COOLDOWN_MS = 30_000; // 30 detik
+// Minimum interval antara resume scan
+const RESUME_SCAN_COOLDOWN_MS = 60_000;  // 🔥 FIX Bug #4: 60s
+const MIN_BACKGROUND_MS = 3_000;          // 🔥 FIX Bug #4: skip resume <3s di bg
+
+// 🔥 FIX Bug #4: module-level state (survive across hook remount)
+let _globalLastResumeScan = 0;
+let _globalBackgroundedAt = 0;
+let _globalLastResumeLog = 0;
 
 export function useScanManager() {
   const store = useLibraryStore();
   const hasInitialized = useRef(false);
   const isQuickDiffRunning = useRef(false);
-  const lastResumeScan = useRef(0); // ✅ useRef, bukan let — persist antar render
   const [isLocked, setIsLocked] = useState(false);
 
   // ── Initial Scan hanya jika library kosong ──────────────────────────────────
@@ -68,13 +73,27 @@ useEffect(() => {
 
     const subscription = AppState.addEventListener("change", (nextState) => {
       // ✅ param = nextState
+      // 🔥 FIX Bug #4: track background duration (skip audio focus false positive)
+      if (nextState === "background" || nextState === "inactive") {
+        _globalBackgroundedAt = Date.now();
+        return;
+      }
       if (nextState !== "active") return;
       if (isQuickDiffRunning.current) return;
 
-      // ✅ Cooldown check — gunakan ref, bukan let variable
       const now = Date.now();
-      if (now - lastResumeScan.current < RESUME_SCAN_COOLDOWN_MS) {
-        console.log("[useScanManager] Resume scan cooldown active, skipping");
+
+      // Skip kalau baru <3s di background
+      if (_globalBackgroundedAt > 0 && now - _globalBackgroundedAt < MIN_BACKGROUND_MS) {
+        return;
+      }
+
+      // Cooldown GLOBAL (bukan useRef)
+      if (now - _globalLastResumeScan < RESUME_SCAN_COOLDOWN_MS) {
+        if (now - _globalLastResumeLog > 10_000) {
+          console.log("[useScanManager] Resume cooldown active (global), skip");
+          _globalLastResumeLog = now;
+        }
         return;
       }
 
@@ -89,7 +108,7 @@ useEffect(() => {
         }
 
         isQuickDiffRunning.current = true;
-        lastResumeScan.current = Date.now(); // ✅ update timestamp sebelum jalan
+        _globalLastResumeScan = Date.now(); // ✅ update timestamp sebelum jalan
         console.log("[useScanManager] App resumed → Running quick diff...");
 
         try {

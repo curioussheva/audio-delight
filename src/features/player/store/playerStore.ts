@@ -27,6 +27,10 @@ const KEYS = {
 } as const;
 
 let _positionSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+// 🔥 FIX Bug #1: dedupe concurrent playSong (crash saat tap cepat)
+const _playInFlightSongIds = new Set<string>();
+let _lastPlayRequest: { songId: string; ts: number } | null = null;
 const savePositionThrottled = (position: number) => {
   if (_positionSaveTimer) return;
   _positionSaveTimer = setTimeout(() => {
@@ -202,6 +206,28 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       console.error("[Player] playSong: invalid song");
       set({ playError: "Invalid song" });
       return false;
+    }
+
+    // 🔥 FIX Bug #1: dedupe concurrent playSong (cegah crash saat tap cepat)
+    // Layer 1: cek in-flight (Set) — kalau ada play yang sedang jalan, skip
+    if (_playInFlightSongIds.has(song.id)) {
+      console.log(`[Player] 🚫 dedupe playSong (in-flight): ${song.id}`);
+      return true;
+    }
+    // Layer 2: cek rapid re-tap — kalau < 1s, skip juga
+    {
+      const _now = Date.now();
+      if (
+        _lastPlayRequest?.songId === song.id &&
+        _now - _lastPlayRequest.ts < 1000
+      ) {
+        console.log(`[Player] 🚫 dedupe playSong (rapid re-tap): ${song.id}`);
+        return true;
+      }
+      _lastPlayRequest = { songId: song.id, ts: _now };
+      _playInFlightSongIds.add(song.id);
+      // Safety cleanup: auto-release setelah 20s (max durasi setQueue terlihat 15s)
+      setTimeout(() => _playInFlightSongIds.delete(song.id), 20_000);
     }
 
     const state = get();
