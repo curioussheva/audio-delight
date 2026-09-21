@@ -20,38 +20,47 @@ export function useScanManager() {
   const lastResumeScan = useRef(0); // ✅ useRef, bukan let — persist antar render
   const [isLocked, setIsLocked] = useState(false);
 
-// ── Initial Scan hanya jika library kosong ──────────────────────────────────
-  useEffect(() => {
-    if (hasInitialized.current) return;
-    hasInitialized.current = true;
+  // ── Initial Scan hanya jika library kosong ──────────────────────────────────
+  
+  // ── Initial Scan — DISABLED SEMENTARA UNTUK DEBUGGING ─────────────────────
+useEffect(() => {
+  if (hasInitialized.current) return;
+  hasInitialized.current = true;
 
-    const timer = setTimeout(async () => {
-      const currentStore = useLibraryStore.getState();
+  // 🔥 DISABLED: Uncomment untuk aktifkan kembali
+  console.log("[useScanManager] 🚫 Initial scan DISABLED (debug mode)");
+  return;
 
-      if (currentStore.tracks.length === 0) {
-        console.log(
-          "[useScanManager] Fresh/empty library → Running initial MANUAL (DEEP) Scan",
-        );
+  // ─────────────────────────────────────────────────────────────
+  // Kode asli (jangan dihapus, di-comment sementara):
+  // ─────────────────────────────────────────────────────────────
+  /*
+  const timer = setTimeout(async () => {
+    const currentStore = useLibraryStore.getState();
 
-        setIsLocked(true);
-        try {
-          await UnifiedScanService.manualScan((progress) => {
-            useLibraryStore.getState().updateManualScanProgress(progress);
-          });
-        } catch (err) {
-          console.warn("[useScanManager] Initial scan error:", err);
-        } finally {
-          setIsLocked(false);
-        }
-      } else {
-        console.log(
-          "[useScanManager] Library already exists → Skipping initial scan",
-        );
+    if (currentStore.tracks.length === 0) {
+      console.log(
+        "[useScanManager] Fresh/empty library → Running initial MANUAL (DEEP) Scan",
+      );
+      
+      setIsLocked(true);
+      try {
+        await UnifiedScanService.manualScan();
+      } catch (err) {
+        console.warn("[useScanManager] Initial scan error:", err);
+      } finally {
+        setIsLocked(false);
       }
-    }, 1000);
+    } else {
+      console.log(
+        "[useScanManager] Library already exists → Skipping initial scan",
+      );
+    }
+  }, 1000);
 
-    return () => clearTimeout(timer);
-  }, []); 
+  return () => clearTimeout(timer);
+  */
+}, []);
 
   // ── Quick Diff saat App Resume ──────────────────────────────────────────────
   useEffect(() => {
@@ -119,15 +128,27 @@ export function useScanManager() {
   // ── Manual Rescan ───────────────────────────────────────────────────────────
   const manualRescan = useCallback(
     async (onProgress?: (progress: ScanProgress) => void) => {
+      console.log("[useScanManager] manualRescan called");
+      console.log("[useScanManager] - isLocked:", isLocked);
+      console.log("[useScanManager] - isManualScanning:", store.isManualScanning);
+      console.log("[useScanManager] - isAutoScanning:", store.isAutoScanning);
+
       if (isLocked || store.isManualScanning || store.isAutoScanning) {
-        console.warn("[useScanManager] Scan locked or already running");
+        console.warn("[useScanManager] ❌ Scan locked or already running");
         throw new Error("Scan already in progress");
       }
 
+      console.log("[useScanManager] ✅ Setting isLocked = true");
       setIsLocked(true);
       try {
-        return await UnifiedScanService.manualScan(onProgress);
+        const result = await UnifiedScanService.manualScan(onProgress);
+        console.log("[useScanManager] ✅ manualScan completed");
+        return result;
+      } catch (err) {
+        console.error("[useScanManager] ❌ manualScan error:", err);
+        throw err;
       } finally {
+        console.log("[useScanManager] 🔚 Setting isLocked = false");
         setIsLocked(false);
       }
     },
@@ -192,4 +213,5 @@ export function useScanManager() {
     autoScanProgress: store.autoScanProgress,
     lastEnrichmentAt: store.lastEnrichmentAt,
   };
-} 
+}
+ 

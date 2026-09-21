@@ -216,9 +216,26 @@ export const ScanDiffEngine = {
       }
 
       const allChanges = [...newSongs, ...updatedSongs];
-      for (let i = 0; i < allChanges.length; i++) {
-        await saveBasicSongInfo(allChanges[i]);
-        onProgress?.(i + 1, allChanges.length);
+
+      // 🔥 OPTIMASI: satu transaction untuk semua write, bukan commit
+      // terpisah per lagu (1196 commit → 1 commit). Ini biasanya jadi
+      // bottleneck utama untuk bulk insert SQLite.
+      db.execute("BEGIN TRANSACTION");
+      try {
+        const PROGRESS_THROTTLE = 20; // update UI tiap 20 lagu, bukan tiap 1
+        for (let i = 0; i < allChanges.length; i++) {
+          await saveBasicSongInfo(allChanges[i]);
+          if (
+            (i + 1) % PROGRESS_THROTTLE === 0 ||
+            i + 1 === allChanges.length
+          ) {
+            onProgress?.(i + 1, allChanges.length);
+          }
+        }
+        db.execute("COMMIT");
+      } catch (err) {
+        db.execute("ROLLBACK");
+        throw err;
       }
 
       return {
@@ -235,6 +252,6 @@ export const ScanDiffEngine = {
       console.error("[ScanDiffEngine] Full diff failed:", error);
       throw error;
     }
-  },
+  }, 
 };
   

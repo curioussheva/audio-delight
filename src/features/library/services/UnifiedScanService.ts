@@ -115,6 +115,7 @@ export class UnifiedScanService {
 
     const store = useLibraryStore.getState();
     const startTime = Date.now();
+    let result: ScanResult;
 
     try {
       store.startManualScan();
@@ -138,9 +139,7 @@ export class UnifiedScanService {
         },
       );
 
-      store.finishManualScan();
-
-      const result: ScanResult = {
+      result = {
         mode: "full",
         level: 2,
         discovered: diffResult.totalScanned,
@@ -158,6 +157,10 @@ export class UnifiedScanService {
       console.error("[UnifiedScan] Manual scan failed:", error);
       throw error;
     } finally {
+      // 🔥 FIX: SELALU reset store state (anti stuck)
+      store.finishManualScan();
+      console.log("🔚 [UnifiedScan] finally: store.finishManualScan() called");
+      
       this.cleanup();
     }
   }
