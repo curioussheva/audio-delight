@@ -68,8 +68,8 @@ export const MediaStore = {
    */
   getSongInfo: async (uri: string): Promise<NativeSong | null> => {
     try {
-      const songs = await MediaStoreModule.queryAudioFiles();
-      return songs.find((song: NativeSong) => song.uri === uri) || null;
+      const songs = (await MediaStoreModule.queryAudioFiles()) as NativeSong[];
+      return songs.find((song) => song.uri === uri) ?? null;
     } catch (error) {
       console.error("[MediaStore] Get song info failed:", error);
       return null;

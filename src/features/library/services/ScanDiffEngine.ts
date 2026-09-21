@@ -9,6 +9,7 @@ import {
 } from "@/features/library/native/MediaStoreModule";
 import MetadataExtractor from "@/features/library/api/metadata";
 import { useLibraryStore } from "../store/libraryStore";
+import { db } from "@/shared/lib/sqlite"; 
 
 /* =============================================
    TYPE DEFINITIONS
@@ -236,3 +237,4 @@ export const ScanDiffEngine = {
     }
   },
 };
+  

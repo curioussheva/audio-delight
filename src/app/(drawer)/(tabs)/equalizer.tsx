@@ -35,7 +35,6 @@ import { EqualizerBand } from "@/features/equalizer/components/Band";
 import { HorizontalSlider } from "@/features/equalizer/components/HorizontalSlider";
 import { PresetChip } from "@/features/equalizer/components/PresetChip";
 import { SavePresetModal } from "@/features/equalizer/components/SavePresetModal";
-import { LIST_BOTTOM_PADDING } from "@/app/(drawer)/(tabs)/_layout";
 
 if (
   require("react-native").Platform.OS === "android" &&
@@ -79,6 +78,8 @@ const MiniSwitch = ({ value, onValueChange, disabled, color, label }: any) => (
 );
 
 // ─── MAIN SCREEN ─────────────────────────────────────────────────────────
+
+const LIST_BOTTOM_PADDING = 100;
 
 export default function EqualizerScreen() {
   const { theme } = useTheme();

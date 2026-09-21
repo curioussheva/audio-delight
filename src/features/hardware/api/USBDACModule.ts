@@ -54,7 +54,7 @@ const getEmitter = () => {
 export const USBDACService = {
   detectDACs: async (): Promise<DACInfo[]> => {
     if (!USBDACModule) return [];
-    return await USBDACModule.detectDACs();
+    return (await USBDACModule.detectDACs()) as any[];
   },
 
   setExclusiveMode: async (
@@ -65,7 +65,7 @@ export const USBDACService = {
     try {
       // USBDACModule native method expects (dacId, enable)
       const result = await USBDACModule.setExclusiveMode(_dacId, enabled);
-      return { success: result?.success ?? true, active: result?.active ?? enabled };
+      return { success: (result as any)?.success ?? true, active: (result as any)?.active ?? enabled };
     } catch {
       return { success: false, active: false };
     }
@@ -96,12 +96,12 @@ export const USBDACService = {
     try {
       const s = await USBDACModule.getRecommendedSettings(_dacId);
       return {
-        sampleRate: s?.sampleRate ?? 48000,
-        bitDepth: s?.bitDepth ?? 24,
+        sampleRate: (s as any)?.sampleRate ?? 48000,
+        bitDepth: (s as any)?.bitDepth ?? 24,
         exclusiveMode: false,
-        exclusiveModeRecommended: s?.exclusiveModeRecommended ?? false,
-        bufferSize: s?.bufferSize ?? 512,
-        dsdMode: s?.dsdMode ?? "off",
+        exclusiveModeRecommended: (s as any)?.exclusiveModeRecommended ?? false,
+        bufferSize: (s as any)?.bufferSize ?? 512,
+        dsdMode: (s as any)?.dsdMode ?? "off",
       };
     } catch {
       return {
@@ -126,7 +126,7 @@ export const USBDACService = {
     if (!USBDACModule) return 0;
     try {
       const result = await USBDACModule.createAudioSession();
-      return result?.sessionId ?? 0;
+      return (result as any)?.sessionId ?? 0;
     } catch {
       return 0;
     }

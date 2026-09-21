@@ -51,7 +51,7 @@ import {
 
 // Scan System
 import { useScanManager } from "@/features/library/hooks/useScanManager";
-//import { ScanStatusBar } from "@/features/library/components/ScanStatusBar";
+import { ScanStatusBar } from "@/features/library/components/ScanStatusBar";
 import { EnrichMetadataModal } from "@/features/library/components/EnrichMetadataModal";
 
 // Components
@@ -528,7 +528,7 @@ export default function LibraryScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background.primary }]}>
-      {/*}    <ScanStatusBar /> */}
+      <ScanStatusBar /> 
 
       {/* Header */}
       <View

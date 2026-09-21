@@ -74,7 +74,7 @@ const performInitialization = useCallback(async () => {
         const deleted = await svc.clearCache();
         console.log(`[BOOT] 🧹 Cleared ${deleted} cache files`);
       } else {
-        console.log("[BOOT] ⚠️ clearCache not available (Kotlin belum rebuild)");
+        console.log("[BOOT] ⚠️ clearCache");
       }
     } catch (e) {
       console.warn("[BOOT] Cache cleanup skipped:", e);

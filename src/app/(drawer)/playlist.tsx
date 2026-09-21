@@ -12,8 +12,9 @@ export default function PlaylistsScreen() {
   const { theme } = useTheme();
   const { colors } = theme;
 
-  const { playlists, favoriteCount, createPlaylist, deletePlaylist, importM3UPaths } =
+  const { playlists, createPlaylist, deletePlaylist, importM3UPaths } =
     usePlaylists();
+  const favoriteCount = 0;  // 🔥 placeholder
   const [selectedPlaylist, setSelectedPlaylist] = useState<PlaylistItem | null>(null);
 
   // Playlist (dari usePlaylists) pakai field `songCount`, sementara

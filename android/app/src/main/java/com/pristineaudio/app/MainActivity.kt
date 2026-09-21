@@ -12,7 +12,14 @@ class MainActivity : ReactActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         Log.d("PristineApp", "MainActivity onCreate")
-        super.onCreate(savedInstanceState)
+        // 🔥 FIX: react-native-screens tidak kompatibel dengan Android
+        // fragment state restoration. Kalau process di-kill (OOM/lifecycle)
+        // lalu Activity di-restore dengan savedInstanceState lama, ini
+        // crash: "IllegalStateException: Screen fragments should never
+        // be restored". Solusi resmi: selalu pass null supaya semua
+        // fragment dibuat fresh, bukan di-restore.
+        // Ref: https://github.com/software-mansion/react-native-screens/issues/17
+        super.onCreate(null)
         Log.d("PristineApp", "MainActivity onCreate finished")
     }
 
@@ -26,4 +33,4 @@ class MainActivity : ReactActivity() {
         ) {}
         return ReactActivityDelegateWrapper(this, BuildConfig.IS_NEW_ARCHITECTURE_ENABLED, delegate)
     }
-} 
+}
