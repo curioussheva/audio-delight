@@ -28,7 +28,13 @@ DecoderWorker::~DecoderWorker() {
 // =====================================================
 
 bool DecoderWorker::start(const std::string& uri, double startPosition) {
-    if (running_.load()) return false;
+    // 🔥 FIX: jangan silent-fail — force stop+join kalau masih running
+    if (running_.load()) {
+        __android_log_print(ANDROID_LOG_WARN, "DecoderWorker",
+                            "start(): already running — forcing stop() (uri=%s)",
+                            uri.c_str());
+        stop();
+    }
 
     stopRequested_.store(false);
     paused_.store(false);

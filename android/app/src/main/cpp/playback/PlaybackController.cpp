@@ -137,6 +137,7 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
     currentTrack_ = track;
     pcmQueue_->clear();
     clock_->reset();
+    if (state_) state_->setPosition(0);  // 🔥 FIX: reset posisi state juga
 
     // 🔥 FIX: set duration dari metadata track
     if (state_ && track.durationMs > 0) {
@@ -193,6 +194,14 @@ bool PlaybackController::play() {
                                 "play(): FAILED - loadTrack returned false");
             return false;
         }
+    }
+
+    // 🔥 FIX: guard decoderWorker_ null (startDecoder bisa gagal silent)
+    if (!decoderWorker_) {
+        __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
+                            "play(): FAILED - decoderWorker_ null after needsLoad (uri=%s)",
+                            track->uri.c_str());
+        return false;
     }
 
     playing_.store(true, std::memory_order_release);
