@@ -33,19 +33,17 @@ export default function FloatingPlayer() {
   const { colors, shadows } = theme;
   const router = useRouter();
 
-  const {
-    currentSong,
-    isPlaying,
-    togglePlay,
-    position,
-    duration,
-    playNext,
-    playPrevious,
-    shuffle,
-    repeat,
-    toggleShuffle,
-    toggleRepeat,
-  } = usePlayerStore();
+    const currentSong = usePlayerStore((s) => s.currentSong);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const togglePlay = usePlayerStore((s) => s.togglePlay);
+  const position = usePlayerStore((s) => s.position);
+  const duration = usePlayerStore((s) => s.duration);
+  const playNext = usePlayerStore((s) => s.playNext);
+  const playPrevious = usePlayerStore((s) => s.playPrevious);
+  const shuffle = usePlayerStore((s) => s.shuffle);
+  const repeat = usePlayerStore((s) => s.repeat);
+  const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
+  const toggleRepeat = usePlayerStore((s) => s.toggleRepeat);
 
   const translateX = useSharedValue(0);
 

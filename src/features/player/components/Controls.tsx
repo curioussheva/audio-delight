@@ -14,8 +14,11 @@ export const PlayerControls: React.FC = () => {
   const { theme } = useTheme();
   const { colors, spacing } = theme;
   const { play, pause, skipToNext, skipToPrevious } = useAudioPlayer();
-  const { isPlaying, shuffle, repeat, toggleShuffle, toggleRepeat } =
-    usePlayerStore(); // ← HAPUS favorite
+    const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const shuffle = usePlayerStore((s) => s.shuffle);
+  const repeat = usePlayerStore((s) => s.repeat);
+  const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
+  const toggleRepeat = usePlayerStore((s) => s.toggleRepeat);
   const [showMoreOptions, setShowMoreOptions] = useState(false);
 
   const playButtonStyle = useAnimatedStyle(() => ({

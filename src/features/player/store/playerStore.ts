@@ -197,37 +197,96 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       console.error("[Player] Failed to init PlayerStore:", e);
     }
 
-    // 🔥 FIX v2: auto-next watcher baca posisi LANGSUNG dari native
-    // Tidak bergantung pada useAudioPlayer mounted atau tidak.
-    // Overhead: 1 native call per detik (negligible).
+    // 🔥 FIX v3: auto-next dengan 2 deteksi:
+    // A) duration known → cek pos >= dur - 500ms
+    // B) duration=0 (metadata gagal) → deteksi posisi stuck 3s
     if (!(globalThis as any).__trackEndWatcher) {
       let _inFlight = false;
+      let _lastPos = 0;
+      let _lastChangeAt = Date.now();
+      const STUCK_MS = 3000;      // 3 detik stuck → anggap track habis
+      const STUCK_EPSILON = 50;    // toleransi 50ms drift
+
       (globalThis as any).__trackEndWatcher = setInterval(async () => {
-        if (_inFlight) return;  // cegah overlap kalau native lambat
+        if (_inFlight) return;
         const s = get();
         if (!s.isPlaying || !s.currentSong) return;
-        const durMs = (s.currentSong.duration ?? 0) * 1000;
-        if (durMs <= 0) return;
 
         _inFlight = true;
         try {
           const nativePosMs = await NativePlaybackService.getPosition();
-          if (
-            nativePosMs >= durMs - 500 &&
-            nativePosMs < durMs + 5000
-          ) {
-            console.log(
-              `[Player] 🎵 track ended (native=${nativePosMs}ms, dur=${durMs}ms) → next`,
-            );
+          const durMs = (s.currentSong.duration ?? 0) * 1000;
+          const now = Date.now();
+
+          // Detect: posisi berubah atau stuck
+          if (Math.abs(nativePosMs - _lastPos) > STUCK_EPSILON) {
+            _lastChangeAt = now;
+            _lastPos = nativePosMs;
+          }
+
+          let shouldAdvance = false;
+          let reason = "";
+
+          // A) duration known
+          if (durMs > 0 && nativePosMs >= durMs - 500) {
+            shouldAdvance = true;
+            reason = `dur-known (pos=${nativePosMs}ms >= dur-500=${durMs-500}ms)`;
+          }
+
+          // B) duration=0 → deteksi stuck
+          if (durMs <= 0 && now - _lastChangeAt > STUCK_MS) {
+            shouldAdvance = true;
+            reason = `stuck ${now - _lastChangeAt}ms @ pos=${nativePosMs}ms`;
+          }
+
+          if (shouldAdvance) {
+            console.log(`[Player] 🎵 track ended — ${reason} → next`);
+            // Reset baseline dulu
+            _lastChangeAt = now;
+            _lastPos = 0;
             await get().playNext();
           }
         } catch (e) {
-          // silent — akan retry tick berikutnya
+          // silent
         } finally {
           _inFlight = false;
         }
       }, 1000);
-      console.log("[Player] 🎵 Auto-next watcher started (native-based)");
+      console.log("[Player] 🎵 Auto-next watcher started (v3 stuck-detect)");
+    }
+
+    // 🔥 FIX: position+duration polling terpusat (bukan di hook useAudioPlayer)
+    // Supaya slider progress bergerak walaupun hook unmount.
+    if (!(globalThis as any).__positionWatcher) {
+      let _posInFlight = false;
+      (globalThis as any).__positionWatcher = setInterval(async () => {
+        if (_posInFlight) return;
+        const s = get();
+        if (!s.currentSong) return;
+
+        _posInFlight = true;
+        try {
+          const posMs = await NativePlaybackService.getPosition();
+          const newPos = posMs / 1000;
+
+          // Sync posisi ke Zustand (throttle: hanya update kalau berubah >0.1s)
+          if (Math.abs(newPos - get().position) > 0.1) {
+            set({ position: newPos });
+          }
+
+          // Sync duration dari currentSong (kalau belum ada)
+          const curDur = get().duration;
+          const songDur = s.currentSong.duration ?? 0;
+          if (curDur <= 0 && songDur > 0) {
+            set({ duration: songDur });
+          }
+        } catch (e) {
+          // silent
+        } finally {
+          _posInFlight = false;
+        }
+      }, 500);
+      console.log("[Player] 📊 Position watcher started (500ms)");
     }
   },
 
