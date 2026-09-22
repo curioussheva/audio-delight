@@ -196,6 +196,39 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     } catch (e) {
       console.error("[Player] Failed to init PlayerStore:", e);
     }
+
+    // 🔥 FIX v2: auto-next watcher baca posisi LANGSUNG dari native
+    // Tidak bergantung pada useAudioPlayer mounted atau tidak.
+    // Overhead: 1 native call per detik (negligible).
+    if (!(globalThis as any).__trackEndWatcher) {
+      let _inFlight = false;
+      (globalThis as any).__trackEndWatcher = setInterval(async () => {
+        if (_inFlight) return;  // cegah overlap kalau native lambat
+        const s = get();
+        if (!s.isPlaying || !s.currentSong) return;
+        const durMs = (s.currentSong.duration ?? 0) * 1000;
+        if (durMs <= 0) return;
+
+        _inFlight = true;
+        try {
+          const nativePosMs = await NativePlaybackService.getPosition();
+          if (
+            nativePosMs >= durMs - 500 &&
+            nativePosMs < durMs + 5000
+          ) {
+            console.log(
+              `[Player] 🎵 track ended (native=${nativePosMs}ms, dur=${durMs}ms) → next`,
+            );
+            await get().playNext();
+          }
+        } catch (e) {
+          // silent — akan retry tick berikutnya
+        } finally {
+          _inFlight = false;
+        }
+      }, 1000);
+      console.log("[Player] 🎵 Auto-next watcher started (native-based)");
+    }
   },
 
   // ── Core Playback ────────────────────────────────────────────────────────
@@ -416,7 +449,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
   },
 
-  toggleShuffle: () => set((s) => ({ shuffle: !s.shuffle })),
+  toggleShuffle: () => {
+    const next = !get().shuffle;
+    set({ shuffle: next });
+    // 🔥 FIX: kirim ke native (sebelumnya cuma update Zustand)
+    safeFireAndForget(
+      () => NativePlaybackService.setShuffle(next),
+      "setShuffle",
+    );
+    console.log(`[Player] shuffle=${next} → native`);
+  },
 
   toggleRepeat: () => {
     const map: Record<RepeatMode, RepeatMode> = {
@@ -424,7 +466,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       all: "track",
       track: "off",
     };
-    set((s) => ({ repeat: map[s.repeat] }));
+    const next = map[get().repeat];
+    set({ repeat: next });
+    // 🔥 FIX: kirim ke native (0=off, 1=all, 2=track)
+    const nativeMode = next === "off" ? 0 : next === "all" ? 1 : 2;
+    safeFireAndForget(
+      () => NativePlaybackService.setRepeatMode(nativeMode),
+      "setRepeatMode",
+    );
+    console.log(`[Player] repeat=${next} (native=${nativeMode})`);
   },
 
   setPlaybackSpeed: async (speed: number) => {
