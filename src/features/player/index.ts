@@ -20,7 +20,6 @@ export * from "./components/AudioPropertyToast";
 // hooks
 export * from "./hooks/useAudioPlayer";
 export * from "./hooks/useAudioProgress";
-export * from "./hooks/useTrackPlayerHandler";
 
 // store
 export * from "./store/playerStore";
