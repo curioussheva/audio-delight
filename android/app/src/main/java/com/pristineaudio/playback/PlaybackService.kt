@@ -26,8 +26,14 @@ class PlaybackService : Service() {
         instance = this
     }
 
+    private var isForegroundStarted = false
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        mediaSessionManager.startForeground()
+        // 🔥 FIX: panggil startForeground() HANYA SEKALI
+        if (!isForegroundStarted) {
+            mediaSessionManager.startForeground()
+            isForegroundStarted = true
+        }
 
         when (intent?.action) {
             ACTION_PLAY -> PlaybackNativeBridge.play()
@@ -49,6 +55,12 @@ class PlaybackService : Service() {
 
     fun updatePlaybackState(isPlaying: Boolean, positionMs: Long) {
         mediaSessionManager.updatePlaybackState(isPlaying, positionMs)
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // 🔥 FIX: jangan stop service saat user swipe app dari recents
+        android.util.Log.d("PlaybackService", "onTaskRemoved — service tetap jalan")
+        super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {

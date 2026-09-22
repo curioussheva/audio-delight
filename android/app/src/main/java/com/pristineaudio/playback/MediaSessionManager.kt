@@ -24,6 +24,7 @@ class MediaSessionManager(private val service: PlaybackService) {
 
     private var lastTitle: String = "PristineAudio"
     private var lastArtist: String = "Playing..."
+    private var lastIsPlaying: Boolean = false
 
     private val sessionCallback = object : MediaSessionCompat.Callback() {
         override fun onPlay() {
@@ -101,6 +102,7 @@ class MediaSessionManager(private val service: PlaybackService) {
 
     // 🔥 NEW: update playback state (playing/paused, posisi) untuk slider lock screen
     fun updatePlaybackState(isPlaying: Boolean, positionMs: Long) {
+        lastIsPlaying = isPlaying
         val state = playbackStateBuilder
             .setState(
                 if (isPlaying) PlaybackStateCompat.STATE_PLAYING
@@ -151,11 +153,20 @@ class MediaSessionManager(private val service: PlaybackService) {
             "Previous",
             pendingIntentForAction(PlaybackService.ACTION_PREVIOUS)
         )
-        builder.addAction(
-            android.R.drawable.ic_media_play,
-            "Play",
-            pendingIntentForAction(PlaybackService.ACTION_PLAY)
-        )
+        // 🔥 FIX: tombol Play/Pause dynamic
+        if (lastIsPlaying) {
+            builder.addAction(
+                android.R.drawable.ic_media_pause,
+                "Pause",
+                pendingIntentForAction(PlaybackService.ACTION_PAUSE)
+            )
+        } else {
+            builder.addAction(
+                android.R.drawable.ic_media_play,
+                "Play",
+                pendingIntentForAction(PlaybackService.ACTION_PLAY)
+            )
+        }
         builder.addAction(
             android.R.drawable.ic_media_next,
             "Next",
