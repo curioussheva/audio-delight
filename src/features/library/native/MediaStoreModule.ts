@@ -39,6 +39,13 @@ export const MediaStore = {
   /**
    * Query semua audio files dari MediaStore Android
    * Mengembalikan array NativeSong dengan metadata lengkap
+   *
+   * PENTING: kegagalan query DILEMPAR, bukan dikembalikan sebagai array
+   * kosong. Array kosong berarti "device tidak punya file audio" - dan
+   * pemanggil (ScanDiffEngine) menyimpulkan bahwa semua lagu di database
+   * sudah terhapus. Satu izin yang dicabut atau MediaStore yang sibuk akan
+   * menghapus seluruh library pengguna. Pemanggil yang ingin menoleransi
+   * kegagalan harus menangkapnya sendiri, secara sadar.
    */
   queryAudioFiles: async (): Promise<NativeSong[]> => {
     try {
@@ -46,7 +53,7 @@ export const MediaStore = {
       return result as NativeSong[];
     } catch (error: any) {
       console.error("[MediaStore] Query failed:", error?.message || error);
-      return [];
+      throw error;
     }
   },
 

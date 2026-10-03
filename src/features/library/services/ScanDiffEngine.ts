@@ -57,6 +57,73 @@ function _emptyQuickResult(): QuickDiffResult {
   };
 }
 
+/**
+ * Penjaga sebelum menghapus. Menghapus lagu adalah operasi merusak: playlist,
+ * favorit, dan riwayat ikut hilang karena merujuk ke lagu yang dihapus.
+ *
+ * Aturannya: kalau diff ingin menghapus sejumlah besar library sekaligus
+ * sementara yang terdeteksi di device sangat sedikit, itu jauh lebih mungkin
+ * query MediaStore yang tidak lengkap/gagal daripada pengguna benar-benar
+ * menghapus musiknya. Tahan penghapusan, laporkan, jangan tebak.
+ *
+ * Diekspor untuk pengujian.
+ */
+export const SAFE_DELETE_RATIO = 0.5;
+export const SAFE_DELETE_MIN_COUNT = 5;
+
+export function isDeletionPlausible(
+  existingCount: number,
+  deletedCount: number,
+  currentCount: number,
+): boolean {
+  // Hapus sedikit lagu: selalu wajar.
+  if (deletedCount < SAFE_DELETE_MIN_COUNT) return true;
+  // Device melaporkan ada lagu, dan yang dihapus minoritas: wajar.
+  if (currentCount > 0 && deletedCount / existingCount <= SAFE_DELETE_RATIO) {
+    return true;
+  }
+  // Device melaporkan NOL lagu padahal database punya banyak: mencurigakan.
+  // 5+ lagu hilang sekaligus tanpa satu pun tersisa hampir selalu berarti
+  // query gagal, bukan pengguna menghapus semuanya.
+  return false;
+}
+
+/**
+ * Hitung diff murni antara isi database dan hasil MediaStore.
+ * Tidak menyentuh database maupun file - hanya menghitung.
+ * Diekspor untuk pengujian.
+ */
+export function computeDiff(
+  nativeSongs: NativeSong[],
+  existingUris: Set<string>,
+  getSongFileSize: (uri: string) => number | undefined,
+): { newSongs: NativeSong[]; updatedSongs: NativeSong[]; deletedUris: string[] } {
+  const currentUris = new Set(
+    nativeSongs.map((s) => s.uri).filter(Boolean) as string[],
+  );
+
+  const newSongs: NativeSong[] = [];
+  const updatedSongs: NativeSong[] = [];
+
+  for (const song of nativeSongs) {
+    if (!song.uri) continue;
+    if (!existingUris.has(song.uri)) {
+      newSongs.push(song);
+    } else {
+      const existingSize = getSongFileSize(song.uri);
+      if (existingSize !== undefined && existingSize !== song.fileSize) {
+        updatedSongs.push(song);
+      }
+    }
+  }
+
+  return {
+    newSongs,
+    updatedSongs,
+    deletedUris: [...existingUris].filter((uri) => !currentUris.has(uri)),
+  };
+}
+
 function _extractFolder(uri: string): string {
   try {
     const parts = uri.split(/[/\\]/);
@@ -129,39 +196,61 @@ async function saveBasicSongInfo(song: NativeSong): Promise<void> {
 async function processQuickDiff(
   nativeSongs: NativeSong[],
 ): Promise<QuickDiffResult> {
-  const currentUris = new Set(nativeSongs.map((s) => s.uri).filter(Boolean));
   const existingUris = LibraryScanner.getExistingUris();
+  const currentUris = new Set(
+    nativeSongs.map((s) => s.uri).filter(Boolean) as string[],
+  );
 
-  const newSongs: NativeSong[] = [];
-  const updatedSongs: NativeSong[] = [];
+  const { newSongs, updatedSongs, deletedUris } = computeDiff(
+    nativeSongs,
+    existingUris,
+    (uri) => LibraryScanner.getSongByUri(uri)?.fileSize,
+  );
 
-  for (const song of nativeSongs) {
-    if (!song.uri) continue;
+  // Pengaman: jangan pernah percaya buta pada daftar hapus.
+  const bolehHapus = isDeletionPlausible(
+    existingUris.size,
+    deletedUris.length,
+    currentUris.size,
+  );
+  if (!bolehHapus) {
+    console.warn(
+      `[ScanDiffEngine] Tahan penghapusan: ${deletedUris.length} dari ` +
+        `${existingUris.size} lagu ingin dihapus, tapi MediaStore hanya ` +
+        `melaporkan ${currentUris.size} file. Kemungkinan query tidak lengkap.`,
+    );
+  }
+  const finalDeleted = bolehHapus ? deletedUris : [];
 
-    if (!existingUris.has(song.uri)) {
-      await saveBasicSongInfo(song);
-      newSongs.push(song);
-    } else {
-      const existing = LibraryScanner.getSongByUri(song.uri);
-      if (existing && existing.fileSize !== song.fileSize) {
-        updatedSongs.push(song);
+  // Tulis lagu baru. Sebelumnya ini dilakukan di dalam loop tanpa
+  // transaction, sehingga scan yang gagal di tengah meninggalkan database
+  // setengah terisi. Sekarang satu transaction, sama seperti full diff.
+  const toWrite = [...newSongs, ...updatedSongs];
+  if (toWrite.length > 0) {
+    db.execute("BEGIN TRANSACTION");
+    try {
+      for (const song of toWrite) {
+        await saveBasicSongInfo(song);
       }
+      db.execute("COMMIT");
+    } catch (err) {
+      db.execute("ROLLBACK");
+      throw err;
     }
   }
 
-  const deletedUris = [...existingUris].filter((uri) => !currentUris.has(uri));
-  if (deletedUris.length > 0) {
-    await LibraryScanner.deleteSongsByUris(deletedUris);
+  if (finalDeleted.length > 0) {
+    await LibraryScanner.deleteSongsByUris(finalDeleted);
   }
 
   return {
     newCount: newSongs.length,
-    deletedCount: deletedUris.length,
+    deletedCount: finalDeleted.length,
     updatedCount: updatedSongs.length,
     totalScanned: nativeSongs.length,
     newSongs,
     updatedSongs,
-    deletedUris,
+    deletedUris: finalDeleted,
   };
 }
 
@@ -189,30 +278,34 @@ export const ScanDiffEngine = {
     try {
       const nativeSongs = await getNativeSongs();
       const existingUris = LibraryScanner.getExistingUris();
-      const currentUris = new Set(
-        nativeSongs.map((s) => s.uri).filter(Boolean),
+
+      const { newSongs, updatedSongs, deletedUris } = computeDiff(
+        nativeSongs,
+        existingUris,
+        (uri) => LibraryScanner.getSongByUri(uri)?.fileSize,
       );
 
-      const newSongs: NativeSong[] = [];
-      const updatedSongs: NativeSong[] = [];
+      const currentCount = new Set(
+        nativeSongs.map((s) => s.uri).filter(Boolean) as string[],
+      ).size;
 
-      for (const song of nativeSongs) {
-        if (!song.uri) continue;
-        if (!existingUris.has(song.uri)) {
-          newSongs.push(song);
-        } else {
-          const existing = LibraryScanner.getSongByUri(song.uri);
-          if (existing && existing.fileSize !== song.fileSize) {
-            updatedSongs.push(song);
-          }
-        }
+      // Pengaman yang sama seperti quickDiff - jalur ini juga menghapus,
+      // dan sebelumnya tanpa penjagaan apa pun.
+      const bolehHapus = isDeletionPlausible(
+        existingUris.size,
+        deletedUris.length,
+        currentCount,
+      );
+      if (!bolehHapus) {
+        console.warn(
+          `[ScanDiffEngine] Tahan penghapusan (full diff): ${deletedUris.length} ` +
+            `dari ${existingUris.size} lagu, MediaStore melaporkan ${currentCount}.`,
+        );
       }
+      const finalDeleted = bolehHapus ? deletedUris : [];
 
-      const deletedUris = [...existingUris].filter(
-        (uri) => !currentUris.has(uri),
-      );
-      if (deletedUris.length > 0) {
-        await LibraryScanner.deleteSongsByUris(deletedUris);
+      if (finalDeleted.length > 0) {
+        await LibraryScanner.deleteSongsByUris(finalDeleted);
       }
 
       const allChanges = [...newSongs, ...updatedSongs];
@@ -240,13 +333,13 @@ export const ScanDiffEngine = {
 
       return {
         newCount: newSongs.length,
-        deletedCount: deletedUris.length,
+        deletedCount: finalDeleted.length,
         updatedCount: updatedSongs.length,
-        totalAfter: currentUris.size,
+        totalAfter: currentCount,
         totalScanned: nativeSongs.length,
         newSongs,
         updatedSongs,
-        deletedUris,
+        deletedUris: finalDeleted,
       };
     } catch (error) {
       console.error("[ScanDiffEngine] Full diff failed:", error);

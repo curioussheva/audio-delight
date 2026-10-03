@@ -39,9 +39,14 @@ export const analyzeBitDepth = async (
 
     // Extract info dari analysis
     const declaredDepth = song.bitDepth || 16;
-    const compressionRatio = 0; // AnalysisResult tidak punya compressionRatio — tidak ada di flat struct
+    const compressionRatio = 0; // AnalysisResult tidak punya compressionRatio - tidak ada di flat struct
 
-    // Pastikan variabel 'sampleRate' tersedia di scope ini (diambil dari metadata lagu)
+    // Sample rate HARUS dari lagu, bukan hardcoded: heuristik "upsample
+    // detector" hanya bisa bekerja kalau tahu laju file sebenarnya. Memakai
+    // 44100 membuat `sampleRate > 48000` selalu false, sehingga file hi-res
+    // yang di-upsample dari CD tidak pernah terdeteksi.
+    const sampleRate =
+      song.sampleRate || analysis.format?.sampleRate || 44100;
 
     const estimatedDepth = estimateRealBitDepth(
       declaredDepth,
@@ -49,7 +54,7 @@ export const analyzeBitDepth = async (
       analysis.estimatedSpectralCutoffHz,
       compressionRatio,
       analysis.detectedBitrateKbps,
-      44100, // Jika benar-benar tidak ada variabel sampleRate, gunakan 44100 sebagai fallback
+      sampleRate,
     );
 
     // Calculate confidence
@@ -80,13 +85,25 @@ export const analyzeBitDepth = async (
 // Helper Functions
 // ============================================================================
 
-function estimateRealBitDepth(
+/**
+ * Estimasi bit depth nyata dari hasil analisis spektral/dinamis.
+ *
+ * Diekspor untuk pengujian: ini inti heuristik verdict "FLAC palsu", dan
+ * kesalahan di sini langsung menyesatkan pengguna.
+ *
+ * PENTING soal skala: `(DR - 1.76) / 6.02` **sudah bernilai dalam satuan bit**
+ * (rumus DR teoretis untuk N-bit: 6.02N + 1.76). Nilai itu dibandingkan dengan
+ * ambang dalam satuan bit juga (16/20/24), BUKAN 18/26 - memakai 18/26 berarti
+ * menuntut DR >= 110 dB sebelum file diakui 24-bit, dan 24-bit asli hampir
+ * tidak pernah mencapai itu (maksimum teoretis 146 dB, realistis 100-120 dB).
+ */
+export function estimateRealBitDepth(
   declared: number,
   dynamicRange: number,
   spectralCutoff: number,
   compressionRatio: number,
   bitrate: number,
-  sampleRate: number, // Tambahkan parameter ini
+  sampleRate: number,
 ): number {
   // --- Heuristic 1: Dynamic Range Validation ---
   // File 24-bit asli harusnya punya DR > 96dB.
@@ -94,10 +111,13 @@ function estimateRealBitDepth(
   const theoreticalFromDR = Math.max(1, (dynamicRange - 1.76) / 6.02);
 
   // --- Heuristic 2: Spectral Analysis (The "Upsample" Detector) ---
-  // Jika sample rate 96kHz tapi cutoff di 22kHz, maka bit depth tinggi pun percuma.
-  // Ini indikasi kuat source-nya adalah CD Quality (44.1kHz).
-  const nyquistMax = sampleRate / 2;
-  const isSpectralLimited = spectralCutoff < 22050 && sampleRate > 48000;
+  // Jika sample rate 96kHz tapi cutoff di ~22kHz, maka bit depth tinggi pun
+  // percuma - ini indikasi kuat source-nya CD Quality (44.1kHz).
+  // Batas dibandingkan dengan laju sumber, bukan angka ajaib: cutoff di bawah
+  // 24 kHz sementara file mengaku > 48 kHz berarti tidak ada konten di atas
+  // apa yang bisa dibawa CD.
+  const CD_NYQUIST = 22050;
+  const isSpectralLimited = spectralCutoff < CD_NYQUIST && sampleRate > 48000;
 
   // --- Heuristic 3: Enhanced Compression Ratio ---
   // File 24-bit dengan 8-bit terakhir berisi nol (padding) akan sangat "kopong".
@@ -109,24 +129,36 @@ function estimateRealBitDepth(
   // --- Scoring System ---
   let score = theoreticalFromDR;
 
-  // Penalti berat jika spektrum terbatas (Upsampled)
+  // Penalti jika spektrum terbatas (upsampled). Turunkan ke plafon CD.
   if (isSpectralLimited) {
-    score -= 4; // Kurangi estimasi sekitar 4 bit
+    score = Math.min(score, 16);
   }
 
-  // Penalti jika rasio kompresi terlalu efisien (Padding)
+  // Penalti jika rasio kompresi terlalu efisien (padding suspected).
   if (isPaddingSuspected) {
     score *= 0.8;
   }
 
   // --- Final Clamping ---
-  // Kita lebih konservatif: Jika ragu, turunkan ke 16-bit.
-  if (score < 18) return 16;
-  if (score < 26) return 24;
+  // Konservatif: kalau ragu, turunkan. Ambang dalam satuan bit.
+  // 16-bit  -> DR <= ~98 dB (batas teoretis 16-bit)
+  // 24-bit  -> DR > 98 dB, sampai batas teoretis 24-bit (146 dB)
+  // 32-bit  -> jarang bermakna untuk playback; hanya jika DR sangat tinggi
+  if (score <= 16) return 16;
+  if (score <= 24) return 24;
   return 32;
 }
 
-function calculateConfidence(
+/** Batas DR teoretis MSB untuk N-bit, dalam dB. Dipakai untuk clamp. */
+export function theoreticalDrForBitDepth(bits: number): number {
+  return 6.02 * bits + 1.76;
+}
+
+/**
+ * Confidence analysis, 0-100. Turun 5 poin per bit selisih antara
+ * declared dan estimated. Diekspor untuk pengujian.
+ */
+export function calculateConfidence(
   declared: number,
   estimated: number,
   baseConfidence: number,
