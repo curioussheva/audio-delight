@@ -16,7 +16,7 @@ jobs:
       GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
       EXPO_NO_DEV_SERVER: 1
       EXPO_NO_DEV_CLIENT: 1
-      # NODE_ENV dihapus — biarkan default
+      # NODE_ENV dihapus - biarkan default
 
     steps:
       # 1. Checkout
@@ -61,7 +61,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y nasm
 
-      # 8. Cache Gradle (tambahan — percepat rebuild)
+      # 8. Cache Gradle (tambahan - percepat rebuild)
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
@@ -93,7 +93,7 @@ jobs:
           cmake.dir=$ANDROID_HOME/cmake/3.22.1
           EOF
 
-      # 12. Disable dev-client (WAJIB — supaya APK offline jalan)
+      # 12. Disable dev-client (WAJIB - supaya APK offline jalan)
       - name: Disable dev-client + auto-download JDK
         run: |
           echo "" >> android/gradle.properties
@@ -101,11 +101,42 @@ jobs:
           echo "expo.devClient.enabled=false" >> android/gradle.properties
           echo "org.gradle.java.installations.auto-download=false" >> android/gradle.properties
 
-      # 13. Patch RN Gradle Plugin (foojay)
+      # 13. Inject Gradle init script
+      #
+      # WAJIB. `android/settings.gradle` juga memanggil includeBuild untuk
+      # kedua plugin ini, TAPI settings.gradle hanya berlaku untuk root
+      # project. Sub-build yang berdiri sendiri - expo-dev-launcher-gradle-plugin
+      # dan expo-module-gradle-plugin - tidak punya settings.gradle sendiri,
+      # dan tanpa includeBuild dari sini mereka mencari
+      # `com.facebook.react:react-native-gradle-plugin` di repo Maven dengan
+      # versi KOSONG:
+      #
+      #   Could not find com.facebook.react:react-native-gradle-plugin:
+      #
+      # beforeSettings memastikan pluginManagement berlaku untuk SETIAP
+      # settings yang dievaluasi, bukan hanya yang di root.
+      - name: Inject Gradle init script
+        run: |
+          mkdir -p $GRADLE_USER_HOME/init.d
+          cat > $GRADLE_USER_HOME/init.d/rn-plugins.gradle << EOF
+          beforeSettings { settings ->
+              settings.pluginManagement {
+                  repositories {
+                      google()
+                      mavenCentral()
+                      gradlePluginPortal()
+                  }
+                  includeBuild("${{ github.workspace }}/node_modules/@react-native/gradle-plugin")
+                  includeBuild("${{ github.workspace }}/node_modules/expo-modules-autolinking/android/expo-gradle-plugin")
+              }
+          }
+          EOF
+
+      # 14. Patch RN Gradle Plugin (foojay)
       - name: Patch RN Gradle Plugin (foojay)
         run: python3 scripts/patch-foojay.py
 
-      # 14. Setup Oboe
+      # 15. Setup Oboe
       - name: Setup Oboe
         run: |
           OBOE_DIR="android/app/src/main/cpp/oboe"
@@ -113,7 +144,7 @@ jobs:
           curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz \
           | tar -xz --strip-components=1 -C "$OBOE_DIR"
 
-      # 15. Clean native caches
+      # 16. Clean native caches
       - name: Clean native caches
         working-directory: android
         run: |
@@ -122,7 +153,7 @@ jobs:
           rm -rf app/.cxx app/build
           echo "✅ Native caches cleaned"
 
-      # 16. Generate Codegen
+      # 17. Generate Codegen
       - name: Generate Codegen
         working-directory: android
         run: |
@@ -131,7 +162,7 @@ jobs:
             -PreactNativeNewArch=true \
             -PhermesEnabled=true
 
-      # 17. Embed Expo bundle (DEV true — match assembleDebug)
+      # 18. Embed Expo bundle (DEV true - match assembleDebug)
       - name: Embed Expo bundle
         run: |
           mkdir -p android/app/src/main/assets
@@ -147,7 +178,7 @@ jobs:
             exit 1
           fi
 
-      # 18. Build Debug APK
+      # 19. Build Debug APK
       - name: Build Debug APK
         working-directory: android
         run: |
@@ -157,7 +188,7 @@ jobs:
             -PhermesEnabled=true \
             -DJS_RUNTIME=hermes 2>&1 | tee build.log
 
-      # 19. Verify bundle in APK
+      # 20. Verify bundle in APK
       - name: Verify bundle in APK
         run: |
           APK="android/app/build/outputs/apk/debug/app-debug.apk"
@@ -169,7 +200,7 @@ jobs:
             exit 1
           fi
 
-      # 20. Upload Build Log on Failure
+      # 21. Upload Build Log on Failure
       - name: Upload Build Log
         uses: actions/upload-artifact@v4
         if: failure()
@@ -178,7 +209,7 @@ jobs:
           path: android/build.log
           retention-days: 7
 
-      # 21. Upload APK on Success
+      # 22. Upload APK on Success
       - name: Upload APK
         uses: actions/upload-artifact@v4
         if: success()
