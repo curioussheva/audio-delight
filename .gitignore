@@ -75,12 +75,13 @@ MIGRATION_REPORT.txt
 .DS_Store
 Thumbs.db
 
-# Logs & Tests
+# Logs
 *.log
 coverage/
-__tests__/
-*.test.ts
-*.spec.ts
+
+# Tests DI-TRACK. Baris `__tests__/`, `*.test.ts`, `*.spec.ts` dihapus 2026-10-03:
+# pola itu berasal dari era tanpa test di repo dan membuat suite Jest baru
+# tidak pernah bisa di-commit maupun jalan di CI.
 
 # TypeScript
 *.tsbuildinfo

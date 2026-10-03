@@ -2,13 +2,18 @@
 
 Strategi verifikasi, disesuaikan dengan constraint: **tidak ada Gradle lokal, tidak ada Android SDK/NDK, tidak ada emulator.** Build native hanya lewat CI atau EAS.
 
-> **Status jujur 2026-10-03: proyek ini tidak punya satu pun test otomatis.** Tidak ada Jest, tidak ada skrip `verify-*.mjs`. Satu-satunya gerbang mutu otomatis adalah `tsc --noEmit` - yang tidak menyentuh satu baris C++ pun, padahal C++ adalah 193 file dan bagian terbesar risikonya. Dokumen ini mencatat apa yang **bisa** dijalankan sekarang, dan apa yang belum ada.
+> **Status 2026-10-03 (diperbarui): proyek ini punya test otomatis pertama - 58 test Jest di 4 suite, semuanya untuk logika murni TS.** Sebelumnya nol. Ini baru lapisan pertama; **C++ masih tanpa test sama sekali** (193 file, bagian terbesar risiko). Lihat bagian 5 untuk batasnya.
 
 ---
 
 ## 1. Verifikasi lokal yang benar-benar jalan (sekarang)
 
 ```bash
+# Test unit logika murni (Jest + ts-jest, ~60 detik)
+pnpm test                    # jest, semua suite
+pnpm test:watch              # jest --watch
+pnpm test:coverage           # jest --coverage
+
 # Typecheck seluruh project (~100 detik di Termux)
 node_modules/.bin/tsc --noEmit          # atau: pnpm typecheck
 # Hasil 2026-10-03: LULUS, 0 error
@@ -88,15 +93,38 @@ adb logcat -s PristineAudio ReactNativeJS
 
 **Yang paling sering dilewatkan:** #9. Mengubah konstanta default di kode tidak membuktikan bahwa jalur BitPerfect benar-benar melewati DSP - harus terdengar.
 
-## 5. Yang seharusnya diotomasi lebih dulu (urutan)
+## 5. Test yang sudah ada (dibuat 2026-10-03)
 
-1. **Jest (`jest-expo`) untuk logika murni** - `ScanDiffEngine`, format durasi, mapping preset, `getThemeById` fallback. Tidak butuh device, tidak butuh native.
-2. **Test kontras 20 tema** - port pola `check_contrast.ts` persona. Angka awalnya sudah ada di `VISUAL_HEALTH.md` (16 gagal); jadikan gerbang setelah diperbaiki.
-3. **`check_layout.ts` sebagai gerbang CI** - cegah literal spacing **baru** (519 existing, anggap baseline).
-4. **Job `verify` terpisah sebelum `build`** - pola persona: kegagalan JS muncul ~2 menit, bukan setelah 16 menit `assembleDebug`.
-5. **`scripts/check.sh` di CI** - menangkap error C++ tanpa perlu `assembleDebug`.
+58 test, 4 suite. Semuanya di `src/__tests__/`, menguji **logika murni** - tidak ada import react/react-native/expo, sehingga berjalan di `testEnvironment: node` tanpa satu pun mock.
 
-## 6. Batas yang tidak bisa dilewati dari lingkungan ini
+| Suite | Test | Yang dijaga |
+|---|---|---|
+| `shared/utils/LrcParser.test.ts` | 11 | Parser lirik LRC: format timestamp, multi-timestamp, pengurutan, state regex |
+| `shared/types/dsp.test.ts` | 19 | `createFlatEQ`, clamp gain, `dbToLinear`/`linearToDb`, mapping reverb |
+| `shared/types/audio.test.ts` | 15 | `formatDuration`, `formatFileSize`, batas satuan |
+| `shared/types/dac.test.ts` | 13 | `canDoBitPerfect`, `isHiResCapable`, `recommendDSDMode` |
+
+**Konfigurasi sengaja minimal:** `jest.config.cjs` + `preset: "ts-jest"`, tanpa `babel-preset-expo`. Alasannya: memuat babel-expo akan menyeret kebutuhan mock RN ke setiap test, padahal yang diuji murni TS. Kalau nanti perlu menguji komponen, buat project Jest **terpisah** dengan `jest-expo` - jangan bebankan mock ke suite yang sekarang.
+
+**Lokasi test di `src/__tests__/`, bukan `__tests__/` di samping modul.** Ini bukan pilihan estetika: `tsconfig.json` mencantumkan `./src/shared/types` di `typeRoots`, sehingga folder `__tests__` di dalamnya dipindai TypeScript sebagai *type library* dan memunculkan `error TS2688: Cannot find type definition file for '__tests__'`. Menaruhnya di `src/__tests__/` menghindari itu tanpa mengubah tsconfig.
+
+### Bug yang ditemukan test ini
+
+**`formatDuration(Infinity)` mengembalikan `"Infinity:NaN"`.** Penjaganya `if (!seconds || isNaN(seconds))` tidak menangkap `Infinity`: nilainya truthy, dan `isNaN(Infinity)` bernilai `false`. Diperbaiki jadi `if (!Number.isFinite(seconds) || seconds <= 0)`, yang sekaligus menangani nilai negatif. Ini kelas bug yang **lolos typecheck dan lolos build** - persis alasan test ini ada.
+
+## 6. Yang seharusnya diotomasi berikutnya (urutan)
+
+1. ~~**Jest untuk logika murni**~~ - **selesai** untuk `LrcParser`, `dsp`, `audio`, `dac`.
+2. **`ScanDiffEngine` + `selectors.ts`** - logika diff scan dan pengelompokan album/artis. Murni, tapi `selectors.ts` mengimpor tipe dari `libraryStore.ts` yang menyeret zustand + AsyncStorage; butuh `jest.mock` untuk store atau pemisahan tipe.
+3. **`BitDepthVerifier.analyzeBitDepth`** - deteksi FLAC palsu/upscale. Murni, nilainya tinggi, dan salah di sini langsung menyesatkan pengguna.
+4. **Test kontras 20 tema** - port pola `check_contrast.ts` persona. Angka awalnya ada di `VISUAL_HEALTH.md` (16 gagal); jadikan gerbang setelah diperbaiki.
+5. **`check_layout.ts` sebagai gerbang CI** - cegah literal spacing **baru** (519 existing, anggap baseline).
+6. **Job `verify` terpisah sebelum `build`** - pola persona: kegagalan JS muncul ~2 menit, bukan setelah 16 menit `assembleDebug`.
+7. **`scripts/check.sh` di CI** - menangkap error C++ tanpa perlu `assembleDebug`.
+
+**C++ tetap nol test.** Itu 193 file dan bagian terbesar risiko; Jest tidak menyentuhnya. Padanan yang benar adalah pola persona: kompilasi modul murni lalu jalankan di host, dan bandingkan dengan implementasi independen.
+
+## 7. Batas yang tidak bisa dilewati dari lingkungan ini
 
 - **Tidak ada `adb devices`.** Tidak ada device, tidak ada emulator.
 - **Tidak ada Gradle.** `./gradlew` tidak bisa dijalankan lokal.

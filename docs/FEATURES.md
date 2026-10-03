@@ -125,8 +125,8 @@ Catatan: `favorites` fitur sendiri (6 file, store + service + hook) **tapi tidak
 
 **Yang lemah, dan ini yang menahan klaim "produk":**
 
-1. **Nol test otomatis.** Tidak ada `verify-*.mjs`, tidak ada Jest. Satu-satunya gerbang mutu otomatis adalah `tsc --noEmit` (lulus) - dan typecheck tidak menyentuh satu baris C++ pun, yang justru bagian terbesar risikonya.
+1. **Test otomatis baru ada di lapisan tipis.** 58 test Jest untuk logika murni TS (`LrcParser`, dsp, audio, dac) - dibuat 2026-10-03, sebelumnya nol. Tapi **C++ tetap nol test**, dan itu 193 file serta bagian terbesar risikonya. Typecheck tidak menyentuh satu baris C++ pun.
 2. **Nol verifikasi device.** 193 file C++ yang tidak pernah dibuktikan berjalan di perangkat nyata oleh sesi ini.
-3. **Nol riwayat rilis.** Versi `1.0.37`, nol git tag, tidak ada CHANGELOG.
+3. **Riwayat rilis baru dimulai.** Versi `1.0.37`, git tag pertama `v1.0.37` dibuat 2026-10-03; sebelumnya nol tag. `CHANGELOG.md` merekonstruksi sebagian, bukan catatan asli.
 4. **Utang visual terukur** - 519 literal spacing, 16 pasangan kontras gagal.
-5. **Satu file sampah** di route tree: `src/app/_layout.tsx (2)`.
+5. ~~**Satu file sampah** di route tree: `src/app/_layout.tsx (2)`.~~ - **dihapus 2026-10-03** (backup di `$TMPDIR`), setelah diverifikasi tidak ada yang mereferensikannya dan versinya sudah ketinggalan dua fix.

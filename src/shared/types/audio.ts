@@ -65,7 +65,9 @@ export interface Song {
 }
 
 export function formatDuration(seconds: number): string {
-  if (!seconds || isNaN(seconds)) return "00:00";
+  // !seconds menangani 0/NaN, tapi tidak menangkap Infinity (truthy) maupun
+  // nilai negatif. Tanpa Number.isFinite, Infinity menghasilkan "Infinity:NaN".
+  if (!Number.isFinite(seconds) || seconds <= 0) return "00:00";
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;

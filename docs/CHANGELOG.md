@@ -8,6 +8,35 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/). Versi mengikut
 
 ---
 
+## [Unreleased] - 2026-10-03
+
+### Added
+
+- **Test otomatis pertama** - Jest + ts-jest, 58 test di 4 suite untuk logika murni TS:
+  `LrcParser` (11), `dsp` (19), `audio` (15), `dac` (13). Script `pnpm test`,
+  `test:watch`, `test:coverage`. Konfigurasi di `src/__tests__/` (bukan di samping
+  modul - lihat `TESTING.md` bagian 5 untuk alasannya).
+- **`v1.0.37`** - git tag pertama repo ini, titik acuan sebelum standarisasi dokumentasi.
+- **Dokumentasi terindeks** - 13 file di `docs/` + README root + AGENTS.md, menggantikan
+  11 dokumen roadmap/todolist yang tumpang tindih (533 KB). Lihat commit dokumentasi.
+
+### Fixed
+
+- **`formatDuration(Infinity)` mengembalikan `"Infinity:NaN"`.** Penjaga lama
+  `if (!seconds || isNaN(seconds))` tidak menangkap `Infinity` (truthy, dan
+  `isNaN(Infinity)` = `false`). Sekarang `!Number.isFinite(seconds) || seconds <= 0`,
+  yang sekaligus menangani nilai negatif. Ditemukan oleh test - bug ini lolos
+  typecheck dan lolos build.
+
+### Removed
+
+- **`src/app/_layout.tsx (2)`** - file duplikat di route tree, diabaikan router,
+  tidak pernah dibundel. Diverifikasi tidak ada yang mereferensikan, dan isinya
+  sudah ketinggalan dua fix (`clearCache`, reset stuck scan) dibanding versi aktif.
+  Backup di `$TMPDIR/_layout.debug-backup.tsx`.
+
+---
+
 ## [1.0.37] - Tidak bertanggal (state repo per 2026-10-03)
 
 **Direkonstruksi dari git log. Rentang commit: `d09825ac0` ke belakang.**

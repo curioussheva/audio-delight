@@ -59,13 +59,15 @@ Item ini **terverifikasi terbuka**, bukan diwarisi dari dokumen lama:
 
 ## Fase 3 - Test otomatis (celah terbesar)
 
-PristineAudio **tidak punya satu pun test otomatis**. Persona punya 28 skrip `verify-*.mjs`; di sini nol. Ini yang membuat Fase 1 mahal: tidak ada cara mendeteksi regresi selain memasang APK.
+Test otomatis baru ada di lapisan tipis: **58 test Jest untuk logika murni TS** (`LrcParser`, dsp, audio, dac), dibuat 2026-10-03. **C++ tetap nol test** - dan itu 193 file, bagian terbesar risiko. Ini yang membuat Fase 1 mahal: tidak ada cara mendeteksi regresi native selain build ulang lalu uji manual di device.
 
-- [ ] **Konfigurasi Jest** - `jest-expo` + `@testing-library/react-native`
-- [ ] Test logika murni (tanpa native): `ScanDiffEngine`, format durasi, mapping preset EQ, seleksi tema, `getThemeById` fallback
+- [x] **Konfigurasi Jest** - `jest.config.cjs` + `ts-jest` (bukan `jest-expo`, lihat catatan), script `pnpm test` / `test:watch` / `test:coverage`
+- [x] Test logika murni: `LrcParser` (11), dsp (19), audio (15), dac (13) - **58 test, semua lulus**
+- [ ] Test logika murni lanjutan: `ScanDiffEngine`, `selectors.ts`, `analyzeBitDepth`, seleksi tema, `getThemeById` fallback
 - [ ] Test warna: kontras semua pasangan di **20 tema** - port pola `check_contrast.ts` persona
 - [ ] Test spacing: cegah literal baru (checker `check_layout.ts` sudah jalan, tinggal dijadikan gerbang)
-- [ ] Angkat typecheck ke CI sebagai job terpisah yang lebih dulu jalan (pola `verify` -> `build` persona: kegagalan JS muncul dalam 2 menit, bukan setelah 16 menit build)
+- [ ] Angkat typecheck + `pnpm test` ke CI sebagai job terpisah yang lebih dulu jalan (pola `verify` -> `build` persona: kegagalan JS muncul dalam 2 menit, bukan setelah 16 menit build)
+- [ ] Test C++ - **masih nol**. Padanan pola persona: kompilasi modul murni lalu jalankan di host, bandingkan dengan implementasi independen
 
 ## Fase 4 - Visual (utang terukur)
 
@@ -78,8 +80,8 @@ Angka riil 2026-10-03. Lihat `VISUAL_HEALTH.md`.
 
 ## Fase 5 - Rilis & distribusi
 
-- [ ] **CHANGELOG.md** - tidak ada. Versi `1.0.37` tanpa riwayat apa pun.
-- [ ] **Git tag** - nol tag di repo. Riwayat rilis tidak bisa direkonstruksi.
+- [x] **CHANGELOG.md** - dibuat 2026-10-03; merekonstruksi sebagian dari `git log` (40 commit). Riwayat sebelum ini tidak bisa direkonstruksi.
+- [x] **Git tag** - `v1.0.37` dibuat 2026-10-03 (tag pertama repo ini)
 - [ ] Rapikan tiga jalur build paralel (EAS | GitHub Actions | GitLab CI) - lihat `ARCHITECTURE.md` ADR-9
 - [ ] Perbaiki `eas.json`: `cache.key` mengunci ke `yarn.lock` padahal proyek pakai pnpm - cache selalu miss
 - [ ] Putuskan status 5 workflow GitHub yang semuanya `workflow_dispatch` - sengaja, atau belum disetel?
