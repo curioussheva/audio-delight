@@ -193,7 +193,10 @@ cmd_status() {
   if port_busy; then
     echo "  port $PORT : terpakai"
   else
-    echo "  port $PORT : bebas"
+    # CATATAN: ss/netstat di Termux tidak bisa melihat socket milik proses
+    # sendiri tanpa root, jadi "bebas" di sini TIDAK berarti server mati.
+    # Uji HTTP di bawah ini yang menentukan.
+    echo "  port $PORT : tidak terdeteksi (ss/netstat terbatas di Termux - abaikan)"
   fi
 
   if server_up; then
