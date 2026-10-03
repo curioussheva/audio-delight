@@ -101,3 +101,6 @@ tmp/
 # ~36 MB (graph.json 16 MB), tidak layak masuk riwayat git. Pola sama
 # seperti persona/.gitignore.
 graphify-out/
+
+# Log dev server Metro (dibuat scripts/metro.sh). Besar dan regeneratif.
+.metro.log
