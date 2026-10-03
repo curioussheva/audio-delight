@@ -12,21 +12,39 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/). Versi mengikut
 
 ### Added
 
-- **Test otomatis pertama** - Jest + ts-jest, 58 test di 4 suite untuk logika murni TS:
-  `LrcParser` (11), `dsp` (19), `audio` (15), `dac` (13). Script `pnpm test`,
-  `test:watch`, `test:coverage`. Konfigurasi di `src/__tests__/` (bukan di samping
-  modul - lihat `TESTING.md` bagian 5 untuk alasannya).
+- **Test otomatis pertama** - Jest + ts-jest, **98 test di 6 suite** untuk logika murni TS:
+  `LrcParser` (11), `dsp` (19), `audio` (15), `dac` (13), `BitDepthVerifier` (23),
+  `ScanDiffEngine` (17). Script `pnpm test`, `test:watch`, `test:coverage`.
+  Konfigurasi di `src/__tests__/` (bukan di samping modul - lihat `TESTING.md`
+  bagian 5 untuk alasannya).
 - **`v1.0.37`** - git tag pertama repo ini, titik acuan sebelum standarisasi dokumentasi.
 - **Dokumentasi terindeks** - 13 file di `docs/` + README root + AGENTS.md, menggantikan
   11 dokumen roadmap/todolist yang tumpang tindih (533 KB). Lihat commit dokumentasi.
+- `computeDiff()` dan `isDeletionPlausible()` di `ScanDiffEngine` - logika diff
+  diekstrak jadi fungsi murni yang bisa diuji dan dipakai kedua jalur scan.
 
 ### Fixed
 
+- **KEHILANGAN DATA: satu kegagalan query MediaStore menghapus SELURUH library.**
+  `MediaStore.queryAudioFiles()` menangkap error lalu `return []`; array kosong
+  tidak bisa dibedakan dari "device tidak punya file audio". `ScanDiffEngine`
+  menyimpulkan semua lagu di database terhapus dan memanggil `deleteSongsByUris`
+  dengan seluruh library - playlist, favorit, dan riwayat ikut hilang.
+  Pemicunya hal biasa: izin dicabut, MediaStore sibuk, OOM.
+  Diperbaiki: query melempar error, `isDeletionPlausible()` menahan penghapusan
+  massal, dan `processQuickDiff` kini memakai transaction untuk penulisan.
+- **Deteksi "FLAC palsu" salah skala.** `estimateRealBitDepth` membandingkan
+  `(DR - 1.76) / 6.02` - sudah bernilai satuan bit - dengan ambang `18`/`26`.
+  Ambang 18 menuntut DR >= 110 dB untuk diakui 24-bit, sehingga file 24/96 asli
+  diklasifikasi 16-bit. Ambang diperbaiki jadi `16`/`24`. Ambang lama juga tidak
+  pernah bisa menghasilkan 32-bit (butuh DR 158 dB, di atas maksimum teoretis).
+- **`BitDepthVerifier` memakai `sampleRate` hardcoded 44100**, sehingga penalti
+  "upsample detector" (`sampleRate > 48000`) tidak pernah aktif dan file hi-res
+  hasil upsample dari CD tidak terdeteksi. Sekarang mengambil dari lagu/analisis.
 - **`formatDuration(Infinity)` mengembalikan `"Infinity:NaN"`.** Penjaga lama
   `if (!seconds || isNaN(seconds))` tidak menangkap `Infinity` (truthy, dan
   `isNaN(Infinity)` = `false`). Sekarang `!Number.isFinite(seconds) || seconds <= 0`,
-  yang sekaligus menangani nilai negatif. Ditemukan oleh test - bug ini lolos
-  typecheck dan lolos build.
+  yang sekaligus menangani nilai negatif. Ditemukan oleh test.
 
 ### Removed
 

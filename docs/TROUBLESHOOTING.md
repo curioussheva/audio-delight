@@ -18,7 +18,7 @@ bash scripts/check.sh core/AudioEngine.cpp     # atau satu file (jauh lebih cepa
 
 ---
 
-## Sepuluh pola berulang (cek ini dulu)
+## Sebelas pola berulang (cek ini dulu)
 
 Sebelum menginvestigasi error C++ dari nol, periksa apakah ini salah satu pola yang sudah terbukti berulang. Semuanya pernah terjadi lebih dari sekali di proyek ini.
 
@@ -90,7 +90,47 @@ grep -rn "initPlaybackModule" android/app/src/main/ | grep -v "/oboe/"
 
 `src/app/_layout.tsx (2)` - duplikat 10 KB dari `_layout.tsx` yang tertinggal dari editor. expo-router mengabaikannya (bukan nama file valid), tapi ia mengotori grep dan tree.
 
+**Sudah dihapus 2026-10-03.** Pola ini tetap didokumentasikan karena menunjuk ke kelas masalah: file yang tampak seperti duplikat belum tentu duplikat. Versi `_layout.tsx (2)` ternyata **ketinggalan dua fix** (`clearCache`, reset stuck scan) dibanding versi aktif - jadi menyalinnya dengan asumsi "yang lama sama saja" akan me-regresi dua perbaikan. Bandingkan (`diff`) sebelum menghapus atau memilih.
+
 ---
+
+### 11. `catch` yang mengembalikan `[]` menyamarkan kegagalan sebagai data kosong
+
+Pola paling berbahaya di proyek ini, karena kegagalannya **tidak terlihat** -
+aplikasi tetap jalan, hanya datanya hilang.
+
+`MediaStore.queryAudioFiles()` dulu menangkap error lalu `return []`. Array kosong
+tidak bisa dibedakan dari "device tidak punya file audio". `ScanDiffEngine`
+menyimpulkan semua lagu di database sudah terhapus, lalu memanggil
+`deleteSongsByUris` dengan **seluruh library**. Playlist, favorit, dan riwayat
+ikut hilang karena merujuk ke lagu yang dihapus. Pemicunya hal biasa: izin
+dicabut, MediaStore sibuk, OOM.
+
+**Aturan:** fungsi yang membaca keadaan (query, list, scan) harus **melempar**
+saat gagal, bukan mengembalikan koleksi kosong. Pemanggil yang ingin menoleransi
+kegagalan harus menangkapnya sendiri, secara sadar dan terlihat.
+
+```ts
+// SALAH - kegagalan menyamar jadi "tidak ada data"
+catch (e) { return []; }
+
+// BENAR - pemanggil memutuskan, bukan diam-diam
+catch (e) { console.error(...); throw e; }
+```
+
+**Untuk operasi yang merusak (delete, overwrite), tambahkan penjaga terpisah.**
+Jangan percaya buta pada daftar hapus yang dihitung dari data yang mungkin tidak
+lengkap:
+
+```ts
+// ScanDiffEngine.isDeletionPlausible()
+if (deletedCount >= 5 && currentCount === 0) tolak;  // device "kosong" = curiga
+if (deletedCount / existingCount > 0.5) tolak;        // mayoritas library hilang
+```
+
+**Cara mengenali kelas bug ini:** cari `catch` yang mengembalikan nilai netral
+(`[]`, `{}`, `null`, `0`, `false`) untuk fungsi yang hasilnya dipakai sebagai
+dasar keputusan destruktif.
 
 ## Error build spesifik
 

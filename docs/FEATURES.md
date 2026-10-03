@@ -125,7 +125,7 @@ Catatan: `favorites` fitur sendiri (6 file, store + service + hook) **tapi tidak
 
 **Yang lemah, dan ini yang menahan klaim "produk":**
 
-1. **Test otomatis baru ada di lapisan tipis.** 58 test Jest untuk logika murni TS (`LrcParser`, dsp, audio, dac) - dibuat 2026-10-03, sebelumnya nol. Tapi **C++ tetap nol test**, dan itu 193 file serta bagian terbesar risikonya. Typecheck tidak menyentuh satu baris C++ pun.
+1. **Test otomatis baru ada di lapisan tipis.** 98 test Jest di 6 suite - `LrcParser`, dsp, audio, dac, `BitDepthVerifier`, `ScanDiffEngine`. Dibuat 2026-10-03, sebelumnya nol. Tapi **C++ tetap nol test**, dan itu 193 file serta bagian terbesar risikonya. Typecheck tidak menyentuh satu baris C++ pun.
 2. **Nol verifikasi device.** 193 file C++ yang tidak pernah dibuktikan berjalan di perangkat nyata oleh sesi ini.
 3. **Riwayat rilis baru dimulai.** Versi `1.0.37`, git tag pertama `v1.0.37` dibuat 2026-10-03; sebelumnya nol tag. `CHANGELOG.md` merekonstruksi sebagian, bukan catatan asli.
 4. **Utang visual terukur** - 519 literal spacing, 16 pasangan kontras gagal.

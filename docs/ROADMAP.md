@@ -59,11 +59,12 @@ Item ini **terverifikasi terbuka**, bukan diwarisi dari dokumen lama:
 
 ## Fase 3 - Test otomatis (celah terbesar)
 
-Test otomatis baru ada di lapisan tipis: **58 test Jest untuk logika murni TS** (`LrcParser`, dsp, audio, dac), dibuat 2026-10-03. **C++ tetap nol test** - dan itu 193 file, bagian terbesar risiko. Ini yang membuat Fase 1 mahal: tidak ada cara mendeteksi regresi native selain build ulang lalu uji manual di device.
+Test otomatis baru ada di lapisan tipis: **98 test Jest di 6 suite** (`LrcParser`, dsp, audio, dac, `BitDepthVerifier`, `ScanDiffEngine`), dibuat 2026-10-03. **C++ tetap nol test** - dan itu 193 file, bagian terbesar risiko. Ini yang membuat Fase 1 mahal: tidak ada cara mendeteksi regresi native selain build ulang lalu uji manual di device.
 
 - [x] **Konfigurasi Jest** - `jest.config.cjs` + `ts-jest` (bukan `jest-expo`, lihat catatan), script `pnpm test` / `test:watch` / `test:coverage`
-- [x] Test logika murni: `LrcParser` (11), dsp (19), audio (15), dac (13) - **58 test, semua lulus**
-- [ ] Test logika murni lanjutan: `ScanDiffEngine`, `selectors.ts`, `analyzeBitDepth`, seleksi tema, `getThemeById` fallback
+- [x] Test logika murni: `LrcParser` (11), dsp (19), audio (15), dac (13) - **58 test**
+- [x] `BitDepthVerifier` (23 test) + `ScanDiffEngine` (17 test) - **98 test total, semua lulus**
+- [ ] Test lanjutan: `selectors.ts`, seleksi tema, `getThemeById` fallback
 - [ ] Test warna: kontras semua pasangan di **20 tema** - port pola `check_contrast.ts` persona
 - [ ] Test spacing: cegah literal baru (checker `check_layout.ts` sudah jalan, tinggal dijadikan gerbang)
 - [ ] Angkat typecheck + `pnpm test` ke CI sebagai job terpisah yang lebih dulu jalan (pola `verify` -> `build` persona: kegagalan JS muncul dalam 2 menit, bukan setelah 16 menit build)

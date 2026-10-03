@@ -2,15 +2,15 @@
 
 Strategi verifikasi, disesuaikan dengan constraint: **tidak ada Gradle lokal, tidak ada Android SDK/NDK, tidak ada emulator.** Build native hanya lewat CI atau EAS.
 
-> **Status 2026-10-03 (diperbarui): proyek ini punya test otomatis pertama - 58 test Jest di 4 suite, semuanya untuk logika murni TS.** Sebelumnya nol. Ini baru lapisan pertama; **C++ masih tanpa test sama sekali** (193 file, bagian terbesar risiko). Lihat bagian 5 untuk batasnya.
+> **Status 2026-10-03 (diperbarui): proyek ini punya 98 test Jest di 6 suite, semuanya untuk logika murni TS.** Sebelumnya nol. Ini baru lapisan pertama; **C++ masih tanpa test sama sekali** (193 file, bagian terbesar risiko). Lihat bagian 5 untuk batasnya.
 
 ---
 
 ## 1. Verifikasi lokal yang benar-benar jalan (sekarang)
 
 ```bash
-# Test unit logika murni (Jest + ts-jest, ~60 detik)
-pnpm test                    # jest, semua suite
+# Test unit logika murni (Jest + ts-jest, ~25 detik)
+pnpm test                    # jest, semua suite (98 test, ~25 detik)
 pnpm test:watch              # jest --watch
 pnpm test:coverage           # jest --coverage
 
@@ -95,7 +95,7 @@ adb logcat -s PristineAudio ReactNativeJS
 
 ## 5. Test yang sudah ada (dibuat 2026-10-03)
 
-58 test, 4 suite. Semuanya di `src/__tests__/`, menguji **logika murni** - tidak ada import react/react-native/expo, sehingga berjalan di `testEnvironment: node` tanpa satu pun mock.
+98 test, 6 suite. Empat suite pertama murni tanpa mock; dua terakhir memakai `jest.mock` untuk modul yang menyeret kode native. Semua berjalan di `testEnvironment: node`.
 
 | Suite | Test | Yang dijaga |
 |---|---|---|
@@ -103,6 +103,10 @@ adb logcat -s PristineAudio ReactNativeJS
 | `shared/types/dsp.test.ts` | 19 | `createFlatEQ`, clamp gain, `dbToLinear`/`linearToDb`, mapping reverb |
 | `shared/types/audio.test.ts` | 15 | `formatDuration`, `formatFileSize`, batas satuan |
 | `shared/types/dac.test.ts` | 13 | `canDoBitPerfect`, `isHiResCapable`, `recommendDSDMode` |
+| `features/audio/BitDepthVerifier.test.ts` | 23 | Heuristik deteksi bit depth palsu & upsample |
+| `features/library/ScanDiffEngine.test.ts` | 17 | Logika diff scan + pengaman anti-hapus-library |
+
+Dua suite terakhir butuh `jest.mock` untuk modul yang menyeret native (`audioAnalyzer`, `MediaStore`, `LibraryScanner`, `db`) - bukan karena RN, tapi karena fungsi murni yang diuji tinggal serumah dengan kode native.
 
 **Konfigurasi sengaja minimal:** `jest.config.cjs` + `preset: "ts-jest"`, tanpa `babel-preset-expo`. Alasannya: memuat babel-expo akan menyeret kebutuhan mock RN ke setiap test, padahal yang diuji murni TS. Kalau nanti perlu menguji komponen, buat project Jest **terpisah** dengan `jest-expo` - jangan bebankan mock ke suite yang sekarang.
 
@@ -110,13 +114,28 @@ adb logcat -s PristineAudio ReactNativeJS
 
 ### Bug yang ditemukan test ini
 
-**`formatDuration(Infinity)` mengembalikan `"Infinity:NaN"`.** Penjaganya `if (!seconds || isNaN(seconds))` tidak menangkap `Infinity`: nilainya truthy, dan `isNaN(Infinity)` bernilai `false`. Diperbaiki jadi `if (!Number.isFinite(seconds) || seconds <= 0)`, yang sekaligus menangani nilai negatif. Ini kelas bug yang **lolos typecheck dan lolos build** - persis alasan test ini ada.
+Tiga, semuanya **lolos typecheck dan lolos build** - persis alasan test ini ada.
+
+**1. `formatDuration(Infinity)` mengembalikan `"Infinity:NaN"`.** Penjaganya `if (!seconds || isNaN(seconds))` tidak menangkap `Infinity`: nilainya truthy, dan `isNaN(Infinity)` bernilai `false`. Diperbaiki jadi `if (!Number.isFinite(seconds) || seconds <= 0)`, yang sekaligus menangani nilai negatif.
+
+**2. Deteksi "FLAC palsu" salah skala, hampir semua hi-res asli dituduh palsu.** `estimateRealBitDepth` menghitung `(dynamicRange - 1.76) / 6.02` - yang **sudah bernilai satuan bit** - lalu membandingkannya dengan ambang `18` dan `26`. Ambang 18 berarti menuntut DR >= 110 dB sebelum file diakui 24-bit; 24-bit asli DR 100-120 dB, dan maksimum teoretisnya 146 dB. Akibatnya file 24/96 asli diklasifikasi 16-bit. Ambang diperbaiki jadi `16`/`24` (satuan bit, sejalan dengan rumusnya). Ambang lama juga tidak pernah bisa mencapai 32-bit (butuh DR 158 dB, di atas maksimum teoretis 32-bit).
+
+**3. Satu kegagalan query MediaStore menghapus SELURUH library pengguna.** Ini yang terburuk. `MediaStore.queryAudioFiles()` menangkap error lalu `return []` - array kosong tidak bisa dibedakan dari "device tidak punya file audio". `ScanDiffEngine` lalu menyimpulkan bahwa **semua** lagu di database sudah terhapus, dan memanggil `deleteSongsByUris` dengan seluruh library. Playlist, favorit, dan riwayat ikut hilang karena merujuk ke lagu yang dihapus. Pemicunya hal biasa: izin dicabut, MediaStore sibuk, OOM.
+
+Diperbaiki berlapis:
+- `MediaStore.queryAudioFiles()` **melempar** error, tidak lagi menyamarkannya sebagai array kosong.
+- `isDeletionPlausible()` menahan penghapusan massal: >= 5 lagu dihapus sekaligus dengan device melaporkan nol file, atau lebih dari 50% library hilang, akan ditolak dan dicatat ke log.
+- `processQuickDiff` sekarang memakai transaction untuk penulisan (sebelumnya tidak), sehingga scan yang gagal di tengah tidak meninggalkan database setengah terisi.
+- `computeDiff()` diekstrak jadi fungsi murni, dan **kedua** jalur diff (quick & full) memakai pengaman yang sama - sebelumnya `runMediaStoreDiff` menghapus tanpa penjagaan apa pun.
+
+Uji regresinya ada di `ScanDiffEngine.test.ts`: 1196 lagu di database dengan MediaStore melaporkan 0 file **harus** ditolak.
 
 ## 6. Yang seharusnya diotomasi berikutnya (urutan)
 
 1. ~~**Jest untuk logika murni**~~ - **selesai** untuk `LrcParser`, `dsp`, `audio`, `dac`.
-2. **`ScanDiffEngine` + `selectors.ts`** - logika diff scan dan pengelompokan album/artis. Murni, tapi `selectors.ts` mengimpor tipe dari `libraryStore.ts` yang menyeret zustand + AsyncStorage; butuh `jest.mock` untuk store atau pemisahan tipe.
-3. **`BitDepthVerifier.analyzeBitDepth`** - deteksi FLAC palsu/upscale. Murni, nilainya tinggi, dan salah di sini langsung menyesatkan pengguna.
+2. ~~**`ScanDiffEngine`**~~ - **selesai** (17 test, termasuk pengaman anti-hapus-library).
+3. ~~**`BitDepthVerifier.analyzeBitDepth`**~~ - **selesai** (23 test).
+4. **`selectors.ts`** - pengelompokan album/artis. Mengimpor tipe dari `libraryStore.ts` yang menyeret zustand + AsyncStorage; butuh `jest.mock` atau pemisahan tipe. Pola mock-nya sudah ada di `ScanDiffEngine.test.ts`.
 4. **Test kontras 20 tema** - port pola `check_contrast.ts` persona. Angka awalnya ada di `VISUAL_HEALTH.md` (16 gagal); jadikan gerbang setelah diperbaiki.
 5. **`check_layout.ts` sebagai gerbang CI** - cegah literal spacing **baru** (519 existing, anggap baseline).
 6. **Job `verify` terpisah sebelum `build`** - pola persona: kegagalan JS muncul ~2 menit, bukan setelah 16 menit `assembleDebug`.
