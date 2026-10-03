@@ -3,14 +3,20 @@ name: Build Dev APK
 on:
   workflow_dispatch:
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
 
     env:
       GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
-      NODE_ENV: development
       EXPO_NO_DEV_SERVER: 1
+      EXPO_NO_DEV_CLIENT: 1
+      # NODE_ENV dihapus — biarkan default
 
     steps:
       # 1. Checkout
@@ -37,12 +43,12 @@ jobs:
           distribution: "temurin"
           cache: gradle
 
-      # 5. Setup Android SDK — dengan packages kosong
+      # 5. Setup Android SDK
       - uses: android-actions/setup-android@v3
         with:
           packages: ''
 
-      # 6. Install NDK + CMake (manual)
+      # 6. Install NDK + CMake
       - name: Install NDK + CMake
         run: |
           yes | sdkmanager \
@@ -55,7 +61,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y nasm
 
-      # 8. Cache FFmpeg build
+      # 8. Cache Gradle (tambahan — percepat rebuild)
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      # 9. Cache FFmpeg build
       - name: Cache FFmpeg build
         id: cache-ffmpeg
         uses: actions/cache@v4
@@ -63,12 +80,12 @@ jobs:
           path: android/app/src/main/cpp/libs/ffmpeg
           key: ffmpeg-android-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-android.sh') }}
 
-      # 9. Build FFmpeg for Android
+      # 10. Build FFmpeg for Android
       - name: Build FFmpeg for Android
         if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
         run: bash scripts/build-ffmpeg-android.sh
 
-      # 10. Configure Android paths
+      # 11. Configure Android paths
       - name: Configure Android paths
         run: |
           cat > android/local.properties << EOF
@@ -76,36 +93,19 @@ jobs:
           cmake.dir=$ANDROID_HOME/cmake/3.22.1
           EOF
 
-      # 11. Inject Gradle init script
-      - name: Inject Gradle init script
+      # 12. Disable dev-client (WAJIB — supaya APK offline jalan)
+      - name: Disable dev-client + auto-download JDK
         run: |
-          mkdir -p $GRADLE_USER_HOME/init.d
-          cat > $GRADLE_USER_HOME/init.d/rn-plugins.gradle << EOF
-          beforeSettings { settings ->
-              settings.pluginManagement {
-                  repositories {
-                      google()
-                      mavenCentral()
-                      gradlePluginPortal()
-                  }
-                  includeBuild("${{ github.workspace }}/node_modules/@react-native/gradle-plugin")
-                  includeBuild("${{ github.workspace }}/node_modules/expo-modules-autolinking/android/expo-gradle-plugin")
-              }
-          }
-          EOF
+          echo "" >> android/gradle.properties
+          echo "# CI: disable dev-client" >> android/gradle.properties
+          echo "expo.devClient.enabled=false" >> android/gradle.properties
+          echo "org.gradle.java.installations.auto-download=false" >> android/gradle.properties
 
-      # 12. Patch RN Gradle Plugin
-      - name: Patch RN Gradle Plugin
-        run: |
-          FILE=node_modules/@react-native/gradle-plugin/settings.gradle.kts
-          if grep -q "foojay-resolver-convention" "$FILE"; then
-            sed -i '/foojay-resolver-convention/d' "$FILE"
-            echo "✅ Patched foojay"
-          else
-            echo "✅ Already patched"
-          fi
+      # 13. Patch RN Gradle Plugin (foojay)
+      - name: Patch RN Gradle Plugin (foojay)
+        run: python3 scripts/patch-foojay.py
 
-      # 13. Setup Oboe
+      # 14. Setup Oboe
       - name: Setup Oboe
         run: |
           OBOE_DIR="android/app/src/main/cpp/oboe"
@@ -113,7 +113,7 @@ jobs:
           curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz \
           | tar -xz --strip-components=1 -C "$OBOE_DIR"
 
-      # 14. Clean native caches
+      # 15. Clean native caches
       - name: Clean native caches
         working-directory: android
         run: |
@@ -122,46 +122,42 @@ jobs:
           rm -rf app/.cxx app/build
           echo "✅ Native caches cleaned"
 
-      # 15. Generate Codegen
+      # 16. Generate Codegen
       - name: Generate Codegen
         working-directory: android
         run: |
           ./gradlew generateCodegenArtifactsFromSchema \
-            --no-daemon \
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
             -PhermesEnabled=true
 
-      # 16. Embed Expo bundle
+      # 17. Embed Expo bundle (DEV true — match assembleDebug)
       - name: Embed Expo bundle
         run: |
-          echo "📦 Embedding Expo bundle..."
-          npx expo export:embed --platform android --dev false \
+          mkdir -p android/app/src/main/assets
+          echo "📦 Embedding Expo bundle (dev=true)..."
+          npx expo export:embed --platform android --dev true \
             --bundle-output android/app/src/main/assets/index.android.bundle
 
           if [ -f android/app/src/main/assets/index.android.bundle ]; then
             SIZE=$(wc -c < android/app/src/main/assets/index.android.bundle)
             echo "✅ Bundle embedded: $SIZE bytes"
-            if grep -q "DUMMY" android/app/src/main/assets/index.android.bundle; then
-              echo "✅ 'DUMMY' found in bundle"
-            fi
           else
             echo "❌ Bundle embedding failed!"
             exit 1
           fi
 
-      # 17. Build Debug APK
+      # 18. Build Debug APK
       - name: Build Debug APK
         working-directory: android
         run: |
           ./gradlew assembleDebug \
-            --no-daemon \
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
             -PhermesEnabled=true \
             -DJS_RUNTIME=hermes 2>&1 | tee build.log
 
-      # 18. Verify bundle in APK
+      # 19. Verify bundle in APK
       - name: Verify bundle in APK
         run: |
           APK="android/app/build/outputs/apk/debug/app-debug.apk"
@@ -173,7 +169,7 @@ jobs:
             exit 1
           fi
 
-      # 19. Upload Build Log on Failure
+      # 20. Upload Build Log on Failure
       - name: Upload Build Log
         uses: actions/upload-artifact@v4
         if: failure()
@@ -182,7 +178,7 @@ jobs:
           path: android/build.log
           retention-days: 7
 
-      # 20. Upload APK on Success
+      # 21. Upload APK on Success
       - name: Upload APK
         uses: actions/upload-artifact@v4
         if: success()
