@@ -15,11 +15,14 @@ Rules:
 - `android/app/src/main/cpp/oboe/**` is a vendored dependency and is excluded from `scripts/check.sh`; it does contribute nodes to the graph.
 
 ## Pitfalls (learned the hard way):
-- **`scripts/patch-*.py` (~59 files) are mostly idempotent, but NOT all.**
-  Mass-running them can *revert* fixes made later — this happened
-  2026-10-03: `PlaybackController.cpp` buffer `1<<21`→`1<<19`, `loadTrack`
-  position/duration reset removed, `play()` track-change fix removed.
-  **Run them one at a time, read the diff, then continue. Never mass-run.**
+- **`scripts/patch_*.py` — DIBERSIHKAN 2026-10-03.** Dulu ada 59 patch script
+  hasil iterasi debugging audio. Hampir semua fixnya sudah terapply ke source,
+  tapi banyak yang **tidak idempotent** — kalau dijalankan lagi, double-apply /
+  revert fix yang lebih baru (ini benar terjadi: `PlaybackController.cpp`
+  buffer `1<<21`→`1<<19` saat mass-run). Yang tersisa **7 file**, semua masih
+  dipakai CI/clangd. Kalau butuh patch native baru, ikuti pola
+  `patch_audio_fixes.py` (anchor-count validation + `--dry-run` + skip-amankan)
+  — jangan tulis script str-replace tanpa guard.
 - **A patch script can break silently.** `patch-foojay.py` is invoked by the
   CI workflow but its regex did not match the actual plugin format in
   `node_modules/@react-native/gradle-plugin/settings.gradle.kts` → CI fails.

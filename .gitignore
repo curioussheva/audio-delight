@@ -96,3 +96,8 @@ expo-env.d.ts
 tmp/
 *.bak
 *.bak_*
+
+# graphify - output knowledge graph. Di-regenerate oleh `graphify update`,
+# ~36 MB (graph.json 16 MB), tidak layak masuk riwayat git. Pola sama
+# seperti persona/.gitignore.
+graphify-out/
