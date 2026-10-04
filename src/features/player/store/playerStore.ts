@@ -7,6 +7,13 @@ import { Song } from "@/shared/types/audio";
 import { LibraryScanner } from "@/features/library/api/scanner";
 import { SongQueries, db } from "@/shared/lib/sqlite";
 import NativePlaybackService from "@/specs/NativePlaybackService";
+import {
+  findSongByUri,
+  isPlayingFromStatus,
+  shouldCorrectDuration,
+  shouldRestartInsteadOfPrevious,
+  validateQueueIndex,
+} from "@/shared/utils/queueNavigation";
 
 export interface LyricLine {
   time: number;
@@ -105,6 +112,10 @@ export interface PlayerState {
   skipToIndex: (index: number) => Promise<void>;
   playNext: () => Promise<void>;
   playPrevious: () => Promise<void>;
+  // Baca ulang keadaan dari native: track aktif, indeks, status, posisi.
+  // Dipakai setelah perintah navigasi supaya UI menampilkan apa yang
+  // benar-benar dimuat native - termasuk perubahan dari tombol notification.
+  syncFromNative: () => Promise<void>;
   setIsPlaying: (isPlaying: boolean) => Promise<void>;
   togglePlay: () => Promise<void>;
   seek: (pos: number) => Promise<void>;
@@ -274,10 +285,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
             set({ position: newPos });
           }
 
-          // Sync duration dari currentSong (kalau belum ada)
-          const curDur = get().duration;
+          // Sync duration dari currentSong, TAPI koreksi kalau nilainya tidak
+          // masuk akal. Sebelumnya hanya di-set kalau masih 0 (`curDur <= 0`),
+          // jadi duration yang salah dari database (mis. hasil scan yang
+          // gagal baca header) bertahan selamanya - progress bar mati dan
+          // seek ke tengah lagu jadi tidak mungkin.
           const songDur = s.currentSong.duration ?? 0;
-          if (curDur <= 0 && songDur > 0) {
+          if (shouldCorrectDuration(get().duration, songDur)) {
             set({ duration: songDur });
           }
         } catch (e) {
@@ -459,40 +473,116 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
  
   skipToIndex: async (index: number) => {
-    const { queue } = get();
-    const song = queue[index];
-    if (song) await get().playSong(song);
+    // Pindah ke indeks NATIVE. Sebelumnya fungsi ini memanggil playSong(song)
+    // yang menimpa queue native lewat setQueue - itu membuang indeks dan
+    // urutan shuffle yang sudah dihitung native, dan membuat next/prev
+    // berperilaku berbeda dari tombol di notification.
+    const queueSize = NativePlaybackService.getQueueSize();
+    const valid = validateQueueIndex(index, queueSize);
+    if (valid === null) {
+      console.warn(
+        `[Player] skipToIndex(${index}) ditolak: di luar jangkauan (queue=${queueSize})`,
+      );
+      return;
+    }
+
+    try {
+      await NativePlaybackService.jumpTo(valid);
+      await get().syncFromNative();
+    } catch (e) {
+      console.error(`[Player] skipToIndex(${valid}) gagal:`, e);
+      set({ playError: "Tidak bisa pindah lagu." });
+    }
+  },
+
+  // Baca ulang keadaan sebenarnya dari native (track aktif, indeks, status).
+  // Dipanggil setelah setiap perintah navigasi supaya UI menampilkan apa yang
+  // benar-benar dimuat native - termasuk kalau yang mengubah adalah tombol
+  // di notification / lock screen, yang tidak lewat store.
+  syncFromNative: async () => {
+    try {
+      const [uri, index, status, posMs] = await Promise.all([
+        NativePlaybackService.getCurrentTrack(),
+        Promise.resolve(NativePlaybackService.getCurrentIndex()),
+        NativePlaybackService.getStatus(),
+        NativePlaybackService.getPosition(),
+      ]);
+
+      const patch: Partial<PlayerState> = {
+        // Hanya PLAYING yang dianggap true. Memakai `status !== 0` membuat
+        // PAUSED ikut dianggap playing - tombol jadi menampilkan "pause"
+        // padahal audio berhenti.
+        isPlaying: isPlayingFromStatus(status),
+        position: posMs / 1000,
+      };
+
+      // Cocokkan track native dengan song di queue store lewat URI, bukan
+      // indeks: saat shuffle aktif, indeks di store tidak sama dengan indeks
+      // native, jadi mencocokkan lewat indeks menampilkan lagu yang salah.
+      const song = findSongByUri(get().queue, uri);
+      if (song) patch.currentSong = song;
+
+      set(patch);
+
+      // Judul di notification harus ikut berubah setelah next/prev, kalau
+      // tidak lock screen tetap menampilkan lagu lama.
+      const cur = get().currentSong;
+      if (cur) {
+        safeFireAndForget(
+          () =>
+            NativePlaybackService.updateMetadata(
+              cur.title ?? "Unknown Title",
+              cur.artist ?? "Unknown Artist",
+              cur.album ?? "",
+              (cur.duration ?? 0) * 1000,
+            ),
+          "updateMetadata(sync)",
+        );
+      }
+    } catch (e) {
+      // Tidak fatal: polling berkala akan menyusulkan state berikutnya.
+      console.warn("[Player] syncFromNative gagal:", e);
+    }
   },
 
   playNext: async () => {
     const { queue, currentSong, repeat } = get();
     if (!queue.length || !currentSong) return;
 
-    const idx = queue.findIndex((s) => s.id === currentSong.id);
-    let nextIndex = idx + 1;
-    if (nextIndex >= queue.length) {
-      if (repeat === "all") nextIndex = 0;
-      else return;
+    // Native sudah punya queue lengkap. Perintahkan native maju, lalu
+    // sinkronkan UI dari native - jangan hitung indeks di sini.
+    //
+    // Bedanya penting saat shuffle/repeat aktif: urutan sebenarnya hanya
+    // diketahui native, jadi menghitung indeks di JS (pola lama) bisa memuat
+    // lagu yang berbeda dari yang ditampilkan.
+    try {
+      await NativePlaybackService.next();
+      await get().syncFromNative();
+    } catch (e) {
+      console.error("[Player] playNext gagal:", e);
+      // Fallback: hanya kalau native menolak (mis. akhir queue dengan
+      // repeat=off) dan JS masih bisa menentukan berikutnya.
+      if (repeat === "all") await get().skipToIndex(0);
     }
-    await get().skipToIndex(nextIndex);
   },
 
   playPrevious: async () => {
-    const { queue, currentSong, position, repeat } = get();
+    const { queue, currentSong, position } = get();
     if (!queue.length || !currentSong) return;
 
-    if (position > 3) {
+    // Perilaku standar player: kalau sudah lewat ambang, "previous" berarti
+    // ulang lagu ini, bukan pindah ke lagu sebelumnya.
+    if (shouldRestartInsteadOfPrevious(position)) {
       await get().seek(0);
       return;
     }
 
-    const idx = queue.findIndex((s) => s.id === currentSong.id);
-    let prevIndex = idx - 1;
-    if (prevIndex < 0) {
-      if (repeat === "all") prevIndex = queue.length - 1;
-      else return;
+    try {
+      await NativePlaybackService.previous();
+      await get().syncFromNative();
+    } catch (e) {
+      console.error("[Player] playPrevious gagal:", e);
     }
-    await get().skipToIndex(prevIndex);
   },
 
   setIsPlaying: async (isPlaying: boolean) => {

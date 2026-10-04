@@ -1,5 +1,5 @@
 // src/features/player/components/FloatingPlayer.tsx
-import React from "react";
+import React, { useEffect } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
@@ -24,6 +24,7 @@ import {
 } from "lucide-react-native";
 
 import { usePlayerStore } from "@/features/player/store/playerStore";
+import { progressPercent } from "@/shared/utils/queueNavigation";
 import { useTheme } from "@/shared/context/ThemeContext";
 
 const PLACEHOLDER = require("../../../../assets/images/icon.png");
@@ -47,6 +48,23 @@ export default function FloatingPlayer() {
 
   const translateX = useSharedValue(0);
 
+  // Progress bar untuk FloatingPlayer.
+  //
+  // Sebelumnya memakai useAnimatedStyle yang membaca `position`/`duration`
+  // dari React state DI LUAR worklet. Worklet Reanimated tidak ikut re-render
+  // saat state berubah, jadi lebarnya bisa beku walau posisi audio jalan.
+  //
+  // Perbaikannya: nilai progress disimpan di shared value sendiri, dan
+  // di-update lewat useEffect setiap kali state benar-benar berubah. Worklet
+  // hanya membaca shared value - itu reaktif dengan benar.
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    progress.value = withTiming(progressPercent(position, duration) / 100, {
+      duration: 200,
+    });
+  }, [position, duration, progress]);
+
   const swipeGesture = Gesture.Pan()
     .activeOffsetX([-15, 15])
     .onUpdate((e) => {
@@ -59,8 +77,7 @@ export default function FloatingPlayer() {
     });
 
   const animatedProgress = useAnimatedStyle(() => {
-    const pct = duration > 0 ? Math.min(position / duration, 1) : 0;
-    return { width: `${pct * 100}%` };
+    return { width: `${progress.value * 100}%` };
   });
 
   const animatedContainer = useAnimatedStyle(() => ({

@@ -120,6 +120,31 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
         }
     }
 
+    // Indeks trek aktif menurut native. Sync (tanpa Promise) karena ini
+    // pembacaan cepat tanpa I/O - JS memakainya untuk menampilkan posisi di
+    // queue, dan harus selalu akurat setelah next/prev/jumpTo.
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    fun getCurrentIndex(): Int = PlaybackNativeBridge.getCurrentIndex()
+
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    fun getQueueSize(): Int = PlaybackNativeBridge.getQueueSize()
+
+    // Pindah ke indeks tertentu di queue NATIVE. Ini pengganti pola lama
+    // "hitung indeks di JS lalu setQueue ulang", yang menimpa queue native
+    // dan membuang urutan shuffle yang hanya diketahui native.
+    @ReactMethod
+    fun jumpTo(index: Int, promise: Promise) {
+        try {
+            if (PlaybackNativeBridge.jumpTo(index)) {
+                promise.resolve(null)
+            } else {
+                promise.reject("JUMP_FAILED", "jumpTo($index) gagal - indeks tidak valid?")
+            }
+        } catch (e: Exception) {
+            promise.reject("JUMP_FAILED", e)
+        }
+    }
+
     @ReactMethod
     fun setRepeatMode(mode: Int, promise: Promise) {
         try {

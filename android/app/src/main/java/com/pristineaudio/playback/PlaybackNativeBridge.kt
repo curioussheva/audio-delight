@@ -66,6 +66,20 @@ object PlaybackNativeBridge {
         android.util.Log.d("PlaybackNativeBridge", "getCurrentTrack() called")
         return NativePlaybackModule.instance?.getCurrentTrackFromService()
     }
+
+    // Indeks trek aktif menurut native. -1 kalau queue kosong / instance null.
+    fun getCurrentIndex(): Int {
+        return NativePlaybackModule.instance?.getCurrentIndexFromService() ?: -1
+    }
+
+    fun getQueueSize(): Int {
+        return NativePlaybackModule.instance?.getQueueSizeFromService() ?: 0
+    }
+
+    fun jumpTo(index: Int): Boolean {
+        android.util.Log.d("PlaybackNativeBridge", "jumpTo($index) called")
+        return NativePlaybackModule.instance?.jumpToFromService(index) ?: false
+    }
     
     fun getPosition(): Long {
     return NativePlaybackModule.instance?.getPositionFromService()?.toLong() ?: 0L

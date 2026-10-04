@@ -23,6 +23,13 @@ export interface Spec extends TurboModule {
   getQueue(): Promise<string[]>;
   getCurrentTrack(): Promise<string>;
 
+  // Queue & navigasi (native yang memegang queue dan indeks).
+  // getCurrentIndex/getQueueSize sinkron: pembacaan cepat, dipakai untuk
+  // menampilkan posisi di queue dan harus akurat setelah next/prev/jumpTo.
+  getCurrentIndex(): number;
+  getQueueSize(): number;
+  jumpTo(index: number): Promise<void>;
+
   // Media session
   updateMetadata(
     title: string,

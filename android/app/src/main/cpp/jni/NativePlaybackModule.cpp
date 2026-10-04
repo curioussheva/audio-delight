@@ -77,6 +77,45 @@ JNIEXPORT jint JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeG
     return static_cast<jint>(controller->state()->getStatus());
 }
 
+// Indeks trek aktif di queue native. Native yang memegang queue dan indeks,
+// jadi JS harus menanyakan ini alih-alih menghitung sendiri - kalau JS
+// menghitung sendiri, shuffle dan repeat di sisi native tidak terhitung dan
+// lagu yang dimuat bisa berbeda dari yang ditampilkan UI.
+JNIEXPORT jint JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetCurrentIndex(JNIEnv*, jobject) {
+    auto* controller = getController();
+    if (!controller || !controller->queue()) return -1;
+    const auto& tracks = controller->queue()->tracks();
+    if (tracks.empty()) return -1;
+    return static_cast<jint>(controller->queue()->currentIndex());
+}
+
+// Jumlah trek di queue native. Dipakai JS untuk memvalidasi indeks dan
+// mendeteksi queue yang berubah di luar kendalinya.
+JNIEXPORT jint JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetQueueSize(JNIEnv*, jobject) {
+    auto* controller = getController();
+    if (!controller || !controller->queue()) return 0;
+    return static_cast<jint>(controller->queue()->tracks().size());
+}
+
+// Lompat ke indeks tertentu di queue native lalu muat treknya.
+// next()/previous() di C++ sudah memuat track sendiri, jadi jalur ini dibuat
+// sama: jumpTo di queue, lalu loadTrack. Tanpa memuat di sini, JS harus
+// memanggil setQueue ulang hanya untuk berpindah trek - itu menimpa queue
+// native dan membuang indeks yang sudah dihitung native (termasuk urutan
+// shuffle yang hanya diketahui native).
+JNIEXPORT jboolean JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeJumpTo(JNIEnv*, jobject, jint index) {
+    auto* controller = getController();
+    if (!controller || !controller->queue() || index < 0) return JNI_FALSE;
+
+    auto q = controller->queue();
+    if (static_cast<size_t>(index) >= q->tracks().size()) return JNI_FALSE;
+    if (!q->jumpTo(static_cast<size_t>(index))) return JNI_FALSE;
+
+    auto track = q->current();
+    if (!track) return JNI_FALSE;
+    return controller->loadTrack(*track) ? JNI_TRUE : JNI_FALSE;
+}
+
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeNext(JNIEnv*, jobject) {
     auto* controller = getController();
     if (controller) controller->next();

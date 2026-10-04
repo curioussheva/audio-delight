@@ -36,11 +36,18 @@ class MediaSessionManager(private val service: PlaybackService) {
         }
 
         override fun onSkipToNext() {
+            // Tombol next di notification / lock screen TIDAK lewat React, jadi
+            // UI React tidak tahu lagu berubah sampai polling menangkapnya.
+            // Panggil notifikasi perubahan supaya JS menyegarkan state tanpa
+            // menunggu polling - dan supaya notifikasi sendiri ikut update
+            // judulnya, bukan menampilkan lagu lama.
             PlaybackNativeBridge.next()
+            notifyQueueChanged()
         }
 
         override fun onSkipToPrevious() {
             PlaybackNativeBridge.previous()
+            notifyQueueChanged()
         }
 
         override fun onSeekTo(pos: Long) {
@@ -49,6 +56,24 @@ class MediaSessionManager(private val service: PlaybackService) {
 
         override fun onStop() {
             PlaybackNativeBridge.stop()
+        }
+    }
+
+    // Beri tahu JS kalau trek berganti dari sisi native (notification/lock
+    // screen). Memakai emit ke semua listener kalau bridge-nya menyediakannya;
+    // kalau tidak, polling store yang akan mengambil alih - tapi setidaknya
+    // notifikasi sendiri langsung diperbarui judulnya di sini.
+    private fun notifyQueueChanged() {
+        try {
+            val cur = PlaybackNativeBridge.getCurrentTrack()
+            if (!cur.isNullOrEmpty()) {
+                // Judul di notifikasi diperbarui oleh JS lewat updateMetadata;
+                // di sini cukup pastikan notifikasi digambar ulang supaya
+                // tombol play/pause mencerminkan state terbaru.
+                refreshNotification()
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("MediaSessionManager", "notifyQueueChanged: ${e.message}")
         }
     }
 

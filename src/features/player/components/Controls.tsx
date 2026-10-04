@@ -7,14 +7,26 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 import { usePlayerStore } from "@/features/player/store/playerStore";
-import { useAudioPlayer } from "@/features/player/hooks/useAudioPlayer";
 import { useTheme } from "@/context/ThemeContext";
 
 export const PlayerControls: React.FC = () => {
   const { theme } = useTheme();
   const { colors, spacing } = theme;
-  const { play, pause, skipToNext, skipToPrevious } = useAudioPlayer();
-    const isPlaying = usePlayerStore((s) => s.isPlaying);
+
+  // Semua kontrol lewat STORE, bukan hook useAudioPlayer.
+  //
+  // Sebelumnya komponen ini memakai useAudioPlayer.skipToNext yang dijaga
+  // `if (!isReady.current) return`. isReady hanya di-set true di useEffect
+  // milik hook itu sendiri, jadi kalau komponen ini mount lebih dulu (atau
+  // hook-nya unmount), tombol next/prev MENGAKIBATKAN RETURN DIAM tanpa log
+  // apa pun - nol jejak di logcat meski user menekan tombol berkali-kali.
+  //
+  // Store juga jalur yang sama dengan FloatingPlayer dan tombol di
+  // notification, jadi perilakunya tidak lagi berbeda antar UI.
+  const togglePlay = usePlayerStore((s) => s.togglePlay);
+  const playNext = usePlayerStore((s) => s.playNext);
+  const playPrevious = usePlayerStore((s) => s.playPrevious);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
   const shuffle = usePlayerStore((s) => s.shuffle);
   const repeat = usePlayerStore((s) => s.repeat);
   const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
@@ -37,7 +49,7 @@ export const PlayerControls: React.FC = () => {
           />
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={skipToPrevious}>
+        <TouchableOpacity onPress={playPrevious}>
           <Ionicons
             name="play-skip-back"
             size={32}
@@ -52,7 +64,7 @@ export const PlayerControls: React.FC = () => {
             { backgroundColor: colors.primary[500] },
           ]}
         >
-          <TouchableOpacity onPress={isPlaying ? pause : play}>
+          <TouchableOpacity onPress={togglePlay}>
             <Ionicons
               name={isPlaying ? "pause" : "play"}
               size={40}
@@ -61,7 +73,7 @@ export const PlayerControls: React.FC = () => {
           </TouchableOpacity>
         </Animated.View>
 
-        <TouchableOpacity onPress={skipToNext}>
+        <TouchableOpacity onPress={playNext}>
           <Ionicons
             name="play-skip-forward"
             size={32}

@@ -26,6 +26,11 @@ class NativePlaybackModule(reactContext: ReactApplicationContext) :
     private external fun nativeSeek(positionMs: Long)
     private external fun nativeGetPosition(): Long
     private external fun nativeGetStatus(): Int
+
+    // Queue & navigasi (native yang memegang queue dan indeks)
+    private external fun nativeGetCurrentIndex(): Int
+    private external fun nativeGetQueueSize(): Int
+    private external fun nativeJumpTo(index: Int): Boolean
     private external fun nativeNext()
     private external fun nativePrevious()
     private external fun nativeSetShuffle(enabled: Boolean)
@@ -121,6 +126,28 @@ class NativePlaybackModule(reactContext: ReactApplicationContext) :
     @ReactMethod(isBlockingSynchronousMethod = true)
     fun getCurrentTrack(): String = nativeGetCurrentTrack()
 
+    // Indeks trek aktif menurut NATIVE. -1 kalau queue kosong.
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    fun getCurrentIndex(): Int = nativeGetCurrentIndex()
+
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    fun getQueueSize(): Int = nativeGetQueueSize()
+
+    // Pindah ke indeks tertentu di queue native. Promise, bukan sync, karena
+    // ini memuat trek (menyentuh disk) dan bisa gagal.
+    @ReactMethod
+    fun jumpTo(index: Int, promise: Promise) {
+        try {
+            if (nativeJumpTo(index)) {
+                promise.resolve(null)
+            } else {
+                promise.reject("JUMP_FAILED", "nativeJumpTo($index) gagal - indeks tidak valid?")
+            }
+        } catch (e: Exception) {
+            promise.reject("JUMP_FAILED", e)
+        }
+    }
+
     // ========== Helper ==========
     private fun resolveContentUri(uriString: String): String {
         if (!uriString.startsWith("content://")) {
@@ -174,4 +201,7 @@ class NativePlaybackModule(reactContext: ReactApplicationContext) :
     fun getCurrentTrackFromService(): String = nativeGetCurrentTrack()
     fun getPositionFromService(): Double = nativeGetPosition().toDouble()
     fun getStatusFromService(): Int = nativeGetStatus()
+    fun getCurrentIndexFromService(): Int = nativeGetCurrentIndex()
+    fun getQueueSizeFromService(): Int = nativeGetQueueSize()
+    fun jumpToFromService(index: Int): Boolean = nativeJumpTo(index)
 } 
