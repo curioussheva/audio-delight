@@ -370,8 +370,26 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       // ── 2. setQueue (dengan await!) ────────────────────
       await timedCall("setQueue", () => NativePlaybackService.setQueue(uris));
 
-      // ── 3. play (dengan await!) ────────────────────────
-      await timedCall("play", () => NativePlaybackService.play());
+      // Native me-reject kalau dekoder gagal membuka track (mis. content://
+      // yang belum di-resolve). Kalau hasilnya diabaikan, UI menampilkan lagu
+      // "sedang diputar" tanpa suara - ini pernah terjadi pada logcat
+      // 2026-10-04 12:22, tiga kali berturut-turut.
+      try {
+        await timedCall("play", () => NativePlaybackService.play());
+      } catch (playErr) {
+        console.error(
+          `[Player] playSong: native play() GAGAL untuk "${playableSong.title}"`,
+          playErr,
+        );
+        set({
+          currentSong: playableSong,
+          queue: targetQueue,
+          isPlaying: false,
+          position: 0,
+          playError: "Gagal memutar lagu ini. Coba lagu lain.",
+        });
+        return false;
+      }
 
 // ── 4. State update ────────────────────────────────
       // 🔥 RESTORE POSITION: kalau resume after restart
@@ -480,7 +498,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setIsPlaying: async (isPlaying: boolean) => {
     try {
       if (isPlaying) {
-        await timedCall("play", () => NativePlaybackService.play());
+        // Kalau native menolak (dekoder gagal), jangan tandai playing.
+        try {
+          await timedCall("play", () => NativePlaybackService.play());
+        } catch (playErr) {
+          console.error("[Player] setIsPlaying(true): native play() GAGAL", playErr);
+          set({ isPlaying: false });
+          return;
+        }
       } else {
         await timedCall("pause", () => NativePlaybackService.pause());
       }

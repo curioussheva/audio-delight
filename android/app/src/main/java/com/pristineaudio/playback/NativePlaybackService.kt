@@ -44,11 +44,17 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
     // TRANSPORT (unchanged)
     // ============================================================
 
+    // reject kalau native play() mengembalikan false. Tanpa ini, kegagalan
+    // dekoder (mis. URI yang belum di-resolve) hanya jadi log native, dan JS
+    // tetap menandai lagu sebagai sedang diputar.
     @ReactMethod
     fun play(promise: Promise) {
         try {
-            PlaybackNativeBridge.play()
-            promise.resolve(null)
+            if (PlaybackNativeBridge.play()) {
+                promise.resolve(null)
+            } else {
+                promise.reject("PLAY_FAILED", "native play() returned false - dekoder gagal membuka track")
+            }
         } catch (e: Exception) {
             promise.reject("PLAY_FAILED", e)
         }

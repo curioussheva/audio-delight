@@ -30,18 +30,24 @@ static pristine::playback::PlaybackController* getController() {
 
 extern "C" {
 
-JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativePlay(JNIEnv*, jobject) {
+// Mengembalikan jboolean supaya lapisan atas bisa tahu play() GAGAL.
+// Sebelumnya void: kegagalan dekoder (mis. avformat_open_input failed untuk
+// URI yang belum di-resolve) hilang begitu saja dan UI tetap menampilkan
+// "sedang diputar" walau tidak ada suara. Terbukti pada logcat 2026-10-04
+// 12:22 - play(): FAILED tiga kali, tapi updateMetadata tetap jalan.
+JNIEXPORT jboolean JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativePlay(JNIEnv*, jobject) {
     __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
                         "nativePlay() called from JS");
     auto* controller = getController();
     if (!controller) {
         __android_log_print(ANDROID_LOG_ERROR, "NativePlaybackModule",
                             "nativePlay: controller null!");
-        return;
+        return JNI_FALSE;
     }
-    controller->play();
+    const bool ok = controller->play();
     __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
-                        "nativePlay() returned");
+                        "nativePlay() returned ok=%d", ok ? 1 : 0);
+    return ok ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativePause(JNIEnv*, jobject) {

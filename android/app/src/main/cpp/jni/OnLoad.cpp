@@ -11,6 +11,7 @@
 
 #include "PristineAudioSpec.h"
 #include "manager/EngineManager.h"
+#include "decoder/ContentUriResolver.h"
  
 #undef LOG_TAG
 #define LOG_TAG "PristineJNI"
@@ -55,7 +56,12 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
             &facebook::react::appModulesRegisterProviders;
   });
 
-  __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "JNI_OnLoad — initializing EngineManager");
+  // Simpan JavaVM untuk resolver URI content:// di lapisan dekoder.
+  // Tanpa ini, FFmpegDecoder tidak bisa membuka content:// dan pemutaran
+  // gagal pada trek pertama yang belum di-resolve sisi Kotlin.
+  ::pristine::decoder::ContentUriResolver::init(vm);
+
+  __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "JNI_OnLoad â initializing EngineManager");
   pristine::EngineManager::get().start();
   __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "EngineManager started successfully");
 

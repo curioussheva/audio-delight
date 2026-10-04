@@ -1,4 +1,5 @@
 #include "FFmpegDecoder.h"
+#include "ContentUriResolver.h"
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -38,13 +39,36 @@ bool FFmpegDecoder::onOpen(
     __android_log_print(ANDROID_LOG_DEBUG, "FFmpegDecoder",
                         "onOpen: %s", uri.c_str());
 
+    // content:// adalah skema ContentProvider Android, BUKAN jalur file.
+    // FFmpeg tidak punya handler untuk itu, jadi avformat_open_input selalu
+    // gagal kalau URI diteruskan mentah. Resolver menyalin isinya ke cache
+    // dan mengembalikan jalur file.
+    //
+    // Tanpa langkah ini, pemutaran berhenti pada trek pertama yang URI-nya
+    // belum di-resolve sisi Kotlin (MAX_PRE_RESOLVE = 5, sisanya deferred).
+    std::string resolvedUri = ContentUriResolver::resolve(uri);
+
+    if (resolvedUri.empty()) {
+        // Resolve gagal - JANGAN jatuh kembali ke uri asli. content://
+        // mentah pasti gagal juga, dan pesan errornya jadi menyesatkan.
+        __android_log_print(ANDROID_LOG_ERROR, "FFmpegDecoder",
+                            "onOpen: gagal resolve content:// uri=%s", uri.c_str());
+        return false;
+    }
+
+    if (resolvedUri != uri) {
+        __android_log_print(ANDROID_LOG_DEBUG, "FFmpegDecoder",
+                            "onOpen: resolved -> %s", resolvedUri.c_str());
+    }
+
     if (avformat_open_input(
             &formatCtx_,
-            uri.c_str(),
+            resolvedUri.c_str(),
             nullptr,
             nullptr) < 0) {
         __android_log_print(ANDROID_LOG_ERROR, "FFmpegDecoder",
-                            "onOpen: avformat_open_input failed");
+                            "onOpen: avformat_open_input failed (uri=%s)",
+                            resolvedUri.c_str());
         return false;
     }
 

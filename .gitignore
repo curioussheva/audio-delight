@@ -104,3 +104,6 @@ graphify-out/
 
 # Log dev server Metro (dibuat scripts/metro.sh). Besar dan regeneratif.
 .metro.log
+
+# Cache clangd (indeks .cpp). Regeneratif, timbul dari scripts/check.sh.
+android/app/src/main/cpp/.cache/

@@ -4,9 +4,17 @@ import com.pristineaudio.audio.NativePlaybackModule
 
 object PlaybackNativeBridge {
 
-    fun play() {
+    // Mengembalikan Boolean: kegagalan dekoder harus sampai ke JS, supaya UI
+    // tidak menampilkan "sedang diputar" padahal play() gagal di native.
+    // instance null juga kegagalan - dulu dibiarkan lolos tanpa jejak.
+    fun play(): Boolean {
+        val inst = NativePlaybackModule.instance
+        if (inst == null) {
+            android.util.Log.e("PlaybackNativeBridge", "play(): instance null")
+            return false
+        }
         android.util.Log.d("PlaybackNativeBridge", "play() called")
-        NativePlaybackModule.instance?.playFromService()
+        return inst.playFromService()
     }
 
     fun pause() {

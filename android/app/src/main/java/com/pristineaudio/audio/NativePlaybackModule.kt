@@ -20,7 +20,7 @@ class NativePlaybackModule(reactContext: ReactApplicationContext) :
     }
 
     // Native methods
-    private external fun nativePlay()
+    private external fun nativePlay(): Boolean
     private external fun nativePause()
     private external fun nativeStop()
     private external fun nativeSeek(positionMs: Long)
@@ -37,10 +37,21 @@ class NativePlaybackModule(reactContext: ReactApplicationContext) :
     override fun getName() = NAME
 
     // ========== React methods ==========
-    // Void return → safe untuk async
+    // play() mengembalikan Promise: kegagalan dekoder (mis. URI yang belum
+    // di-resolve) harus sampai ke JS. Sebelumnya void, sehingga UI tetap
+    // menampilkan "sedang diputar" padahal play() gagal di native.
     @ReactMethod
-    fun play() {
-        nativePlay()
+    fun play(promise: Promise) {
+        try {
+            val ok = nativePlay()
+            if (ok) {
+                promise.resolve(null)
+            } else {
+                promise.reject("PLAY_FAILED", "native play() returned false")
+            }
+        } catch (e: Exception) {
+            promise.reject("PLAY_FAILED", e)
+        }
     }
 
     @ReactMethod
@@ -150,7 +161,7 @@ class NativePlaybackModule(reactContext: ReactApplicationContext) :
     }
 
     // ========== Service-friendly methods (tanpa React) ==========
-    fun playFromService() = nativePlay()
+    fun playFromService(): Boolean = nativePlay()
     fun pauseFromService() = nativePause()
     fun stopFromService() = nativeStop()
     fun seekFromService(positionMs: Long) = nativeSeek(positionMs)
