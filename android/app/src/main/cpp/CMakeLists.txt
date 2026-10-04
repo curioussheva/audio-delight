@@ -327,7 +327,22 @@ if(EXISTS "${CODEGEN_JNI_DIR}/CMakeLists.txt")
   endif()
 endif()
 
-# appmodules — sekarang menyertakan OnLoad.cpp (registrasi TurboModule delegate + start EngineManager)
+# appmodules - menyertakan OnLoad.cpp (registrasi TurboModule delegate +
+# start EngineManager).
+#
+# PENTING: OnLoad.cpp memanggil ContentUriResolver::init() yang definisinya ada
+# di decoder/ContentUriResolver.cpp, bagian dari library `pristine-audio`.
+# Target itu dibangun dengan `-fvisibility=hidden`, sehingga TANPA anotasi
+# eksplisit simbolnya tidak terekspos ke luar dan linker gagal:
+#
+#   ld.lld: error: undefined symbol:
+#     pristine::decoder::ContentUriResolver::init(_JavaVM*)
+#   >>> referenced by OnLoad.cpp:62
+#
+# Perbaikannya ada di header ContentUriResolver.h (anotasi PRISTINE_EXPORT),
+# BUKAN dengan mengompilasi ulang file itu di sini. Mengompilasi ulang akan
+# menduplikasi simbol karena appmodules sudah link ke pristine-audio (di bawah),
+# dan `-Wl,--no-undefined` menolak duplikat itu.
 add_library(appmodules SHARED
   jni/OnLoad.cpp
 )

@@ -128,7 +128,7 @@ std::string describeAndClear(JNIEnv* env) {
 // INIT
 // =====================================================
 
-void ContentUriResolver::init(JavaVM* vm) {
+PRISTINE_EXPORT void ContentUriResolver::init(JavaVM* vm) {
     g_vm = vm;
     if (vm) {
         LOGI("init: JavaVM tersimpan, resolver siap");
@@ -137,7 +137,7 @@ void ContentUriResolver::init(JavaVM* vm) {
     }
 }
 
-bool ContentUriResolver::isReady() {
+PRISTINE_EXPORT bool ContentUriResolver::isReady() {
     return g_vm != nullptr;
 }
 
@@ -152,7 +152,7 @@ bool ContentUriResolver::isReady() {
 //   selalu gagal, dan pemanggil jadi tidak bisa membedakan "berhasil lewat
 //   jalur lain" dari "tidak perlu resolve".
 
-std::string ContentUriResolver::resolve(const std::string& uri) {
+PRISTINE_EXPORT std::string ContentUriResolver::resolve(const std::string& uri) {
     if (uri.rfind("content://", 0) != 0) {
         return uri;
     }

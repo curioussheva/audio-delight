@@ -3,6 +3,33 @@
 #include <jni.h>
 #include <string>
 
+// =====================================================
+// ANOTASI EKSPOR SIMBOL
+// =====================================================
+//
+// Library `pristine-audio` dibangun dengan `-fvisibility=hidden`, sehingga
+// secara default tidak ada simbol yang terekspos ke luar library. Itu bagus
+// untuk ukuran binary, tapi membuat simbol yang HARUS dipanggil dari library
+// lain tidak terlihat.
+//
+// Gejalanya muncul sebagai kegagalan LINK (bukan kompilasi), jadi mudah
+// tertukar dengan "file belum ditambahkan ke CMake":
+//
+//   ld.lld: error: undefined symbol:
+//     pristine::decoder::ContentUriResolver::init(_JavaVM*)
+//   >>> referenced by OnLoad.cpp:62
+//
+// Padahal definisinya ADA di library, hanya disembunyikan visibilitas.
+//
+// Anotasi di bawah memaksa simbol diekspor. Dipakai pada kelas dan pada
+// setiap method yang dipanggil lintas-library - satu method yang lupa
+// dianotasi akan menggagalkan link lagi dengan pesan yang sama.
+#if defined(__GNUC__) || defined(__clang__)
+  #define PRISTINE_EXPORT __attribute__((visibility("default")))
+#else
+  #define PRISTINE_EXPORT
+#endif
+
 namespace pristine::decoder {
 
 // =====================================================
@@ -27,19 +54,20 @@ namespace pristine::decoder {
 // Implementasi memakai JNI + ContentResolver, sama seperti sisi Kotlin, tapi
 // bisa dipanggil dari thread dekoder mana pun.
 
-class ContentUriResolver {
+class PRISTINE_EXPORT ContentUriResolver {
 public:
     // Simpan JavaVM dari JNI_OnLoad. Wajib dipanggil sekali sebelum resolve().
-    static void init(JavaVM* vm);
+    // Dipanggil dari OnLoad.cpp (library `appmodules`), jadi HARUS diekspor.
+    PRISTINE_EXPORT static void init(JavaVM* vm);
 
     // true kalau VM sudah terpasang dan JNI siap dipakai.
-    static bool isReady();
+    PRISTINE_EXPORT static bool isReady();
 
     // Kalau uri adalah `content://`, salin isinya ke cache aplikasi dan
     // kembalikan jalur file hasilnya. Kalau bukan content://, kembalikan uri
     // apa adanya. Kalau gagal, kembalikan string kosong - pemanggil harus
     // memperlakukan itu sebagai kegagalan, BUKAN mencoba uri aslinya.
-    static std::string resolve(const std::string& uri);
+    PRISTINE_EXPORT static std::string resolve(const std::string& uri);
 
 private:
     static JavaVM* vm_;
