@@ -40,8 +40,8 @@ export const DEEP_NAVY: Theme = {
       info: "#2B6EB0",
     },
     border: {
-      light: "#2A3440",
-      medium: "#1F2A3A",
+      light: "#36404F",
+      medium: "#606873",
       heavy: "#141E33",
     },
     // ✅ FIXED: Array format
@@ -99,8 +99,8 @@ export const MIDNIGHT_BLUE: Theme = {
       info: "#3A6EFF",
     },
     border: {
-      light: "#222E4A",
-      medium: "#1A2540",
+      light: "#373E4B",
+      medium: "#606671",
       heavy: "#121C30",
     },
     // ✅ FIXED: Array format
@@ -154,8 +154,8 @@ export const CHARCOAL_BLACK: Theme = {
       info: "#3B82F6",
     },
     border: {
-      light: "#1A1A1A",
-      medium: "#121212",
+      light: "#2E2E2E",
+      medium: "#666666",
       heavy: "#0A0A0A",
     },
     // ✅ FIXED: Array format
@@ -214,8 +214,8 @@ export const EMERALD_NOIR: Theme = {
       info: "#059669",
     },
     border: {
-      light: "#1B2620",
-      medium: "#141D17",
+      light: "#363A38",
+      medium: "#606361",
       heavy: "#0E1511",
     },
     gradient: {
@@ -274,8 +274,8 @@ export const COZY_METALLIC: Theme = {
       info: "#B87333",
     },
     border: {
-      light: "#3B2E26",
-      medium: "#2F251E",
+      light: "#433E3B",
+      medium: "#6A6664",
       heavy: "#241C16",
     },
     gradient: {
@@ -334,8 +334,8 @@ export const BLUE_JEANS: Theme = {
       info: "#4A7AB5",
     },
     border: {
-      light: "#273240",
-      medium: "#1E2835",
+      light: "#3A4048",
+      medium: "#63686E",
       heavy: "#161F2A",
     },
     gradient: {
@@ -394,8 +394,8 @@ export const VINYL_NOIR: Theme = {
       info: "#C4883C",
     },
     border: {
-      light: "#262626",
-      medium: "#1C1C1C",
+      light: "#343434",
+      medium: "#5E5E5E",
       heavy: "#121212",
     },
     gradient: {
@@ -454,8 +454,8 @@ export const AGED_WHISKEY: Theme = {
       info: "#A0522D",
     },
     border: {
-      light: "#2E2016",
-      medium: "#241810",
+      light: "#3D3834",
+      medium: "#65615E",
       heavy: "#1A120C",
     },
     gradient: {
@@ -514,8 +514,8 @@ export const GRAPHITE_SLATE: Theme = {
       info: "#5A8AA0",
     },
     border: {
-      light: "#2C3840",
-      medium: "#232C34",
+      light: "#3D4245",
+      medium: "#65696B",
       heavy: "#1A2228",
     },
     gradient: {

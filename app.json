@@ -24,8 +24,9 @@
       "package": "com.pristineaudio.app",
       "versionCode": 1,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#0A1628"
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundColor": "#0A1628",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "permissions": [
         "MODIFY_AUDIO_SETTINGS",
@@ -65,12 +66,12 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/logo.png",
+          "image": "./assets/images/splash.png",
           "resizeMode": "contain",
           "backgroundColor": "#040B13",
-          "imageWidth": 200,
+          "imageWidth": 240,
           "dark": {
-            "image": "./assets/images/logo.png",
+            "image": "./assets/images/splash.png",
             "backgroundColor": "#040B13"
           }
         }

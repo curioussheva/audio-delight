@@ -104,7 +104,7 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
       warning: {
         500: "#F59E0B",
       },
-      border: { medium: "#334155", light: "#1F2A3A" },
+      border: { medium: "#606873", light: "#36404F" },
     },
     spacing: SPACING,
     shadows: {
@@ -193,7 +193,7 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
       warning: {
         500: "#F59E0B",
       },
-      border: { medium: "#E2E8F0", light: "#F1F5F9" },
+      border: { medium: "#8C8C8C", light: "#D1D1D1" },
     },
     spacing: SPACING,
     shadows: BASE_SHADOWS,
@@ -236,7 +236,7 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
       warning: {
         500: "#F59E0B",
       },
-      border: { medium: "#D4D4D8", light: "#E4E4E7" },
+      border: { medium: "#8A8A8A", light: "#CDCDCD" },
     },
     spacing: SPACING,
     shadows: BASE_SHADOWS,

@@ -1,9 +1,20 @@
 import { Tabs } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import { View } from "react-native";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { usePlayerStore } from "@/features/player/store/playerStore";
+import { FLOATING_PLAYER_HEIGHT } from "@/features/player/layout";
 import FloatingPlayer from "@/features/player/components/FloatingPlayer";
 
 export default function TabsLayout() {
+  // 🔥 Tinggi tab bar dari react-navigation (safe-area aware), bukan tebakan 70.
+  // Kalau tab bar lebih tinggi dari 60 (gesture nav, dsb.), FloatingPlayer
+  // sebelumnya ikut menutupinya.
+  const tabBarHeight = useBottomTabBarHeight();
+  const insets = useSafeAreaInsets();
+  const currentSong = usePlayerStore((s) => s.currentSong);
+
   return (
     <View style={{ flex: 1 }}>
       <Tabs
@@ -56,13 +67,14 @@ export default function TabsLayout() {
         />
       </Tabs>
 
-      {/* 🔥 Floating Player — posisi absolute di atas tab bar */}
+      {/* 🔥 Floating Player — posisi absolute di atas tab bar.
+          bottom = tinggi tab bar sebenarnya (safe-area aware), bukan 70. */}
       <View
         style={{
           position: "absolute",
           left: 8,
           right: 8,
-          bottom: 70, // di atas tab bar (tinggi tab bar ~60)
+          bottom: tabBarHeight,
           zIndex: 100,
           elevation: 10, // Android shadow
         }}

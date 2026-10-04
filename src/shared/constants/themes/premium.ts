@@ -40,8 +40,8 @@ export const GOLDEN_HOUR: Theme = {
       info: "#3B82F6",
     },
     border: {
-      light: "#4A382E",
-      medium: "#3A2C24",
+      light: "#433E3B",
+      medium: "#6A6664",
       heavy: "#2A201A",
     },
     gradient: {
@@ -92,8 +92,8 @@ export const ROSE_GOLD: Theme = {
       info: "#3B82F6",
     },
     border: {
-      light: "#4F3838",
-      medium: "#3F2E2E",
+      light: "#474343",
+      medium: "#6D6A6A",
       heavy: "#2F2424",
     },
     gradient: {

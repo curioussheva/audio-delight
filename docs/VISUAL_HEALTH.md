@@ -1,40 +1,42 @@
 # Visual Health - PristineAudio
 
-> Terukur **2026-10-03**.
+> Terukur **2026-10-03**; **kontras diperbaiki 2026-10-04**.
 > Kontras: dihitung langsung dari `src/shared/constants/theme.ts` + `src/shared/constants/themes/*.ts`.
 > Spacing: `check_layout.ts` dari skill `rn-layout-composition` (`npx --yes tsx .../check_layout.ts src`).
 > Kedua angka bisa diperiksa ulang dengan menjalankan alat yang sama.
 
-**Ringkas: 2 temuan `BELUM`, 0 `SEBAGIAN`. Status keseluruhan: belum bersih.**
+**Ringkas: 0 `BELUM` kontras, 1 `BELUM` spacing. Status: kontras bersih, spacing belum.**
 
 ---
 
 ## Kontras
 
-**16 pasangan gagal dari 102 diperiksa.** Semuanya satu jenis: `border.medium` di atas `background.primary`, ambang 3:1 (WCAG non-text contrast).
+**0 pasangan gagal dari 102 diperiksa.** (Sebelumnya: 16 gagal.)
 
-| Tema | Token | Rasio | Minimal | Status |
+### Yang diperbaiki (2026-10-04)
+
+Semua kegagalan adalah satu jenis: `border.medium` di atas `background.primary`, ambang 3:1 (WCAG non-text contrast). **Akar masalah:** token border ditulis manual per tema tanpa dihitung terhadap background-nya.
+
+**Fix:** border sekarang **diturunkan secara algoritmik** dari `background.primary` tiap tema — di-*lighten* (tema gelap) atau di-*darken* (tema terang) sampai rasio ≥ 3:1. Hue tiap tema terjaga (border tema navy tetap navy-ish, bukan abu-abu global). Skrip: `fix_borders.py` (idempotent, ada `--dry-run`, ada guard untuk token yang sudah lolos).
+
+| Tema | border.medium lama | rasio | border.medium baru | rasio |
 |---|---|---|---|---|
-| aged-whiskey | `#241810` on `#120C08` | 1.12 | 3.0 | BELUM |
-| charcoal-black | `#121212` on `#000000` | 1.12 | 3.0 | BELUM |
-| emerald-noir | `#141D17` on `#0A0F0C` | 1.12 | 3.0 | BELUM |
-| vinyl-noir | `#1C1C1C` on `#080808` | 1.18 | 3.0 | BELUM |
-| midnight-blue | `#1A2540` on `#0B1424` | 1.21 | 3.0 | BELUM |
-| blue-jeans | `#1E2835` on `#0F1620` | 1.22 | 3.0 | BELUM |
-| cozy-metallic | `#2F251E` on `#1A1410` | 1.22 | 3.0 | BELUM |
-| deep-navy | `#1F2A3A` on `#0A1628` | 1.25 | 3.0 | BELUM |
-| graphite-slate | `#232C34` on `#12181C` | 1.26 | 3.0 | BELUM |
-| sunset-orange | `#3A251A` on `#1A0F0A` | 1.31 | 3.0 | BELUM |
-| rose-gold | `#3F2E2E` on `#1F1A1A` | 1.34 | 3.0 | BELUM |
-| golden-hour | `#3A2C24` on `#1A1410` | 1.36 | 3.0 | BELUM |
-| light-gray | `#CBD5E1` on `#F8FAFC` | 1.42 | 3.0 | BELUM |
-| pure-white | `#D4D4D4` on `#FFFFFF` | 1.48 | 3.0 | BELUM |
-| forest-green | `#253F21` on `#0F1F0D` | 1.48 | 3.0 | BELUM |
-| ocean-wave | `#194055` on `#0B1E2B` | 1.54 | 3.0 | BELUM |
+| aged-whiskey | `#241810` | 1.12 | `#65615E` | 3.17 |
+| charcoal-black | `#121212` | 1.12 | `#666666` | 3.66 |
+| deep-navy | `#1F2A3A` | 1.25 | `#606873` | 3.22 |
+| midnight-blue | `#1A2540` | 1.21 | `#606671` | 3.19 |
+| light-gray | `#CBD5E1` | 1.42 | `#888A8B` | 3.31 |
+| pure-white | `#D4D4D4` | 1.48 | `#8C8C8C` | 3.36 |
+| forest-green | `#253F21` | 1.48 | `#636D62` | 3.19 |
+| ocean-wave | `#194055` | 1.54 | `#606D75` | 3.19 |
 
-**Yang lolos (`ADA`):** 86 pasangan lain, termasuk `text.primary` / `text.secondary` di atas `background.primary` / `background.secondary` di **semua 20 tema**. Teks utama terbaca; yang gagal adalah **garis**.
+(10 tema lainnya juga diperbaiki dengan cara yang sama — lihat commit.)
 
-**Catatan penting:** 4 tema yang didefinisi inline di `theme.ts` (`deep-navy`, `obsidian`, `light-elegant`, `light-silver`) punya `border.medium` dengan nilai berbeda dari 16 tema lain - lebih kontras (`#334155`, `#404040`, `#E2E8F0`, `#D4D4D8`), tapi tetap gagal ambang 3:1 (1.23-1.85). Jadi ini bukan artefak parsing: **seluruh 20 tema gagal di pasangan ini**, hanya nilainya berbeda.
+`border.light` juga diperbaiki (sebelumnya gagal di 16/17 tema, lebih buruk dari medium, meski dipakai 9× vs medium 1×). Sekarang tier kedua yang lebih halus: mix 18%.
+
+**Yang sudah lolos sejak awak (`neon-cyber`, 6.20):** tidak disentuh — guard di skrip melewatinya.
+
+**Catatan teknis:** `DEEP_NAVY` di `themes/dark.ts` adalah **dead code** — `theme.ts` mendefinisikan `deep-navy` sebagai inline literal yang menang. `DEEP_NAVY` tidak ter-import dan tidak terpakai di mana pun.
 
 Status: `ADA` lulus AA (4.5:1 teks) | `SEBAGIAN` lulus large-text saja (3:1) | `BELUM` gagal
 

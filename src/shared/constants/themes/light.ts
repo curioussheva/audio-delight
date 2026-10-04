@@ -42,8 +42,8 @@ export const LIGHT_GRAY: Theme = {
       info: "#3B82F6",
     },
     border: {
-      light: "#E2E8F0",
-      medium: "#CBD5E1",
+      light: "#CBCDCF",
+      medium: "#888A8B",
       heavy: "#94A3B8",
     },
     // ✅ FIXED: Array format
@@ -126,8 +126,8 @@ export const PURE_WHITE: Theme = {
       info: "#3B82F6",
     },
     border: {
-      light: "#E5E5E5",
-      medium: "#D4D4D4",
+      light: "#D1D1D1",
+      medium: "#8C8C8C",
       heavy: "#A3A3A3",
     },
     // ✅ FIXED: Array format

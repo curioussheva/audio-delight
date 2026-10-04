@@ -97,8 +97,8 @@ export const SUNSET_ORANGE: Theme = {
       info: "#3B82F6",
     },
     border: {
-      light: "#4A3022",
-      medium: "#3A251A",
+      light: "#433A36",
+      medium: "#6A6360",
       heavy: "#2A1A12",
     },
     // ✅ FIXED: Array format

@@ -65,6 +65,10 @@ import { GenreList } from "@/features/library/components/GenreList";
 import { FolderList } from "@/features/library/components/FolderList";
 import { FileTypeList } from "@/features/library/components/FileTypeList";
 import { PlaylistList } from "@/features/library/components/PlaylistList";
+import {
+  FLOATING_PLAYER_CLEARANCE,
+  FLOATING_PLAYER_HEIGHT,
+} from "@/features/player/layout";
 
 // Debounce helper
 const debounce = (func: Function, delay: number) => {
@@ -106,6 +110,14 @@ export default function LibraryScreen() {
 
   const searchInputRef = useRef<TextInput>(null);
   const BOTTOM_COMPENSATION = Platform.OS === "ios" ? insets.bottom + 20 : 30;
+
+  const { playSong, currentSong, isPlaying } = usePlayerStore();
+
+  // 🔥 FIX: list harus punya ruang untuk FloatingPlayer + tab bar.
+  // Sebelumnya padding bawah cuma 30 (Android), tapi FloatingPlayer sendiri
+  // sudah 72 + margin, jadi item terakhir tertutupi.
+  const FLOATING_BOTTOM =
+    BOTTOM_COMPENSATION + FLOATING_PLAYER_CLEARANCE * (currentSong ? 1 : 0);
 
   // Styles with colors
   const s = useMemo(() => createStyles(colors), [colors]);
@@ -428,7 +440,7 @@ export default function LibraryScreen() {
             data={validSongs}
             keyExtractor={(item) => item.id}
             contentContainerStyle={{
-              paddingBottom: BOTTOM_COMPENSATION,
+              paddingBottom: FLOATING_BOTTOM,
               paddingHorizontal: 12,
             }}
             renderItem={({ item }) => (
@@ -517,7 +529,6 @@ export default function LibraryScreen() {
 
   const { playSong, currentSong, isPlaying } = usePlayerStore();
 
-  // ── BRIDGE: Convert MediaTrack to Song for Player ──────────────────────────
   const handleSongPress = useCallback((track: any, queue: any[]) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 

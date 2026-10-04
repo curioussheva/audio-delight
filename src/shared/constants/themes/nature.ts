@@ -40,8 +40,8 @@ export const FOREST_GREEN: Theme = {
       info: "#3B82F6",
     },
     border: {
-      light: "#304F2B",
-      medium: "#253F21",
+      light: "#3A4739",
+      medium: "#636D62",
       heavy: "#1A2F17",
     },
     gradient: {
@@ -92,8 +92,8 @@ export const OCEAN_WAVE: Theme = {
       info: "#3B82F6",
     },
     border: {
-      light: "#20516A",
-      medium: "#194055",
+      light: "#374651",
+      medium: "#606D75",
       heavy: "#122F40",
     },
     gradient: { primary: ["#1A4B77", "#0B1E2B"] },
