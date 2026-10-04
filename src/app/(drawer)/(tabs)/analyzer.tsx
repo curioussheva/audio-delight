@@ -27,6 +27,7 @@ import {
 // Hooks & Store
 import { useTheme } from "@/shared/context/ThemeContext";
 import { usePlayerStore } from "@/features/player/store/playerStore";
+import { FLOATING_PLAYER_CLEARANCE } from "@/features/player/layout";
 import { useUSBDAC } from "@/features/hardware/hooks/useUSBDAC";
 
 // Logic & Services
@@ -232,7 +233,7 @@ export default function AnalyzerScreen() {
       contentContainerStyle={{
         paddingTop: insets.top + 16,
         paddingHorizontal: 16,
-        paddingBottom: insets.bottom + 80,
+        paddingBottom: insets.bottom + FLOATING_PLAYER_CLEARANCE + 8,
       }}
     >
       <Text style={[styles.title, { color: colors.text.primary }]}>

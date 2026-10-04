@@ -4,7 +4,6 @@ import { View } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePlayerStore } from "@/features/player/store/playerStore";
-import { FLOATING_PLAYER_HEIGHT } from "@/features/player/layout";
 import FloatingPlayer from "@/features/player/components/FloatingPlayer";
 
 export default function TabsLayout() {

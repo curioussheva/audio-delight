@@ -35,6 +35,7 @@ import { EqualizerBand } from "@/features/equalizer/components/Band";
 import { HorizontalSlider } from "@/features/equalizer/components/HorizontalSlider";
 import { PresetChip } from "@/features/equalizer/components/PresetChip";
 import { SavePresetModal } from "@/features/equalizer/components/SavePresetModal";
+import { FLOATING_PLAYER_CLEARANCE } from "@/features/player/layout";
 
 if (
   require("react-native").Platform.OS === "android" &&
@@ -79,7 +80,8 @@ const MiniSwitch = ({ value, onValueChange, disabled, color, label }: any) => (
 
 // ─── MAIN SCREEN ─────────────────────────────────────────────────────────
 
-const LIST_BOTTOM_PADDING = 100;
+// Bottom padding: ruang untuk tab bar + FloatingPlayer (FLOATING_PLAYER_CLEARANCE).
+const LIST_BOTTOM_PADDING = FLOATING_PLAYER_CLEARANCE + 20;
 
 export default function EqualizerScreen() {
   const { theme } = useTheme();

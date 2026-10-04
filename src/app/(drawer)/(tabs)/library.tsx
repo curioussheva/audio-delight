@@ -527,8 +527,8 @@ export default function LibraryScreen() {
     }
   };
 
-  const { playSong, currentSong, isPlaying } = usePlayerStore();
 
+  // ── BRIDGE: Convert MediaTrack to Song for Player ──────────────────────────
   const handleSongPress = useCallback((track: any, queue: any[]) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
