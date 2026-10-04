@@ -119,14 +119,65 @@ const performInitialization = useCallback(async () => {
       await setAudioMode("dsp");
     }
 
-    console.log("[BOOT] ✅ Engine & Store initialization success.");
+    // Izin notifikasi (Android 13+).
+    //
+    // Diminta di sini juga, bukan hanya di onboarding: user yang sudah
+    // melewati onboarding (has_onboarded = true) tidak akan pernah diminta
+    // lagi. Tanpa izin ini, startForeground() tetap jalan tapi notifikasinya
+    // TIDAK TAMPIL - dan itulah gejala "notification player tidak keluar".
+    // Kegagalan di sini sengaja tidak fatal: aplikasi tetap bisa memutar audio.
+    try {
+      const { PermissionsAndroid, Platform } = require("react-native");
+      if (Platform.OS === "android" && Platform.Version >= 33) {
+        const granted = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+        );
+        if (!granted) {
+          console.log("[BOOT] Meminta izin POST_NOTIFICATIONS...");
+          const result = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+          );
+          console.log(`[BOOT] Izin POST_NOTIFICATIONS: ${result}`);
+        } else {
+          console.log("[BOOT] Izin POST_NOTIFICATIONS sudah ada");
+        }
+      }
+    } catch (e) {
+      console.warn("[BOOT] Permintaan izin notifikasi dilewati:", e);
+    }
+
+    console.log("[BOOT] Engine & Store initialization success.");
     setAppState("loading");
   } catch (error) {
-    console.error("[BOOT] ❌ Initialization Fatal Error:", error);
+    console.error("[BOOT] Initialization Fatal Error:", error);
     setErrorMessage(error instanceof Error ? error.message : "Engine Failure");
     setAppState("error");
   }
 }, [initStore, setAudioMode]);
+
+  // ============================================================
+  // BOOT TRIGGER
+  // ============================================================
+  //
+  // performInitialization() sebelumnya HANYA dipanggil dari tombol Retry
+  // (appState === "error"). Akibatnya audioEngine.initialize() tidak pernah
+  // jalan saat boot, dan karena startService() ada di dalamnya, foreground
+  // service + notifikasi player TIDAK PERNAH aktif.
+  //
+  // Gejala di device: tidak ada notifikasi media, dan proses mudah dimatikan
+  // sistem karena tidak ada foreground service yang menahannya.
+  // Terbukti pada logcat 2026-10-04 12:18 - tidak ada satu pun baris
+  // PlaybackService / startForeground untuk aplikasi ini, sementara
+  // "[BOOT] 1. Initializing Audio Engine & Stores..." juga tidak muncul
+  // (yang muncul hanya "[BOOT] 1. Index mount started" dari index.tsx).
+  //
+  // hasInitialized sekarang benar-benar dipakai sebagai penjaga supaya
+  // inisialisasi tidak berjalan dua kali (React StrictMode / remount).
+  useEffect(() => {
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
+    performInitialization();
+  }, [performInitialization]);
 
 
 

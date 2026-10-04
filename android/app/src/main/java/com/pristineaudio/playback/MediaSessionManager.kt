@@ -74,7 +74,25 @@ class MediaSessionManager(private val service: PlaybackService) {
     fun startForeground() {
         createNotificationChannel()
         val notification = buildNotification()
-        service.startForeground(NOTIFICATION_ID, notification)
+        // Android 14+ (API 34) mewajibkan type eksplisit saat startForeground.
+        // Tanpa type, sistem melempar MissingForegroundServiceTypeException
+        // dan service langsung dimatikan - notification tidak pernah muncul.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            service.startForeground(
+                NOTIFICATION_ID,
+                notification,
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+            )
+        } else {
+            service.startForeground(NOTIFICATION_ID, notification)
+        }
+
+        // Aktifkan MediaSession supaya sistem mengenali ini sesi media.
+        // Tanpa isActive = true, MediaStyle tidak diikat ke sesi dan
+        // notification bisa tidak tampil sebagai kontrol media di lock screen.
+        mediaSession.isActive = true
+
+        android.util.Log.d("MediaSessionManager", "startForeground OK")
     }
 
     fun release() {
@@ -115,7 +133,9 @@ class MediaSessionManager(private val service: PlaybackService) {
         mediaSession.setPlaybackState(state)
     }
 
-    private fun refreshNotification() {
+    // internal, bukan private: PlaybackService memakainya untuk menyegarkan
+    // notifikasi saat service di-start ulang oleh sistem (START_STICKY).
+    fun refreshNotification() {
         val notification = buildNotification()
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(NOTIFICATION_ID, notification)
@@ -141,12 +161,33 @@ class MediaSessionManager(private val service: PlaybackService) {
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentTitle(lastTitle)
             .setContentText(lastArtist)
+            // setOngoing(true) = tidak bisa di-swipe. Wajib untuk kontrol media:
+            // kalau bisa di-swipe, user kehilangan kontrol dan sistem
+            // menganggap sesi sudah selesai.
             .setOngoing(true)
+            // Prioritas rendah supaya tidak berisik, tapi tetap ada.
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            // Tampil di lock screen.
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            // Ikon kecil wajib ada dan tidak boleh 0; kalau ikon tidak valid,
+            // di beberapa ROM notification GAGAL tampil tanpa error jelas.
+            .setShowWhen(false)
+            // Tap notification membuka aplikasi.
+            .setContentIntent(activityPendingIntent())
             .setStyle(
                 MediaStyle()
                     .setMediaSession(mediaSession.sessionToken)
                     .setShowActionsInCompactView(0, 1, 2)
             )
+
+        // Android 12+: tandai bahwa notification ini milik foreground service.
+        // Tanpa ini, di sebagian ROM notification tidak muncul atau hilang
+        // saat service di-start ulang.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            builder.setForegroundServiceBehavior(
+                NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE
+            )
+        }
 
         builder.addAction(
             android.R.drawable.ic_media_previous,
@@ -183,6 +224,31 @@ class MediaSessionManager(private val service: PlaybackService) {
         return PendingIntent.getService(
             context,
             action.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    // Tap notification -> buka MainActivity (bukan bikin instance baru).
+    private fun activityPendingIntent(): PendingIntent {
+        val launch = context.packageManager
+            .getLaunchIntentForPackage(context.packageName)
+            ?.apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+
+        // Kalau launch intent tidak tersedia (kasus langka), ambil MainActivity
+        // secara eksplisit supaya tap notification tidak jadi no-op.
+        val intent = launch ?: Intent().apply {
+            setClassName(context.packageName, "com.pristineaudio.app.MainActivity")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+
+        return PendingIntent.getActivity(
+            context,
+            0,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
