@@ -118,6 +118,21 @@ public:
     [[nodiscard]]
     std::vector<TrackInfo>
     tracks() const;
+
+    // Queue DALAM URUTAN AKTIF (ter-shuffle kalau shuffle menyala).
+    //
+    // Ini yang HARUS dipakai untuk navigasi dan untuk indeks yang dilaporkan
+    // ke UI. `tracks()` mengembalikan urutan ASLI (urut file) dan hanya cocok
+    // untuk menampilkan daftar tanpa navigasi - mis. daftar "semua lagu".
+    //
+    // Memakai tracks() untuk navigasi membuat indeks tidak cocok dengan lagu
+    // yang benar-benar diputar saat shuffle menyala. Gejalanya di device:
+    // shuffle berjalan (lagu berganti acak) tapi UI menampilkan urutan dan
+    // posisi yang salah - "shuffle berhasil, UI tidak sinkron" (2026-10-05).
+    [[nodiscard]]
+    std::vector<TrackInfo>
+    activeTracks() const;
+
 private:
 
     [[nodiscard]]

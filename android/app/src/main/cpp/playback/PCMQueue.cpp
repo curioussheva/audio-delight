@@ -28,17 +28,28 @@ inline size_t PCMQueue::indexMask(size_t v) const noexcept {
 
 size_t PCMQueue::write(const float* input, size_t frames) {
 
-    const size_t w = writeIndex_.load(std::memory_order_relaxed);
-    const size_t r = readIndex_.load(std::memory_order_acquire);
+    if (!input || frames == 0) return 0;
 
-    size_t free = capacity_ - (w - r);
-    size_t toWrite = std::min(frames, free);
+    const uint64_t w = writeCount_.load(std::memory_order_relaxed);
+    const uint64_t r = readCount_.load(std::memory_order_acquire);
 
-    for (size_t i = 0; i < toWrite; ++i) {
-        buffer_[indexMask(w + i)] = input[i];
+    // safeDiff: 0 kalau r > w. Tanpa ini, `capacity_ - (w - r)` underflow
+    // dan write() menulis jauh melebihi kapasitas (lihat komentar di header).
+    const size_t used = safeDiff(w, r);
+    const size_t free = (used < capacity_) ? (capacity_ - used) : 0u;
+    const size_t toWrite = std::min(frames, free);
+
+    if (toWrite == 0) return 0;   // queue penuh: buang, jangan tulis liar
+
+    // Salin dalam dua segmen supaya tidak perlu indexMask per elemen.
+    const size_t start = indexMask(static_cast<size_t>(w));
+    const size_t first = std::min(toWrite, capacity_ - start);
+    std::memcpy(&buffer_[start], input, first * sizeof(float));
+    if (toWrite > first) {
+        std::memcpy(&buffer_[0], input + first, (toWrite - first) * sizeof(float));
     }
 
-    writeIndex_.store(w + toWrite, std::memory_order_release);
+    writeCount_.store(w + toWrite, std::memory_order_release);
     return toWrite;
 }
 
@@ -48,17 +59,24 @@ size_t PCMQueue::write(const float* input, size_t frames) {
 
 size_t PCMQueue::read(float* output, size_t frames) {
 
-    const size_t r = readIndex_.load(std::memory_order_relaxed);
-    const size_t w = writeIndex_.load(std::memory_order_acquire);
+    if (!output || frames == 0) return 0;
 
-    size_t available = w - r;
-    size_t toRead = std::min(frames, available);
+    const uint64_t r = readCount_.load(std::memory_order_relaxed);
+    const uint64_t w = writeCount_.load(std::memory_order_acquire);
 
-    for (size_t i = 0; i < toRead; ++i) {
-        output[i] = buffer_[indexMask(r + i)];
+    const size_t available = safeDiff(w, r);
+    const size_t toRead = std::min(frames, available);
+
+    if (toRead == 0) return 0;
+
+    const size_t start = indexMask(static_cast<size_t>(r));
+    const size_t first = std::min(toRead, capacity_ - start);
+    std::memcpy(output, &buffer_[start], first * sizeof(float));
+    if (toRead > first) {
+        std::memcpy(output + first, &buffer_[0], (toRead - first) * sizeof(float));
     }
 
-    readIndex_.store(r + toRead, std::memory_order_release);
+    readCount_.store(r + toRead, std::memory_order_release);
     return toRead;
 }
 
@@ -68,24 +86,21 @@ size_t PCMQueue::read(float* output, size_t frames) {
 
 float* PCMQueue::beginWrite(size_t frames) {
 
-    const size_t w = writeIndex_.load(std::memory_order_relaxed);
-    const size_t r = readIndex_.load(std::memory_order_acquire);
+    const uint64_t w = writeCount_.load(std::memory_order_relaxed);
+    const uint64_t r = readCount_.load(std::memory_order_acquire);
 
-    size_t free = capacity_ - (w - r);
+    const size_t used = safeDiff(w, r);
+    const size_t free = (used < capacity_) ? (capacity_ - used) : 0u;
     if (frames > free) return nullptr;
 
     writeReserve_ = frames;
-    writePtr_ = &buffer_[indexMask(w)];
+    writePtr_ = &buffer_[indexMask(static_cast<size_t>(w))];
 
     return writePtr_;
 }
 
 void PCMQueue::commitWrite(size_t frames) {
-    writeIndex_.store(
-        writeIndex_.load(std::memory_order_relaxed) + frames,
-        std::memory_order_release
-    );
-
+    writeCount_.fetch_add(frames, std::memory_order_release);
     writeReserve_ = 0;
     writePtr_ = nullptr;
 }
@@ -96,24 +111,19 @@ void PCMQueue::commitWrite(size_t frames) {
 
 float* PCMQueue::beginRead(size_t frames) {
 
-    const size_t r = readIndex_.load(std::memory_order_relaxed);
-    const size_t w = writeIndex_.load(std::memory_order_acquire);
+    const uint64_t r = readCount_.load(std::memory_order_relaxed);
+    const uint64_t w = writeCount_.load(std::memory_order_acquire);
 
-    size_t available = w - r;
-    if (frames > available) return nullptr;
+    if (frames > safeDiff(w, r)) return nullptr;
 
     readReserve_ = frames;
-    readPtr_ = &buffer_[indexMask(r)];
+    readPtr_ = &buffer_[indexMask(static_cast<size_t>(r))];
 
     return readPtr_;
 }
 
 void PCMQueue::commitRead(size_t frames) {
-    readIndex_.store(
-        readIndex_.load(std::memory_order_relaxed) + frames,
-        std::memory_order_release
-    );
-
+    readCount_.fetch_add(frames, std::memory_order_release);
     readReserve_ = 0;
     readPtr_ = nullptr;
 }
@@ -121,10 +131,21 @@ void PCMQueue::commitRead(size_t frames) {
 // =====================================================
 // CLEAR
 // =====================================================
-
+//
+// SATU operasi, bukan dua.
+//
+// Versi lama menulis writeIndex_ lalu readIndex_ secara terpisah. Thread audio
+// bisa membaca di antara keduanya dan mendapat pasangan (w, r) yang tidak
+// konsisten, yang lalu membuat available/free underflow.
+//
+// Dengan satu counter monotonik, "kosong" didefinisikan sebagai
+// readCount_ == writeCount_. Menyamakan keduanya cukup dengan SATU store,
+// jadi tidak ada jendela race sama sekali.
 void PCMQueue::clear() noexcept {
-    writeIndex_.store(0, std::memory_order_relaxed);
-    readIndex_.store(0, std::memory_order_release);
+    // Baca nilai write terkini, lalu set read = write. Satu store atomic.
+    // Setelah ini available == 0 dan free == capacity_.
+    const uint64_t w = writeCount_.load(std::memory_order_acquire);
+    readCount_.store(w, std::memory_order_release);
 }
 
 // =====================================================
@@ -132,17 +153,18 @@ void PCMQueue::clear() noexcept {
 // =====================================================
 
 size_t PCMQueue::availableFrames() const noexcept {
-    const size_t w = writeIndex_.load(std::memory_order_acquire);
-    const size_t r = readIndex_.load(std::memory_order_acquire);
-    return w - r;
+    const uint64_t w = writeCount_.load(std::memory_order_acquire);
+    const uint64_t r = readCount_.load(std::memory_order_acquire);
+    return safeDiff(w, r);
 }
 
 size_t PCMQueue::freeFrames() const noexcept {
-    return capacity_ - availableFrames();
+    const size_t used = availableFrames();
+    return (used < capacity_) ? (capacity_ - used) : 0u;
 }
 
 size_t PCMQueue::capacityFrames() const noexcept {
     return capacity_;
 }
 
-} // namespace pristine::playback 
+} // namespace pristine::playback

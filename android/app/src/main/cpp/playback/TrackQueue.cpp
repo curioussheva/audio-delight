@@ -96,6 +96,19 @@ std::vector<TrackInfo> TrackQueue::tracks() const {
     return mTracks;
 }
 
+// Queue dalam urutan AKTIF (ter-shuffle kalau shuffle menyala).
+//
+// Dipakai untuk navigasi dan untuk indeks yang dilaporkan ke UI, supaya
+// indeks selalu menunjuk lagu yang sama dengan yang benar-benar diputar
+// native. Sebelumnya JNI memakai tracks() (urutan asli), sehingga saat
+// shuffle menyala indeks UI tidak cocok dengan lagu yang berbunyi.
+std::vector<TrackInfo> TrackQueue::activeTracks() const {
+    std::lock_guard lock(mMutex);
+
+    const auto& queue = activeQueue();
+    return std::vector<TrackInfo>(queue.begin(), queue.end());
+}
+
 // =====================================
 // Navigation
 // =====================================

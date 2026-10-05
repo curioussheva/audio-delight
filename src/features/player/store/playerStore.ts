@@ -94,6 +94,11 @@ export interface PlayerState {
   isPlaying: boolean;
   position: number;
   duration: number;
+  // Indeks trek aktif menurut NATIVE (posisi di queue AKTIF, sudah
+  // memperhitungkan shuffle). -1 kalau belum diketahui.
+  // Dipakai untuk indicator "sedang diputar" supaya cocok dengan urutan
+  // yang benar-benar diputar native saat shuffle menyala.
+  currentIndex: number;
   shuffle: boolean;
   repeat: RepeatMode;
   playbackSpeed: number;
@@ -145,6 +150,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isPlaying: false,
   position: 0,
   duration: 0,
+  currentIndex: -1,
   shuffle: false,
   repeat: "off",
   playbackSpeed: 1.0,
@@ -549,6 +555,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       // native, jadi mencocokkan lewat indeks menampilkan lagu yang salah.
       const song = findSongByUri(get().queue, uri);
       if (song) patch.currentSong = song;
+
+      // Indeks native juga disimpan supaya indicator "sedang diputar" di
+      // daftar bisa mengikuti urutan native saat shuffle aktif. Native
+      // sekarang melaporkan indeks di queue AKTIF (bukan urutan file).
+      if (index >= 0) patch.currentIndex = index;
 
       set(patch);
 

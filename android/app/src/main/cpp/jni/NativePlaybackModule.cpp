@@ -94,8 +94,11 @@ JNIEXPORT jint JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeG
 JNIEXPORT jint JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetCurrentIndex(JNIEnv*, jobject) {
     auto* controller = getController();
     if (!controller || !controller->queue()) return -1;
-    const auto& tracks = controller->queue()->tracks();
-    if (tracks.empty()) return -1;
+    // activeTracks(), BUKAN tracks(): indeks ini menunjuk posisi di queue
+    // yang benar-benar diputar native. Saat shuffle menyala, urutannya
+    // berbeda dari urutan file asli, jadi memakai tracks() membuat UI
+    // menampilkan lagu/posisi yang salah.
+    if (controller->queue()->activeTracks().empty()) return -1;
     return static_cast<jint>(controller->queue()->currentIndex());
 }
 
@@ -104,7 +107,9 @@ JNIEXPORT jint JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeG
 JNIEXPORT jint JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetQueueSize(JNIEnv*, jobject) {
     auto* controller = getController();
     if (!controller || !controller->queue()) return 0;
-    return static_cast<jint>(controller->queue()->tracks().size());
+    // Ukuran sama untuk tracks() dan activeTracks() (hanya urutannya beda),
+    // tapi activeTracks() dipakai supaya satu sumber kebenaran.
+    return static_cast<jint>(controller->queue()->activeTracks().size());
 }
 
 // Lompat ke indeks tertentu di queue native lalu muat treknya.
@@ -118,7 +123,10 @@ JNIEXPORT jboolean JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nat
     if (!controller || !controller->queue() || index < 0) return JNI_FALSE;
 
     auto q = controller->queue();
-    if (static_cast<size_t>(index) >= q->tracks().size()) return JNI_FALSE;
+    // activeTracks(): indeks dari JS adalah indeks di queue AKTIF (yang
+    // ditampilkan UI, sudah memperhitungkan shuffle). Memvalidasi terhadap
+    // tracks() akan menerima indeks yang menunjuk lagu berbeda saat shuffle.
+    if (static_cast<size_t>(index) >= q->activeTracks().size()) return JNI_FALSE;
     if (!q->jumpTo(static_cast<size_t>(index))) return JNI_FALSE;
 
     auto track = q->current();
@@ -150,7 +158,10 @@ JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativePlaybackModule
     auto* controller = getController();
     if (!controller) return env->NewObjectArray(0, env->FindClass("java/lang/String"), nullptr);
 
-    auto queue = controller->queue()->tracks();
+    // activeTracks(): JS memakai daftar ini untuk menampilkan urutan queue.
+    // Kalau yang dikirim tracks() (urutan file asli), daftar di UI tidak
+    // cocok dengan urutan yang benar-benar diputar saat shuffle menyala.
+    auto queue = controller->queue()->activeTracks();
     jobjectArray result = env->NewObjectArray(queue.size(), env->FindClass("java/lang/String"), nullptr);
     for (size_t i = 0; i < queue.size(); ++i) {
         jstring str = env->NewStringUTF(queue[i].uri.c_str());
