@@ -7,8 +7,10 @@
  * dan padding 100/120/150 tersebar di 7 komponen library. FloatingPlayer bisa
  * menutupi tab bar karena `70` hanya tebakan tinggi tab bar.
  *
- * Tinggi tab bar diambil dari useBottomTabBarHeight() react-navigation
- * (sudah memasukkan safe-area inset), bukan angka hardcoded.
+ * Tinggi tab bar dihitung manual dari TABBAR_HEIGHT_UIKIT react-navigation
+ * (49dp content + safe-area inset), lihat tabBarHeight.ts. Tidak bisa pakai
+ * useBottomTabBarHeight() di layout itu karena hooknya hanya valid di dalam
+ * screen navigator, sedangkan _layout me-render <Tabs> itu sendiri.
  */
 
 /** Tinggi total FloatingPlayer: accent 2.5 + progress 1.5 + content 68 */
