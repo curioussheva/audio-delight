@@ -33,50 +33,102 @@ AudioStreamController::
 
 bool AudioStreamController::open(
     oboe::AudioStreamCallback* callback,
-    bool exclusive
+    bool exclusive,
+    int32_t requestedSampleRate
 ) {
 
     close();
 
-    oboe::AudioStreamBuilder builder;
+    mOpenSLESFallback.store(false, std::memory_order_release);
 
-    if (
-        !buildStream(
-            builder,
-            callback,
-            exclusive
-        )
-    ) {
-        return false;
+    // =============================================
+    // PERCOBAAN 1: AAudio
+    // =============================================
+    //
+    // AAudio adalah jalur utama karena punya mode Exclusive - satu-satunya
+    // cara mengirim sampel ke DAC tanpa melewati mixer Android, dan syarat
+    // untuk bit-perfect. OpenSLES tidak punya mode itu.
+    //
+    // AAudio tersedia sejak Android 8.0 (API 26). Kalau perangkat lebih lama,
+    // atau AAudio gagal membuka stream (mis. driver bermasalah), kita jatuh
+    // ke OpenSLES di bawah - hanya sebagai fallback.
+    {
+        oboe::AudioStreamBuilder builder;
+
+        if (!buildStream(builder, callback, exclusive, requestedSampleRate)) {
+            return false;
+        }
+        builder.setAudioApi(oboe::AudioApi::AAudio);
+
+        std::shared_ptr<oboe::AudioStream> stream;
+        const auto result = builder.openStream(stream);
+
+        if (result == oboe::Result::OK && stream) {
+            mStream = std::move(stream);
+            __android_log_print(ANDROID_LOG_INFO, "AudioStreamController",
+                "open: AAudio BERHASIL (requested=%d, actual=%d, exclusive=%s)",
+                requestedSampleRate, mStream->getSampleRate(),
+                exclusive ? "ya" : "tidak");
+        } else {
+            __android_log_print(ANDROID_LOG_WARN, "AudioStreamController",
+                "open: AAudio gagal (%s) - mencoba OpenSLES fallback",
+                oboe::convertToText(result));
+        }
     }
 
-    std::shared_ptr<oboe::AudioStream>
-        stream;
+    // =============================================
+    // PERCOBAAN 2: OpenSLES (fallback device lama)
+    // =============================================
+    if (!mStream) {
+        oboe::AudioStreamBuilder builder;
 
-    const auto result =
-        builder.openStream(stream);
+        if (!buildStream(builder, callback, exclusive, requestedSampleRate)) {
+            return false;
+        }
+        builder.setAudioApi(oboe::AudioApi::OpenSLES);
 
-    if (
-        result != oboe::Result::OK ||
-        !stream
-    ) {
-        return false;
+        std::shared_ptr<oboe::AudioStream> stream;
+        const auto result = builder.openStream(stream);
+
+        if (result != oboe::Result::OK || !stream) {
+            __android_log_print(ANDROID_LOG_ERROR, "AudioStreamController",
+                "open: AAudio DAN OpenSLES gagal (%s)",
+                oboe::convertToText(result));
+            return false;
+        }
+
+        mStream = std::move(stream);
+        mOpenSLESFallback.store(true, std::memory_order_release);
+
+        // Penting: di OpenSLES tidak ada jalur exclusive, jadi sampel SELALU
+        // lewat mixer sistem. Dicatat sebagai peringatan supaya tidak
+        // dilaporkan sebagai bit-perfect padahal bukan.
+        __android_log_print(ANDROID_LOG_WARN, "AudioStreamController",
+            "open: OpenSLES fallback dipakai (actual=%d). "
+            "TIDAK ada jalur exclusive - bit-perfect ke DAC tidak tersedia "
+            "di jalur ini.",
+            mStream->getSampleRate());
     }
 
-    mStream =
-        std::move(stream);
-
-    // 🔥 DEBUG: log actual stream rate
+    // ð¥ DEBUG: log actual stream rate
     {
         int32_t actualRate = mStream ? mStream->getSampleRate() : 0;
         int32_t actualFrames = mStream ? mStream->getFramesPerBurst() : 0;
         __android_log_print(ANDROID_LOG_INFO, "AudioStreamController",
-            "OPEN RESULT: ACTUAL rate=%d, framesPerBurst=%d",
-            actualRate, actualFrames);
-        if (actualRate != 48000) {
-            __android_log_print(ANDROID_LOG_ERROR, "AudioStreamController",
-                "RATE MISMATCH! Actual=%d (expected 48000), ratio %.2fx",
-                actualRate, (float)actualRate / 48000.0f);
+            "OPEN RESULT: ACTUAL rate=%d, framesPerBurst=%d, api=%s",
+            actualRate, actualFrames,
+            mStream ? oboe::convertToText(mStream->getAudioApi()) : "?");
+
+        // Laju berbeda dari yang diminta = device/DAC tidak mendukung laju itu.
+        // Bukan error fatal: yang penting decoder TAHU laju sebenarnya supaya
+        // resample-nya benar. Sebelumnya dibandingkan dengan konstanta 48000,
+        // yang salah begitu laju bisa diminta dinamis.
+        if (requestedSampleRate > 0 && actualRate != requestedSampleRate) {
+            __android_log_print(ANDROID_LOG_WARN, "AudioStreamController",
+                "RATE MISMATCH: diminta=%d, dapat=%d (rasio %.3fx) - "
+                "device/DAC tidak mendukung laju itu",
+                requestedSampleRate, actualRate,
+                static_cast<float>(actualRate) / static_cast<float>(requestedSampleRate));
         }
     }
 
@@ -121,7 +173,8 @@ bool AudioStreamController::open(
 bool AudioStreamController::buildStream(
     oboe::AudioStreamBuilder& builder,
     oboe::AudioStreamCallback* callback,
-    bool exclusive
+    bool exclusive,
+    int32_t requestedSampleRate
 ) {
 
     builder.setDirection(
@@ -144,8 +197,18 @@ bool AudioStreamController::buildStream(
 
     builder.setChannelCount(2);
 
-    builder.setSampleRate(48000);
-    builder.setAudioApi(oboe::AudioApi::OpenSLES);  // 🔥 TEST ONLY
+    // Laju diminta eksplisit, bukan dipatok 48000.
+    //
+    // Ini syarat bit-perfect: kalau file 96 kHz, stream harus dibuka di 96 kHz
+    // supaya sampel tidak dikonversi di mixer Android. Pemanggil yang menentukan
+    // laju (dari kapabilitas DAC atau laju file); kalau 0, pakai 48000 sebagai
+    // default yang aman.
+    //
+    // CATATAN: setAudioApi() TIDAK di sini. Pemilihan API dilakukan di open()
+    // supaya bisa mencoba AAudio dulu lalu jatuh ke OpenSLES.
+    builder.setSampleRate(
+        requestedSampleRate > 0 ? requestedSampleRate : 48000
+    );
 
     builder.setFramesPerCallback(
         oboe::Unspecified
@@ -287,7 +350,17 @@ const noexcept {
 // SAMPLE RATE
 // =====================================================
 
-int32_t AudioStreamController::sampleRate()
+// Laju yang BENAR-BENAR dipakai stream. Sumber kebenaran untuk memberi tahu
+// decoder laju mana yang harus dijadikan target resample.
+int32_t AudioStreamController::actualSampleRate() const noexcept {
+    return mStream ? mStream->getSampleRate() : mSampleRate;
+}
+
+bool AudioStreamController::usingOpenSLESFallback() const noexcept {
+    return mOpenSLESFallback.load(std::memory_order_acquire);
+}
+
+int32_t AudioStreamController::sampleRate() const noexcept {
 const noexcept {
 
     return mSampleRate;

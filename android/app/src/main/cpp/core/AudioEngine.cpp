@@ -3,6 +3,8 @@
 // =====================================================
 
 #include "AudioEngine.h"
+#include "DeviceRateDetector.h"
+#include <android/log.h>
 #include "../playback/PlaybackController.h"
 
 namespace pristine {
@@ -36,7 +38,8 @@ AudioEngine::~AudioEngine() {
 // =====================================================
 
 bool AudioEngine::start(
-    bool exclusiveMode
+    bool exclusiveMode,
+    int32_t requestedSampleRate
 ) {
 
     if (
@@ -45,23 +48,58 @@ bool AudioEngine::start(
         return true;
     }
 
+    // Laju 0 = pemanggil tidak menentukan: deteksi sendiri dari device/DAC.
+    // Ini yang membuat laju tidak lagi hardcoded 48000.
+    if (requestedSampleRate <= 0) {
+        const int detected = audio::DeviceRateDetector::refresh();
+        if (detected > 0) {
+            // Pakai laju tertinggi yang didukung sebagai default saat tidak
+            // ada file spesifik yang diminta - memberi ruang terbanyak untuk
+            // laju file asli tanpa konversi.
+            const auto& rates = audio::DeviceRateDetector::supportedRates();
+            requestedSampleRate = rates.empty() ? 48000 : rates.back();
+            __android_log_print(ANDROID_LOG_INFO, "AudioEngine",
+                "start: laju dideteksi sendiri = %d (dari %d laju didukung)",
+                requestedSampleRate, detected);
+        } else {
+            requestedSampleRate = 48000;
+            __android_log_print(ANDROID_LOG_WARN, "AudioEngine",
+                "start: deteksi laju gagal, pakai default %d", requestedSampleRate);
+        }
+    }
+
     if (
         !mStreamController.open(
             &mCallback,
-            exclusiveMode
+            exclusiveMode,
+            requestedSampleRate
         )
     ) {
         return false;
     }
 
+    // Pakai laju AKTUAL dari stream, bukan yang diminta - kalau device/DAC
+    // tidak mendukung laju yang diminta, decoder harus tahu laju sebenarnya
+    // supaya resample-nya benar dan tidak ada konversi tambahan.
+    const int32_t actualRate = mStreamController.actualSampleRate();
+
     mPipeline.prepare(
-        mStreamController.sampleRate(),
+        actualRate,
         mStreamController.framesPerBurst()
     );
 
     mCallback.setSampleRate(
-        mStreamController.sampleRate()
+        actualRate
     );
+
+    __android_log_print(ANDROID_LOG_INFO, "AudioEngine",
+        "start: diminta=%d, dipakai=%d, exclusive=%s, api=%s%s",
+        requestedSampleRate, actualRate,
+        exclusiveMode ? "ya" : "tidak",
+        mStreamController.usingOpenSLESFallback() ? "OpenSLES" : "AAudio",
+        mStreamController.usingOpenSLESFallback()
+            ? " (TANPA jalur exclusive - bit-perfect ke DAC tidak tersedia)"
+            : "");
 
     if (
         !mStreamController.start()
@@ -81,6 +119,14 @@ bool AudioEngine::start(
 // =====================================================
 // STOP
 // =====================================================
+
+int32_t AudioEngine::actualSampleRate() const {
+    return mStreamController.actualSampleRate();
+}
+
+bool AudioEngine::usingOpenSLESFallback() const {
+    return mStreamController.usingOpenSLESFallback();
+}
 
 void AudioEngine::stop() {
 

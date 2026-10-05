@@ -27,9 +27,16 @@ public:
     // STREAM
     // =============================================
 
+    // `requestedSampleRate` = laju yang DIINGINKAN (dari kapabilitas DAC atau
+    // laju file). 0 = pakai default 48000.
+    //
+    // Diisi eksplisit supaya laju stream bisa mengikuti DAC/file, bukan
+    // dipatok 48000 - itu syarat bit-perfect: sampel harus sampai ke DAC
+    // pada laju aslinya, tanpa konversi di mixer Android.
     bool open(
         oboe::AudioStreamCallback* callback,
-        bool exclusive
+        bool exclusive,
+        int32_t requestedSampleRate = 0
     );
 
     bool start();
@@ -71,6 +78,16 @@ public:
     oboe::AudioStream*
     stream() noexcept;
 
+    // Laju yang BENAR-BENAR dipakai stream setelah dibuka. Bisa berbeda dari
+    // yang diminta kalau device/DAC tidak mendukung laju itu. Dipakai untuk
+    // memberi tahu decoder laju mana yang harus dipakai (target resample).
+    int32_t actualSampleRate() const noexcept;
+
+    // true kalau stream jatuh ke OpenSLES karena AAudio gagal. AAudio adalah
+    // jalur utama (punya mode exclusive untuk bit-perfect); OpenSLES hanya
+    // fallback untuk device lama yang tidak punya AAudio.
+    bool usingOpenSLESFallback() const noexcept;
+
     // =============================================
     // ERROR CALLBACK
     // =============================================
@@ -85,7 +102,8 @@ private:
     bool buildStream(
         oboe::AudioStreamBuilder& builder,
         oboe::AudioStreamCallback* callback,
-        bool exclusive
+        bool exclusive,
+        int32_t requestedSampleRate
     );
 
 private:
@@ -111,6 +129,9 @@ private:
 
     oboe::AudioApi mApi =
         oboe::AudioApi::Unspecified;
+
+    // true kalau AAudio gagal dan stream dibuka ulang dengan OpenSLES.
+    std::atomic<bool> mOpenSLESFallback{false};
 
     oboe::PerformanceMode mPerfMode =
         oboe::PerformanceMode::LowLatency;

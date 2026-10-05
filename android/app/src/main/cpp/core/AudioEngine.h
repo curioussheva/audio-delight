@@ -30,9 +30,24 @@ public:
     // ENGINE
     // =============================================
 
+    // `requestedSampleRate` = laju stream yang diinginkan (dari kapabilitas
+    // DAC atau laju file). 0 = default 48000.
+    //
+    // Diisi supaya sampel dikirim ke DAC pada laju aslinya. Kalau device/DAC
+    // tidak mendukung laju itu, stream tetap dibuka di laju terdekat dan
+    // laju sebenarnya bisa dibaca lewat actualSampleRate().
     bool start(
-        bool exclusiveMode = false
+        bool exclusiveMode = false,
+        int32_t requestedSampleRate = 0
     );
+
+    // Laju yang BENAR-BENAR dipakai stream. Dipakai decoder sebagai target
+    // resample supaya tidak ada konversi yang tidak perlu.
+    int32_t actualSampleRate() const;
+
+    // true kalau stream jatuh ke OpenSLES (AAudio gagal). OpenSLES tidak punya
+    // jalur exclusive, jadi bit-perfect ke DAC tidak tersedia di jalur itu.
+    bool usingOpenSLESFallback() const;
 
     void stop();
 

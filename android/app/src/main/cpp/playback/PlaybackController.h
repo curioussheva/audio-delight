@@ -42,6 +42,14 @@ public:
     // Audio thread
     void render(float* output, uint32_t frames, uint32_t channels, uint32_t sampleRate) noexcept;
 
+    // Laju stream yang SEDANG dipakai. Diisi oleh pemilik stream (AudioEngine
+    // lewat AudioCallback) supaya decoder tahu target laju yang benar.
+    //
+    // Tanpa ini decoder memakai default 48000, sehingga file 96/192 kHz
+    // diturunkan ke 48 kHz - kebalikan dari bit-perfect.
+    void setStreamSampleRate(uint32_t rate) noexcept;
+    uint32_t streamSampleRate() const noexcept;
+
     // State accessors
     std::shared_ptr<PlaybackState> state() const noexcept;
     std::shared_ptr<MetricsCollector> metrics() const noexcept;
@@ -67,6 +75,9 @@ private:
     std::shared_ptr<PlaybackClock> clock_;
     std::shared_ptr<PCMQueue> pcmQueue_;
     std::atomic<bool> clearing_{false};
+
+    // Laju stream aktual (dari device/DAC). 0 = belum diketahui.
+    std::atomic<uint32_t> streamSampleRate_{0};
     std::shared_ptr<TrackQueue> queue_;
 
     std::unique_ptr<decoder::DecoderWorker> decoderWorker_;

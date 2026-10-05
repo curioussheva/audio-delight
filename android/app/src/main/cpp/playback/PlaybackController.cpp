@@ -278,6 +278,13 @@ void PlaybackController::render(float* output,
                                 uint32_t sampleRate) noexcept {
     if (!output || frames == 0) return;
 
+    // Laju stream datang dari pemilik stream (AudioEngine). Disimpan supaya
+    // startDecoder() bisa memakai laju yang BENAR sebagai target resample,
+    // bukan default 48000.
+    if (sampleRate >= 8000 && sampleRate <= 768000) {
+        setStreamSampleRate(sampleRate);
+    }
+
     const size_t requestedSamples =
         static_cast<size_t>(frames) * channels;
 
@@ -375,14 +382,43 @@ if (renderDebugCount % 100 == 0 && readSamples > 0) {
 // DECODER CONTROL
 // =====================================================
 
+void PlaybackController::setStreamSampleRate(uint32_t rate) noexcept {
+    if (rate >= 8000 && rate <= 768000) {
+        const uint32_t prev = streamSampleRate_.exchange(rate, std::memory_order_acq_rel);
+        if (prev != rate) {
+            __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                "setStreamSampleRate: %u -> %u", prev, rate);
+        }
+    }
+}
+
+uint32_t PlaybackController::streamSampleRate() const noexcept {
+    return streamSampleRate_.load(std::memory_order_acquire);
+}
+
 bool PlaybackController::startDecoder(const TrackInfo& track) {
     try {
         __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                             "startDecoder(): creating decoder for uri=%s",
                             track.uri.c_str());
 
+        // DecodeConfig.targetSampleRate diisi dari laju STREAM, bukan default.
+        //
+        // Ini syarat bit-perfect: kalau stream dibuka di 96000 (karena file
+        // 96 kHz dan DAC mendukung), decoder TIDAK boleh menurunkan ke 48000.
+        // Sebelumnya selalu default 48000, jadi semua file hi-res dikonversi
+        // turun tanpa alasan.
+        decoder::DecodeConfig cfg;
+        const uint32_t rate = streamSampleRate();
+        if (rate >= 8000 && rate <= 768000) {
+            cfg.targetSampleRate = rate;
+        }
+        __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+            "startDecoder: targetSampleRate=%u (stream=%u)",
+            cfg.targetSampleRate, rate);
+
         decoderWorker_ = std::make_unique<decoder::DecoderWorker>(
-            std::make_unique<decoder::FFmpegDecoder>()
+            std::make_unique<decoder::FFmpegDecoder>(cfg)
         );
 
         // 🔥 EOF callback: decoder selesai membaca seluruh stream.

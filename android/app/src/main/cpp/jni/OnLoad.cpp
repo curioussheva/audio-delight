@@ -12,6 +12,7 @@
 #include "PristineAudioSpec.h"
 #include "manager/EngineManager.h"
 #include "decoder/ContentUriResolver.h"
+#include "core/DeviceRateDetector.h"
 #include "playback/NativeEventEmitter.h"
  
 #undef LOG_TAG
@@ -61,6 +62,10 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
   // Tanpa ini, FFmpegDecoder tidak bisa membuka content:// dan pemutaran
   // gagal pada trek pertama yang belum di-resolve sisi Kotlin.
   ::pristine::decoder::ContentUriResolver::init(vm);
+
+  // Detector laju juga butuh JavaVM untuk membaca kapabilitas device/DAC
+  // lewat AudioManager. Tanpa ini, laju stream terpaksa dipatok 48000.
+  ::pristine::audio::setDeviceRateDetectorVm(vm);
 
   // Simpan JavaVM untuk emit event native→JS (track ended).
   ::pristine::playback::initJavaVm(vm);
