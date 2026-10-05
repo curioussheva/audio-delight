@@ -102,12 +102,16 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
      * Beri tahu JS kalau daftar device berubah. Pemakai di sisi JS bisa
      * mendengarkan lewat NativeEventEmitter nama "PristineDeviceChange".
      * Kalau tidak ada listener, ini hanya no-op.
+     *
+     * Memakai reactApplicationContext.emitDeviceEvent() alih-alih
+     * getJSModule(RCTDeviceEventEmitter::class.java) karena yang kedua adalah
+     * kelas generik dan Kotlin tidak bisa menyimpulkan argumen tipenya
+     * ("Cannot infer type for this parameter"). emitDeviceEvent sudah
+     * menangani hal yang sama tanpa masalah tipe.
      */
     private fun emitDeviceListChanged() {
         try {
-            reactApplicationContext
-                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-                .emit("PristineDeviceChange", null)
+            reactApplicationContext.emitDeviceEvent("PristineDeviceChange", null)
         } catch (e: Exception) {
             android.util.Log.w("NativeDeviceModule", "emit gagal: ${e.message}")
         }
