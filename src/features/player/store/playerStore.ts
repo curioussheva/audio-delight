@@ -208,68 +208,66 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       console.error("[Player] Failed to init PlayerStore:", e);
     }
 
-    // 🔥 FIX v3: auto-next dengan 2 deteksi:
-    // A) duration known → cek pos >= dur - 500ms
-    // B) duration=0 (metadata gagal) → deteksi posisi stuck 3s
-    if (!(globalThis as any).__trackEndWatcher) {
-      let _inFlight = false;
-      let _lastPos = 0;
-      let _lastChangeAt = Date.now();
-      const STUCK_MS = 3000;      // 3 detik stuck → anggap track habis
-      const STUCK_EPSILON = 50;    // toleransi 50ms drift
+    // 🔥 FIX #4: event native→JS untuk track-ended.
+    //
+    // Sebelumnya JS menebak-nebak: __trackEndWatcher polling tiap 1 detik,
+    // deteksi "posisi stuck 3 detik" atau "pos >= dur - 500". Ini fragile:
+    // kalau JS thread busy, deteksi telat; kalau duration salah, deteksi gagal.
+    //
+    // Sekarang C++ yang kasih tahu (DecoderWorker EOF callback →
+    // NativePlaybackModule.onNativeTrackEnded → DeviceEventEmitter).
+    // Polling __trackEndWatcher dihapus.
+    if (!(globalThis as any).__nativeTrackEndListener) {
+      const { NativeEventEmitter } = require("react-native");
+      const emitter = new NativeEventEmitter(NativePlaybackService);
+      const subscription = emitter.addListener(
+        "onPlaybackTrackEnded",
+        async (uri: string) => {
+          console.log(`[Player] 🎵 native track-ended event: ${uri}`);
+          const s = get();
+          if (!s.currentSong) return;
 
-      (globalThis as any).__trackEndWatcher = setInterval(async () => {
-        if (_inFlight) return;
-        const s = get();
-        if (!s.isPlaying || !s.currentSong) return;
-
-        _inFlight = true;
-        try {
-          const nativePosMs = await NativePlaybackService.getPosition();
-          const durMs = (s.currentSong.duration ?? 0) * 1000;
-          const now = Date.now();
-
-          // Detect: posisi berubah atau stuck
-          if (Math.abs(nativePosMs - _lastPos) > STUCK_EPSILON) {
-            _lastChangeAt = now;
-            _lastPos = nativePosMs;
+          // Kalau URI yang berakhir = lagu yang sedang diputar JS, lanjut next.
+          // Cek ini karena event bisa datang terlambat (user sudah skip manual).
+          if (uri && s.currentSong.uri && s.currentSong.uri !== uri) {
+            console.log(
+              `[Player] 🎵 skip: uri event (${uri}) ≠ currentSong.uri (${s.currentSong.uri})`,
+            );
+            return;
           }
 
-          let shouldAdvance = false;
-          let reason = "";
+          // 🔥 C++ sudah advance queue di EOF callback (TrackQueue::advance).
+          // Jadi kita hanya perlu sync dari native — JANGAN panggil
+          // NativePlaybackService.next() lagi (double-advance).
+          await get().syncFromNative();
+        },
+      );
+      (globalThis as any).__nativeTrackEndListener = subscription;
+      console.log("[Player] 🎵 Native track-ended listener registered");
+    }
 
-          // A) duration known
-          if (durMs > 0 && nativePosMs >= durMs - 500) {
-            shouldAdvance = true;
-            reason = `dur-known (pos=${nativePosMs}ms >= dur-500=${durMs-500}ms)`;
-          }
-
-          // B) duration=0 → deteksi stuck
-          if (durMs <= 0 && now - _lastChangeAt > STUCK_MS) {
-            shouldAdvance = true;
-            reason = `stuck ${now - _lastChangeAt}ms @ pos=${nativePosMs}ms`;
-          }
-
-          if (shouldAdvance) {
-            console.log(`[Player] 🎵 track ended — ${reason} → next`);
-            // Reset baseline dulu
-            _lastChangeAt = now;
-            _lastPos = 0;
-            await get().playNext();
-          }
-        } catch (e) {
-          // silent
-        } finally {
-          _inFlight = false;
-        }
-      }, 1000);
-      console.log("[Player] 🎵 Auto-next watcher started (v3 stuck-detect)");
+    // 🔥 FIX #4: event native→JS kalau user pencet next/prev di lock screen.
+    // Native sudah ganti trek (PlaybackNativeBridge.next()), JS tinggal sync.
+    if (!(globalThis as any).__nativeTrackChangedListener) {
+      const { NativeEventEmitter } = require("react-native");
+      const emitter = new NativeEventEmitter(NativePlaybackService);
+      const subscription = emitter.addListener(
+        "onPlaybackTrackChanged",
+        async (payload: { uri: string; index: number } | string) => {
+          // Payload bisa berupa Pair (Android) atau string polos.
+          console.log("[Player] 🔀 native track-changed event:", payload);
+          await get().syncFromNative();
+        },
+      );
+      (globalThis as any).__nativeTrackChangedListener = subscription;
+      console.log("[Player] 🔀 Native track-changed listener registered");
     }
 
     // 🔥 FIX: position+duration polling terpusat (bukan di hook useAudioPlayer)
     // Supaya slider progress bergerak walaupun hook unmount.
     if (!(globalThis as any).__positionWatcher) {
       let _posInFlight = false;
+      let lastEmittedPos = -1; // 🔥 throttle untuk MediaSession sync
       (globalThis as any).__positionWatcher = setInterval(async () => {
         if (_posInFlight) return;
         const s = get();
@@ -283,6 +281,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           // Sync posisi ke Zustand (throttle: hanya update kalau berubah >0.1s)
           if (Math.abs(newPos - get().position) > 0.1) {
             set({ position: newPos });
+          }
+
+          // 🔥 FIX #2: sync posisi ke MediaSession supaya slider lock screen
+          // ikut jalan. Throttle: hanya tiap ~1 detik (Math.floor) supaya
+          // tidak spam bridge setiap 500ms dengan nilai yang berubah tipis.
+          if (Math.floor(newPos) !== Math.floor(lastEmittedPos)) {
+            lastEmittedPos = newPos;
+            safeFireAndForget(
+              () =>
+                NativePlaybackService.updatePlaybackState(
+                  get().isPlaying,
+                  newPos * 1000,
+                ),
+              "updatePlaybackState(poll)",
+            );
           }
 
           // Sync duration dari currentSong, TAPI koreksi kalau nilainya tidak
@@ -442,6 +455,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
             playableSong.artist ?? "Unknown Artist",
             playableSong.album ?? "",
             (playableSong.duration ?? 0) * 1000,
+            playableSong.artwork ?? null,
           ),
         "updateMetadata",
       );
@@ -449,6 +463,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       safeFireAndForget(
         () => NativePlaybackService.updatePlaybackState(true, 0),
         "updatePlaybackState",
+      );
+
+      // 🔥 MediaSession shuffle/repeat sync: kirim state awal supaya lock
+      // screen langsung benar, tidak menunggu user toggle pertama.
+      safeFireAndForget(
+        () => NativePlaybackService.updateShuffleMode(get().shuffle),
+        "updateShuffleMode(init)",
+      );
+      safeFireAndForget(
+        () =>
+          NativePlaybackService.updateRepeatMode(
+            get().repeat === "off" ? 0 : get().repeat === "all" ? 1 : 2,
+          ),
+        "updateRepeatMode(init)",
       );
 
       AsyncStorage.setItem(KEYS.LAST_SONG_ID, playableSong.id).catch(() => {});
@@ -535,6 +563,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
               cur.artist ?? "Unknown Artist",
               cur.album ?? "",
               (cur.duration ?? 0) * 1000,
+              cur.artwork ?? null,
             ),
           "updateMetadata(sync)",
         );
@@ -618,6 +647,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     try {
       await timedCall("seek", () => NativePlaybackService.seek(pos * 1000));
       set({ position: pos });
+
+      // 🔥 FIX #2: setelah seek, MediaSession harus tahu posisi baru.
+      // Sebelumnya slider lock screen masih nunjukkin posisi lama sampai
+      // user play/pause berikutnya.
+      safeFireAndForget(
+        () => NativePlaybackService.updatePlaybackState(get().isPlaying, pos * 1000),
+        "updatePlaybackState(seek)",
+      );
     } catch (error) {
       console.error("[Player] Seek failed:", error);
     }
@@ -630,6 +667,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     safeFireAndForget(
       () => NativePlaybackService.setShuffle(next),
       "setShuffle",
+    );
+    // 🔥 FIX #3: sync ke MediaSession supaya lock screen ikut.
+    safeFireAndForget(
+      () => NativePlaybackService.updateShuffleMode(next),
+      "updateShuffleMode",
     );
     console.log(`[Player] shuffle=${next} → native`);
   },
@@ -647,6 +689,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     safeFireAndForget(
       () => NativePlaybackService.setRepeatMode(nativeMode),
       "setRepeatMode",
+    );
+    // 🔥 FIX #3: sync ke MediaSession supaya lock screen ikut.
+    safeFireAndForget(
+      () => NativePlaybackService.updateRepeatMode(nativeMode),
+      "updateRepeatMode",
     );
     console.log(`[Player] repeat=${next} (native=${nativeMode})`);
   },

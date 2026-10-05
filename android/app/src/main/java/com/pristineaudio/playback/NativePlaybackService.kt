@@ -307,9 +307,16 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
     // ============================================================
 
     @ReactMethod
-    fun updateMetadata(title: String, artist: String, album: String, durationMs: Double, promise: Promise) {
+    fun updateMetadata(
+        title: String,
+        artist: String,
+        album: String,
+        durationMs: Double,
+        artworkUri: String?,
+        promise: Promise,
+    ) {
         try {
-            PlaybackNativeBridge.updateMetadata(title, artist, album, durationMs.toLong())
+            PlaybackNativeBridge.updateMetadata(title, artist, album, durationMs.toLong(), artworkUri)
             promise.resolve(null)
         } catch (e: Exception) {
             promise.reject("UPDATE_METADATA_FAILED", e)
@@ -325,6 +332,34 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
             promise.reject("UPDATE_STATE_FAILED", e)
         }
     }
+
+    // 🔥 MediaSession sync untuk shuffle/repeat (lock screen).
+    @ReactMethod
+    fun updateShuffleMode(enabled: Boolean, promise: Promise) {
+        try {
+            PlaybackNativeBridge.updateShuffleMode(enabled)
+            promise.resolve(null)
+        } catch (e: Exception) {
+            promise.reject("UPDATE_SHUFFLE_FAILED", e)
+        }
+    }
+
+    @ReactMethod
+    fun updateRepeatMode(mode: Int, promise: Promise) {
+        try {
+            PlaybackNativeBridge.updateRepeatMode(mode)
+            promise.resolve(null)
+        } catch (e: Exception) {
+            promise.reject("UPDATE_REPEAT_FAILED", e)
+        }
+    }
+
+    // 🔥 Wajib untuk NativeEventEmitter supaya tidak warning di JS.
+    @ReactMethod
+    fun addListener(eventName: String) {}
+
+    @ReactMethod
+    fun removeListeners(count: Int) {}
 
     // ============================================================
     // URI RESOLVER

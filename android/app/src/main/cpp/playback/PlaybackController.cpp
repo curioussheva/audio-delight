@@ -1,4 +1,5 @@
 #include "PlaybackController.h"
+#include "NativeEventEmitter.h"
 
 #include "../decoder/FFmpegDecoder.h"
 
@@ -47,6 +48,12 @@ void PlaybackController::shutdown() {
         return;
 
     stopDecoder();
+
+    // 🔥 Join advance thread: kalau lagi loadTrack untuk track berikutnya,
+    // harus selesai sebelum resource di-reset di bawah.
+    if (advanceThread_.joinable()) {
+        advanceThread_.join();
+    }
 
     playing_.store(false);
     stopping_.store(true);
@@ -378,6 +385,29 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
             std::make_unique<decoder::FFmpegDecoder>()
         );
 
+        // 🔥 EOF callback: decoder selesai membaca seluruh stream.
+        // Sebelumnya tidak di-set; JS menebak-nebak lewat __trackEndWatcher
+        // polling (posisi stuck 3 detik → next). Sekarang C++ yang kasih tahu.
+        //
+        // ⚠️ Thread-safety: callback ini jalan di thread decoder. Memanggil
+        // loadTrack() langsung di sini = stopDecoder() → decoderWorker_.reset()
+        // → thread ini destroy object yang sedang menjalankannya (use-after-
+        // free + deadlock join). Karena itu advance + loadTrack dijadwalkan
+        // ke thread terpisah (lihat scheduleAdvance).
+        decoderWorker_->setEofCallback([this]() {
+            __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                                "EOF callback: track ended, advancing queue");
+
+            auto track = queue_ ? queue_->current() : std::nullopt;
+            const std::string uri = track ? track->uri : "";
+
+            // Emit ke JS lewat JNI (thread-safe).
+            pristine::playback::emitTrackEnded(uri);
+
+            // Advance + loadTrack di thread terpisah — JANGAN di thread ini.
+            scheduleAdvance();
+        });
+
         decoderWorker_->setDecodeCallback(
             [this](decoder::DecodeResult&& result) {
                 if (pcmQueue_ && !result.samples.empty()) {
@@ -451,6 +481,38 @@ void PlaybackController::stopDecoder() {
 
     decoderWorker_->stop();
     decoderWorker_.reset();
+}
+
+// 🔥 Advance queue + loadTrack setelah EOF, di thread terpisah.
+//
+// EOF callback jalan di thread decoder. Kalau loadTrack() dipanggil di sana,
+// stopDecoder() akan join thread yang sedang berjalan → deadlock, dan
+// decoderWorker_.reset() menghancurkan object dari dalam dirinya sendiri
+// → use-after-free. Thread baru memutus dependensi ini.
+//
+// advanceThread_ di-join di destructor + stopDecoder supaya tidak bocor.
+void PlaybackController::scheduleAdvance() {
+    if (advanceThread_.joinable()) {
+        advanceThread_.join();
+    }
+
+    advanceThread_ = std::thread([this]() {
+        if (!queue_) return;
+
+        if (queue_->advance()) {
+            auto nextTrack = queue_->current();
+            if (nextTrack) {
+                __android_log_print(
+                    ANDROID_LOG_INFO, "PlaybackController",
+                    "EOF: advancing to next track uri=%s",
+                    nextTrack->uri.c_str());
+                loadTrack(*nextTrack);
+            }
+        } else {
+            __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                                "EOF: queue exhausted (repeat off)");
+        }
+    });
 }
 
 void PlaybackController::updatePlaybackState() {

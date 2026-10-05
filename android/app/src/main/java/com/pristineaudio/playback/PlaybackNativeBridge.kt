@@ -89,12 +89,56 @@ object PlaybackNativeBridge {
     return NativePlaybackModule.instance?.getStatusFromService() ?: 0
     }
     
-    fun updateMetadata(title: String, artist: String, album: String, durationMs: Long) {
-    android.util.Log.d("PlaybackNativeBridge", "updateMetadata($title) called")
-    PlaybackService.instance?.updateMetadata(title, artist, album, durationMs)
+    fun updateMetadata(
+        title: String,
+        artist: String,
+        album: String,
+        durationMs: Long,
+        artworkUri: String?,
+    ) {
+        android.util.Log.d("PlaybackNativeBridge", "updateMetadata($title) called")
+        PlaybackService.instance?.updateMetadata(title, artist, album, durationMs, artworkUri)
     }
 
     fun updatePlaybackState(isPlaying: Boolean, positionMs: Long) {
-    PlaybackService.instance?.updatePlaybackState(isPlaying, positionMs)
+        PlaybackService.instance?.updatePlaybackState(isPlaying, positionMs)
+    }
+
+    // 🔥 Event native→JS: kirim info trek ke JS tanpa polling.
+    // Dipanggil saat track berganti dari sisi native (notification / C++ advance).
+    fun emitTrackChanged(uri: String, index: Int) {
+        try {
+            val module = NativePlaybackModule.instance ?: return
+            val ctx = module.reactApplicationContext
+            ctx.getJSModule(com.facebook.react.modules.core.DeviceEventManagerModule
+                .RCTDeviceEventEmitter::class.java)
+                .emit("onPlaybackTrackChanged", androidx.core.util.Pair(uri, index))
+        } catch (e: Exception) {
+            android.util.Log.w("PlaybackNativeBridge", "emitTrackChanged: ${e.message}")
+        }
+    }
+
+    // 🔥 Event native→JS: track selesai (EOF). Dulu JS nebak-nebak pakai
+    // __trackEndWatcher polling; sekarang C++ yang kasih tahu.
+    fun emitTrackEnded(uri: String) {
+        try {
+            val module = NativePlaybackModule.instance ?: return
+            val ctx = module.reactApplicationContext
+            ctx.getJSModule(com.facebook.react.modules.core.DeviceEventManagerModule
+                .RCTDeviceEventEmitter::class.java)
+                .emit("onPlaybackTrackEnded", uri)
+        } catch (e: Exception) {
+            android.util.Log.w("PlaybackNativeBridge", "emitTrackEnded: ${e.message}")
+        }
+    }
+
+    // 🔥 MediaSession shuffle/repeat sync. Dipanggil dari NativePlaybackService
+    // ReactMethod (updateShuffleMode/updateRepeatMode).
+    fun updateShuffleMode(enabled: Boolean) {
+        PlaybackService.instance?.updateShuffleMode(enabled)
+    }
+
+    fun updateRepeatMode(mode: Int) {
+        PlaybackService.instance?.updateRepeatMode(mode)
     }
 } 

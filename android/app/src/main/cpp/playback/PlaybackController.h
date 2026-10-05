@@ -51,6 +51,10 @@ public:
 private:
     bool startDecoder(const TrackInfo& track);
     void stopDecoder();
+
+    // 🔥 Advance queue + loadTrack setelah EOF (dipanggil dari thread decoder).
+    // Lihat implementasi: harus di thread terpisah supaya tidak self-join.
+    void scheduleAdvance();
     void updatePlaybackState();
 
     std::atomic<bool> initialized_{false};
@@ -66,6 +70,9 @@ private:
     std::shared_ptr<TrackQueue> queue_;
 
     std::unique_ptr<decoder::DecoderWorker> decoderWorker_;
+
+    // 🔥 Thread untuk advance queue setelah EOF (lihat scheduleAdvance).
+    std::thread advanceThread_;
 };
 
 } // namespace pristine::playback

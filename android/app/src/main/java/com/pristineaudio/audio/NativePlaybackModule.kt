@@ -17,9 +17,26 @@ class NativePlaybackModule(reactContext: ReactApplicationContext) :
     init {
         System.loadLibrary("pristine-audio")
         instance = this
+        // 🔥 Daftarkan reference untuk callback native→JS (butuh JNIEnv, dan
+        // init block jalan di thread yang punya JNIEnv).
+        nativeInitEventEmitter()
     }
 
     // Native methods
+
+    // 🔥 Akses context untuk bridge event (PlaybackNativeBridge.emit*).
+    val reactApplicationContext: ReactApplicationContext get() = reactContext
+
+    // 🔥 Callback native→JS: decoder EOF. Di-emit dari C++ (thread decoder).
+    // Tidak boleh crash kalau JS belum siap — bridge tolak kalau instance null.
+    @JvmOverloads
+    fun onNativeTrackEnded(uri: String?) {
+        if (uri.isNullOrEmpty()) return
+        android.util.Log.d("NativePlaybackModule", "onNativeTrackEnded: $uri")
+        PlaybackNativeBridge.emitTrackEnded(uri)
+    }
+
+    private external fun nativeInitEventEmitter()
     private external fun nativePlay(): Boolean
     private external fun nativePause()
     private external fun nativeStop()

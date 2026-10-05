@@ -25,6 +25,15 @@ class MediaSessionManager(private val service: PlaybackService) {
     private var lastTitle: String = "PristineAudio"
     private var lastArtist: String = "Playing..."
     private var lastIsPlaying: Boolean = false
+    private var lastArtwork: android.graphics.Bitmap? = null
+
+    // Executor untuk decode artwork (IO + bitmap decode butuh background thread).
+    // Single-threaded: decode artwork tidak butuh paralel, dan urutan tetap.
+    private val artworkExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+
+    // Artwork di-downscale ke maksimum sisi ini untuk notifikasi (px).
+    // Full-res album art bisa ribuan px — boros memory dan lambat.
+    private val ARTWORK_MAX_DIM = 320
 
     private val sessionCallback = object : MediaSessionCompat.Callback() {
         override fun onPlay() {
@@ -36,11 +45,8 @@ class MediaSessionManager(private val service: PlaybackService) {
         }
 
         override fun onSkipToNext() {
-            // Tombol next di notification / lock screen TIDAK lewat React, jadi
-            // UI React tidak tahu lagu berubah sampai polling menangkapnya.
-            // Panggil notifikasi perubahan supaya JS menyegarkan state tanpa
-            // menunggu polling - dan supaya notifikasi sendiri ikut update
-            // judulnya, bukan menampilkan lagu lama.
+            // Tombol next di notification / lock screen TIDAK lewat React.
+            // Bridge emit event ke JS supaya UI langsung update tanpa polling.
             PlaybackNativeBridge.next()
             notifyQueueChanged()
         }
@@ -60,18 +66,21 @@ class MediaSessionManager(private val service: PlaybackService) {
     }
 
     // Beri tahu JS kalau trek berganti dari sisi native (notification/lock
-    // screen). Memakai emit ke semua listener kalau bridge-nya menyediakannya;
-    // kalau tidak, polling store yang akan mengambil alih - tapi setidaknya
-    // notifikasi sendiri langsung diperbarui judulnya di sini.
+    // screen). Native advance sudah update queue + load track baru; JS perlu
+    // sync supaya UI React tidak menampilkan lagu lama.
+    //
+    // Dulu ini cuma refreshNotification() (gambar ulang notifikasi doang),
+    // namanya menyesatkan. Sekarang juga emit event ke JS lewat bridge.
     private fun notifyQueueChanged() {
         try {
             val cur = PlaybackNativeBridge.getCurrentTrack()
+            val index = PlaybackNativeBridge.getCurrentIndex()
             if (!cur.isNullOrEmpty()) {
-                // Judul di notifikasi diperbarui oleh JS lewat updateMetadata;
-                // di sini cukup pastikan notifikasi digambar ulang supaya
-                // tombol play/pause mencerminkan state terbaru.
-                refreshNotification()
+                // Emit ke JS: UI React langsung segarkan.
+                PlaybackNativeBridge.emitTrackChanged(cur, index)
             }
+            // Notifikasi tetap di-refresh supaya tombol play/pause benar.
+            refreshNotification()
         } catch (e: Exception) {
             android.util.Log.w("MediaSessionManager", "notifyQueueChanged: ${e.message}")
         }
@@ -126,7 +135,15 @@ class MediaSessionManager(private val service: PlaybackService) {
     }
 
     // 🔥 NEW: update metadata (judul, artist, durasi) + refresh notifikasi
-    fun updateMetadata(title: String, artist: String, album: String, durationMs: Long) {
+    // Artwork: URI gambar (content:// album art, atau path file). Dibaca di
+    // background (IO disk) supaya tidak memblokir thread yang panggil ini.
+    fun updateMetadata(
+        title: String,
+        artist: String,
+        album: String,
+        durationMs: Long,
+        artworkUri: String?,
+    ) {
         lastTitle = title
         lastArtist = artist
 
@@ -140,12 +157,44 @@ class MediaSessionManager(private val service: PlaybackService) {
         mediaSession.setMetadata(metadata)
         mediaSession.isActive = true
 
+        // Artwork di-update terpisah: decode bitmap butuh IO.
+        // Kunci (synchronized) supaya tidak ada dua thread decode sekaligus.
+        if (!artworkUri.isNullOrEmpty()) {
+            artworkExecutor.execute {
+                loadArtwork(artworkUri)
+            }
+        }
+
         refreshNotification()
     }
 
     // 🔥 NEW: update playback state (playing/paused, posisi) untuk slider lock screen
     fun updatePlaybackState(isPlaying: Boolean, positionMs: Long) {
         lastIsPlaying = isPlaying
+        applyPlaybackState(isPlaying, positionMs)
+    }
+
+    // 🔥 NEW: shuffle/repeat di MediaSession supaya lock screen ikut.
+    // repeat mode: 0=off, 1=all, 2=track (sesuai mapping JS di playerStore).
+    fun updateShuffleMode(enabled: Boolean) {
+        playbackStateBuilder.setShuffleMode(
+            if (enabled) PlaybackStateCompat.SHUFFLE_MODE_ALL
+            else PlaybackStateCompat.SHUFFLE_MODE_NONE
+        )
+        refreshNotification()
+    }
+
+    fun updateRepeatMode(mode: Int) {
+        val repeatMode = when (mode) {
+            1 -> PlaybackStateCompat.REPEAT_MODE_ALL
+            2 -> PlaybackStateCompat.REPEAT_MODE_ONE
+            else -> PlaybackStateCompat.REPEAT_MODE_NONE
+        }
+        playbackStateBuilder.setRepeatMode(repeatMode)
+        refreshNotification()
+    }
+
+    private fun applyPlaybackState(isPlaying: Boolean, positionMs: Long) {
         val state = playbackStateBuilder
             .setState(
                 if (isPlaying) PlaybackStateCompat.STATE_PLAYING
@@ -164,6 +213,99 @@ class MediaSessionManager(private val service: PlaybackService) {
         val notification = buildNotification()
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(NOTIFICATION_ID, notification)
+    }
+
+    // ============================================================
+    // 🔥 ARTWORK
+    // ============================================================
+
+    // Decode bitmap dari content:// (MediaStore album art) atau path file.
+    // Dijalankan di artworkExecutor (background). Hasilnya dipakai untuk
+    // METADATA_KEY_ART (lock screen background) + setLargeIcon (notification).
+    private fun loadArtwork(uri: String) {
+        try {
+            val bmp = decodeBitmapSafely(uri)
+            if (bmp != null) {
+                lastArtwork = bmp
+
+                // Update metadata dengan artwork. putBitmap butuh ukuran
+                // yang wajar — biarkan sistem menangani scaling.
+                val oldMeta = mediaSession.controller.metadata
+                val metadata = MediaMetadataCompat.Builder()
+                    .putString(MediaMetadataCompat.METADATA_KEY_TITLE, lastTitle)
+                    .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, lastArtist)
+                    .apply {
+                        oldMeta?.let {
+                            val album = it.getString(MediaMetadataCompat.METADATA_KEY_ALBUM)
+                            if (!album.isNullOrEmpty()) putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album)
+                            val dur = it.getLong(MediaMetadataCompat.METADATA_KEY_DURATION)
+                            if (dur > 0) putLong(MediaMetadataCompat.METADATA_KEY_DURATION, dur)
+                        }
+                    }
+                    .putBitmap(MediaMetadataCompat.METADATA_KEY_ART, bmp)
+                    .build()
+
+                mediaSession.setMetadata(metadata)
+
+                // Refresh notifikasi di main thread (notifikasi + UI lockscreen).
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    try {
+                        refreshNotification()
+                    } catch (e: Exception) {
+                        android.util.Log.w("MediaSessionManager", "refresh setelah artwork: ${e.message}")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("MediaSessionManager", "loadArtwork($uri): ${e.message}")
+        }
+    }
+
+    // Decode + downscale. Bitmap full-res dari album art bisa 4000x4000;
+    // notifikasi tidak butuh lebih dari ~320px sisi terpanjang.
+    private fun decodeBitmapSafely(uri: String): android.graphics.Bitmap? {
+        return try {
+            val resolver = context.contentResolver
+            val opts = android.graphics.BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+
+            // Coba content:// dulu, fallback ke path file.
+            try {
+                resolver.openInputStream(android.net.Uri.parse(uri))?.use { input ->
+                    android.graphics.BitmapFactory.decodeStream(input, null, opts)
+                }
+            } catch (e: Exception) {
+                // Bukan content URI → coba path file langsung
+                android.graphics.BitmapFactory.decodeFile(uri, opts)
+            }
+
+            if (opts.outWidth <= 0 || opts.outHeight <= 0) return null
+
+            // Hitung sample size supaya sisi terpanjang <= 320px.
+            val maxDim = maxOf(opts.outWidth, opts.outHeight)
+            var sampleSize = 1
+            while (maxDim / sampleSize > ARTWORK_MAX_DIM) {
+                sampleSize *= 2
+            }
+
+            val decodeOpts = android.graphics.BitmapFactory.Options().apply {
+                inSampleSize = sampleSize
+            }
+
+            val bmp = try {
+                resolver.openInputStream(android.net.Uri.parse(uri))?.use { input ->
+                    android.graphics.BitmapFactory.decodeStream(input, null, decodeOpts)
+                }
+            } catch (e: Exception) {
+                android.graphics.BitmapFactory.decodeFile(uri, decodeOpts)
+            }
+
+            bmp
+        } catch (e: Exception) {
+            android.util.Log.w("MediaSessionManager", "decodeBitmapSafely: ${e.message}")
+            null
+        }
     }
 
     private fun createNotificationChannel() {
@@ -199,7 +341,14 @@ class MediaSessionManager(private val service: PlaybackService) {
             .setShowWhen(false)
             // Tap notification membuka aplikasi.
             .setContentIntent(activityPendingIntent())
-            .setStyle(
+
+        // 🔥 Artwork: gambar album di notifikasi (large icon) + lock screen.
+        // lastArtwork di-set async oleh loadArtwork; null = belum ada artwork.
+        lastArtwork?.let { bmp ->
+            builder.setLargeIcon(bmp)
+        }
+
+        builder.setStyle(
                 MediaStyle()
                     .setMediaSession(mediaSession.sessionToken)
                     .setShowActionsInCompactView(0, 1, 2)

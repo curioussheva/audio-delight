@@ -12,6 +12,7 @@
 #include "PristineAudioSpec.h"
 #include "manager/EngineManager.h"
 #include "decoder/ContentUriResolver.h"
+#include "playback/NativeEventEmitter.h"
  
 #undef LOG_TAG
 #define LOG_TAG "PristineJNI"
@@ -60,6 +61,9 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
   // Tanpa ini, FFmpegDecoder tidak bisa membuka content:// dan pemutaran
   // gagal pada trek pertama yang belum di-resolve sisi Kotlin.
   ::pristine::decoder::ContentUriResolver::init(vm);
+
+  // Simpan JavaVM untuk emit event native→JS (track ended).
+  ::pristine::playback::initJavaVm(vm);
 
   __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "JNI_OnLoad â initializing EngineManager");
   pristine::EngineManager::get().start();

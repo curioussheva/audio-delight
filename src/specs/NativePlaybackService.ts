@@ -36,12 +36,17 @@ export interface Spec extends TurboModule {
     artist: string,
     album: string,
     durationMs: number,
+    artworkUri: string | null,
   ): Promise<void>;
 
   updatePlaybackState(
     isPlaying: boolean,
     positionMs: number,
   ): Promise<void>;
+
+  // 🔥 MediaSession sync untuk shuffle/repeat (lock screen ikut state).
+  updateShuffleMode(enabled: boolean): Promise<void>;
+  updateRepeatMode(mode: number): Promise<void>;
 
   // Lazy resolve
   resolveUri(rawUri: string): Promise<string>;

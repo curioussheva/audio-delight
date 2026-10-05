@@ -113,12 +113,26 @@ class PlaybackService : Service() {
         return START_STICKY
     }
 
-    fun updateMetadata(title: String, artist: String, album: String, durationMs: Long) {
-        mediaSessionManager.updateMetadata(title, artist, album, durationMs)
+    fun updateMetadata(
+        title: String,
+        artist: String,
+        album: String,
+        durationMs: Long,
+        artworkUri: String?,
+    ) {
+        mediaSessionManager.updateMetadata(title, artist, album, durationMs, artworkUri)
     }
 
     fun updatePlaybackState(isPlaying: Boolean, positionMs: Long) {
         mediaSessionManager.updatePlaybackState(isPlaying, positionMs)
+    }
+
+    fun updateShuffleMode(enabled: Boolean) {
+        mediaSessionManager.updateShuffleMode(enabled)
+    }
+
+    fun updateRepeatMode(mode: Int) {
+        mediaSessionManager.updateRepeatMode(mode)
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {

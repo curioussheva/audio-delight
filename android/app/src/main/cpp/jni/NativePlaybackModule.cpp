@@ -2,6 +2,7 @@
 #include "manager/EngineManager.h"
 #include "playback/PlaybackController.h"
 #include "playback/TrackQueue.h"
+#include "playback/NativeEventEmitter.h"
 #include <android/log.h>
 #include <vector>
 #include <string>
@@ -29,6 +30,15 @@ static pristine::playback::PlaybackController* getController() {
 }
 
 extern "C" {
+
+// 🔥 Simpan reference ke Java module untuk callback native→JS.
+// Dipanggil dari NativePlaybackModule.kt init {} — thread yang punya JNIEnv.
+JNIEXPORT void JNICALL
+Java_com_pristineaudio_audio_NativePlaybackModule_nativeInitEventEmitter(
+    JNIEnv* env, jobject instance
+) {
+    pristine::playback::initModuleRef(env, instance);
+}
 
 // Mengembalikan jboolean supaya lapisan atas bisa tahu play() GAGAL.
 // Sebelumnya void: kegagalan dekoder (mis. avformat_open_input failed untuk
