@@ -33,10 +33,11 @@ class NativePlaybackModule(
     //
     // getReactApplicationContext() di BaseJavaModule adalah protected, jadi
     // PlaybackNativeBridge (object, bukan subclass) tidak bisa pakai itu
-    // langsung — butuh property publik. Property ini harus memakai field
-    // (context), karena param constructor reactContext hanya in-scope di init
-    // block, bukan di getter.
-    val reactApplicationContext: ReactApplicationContext
+    // langsung — butuh property publik. Nama property TIDAK boleh
+    // `reactApplicationContext`: Kotlin akan generate getter
+    // getReactApplicationContext() yang menabrak method protected di superclass
+    // ("Accidental override"). Pakai nama lain.
+    val reactContext: ReactApplicationContext
         get() = context
 
     // 🔥 Callback native→JS: decoder EOF. Di-emit dari C++ (thread decoder).

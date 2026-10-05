@@ -109,7 +109,7 @@ object PlaybackNativeBridge {
     fun emitTrackChanged(uri: String, index: Int) {
         try {
             val module = NativePlaybackModule.instance ?: return
-            val ctx = module.reactApplicationContext
+            val ctx = module.reactContext
             ctx.getJSModule(com.facebook.react.modules.core.DeviceEventManagerModule
                 .RCTDeviceEventEmitter::class.java)
                 .emit("onPlaybackTrackChanged", androidx.core.util.Pair(uri, index))
@@ -123,7 +123,7 @@ object PlaybackNativeBridge {
     fun emitTrackEnded(uri: String) {
         try {
             val module = NativePlaybackModule.instance ?: return
-            val ctx = module.reactApplicationContext
+            val ctx = module.reactContext
             ctx.getJSModule(com.facebook.react.modules.core.DeviceEventManagerModule
                 .RCTDeviceEventEmitter::class.java)
                 .emit("onPlaybackTrackEnded", uri)
