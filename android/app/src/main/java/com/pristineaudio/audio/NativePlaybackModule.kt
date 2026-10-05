@@ -5,8 +5,12 @@ import com.facebook.react.module.annotations.ReactModule
 import com.pristineaudio.playback.PlaybackNativeBridge
 
 @ReactModule(name = NativePlaybackModule.NAME)
-class NativePlaybackModule(reactContext: ReactApplicationContext) :
-    ReactContextBaseJavaModule(reactContext) {
+class NativePlaybackModule(
+    // 🔥 Simpan param constructor ke field: param constructor hanya bisa
+    // diakses di init block / initializer, BUKAN di getter property.
+    private val context: ReactApplicationContext
+) :
+    ReactContextBaseJavaModule(context) {
 
     companion object {
         const val NAME = "NativePlaybackModule"
@@ -26,11 +30,14 @@ class NativePlaybackModule(reactContext: ReactApplicationContext) :
     // Native methods
 
     // 🔥 Akses context untuk bridge event (PlaybackNativeBridge.emit*).
-    // reactApplicationContext di-resolve ke method protected
-    // getReactApplicationContext() di BaseJavaModule — TIDAK perlu property
-    // lokal; property lokal justru men-shadow param constructor reactContext
-    // dan bikin "Unresolved reference".
-    // NativePlaybackService memakai pola yang sama (lihat baris 33-40 di sana).
+    //
+    // getReactApplicationContext() di BaseJavaModule adalah protected, jadi
+    // PlaybackNativeBridge (object, bukan subclass) tidak bisa pakai itu
+    // langsung — butuh property publik. Property ini harus memakai field
+    // (context), karena param constructor reactContext hanya in-scope di init
+    // block, bukan di getter.
+    val reactApplicationContext: ReactApplicationContext
+        get() = context
 
     // 🔥 Callback native→JS: decoder EOF. Di-emit dari C++ (thread decoder).
     // Tidak boleh crash kalau JS belum siap — bridge tolak kalau instance null.
