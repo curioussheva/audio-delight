@@ -212,7 +212,10 @@ int AudioDeviceManager::refreshDevices() {
         if (d.name.empty()) d.name = deviceTypeName(d.type);
 
         if (getRates) {
-            auto rates = (jintArray)env->CallIntMethod(dev, getRates);
+            // getSampleRates() mengembalikan int[], bukan int. Memakai
+            // CallIntMethod di sini salah dan menghasilkan cast pointer dari
+            // integer (-Wint-to-pointer-cast). Harus CallObjectMethod.
+            auto rates = getRates ? reinterpret_cast<jintArray>(env->CallObjectMethod(dev, getRates)) : nullptr;
             if (describeAndClear(env).empty() && rates) {
                 const jsize rn = env->GetArrayLength(rates);
                 std::vector<jint> buf(static_cast<size_t>(rn));

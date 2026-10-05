@@ -361,7 +361,6 @@ bool AudioStreamController::usingOpenSLESFallback() const noexcept {
 }
 
 int32_t AudioStreamController::sampleRate() const noexcept {
-const noexcept {
 
     return mSampleRate;
 }

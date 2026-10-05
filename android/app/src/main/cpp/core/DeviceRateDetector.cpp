@@ -171,7 +171,7 @@ int DeviceRateDetector::refresh() {
         // TYPE_USB_DEVICE=11, TYPE_USB_HEADSET=22
         const bool isUsbDev = (type == 11 || type == 22);
 
-        auto rates = getRates ? (jintArray)env->CallIntMethod(dev, getRates) : nullptr;
+        auto rates = getRates ? reinterpret_cast<jintArray>(env->CallObjectMethod(dev, getRates)) : nullptr;
         if (describeException(env).size()) rates = nullptr;
 
         if (rates) {

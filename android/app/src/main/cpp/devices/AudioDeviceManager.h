@@ -69,10 +69,6 @@ public:
 
 private:
     AudioDeviceManager() = default;
-};
-
-// Dipanggil sekali dari JNI_OnLoad. Dipisah dari kelas karena butuh JavaVM.
-void setAudioDeviceManagerVm(JavaVM* vm);
 
     mutable std::mutex mMutex;
     std::vector<AudioDeviceDescriptor> mDevices;
@@ -82,5 +78,8 @@ void setAudioDeviceManagerVm(JavaVM* vm);
     std::function<void(const AudioDeviceDescriptor&)> mOnPlugged;
     std::function<void(const std::string&)> mOnUnplugged;
 };
+
+// Dipanggil sekali dari JNI_OnLoad. Dipisah dari kelas karena butuh JavaVM.
+void setAudioDeviceManagerVm(JavaVM* vm);
 
 } // namespace pristine
