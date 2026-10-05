@@ -69,9 +69,13 @@ private:
     DeviceRateDetector() = delete;
 };
 
+// PRISTINE_EXPORT dari core/Export.h - wajib karena fungsi ini dipanggil
+// OnLoad.cpp yang ada di target library lain.
+#include "core/Export.h"
+
 // Dipanggil sekali dari JNI_OnLoad supaya detector bisa memakai JNI.
 // Dipisah dari kelas karena butuh JavaVM dan tidak ada hubungannya dengan
 // state deteksi itu sendiri.
-void setDeviceRateDetectorVm(JavaVM* vm);
+PRISTINE_EXPORT void setDeviceRateDetectorVm(JavaVM* vm);
 
 } // namespace pristine::audio

@@ -80,7 +80,7 @@ std::string jstr(JNIEnv* env, jstring s) {
 } // namespace
 
 // Dipanggil sekali dari JNI_OnLoad supaya detector bisa memakai JNI.
-void setDeviceRateDetectorVm(JavaVM* vm) {
+PRISTINE_EXPORT void setDeviceRateDetectorVm(JavaVM* vm) {
     gVm = vm;
 }
 

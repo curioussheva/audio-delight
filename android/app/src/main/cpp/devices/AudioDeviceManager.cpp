@@ -96,7 +96,7 @@ DeviceType mapDeviceType(jint androidType, bool& outIsUsb) {
 } // namespace
 
 // Dipanggil sekali dari JNI_OnLoad supaya manager bisa memakai JNI.
-void setAudioDeviceManagerVm(JavaVM* vm) {
+PRISTINE_EXPORT void setAudioDeviceManagerVm(JavaVM* vm) {
     gVm = vm;
 }
 

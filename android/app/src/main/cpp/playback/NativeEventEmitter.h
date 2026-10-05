@@ -3,10 +3,11 @@
 #include <jni.h>
 #include <string>
 
-// Library `pristine-audio` dibangun dengan `-fvisibility=hidden`, sehingga
-// simbol yang dipakai dari luar (OnLoad.cpp -> appmodules) harus dianotasi
-// PRISTINE_EXPORT. Lihat decoder/ContentUriResolver.h untuk kasus serupa.
-#include "../decoder/ContentUriResolver.h"
+// PRISTINE_EXPORT dari core/Export.h (satu sumber untuk semua).
+// Sebelumnya header ini meng-include decoder/ContentUriResolver.h hanya untuk
+// mendapat makronya - ketergantungan yang tidak perlu dan rapuh: kalau file
+// itu berubah, header ini ikut rusak tanpa alasan.
+#include "core/Export.h"
 
 namespace pristine::playback {
 

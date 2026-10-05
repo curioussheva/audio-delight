@@ -3,32 +3,10 @@
 #include <jni.h>
 #include <string>
 
-// =====================================================
-// ANOTASI EKSPOR SIMBOL
-// =====================================================
-//
-// Library `pristine-audio` dibangun dengan `-fvisibility=hidden`, sehingga
-// secara default tidak ada simbol yang terekspos ke luar library. Itu bagus
-// untuk ukuran binary, tapi membuat simbol yang HARUS dipanggil dari library
-// lain tidak terlihat.
-//
-// Gejalanya muncul sebagai kegagalan LINK (bukan kompilasi), jadi mudah
-// tertukar dengan "file belum ditambahkan ke CMake":
-//
-//   ld.lld: error: undefined symbol:
-//     pristine::decoder::ContentUriResolver::init(_JavaVM*)
-//   >>> referenced by OnLoad.cpp:62
-//
-// Padahal definisinya ADA di library, hanya disembunyikan visibilitas.
-//
-// Anotasi di bawah memaksa simbol diekspor. Dipakai pada kelas dan pada
-// setiap method yang dipanggil lintas-library - satu method yang lupa
-// dianotasi akan menggagalkan link lagi dengan pesan yang sama.
-#if defined(__GNUC__) || defined(__clang__)
-  #define PRISTINE_EXPORT __attribute__((visibility("default")))
-#else
-  #define PRISTINE_EXPORT
-#endif
+// PRISTINE_EXPORT: lihat core/Export.h untuk penjelasan lengkap kenapa
+// anotasi ini wajib (library ini dibangun dengan -fvisibility=hidden,
+// sementara OnLoad.cpp ada di target library lain).
+#include "core/Export.h"
 
 namespace pristine::decoder {
 
