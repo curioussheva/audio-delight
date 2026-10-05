@@ -38,8 +38,11 @@ Aturan `[x]` = "**ada pemanggil nyata**", bukan "filenya ada". Semua status di b
 | Dekode FLAC/WAV/MP3/AAC | MVP | ADA | `cpp/decoder/` (16 file): `FFmpegDecoder`, `PCMDecoder`, `DecoderFactory` |
 | Resampling | MVP | ADA | `cpp/resampler/` (8 file), `StreamResampler.cpp` |
 | Flow control (queue penuh/kosong) | MVP | ADA | commit `fix(audio): flow control pause/resume decoder on queue full/low` |
-| Tiga mode: BitPerfect / DSP / Immersive | MVP | ADA | `cpp/modes/` (6 file), tiga kelas pipeline |
-| **BitPerfect sebagai default** | MVP | ADA | `patch_default_bypass_dsp.py` - DSP di-bypass secara default |
+| Tiga mode: BitPerfect / DSP / Immersive | MVP | **TIDAK TERSAMBUNG** | `cpp/modes/` (6 file). Kelas ada tapi **nol pemakai** di jalur audio - lihat catatan di bawah |
+| BitPerfect sebagai default | MVP | **TIDAK TERSAMBUNG** | `AudioTypes.h` default `ProcessingMode::BitPerfect`, tapi pipeline tidak dipanggil dari `render()` |
+| **Laju stream dari DAC/file (tidak hardcoded)** | MVP | ADA | `core/DeviceRateDetector.cpp` - baca `AudioManager.getDevices()`, pilih laju per-file |
+| **AAudio utama, OpenSLES fallback** | MVP | ADA | `core/AudioStreamController.cpp` - AAudio dicoba dulu (punya mode exclusive) |
+| Laju stream sampai ke decoder | MVP | ADA | `PlaybackController::setStreamSampleRate()` -> `DecodeConfig.targetSampleRate` |
 | DSP chain (biquad, EQ, limiter) | MVP | ADA | `cpp/dsp/` (56 file), `DSPChain.cpp` |
 | Convolution / spatial / headphone | P2 | SEBAGIAN | subdir `convolution/`, `spatial/`, `headphone/` ada di `dsp/`; tingkat keterhubungan belum diverifikasi |
 | Ring buffer & metrics | MVP | ADA | `core/RingBuffer.h`, `core/AudioMetrics.cpp` |
@@ -49,11 +52,15 @@ Aturan `[x]` = "**ada pemanggil nyata**", bukan "filenya ada". Semua status di b
 
 | Fitur | Scope | Status | Bukti |
 |---|---|---|---|
-| Deteksi USB DAC | P1 | ADA | `cpp/usb/USBDeviceManager.cpp`, `java/.../USBDACModule.kt` |
+| **Baca daftar device output (termasuk DAC USB)** | **MVP** | **ADA** | `devices/AudioDeviceManager.cpp` - dibangun ulang 2026-10-05; sebelumnya stub |
+| **Deteksi DAC dicolok saat app berjalan** | **MVP** | **ADA** | `AudioDeviceCallback` di `NativeDeviceModule.kt` -> `nativeOnDeviceAdded/Removed` |
+| **Laju yang didukung per device** | **MVP** | **ADA** | `AudioDeviceManager::refreshDevices()` -> `supportedSampleRates` |
+| Deteksi USB DAC | P1 | SEBAGIAN | `cpp/usb/USBDeviceManager.cpp`; jalur utamanya sekarang lewat `AudioDeviceManager` |
 | Sinkronisasi clock USB | P1 | SEBAGIAN | `cpp/usb/USBClockSync.cpp` ada; presisi belum diukur |
-| Baca kapabilitas DAC | P1 | ADA | `cpp/usb/USBDACCapabilities.cpp` |
+| Baca kapabilitas DAC | P1 | SEBAGIAN | `USBDACCapabilities.cpp` ada struct; pembacaan nyata ada di `AudioDeviceManager` |
 | Sesi stream USB | P1 | SEBAGIAN | `cpp/usb/USBStreamSession.cpp` |
-| UI pemilih output | P1 | ADA | `features/player/components/OutputSettings.tsx`, `shared/hooks/useUSBDAC.ts` |
+| UI pemilih output | P1 | SEBAGIAN | `OutputSettings.tsx` ada; `getDevices()` baru 2026-10-05 benar-benar memanggil JNI |
+| Terapkan device pilihan ke stream | P1 | **BELUM** | `setActiveDevice()` mencatat + validasi; `Oboe setDeviceId()` belum diterapkan |
 
 ## 4. Library
 

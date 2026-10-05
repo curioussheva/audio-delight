@@ -207,10 +207,28 @@ struct LatencyInfo {
 };
 
 // =====================================================
-// DEVICE INFO
+// DEVICE INFO - USANG, JANGAN DIPAKAI
 // =====================================================
-
-struct AudioDeviceInfo {
+//
+// Struct ini TIDAK dipakai di mana pun (diverifikasi 2026-10-05: hanya
+// dirinya sendiri yang menyebutnya). Dibiarkan ada supaya tidak menghapus
+// sesuatu yang mungkin masih direferensikan di luar tree ini, tapi JANGAN
+// dipakai untuk kode baru.
+//
+// Kenapa menyesatkan: `sampleRate` di sini HARDCODED 48000, dan `exclusive`
+// hardcoded false. Kalau ada yang memakainya, ia akan menyimpulkan laju
+// device selalu 48000 - persis bug yang baru diperbaiki.
+//
+// Yang benar:
+//   - struct pristine::AudioDeviceDescriptor (devices/AudioDeviceDescriptor.h)
+//     untuk deskripsi perangkat, dengan supportedSampleRates yang NYATA
+//   - pristine::AudioDeviceManager (devices/AudioDeviceManager.h)
+//     untuk membaca daftar perangkat dari Android
+//   - pristine::audio::DeviceRateDetector (core/DeviceRateDetector.h)
+//     untuk memilih laju stream
+struct [[deprecated("Usang dan menyesatkan (laju hardcoded). "
+                    "Pakai AudioDeviceDescriptor + AudioDeviceManager.")]]
+AudioDeviceInfo {
 
     OutputDeviceType type =
         OutputDeviceType::Speaker;

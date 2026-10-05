@@ -97,9 +97,61 @@ jni/      (12 file)   JSIInstaller | NativeAudioFeed | OnLoad + jembatan per-mod
 
 | Mode | Kelas | Perilaku |
 |---|---|---|
-| `BitPerfect` | `BitPerfectPipeline` | DSP dilewati - **default** (fix `patch_default_bypass_dsp.py`) |
+| `BitPerfect` | `BitPerfectPipeline` | DSP dilewati - **default** |
 | `DSP` | `DSPPipeline` | DSP chain aktif |
 | `Immersive` | `ImmersivePipeline` | DSP + spatial/headphone |
+
+**PENTING - kelas-kelas di atas TIDAK tersambung ke jalur audio.** Diverifikasi 2026-10-05: `BitPerfectPipeline` hanya didefinisikan (nol pemakai), dan `AudioPipeline::processBitPerfect()` body-nya kosong. `AudioCallback::onAudioReady()` `return` sebelum `mPipeline.process()` sempat dipanggil, karena jalur yang benar-benar berbunyi adalah:
+
+```
+AudioCallback::onAudioReady
+  -> PlaybackController::render()      <- return di sini
+       -> PCMQueue::read()
+```
+
+Jadi bit-perfect saat ini tercapai **secara tidak langsung**: DSP tidak pernah disentuh karena `render()` tidak memanggil pipeline sama sekali. Itu kebetulan yang menguntungkan, **bukan desain**. Menyambungkan pipeline ke jalur render adalah pekerjaan terpisah yang belum dikerjakan.
+
+---
+
+## 3b. Jalur Bit-Perfect (dibangun 2026-10-05)
+
+Tiga syarat bit-perfect ke DAC, semuanya harus terpenuhi:
+
+| Syarat | Status | Bukti |
+|---|---|---|
+| API audio punya jalur langsung (exclusive) | AAudio utama, OpenSLES fallback | `AudioStreamController::open()` |
+| Laju stream mengikuti DAC/file, bukan konstanta | autodetect lewat `AudioManager.getDevices()` | `core/DeviceRateDetector` |
+| Decoder tidak resample ke laju lain | `DecodeConfig.targetSampleRate` dari laju stream aktual | `PlaybackController::startDecoder()` |
+
+**Kenapa OpenSLES tidak cukup untuk bit-perfect:** tidak punya mode exclusive, jadi sampel selalu lewat mixer sistem. Terverifikasi di logcat 2026-10-05 (`AudioStreamOpenSLES::open()` yang dipakai). Kalau AAudio gagal dan fallback terpakai, log mencatat PERINGATAN eksplisit.
+
+**Rantai laju:**
+
+```
+AudioEngine::start(requestedSampleRate)
+  -> AudioStreamController::open(rate)         buka stream di laju itu
+  -> actualSampleRate()                        laju yang benar-benar didapat
+  -> PlaybackController::setStreamSampleRate()
+  -> DecodeConfig.targetSampleRate
+  -> FFmpegDecoder::setupResampler()
+```
+
+Kalau file 96 kHz dan DAC mendukung, `input_rate == output_rate` ÃÂ¢ÃÂÃÂ resampler **tidak aktif** ÃÂ¢ÃÂÃÂ sampel lewat tanpa konversi.
+
+**Pemilihan laju** (`DeviceRateDetector::pickBestRate`), berurutan:
+
+1. laju file kalau didukung ÃÂ¢ÃÂÃÂ **tanpa konversi**
+2. kelipatan bulat terkecil ÃÂ¢ÃÂÃÂ upsample integer, tanpa rate conversion fraksional
+3. laju tertinggi yang ÃÂ¢ÃÂÃÂ¤ laju file ÃÂ¢ÃÂÃÂ turun sesedikit mungkin
+4. semua lebih tinggi ÃÂ¢ÃÂÃÂ yang terendah
+
+Mengembalikan laju file saat device **tidak** mendukungnya sengaja dihindari: stream akan gagal dibuka.
+
+**Perangkat audio** (`AudioDeviceManager`) membaca daftar nyata dari Android termasuk DAC USB. Dibangun ulang 2026-10-05 ÃÂ¢ÃÂÃÂ sebelumnya seluruh kelas adalah stub yang mengembalikan `{}` dan `true` tanpa efek.
+
+`AudioDeviceCallback` terdaftar lewat `NativeDeviceModule`, jadi DAC yang dicolok **saat app berjalan** terdeteksi dan laju ter-refresh. Tanpa itu, bit-perfect gagal diam-diam ketika user mencolok DAC di tengah pemutaran.
+
+**Batas kemampuan Android:** tidak ada API publik untuk "paksa output ke device ini". Yang tersedia: `AudioTrack.setPreferredDevice()` (preferensi, bisa diabaikan sistem) dan `Oboe setDeviceId()` (diterapkan saat stream dibuka). `AudioDeviceManager::setActiveDevice()` mencatat pilihan dan memvalidasinya ÃÂ¢ÃÂÃÂ mengembalikan `false` kalau id tidak ada, bukan `true` buta.
 
 ---
 
@@ -147,6 +199,34 @@ Oboe 1.9.0 diunduh ke `cpp/oboe/` (363 file) lewat `pnpm download-oboe` / `eas-h
 ### ADR-9 - Tiga jalur build paralel (EAS, GitHub Actions, GitLab CI) tanpa sumber tunggal
 
 `eas.json` mendefinisikan profile `development`/`preview`/`production`; GitHub Actions mendefinisikan langkahnya sendiri; GitLab CI mendefinisikan langkah ketiga. Ketiganya mengonfigurasi NDK, ABI, dan flag Gradle secara terpisah. **Ini sumber drift:** `.gitlab-ci.yml` memakai `--max-workers=2` dan ABI tunggal `arm64-v8a`; workflow GitHub tidak. Perubahan pada satu jalur tidak otomatis berlaku di dua lainnya.
+
+### ADR-11 - AAudio utama, OpenSLES hanya fallback
+
+**Konteks.** Kode memaksa `oboe::AudioApi::OpenSLES` dengan komentar `TEST ONLY` (kemungkinan besar karena AAudio bermasalah di device uji saat itu).
+
+**Masalah.** OpenSLES tidak punya mode exclusive, jadi sampel selalu lewat mixer Android dan bit-perfect ke DAC tidak mungkin tercapai. Terverifikasi di logcat 2026-10-05.
+
+**Keputusan.** Coba AAudio dulu; jatuh ke OpenSLES hanya kalau AAudio gagal (device lama atau driver bermasalah). Setiap fallback dicatat sebagai PERINGATAN eksplisit bahwa bit-perfect tidak tersedia.
+
+**Konsekuensi.** Device lama tetap bisa memutar audio (fallback jalan), tapi tidak bisa bit-perfect - dan itu dilaporkan dengan jujur, bukan didiamkan.
+
+### ADR-12 - Laju stream dideteksi, bukan konstanta
+
+**Konteks.** Tiga tempat memaku 48000 sekaligus: `buildStream`, `DecodeConfig.targetSampleRate`, dan konstruksi decoder. Akibatnya SEMUA file dikonversi ke 48 kHz termasuk 96/192 kHz.
+
+**Keputusan.** Laju dibaca dari kapabilitas device/DAC aktif lewat `AudioManager.getDevices()`. Pemilihan per-file berurutan: laju file kalau didukung (tanpa konversi), kelipatan bulat terkecil, tertinggi yang <= laju file, lalu terendah.
+
+**Konsekuensi.** Kalau DAC mendukung laju file, resampler tidak aktif sama sekali. Kalau tidak, ada konversi - tapi tetap di laju tertinggi yang didukung, bukan langsung turun ke 48 kHz. Batasnya: `AudioManager` hanya melaporkan laju **maksimum** per device, bukan laju mana yang sedang aktif, jadi pilihan bisa ditolak sistem saat stream dibuka. Karena itu `actualSampleRate()` dibaca kembali setelah stream terbuka dan dipakai sebagai target decoder.
+
+### ADR-13 - Device routing: catat & validasi, jangan paksa
+
+**Konteks.** `AudioDeviceManager` adalah stub: `getAvailableDevices()` mengembalikan `{}`, `setActiveDevice()` mengembalikan `true` tanpa efek.
+
+**Masalah.** Mengembalikan `true` buta lebih buruk daripada gagal: pemanggil mengira device sudah diganti padahal tidak, dan tidak ada cara mendeteksi kegagalannya.
+
+**Keputusan.** Manager membaca daftar device nyata dan memvalidasi pilihan terhadap daftar itu - `false` kalau id tidak ada. Penerapan sebenarnya ke stream dilakukan lewat `Oboe setDeviceId()` saat stream dibuka, karena Android tidak punya API publik untuk "paksa output sekarang".
+
+**Konsekuensi.** Pemanggil mendapat jawaban jujur soal validitas pilihan, tapi masih tidak bisa menjamin sistem menghormatinya. `supportsExclusive` disimpan per device supaya UI tidak menawarkan bit-perfect untuk speaker/headphone built-in yang secara teknis selalu lewat mixer.
 
 ### ADR-10 - `ThemeId` dideklarasikan manual, bukan diturunkan dari `ALL_THEMES`
 

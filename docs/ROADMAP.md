@@ -29,6 +29,18 @@ Semua status diverifikasi 2026-10-03 langsung ke kode.
 - [x] expo-router: drawer + 4 tab + player + onboarding
 - [x] Migrasi lepas dari `react-native-track-player` - dependensinya **sudah tidak ada** di `package.json`
 
+## Fase 0 - Fondasi Bit-Perfect (dibangun 2026-10-05, BELUM teruji device)
+
+- [x] AAudio sebagai API utama, OpenSLES sebagai fallback (`AudioStreamController::open`)
+- [x] Laju stream autodetect dari device/DAC (`core/DeviceRateDetector`)
+- [x] Rantai laju sampai ke decoder (`setStreamSampleRate` -> `DecodeConfig`)
+- [x] Baca daftar device nyata + kapabilitas laju (`devices/AudioDeviceManager`)
+- [x] Deteksi DAC dicolok saat app berjalan (`AudioDeviceCallback`)
+- [x] `getDevices()` Kotlin benar-benar memanggil JNI (sebelumnya array kosong)
+- [ ] Terapkan device pilihan ke stream (`Oboe setDeviceId()`)
+- [ ] Verifikasi di device: file 96 kHz harus `input_rate == output_rate`
+- [ ] **Sambungkan `BitPerfectPipeline` ke jalur render** - sekarang dead code, bit-perfect hanya "kebetulan" karena DSP tidak disentuh
+
 ## Fase 1 - Verifikasi device (PRIORITAS TERTINGGI)
 
 **Kenapa ini nomor satu:** 193 file C++ dan 33 file Kotlin tidak pernah dibuktikan berjalan. Semua klaim "berfungsi" di `FEATURES.md` adalah klaim statis. Selama ini belum ditutup, menambah fitur baru hanya menumpuk klaim yang belum dibuktikan - persis pola yang sudah menimpa persona (`persona/docs/COMPETITIVE_LANDSCAPE.md` bagian 4).
