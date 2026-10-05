@@ -100,6 +100,18 @@ export function startAudioDiagnostics(options?: {
   let lastTime = Date.now();
   let lastStatus = -1;
   let lastSnapshot: AudioSnapshot | null = null;
+  // 🔥 FIX: snapshot pertama tidak boleh dipakai hitung speed.
+  //
+  // Baseline (lastPosition=0, lastTime=now) di-set saat monitor dimulai, tapi
+  // audio biasanya SUDAH bermain sebelum itu (user play → appState "ready"
+  // → monitor mulai). Snapshot pertama melaporkan posisi yang sudah jalan
+  // (mis. pos=2863ms), jadi deltaPos besar dan elapsed kecil → speed jadi
+  // 2.69x padahal playback normal 1.00x.
+  //
+  // Gejala di log: "[DIAG] PLAYING pos=2863ms speed=2.69x" lalu snapshot
+  // berikutnya semua 1.00x. Ini false positive yang menyesatkan diagnosa
+  // masalah audio sungguhan.
+  let isFirstSnapshot = true;
 
   const timer = setInterval(async () => {
     const snap = await getAudioSnapshot();
@@ -132,6 +144,16 @@ export function startAudioDiagnostics(options?: {
     if (suspiciousDrop || tooShortWindow) {
       lastPosition = snap.positionMs;
       lastTime = now;
+      return;
+    }
+
+    // 🔥 FIX: snapshot pertama hanya untuk baseline, jangan hitung speed
+    // (posisi yang dilaporkan sudah jalan sebelum monitor mulai).
+    if (isFirstSnapshot) {
+      isFirstSnapshot = false;
+      lastPosition = snap.positionMs;
+      lastTime = now;
+      lastStatus = snap.status;
       return;
     }
 

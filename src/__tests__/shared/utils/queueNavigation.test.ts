@@ -6,6 +6,7 @@ import {
   progressPercent,
   shouldCorrectDuration,
   shouldRestartInsteadOfPrevious,
+  uriMatches,
   validateQueueIndex,
 } from "@/shared/utils/queueNavigation";
 
@@ -85,6 +86,53 @@ describe("queueNavigation - pencocokan track aktif", () => {
     const shuffled = [queue[2], queue[0], queue[1]];
     const found = findSongByUri(shuffled, "content://media/external/audio/media/1000996759");
     expect(found?.id).toBe("3");
+  });
+
+  // 🔥 REGRESI: auto-advance UI mati karena URI native (path cache) tidak
+  // cocok dengan URI JS (content://). Log device 2026-10-05 17:12:
+  //   [Player] 🎵 native track-ended event:
+  //     /data/user/0/com.pristineaudio.app/cache/audio_725973120.flac
+  //   [Player] 🎵 skip: uri event ≠ currentSong.uri
+  //     (content://media/external/audio/media/1001007979)
+  // ...padahal audio native sudah pindah ke trek berikutnya.
+  it("menemukan song meskipun native mengirim path cache, bukan content://", () => {
+    // Kotlin me-resolve 5 trek pertama ke path cache sebelum kasih ke native.
+    // Nama file: audio_<javaStringHashCode(contentUri)>.<ext>
+    const found = findSongByUri(
+      queue,
+      "/data/user/0/com.pristineaudio.app/cache/audio_104412633.flac",
+    );
+    expect(found?.id).toBe("1");
+  });
+
+  it("uriMatches: content:// JS vs path cache native = true", () => {
+    expect(
+      uriMatches(
+        "content://media/external/audio/media/1000996840",
+        "/data/user/0/com.pristineaudio.app/cache/audio_104412633.flac",
+      ),
+    ).toBe(true);
+  });
+
+  it("uriMatches: content:// vs content:// yang sama = true", () => {
+    const uri = "content://media/external/audio/media/1000996840";
+    expect(uriMatches(uri, uri)).toBe(true);
+  });
+
+  it("uriMatches: URI berbeda tidak cocok", () => {
+    expect(
+      uriMatches(
+        "content://media/external/audio/media/1000996840",
+        "/data/user/0/com.pristineaudio.app/cache/audio_999999999.flac",
+      ),
+    ).toBe(false);
+  });
+
+  it("uriMatches: null/undefined tidak pernah cocok", () => {
+    expect(uriMatches(null, "content://x")).toBe(false);
+    expect(uriMatches("content://x", null)).toBe(false);
+    expect(uriMatches(null, null)).toBe(false);
+    expect(uriMatches(undefined, undefined)).toBe(false);
   });
 });
 

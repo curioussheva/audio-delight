@@ -12,6 +12,7 @@ import {
   isPlayingFromStatus,
   shouldCorrectDuration,
   shouldRestartInsteadOfPrevious,
+  uriMatches,
   validateQueueIndex,
 } from "@/shared/utils/queueNavigation";
 
@@ -228,14 +229,24 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       const emitter = new NativeEventEmitter(NativePlaybackService);
       const subscription = emitter.addListener(
         "onPlaybackTrackEnded",
-        async (uri: string) => {
+          async (uri: string) => {
           console.log(`[Player] 🎵 native track-ended event: ${uri}`);
           const s = get();
           if (!s.currentSong) return;
 
           // Kalau URI yang berakhir = lagu yang sedang diputar JS, lanjut next.
           // Cek ini karena event bisa datang terlambat (user sudah skip manual).
-          if (uri && s.currentSong.uri && s.currentSong.uri !== uri) {
+          //
+          // ⚠️ URI native bisa berbeda BENTUK dari currentSong.uri JS:
+          // - JS mengirim content:// ke setQueue
+          // - Kotlin me-resolve 5 trek pertama ke path cache
+          //   (/data/.../cache/audio_<hash>.flac) sebelum kasih ke native
+          // - trek deferred tetap content://
+          // Jadi perbandingan string mentah gagal untuk trek yang sudah
+          // di-resolve — padahal itu trek yang sedang diputar! Akibatnya
+          // auto-advance UI tidak pernah jalan (audio native sudah next,
+          // currentSong JS masih yang lama).
+          if (uri && s.currentSong.uri && !uriMatches(s.currentSong.uri, uri)) {
             console.log(
               `[Player] 🎵 skip: uri event (${uri}) ≠ currentSong.uri (${s.currentSong.uri})`,
             );

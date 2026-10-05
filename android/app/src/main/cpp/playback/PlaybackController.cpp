@@ -430,14 +430,26 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
         // → thread ini destroy object yang sedang menjalankannya (use-after-
         // free + deadlock join). Karena itu advance + loadTrack dijadwalkan
         // ke thread terpisah (lihat scheduleAdvance).
+        //
+        // ⚠️ URIPLENS: kirim currentTrack_.uri (URI ASLI yang diberikan ke
+        // queue), BUKAN queue_->current() setelah advance. Setelah advance,
+        // queue_->current() adalah trek BERIKUTNYA — JS menerima URI yang
+        // salah, perbandingan dengan currentSong.uri gagal, dan auto-advance
+        // UI mati (log terlihat: "skip: uri event ≠ currentSong.uri" untuk
+        // setiap trek, padahal audio native sudah pindah).
+        //
+        // Selain itu URI yang disimpan queue bisa berbeda bentuk dari
+        // currentSong.uri JS (Kotlin me-resolve content:// ke path cache).
+        // Lihat emitTrackEnded di NativeEventEmitter: JS harus menangani
+        // kedua bentuk.
         decoderWorker_->setEofCallback([this]() {
             __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                                 "EOF callback: track ended, advancing queue");
 
-            auto track = queue_ ? queue_->current() : std::nullopt;
-            const std::string uri = track ? track->uri : "";
+            // URI trek yang BARU SAJA selesai — dibaca SEBELUM advance.
+            const std::string uri = currentTrack_.uri;
 
-            // Emit ke JS lewat JNI (thread-safe).
+            // Emit ke JS (thread-safe).
             pristine::playback::emitTrackEnded(uri);
 
             // Advance + loadTrack di thread terpisah — JANGAN di thread ini.

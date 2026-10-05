@@ -81,8 +81,21 @@ useEffect(() => {
       if (!isReady.current) return;
 
       try {
-        NativePlaybackService.setQueue([song.uri]);
-        NativePlaybackService.play();
+        // 🔥 FIX: setQueue HARUS di-await sebelum play().
+        //
+        // setQueue adalah promise yang resolve SETELAH Kotlin selesai
+        // me-resolve content:// ke path cache (copy file, bisa 2.6 detik
+        // untuk 50 trek). Tanpa await, play() dipanggil saat native queue
+        // masih KOSONG → PlaybackController::play() return false (4ms),
+        // dan UI menampilkan error "native play() returned false".
+        //
+        // Log device 2026-10-05:
+        //   [PERF] play: FAILED in 4ms
+        //   ...
+        //   [PERF] setQueue: 2675ms (async=true)
+        //   [PERF] play: 415ms (async=true)   <- playSong (sudah await)
+        await NativePlaybackService.setQueue([song.uri]);
+        await NativePlaybackService.play();
         setCurrentSong(song);
         setIsPlaying(true);
         setDuration(song.duration || 0);

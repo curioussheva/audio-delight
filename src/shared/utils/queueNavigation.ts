@@ -32,6 +32,10 @@ export const NATIVE_STATUS = {
   STOPPED: 3,
 } as const;
 
+// javaStringHashCode dipakai uriMatches() untuk mencocokkan content:// (JS)
+// dengan path cache (native). Replikasi persis java.lang.String.hashCode().
+import { javaStringHashCode } from "./cacheNaming";
+
 /** Ambang "previous = ulang lagu ini" (detik), perilaku standar player. */
 export const RESTART_THRESHOLD_SECONDS = 3;
 
@@ -75,13 +79,62 @@ export function validateQueueIndex(
  * Queue di store hanya untuk metadata tampilan; native yang punya kebenaran
  * soal mana yang dimuat. Pencocokan HARUS lewat URI, bukan indeks: saat
  * shuffle aktif, indeks di store tidak sama dengan indeks native.
+ *
+ * ⚠️ URI native dan URI JS bisa berbeda BENTUK untuk trek yang sama:
+ * - JS mengirim `content://media/external/audio/media/123` ke setQueue
+ * - Kotlin (NativePlaybackService.setQueue) me-resolve MAX_PRE_RESOLVE = 5
+ *   trek pertama ke path cache `/data/.../audio_<hash>.flac`, sisanya
+ *   dibiarkan `content://`
+ * - Decoder juga bisa me-resolve `content://` sendiri ke path cache
+ *   (ContentUriResolver)
+ *
+ * Jadi perbandingan string mentah `a === b` gagal untuk trek yang sudah
+ * di-resolve — tepatnya trek yang sedang diputar. Tanpa helper ini,
+ * `findSongByUri` kembali null, `currentSong` JS tidak update, dan UI
+ * menampilkan trek lama padahal audio native sudah next.
  */
+export function uriMatches(
+  jsUri: string | null | undefined,
+  nativeUri: string | null | undefined,
+): boolean {
+  if (!jsUri || !nativeUri) return false;
+  if (jsUri === nativeUri) return true;
+
+  // Native resolve content:// → /data/.../cache/audio_<hashCode>.<ext>.
+  //java.lang.String.hashCode() dari content:// harus sama dengan hash di
+  //nama file cache. Lihat javaStringHashCode() (replikasi persis).
+  const cacheName = cacheFileNameForUri(jsUri);
+  if (cacheName && nativeUri.includes(cacheName)) return true;
+
+  // Simetri: JS ada path cache, native kasih content:// (jarang, tapi mungkin
+  // kalau trek deferred dan decoder resolve di-lazy).
+  const cacheName2 = cacheFileNameForUri(nativeUri);
+  if (cacheName2 && jsUri.includes(cacheName2)) return true;
+
+  return false;
+}
+
+/** Nama file cache yang dihasilkan Kotlin/native untuk URI ini
+ * (`audio_<javaHashCode>.<ext>`), atau null kalau bukan content://. */
+function cacheFileNameForUri(uri: string): string | null {
+  if (!uri.startsWith("content://")) return null;
+  // Ekstensi tidak bisa ditebak dari URI saja (didapat dari ContentResolver
+  // getType), jadi cocokkan hanya prefix `audio_<hash>.` — itu sudah unik.
+  return `audio_${javaStringHashCode(uri)}.`;
+}
+
 export function findSongByUri<T extends { uri?: string }>(
   queue: T[],
   uri: string | null | undefined,
 ): T | null {
   if (!uri) return null;
-  return queue.find((s) => s.uri === uri) ?? null;
+  // Cek exact match dulu (kasus path cache == path cache), baru fallback
+  // ke uriMatches (content:// vs path cache).
+  return (
+    queue.find((s) => s.uri === uri) ??
+    queue.find((s) => uriMatches(s.uri, uri)) ??
+    null
+  );
 }
 
 /**
