@@ -102,7 +102,9 @@ class MediaSessionManager(private val service: PlaybackService) {
                 PlaybackStateCompat.ACTION_PLAY_PAUSE or
                 PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
                 PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
-                PlaybackStateCompat.ACTION_SEEK_TO
+                PlaybackStateCompat.ACTION_SEEK_TO or
+                PlaybackStateCompat.ACTION_SET_REPEAT_MODE or
+                PlaybackStateCompat.ACTION_SET_SHUFFLE_MODE
         )
 
     fun startForeground() {
@@ -176,8 +178,14 @@ class MediaSessionManager(private val service: PlaybackService) {
 
     // 🔥 NEW: shuffle/repeat di MediaSession supaya lock screen ikut.
     // repeat mode: 0=off, 1=all, 2=track (sesuai mapping JS di playerStore).
+    //
+    // CATATAN: setShuffleMode/setRepeatMode ada di MediaSessionCompat, BUKAN di
+    // PlaybackStateCompat.Builder (Builder hanya punya setActions, setState,
+    // setBufferedPosition, setExtras, dll). Builder tidak punya method ini,
+    // jadi panggil di mediaSession — itu juga yang mengupdate state yang
+    // terlihat di lock screen / Bluetooth / Android Auto.
     fun updateShuffleMode(enabled: Boolean) {
-        playbackStateBuilder.setShuffleMode(
+        mediaSession.setShuffleMode(
             if (enabled) PlaybackStateCompat.SHUFFLE_MODE_ALL
             else PlaybackStateCompat.SHUFFLE_MODE_NONE
         )
@@ -190,7 +198,7 @@ class MediaSessionManager(private val service: PlaybackService) {
             2 -> PlaybackStateCompat.REPEAT_MODE_ONE
             else -> PlaybackStateCompat.REPEAT_MODE_NONE
         }
-        playbackStateBuilder.setRepeatMode(repeatMode)
+        mediaSession.setRepeatMode(repeatMode)
         refreshNotification()
     }
 

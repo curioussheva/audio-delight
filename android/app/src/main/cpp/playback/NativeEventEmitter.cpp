@@ -7,11 +7,11 @@ static JavaVM* g_jvm = nullptr;
 static jobject g_moduleRef = nullptr;
 static jmethodID g_methodId = nullptr;
 
-void initJavaVm(JavaVM* vm) {
+PRISTINE_EXPORT void initJavaVm(JavaVM* vm) {
     g_jvm = vm;
 }
 
-void initModuleRef(JNIEnv* env, jobject instance) {
+PRISTINE_EXPORT void initModuleRef(JNIEnv* env, jobject instance) {
     if (!env || !instance) return;
     if (g_moduleRef) {
         env->DeleteGlobalRef(g_moduleRef);
@@ -30,7 +30,7 @@ void initModuleRef(JNIEnv* env, jobject instance) {
                         (void*)g_moduleRef, (void*)g_methodId);
 }
 
-void emitTrackEnded(const std::string& uri) {
+PRISTINE_EXPORT void emitTrackEnded(const std::string& uri) {
     if (!g_jvm || !g_moduleRef || !g_methodId) return;
 
     JNIEnv* env = nullptr;

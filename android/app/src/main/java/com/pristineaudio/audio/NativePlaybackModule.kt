@@ -2,6 +2,7 @@ package com.pristineaudio.audio
 
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
+import com.pristineaudio.playback.PlaybackNativeBridge
 
 @ReactModule(name = NativePlaybackModule.NAME)
 class NativePlaybackModule(reactContext: ReactApplicationContext) :
@@ -25,7 +26,11 @@ class NativePlaybackModule(reactContext: ReactApplicationContext) :
     // Native methods
 
     // 🔥 Akses context untuk bridge event (PlaybackNativeBridge.emit*).
-    val reactApplicationContext: ReactApplicationContext get() = reactContext
+    // reactApplicationContext di-resolve ke method protected
+    // getReactApplicationContext() di BaseJavaModule — TIDAK perlu property
+    // lokal; property lokal justru men-shadow param constructor reactContext
+    // dan bikin "Unresolved reference".
+    // NativePlaybackService memakai pola yang sama (lihat baris 33-40 di sana).
 
     // 🔥 Callback native→JS: decoder EOF. Di-emit dari C++ (thread decoder).
     // Tidak boleh crash kalau JS belum siap — bridge tolak kalau instance null.
