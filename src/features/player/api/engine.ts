@@ -56,6 +56,34 @@ export class AudioEngine {
   async toggleExclusiveMode(enabled: boolean): Promise<void> {
     this.isExclusive = enabled;
     console.log(`🚀 [AudioEngine] Exclusive Mode: ${enabled ? "ON" : "OFF"}`);
+
+    // 🔥 FIX (2026-10-06): nyalakan Oboe exclusive mode di native.
+    //
+    // Sebelumnya ini CUMA melepas DSP session Android (releaseAllFX). Itu
+    // efek EQ/bass/virtualizer Android, TAPI stream Oboe tetap SharedMode —
+    // sampel masih lewat AudioFlinger mixer yang menambah konversi + gain.
+    // Bit-perfect tidak tercapai namanya saja.
+    //
+    // Chain native sudah lengkap dan teruji:
+    //   NativeDSPModule.setExclusiveMode → JNI NativeDSPModule.cpp:166
+    //   → EngineManager::setExclusiveMode() → stop stream
+    //   → AudioEngine::start(exclusive=true) → AAudio Exclusive
+    //
+    // ⚠️ EngineManager::setExclusiveMode() stop+start stream. Kalau
+    // dipanggil saat playback jalan ada jeda singkat. Panggil SEBELUM play
+    // kalau bisa (dari setAudioMode, sebelum setQueue/play).
+    //
+    // ⚠️ AAudio bisa menolak exclusive (device / Android version). Oboe
+    // otomatis fallback ke shared — gejala: bit-perfect "on" tapi mixer
+    // tetap menyentuh sampel. Setelah panggil ini, cek
+    // AudioStreamController::isExclusive() (TODO: expose ke JS, lihat
+    // docs/WORKFLOW.md Prioritas 2) untuk tahu apakah benar-benar exclusive.
+    try {
+      NativeDSPModule?.setExclusiveMode?.(enabled);
+    } catch (e) {
+      console.warn("[AudioEngine] setExclusiveMode gagal:", e);
+    }
+
     if (enabled) {
       await this.releaseAllFX();
     }
