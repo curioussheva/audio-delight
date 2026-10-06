@@ -655,6 +655,53 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setIsPlaying: async (isPlaying: boolean) => {
     try {
       if (isPlaying) {
+        // 🔥 FIX: setelah app restart, native queue KOSONG (restore dilakukan
+        // lazy — lihat initStore baris ~199). Kalau user tap play sebelum
+        // memutar trek apapun, native menolak: "queue_->current() null".
+        //
+        // Sebelumnya: play() gagal 212ms, UI reset ke isPlaying=false, user
+        // harus tap dua kali. Sekarang: kalau native queue kosong tapi JS punya
+        // currentSong, lakukan re-sync seperti playSong() — setQueue (resolve
+        // content:// ke cache, bisa 2-3 detik untuk 50 trek) baru play.
+        try {
+          const nativeSize = NativePlaybackService.getQueueSize();
+          if (nativeSize === 0) {
+            const s = get();
+            const song = s.currentSong;
+            if (song?.uri) {
+              console.log(
+                "[Player] 🔁 Native queue kosong — re-sync sebelum play()",
+              );
+              const target = s.queue.length > 0 ? s.queue : [song];
+              const uris = target
+                .map((x) => x.uri)
+                .filter((u): u is string => !!u);
+              if (uris.length > 0) {
+                await timedCall("setQueue(resume)", () =>
+                  NativePlaybackService.setQueue(uris),
+                );
+                if (s.position > 0) {
+                  // posisi restore: biarkan decoder siap dulu, baru seek
+                  setTimeout(async () => {
+                    try {
+                      await NativePlaybackService.seek(s.position * 1000);
+                      console.log(
+                        `[Player] ✅ resume seek ke ${s.position}s setelah re-sync`,
+                      );
+                    } catch (e) {
+                      console.warn("[Player] resume seek gagal:", e);
+                    }
+                  }, 500);
+                }
+              }
+            }
+          }
+        } catch (probeErr) {
+          // getQueueSize sync bisa melempar kalau bridge belum siap — bukan
+          // fatal, lanjut ke play() biasa.
+          console.warn("[Player] probe queue size gagal:", probeErr);
+        }
+
         // Kalau native menolak (dekoder gagal), jangan tandai playing.
         try {
           await timedCall("play", () => NativePlaybackService.play());
