@@ -195,8 +195,21 @@ menolak, keduanya beda — dan hanya yang kedua yang jujur.
 Sinkron (`isBlockingSynchronousMethod`) supaya bacaan tidak dapat data dari
 stream lama saat `setExclusiveMode()` sedang stop+start stream.
 
-**Yang belum:** UI belum pakai ini untuk tampilkan indikator ke user — baru
-log. Itu pekerjaan UI terpisah.
+**Yang belum:** ~~UI belum pakai ini untuk tampilkan indikator ke user — baru
+log. Itu pekerjaan UI terpisah.~~ **SELESAI**, commit `dff0363c7`.
+
+Hook `useBitPerfectStatus` membedakan empat keadaan:
+
+| `requested` | `streamExclusive` | Tampilan | Arti |
+|---|---|---|---|
+| false | — | DSP Mode | Normal |
+| true | true | `BIT-PERFECT 48K` (hijau) | Benar-benar bit-perfect |
+| true | false | `FALLBACK` (merah) | AAudio tolak, mixer aktif |
+| true | — (native belum siap) | `BIT-PERFECT` (hijau) | Engine belum start |
+
+Dua tempat dipasang: badge di `player/index.tsx` dan baris Switch di
+`settings.tsx` (label + sublabel + saran "coba colok USB DAC"). Polling 2s
+hanya saat `isPlaying` supaya idle tidak membangun native.
 
 ### 🟡 Prioritas 3 — Restart stream per-trek (opsional, mahal)
 
