@@ -446,8 +446,40 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
             __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                                 "EOF callback: track ended, advancing queue");
 
-            // URI trek yang BARU SAJA selesai — dibaca SEBELUM advance.
+            // 🔥 FIX (2026-10-06): anti-flood EOF.
+            //
+            // Kalau trek korup / 0-byte / tidak bisa di-decode, decoder
+            // langsung EOF. loadTrack(next) juga EOF, dan setiap EOF memicu
+            // emitTrackEnded ke JS ratusan kali per detik. Gejala di device:
+            // "track-ended event: ...1000996760" diulang ratusan kali dan
+            // posisi stuck (speed=0.01x).
+            //
+            // Guard: kalau EOF untuk URI yang SAMA datang terlalu cepat
+            // (< 500ms), anggap decoder stuck dan berhenti. UI tidak perlu
+            // ratusan event identik.
             const std::string uri = currentTrack_.uri;
+            const auto now = std::chrono::steady_clock::now();
+            {
+                const auto lastTime = lastEofTime_.load(
+                    std::memory_order_relaxed
+                );
+                const auto lastUri = lastEofUri_.load(
+                    std::memory_order_relaxed
+                );
+                const bool sameTrack = (uri == lastUri);
+                const bool tooFast = (now - lastTime) < std::chrono::milliseconds(500);
+                if (sameTrack && tooFast) {
+                    __android_log_print(
+                        ANDROID_LOG_WARN,
+                        "PlaybackController",
+                        "EOF flood: skip duplikat untuk %s (<500ms)",
+                        uri.c_str()
+                    );
+                    return;
+                }
+            }
+            lastEofUri_ = uri;
+            lastEofTime_ = now;
 
             // Emit ke JS (thread-safe).
             pristine::playback::emitTrackEnded(uri);

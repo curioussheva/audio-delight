@@ -246,10 +246,26 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           // di-resolve — padahal itu trek yang sedang diputar! Akibatnya
           // auto-advance UI tidak pernah jalan (audio native sudah next,
           // currentSong JS masih yang lama).
-          if (uri && s.currentSong.uri && !uriMatches(s.currentSong.uri, uri)) {
+          const matches = uriMatches(s.currentSong.uri, uri);
+          if (uri && s.currentSong.uri && !matches) {
             console.log(
               `[Player] 🎵 skip: uri event (${uri}) ≠ currentSong.uri (${s.currentSong.uri})`,
             );
+
+            // 🔥 FIX (2026-10-06): jangan cuma skip — TETAP syncFromNative.
+            //
+            // Kenapa: kalau native sudah advance (auto-advance atau lock
+            // screen next) tapi event sampai setelah JS update, atau kalau
+            // native main trek yang berbeda (bug shuffle lama / queue
+            // berubah), currentSong JS jadi TIDAK SAMA dengan yang sedang
+            // dimainkan. UI nunjukin trek lama, speaker main trek baru —
+            // itulah desync yang dikeluhkan.
+            //
+            // syncFromNative membaca current track native dan mengupdate
+            // currentSong JS ke trek yang BENAR-BENAR diputar sekarang.
+            // Kalau ternyata sama, tidak ada yang berubah (no-op). Kalau
+            // beda, UI jadi benar. Idempoten dan aman dipanggil berulang.
+            await get().syncFromNative();
             return;
           }
 

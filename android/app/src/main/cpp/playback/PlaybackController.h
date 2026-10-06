@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <atomic>
+#include <chrono>
 #include "PlaybackState.h"
 #include "PlaybackMetrics.h"
 #include "PlaybackClock.h"
@@ -84,6 +85,12 @@ private:
 
     // 🔥 Thread untuk advance queue setelah EOF (lihat scheduleAdvance).
     std::thread advanceThread_;
+
+    // 🔥 FIX (2026-10-06): anti-flood EOF. Lihat setEofCallback di
+    // PlaybackController.cpp — trek korup/0-byte bikin decoder EOF berulang
+    // dan menembak event ke JS ratusan kali per detik.
+    std::atomic<std::string> lastEofUri_;
+    std::atomic<std::chrono::steady_clock::time_point> lastEofTime_;
 };
 
 } // namespace pristine::playback
