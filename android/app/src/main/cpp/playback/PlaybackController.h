@@ -3,6 +3,8 @@
 #include <memory>
 #include <atomic>
 #include <chrono>
+#include <mutex>
+#include <string>
 #include "PlaybackState.h"
 #include "PlaybackMetrics.h"
 #include "PlaybackClock.h"
@@ -89,8 +91,14 @@ private:
     // 🔥 FIX (2026-10-06): anti-flood EOF. Lihat setEofCallback di
     // PlaybackController.cpp — trek korup/0-byte bikin decoder EOF berulang
     // dan menembak event ke JS ratusan kali per detik.
-    std::atomic<std::string> lastEofUri_;
-    std::atomic<std::chrono::steady_clock::time_point> lastEofTime_;
+    //
+    // ⚠️ JANGAN pakai std::atomic<std::string> — std::atomic hanya untuk
+    // tipe trivially copyable, dan std::string bukan itu. NDK clang
+    // menolak: "std::atomic<T> requires that 'T' be a trivially copyable
+    // type" (build 37399429037, 01:47 UTC). Pakai mutex biasa.
+    std::mutex eofMutex_;
+    std::string lastEofUri_;
+    std::chrono::steady_clock::time_point lastEofTime_;
 };
 
 } // namespace pristine::playback

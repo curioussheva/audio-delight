@@ -460,14 +460,14 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
             const std::string uri = currentTrack_.uri;
             const auto now = std::chrono::steady_clock::now();
             {
-                const auto lastTime = lastEofTime_.load(
-                    std::memory_order_relaxed
-                );
-                const auto lastUri = lastEofUri_.load(
-                    std::memory_order_relaxed
-                );
-                const bool sameTrack = (uri == lastUri);
-                const bool tooFast = (now - lastTime) < std::chrono::milliseconds(500);
+                // 🔥 FIX (2026-10-06): std::atomic<std::string> tidak valid
+                // (std::string bukan trivially copyable, NDK tolak). Pakai
+                // mutex — EOF callback hanya jalan di thread decoder, jadi
+                // kontensi minimal.
+                std::lock_guard<std::mutex> eofLock(eofMutex_);
+                const bool sameTrack = (uri == lastEofUri_);
+                const bool tooFast =
+                    (now - lastEofTime_) < std::chrono::milliseconds(500);
                 if (sameTrack && tooFast) {
                     __android_log_print(
                         ANDROID_LOG_WARN,
@@ -477,9 +477,9 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
                     );
                     return;
                 }
+                lastEofUri_ = uri;
+                lastEofTime_ = now;
             }
-            lastEofUri_ = uri;
-            lastEofTime_ = now;
 
             // Emit ke JS (thread-safe).
             pristine::playback::emitTrackEnded(uri);
