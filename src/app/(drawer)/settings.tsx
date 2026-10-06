@@ -38,13 +38,14 @@ import * as Haptics from "expo-haptics";
 import { useTheme } from "@/context/ThemeContext";
 import { useUSBDAC } from "@/features/hardware/hooks/useUSBDAC";
 import { usePlayerStore } from "@/features/player/store/playerStore";
+import { useBitPerfectStatus } from "@/features/player/hooks/useBitPerfectStatus";
 import { ThemePicker } from "@/shared/components/ui/ThemePicker";
 import type { Theme } from "@/constants/themes/types";
 import { selectArtists } from "@/features/library/store/selectors";
 import { useSettingsStore } from "@/features/settings/store/settingsStore";
 import OnlineMetadataService from "@/features/library/services/OnlineMetadataService";
 
-import { Zap, ShieldCheck } from "lucide-react-native";
+import { Zap, ShieldCheck, TriangleAlert } from "lucide-react-native";
 import { ALL_PRESETS } from "@/features/equalizer/constants/presets";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
 
@@ -210,6 +211,11 @@ export default function SettingsScreen() {
   } = usePlayerStore();
 
   const isExclusive = audioMode === "bit-perfect";
+
+  // 🔥 Status JUJUR: audioMode hanya mencatat pilihan user. AAudio bisa
+  // menolak exclusive → fallback shared diam-diam. Tanpa ini UI bilang
+  // "Bit-Perfect Mode" padahal mixer masih menyentuh sampel.
+  const bpStatus = useBitPerfectStatus();
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
 
@@ -600,11 +606,20 @@ export default function SettingsScreen() {
                 style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
               >
                 {audioMode === "bit-perfect" ? (
-                  <ShieldCheck
-                    size={16}
-                    color={colors.status.warning}
-                    strokeWidth={2.2}
-                  />
+                  bpStatus.exclusiveFailed ? (
+                    // User minta bit-perfect, tapi AAudio menolak.
+                    <TriangleAlert
+                      size={16}
+                      color={colors.status.error}
+                      strokeWidth={2.2}
+                    />
+                  ) : (
+                    <ShieldCheck
+                      size={16}
+                      color={colors.status.warning}
+                      strokeWidth={2.2}
+                    />
+                  )
                 ) : (
                   <Zap
                     size={16}
@@ -614,7 +629,9 @@ export default function SettingsScreen() {
                 )}
                 <Text style={{ color: colors.text.primary, fontWeight: "600" }}>
                   {audioMode === "bit-perfect"
-                    ? "Bit-Perfect Mode"
+                    ? bpStatus.exclusiveFailed
+                      ? "Bit-Perfect Mode (Fallback)"
+                      : "Bit-Perfect Mode"
                     : "DSP Mode"}
                 </Text>
               </View>
@@ -626,9 +643,27 @@ export default function SettingsScreen() {
                 }}
               >
                 {audioMode === "bit-perfect"
-                  ? "Output murni tanpa EQ/DSP. Cocok untuk DAC eksternal."
+                  ? bpStatus.exclusiveFailed
+                    ? // Device menolak exclusive — sampel lewat mixer sistem.
+                      "AAudio menolak exclusive. Output lewat mixer sistem — tidak bit-perfect."
+                    : bpStatus.streamExclusive
+                      ? `Output murni tanpa EQ/DSP${bpStatus.actualSampleRate > 0 ? ` @ ${bpStatus.actualSampleRate / 1000}kHz` : ""}.`
+                      : "Output murni tanpa EQ/DSP. Cocok untuk DAC eksternal."
                   : "EQ, Bass Boost & efek aktif."}
               </Text>
+              {audioMode === "bit-perfect" && bpStatus.exclusiveFailed && (
+                <Text
+                  style={{
+                    color: colors.status.error,
+                    fontSize: 10,
+                    marginTop: 4,
+                    lineHeight: 14,
+                  }}
+                >
+                  Beberapa device/MIUI membatasi exclusive mode. Coba colok
+                  USB DAC atau restart pemutaran.
+                </Text>
+              )}
             </View>
             <Switch
               value={audioMode === "bit-perfect"}

@@ -16,6 +16,7 @@ import * as Haptics from "expo-haptics";
 
 import { useAudioProgress } from "@/features/player/hooks/useAudioProgress";
 import { usePlayerStore } from "@/features/player/store/playerStore";
+import { useBitPerfectStatus } from "@/features/player/hooks/useBitPerfectStatus";
 import { formatTime } from "@/shared/utils/time";
 import Slider from "@react-native-community/slider";
 import { SleepTimerModal } from "@/features/player/components/SleepTimerModal";
@@ -41,6 +42,7 @@ import {
   Volume2,
   Sparkles,
   Info,
+  TriangleAlert,
 } from "lucide-react-native";
 
 const { width } = Dimensions.get("window");
@@ -139,6 +141,11 @@ export default function PlayerScreen() {
   const borderColor = colors.border?.light || colors.background.tertiary;
   const errorColor = colors.status.error;
 
+  // 🔥 Badge mode audio yang jujur. audioMode = pilihan user; AAudio bisa
+  // menolak exclusive → fallback shared. Tanpa ini badge "BIT-PERFECT"
+  // bohong kalau device menolak.
+  const bpStatus = useBitPerfectStatus();
+
   const gradientColors = colors.gradient?.primary || [
     backgroundColor,
     isDark ? "#000000" : colors.background.secondary,
@@ -181,9 +188,31 @@ export default function PlayerScreen() {
               NOW PLAYING
             </Text>
             <View style={styles.audioModeBadge}>
-              <Sparkles size={12} color={goldColor} />
-              <Text style={[styles.audioModeText, { color: goldColor }]}>
-                {audioMode?.toUpperCase() || "STANDARD"}
+              {audioMode === "bit-perfect" && bpStatus.exclusiveFailed ? (
+                // Bit-perfect diminta tapi AAudio menolak — jangan pamer
+                // label "BIT-PERFECT" yang tidak benar.
+                <TriangleAlert size={12} color={errorColor} />
+              ) : (
+                <Sparkles size={12} color={goldColor} />
+              )}
+              <Text
+                style={[
+                  styles.audioModeText,
+                  {
+                    color:
+                      audioMode === "bit-perfect" && bpStatus.exclusiveFailed
+                        ? errorColor
+                        : goldColor,
+                  },
+                ]}
+              >
+                {audioMode === "bit-perfect"
+                  ? bpStatus.exclusiveFailed
+                    ? "FALLBACK"
+                    : bpStatus.actualSampleRate > 0
+                      ? `BIT-PERFECT ${bpStatus.actualSampleRate / 1000}K`
+                      : "BIT-PERFECT"
+                  : (audioMode?.toUpperCase() || "STANDARD")}
               </Text>
             </View>
           </View>
