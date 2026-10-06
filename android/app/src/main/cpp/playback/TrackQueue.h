@@ -136,7 +136,7 @@ public:
 private:
 
     [[nodiscard]]
-    const std::vector<TrackInfo>&
+    std::vector<TrackInfo>
     activeQueue() const;
 
     void rebuildShuffle();
