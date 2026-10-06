@@ -133,17 +133,18 @@
 
 ---
 
-## 3. Rantai bit-perfect — 5 syarat
+## 3. Rantai bit-perfect — 6 syarat
 
 | # | Syarat | Status | Bukti |
 |---|---|---|---|
 | 1 | **Exclusive mode aktif** (bypass mixer) | ✅ **FIXED** | `engine.ts` sekarang panggil `NativeDSPModule.setExclusiveMode()` (commit `db8327cd7`). Sebelumnya hanya `releaseAllFX()` — DSP session Android, bukan Oboe stream. |
-| 2 | Laju stream mengikuti DAC/file | ⚠️ Sebagian | `DeviceRateDetector` jalan, tapi hanya ambil rate tertinggi **device**, bukan per-file. Speaker: `[44100,48000]`. |
-| 3 | Decoder tidak resample ke laju lain | ⚠️ Sebagian | `targetSampleRate` = rate stream (fix 2026-10-06). Tapi kalau rate file > rate device, downsample paksa. |
-| 4 | Tidak ada stage gain tersembunyi | ✅ Fixed | `kGain 0.89f` dihapus 2026-10-06 (sebelumnya -1 dB diam-diam di decoder). |
-| 5 | DSP dilewati | ✅ Berlebihan | `render()` tidak panggil pipeline apa pun — tapi ini bukan desain, lihat syarat 1. |
+| 2 | **Bisa diverifikasi** (status aktual, bukan permintaan) | ✅ **SELESAI** | `isExclusive()` + `getActualSampleRate()` ke JS (commit `0a19cbb78`). Log: `Stream: exclusive=YA/TIDAK (fallback shared) rate=48000Hz`. |
+| 3 | Laju stream mengikuti DAC/file | ⚠️ Sebagian | `DeviceRateDetector` jalan, tapi hanya ambil rate tertinggi **device**, bukan per-file. Speaker: `[44100,48000]`. |
+| 4 | Decoder tidak resample ke laju lain | ⚠️ Sebagian | `targetSampleRate` = rate stream (fix 2026-10-06). Tapi kalau rate file > rate device, downsample paksa. |
+| 5 | Tidak ada stage gain tersembunyi | ✅ Fixed | `kGain 0.89f` dihapus 2026-10-06 (sebelumnya -1 dB diam-diam di decoder). |
+| 6 | DSP dilewati | ✅ Berlebihan | `render()` tidak panggil pipeline apa pun — tapi ini bukan desain, lihat syarat 1. |
 
-**Kesimpulan:** syarat 4 dan 5 aman, syarat 2–3 sebagian (batas hardware), **syarat 1 putus total**. Itu satu-satunya hal yang membuat mode "bit-perfect" saat ini **bukan** bit-perfect — nama saja, jalur exclusive-nya tidak pernah dinyalakan.
+**Kesimpulan:** syarat 1, 2, 5, 6 aman. Syarat 3–4 sebagian — ini **batas hardware**, bukan bug: speaker internal hanya `[44100, 48000]`, jadi file 96 kHz pasti downsample 2:1. Yang bisa dijamin sekarang: PCM utuh sampai DAC untuk file yang rate-nya didukung device.
 
 ---
 
