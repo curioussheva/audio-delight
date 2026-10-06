@@ -45,6 +45,14 @@ public:
     // resample supaya tidak ada konversi yang tidak perlu.
     int32_t actualSampleRate() const;
 
+    // true kalau Oboe stream BENAR-BENAR exclusive (AAudio menerimanya).
+    //
+    // Berbeda dari exclusiveMode() (AudioState) yang cuma mencatat APA YANG
+    // DIMINTA. AAudio bisa menolak exclusive — Oboe otomatis fallback ke
+    // shared, dan kita wajib jujur soal itu ke user: bit-perfect tidak
+    // tercapai kalau ini false meski mode bit-perfect dipilih.
+    bool isExclusive() const;
+
     // true kalau stream jatuh ke OpenSLES (AAudio gagal). OpenSLES tidak punya
     // jalur exclusive, jadi bit-perfect ke DAC tidak tersedia di jalur itu.
     bool usingOpenSLESFallback() const;

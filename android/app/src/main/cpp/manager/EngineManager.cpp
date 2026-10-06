@@ -249,4 +249,12 @@ EngineManager::getStats() const {
     return mEngine.getStats();
 }
 
+bool EngineManager::isExclusive() const {
+    return mEngine.isExclusive();
+}
+
+int32_t EngineManager::actualSampleRate() const {
+    return mEngine.actualSampleRate();
+}
+
 } // namespace pristine 

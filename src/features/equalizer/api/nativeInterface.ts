@@ -17,6 +17,10 @@ export interface NativeDSPInterface {
   setBalance(balance: number): void;
   setExclusiveMode(enabled: boolean): void;
 
+  // Status stream aktual — AAudio bisa tolak exclusive, fallback diam-diam.
+  isExclusiveModeActive(): boolean;
+  getActualSampleRate(): number;
+
   // Additional engine controls
   setDSPEnabled(enabled: boolean): void;
   setLimiterEnabled(enabled: boolean): void;

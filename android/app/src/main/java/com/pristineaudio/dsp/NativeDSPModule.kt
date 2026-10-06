@@ -41,6 +41,10 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     private external fun setNativeBalance(balance: Float)
     private external fun toggleNativeExclusiveMode(enabled: Boolean)
 
+    // 🔥 Status stream aktual — lihat isExclusiveModeActive() di bawah.
+    private external fun nativeIsExclusiveModeActive(): Boolean
+    private external fun nativeGetActualSampleRate(): Int
+
     // Additional JNI functions (were missing before)
     private external fun setNativeDSPEnabled(enabled: Boolean)
     private external fun setNativeLimiterEnabled(enabled: Boolean)
@@ -136,6 +140,17 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     fun setExclusiveMode(enabled: Boolean) {
         if (engineAvailable) toggleNativeExclusiveMode(enabled)
     }
+
+    // 🔥 Status stream AKTUAL — bukan yang diminta.
+    // AAudio bisa menolak exclusive; UI butuh tahu untuk jujur ke user
+    // bahwa bit-perfect tidak tercapai. Lihat docs/WORKFLOW.md.
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    fun isExclusiveModeActive(): Boolean =
+        if (engineAvailable) nativeIsExclusiveModeActive() else false
+
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    fun getActualSampleRate(): Int =
+        if (engineAvailable) nativeGetActualSampleRate() else 0
 
     // ===================== ADDITIONAL REACT METHODS =====================
 

@@ -190,4 +190,29 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeImmersiveEnabled(
     EngineManager::get().setImmersiveEnabled(enabled);
 }
 
+// =====================================================
+// STATUS STREAM AKTUAL
+// =====================================================
+//
+// Kedua query ini membaca keadaan Oboe stream yang BENAR-BENAR terbuka,
+// bukan permintaan kita. Penting untuk kejujuran UI: kalau AAudio menolak
+// exclusive, isExclusive() false meski mode bit-perfect dipilih — bit-perfect
+// tidak tercapai dan user harus diberi tahu.
+
+JNIEXPORT jboolean JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_isExclusiveModeActive(
+    JNIEnv*, jobject) {
+    return static_cast<jboolean>(
+        EngineManager::get().isExclusive()
+    );
+}
+
+JNIEXPORT jint JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_getActualSampleRate(
+    JNIEnv*, jobject) {
+    return static_cast<jint>(
+        EngineManager::get().actualSampleRate()
+    );
+}
+
 }

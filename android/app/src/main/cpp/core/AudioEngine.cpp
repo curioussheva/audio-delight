@@ -124,6 +124,10 @@ int32_t AudioEngine::actualSampleRate() const {
     return mStreamController.actualSampleRate();
 }
 
+bool AudioEngine::isExclusive() const {
+    return mStreamController.isExclusive();
+}
+
 bool AudioEngine::usingOpenSLESFallback() const {
     return mStreamController.usingOpenSLESFallback();
 }

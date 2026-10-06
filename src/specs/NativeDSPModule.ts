@@ -13,10 +13,19 @@ export interface Spec extends TurboModule {
   // Audio session
   createAudioSession(): Promise<{ sessionId: number; isNew: boolean }>;
 
-  // Direct controls (void)
+  // Direct controls
   setMasterGain(gain: number): void;
   setBalance(balance: number): void;
   setExclusiveMode(enabled: boolean): void;
+
+  // 🔥 Status stream AKTUAL, bukan yang diminta.
+  // AAudio bisa menolak exclusive → Oboe fallback ke shared secara diam-diam.
+  // isExclusiveModeActive() false meski setExclusiveMode(true) dipanggil.
+  // getActualSampleRate() = laju stream yang benar-benar dibuka Oboe.
+  // Sinkron supaya satu read atomic (stop/start stream di tengah bisa kasih
+  // data dari stream lama).
+  isExclusiveModeActive(): boolean;
+  getActualSampleRate(): number;
 
   // Additional engine controls
   setDSPEnabled(enabled: boolean): void;

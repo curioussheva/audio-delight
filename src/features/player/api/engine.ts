@@ -84,6 +84,19 @@ export class AudioEngine {
       console.warn("[AudioEngine] setExclusiveMode gagal:", e);
     }
 
+    // 🔥 VERIFIKASI: AAudio bisa menolak exclusive. Baca kembali status
+    // aktual supaya log jujur — "ON" di UI tapi stream shared tidak ada
+    // gunanya, user harus tahu bit-perfect tidak tercapai.
+    try {
+      const actuallyExclusive = NativeDSPModule?.isExclusiveModeActive?.();
+      const rate = NativeDSPModule?.getActualSampleRate?.();
+      console.log(
+        `💎 [AudioEngine] Stream: exclusive=${actuallyExclusive ? "YA" : "TIDAK (fallback shared)"} rate=${rate}Hz`,
+      );
+    } catch (e) {
+      console.warn("[AudioEngine] baca status stream gagal:", e);
+    }
+
     if (enabled) {
       await this.releaseAllFX();
     }

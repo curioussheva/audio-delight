@@ -53,6 +53,10 @@ public:
         bool enabled
     );
 
+    // Status stream AKTUAL, bukan yang diminta. Lihat AudioEngine::isExclusive.
+    bool isExclusive() const;
+    int32_t actualSampleRate() const;
+
     // metrics
     EngineStats getStats() const;
 
