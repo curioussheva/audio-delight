@@ -151,7 +151,15 @@ Mengembalikan laju file saat device **tidak** mendukungnya sengaja dihindari: st
 
 `AudioDeviceCallback` terdaftar lewat `NativeDeviceModule`, jadi DAC yang dicolok **saat app berjalan** terdeteksi dan laju ter-refresh. Tanpa itu, bit-perfect gagal diam-diam ketika user mencolok DAC di tengah pemutaran.
 
-**Batas kemampuan Android:** tidak ada API publik untuk "paksa output ke device ini". Yang tersedia: `AudioTrack.setPreferredDevice()` (preferensi, bisa diabaikan sistem) dan `Oboe setDeviceId()` (diterapkan saat stream dibuka). `AudioDeviceManager::setActiveDevice()` mencatat pilihan dan memvalidasinya ÃÂ¢ÃÂÃÂ mengembalikan `false` kalau id tidak ada, bukan `true` buta.
+**Batas kemampuan Android:** tidak ada API publik untuk "paksa output ke device ini". Yang tersedia: `AudioTrack.setPreferredDevice()` (preferensi, bisa diabaikan sistem) dan `Oboe setDeviceId()` (diterapkan saat stream dibuka). `AudioDeviceManager::setActiveDevice()` mencatat pilihan dan memvalidasinya — mengembalikan `false` kalau id tidak ada, bukan `true` buta.
+
+**Koreksi 2026-10-06 ("96kHz masih cacat")** — tiga hal yang ternyata **menghianati** ketiga syarat di atas meski tabelnya bertanda terpenuhi:
+
+1. **`kGain 0.89f` (-1 dB) diterapkan di `FFmpegDecoder::onDecode()`** ke setiap sample, *sebelum* PCM masuk queue. `BitPerfectPipeline` memang sengaja kosong ("no gain"), tapi decoder sudah memotong 1 dB lebih dulu — jadi "bit-perfect" ternyata tidak pernah benar-benar utuh. Dihapus; headroom adalah urusan `DSPChain` (punya `LimiterNode` sendiri).
+2. **Stream hanya dibuka sekali, tidak pernah di-restart per trek.** `EngineManager::start()` memanggil `AudioEngine::start(exclusiveMode)` tanpa parameter laju → `requestedSampleRate <= 0` → deteksi mandiri → rate tertinggi yang didukung. Tapi logcat 2026-10-06 menunjukkan device speaker internal hanya melaporkan `[44100, 48000]`, jadi untuk file FLAC 96 kHz, `swr_convert` diaktifkan paksa 96000→48000. Downsample tidak terhindarkan di hardware ini; yang bisa dijamin adalah PCM utuh *sampai* ke DAC, bukan tidak ada konversi.
+3. **Throughput decoder perlu diskalakan dengan rasio downsample.** `chunkSize_` dulu hardcoded 4096; FLAC 96 kHz hanya menghasilkan ~2238 output frame per `decode()`, sehingga saat queue penuh throughput turun di bawah 48 kHz realtime → underrun → glitch. Sekarang `chunkFrames` = 16384 dan `AudioDecoder::config()` dipindah ke `public` supaya `DecoderWorker` benar-benar membacanya.
+
+**Implikasinya untuk tabel di atas**: baris "Decoder tidak resample ke laju lain" hanya benar kalau DAC mendukung laju file. Kalau tidak, yang benar adalah "downsample sekali, di filter kualitas tinggi (`filter_size=128, cutoff=0.97` — terverifikasi SNR 76.5 dB, terbaik dari 5 konfigurasi yang diuji)".
 
 ---
 

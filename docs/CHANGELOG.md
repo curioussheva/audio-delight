@@ -46,6 +46,22 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/). Versi mengikut
   `isNaN(Infinity)` = `false`). Sekarang `!Number.isFinite(seconds) || seconds <= 0`,
   yang sekaligus menangani nilai negatif. Ditemukan oleh test.
 
+- **File 96 kHz terdengar "cacat" (glitch periodik + UI desync).** Dianalisis
+  dari logcat 2026-10-06 12:09 (FLAC 96 kHz Enya "Dark Sky Island"):
+  13.733 sample NaN/garbage HANYA di trek 96 kHz (0 di trek 48 kHz),
+  pola 26 sample tiap ~170 ms. `SAMPLE min=-1.12e18` = bit pattern malloc
+  garbage — float VALID yang lolos dari `isnan()`/`isinf()`.
+  Root cause: `chunkSize_` decoder hardcoded 4096; FLAC 96 kHz hanya
+  menghasilkan ~2238 output frame per `decode()` (2:1 downsample), jadi
+  saat queue penuh throughput turun ke ~24.8k fps < 48k realtime →
+  PCMQueue underrun. Fix: `chunkFrames` 4096→16384, backpressure
+  pause 80%→90% / resume 40%→60%, guard magnitudo ±2.0 di decoder dan render.
+  Bug terkait: `getPositionSeconds()`/`onSeek()` domain salah (posisi 2x
+  cepat untuk 96 kHz, 1.088x untuk 44.1 kHz — cocok speed 1.08x di log),
+  `kGain 0.89f` (-1 dB) menghianati bit-perfect, `setDurationFrames()`
+  tak pernah dipanggil, `formatLogged` static global. Lihat
+  `docs/TROUBLESHOOTING.md` dan `scripts/test_domain_96k.cpp` (14 assertion).
+
 ### Removed
 
 - **`src/app/_layout.tsx (2)`** - file duplikat di route tree, diabaikan router,

@@ -130,6 +130,23 @@ Diperbaiki berlapis:
 
 Uji regresinya ada di `ScanDiffEngine.test.ts`: 1196 lagu di database dengan MediaStore melaporkan 0 file **harus** ditolak.
 
+### Test C++ pertama: `scripts/test_domain_96k.cpp` (2026-10-06)
+
+Test C++ standalone pertama di repo ini. Modelkan logika `getPositionSeconds`/`onSeek`/guard magnitudo/throughput decoder untuk tiga rasio sample rate, lalu jalankan di host dengan `clang++`:
+
+```bash
+clang++ -O2 -std=c++17 -o "$TMPDIR/domain_test2" scripts/test_domain_96k.cpp && "$TMPDIR/domain_test2"
+```
+
+14 assertion, semua lulus. Yang dijaga:
+
+- **Domain posisi**: `currentFrame_` (output `swr_convert`, 48k) dibagi `targetSampleRate`, bukan `codecCtx_->sample_rate`. Rasio salahnya bisa dirasionalkan: 96k → 2.00x, 44.1k → 1.088x, 48k → 1.00x.
+- **Domain seek**: `onSeek` lama membuat frame counter decoder 2x lipat clock stream (`PlaybackClock` pakai domain 48k) → posisi pisah setelah seek.
+- **Guard magnitudo**: float `-1.12e18` adalah float *valid* — lolos `isnan()`/`isinf()`, tapi tertangkap `|v| > 2.0`. Audio 0.8 dan clip 1.2 lolos.
+- **Throughput chunk**: untuk FLAC 96k (1152 output/frame input), chunk 4096 butuh 4 frame input (4608 output, overshoot 12%); chunk 16384 butuh 15 frame (17280, overshoot 5%).
+
+**Catatan**: ini menutup klaim lama "C++ tetap nol test" di bagian 6 — ada satu sekarang, tapi hanya untuk logika murni. Race condition dan underrun tetap butuh device.
+
 ## 6. Yang seharusnya diotomasi berikutnya (urutan)
 
 1. ~~**Jest untuk logika murni**~~ - **selesai** untuk `LrcParser`, `dsp`, `audio`, `dac`.
@@ -141,7 +158,7 @@ Uji regresinya ada di `ScanDiffEngine.test.ts`: 1196 lagu di database dengan Med
 6. **Job `verify` terpisah sebelum `build`** - pola persona: kegagalan JS muncul ~2 menit, bukan setelah 16 menit `assembleDebug`.
 7. **`scripts/check.sh` di CI** - menangkap error C++ tanpa perlu `assembleDebug`.
 
-**C++ tetap nol test.** Itu 193 file dan bagian terbesar risiko; Jest tidak menyentuhnya. Padanan yang benar adalah pola persona: kompilasi modul murni lalu jalankan di host, dan bandingkan dengan implementasi independen.
+**C++ tidak lagi nol test, tapi masih jauh.** `scripts/test_domain_96k.cpp` (2026-10-06) hanya menguji logika murni domain posisi/seek — 193 file dan bagian terbesar risiko tetap tak tersentuh. Jest juga tidak menyentuhnya. Padanan yang benar adalah pola persona: kompilasi modul murni lalu jalankan di host, dan bandingkan dengan implementasi independen.
 
 ## 7. Batas yang tidak bisa dilewati dari lingkungan ini
 

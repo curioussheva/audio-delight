@@ -179,6 +179,55 @@ Kalau build gagal dengan cara yang tidak masuk akal setelah codegen berjalan, ha
 rm -rf android/.gradle android/app/.cxx
 ```
 
+### Audio "cacat" di file hi-res (96 kHz)
+
+**Gejala**: file 44.1/48 kHz bersih, tapi trek 96 kHz terdengar glitch periodik,
+kadang progress bar melompat atau speed terbaca 1.08x–2.00x di `[DIAG]`.
+
+**Cara diagnosis** (logcat + `grep`):
+
+```bash
+# 1. Cek sample rate file yang dibuka
+grep "setupResampler: input_rate" <logcat>
+#    input_rate=96000 output_rate=48000 → file hi-res, stream dipaksa 48k
+
+# 2. Cek NaN/garbage di render — apakah HANYA di trek 96k?
+grep -n "render: cleaned" <logcat> | awk -F: '$1><line-open>'
+#    Kalau muncul hanya setelah trek 96k dibuka dan berhenti setelah ganti
+#    trek → lihat bawah
+
+# 3. Cek magnitudo sample (bukan NaN tapi float garbage)
+grep "SAMPLE min=" <logcat>
+#    min=-1.12e18 / max=1.7e32 = bit pattern malloc, bukan audio
+```
+
+**Root cause 2026-10-06**: `chunkSize_` decoder hardcoded 4096. FLAC 96 kHz
+hanya menghasilkan ~2238 output frame per `decode()` karena 2:1 downsample,
+jadi saat PCMQueue penuh dan decoder tertekan backpressure, throughput turun
+di bawah 48 kHz realtime → underrun → AAudio memangkas burst → sample tidak
+terinisialisasi terlempar ke DAC.
+
+**Fix** (sudah ada, commit `aa66cc4d`): `chunkFrames` 4096→16384,
+`config()` dipindah ke public supaya `DecoderWorker` bisa baca, backpressure
+pause 80%→90% / resume 40%→60%, guard magnitudo ±2.0.
+
+**Pelajaran transferable**:
+
+1. **Float garbage (1e18–1e32) lolos dari `isnan()`/`isinf()`.** Bit pattern
+   malloc adalah float *valid*. Kalau hanya dicek NaN/Inf, glitch akan
+   tembus ke DAC. Guard magnitudo (`|v| > 2.0` untuk output `swr_convert`
+   yang selalu `[-1,1]`) menangkap ini.
+2. **Domain frame counter**: `currentFrame_` yang diisi dari output
+   `swr_convert` harus dibagi dengan **target** sample rate, bukan
+   `codecCtx_->sample_rate`. Rasio salahnya persis muncul sebagai speed
+   false-positive di log (96k → 2.00x, 44.1k → 1.088x).
+3. **`static` lokal di dalam fungsi decode** = hanya log sekali per proses,
+   menyembunyikan format trek berikutnya saat debugging. Pindah ke member
+   + reset di `cleanup()`.
+4. **Reproduksi lokal lebih cepat dari menebak**: FFmpeg/swresample standalone
+   di Termux (lihat `scripts/test_domain_96k.cpp`) mengeluarkan parameter
+   resampler sebagai tersangka dalam hitungan menit.
+
 ---
 
 ## Preseden yang sudah mati (jangan diulang)
