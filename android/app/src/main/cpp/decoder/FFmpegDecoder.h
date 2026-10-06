@@ -73,6 +73,7 @@ protected:
 
 private:
     std::vector<float> scratchBuffer_;  // 🔥 reusable
+    bool formatLogged_ = false;  // 🔥 per-instance, bukan static global
 
 
     bool setupCodec();

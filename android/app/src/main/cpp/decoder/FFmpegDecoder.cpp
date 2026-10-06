@@ -196,14 +196,17 @@ DecodeResult FFmpegDecoder::onDecode(
                 return result;
             }
 
-            static bool formatLogged = false;
-            if (!formatLogged) {
+            // 🔥 FIX (2026-10-06): formatLogged adalah member per-instance,
+            // bukan static global. Sebelumnya static di dalam fungsi → hanya
+            // log trek pertama yang pernah dibuka; trek 96kHz berikutnya
+            // tidak pernah di-log, menyembunyikan info format saat debugging.
+            if (!formatLogged_) {
                 __android_log_print(ANDROID_LOG_INFO, "FFmpegDecoder",
                     "FORMAT CHECK: codecCtx_->sample_fmt=%d, frame_->format=%d, codecCtx_->sample_rate=%d, frame_->sample_rate=%d, nb_samples=%d",
                     codecCtx_->sample_fmt, frame_->format,
                     codecCtx_->sample_rate, frame_->sample_rate,
                     frame_->nb_samples);
-                formatLogged = true;
+                formatLogged_ = true;
             }
 
             const int outSamples = swr_get_out_samples(swrCtx_, frame_->nb_samples) + 256;
@@ -576,6 +579,7 @@ void FFmpegDecoder::cleanup() {
 
     audioStreamIndex_ = -1;
     currentFrame_ = 0;
+    formatLogged_ = false;  // 🔥 reset supaya trek baru di-log lagi
 }
 
 // =====================================================
