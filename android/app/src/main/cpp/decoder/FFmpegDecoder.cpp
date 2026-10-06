@@ -229,13 +229,37 @@ DecodeResult FFmpegDecoder::onDecode(
 
             if (converted > 0) {
 
-    // 🔥 FIX: turunkan gain 3 dB untuk headroom
-    constexpr float kGain = 0.89f;  // -1 dB
-    for (size_t i = 0; i < static_cast<size_t>(converted) * channels; ++i) {
-        temp[i] *= kGain;
+    // 🔥 FIX (2026-10-06): guard magnitudo SEBELUM masuk queue.
+    // Bit pattern malloc garbage (1e18-1e32) lolos dari isnan/isinf.
+    // Buang di sini supaya queue hanya pernah berisi audio valid.
+    {
+        int badCount = 0;
+        const size_t total = static_cast<size_t>(converted) * channels;
+        for (size_t i = 0; i < total; ++i) {
+            float& v = temp[i];
+            if (std::isnan(v) || std::isinf(v) || v > 2.0f || v < -2.0f) {
+                badCount++;
+                v = 0.0f;
+            }
+        }
+        if (badCount > 0) {
+            __android_log_print(ANDROID_LOG_WARN, "FFmpegDecoder",
+                "swr output guard: %zu/%zu samples out-of-range cleaned",
+                (size_t)badCount, total);
+        }
     }
 
-    // 🔥 NaN/Inf detection & cleanup
+    // 🔥 FIX (2026-10-06, "96kHz masih cacat"): kGain 0.89 (-1 dB) diterapkan
+    // ke SEMUA sample. Ini menghianati mode bit-perfect: BitPerfectPipeline
+    // sengaja kosong ("no gain"), tapi decoder sudah memotong 1 dB lebih dulu.
+    // Untuk file hi-res 96kHz, ini merusak dynamics yang seharusnya utuh.
+    //
+    // Headroom 1 dB duluan diperlukan karena EQ/limiter di pipeline lain
+    // bisa memperkuat sinyal melewati 0 dBFS. Tapi bit-perfect tidak punya
+    // stage tersebut, jadi gain ini hanya merusak. Pindahkan ke pipeline
+    // yang benar-benar butuh headroom (ImmersivePipeline) — bukan di sini.
+    //
+    // Sekarang: TIDAK ADA gain di decoder. PCM keluar utuh dari swr_convert.
     {
         int nanCount = 0;
         for (size_t i = 0; i < static_cast<size_t>(converted) * channels; ++i) {
@@ -338,18 +362,29 @@ bool FFmpegDecoder::onSeek(
 
     avcodec_flush_buffers(codecCtx_);
 
+    // 🔥 FIX (2026-10-06): domain currentFrame_ adalah OUTPUT (targetSampleRate),
+    // bukan codecCtx_->sample_rate. Bug kembar getPositionSeconds: untuk FLAC
+    // 96kHz, seek ke 10s menulis 960000 frame, tapi playback stream 48kHz
+    // hanya 480000 frame di 10 detik → posisi langsung melompat 2x dan audio
+    // yang keluar tidak cocok dengan posisi yang dilaporkan.
     currentFrame_ =
         static_cast<uint64_t>(
-            positionSeconds * codecCtx_->sample_rate);
+            positionSeconds * config().targetSampleRate);
 
     return true;
 }
- 
+
 bool FFmpegDecoder::onSeekToFrame(
     uint64_t frame) {
 
+    // frame di sini adalah domain OUTPUT (sama dengan currentFrame_).
+    // Konversi ke detik pakai laju output, lalu seek berbasis waktu AV.
+    const uint32_t outRate = config().targetSampleRate;
+    if (outRate == 0) {
+        return false;
+    }
     return onSeek(
-        static_cast<double>(frame) / codecCtx_->sample_rate);
+        static_cast<double>(frame) / outRate);
 }
 
 // =====================================================
@@ -414,7 +449,17 @@ double FFmpegDecoder::getDurationSeconds() const {
 // =====================================================
 
 double FFmpegDecoder::getPositionSeconds() const {
-    return static_cast<double>(currentFrame_) / codecCtx_->sample_rate;
+    // currentFrame_ dihitung dari HASIL swr_convert, jadi domainnya adalah
+    // laju OUTPUT (config().targetSampleRate), bukan codecCtx_->sample_rate.
+    //
+    // BUG (2026-10-06, "96kHz masih cacat"): pembagung pakai sample_rate ASLI
+    // file. Untuk FLAC 96kHz, currentFrame_ (48k) / 96000 = posisi 2x
+    // terlalu cepat → UI desync, progress bar melompat, speed false-positive.
+    const uint32_t outRate = config().targetSampleRate;
+    if (outRate == 0) {
+        return 0.0;
+    }
+    return static_cast<double>(currentFrame_) / outRate;
 }
 
 uint64_t FFmpegDecoder::getPositionFrames() const {

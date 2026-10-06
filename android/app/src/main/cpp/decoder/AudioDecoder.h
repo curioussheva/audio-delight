@@ -118,6 +118,15 @@ public:
     virtual double
     getDurationSeconds() const = 0;
 
+    // 🔥 FIX (2026-10-06): config() harus public supaya DecoderWorker bisa
+    // baca chunkFrames. Sebelumnya berada di protected — DecodeConfig hanya
+    // bisa diakses dari subclass, jadi DecoderWorker tidak bisa lihat
+    // chunkFrames dan fallback ke 4096 hardcoded (penyebab throughput
+    // deficit untuk file hi-res, lihat startDecoder).
+    [[nodiscard]]
+    const DecodeConfig&
+    config() const noexcept;
+
 protected:
 
     // =====================================================
@@ -158,10 +167,6 @@ protected:
     );
 
     void clearError();
-
-    [[nodiscard]]
-    const DecodeConfig&
-    config() const noexcept;
 
 private:
     DecodeResult applyResampling(

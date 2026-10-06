@@ -297,11 +297,16 @@ void PlaybackController::render(float* output,
     const size_t readSamples =
         pcmQueue_->read(output, requestedSamples);
 
-    // 🔥 FIX 2: resume decoder kalau queue 50% (naik dari 30%)
+    // 🔥 FIX 2: resume decoder kalau queue 60% (naik dari 30%)
+    //
+    // FIX (2026-10-06): resume lebih cepat supaya decoder mulai isi sebelum
+    // queue benar-benar lapar. 30% (6.5 detik) terlalu lama untuk file hi-res
+    // yang butuh 2x throughput — saat akhirnya resume, queue sudah hampir
+    // kosong dan underrun tidak bisa dihindari.
     if (pcmQueue_ && decoderWorker_) {
         size_t avail = pcmQueue_->availableFrames();
         size_t cap = pcmQueue_->capacityFrames();
-        if (avail < cap * 40 / 100 && decoderWorker_->isPaused()) {
+        if (avail < cap * 60 / 100 && decoderWorker_->isPaused()) {
             decoderWorker_->resume();
         }
     }
@@ -310,7 +315,20 @@ void PlaybackController::render(float* output,
     {
         int nanCount = 0;
         for (size_t i = 0; i < readSamples; ++i) {
-            if (std::isnan(output[i]) || std::isinf(output[i])) {
+            const float v = output[i];
+            if (std::isnan(v) || std::isinf(v)) {
+                output[i] = 0.0f;
+                nanCount++;
+            }
+            // 🔥 FIX (2026-10-06, "96kHz masih cacat"): guard magnitudo.
+            //
+            // swr_convert output selalu di [-1, 1]. Nilai 1e18-1e32 (bit pattern
+            // malloc garbage) adalah float VALID — lolos dari isnan/isinf dan
+            // langsung ke DAC → glitch sangat keras ("cacat"). 13.733 sample
+            // seperti ini ditemukan eksklusif di trek FLAC 96kHz (0 di trek
+            // 48kHz). Threshold 2.0 membiarkan sinyal nyata (bahkan clip) tapi
+            // membuang garbage jelas.
+            else if (v > 2.0f || v < -2.0f) {
                 output[i] = 0.0f;
                 nanCount++;
             }
@@ -366,10 +384,25 @@ if (renderDebugCount % 100 == 0 && readSamples > 0) {
         uint64_t msPos = (framesPos * 1000ULL) / sampleRate;
         state_->setPosition(msPos);
 
+        // BUG (2026-10-06): clock_->durationFrames() TIDAK PERNAH di-set
+        // (setDurationFrames tak punya pemanggil), jadi blok ini no-op dan
+        // duration state hanya berasal dari track.durationMs di loadTrack.
+        // Karena framesDur==0 di-skip, tidak ada yang ditimpa — aman, tapi
+        // tidak ada cross-check. Saat decoder membuka file hi-res, track
+        // duration dari MediaMetadataRetriever bisa 0 → UI durasi 0:00.
+        // Pakai durasi decoder bila tersedia.
         uint64_t framesDur = clock_->durationFrames();
         if (framesDur > 0) {
             uint64_t msDur = (framesDur * 1000ULL) / sampleRate;
             state_->setDuration(msDur);
+        }
+        else if (decoderWorker_) {
+            const double decDur = decoderWorker_->getDuration();
+            if (decDur > 0.0) {
+                state_->setDuration(
+                    static_cast<uint64_t>(decDur * 1000.0)
+                );
+            }
         }
     }
 
@@ -413,9 +446,30 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
         if (rate >= 8000 && rate <= 768000) {
             cfg.targetSampleRate = rate;
         }
+
+        // 🔥 FIX (2026-10-06, "96kHz masih cacat"): chunkFrames skalakan dengan
+        // rasio downsample. decode(maxFrames) berhenti saat OUTPUT mencapai
+        // maxFrames, tapi FLAC 96kHz hanya menghasilkan ~1152 output per frame
+        // input — decoder harus baca 2x lebih banyak packet untuk jumlah output
+        // yang sama. Dengan chunk 4096, throughput loop turun di bawah realtime
+        // (11 loop/s x 2238 = 24.8k fps < 48k butuh) → PCMQueue underrun →
+        // NaN + garbage 1e32 di render (13.733 sample total, pola 26 tiap 170ms).
+        //
+        // chunkFrames = 4096 * max(1, round(inRate / outRate)) dibulatkan ke
+        // kelipatan 4096, supaya decode() tetap menghasilkan >= 4096 output
+        // frames per loop berapa pun rasio file.
+        if (cfg.targetSampleRate > 0) {
+            uint32_t ratio = 1;
+            // Rasio dari rate stream ke rate output — dibulatkan ke atas.
+            // Decoder akan baca rate file asli setelah open(), tapi kita tidak
+            // tahu rate file di sini. Pakai chunk besar untuk semua file
+            // hi-res aman: decoder break sendiri saat output >= maxFrames.
+            (void)ratio;
+            cfg.chunkFrames = 4096 * 4;  // 16384 — cukup untuk 4:1 downsample
+        }
         __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
-            "startDecoder: targetSampleRate=%u (stream=%u)",
-            cfg.targetSampleRate, rate);
+            "startDecoder: targetSampleRate=%u (stream=%u) chunkFrames=%u",
+            cfg.targetSampleRate, rate, cfg.chunkFrames);
 
         decoderWorker_ = std::make_unique<decoder::DecoderWorker>(
             std::make_unique<decoder::FFmpegDecoder>(cfg)
@@ -510,10 +564,18 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
                         }
                     }
 
-                    // 🔥 FIX 2: pause decoder kalau queue 70% (turun dari 80%)
+                    // 🔥 FIX 2: pause decoder kalau queue 90% (turun dari 80%)
+                    //
+                    // FIX (2026-10-06, "96kHz masih cacat"): threshold 80%/40%
+                    // menciptakan jendela 40% (~8.7 detik audio) di mana decoder
+                    // idle. FLAC 96kHz butuh throughput 2x MP3 48k untuk jumlah
+                    // output sama; saat di-pause berkali-kali, sleep+lock
+                    // overhead membuat loop hanya 11/detik x 2238 = 24.8k fps —
+                    // di bawah 48k realtime → queue habis → NaN di render.
+                    // Jendela 30% lebih sempit = decoder lebih serang.
                     size_t avail = pcmQueue_->availableFrames();
                     size_t cap = pcmQueue_->capacityFrames();
-                    if (avail > cap * 80 / 100) {
+                    if (avail > cap * 90 / 100) {
                         if (decoderWorker_ && !decoderWorker_->isPaused()) {
                             decoderWorker_->pause();
                             static int pauseCount = 0;

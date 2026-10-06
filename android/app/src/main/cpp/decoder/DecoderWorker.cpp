@@ -17,7 +17,17 @@ using namespace std::chrono;
 // =====================================================
 
 DecoderWorker::DecoderWorker(std::unique_ptr<AudioDecoder> decoder)
-    : decoder_(std::move(decoder)) {}
+    : decoder_(std::move(decoder)) {
+    // 🔥 FIX (2026-10-06): ambil chunkFrames dari DecodeConfig decoder,
+    // bukan hardcoded 4096. PlaybackController sudah hitung chunk yang benar
+    // berdasarkan rasio downsample file (lihat startDecoder).
+    if (decoder_) {
+        chunkSize_ = decoder_->config().chunkFrames;
+        if (chunkSize_ == 0) {
+            chunkSize_ = 4096;
+        }
+    }
+}
 
 DecoderWorker::~DecoderWorker() {
     stop();
