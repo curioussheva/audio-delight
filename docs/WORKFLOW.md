@@ -171,12 +171,31 @@ cek `isExclusive()` setelahnya dan kasih tahu user.
 
 ### 🟡 Prioritas 2 — Ekspos `isExclusive()` ke JS
 
-Indikator jujur: kalau exclusive ditolak device, UI harus bilang "fallback ke
-shared mode, tidak bit-perfect". Sekarang user tidak tahu.
+**SELESAI 2026-10-06, commit `0a19cbb78`.** Rantai lengkap:
 
-JNI ada (`AudioStreamController::isExclusive()`), tinggal tambah JNI export +
-Kotlin + spec. Bandingkan `USBDACModule.isExclusiveModeActive()` yang sudah
-ada untuk level hardware USB.
+```
+AudioStreamController::isExclusive()   status Oboe stream NYATA
+  ↑ AudioEngine::isExclusive()
+    ↑ EngineManager::isExclusive()
+      ↑ JNI isExclusiveModeActive() / getActualSampleRate()
+        ↑ Kotlin @ReactMethod(isBlockingSynchronousMethod = true)
+          ↑ spec TS NativeDSPModule.ts
+            ↑ engine.ts: log verifikasi setelah toggle
+```
+
+Indikator jujur: kalau exclusive ditolak device, UI sekarang bisa bilang
+"fallback ke shared mode, tidak bit-perfect". `engine.ts` sudah log
+`Stream: exclusive=YA/TIDAK (fallback shared) rate=48000Hz` setelah toggle.
+
+**Bedanya dengan `AudioState::exclusiveMode()`:** itu mencatat **APA YANG
+DIMINTA**. `isExclusive()` membaca **APA YANG DIBUKA OBOE**. Kalau AAudio
+menolak, keduanya beda — dan hanya yang kedua yang jujur.
+
+Sinkron (`isBlockingSynchronousMethod`) supaya bacaan tidak dapat data dari
+stream lama saat `setExclusiveMode()` sedang stop+start stream.
+
+**Yang belum:** UI belum pakai ini untuk tampilkan indikator ke user — baru
+log. Itu pekerjaan UI terpisah.
 
 ### 🟡 Prioritas 3 — Restart stream per-trek (opsional, mahal)
 
