@@ -58,8 +58,28 @@ Audit ini membaca ulang 4 dokumen kecil + 3 besar (via subagent) dan **memverifi
 
 ### Masih BERLAKU hari ini
 
-- **`dsp/immersive/*`, `fft/`, `modes/*`, `jni/NativeAudioFeed.cpp` = dead code.** Rantai dependensi terkonfirmasi: `AudioPipeline.cpp` (AKTIF) hanya pakai `dsp/DSPChain.cpp`; `modes/ImmersivePipeline.h` (DEAD) satu-satunya pemakai `dsp/immersive/*` (6 file, hanya saling include); `fft/FFTPlan.cpp` hanya dipakai `FFTResonanceAnalyzer` yang sendiri DEAD; `NativeAudioFeed.cpp` (82 baris, JNI `OboeAudioProcessor_*`) tidak punya pasangan Kotlin. Total ~1141 baris dead code. **Hapus `modes/` dulu**, sisanya ikut (Limiter di `BitPerfectPipeline.cpp` sudah pindah ke `DSPChain`). Catatan: `AudioPipeline.cpp` sendiri punya mode switch `ProcessingMode` inline (baris 55-99), jadi tidak ikut terhapus.
-- **`setProcessingMode` orphan**: C++ chain ada (`AudioConfig.h`, `NativeDSPModule.cpp:142`), JS-nya ada di spec, tapi `AudioPipeline::processImmersive` masih hanya `mDSP.process()` + komentar "FUTURE" — immersive DSP-nya belum jadi.
-- **FD-based custom I/O** (hilangkan cache copy) — masih feature backlog, belum dikerjakan.
+**Bagi yang berikut, "orphan" TIDAK berarti harus dihapus.** Sebagian adalah scaffolding fitur yang sengaja disiapkan tapi belum diimplementasikan — itu sah sebagai backlog, bukan debt. Yang membedakan: apakah ada yang salah-status menganggapnya sudah berfungsi.
+
+**A. `NativeAudioFeed.cpp` — satu-satunya yang benar-benar ditinggalkan.** 82 baris JNI `OboeAudioProcessor_feedFloatBuffer/feedPCM16Buffer`. Target class `com.pristineaudio.audio.OboeAudioProcessor` (sisa fork RNTP) **tidak punya pasangan Kotlin sama sekali** — fungsinya tidak bisa dipanggil dari mana pun. Engine-side `AudioEngine::pushData()` (yang ini tujuannya) hanya dipanggil dari NativeAudioFeed + NativePristineAudio.pushAudio — dan keduanya tidak dipakai JS. Beda dengan `NativePristineAudio`: itu API engine low-level lengkap (spec 7/7 SYNC, Kotlin wrapper ada, JNI jalan), wajar dibiarkan. `NativeAudioFeed` jelas residu migrasi RNTP.
+
+**B. `modes/*` + `dsp/immersive/*` + `fft/` — fitur Immersive yang belum diimplementasikan.** Rantai dependensi terkonfirmasi:
+
+```
+AudioPipeline.cpp (AKTIF) → dsp/DSPChain.cpp (AKTIF)
+modes/ImmersivePipeline.h (TIDAK DIPAKAI)
+  → dsp/immersive/* 6 file — SolfeggioResonator, BrainwaveGenerator,
+    HarmonicExciter, SpatialFieldProcessor, BinauralRenderer, FFTResonanceAnalyzer
+  → fft/FFTPlan.cpp
+```
+
+Bukti orphannya berlapis: (1) `AudioPipeline.cpp` implementasi ketiga mode sendiri secara inline (`processBitPerfect` no-op, `processDSP` → `mDSP.process`, `processImmersive` → `mDSP.process` + komentar "FUTURE" baris 145-158); (2) header `modes/` tidak di-include dari luar `modes/` sama sekali; (3) `dsp/immersive/*` hanya saling include + dipakai `ImmersivePipeline.h`; (4) `fft/` hanya dipakai `FFTResonanceAnalyzer` yang sendiri tidak terpakai.
+
+**Ini gap fitur, bukan sampah.** DSP immerisve-nya asli: `ImmersivePipeline` punya API `prepare/updateParameters/process/reset` non-virtual `final` — desainnya memang untuk hot-path realtime. Yang kurang: 3 hal. Pertama, **chain putus di Kotlin** — `setProcessingMode` punya JNI (`NativeDSPModule.cpp:142`) + C++ (`AudioConfig.h`) + spec TS (`setSolfeggioFreq` dst), tapi `AudioMode` di JS cuma `"bit-perfect" | "dsp"` — tidak ada `"immersive"` (`playerStore.ts:25`), jadi enum `ProcessingMode::Immersive=2` tak tercapai. Kedua, **`AudioPipeline::processImmersive` belum pakai immersive** — isinya masih base DSP + komentar. Ketiga, **UI** — onboarding cuma 2 ModeCard.
+
+Implikasi penghapusan: kalau nanti Immersive mau dikerjakan, `AudioPipeline.cpp` yang dipakai, bukan `modes/ImmersivePipeline` — jadi semua class di `modes/` maupun `dsp/immersive/` tetap perlu di-port dulu. Itu yang membuat ini pilihan desain, bukan sekadar cleanup: hapus saja, atau implementasikan.
+
+**C. Yang hanya butuh sedikit wiring.**
+- **`AudioStreamController::isExclusive()` tidak sampai JS.** Status exclusive Oboe dihitung akurat di native tapi nol eksposur. User tidak tahu bit-perfect diam-diam fallback ke shared mode (AudioFlinger menambah resample+gain). Bandingkan `USBDACModule.isExclusiveModeActive()` yang sudah ada di JS untuk level hardware USB.
+- **`NativeDSPModule.setExclusiveMode` tidak dipanggil engine.ts** — chain lengkap sampai Kotlin tapi ujung JS-nya diam.
 
 Kalau arsip bertentangan dengan dokumen aktif, **dokumen aktif yang berlaku.**
