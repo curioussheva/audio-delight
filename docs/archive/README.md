@@ -74,6 +74,17 @@ modes/ImmersivePipeline.h (TIDAK DIPAKAI)
 
 Bukti orphannya berlapis: (1) `AudioPipeline.cpp` implementasi ketiga mode sendiri secara inline (`processBitPerfect` no-op, `processDSP` → `mDSP.process`, `processImmersive` → `mDSP.process` + komentar "FUTURE" baris 145-158); (2) header `modes/` tidak di-include dari luar `modes/` sama sekali; (3) `dsp/immersive/*` hanya saling include + dipakai `ImmersivePipeline.h`; (4) `fft/` hanya dipakai `FFTResonanceAnalyzer` yang sendiri tidak terpakai.
 
+**Verifikasi graphify 2026-10-06** (graph 12105 nodes / 22863 edges, built at commit `7639dec05`). Hanya memakai edge `calls`/context `call` (pemanggilan nyata, bukan deklarasi tipe):
+
+| Cluster | Panggilan masuk dari luar cluster | Verdict |
+|---|---|---|
+| `modes/` (35 nodes) | hanya dari `modes/ImmersivePipeline.cpp/.h` — dirinya sendiri | tidak ada pemanggil eksternal |
+| `dsp/immersive/` (83 nodes) | hanya dari `SolfeggioResonator.h` — dirinya sendiri | tidak ada pemanggil eksternal |
+| `fft/` (62 nodes) | hanya dari `dsp/convolution/WindowFunctions.cpp` — cluster lain yang juga mati | tidak ada pemanggil eksternal |
+| `jni/NativeAudioFeed.cpp` (3 nodes) | edge dari `EngineManager.h` adalah deklarasi tipe (`.engine()`), bukan call | tidak ada pemanggil eksternal |
+
+Bonus: `AudioPipeline.cpp → modes/` = **0 edge**. Cluster `dsp/convolution/` juga ikut mati (`ConvolverNode`, `IRLoader`, `PartitionedConvolver` dipakai 0 file lain; `FFTConvolver`/`FIRFilter` hanya saling pakai). Begitu juga `dsp/headphone/` (`CrossfeedProcessor`, `HeadphoneCorrection` dipakai 0 file lain) dan `dsp/filters/` (`HighPassFilter`, `LowPassFilter`, `StateVariableFilter`, `ToneControl` dipakai 0 file lain).
+
 **Ini gap fitur, bukan sampah.** DSP immerisve-nya asli: `ImmersivePipeline` punya API `prepare/updateParameters/process/reset` non-virtual `final` — desainnya memang untuk hot-path realtime. Yang kurang: 3 hal. Pertama, **chain putus di Kotlin** — `setProcessingMode` punya JNI (`NativeDSPModule.cpp:142`) + C++ (`AudioConfig.h`) + spec TS (`setSolfeggioFreq` dst), tapi `AudioMode` di JS cuma `"bit-perfect" | "dsp"` — tidak ada `"immersive"` (`playerStore.ts:25`), jadi enum `ProcessingMode::Immersive=2` tak tercapai. Kedua, **`AudioPipeline::processImmersive` belum pakai immersive** — isinya masih base DSP + komentar. Ketiga, **UI** — onboarding cuma 2 ModeCard.
 
 Implikasi penghapusan: kalau nanti Immersive mau dikerjakan, `AudioPipeline.cpp` yang dipakai, bukan `modes/ImmersivePipeline` — jadi semua class di `modes/` maupun `dsp/immersive/` tetap perlu di-port dulu. Itu yang membuat ini pilihan desain, bukan sekadar cleanup: hapus saja, atau implementasikan.
