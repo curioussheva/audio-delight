@@ -137,7 +137,7 @@
 
 | # | Syarat | Status | Bukti |
 |---|---|---|---|
-| 1 | **Exclusive mode aktif** (bypass mixer) | ❌ **PUTUS** | `engine.ts` tidak pernah panggil `NativeDSPModule.setExclusiveMode()`. Stream selalu Shared. |
+| 1 | **Exclusive mode aktif** (bypass mixer) | ✅ **FIXED** | `engine.ts` sekarang panggil `NativeDSPModule.setExclusiveMode()` (commit `db8327cd7`). Sebelumnya hanya `releaseAllFX()` — DSP session Android, bukan Oboe stream. |
 | 2 | Laju stream mengikuti DAC/file | ⚠️ Sebagian | `DeviceRateDetector` jalan, tapi hanya ambil rate tertinggi **device**, bukan per-file. Speaker: `[44100,48000]`. |
 | 3 | Decoder tidak resample ke laju lain | ⚠️ Sebagian | `targetSampleRate` = rate stream (fix 2026-10-06). Tapi kalau rate file > rate device, downsample paksa. |
 | 4 | Tidak ada stage gain tersembunyi | ✅ Fixed | `kGain 0.89f` dihapus 2026-10-06 (sebelumnya -1 dB diam-diam di decoder). |
@@ -151,18 +151,15 @@
 
 ### 🔴 Prioritas 1 — Nyalakan exclusive mode (1 file JS)
 
-Satu-satunya blocker bit-perfect nyata. Chain C++ sudah lengkap dan teruji:
+~~Satu-satunya blocker bit-perfect nyata.~~ **FIXED 2026-10-06, commit `db8327cd7`, CI 37479212847 sukses.**
+
+Chain C++ sudah lengkap dan teruji:
 `NativeDSPModule.setExclusiveMode(bool)` → JNI → `EngineManager::setExclusiveMode()`
 → stop stream → `AudioEngine::start(exclusive=true)` → AAudio Exclusive.
 
-```ts
-// engine.ts
-async toggleExclusiveMode(enabled: boolean): Promise<void> {
-  this.isExclusive = enabled;
-  NativeDSPModule?.setExclusiveMode(enabled);   // ← tambahan ini
-  if (enabled) await this.releaseAllFX();
-}
-```
+Yang kurang cuma satu baris di `engine.ts` — `toggleExclusiveMode()` tidak
+pernah memanggil `NativeDSPModule.setExclusiveMode()`, hanya `releaseAllFX()`
+(DSP session Android, bukan Oboe stream).
 
 **Risiko:** `EngineManager::setExclusiveMode` stop+start stream. Kalau dipanggil
 saat playback jalan, ada jeda singkat. AAudio bisa juga menolak exclusive
