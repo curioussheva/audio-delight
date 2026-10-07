@@ -562,12 +562,8 @@ export default function SettingsScreen() {
                     lineHeight: 15,
                   }}
                 >
-                  {bluetoothCodec.available
-                    ? `A2DP aktif${bluetoothCodec.deviceName ? ` ke ${bluetoothCodec.deviceName}` : ""}` +
-                      (bluetoothCodec.supportedCodecs.length > 0
-                        ? ` - codec didukung: ${bluetoothCodec.supportedCodecs.join(", ")}`
-                        : "") +
-                      ". Lossy, sampel di-encode ulang - codec yang SEDANG dipakai tidak bisa dibaca Android."
+                  {bluetoothCodec.connected
+                    ? `A2DP aktif${bluetoothCodec.deviceName ? ` ke ${bluetoothCodec.deviceName}` : ""}. Lossy — sampel di-encode ulang, bit-perfect tidak mungkin. Codec tidak bisa dibaca Android.`
                     : "Tidak ada perangkat A2DP terhubung (atau izin Bluetooth belum diberikan)."}
                 </Text>
               )}

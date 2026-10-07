@@ -14,7 +14,7 @@ import AudioOutputService, {
   pathKindOf,
   type ActiveDeviceStatus,
   type AudioDeviceDescriptor,
-  type BluetoothCodecInfo,
+  type BluetoothA2dpStatusInfo,
   type OutputPathKind,
 } from "../api/audioOutput";
 
@@ -35,7 +35,7 @@ export interface UseAudioOutputReturn {
    * Codec A2DP aktif. `available: false` kalau perangkat aktif bukan
    * Bluetooth, atau codecnya tidak bisa dibaca.
    */
-  bluetoothCodec: BluetoothCodecInfo;
+  bluetoothCodec: BluetoothA2dpStatusInfo;
   loading: boolean;
   error: string | null;
   /** Baca ulang daftar perangkat dari Android. */
@@ -51,12 +51,10 @@ export const useAudioOutput = (): UseAudioOutputReturn => {
   const [currentDevice, setCurrentDevice] =
     useState<AudioDeviceDescriptor | null>(null);
   const [status, setStatus] = useState<ActiveDeviceStatus | null>(null);
-  const [bluetoothCodec, setBluetoothCodec] = useState<BluetoothCodecInfo>({
-    available: false,
+  const [bluetoothCodec, setBluetoothCodec] = useState<BluetoothA2dpStatusInfo>({
+    connected: false,
     deviceName: "",
-    supportedCodecs: [],
-    activeCodec: "",
-    lossless: false,
+    address: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,13 +86,11 @@ export const useAudioOutput = (): UseAudioOutputReturn => {
       if (mounted.current) setBluetoothCodec(codec);
     } else if (mounted.current) {
       setBluetoothCodec((prev) =>
-        prev.available
+        prev.connected
           ? {
-              available: false,
+              connected: false,
               deviceName: "",
-              supportedCodecs: [],
-              activeCodec: "",
-              lossless: false,
+              address: "",
             }
           : prev,
       );

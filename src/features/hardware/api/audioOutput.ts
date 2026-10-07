@@ -17,10 +17,10 @@ import NativeDeviceModule from "@/specs/NativeDeviceModule";
 import type {
   ActiveDeviceStatus,
   AudioDeviceDescriptor,
-  BluetoothCodecInfo,
+  BluetoothA2dpStatusInfo,
 } from "@/specs/NativeDeviceModule";
 
-export type { ActiveDeviceStatus, AudioDeviceDescriptor, BluetoothCodecInfo };
+export type { ActiveDeviceStatus, AudioDeviceDescriptor, BluetoothA2dpStatusInfo };
 
 /**
  * Jalur output secara arsitektur.
@@ -133,17 +133,15 @@ export const AudioOutputService = {
    * `activeCodec` selalu kosong: getCodecStatus() bukan API publik. Yang bisa
    * ditampilkan hanya daftar codec yang DIDUKUNG, bukan yang sedang dipakai.
    */
-  getBluetoothCodec: async (): Promise<BluetoothCodecInfo> => {
+  getBluetoothCodec: async (): Promise<BluetoothA2dpStatusInfo> => {
     try {
       return await NativeDeviceModule.getBluetoothCodec();
     } catch (e) {
       console.warn("[AudioOutput] getBluetoothCodec gagal:", e);
       return {
-        available: false,
+        connected: false,
         deviceName: "",
-        supportedCodecs: [],
-        activeCodec: "",
-        lossless: false,
+        address: "",
       };
     }
   },

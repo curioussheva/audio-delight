@@ -49,26 +49,22 @@ export interface ActiveDeviceStatus {
 /**
  * Status jalur A2DP.
  *
- * A2DP **selalu lossy** (SBC/aptX/LDAC semua lossy). Sampel masuk ke encoder
- * sebelum dikirim, jadi bit-perfect mustahil lewat Bluetooth - apa pun laju
- * output yang berhasil dibuka.
+ * A2DP **selalu lossy** (SBC/aptX/LDAC semuanya lossy). Sampel masuk ke encoder
+ * sebelum dikirim, jadi bit-perfect mustahil lewat Bluetooth.
  *
- * `activeCodec` selalu `""`: `BluetoothA2dp.getCodecStatus()` bukan API publik
- * (tidak ada di daftar public methods dokumentasi resmi), jadi app biasa tidak
- * bisa membacanya. Yang tersedia hanya perangkat yang terhubung dan daftar
- * codec yang DIDUKUNG.
+ * Codec TIDAK bisa dibaca dari app biasa:
+ *  - `getCodecStatus()` (codec aktif) bukan API publik
+ *  - `getSupportedCodecTypes()` butuh izin signature-level BLUETOOTH_PRIVILEGED
+ *
+ * Yang tersisa hanyalah: terhubung atau tidak, dan ke perangkat apa.
  */
-export interface BluetoothCodecInfo {
-  /** false = tidak ada perangkat A2DP terhubung / BT mati / izin belum ada. */
-  available: boolean;
-  /** Nama perangkat A2DP yang terhubung. "" kalau tidak ada. */
+export interface BluetoothA2dpStatusInfo {
+  /** true kalau ada perangkat A2DP terhubung. */
+  connected: boolean;
+  /** Nama perangkat A2DP. "" kalau tidak ada / tidak terbaca. */
   deviceName: string;
-  /** Codec yang DIDUKUNG perangkat, mis. ["SBC", "AAC", "LDAC"]. */
-  supportedCodecs: string[];
-  /** SELALU "" - tidak bisa dibaca tanpa API @hide. Jangan dikarang. */
-  activeCodec: string;
-  /** true hanya kalau diyakini lossless. Untuk A2DP praktis selalu false. */
-  lossless: boolean;
+  /** Alamat perangkat (MAC). "" kalau tidak terbaca. */
+  address: string;
 }
 
 export interface Spec extends TurboModule {
@@ -81,13 +77,11 @@ export interface Spec extends TurboModule {
    */
   getCurrentOutputDevice(): Promise<AudioDeviceDescriptor | null>;
   /**
-   * Codec A2DP yang sedang dipakai.
+   * Status jalur A2DP: terhubung atau tidak, ke perangkat apa.
    *
-   * `available: false` = tidak bisa dibaca (tidak ada A2DP aktif, API < 33,
-   * atau izin BLUETOOTH_CONNECT belum diberikan). Jangan mengarang nama codec
-   * dalam keadaan itu.
+   * Codec tidak bisa dibaca dari app biasa - jangan dikarang.
    */
-  getBluetoothCodec(): Promise<BluetoothCodecInfo>;
+  getBluetoothCodec(): Promise<BluetoothA2dpStatusInfo>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('NativeDeviceModule');

@@ -267,33 +267,26 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
     }
 
     /**
-     * Status jalur A2DP (bukan codec aktif - lihat catatan batas API).
+     * Status jalur A2DP: terhubung atau tidak, dan ke perangkat apa.
      *
-     * A2DP SELALU lossy. `activeCodec` selalu kosong karena
-     * `BluetoothA2dp.getCodecStatus()` bukan API publik (tidak bisa dipanggil
-     * dari app biasa). Yang tersedia: perangkat yang terhubung dan daftar
-     * codec yang DIDUKUNG.
+     * A2DP SELALU lossy - bit-perfect tidak mungkin lewat Bluetooth.
      *
-     * `available: false` = tidak ada perangkat A2DP terhubung, Bluetooth mati,
-     * atau izin BLUETOOTH_CONNECT belum diberikan.
+     * Codec (aktif maupun didukung) TIDAK bisa dibaca dari app biasa:
+     * `getCodecStatus()` bukan API publik, dan `getSupportedCodecTypes()`
+     * butuh izin signature-level BLUETOOTH_PRIVILEGED. Lihat catatan di
+     * BluetoothA2dpStatus.kt.
      */
     @ReactMethod
     fun getBluetoothCodec(promise: Promise) {
         try {
-            val info = BluetoothCodecReader.read(reactApplicationContext)
+            val status = BluetoothA2dpStatus.read(reactApplicationContext)
             val map = Arguments.createMap()
-            map.putBoolean("available", info.available)
-            map.putString("deviceName", info.deviceName)
-
-            val codecs = Arguments.createArray()
-            info.supportedCodecs.forEach { codecs.pushString(it) }
-            map.putArray("supportedCodecs", codecs)
-
-            map.putString("activeCodec", info.activeCodec)
-            map.putBoolean("lossless", info.lossless)
+            map.putBoolean("connected", status.connected)
+            map.putString("deviceName", status.deviceName)
+            map.putString("address", status.address)
             promise.resolve(map)
         } catch (e: Throwable) {
-            promise.reject("BLUETOOTH_CODEC_FAILED", e)
+            promise.reject("BLUETOOTH_STATUS_FAILED", e)
         }
     }
 }
