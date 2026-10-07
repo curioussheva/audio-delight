@@ -15,6 +15,18 @@ Rules:
 - `android/app/src/main/cpp/oboe/**` is a vendored dependency and is excluded from `scripts/check.sh`; it does contribute nodes to the graph.
 
 ## Pitfalls (learned the hard way):
+- **Stub yang dikompilasi lebih berbahaya daripada file yang tidak ada.** Dulu
+  ada ~20 kelas yang di-build tapi **nol referensi** (`devices/AudioRouteManager`,
+  `usb/USB*` 4 kelas, `session/*` 4, `profiling/*` 3, `realtime/CallbackTimer`,
+  `modes/*` 3). Semuanya menyetub: `setRoute()` hanya log lalu `return true`,
+  `USBDeviceManager::requestDevicePermission()` selalu `false`. Efeknya bukan
+  "tidak dipakai" tapi **"ada yang tampak tersedia padahal tidak ada"** ï¿½
+  `AudioRouteManager` menjanjikan routing yang tidak pernah terjadi. Sudah
+  dihapus 2026-10-07 bersama izin USB di manifest (`device_filter.xml` +
+  `USB_DEVICE_ATTACHED` activity): keduanya satu unit, jangan hapus salah satu
+  saja. Kalau perlu routing/izin USB lagi, bangun ulang dari nol.
+  Cara cepat membedakan "didefinisikan" dari "dipakai": grep nama kelas di
+  seluruh `cpp/`, lalu buang file yang namanya sama dengan kelasnya.
 - **`scripts/patch_*.py` — DIBERSIHKAN 2026-10-03.** Dulu ada 59 patch script
   hasil iterasi debugging audio. Hampir semua fixnya sudah terapply ke source,
   tapi banyak yang **tidak idempotent** — kalau dijalankan lagi, double-apply /

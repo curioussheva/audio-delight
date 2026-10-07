@@ -46,6 +46,27 @@ export interface ActiveDeviceStatus {
   rateHonored: boolean;
 }
 
+/**
+ * Codec A2DP yang sedang dipakai.
+ *
+ * A2DP **selalu lossy** kecuali codec yang memang dirancang lossless (aptX
+ * Lossless). Sampel masuk ke encoder sebelum dikirim, jadi bit-perfect
+ * mustahil lewat Bluetooth - apa pun laju output yang berhasil dibuka.
+ */
+export interface BluetoothCodecInfo {
+  /** false = tidak bisa dibaca; jangan tampilkan nama codec apa pun. */
+  available: boolean;
+  /** "SBC" | "AAC" | "aptX" | "aptX HD" | "LDAC" | "Opus" | ... */
+  codec: string;
+  /** Laju yang dinegosiasikan codec (Hz). 0 = tidak dilaporkan. */
+  sampleRate: number;
+  bitsPerSample: number;
+  /** Bitrate target (bps). 0 = tidak dilaporkan. */
+  bitrate: number;
+  /** true hanya untuk codec yang benar-benar lossless. */
+  lossless: boolean;
+}
+
 export interface Spec extends TurboModule {
   getDevices(): Promise<AudioDeviceDescriptor[]>;
   setActiveDevice(deviceId: string): Promise<boolean>;
@@ -55,6 +76,14 @@ export interface Spec extends TurboModule {
    * sendiri atau belum dibuka.
    */
   getCurrentOutputDevice(): Promise<AudioDeviceDescriptor | null>;
+  /**
+   * Codec A2DP yang sedang dipakai.
+   *
+   * `available: false` = tidak bisa dibaca (tidak ada A2DP aktif, API < 33,
+   * atau izin BLUETOOTH_CONNECT belum diberikan). Jangan mengarang nama codec
+   * dalam keadaan itu.
+   */
+  getBluetoothCodec(): Promise<BluetoothCodecInfo>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('NativeDeviceModule');

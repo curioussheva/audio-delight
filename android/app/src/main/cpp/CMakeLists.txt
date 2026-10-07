@@ -73,19 +73,14 @@ set(CMAKE_CXX_FLAGS_DEBUG   "${CMAKE_CXX_FLAGS_DEBUG} -O2 -g3 -fno-omit-frame-po
 file(GLOB_RECURSE ALL_SRCS CONFIGURE_DEPENDS
   "core/*.cpp"
   "manager/*.cpp"
-  "modes/*.cpp"
   "playback/*.cpp"
   "decoder/*.cpp"
   "dsp/*.cpp"
   "dsp/*/*.cpp"
   "fft/*.cpp"
   "devices/*.cpp"
-  "usb/*.cpp"
   "realtime/*.cpp"
-  "session/*.cpp"
-  "profiling/*.cpp"
   "visualizer/*.cpp"
-  "utils/*.cpp"
   "resampler/*.cpp"
 )
 

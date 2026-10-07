@@ -199,6 +199,7 @@ export default function SettingsScreen() {
     status: outputStatus,
     pathLossy,
     canBeBitPerfect,
+    bluetoothCodec,
     loading: outputLoading,
     error: outputError,
     refresh: refreshOutput,
@@ -511,6 +512,32 @@ export default function SettingsScreen() {
                   ? `${activeOutputDevice.id} â¢ ${activeOutputDevice.sampleRate / 1000} kHz maks â¢ ${pathLabel}`
                   : "Tidak ada perangkat spesifik yang dipilih - Android menentukan sendiri."}
               </Text>
+
+              {/* Codec Bluetooth: A2DP selalu lossy, dan tanpa ini user hanya
+                  melihat "tidak bit-perfect" tanpa tahu penyebabnya. */}
+              {activeOutputDevice?.type === "bluetooth" && (
+                <Text
+                  style={{
+                    color: colors.text.secondary,
+                    fontSize: 11,
+                    marginTop: spacing.xs,
+                    lineHeight: 15,
+                  }}
+                >
+                  {bluetoothCodec.available
+                    ? `Codec A2DP: ${bluetoothCodec.codec}` +
+                      (bluetoothCodec.sampleRate > 0
+                        ? ` ${bluetoothCodec.sampleRate / 1000} kHz`
+                        : "") +
+                      (bluetoothCodec.bitsPerSample > 0
+                        ? ` / ${bluetoothCodec.bitsPerSample} bit`
+                        : "") +
+                      (bluetoothCodec.lossless
+                        ? " - lossless"
+                        : " - lossy, sampel di-encode ulang")
+                    : "Codec A2DP tidak bisa dibaca (izin Bluetooth belum diberikan, atau API terlalu lama)."}
+                </Text>
+              )}
 
               {/* Pilihan tidak dihormati: DAC dipilih tapi stream tetap keluar
                   di perangkat lain. Dulu ini tidak terlihat sama sekali. */}

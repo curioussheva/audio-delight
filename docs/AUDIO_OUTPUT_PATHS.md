@@ -458,22 +458,92 @@ stub tanpa JNI Ã¢ÂÂ kalau nanti mau dibersihkan, itu tempatnya.
 
 ---
 
-## 10. Yang masih terbuka
+## 10. Bluetooth: codec sekarang bisa dibaca
 
-1. **Bluetooth tidak punya penanganan codec sama sekali.** Tidak ada
-   `BluetoothCodecConfig`, tidak ada `BLUETOOTH_CONNECT`, dan tidak ada cara
-   menampilkan codec yang sedang dipakai (SBC/aptX/LDAC). A2DP **selalu
-   lossy**, jadi bit-perfect mustahil Ã¢ÂÂ itu sudah ditangani di UI, tapi
-   "codec apa yang aktif" belum bisa ditampilkan. Butuh JNI baru ke
-   `BluetoothA2dp.getCodecStatus()` (API 33+) dan izin `BLUETOOTH_CONNECT`
-   di manifest.
-2. **`AudioRouteManager` masih stub total.** Empat kelas USB C++ juga masih
-   0 referensi, dan izin USB di manifest masih diminta tanpa dipakai.
-3. **eARC tidak ditangani khusus.** HDMI ditandai sebagai jalur langsung,
-   jadi ia akan muncul sebagai kandidat bit-perfect; belum diuji apakah
-   `setDeviceId()` pada HDMI benar-benar menghasilkan jalur langsung.
-4. **Belum ada bukti dari perangkat.** Semua di atas terverifikasi di level
-   kode + compile, bukan di audio yang keluar speaker/DAC.
+Sebelumnya tidak ada penanganan codec sama sekali. Sekarang ada, dan sengaja
+dirancang supaya **tidak** bisa dipakai mengklaim bit-perfect.
+
+- `android/app/src/main/java/com/pristineaudio/audio/BluetoothCodecReader.kt` Ã¢ÂÂ
+  membaca codec A2DP aktif lewat `BluetoothA2dp.getCodecStatus()` (API 33+),
+  mengembalikan nama codec, laju & bit yang dinegosiasikan, bitrate, dan
+  `lossless`.
+- Manifest: `BLUETOOTH_CONNECT` (API 31+) + `BLUETOOTH` (maxSdk 30).
+- `NativeDeviceModule.getBluetoothCodec()` mengembalikannya ke JS.
+- `useAudioOutput` hanya membaca codec **saat perangkat aktifnya Bluetooth** Ã¢ÂÂ
+  membacanya menempuh profile proxy, tidak ada gunanya saat output ke speaker
+  atau DAC.
+- UI menampilkannya di bawah "OUTPUT AKTIF".
+
+Dua hal yang sengaja dilakukan:
+
+1. **`available: false` bukan `codec: "unknown"`.** Kalau tidak ada A2DP aktif,
+   API < 33, atau izin belum diberikan, yang dilaporkan adalah "tidak bisa
+   dibaca" Ã¢ÂÂ bukan nama codec karangan. UI tidak pernah menampilkan codec yang
+   tidak benar-benar dibaca.
+2. **`lossless` konservatif.** Hanya `aptX Lossless` yang dihitung lossless.
+   aptX Adaptive bisa lossless di mode tertentu tapi tidak selalu, jadi tidak
+   dihitung Ã¢ÂÂ lebih baik menuduh lossy daripada menjanjikan lossless.
+
+Membaca codec punya batas waktu 400 ms supaya Bluetooth yang tidak responsif
+tidak menggantung pemanggilnya.
+
+---
+
+## 11. Kode mati yang dihapus
+
+`AudioRouteManager` dan 4 kelas USB bukan satu-satunya. Audit pemanggil
+menemukan ~20 kelas yang **dibangun tapi nol referensi**, dan semuanya stub:
+
+| Dihapus | Isi sebenarnya |
+|---|---|
+| `devices/AudioRouteManager.{h,cpp}` | `setRoute()` log lalu `return true`; `getCurrentRoute()` selalu kosong |
+| `usb/USBDeviceManager.{h,cpp}` | `requestDevicePermission()` selalu `false` |
+| `usb/USBStreamSession.{h,cpp}` | `write()` tidak menulis apa pun, hanya `return mActive` |
+| `usb/USBClockSync.{h,cpp}` | `updateFeedback()` kosong, `getDriftRatio()` selalu `1.0` |
+| `usb/USBDACCapabilities.{h,cpp}` | struct header-only, 0 pemakai |
+| `session/` (4 kelas) | AudioFocusManager, AudioSessionManager, NoisyReceiverHandler, TransportControls Ã¢ÂÂ 0 include dari luar dirinya |
+| `profiling/` (3 kelas) | CPUProfiler, LatencyProfiler, DSPBenchmark |
+| `realtime/CallbackTimer.{h,cpp}` | Ã¢ÂÂ |
+| `modes/` (3 kelas) | BitPerfectPipeline, DSPPipeline, ImmersivePipeline Ã¢ÂÂ hanya disebut di komentar |
+
+Efeknya bukan "tidak dipakai", tapi **"tampak tersedia padahal tidak ada"**.
+`AudioRouteManager` menjanjikan routing yang tidak pernah terjadi; kelas USB
+menjanjikan jalur bit-perfect terpendek yang tidak pernah tersambung.
+
+Ikut dihapus, karena keduanya satu unit dan hanya melayani USB host API:
+
+- `<intent-filter android.hardware.usb.action.USB_DEVICE_ATTACHED>` +
+  `<meta-data ... device_filter>` di manifest
+- `res/xml/device_filter.xml`
+
+**Yang TIDAK dihapus:** `<uses-feature android:name="android.hardware.usb.host"
+android:required="false"/>`. Itu deklarasi bahwa app *bisa* memakai USB host
+(nilai rendah, `required=false`), bukan izin runtime yang mengganggu. Dan yang
+penting: **izin USB itu untuk `UsbDeviceConnection`, bukan untuk Oboe** Ã¢ÂÂ
+memilih DAC lewat Oboe/`setDeviceId()` tidak pernah butuh izin itu.
+
+`CMakeLists.txt` juga dibersihkan dari glob ke direktori yang sudah tidak ada
+(`modes/`, `usb/`, `session/`, `profiling/`, `utils/`). Yang tersisa:
+60 file C++ dibangun.
+
+> `/graphify --update` langkah berikutnya: 20 kelas itu hilang dari graph.
+
+---
+
+## 12. Yang masih terbuka
+
+1. **Belum ada bukti dari perangkat.** Semua di ÃÂ§9Ã¢ÂÂÃÂ§11 terverifikasi di level
+   kode + compile, bukan di audio yang keluar speaker/DAC. Butuh APK dari CI.
+2. **`getCodecStatus()` butuh API 33.** Di bawah itu codec dilaporkan sebagai
+   tidak tersedia (bukan dikarang). Tidak ada rencana menambalnya Ã¢ÂÂ tidak ada
+   API resmi.
+3. **eARC tidak ditangani khusus.** HDMI ditandai jalur langsung, jadi ia
+   muncul sebagai kandidat bit-perfect; belum diuji apakah `setDeviceId()` pada
+   HDMI benar-benar menghasilkan jalur langsung.
+4. **Jalur bit-perfect terpendek (USB host langsung ke DAC) sekarang tidak
+   ada.** Kalau nanti dibutuhkan, ia harus dibangun ulang dari nol Ã¢ÂÂ tapi
+   ingat: Oboe sudah menangani DAC USB lewat `setDeviceId()` tanpa izin USB,
+   jadi jalur itu hanya diperlukan kalau mau melewati Oboe sepenuhnya.
 
 **Status dokumen:** diverifikasi lewat pembacaan kode + audit pemanggil, 2026-10-07.
 Setiap klaim "tidak ada pemanggil" berasal dari grep yang definisinya dikecualikan.

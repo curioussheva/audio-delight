@@ -14,6 +14,7 @@ import AudioOutputService, {
   pathKindOf,
   type ActiveDeviceStatus,
   type AudioDeviceDescriptor,
+  type BluetoothCodecInfo,
   type OutputPathKind,
 } from "../api/audioOutput";
 
@@ -30,6 +31,11 @@ export interface UseAudioOutputReturn {
   pathLossy: boolean;
   /** true kalau perangkat aktif mungkin bit-perfect (null = belum tahu). */
   canBeBitPerfect: boolean | null;
+  /**
+   * Codec A2DP aktif. `available: false` kalau perangkat aktif bukan
+   * Bluetooth, atau codecnya tidak bisa dibaca.
+   */
+  bluetoothCodec: BluetoothCodecInfo;
   loading: boolean;
   error: string | null;
   /** Baca ulang daftar perangkat dari Android. */
@@ -45,6 +51,14 @@ export const useAudioOutput = (): UseAudioOutputReturn => {
   const [currentDevice, setCurrentDevice] =
     useState<AudioDeviceDescriptor | null>(null);
   const [status, setStatus] = useState<ActiveDeviceStatus | null>(null);
+  const [bluetoothCodec, setBluetoothCodec] = useState<BluetoothCodecInfo>({
+    available: false,
+    codec: "",
+    sampleRate: 0,
+    bitsPerSample: 0,
+    bitrate: 0,
+    lossless: false,
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,6 +80,27 @@ export const useAudioOutput = (): UseAudioOutputReturn => {
     if (!mounted.current) return;
     setStatus(nextStatus);
     setCurrentDevice(nextDevice);
+
+    // Codec hanya relevan kalau perangkat aktifnya Bluetooth. Membacanya
+    // memanggil BluetoothA2dp lewat profile proxy, dan itu tidak gratis -
+    // tidak ada alasan menempuhnya saat output ke speaker atau DAC.
+    if (nextDevice?.type === "bluetooth") {
+      const codec = await AudioOutputService.getBluetoothCodec();
+      if (mounted.current) setBluetoothCodec(codec);
+    } else if (mounted.current) {
+      setBluetoothCodec((prev) =>
+        prev.available
+          ? {
+              available: false,
+              codec: "",
+              sampleRate: 0,
+              bitsPerSample: 0,
+              bitrate: 0,
+              lossless: false,
+            }
+          : prev,
+      );
+    }
   }, []);
 
   const refresh = useCallback(async () => {
@@ -154,6 +189,7 @@ export const useAudioOutput = (): UseAudioOutputReturn => {
     pathKind,
     pathLossy: status?.pathLossy ?? pathKind === "audioflinger",
     canBeBitPerfect: canBeBitPerfect(currentDevice),
+    bluetoothCodec,
     loading,
     error,
     refresh,

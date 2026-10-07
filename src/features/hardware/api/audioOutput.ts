@@ -17,9 +17,10 @@ import NativeDeviceModule from "@/specs/NativeDeviceModule";
 import type {
   ActiveDeviceStatus,
   AudioDeviceDescriptor,
+  BluetoothCodecInfo,
 } from "@/specs/NativeDeviceModule";
 
-export type { ActiveDeviceStatus, AudioDeviceDescriptor };
+export type { ActiveDeviceStatus, AudioDeviceDescriptor, BluetoothCodecInfo };
 
 /**
  * Jalur output secara arsitektur.
@@ -120,6 +121,29 @@ export const AudioOutputService = {
     } catch (e) {
       console.warn("[AudioOutput] getCurrentDevice gagal:", e);
       return null;
+    }
+  },
+
+  /**
+   * Codec A2DP yang sedang dipakai.
+   *
+   * A2DP selalu lossy, jadi ini bukan alat untuk mengklaim bit-perfect -
+   * justru sebaliknya: menjelaskan mengapa jalur Bluetooth tidak bisa.
+   * `available: false` kalau tidak bisa dibaca; jangan mengarang nama codec.
+   */
+  getBluetoothCodec: async (): Promise<BluetoothCodecInfo> => {
+    try {
+      return await NativeDeviceModule.getBluetoothCodec();
+    } catch (e) {
+      console.warn("[AudioOutput] getBluetoothCodec gagal:", e);
+      return {
+        available: false,
+        codec: "",
+        sampleRate: 0,
+        bitsPerSample: 0,
+        bitrate: 0,
+        lossless: false,
+      };
     }
   },
 };

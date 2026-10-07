@@ -28,6 +28,15 @@
     <!-- Advanced FS -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
 
+    <!-- Bluetooth audio route & codec.
+         Dibutuhkan supaya app bisa menampilkan perangkat Bluetooth yang
+         sedang aktif dan codec yang dipakai A2DP (SBC/aptX/LDAC). Tanpa izin
+         ini, getCodecStatus() tidak bisa dipanggil di API 33+.
+         A2DP SELALU lossy - bit-perfect tidak mungkin lewat Bluetooth, dan
+         UI memakainya untuk menyatakan itu, bukan untuk mengklaim sebaliknya. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
+
     <!-- System -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
@@ -97,13 +106,13 @@
                 <data android:scheme="pristineaudio"/>
             </intent-filter>
 
-            <intent-filter>
-                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"/>
-            </intent-filter>
-
-            <meta-data
-                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
-                android:resource="@xml/device_filter"/>
+            <!-- UsbManager.requestPermission() membuka activity ini dengan
+                 EXTRA_PERMISSION_GRANTED. Izin USB itu berlaku untuk
+                 UsbDeviceConnection (USB host API), BUKAN untuk AudioManager
+                 atau Oboe - memilih DAC lewat Oboe tidak butuh izin ini.
+                 Dua blok (intent-filter + meta-data device_filter) adalah satu
+                 unit; keduanya dihapus bersama supaya tidak ada setengah
+                 pendaftaran yang tersisa. -->
         </activity>
 
     </application>
