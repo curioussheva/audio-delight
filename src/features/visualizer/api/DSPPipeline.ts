@@ -2,7 +2,7 @@ import { EqualizerBand } from "@/shared/types/dsp";
 import NativeDSPModule from "@/features/visualizer/native/NativeDSPModule";
 import NativeDSPModuleSpec, {
   ProcessingModeValue,
-  type ProcessingModeValue as ProcessingModeValueType,
+  type ProcessingModeValueType,
 } from "@/specs/NativeDSPModule";
 
 /**

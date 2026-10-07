@@ -70,7 +70,7 @@ export class AudioEngine {
           : NativeDSPModuleValue.DSP;
 
     try {
-      (NativeDSPModule as any)?.setProcessingMode?.(value);
+      NativeDSPModule?.setProcessingMode?.(value);
       console.log(`ðï¸ [AudioEngine] Mode pemrosesan -> ${mode} (${value})`);
     } catch (e) {
       console.warn("[AudioEngine] setProcessingMode gagal:", e);

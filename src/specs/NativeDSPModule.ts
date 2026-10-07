@@ -1,6 +1,30 @@
 import type { TurboModule } from 'react-native';
 import { TurboModuleRegistry } from 'react-native';
 
+// =====================================================
+// CATATAN: ATURAN TIPE DI FILE SPEC TURBOMODULE
+// =====================================================
+//
+// Codegen React Native mem-PARSE file ini untuk menghasilkan kode JNI/Kotlin.
+// Parser-nya TIDAK mendukung seluruh TypeScript. Yang TIDAK boleh dipakai di
+// signature method:
+//
+//   - TSIndexedAccessType : `(typeof X)[keyof typeof X]`
+//   - conditional type    : `T extends U ? A : B`
+//   - mapped type         : `{ [K in keyof T]: ... }`
+//   - template literal type
+//
+// Pelanggaran TIDAK menghasilkan error TypeScript - `tsc` lolos sepenuhnya.
+// Yang muncul: build GAGAL di task `:app:generateCodegenSchemaFromJavaScript`
+// dengan `UnsupportedTypeAnnotationParserError`. Dua kali terjadi di proyek ini.
+//
+// Aturan praktis: signature method hanya pakai primitif (`number`, `boolean`,
+// `string`), array primitif, dan `Promise`/objek sederhana. Untuk "enum",
+// pakai `number` di signature + konstanta bertipe TERPISAH di bawah.
+//
+// `./scripts/check_codegen_spec.py` memeriksa ini secara lokal, karena
+// `tsc` dan clangd sama-sama tidak bisa menangkapnya.
+
 export interface Spec extends TurboModule {
   // Equalizer & effects
   setEqualizer(band: number, level: number, sessionId: number): Promise<boolean>;
@@ -18,8 +42,8 @@ export interface Spec extends TurboModule {
   setBalance(balance: number): void;
   setExclusiveMode(enabled: boolean): void;
 
-  // 🔥 Status stream AKTUAL, bukan yang diminta.
-  // AAudio bisa menolak exclusive → Oboe fallback ke shared secara diam-diam.
+  // ð¥ Status stream AKTUAL, bukan yang diminta.
+  // AAudio bisa menolak exclusive â Oboe fallback ke shared secara diam-diam.
   // isExclusiveModeActive() false meski setExclusiveMode(true) dipanggil.
   // getActualSampleRate() = laju stream yang benar-benar dibuka Oboe.
   // Sinkron supaya satu read atomic (stop/start stream di tengah bisa kasih
@@ -41,10 +65,10 @@ export interface Spec extends TurboModule {
    * Live - mode dibaca dari atomic setiap buffer, jadi perubahan berlaku pada
    * frame berikutnya tanpa restart stream dan tanpa jeda.
    *
-   * Sebelumnya JNI-nya ada tapi tidak ter-expose ke Kotlin, sehingga mode
-   * ketiga mustahil dipilih dari JS.
+   * Bertipe `number` (bukan union literal) karena codegen tidak menerima
+   * indexed-access type. Pakai `ProcessingModeValue` untuk nilainya.
    */
-  setProcessingMode(mode: ProcessingModeValue): void;
+  setProcessingMode(mode: number): void;
 
   /**
    * Sakelar pemrosesan DSP di jalur produksi.
@@ -60,14 +84,18 @@ export interface Spec extends TurboModule {
   isDSPProcessingEnabled(): boolean;
 }
 
-/** Nilai `ProcessingMode` di C++ (core/AudioTypes.h). Jangan diacak. */
+/**
+ * Nilai `ProcessingMode` di C++ (`core/AudioTypes.h`). Jangan diacak - nomor
+ * ini dipakai langsung sebagai `jint` di JNI dan di-cast ke enum C++.
+ */
 export const ProcessingModeValue = {
   BitPerfect: 0,
   DSP: 1,
   Immersive: 2,
 } as const;
 
-export type ProcessingModeValue =
+/** Tipe nilai enum di atas - untuk pemakaian JS/TS, BUKAN di signature spec. */
+export type ProcessingModeValueType =
   (typeof ProcessingModeValue)[keyof typeof ProcessingModeValue];
 
 export default TurboModuleRegistry.getEnforcing<Spec>('NativeDSPModule');

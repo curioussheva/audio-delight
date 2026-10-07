@@ -17,9 +17,16 @@ export interface NativeDSPInterface {
   setBalance(balance: number): void;
   setExclusiveMode(enabled: boolean): void;
 
-  // Status stream aktual — AAudio bisa tolak exclusive, fallback diam-diam.
+  // Status stream aktual â AAudio bisa tolak exclusive, fallback diam-diam.
   isExclusiveModeActive(): boolean;
   getActualSampleRate(): number;
+
+  // Mode pemrosesan (0 = BitPerfect, 1 = DSP, 2 = Immersive). Live.
+  setProcessingMode(mode: number): void;
+
+  // Sakelar diagnostik: proses DSP di jalur produksi.
+  setDSPProcessingEnabled(enabled: boolean): void;
+  isDSPProcessingEnabled(): boolean;
 
   // Additional engine controls
   setDSPEnabled(enabled: boolean): void;
