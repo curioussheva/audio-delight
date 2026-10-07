@@ -25,6 +25,16 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/). Versi mengikut
 
 ### Fixed
 
+- **Tap play setelah app restart gagal.** Setelah aplikasi di-restart, user
+  tap tombol play di mini-player/lock screen → `native play() returned false`
+  dalam 212ms, UI reset ke berhenti; harus tap dua kali. Native queue
+  sengaja tidak di-restore saat boot (lazy, resolve `content://` mahal),
+  tapi re-sync hanya ada di `playSong()`, bukan `setIsPlaying()` — padahal
+  tombol play lewat `togglePlay()` → `setIsPlaying()`. Sekarang
+  `setIsPlaying(true)` memeriksa `getQueueSize()` (sync) dulu; kalau 0 dan
+  ada currentSong, lakukan `setQueue()` → `play()` → seek ke posisi
+  tersimpan. Ditemukan dari logcat device 2026-10-07.
+
 - **KEHILANGAN DATA: satu kegagalan query MediaStore menghapus SELURUH library.**
   `MediaStore.queryAudioFiles()` menangkap error lalu `return []`; array kosong
   tidak bisa dibedakan dari "device tidak punya file audio". `ScanDiffEngine`

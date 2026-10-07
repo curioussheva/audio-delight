@@ -230,6 +230,37 @@ pause 80%→90% / resume 40%→60%, guard magnitudo ±2.0.
 
 ---
 
+## `native play() returned false` setelah app restart
+
+Gejala: setelah aplikasi di-restart (atau kill), user tap tombol play di
+mini-player / lock screen, tapi gagal dalam ~200ms dan UI reset ke berhenti.
+User harus tap dua kali baru jalan.
+
+Log yang khas:
+
+```
+PlaybackController: play(): FAILED - queue_->current() null (size=0)
+[PERF] play: FAILED in 212ms
+[Player] setIsPlaying(true): native play() GAGAL
+```
+
+**Root cause**: saat boot, `initStore` me-restore state JS (currentSong,
+queue, posisi) tetapi **native queue sengaja tidak** di-restore - lazy,
+karena resolve `content://` ke cache itu mahal (2-3 detik untuk 50 trek).
+Masalahnya, re-sync hanya ada di `playSong()`, bukan `setIsPlaying()` -
+padahal tombol play lewat `togglePlay()` → `setIsPlaying()`. Janji
+"re-sync on play" tidak ada pelaksananya di jalur yang umum.
+
+**Fix**: `setIsPlaying(true)` memeriksa `getQueueSize()` (sync) dulu; kalau
+0 dan ada currentSong, lakukan `setQueue()` baru `play()`, lalu seek ke
+posisi tersimpan. Probe dibungkus try/catch karena bridge bisa belum siap.
+
+**Pelajaran**: setiap kali ada komentar yang menjanjikan perilaku lazy
+("akan dilakukan saat X"), pastikan X benar-benar ada implementasinya -
+bukan hanya di satu pemanggil.
+
+---
+
 ## Preseden yang sudah mati (jangan diulang)
 
 Item dari dokumen lama yang **sudah tidak berlaku** - jangan dikerjakan lagi:
