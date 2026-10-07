@@ -259,7 +259,22 @@ bool PlaybackController::seek(double seconds) {
     decoderWorker_->pause();
 
     pcmQueue_->clear();
-    clock_->seekToSeconds(seconds, 48000);
+
+    // 🩹 FIX (2026-10-07): laju clock HARUS laju stream aktual, bukan 48000
+    // tetap. Decoder meresample PCM ke laju stream (lihat startDecoder:
+    // cfg.targetSampleRate = streamSampleRate()), jadi domain frame clock =
+    // laju stream. Hardcode 48000 membuat seek meleset di file non-48k:
+    // file 44.1kHz yang di-seek ke 90s disimpan sebagai 90*48000 = 4.32M frame,
+    // lalu dirender pada 44100 → UI melapor ~98s.
+    //
+    // streamSampleRate() masih 0 sebelum render() pertama (stream belum buka).
+    // Dalam kasus itu fallback 48000 = perilaku lama, supaya seek tidak
+    // menghasilkan frame 0 (meleset ke awal track).
+    uint32_t seekRate = streamSampleRate();
+    if (seekRate == 0) {
+        seekRate = 48000;
+    }
+    clock_->seekToSeconds(seconds, seekRate);
 
     bool ok = decoderWorker_->seek(seconds);
 

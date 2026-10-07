@@ -247,11 +247,15 @@ void PrebufferManager::decodeLoop(
             return;
         }
 
+        // 🩹 FIX: Query actual format dari decoder output, bukan hardcode
+        // 48000/2ch. File hi-res (96/192 kHz) harus pakai rate aslinya.
+        const auto& format = decoder->getOutputFormat();
+
         result->sampleRate =
-            48000;
+            format.sampleRate;
 
         result->channels =
-            2;
+            format.channels;
 
         result->totalFrames =
             totalFrames;
