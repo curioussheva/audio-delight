@@ -200,7 +200,7 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeImmersiveEnabled(
 // tidak tercapai dan user harus diberi tahu.
 
 JNIEXPORT jboolean JNICALL
-Java_com_pristineaudio_dsp_NativeDSPModule_isExclusiveModeActive(
+Java_com_pristineaudio_dsp_NativeDSPModule_nativeIsExclusiveModeActive(
     JNIEnv*, jobject) {
     return static_cast<jboolean>(
         EngineManager::get().isExclusive()
@@ -208,7 +208,7 @@ Java_com_pristineaudio_dsp_NativeDSPModule_isExclusiveModeActive(
 }
 
 JNIEXPORT jint JNICALL
-Java_com_pristineaudio_dsp_NativeDSPModule_getActualSampleRate(
+Java_com_pristineaudio_dsp_NativeDSPModule_nativeGetActualSampleRate(
     JNIEnv*, jobject) {
     return static_cast<jint>(
         EngineManager::get().actualSampleRate()
