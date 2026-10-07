@@ -66,7 +66,7 @@ class NativePlaybackModule(
     private external fun nativeSetShuffle(enabled: Boolean)
     private external fun nativeSetRepeatMode(mode: Int)
     private external fun nativeGetQueue(): Array<String>
-    private external fun nativeSetQueue(uris: Array<String>)
+    private external fun nativeSetQueue(uris: Array<String>, sampleRates: IntArray)
     private external fun nativeGetCurrentTrack(): String
 
     override fun getName() = NAME
@@ -124,8 +124,14 @@ class NativePlaybackModule(
         nativeSetRepeatMode(mode)
     }
 
+    // `sampleRates` = laju file (Hz) per entry di `uris`, boleh null.
+    //
+    // 🔥 FIX (2026-10-07): laju file ikut dikirim supaya C++ bisa membuka
+    // stream di laju track (bit-perfect) alih-alih laju tertinggi perangkat.
+    // Sebelumnya array ini tidak ada dan laju file hilang sebelum sampai ke
+    // native. Elemen yang tidak diketahui dikirim 0.
     @ReactMethod
-    fun setQueue(uris: ReadableArray) {
+    fun setQueue(uris: ReadableArray, sampleRates: ReadableArray?) {
         val list = ArrayList<String>()
         for (i in 0 until uris.size()) {
             val uri = uris.getString(i)
@@ -133,7 +139,24 @@ class NativePlaybackModule(
                 list.add(resolveContentUri(uri))
             }
         }
-        nativeSetQueue(list.toTypedArray())
+        nativeSetQueue(list.toTypedArray(), buildRateArray(sampleRates, list.size))
+    }
+
+    // Ambil laju per track dari ReadableArray, samakan panjangnya dengan
+    // daftar URI. Nilai non-numerik / tidak ada menjadi 0 (= tidak diketahui),
+    // yang ditafsirkan native sebagai "deteksi sendiri".
+    private fun buildRateArray(sampleRates: ReadableArray?, expectedSize: Int): IntArray {
+        val rates = IntArray(expectedSize)
+        if (sampleRates == null) return rates
+        val count = minOf(sampleRates.size(), expectedSize)
+        for (i in 0 until count) {
+            rates[i] = try {
+                sampleRates.getInt(i)
+            } catch (e: Exception) {
+                0
+            }
+        }
+        return rates
     }
 
     // Non-void return → WAJIB isBlockingSynchronousMethod = true
@@ -227,7 +250,8 @@ class NativePlaybackModule(
     fun setShuffleFromService(enabled: Boolean) = nativeSetShuffle(enabled)
     fun setRepeatModeFromService(mode: Int) = nativeSetRepeatMode(mode)
     fun getQueueFromService(): Array<String> = nativeGetQueue()
-    fun setQueueFromService(uris: Array<String>) = nativeSetQueue(uris)
+    fun setQueueFromService(uris: Array<String>, sampleRates: IntArray = IntArray(uris.size)) =
+        nativeSetQueue(uris, sampleRates)
     fun getCurrentTrackFromService(): String = nativeGetCurrentTrack()
     fun getPositionFromService(): Double = nativeGetPosition().toDouble()
     fun getStatusFromService(): Int = nativeGetStatus()

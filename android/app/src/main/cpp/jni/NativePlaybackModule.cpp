@@ -9,7 +9,16 @@
 
 static pristine::playback::PlaybackController* gPlaybackController = nullptr;
 
-// Lazy getter + auto-init engine & controller
+// Controller-only: initialize controller kalau belum, TAPI JANGAN start engine.
+//
+// 🔥 FIX (2026-10-07): dulu fungsi ini sekaligus menyalakan engine, dan semua
+// JNI function memakainya. Akibatnya nativeSetQueue - yang dipanggil JS SEBELUM
+// play, saat queue masih kosong - sudah membuka stream di laju terdeteksi
+// (tertinggi perangkat) sebelum laju file diketahui. play() lalu menemukan
+// engine sudah running dan tidak pernah membukanya ulang di laju track.
+//
+// Sekarang hanya transport (play) yang menyalakan engine, dan itu terjadi
+// setelah queue terisi dan track dimuat - jadi stream dibuka di laju file.
 static pristine::playback::PlaybackController* getController() {
     if (!gPlaybackController) {
         gPlaybackController = &pristine::EngineManager::get().playback();
@@ -21,12 +30,42 @@ static pristine::playback::PlaybackController* getController() {
         __android_log_print(ANDROID_LOG_DEBUG, "NativePlaybackModule", "controller initialized");
     }
 
+    return gPlaybackController;
+}
+
+// Controller + engine, dipakai HANYA oleh play() (transport yang benar-benar
+// butuh stream audio berjalan).
+static pristine::playback::PlaybackController* getControllerAndStartEngine() {
+    auto* controller = getController();
+    if (!controller) return nullptr;
+
     if (!pristine::EngineManager::get().engine().isRunning()) {
+        // 🔥 FIX (2026-10-07): muat track SEBELUM engine start kalau queue
+        // sudah punya track.
+        //
+        // Bit-perfect butuh stream dibuka di laju track. loadTrack() mengisi
+        // laju file ke controller, dan EngineManager::start() memakainya lewat
+        // pickBestRate() untuk memilih laju stream.
+        //
+        // hasDecoder(): loadTrack me-reset posisi dan clock, jadi hanya
+        // dijalankan kalau belum ada decoder. Tanpa guard ini, setiap play()
+        // selama engine belum running akan me-reset playback.
+        if (!controller->hasDecoder()) {
+            if (auto queue = controller->queue()) {
+                if (auto track = queue->current()) {
+                    __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
+                        "play: preload track sebelum start, laju file=%u",
+                        track->sampleRate);
+                    controller->loadTrack(*track);
+                }
+            }
+        }
+
         pristine::EngineManager::get().start();
         __android_log_print(ANDROID_LOG_DEBUG, "NativePlaybackModule", "engine started");
     }
 
-    return gPlaybackController;
+    return controller;
 }
 
 extern "C" {
@@ -48,7 +87,10 @@ Java_com_pristineaudio_audio_NativePlaybackModule_nativeInitEventEmitter(
 JNIEXPORT jboolean JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativePlay(JNIEnv*, jobject) {
     __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
                         "nativePlay() called from JS");
-    auto* controller = getController();
+    // getControllerAndStartEngine: play() adalah satu-satunya transport yang
+    // memulai stream, dan ia melakukannya SETELAH queue terisi, supaya stream
+    // dibuka di laju track (bit-perfect).
+    auto* controller = getControllerAndStartEngine();
     if (!controller) {
         __android_log_print(ANDROID_LOG_ERROR, "NativePlaybackModule",
                             "nativePlay: controller null!");
@@ -171,8 +213,18 @@ JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativePlaybackModule
     return result;
 }
 
+// `uris`  = daftar URI track (wajib).
+// `rates` = laju file per track dalam Hz (opsional, boleh null).
+//
+// 🔥 FIX (2026-10-07): laju file ikut masuk ke TrackInfo supaya engine bisa
+// membuka stream di laju track (bit-perfect), bukan di laju tertinggi
+// perangkat. Sebelumnya array ini tidak ada dan sampleRate selalu 0, jadi
+// informasi laju file hilang sebelum sampai ke C++.
+//
+// Elemen rates yang 0 / array lebih pendek dari uris = laju tidak diketahui;
+// engine akan mendeteksi sendiri untuk track itu.
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSetQueue(
-    JNIEnv* env, jobject, jobjectArray uris) {
+    JNIEnv* env, jobject, jobjectArray uris, jintArray rates) {
 
     __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
                         "nativeSetQueue() called");
@@ -188,6 +240,19 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeS
     __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
                         "nativeSetQueue: length=%d", (int)length);
 
+    // Laju file dibaca sekali di luar loop; jumlahnya boleh lebih pendek.
+    jsize rateCount = 0;
+    std::vector<jint> rateValues;
+    if (rates) {
+        rateCount = env->GetArrayLength(rates);
+        if (rateCount > 0) {
+            rateValues.resize(static_cast<size_t>(rateCount));
+            env->GetIntArrayRegion(
+                rates, 0, rateCount, rateValues.data()
+            );
+        }
+    }
+
     std::vector<pristine::playback::TrackInfo> tracks;
     for (jsize i = 0; i < length; ++i) {
         jstring js = (jstring) env->GetObjectArrayElement(uris, i);
@@ -201,6 +266,17 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeS
 
         pristine::playback::TrackInfo info;
         info.uri = cstr;
+
+        // Laju file: hanya terima nilai yang masuk akal sebagai laju audio.
+        // Nilai sampah (0, negatif, di luar rentang) dibiarkan 0 supaya engine
+        // mendeteksi sendiri alih-alih membuka stream di laju tidak valid.
+        if (i < rateCount) {
+            const int32_t rate = static_cast<int32_t>(rateValues[static_cast<size_t>(i)]);
+            if (rate >= 8000 && rate <= 768000) {
+                info.sampleRate = static_cast<uint32_t>(rate);
+            }
+        }
+
         tracks.push_back(info);
 
         env->ReleaseStringUTFChars(js, cstr);

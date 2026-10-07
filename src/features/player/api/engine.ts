@@ -242,7 +242,11 @@ export class AudioEngine {
     if (songs.length === 0) return;
 
     const uris = songs.map((s) => s.uri);
-    NativePlaybackService.setQueue(uris);
+    // 🔥 FIX (2026-10-07): kirim laju file per track supaya native bisa
+    // membuka stream di laju track (bit-perfect), bukan laju tertinggi
+    // perangkat. Track tanpa laju dikirim 0 = biar native yang deteksi.
+    const sampleRates = songs.map((s) => s.sampleRate ?? 0);
+    NativePlaybackService.setQueue(uris, sampleRates);
     if (startIndex > 0) {
       // Panggil metode native skipTo/playIndex jika sudah diimplementasikan di C++/Java
       // NativePlaybackService.skipTo(startIndex);

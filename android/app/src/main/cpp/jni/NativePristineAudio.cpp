@@ -19,8 +19,12 @@ Java_com_pristineaudio_audio_NativePristineAudio_nativeStart(
     JNIEnv*,
     jobject
 ) {
+    // Lewat EngineManager::start(), BUKAN engine().start() langsung: hanya
+    // jalur itu yang mengisi PlaybackController dan meneruskan laju file
+    // (pickBestRate) ke pembukaan stream. Memanggil engine().start() langsung
+    // membuka stream di laju tertinggi perangkat tanpa controller, sehingga
+    // tidak ada suara dan pemilihan laju per-file dilewati.
     EngineManager::get()
-        .engine()
         .start();
 }
 

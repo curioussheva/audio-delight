@@ -1,9 +1,11 @@
 #pragma once
 
+#include <atomic>
 #include <mutex>
 
 #include "../core/AudioEngine.h"
 #include "../core/AudioState.h"
+#include "../core/DeviceRateDetector.h"
 #include "../playback/PlaybackController.h"
 
 namespace pristine {
@@ -24,6 +26,23 @@ public:
     // lifecycle
     void start();
     void stop();
+
+    // Laju stream yang diminta, dipilih dari laju FILE lewat kapabilitas
+    // perangkat (DeviceRateDetector::pickBestRate).
+    //
+    // Tanpa ini stream selalu dibuka di laju TERTINGGI yang didukung
+    // perangkat, bukan laju file — file 44.1 kHz di DAC 384 kHz jadi
+    // upsampling 8.7x, kebalikan dari bit-perfect.
+    //
+    // fileRate <= 0 = laju file tidak diketahui -> biarkan engine mendeteksi
+    // sendiri (perilaku lama, laju tertinggi perangkat).
+    //
+    // Nilai ini disimpan dan dipakai ulang saat toggle exclusive mode, supaya
+    // stream yang dibuka ulang tidak kembali ke laju tertinggi perangkat.
+    void setRequestedSampleRate(int32_t fileRate);
+
+    // Laju yang diminta saat ini. 0 = belum ditentukan / auto.
+    int32_t requestedSampleRate() const;
 
     // playback
     void play();
@@ -75,11 +94,22 @@ private:
         const EngineManager&
     ) = delete;
 
+    // Laju yang akan dipakai stream berikutnya, dalam Hz.
+    // Prioritas: override eksplisit (setRequestedSampleRate) -> laju file dari
+    // controller (diisi loadTrack) -> 0 (biar engine deteksi sendiri).
+    // Dipanggil hanya saat mMutex sudah dipegang (start/toggle exclusive).
+    int32_t resolveRequestedRate() const;
+
 private:
 
     mutable std::mutex mMutex;
 
     AudioState mState;
+
+    // Laju stream yang diminta (hasil pickBestRate dari laju file).
+    // 0 = belum ditentukan -> engine mendeteksi sendiri dari perangkat.
+    // Atomic karena dibaca tanpa mMutex (requestedSampleRate() const).
+    std::atomic<int32_t> mRequestedSampleRate{0};
 
     AudioEngine mEngine;
 

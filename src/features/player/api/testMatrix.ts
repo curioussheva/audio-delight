@@ -11,6 +11,10 @@ export interface TestFile {
   name: string;
   uri: string;
   durationSec?: number;
+  // Laju file (Hz). Dipakai test matrix untuk menguji pemilihan laju stream:
+  // native harus membuka stream di laju ini kalau perangkat mendukungnya.
+  // 0 / tidak diisi = biar native mendeteksi sendiri.
+  sampleRate?: number;
 }
 
 export const DEFAULT_TEST_FILES: TestFile[] = [
@@ -18,16 +22,19 @@ export const DEFAULT_TEST_FILES: TestFile[] = [
     name: "MP3 44.1kHz",
     uri: "/storage/emulated/0/Music/test.mp3",
     durationSec: 18,
+    sampleRate: 44100,
   },
   {
     name: "FLAC 96kHz (Enya)",
     uri: "/storage/emulated/0/Music/Enya_-_Dark_Sky_Island.flac",
     durationSec: 30,
+    sampleRate: 96000,
   },
   {
     name: "FLAC 44.1kHz (Leo Rojas)",
     uri: "/storage/emulated/0/Music/The Rose - Leo Rojas.mp3",
     durationSec: 20,
+    sampleRate: 44100,
   },
 ];
 
@@ -54,7 +61,7 @@ export async function runAudioTestMatrix(
     try {
       // 1. Set queue
       await Promise.resolve(
-        NativePlaybackService.setQueue([file.uri]),
+        NativePlaybackService.setQueue([file.uri], [file.sampleRate ?? 0]),
       );
       const tSetQueue = Date.now() - t0;
       console.log(`  ⏱️  setQueue: ${tSetQueue}ms`);

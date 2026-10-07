@@ -413,7 +413,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     try {
       // ── 1. Filter URIs ─────────────────────────────────
       const tFilter0 = Date.now();
-      const uris = targetQueue.map((s) => s.uri).filter((uri) => !!uri);
+      const targetQueueSafe = targetQueue.filter((s) => !!s.uri);
+      const uris = targetQueueSafe.map((s) => s.uri);
+      // Laju file dipasangkan dengan uris yang SAMA (setelah filter), supaya
+      // track tanpa laju tidak menggeser laju track lain.
+      const queueRates = targetQueueSafe.map((s) => s.sampleRate ?? 0);
       if (uris.length === 0) {
         set({ playError: "No valid URIs" });
         return false;
@@ -428,7 +432,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       );
 
       // ── 2. setQueue (dengan await!) ────────────────────
-      await timedCall("setQueue", () => NativePlaybackService.setQueue(uris));
+      await timedCall("setQueue", () => NativePlaybackService.setQueue(uris, queueRates));
 
       // Native me-reject kalau dekoder gagal membuka track (mis. content://
       // yang belum di-resolve). Kalau hasilnya diabaikan, UI menampilkan lagu
@@ -673,12 +677,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
                 "[Player] 🔁 Native queue kosong — re-sync sebelum play()",
               );
               const target = s.queue.length > 0 ? s.queue : [song];
-              const uris = target
-                .map((x) => x.uri)
-                .filter((u): u is string => !!u);
+              const targetSafe = target.filter((x) => !!x.uri);
+              const uris = targetSafe.map((x) => x.uri);
+              const rates = targetSafe.map((x) => x.sampleRate ?? 0);
               if (uris.length > 0) {
                 await timedCall("setQueue(resume)", () =>
-                  NativePlaybackService.setQueue(uris),
+                  NativePlaybackService.setQueue(uris, rates),
                 );
                 if (s.position > 0) {
                   // posisi restore: biarkan decoder siap dulu, baru seek

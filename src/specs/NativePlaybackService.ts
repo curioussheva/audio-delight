@@ -15,7 +15,7 @@ export interface Spec extends TurboModule {
   seek(positionMs: number): Promise<void>;
   setShuffle(enabled: boolean): Promise<void>;
   setRepeatMode(mode: number): Promise<void>;
-  setQueue(uris: string[]): Promise<void>;
+  setQueue(uris: string[], sampleRates: number[] | null): Promise<void>;
 
   // Query
   getPosition(): Promise<number>;

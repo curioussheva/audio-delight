@@ -53,11 +53,36 @@ public:
     void setStreamSampleRate(uint32_t rate) noexcept;
     uint32_t streamSampleRate() const noexcept;
 
+    // 🔥 FIX (2026-10-07): laju FILE yang diminta, berbeda dari laju stream.
+    //
+    // Diisi otomatis oleh loadTrack(track.sampleRate), lalu dibaca
+    // EngineManager untuk memilih laju stream lewat
+    // DeviceRateDetector::pickBestRate(). Tanpa ini tidak ada jalur yang
+    // membawa laju file ke pembukaan stream: stream selalu dibuka di laju
+    // tertinggi perangkat, bukan laju file.
+    //
+    // 0 = laju file tidak diketahui (metadata tidak terbaca) -> engine
+    // mendeteksi sendiri.
+    //
+    // ⚠️ Memilih laju stream yang BENAR saat start() belum menghasilkan
+    // bit-perfect kalau stream dibuka sebelum track dimuat. Bit-perfect butuh
+    // stream dibuka di laju track, jadi urutan panggilannya: loadTrack dulu,
+    // baru start().
+    void setFileSampleRate(uint32_t rate) noexcept;
+    uint32_t currentFileSampleRate() const noexcept;
+
     // State accessors
     std::shared_ptr<PlaybackState> state() const noexcept;
     std::shared_ptr<MetricsCollector> metrics() const noexcept;
     std::shared_ptr<PlaybackClock> clock() const noexcept;
     std::shared_ptr<PCMQueue> pcmQueue() const noexcept;
+
+    // true kalau decoder untuk sebuah track sudah terbuka.
+    //
+    // Dipakai getController() JNI untuk memuat track tepat SATU kali sebelum
+    // engine start - memuat track itu me-reset posisi dan clock, jadi tidak
+    // boleh dipanggil berulang tiap JNI call.
+    bool hasDecoder() const noexcept;
 
 private:
     bool startDecoder(const TrackInfo& track);
@@ -81,6 +106,12 @@ private:
 
     // Laju stream aktual (dari device/DAC). 0 = belum diketahui.
     std::atomic<uint32_t> streamSampleRate_{0};
+
+    // Laju FILE yang diminta (metadata track). 0 = belum diketahui.
+    // Terpisah dari streamSampleRate_ karena keduanya memang berbeda sampai
+    // stream berhasil dibuka di laju file.
+    std::atomic<uint32_t> fileSampleRate_{0};
+
     std::shared_ptr<TrackQueue> queue_;
 
     std::unique_ptr<decoder::DecoderWorker> decoderWorker_;

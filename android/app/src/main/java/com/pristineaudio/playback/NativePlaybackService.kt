@@ -169,10 +169,18 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
      *
      * Efek: 5-30x lebih cepat dari resolve 50 file sekaligus.
      */
+    // `sampleRates` = laju file (Hz) per entry uris, boleh null.
+    //
+    // 🔥 FIX (2026-10-07): laju file diteruskan ke native supaya stream bisa
+    // dibuka di laju track (bit-perfect), bukan laju tertinggi perangkat.
     @ReactMethod
-    fun setQueue(uris: ReadableArray, promise: Promise) {
+    fun setQueue(uris: ReadableArray, sampleRates: ReadableArray?, promise: Promise) {
         try {
             val list = ArrayList<String>(uris.size())
+            // Index asli tiap entry di `list`. `continue` di loop bawah bisa
+            // melewati entry, jadi laju harus dipasangkan berdasarkan posisi
+            // asli, bukan urutan push.
+            val rateIndexes = ArrayList<Int>(uris.size())
             val startTime = System.currentTimeMillis()
             var resolved = 0
             var deferred = 0
@@ -185,6 +193,8 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
                 // 2. Sudah lewat timeout
                 val timedOut = (System.currentTimeMillis() - startTime) > RESOLVE_TIMEOUT_MS
                 val maxReached = resolved >= MAX_PRE_RESOLVE
+
+                rateIndexes.add(i)
 
                 if (timedOut || maxReached) {
                     // Simpan raw URI — resolve nanti saat benar-benar diperlukan
@@ -205,12 +215,37 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
                     "elapsed=${elapsed}ms"
             )
 
-            PlaybackNativeBridge.setQueue(list.toTypedArray())
+            PlaybackNativeBridge.setQueue(
+                list.toTypedArray(),
+                buildRateArray(sampleRates, rateIndexes, list.size)
+            )
             promise.resolve(null)
         } catch (e: Exception) {
             android.util.Log.e(LOG_TAG, "setQueue failed", e)
             promise.reject("SET_QUEUE_FAILED", e)
         }
+    }
+
+    // Petakan laju file ke posisi yang benar di queue hasil resolve.
+    // Entry yang dilewati (`continue`) tidak punya pasangan laju.
+    private fun buildRateArray(
+        sampleRates: ReadableArray?,
+        sourceIndexes: List<Int>,
+        expectedSize: Int,
+    ): IntArray {
+        val rates = IntArray(expectedSize)
+        if (sampleRates == null) return rates
+        for (i in 0 until minOf(sourceIndexes.size, expectedSize)) {
+            val src = sourceIndexes[i]
+            if (src < sampleRates.size()) {
+                rates[i] = try {
+                    sampleRates.getInt(src)
+                } catch (e: Exception) {
+                    0
+                }
+            }
+        }
+        return rates
     }
 
     // ============================================================

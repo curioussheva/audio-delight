@@ -57,9 +57,9 @@ object PlaybackNativeBridge {
         return NativePlaybackModule.instance?.getQueueFromService()
     }
 
-    fun setQueue(uris: Array<String>) {
+    fun setQueue(uris: Array<String>, sampleRates: IntArray = IntArray(uris.size)) {
         android.util.Log.d("PlaybackNativeBridge", "setQueue(${uris.size} items) called")
-        NativePlaybackModule.instance?.setQueueFromService(uris)
+        NativePlaybackModule.instance?.setQueueFromService(uris, sampleRates)
     }
 
     fun getCurrentTrack(): String? {

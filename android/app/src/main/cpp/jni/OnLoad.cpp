@@ -75,9 +75,20 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
   // Simpan JavaVM untuk emit event native→JS (track ended).
   ::pristine::playback::initJavaVm(vm);
 
-  __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "JNI_OnLoad â initializing EngineManager");
-  pristine::EngineManager::get().start();
-  __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "EngineManager started successfully");
+  // ⚠️ JANGAN start engine di sini.
+  //
+  // 🔥 FIX (2026-10-07): dulu baris ini memanggil EngineManager::get().start()
+  // saat library dimuat. Akibatnya stream audio dibuka SEBELUM ada track, dan
+  // pada saat itu laju file belum diketahui sehingga stream memakai laju
+  // tertinggi perangkat. play() lalu menemukan engine sudah running dan tidak
+  // pernah membukanya ulang - jadi pemilihan laju per-file (pickBestRate)
+  // tidak pernah berpengaruh, dan file 44.1 kHz di-resample naik ke laju DAC.
+  //
+  // Bit-perfect butuh stream dibuka di laju track. Engine sekarang dinyalakan
+  // oleh transport (nativePlay -> EngineManager::start()) setelah queue terisi
+  // dan track dimuat.
+  __android_log_print(ANDROID_LOG_INFO, LOG_TAG,
+      "JNI_OnLoad — EngineManager siap (start ditunda sampai track dimuat)");
 
   return result;
 }

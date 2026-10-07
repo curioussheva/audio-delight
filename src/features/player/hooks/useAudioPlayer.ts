@@ -94,7 +94,9 @@ useEffect(() => {
         //   ...
         //   [PERF] setQueue: 2675ms (async=true)
         //   [PERF] play: 415ms (async=true)   <- playSong (sudah await)
-        await NativePlaybackService.setQueue([song.uri]);
+        // Laju file ikut dikirim supaya stream dibuka di laju track ini
+        // (bit-perfect), bukan laju tertinggi perangkat.
+        await NativePlaybackService.setQueue([song.uri], [song.sampleRate ?? 0]);
         await NativePlaybackService.play();
         setCurrentSong(song);
         setIsPlaying(true);

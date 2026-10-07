@@ -93,6 +93,10 @@ std::shared_ptr<TrackQueue> PlaybackController::queue() const noexcept {
     return queue_;
 }
 
+bool PlaybackController::hasDecoder() const noexcept {
+    return decoderWorker_ != nullptr;
+}
+
 // =====================================================
 // QUEUE & NAVIGATION
 // =====================================================
@@ -142,6 +146,19 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
     currentTrack_ = track;
+
+    // 🔥 FIX (2026-10-07): bawa laju FILE ke EngineManager lewat controller.
+    //
+    // Ini titik di mana laju file akhirnya masuk ke jalur engine. loadTrack()
+    // selalu dipanggil saat track dibuka (play/next/previous/jumpTo), jadi ini
+    // tempat yang benar - bukan di JNI play(), yang hanya dipanggil sekali dan
+    // tidak tahu track mana yang akan dimuat.
+    //
+    // EngineManager memakainya di start() berikutnya untuk memilih laju stream
+    // lewat pickBestRate(). Kalau track.sampleRate == 0 (metadata tidak
+    // terbaca) nilai ini menjadi 0 dan engine mendeteksi sendiri.
+    setFileSampleRate(track.sampleRate);
+
     pcmQueue_->clear();
     clock_->reset();
     if (state_) state_->setPosition(0);  // 🔥 FIX: reset posisi state juga
@@ -442,6 +459,20 @@ void PlaybackController::setStreamSampleRate(uint32_t rate) noexcept {
 
 uint32_t PlaybackController::streamSampleRate() const noexcept {
     return streamSampleRate_.load(std::memory_order_acquire);
+}
+
+void PlaybackController::setFileSampleRate(uint32_t rate) noexcept {
+    // Sama seperti setStreamSampleRate: di luar rentang audio wajar berarti
+    // metadata tidak terbaca, jangan dipakai sebagai target stream.
+    if (rate >= 8000 && rate <= 768000) {
+        fileSampleRate_.store(rate, std::memory_order_release);
+    } else {
+        fileSampleRate_.store(0, std::memory_order_release);
+    }
+}
+
+uint32_t PlaybackController::currentFileSampleRate() const noexcept {
+    return fileSampleRate_.load(std::memory_order_acquire);
 }
 
 bool PlaybackController::startDecoder(const TrackInfo& track) {
