@@ -47,23 +47,27 @@ export interface ActiveDeviceStatus {
 }
 
 /**
- * Codec A2DP yang sedang dipakai.
+ * Status jalur A2DP.
  *
- * A2DP **selalu lossy** kecuali codec yang memang dirancang lossless (aptX
- * Lossless). Sampel masuk ke encoder sebelum dikirim, jadi bit-perfect
- * mustahil lewat Bluetooth - apa pun laju output yang berhasil dibuka.
+ * A2DP **selalu lossy** (SBC/aptX/LDAC semua lossy). Sampel masuk ke encoder
+ * sebelum dikirim, jadi bit-perfect mustahil lewat Bluetooth - apa pun laju
+ * output yang berhasil dibuka.
+ *
+ * `activeCodec` selalu `""`: `BluetoothA2dp.getCodecStatus()` bukan API publik
+ * (tidak ada di daftar public methods dokumentasi resmi), jadi app biasa tidak
+ * bisa membacanya. Yang tersedia hanya perangkat yang terhubung dan daftar
+ * codec yang DIDUKUNG.
  */
 export interface BluetoothCodecInfo {
-  /** false = tidak bisa dibaca; jangan tampilkan nama codec apa pun. */
+  /** false = tidak ada perangkat A2DP terhubung / BT mati / izin belum ada. */
   available: boolean;
-  /** "SBC" | "AAC" | "aptX" | "aptX HD" | "LDAC" | "Opus" | ... */
-  codec: string;
-  /** Laju yang dinegosiasikan codec (Hz). 0 = tidak dilaporkan. */
-  sampleRate: number;
-  bitsPerSample: number;
-  /** Bitrate target (bps). 0 = tidak dilaporkan. */
-  bitrate: number;
-  /** true hanya untuk codec yang benar-benar lossless. */
+  /** Nama perangkat A2DP yang terhubung. "" kalau tidak ada. */
+  deviceName: string;
+  /** Codec yang DIDUKUNG perangkat, mis. ["SBC", "AAC", "LDAC"]. */
+  supportedCodecs: string[];
+  /** SELALU "" - tidak bisa dibaca tanpa API @hide. Jangan dikarang. */
+  activeCodec: string;
+  /** true hanya kalau diyakini lossless. Untuk A2DP praktis selalu false. */
   lossless: boolean;
 }
 

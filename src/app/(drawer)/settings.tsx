@@ -563,17 +563,12 @@ export default function SettingsScreen() {
                   }}
                 >
                   {bluetoothCodec.available
-                    ? `Codec A2DP: ${bluetoothCodec.codec}` +
-                      (bluetoothCodec.sampleRate > 0
-                        ? ` ${bluetoothCodec.sampleRate / 1000} kHz`
+                    ? `A2DP aktif${bluetoothCodec.deviceName ? ` ke ${bluetoothCodec.deviceName}` : ""}` +
+                      (bluetoothCodec.supportedCodecs.length > 0
+                        ? ` - codec didukung: ${bluetoothCodec.supportedCodecs.join(", ")}`
                         : "") +
-                      (bluetoothCodec.bitsPerSample > 0
-                        ? ` / ${bluetoothCodec.bitsPerSample} bit`
-                        : "") +
-                      (bluetoothCodec.lossless
-                        ? " - lossless"
-                        : " - lossy, sampel di-encode ulang")
-                    : "Codec A2DP tidak bisa dibaca (izin Bluetooth belum diberikan, atau API terlalu lama)."}
+                      ". Lossy, sampel di-encode ulang - codec yang SEDANG dipakai tidak bisa dibaca Android."
+                    : "Tidak ada perangkat A2DP terhubung (atau izin Bluetooth belum diberikan)."}
                 </Text>
               )}
 

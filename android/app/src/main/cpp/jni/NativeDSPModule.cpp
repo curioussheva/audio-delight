@@ -138,9 +138,14 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeLimiterEnabled(
 // =====================================================
 // PROCESSING MODE
 // =====================================================
-
+//
+// Nama fungsi HARUS cocok dengan `external fun` di Kotlin: JNI memakai
+// mangling Java_com_<pkg>_<Class>_<namaFungsi>, jadi `setNativeProcessingMode`
+// di Kotlin mencari `..._setNativeProcessingMode` - bukan `..._setProcessingMode`.
+// Salah nama = UnsatisfiedLinkError saat runtime (CI tetap lolos, karena ini
+// bukan error kompilasi).
 JNIEXPORT void JNICALL
-Java_com_pristineaudio_dsp_NativeDSPModule_setProcessingMode(
+Java_com_pristineaudio_dsp_NativeDSPModule_setNativeProcessingMode(
     JNIEnv*,
     jobject,
     jint mode
@@ -150,6 +155,9 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setProcessingMode(
         .setProcessingMode(
             static_cast<ProcessingMode>(mode)
         );
+
+    __android_log_print(ANDROID_LOG_INFO, "NativeDSPModule",
+        "mode pemrosesan -> %d", (int)mode);
 }
 
 // =====================================================

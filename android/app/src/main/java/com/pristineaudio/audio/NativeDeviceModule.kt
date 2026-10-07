@@ -267,15 +267,15 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
     }
 
     /**
-     * Codec A2DP yang sedang dipakai (SBC/aptX/LDAC/...).
+     * Status jalur A2DP (bukan codec aktif - lihat catatan batas API).
      *
-     * A2DP SELALU lossy kecuali codec yang memang lossless (aptX Lossless).
-     * Sampel masuk ke encoder sebelum dikirim, jadi bit-perfect mustahil
-     * lewat Bluetooth - apa pun laju output yang berhasil dibuka.
+     * A2DP SELALU lossy. `activeCodec` selalu kosong karena
+     * `BluetoothA2dp.getCodecStatus()` bukan API publik (tidak bisa dipanggil
+     * dari app biasa). Yang tersedia: perangkat yang terhubung dan daftar
+     * codec yang DIDUKUNG.
      *
-     * `available: false` berarti codec tidak bisa dibaca (tidak ada A2DP
-     * aktif, API < 33, atau izin BLUETOOTH_CONNECT belum diberikan). UI tidak
-     * boleh mengarang nama codec dalam keadaan itu.
+     * `available: false` = tidak ada perangkat A2DP terhubung, Bluetooth mati,
+     * atau izin BLUETOOTH_CONNECT belum diberikan.
      */
     @ReactMethod
     fun getBluetoothCodec(promise: Promise) {
@@ -283,10 +283,13 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
             val info = BluetoothCodecReader.read(reactApplicationContext)
             val map = Arguments.createMap()
             map.putBoolean("available", info.available)
-            map.putString("codec", info.codecName)
-            map.putInt("sampleRate", info.sampleRate)
-            map.putInt("bitsPerSample", info.bitsPerSample)
-            map.putInt("bitrate", info.bitrate)
+            map.putString("deviceName", info.deviceName)
+
+            val codecs = Arguments.createArray()
+            info.supportedCodecs.forEach { codecs.pushString(it) }
+            map.putArray("supportedCodecs", codecs)
+
+            map.putString("activeCodec", info.activeCodec)
             map.putBoolean("lossless", info.lossless)
             promise.resolve(map)
         } catch (e: Throwable) {

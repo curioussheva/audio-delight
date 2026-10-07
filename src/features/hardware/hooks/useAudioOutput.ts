@@ -53,10 +53,9 @@ export const useAudioOutput = (): UseAudioOutputReturn => {
   const [status, setStatus] = useState<ActiveDeviceStatus | null>(null);
   const [bluetoothCodec, setBluetoothCodec] = useState<BluetoothCodecInfo>({
     available: false,
-    codec: "",
-    sampleRate: 0,
-    bitsPerSample: 0,
-    bitrate: 0,
+    deviceName: "",
+    supportedCodecs: [],
+    activeCodec: "",
     lossless: false,
   });
   const [loading, setLoading] = useState(false);
@@ -92,10 +91,9 @@ export const useAudioOutput = (): UseAudioOutputReturn => {
         prev.available
           ? {
               available: false,
-              codec: "",
-              sampleRate: 0,
-              bitsPerSample: 0,
-              bitrate: 0,
+              deviceName: "",
+              supportedCodecs: [],
+              activeCodec: "",
               lossless: false,
             }
           : prev,

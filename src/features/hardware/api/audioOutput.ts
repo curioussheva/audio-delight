@@ -125,11 +125,13 @@ export const AudioOutputService = {
   },
 
   /**
-   * Codec A2DP yang sedang dipakai.
+   * Status jalur A2DP.
    *
    * A2DP selalu lossy, jadi ini bukan alat untuk mengklaim bit-perfect -
    * justru sebaliknya: menjelaskan mengapa jalur Bluetooth tidak bisa.
-   * `available: false` kalau tidak bisa dibaca; jangan mengarang nama codec.
+   *
+   * `activeCodec` selalu kosong: getCodecStatus() bukan API publik. Yang bisa
+   * ditampilkan hanya daftar codec yang DIDUKUNG, bukan yang sedang dipakai.
    */
   getBluetoothCodec: async (): Promise<BluetoothCodecInfo> => {
     try {
@@ -138,10 +140,9 @@ export const AudioOutputService = {
       console.warn("[AudioOutput] getBluetoothCodec gagal:", e);
       return {
         available: false,
-        codec: "",
-        sampleRate: 0,
-        bitsPerSample: 0,
-        bitrate: 0,
+        deviceName: "",
+        supportedCodecs: [],
+        activeCodec: "",
         lossless: false,
       };
     }
