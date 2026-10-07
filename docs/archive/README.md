@@ -64,6 +64,16 @@ Audit ini membaca ulang 4 dokumen kecil + 3 besar (via subagent) dan **memverifi
 
 **B. `modes/*` + `dsp/immersive/*` + `fft/` — fitur Immersive yang belum diimplementasikan.** Rantai dependensi terkonfirmasi:
 
+> **PEMBARUAN 2026-10-07 — `modes/` sudah terhapus.** Commit `5a386f0a9` menghapus
+> `cpp/modes/` (3 kelas) dengan alasan "nol referensi". Alasan itu **salah dan
+> dibatalkan** oleh `../adr/0001-tiga-mode-satu-sumber-kebenaran.md`: dokumen ini
+> sendiri menyatakan orphan â  hapus. Penghapusan dilakukan sebelum dokumentasi
+> diperiksa — pelanggaran urutan proses, bukan sekadar salah kesimpulan.
+> `dsp/immersive/*` (6 file), `dsp/convolution/`, `dsp/headphone/`, `dsp/filters/`,
+> dan `fft/` **masih ada dan masih dibangun**. Perilaku `modes/ImmersivePipeline`
+> akan di-port ke `AudioPipeline::processImmersive()`, bukan dijadikan jalur
+> terpisah. Lihat juga `../adr/0002-komparasi-modes.md`.
+
 ```
 AudioPipeline.cpp (AKTIF) → dsp/DSPChain.cpp (AKTIF)
 modes/ImmersivePipeline.h (TIDAK DIPAKAI)

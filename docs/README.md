@@ -15,6 +15,8 @@
 | [`NATIVE_MODULES_CONSISTENCY.md`](./NATIVE_MODULES_CONSISTENCY.md) | Analisis konsistensi semua native modules: 1 bug, 3 clean, dead code inventory (2026-10-07) |
 | [`RATE_CHAIN_AUDIT.md`](./RATE_CHAIN_AUDIT.md) | Alur sample rate hulu→hilir: autodetect device/DAC status, di mana rantai putus, jalan ke bit-perfect (2026-10-07) |
 | [`AUDIO_OUTPUT_PATHS.md`](./AUDIO_OUTPUT_PATHS.md) | Audit jalur output audio: speaker/jack/USB DAC/HDMI/Bluetooth-A2DP/cast, mana yang bisa bit-perfect (2026-10-07) |
+| [`adr/0001-tiga-mode-satu-sumber-kebenaran.md`](./adr/0001-tiga-mode-satu-sumber-kebenaran.md) | ADR: di mana logika tiga mode hidup, dan mengapa `AudioPipeline` (2026-10-07) |
+| [`adr/0002-komparasi-modes.md`](./adr/0002-komparasi-modes.md) | Komparasi teknis nasib `cpp/modes/*`: port-lalu-hapus vs hidupkan kembali (2026-10-07) |
 | [`THREAT_MODEL.md`](./THREAT_MODEL.md) | Aset yang dilindungi, skenario ancaman, status mitigasi |
 | [`PRIVACY.md`](./PRIVACY.md) | Data apa yang diproses lokal vs keluar device, izin yang diminta |
 | [`ACCEPTABLE_USE.md`](./ACCEPTABLE_USE.md) | Batas penggunaan yang sah |
