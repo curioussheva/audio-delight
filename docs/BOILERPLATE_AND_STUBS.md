@@ -179,3 +179,43 @@ terbalik ÃÂ¢ÃÂÃÂ dokumentasi diperiksa **sesudah** menghapus.
 **Apa pun yang belum dibuktikan di perangkat harus disebut belum dibuktikan.**
 Terverifikasi-compile ÃÂ¢ÃÂÃÂ¡ terverifikasi-berfungsi. Statement "check.sh 5/5 lulus"
 sah; statement "tiga mode bekerja" tidak, sampai ada log dari device.
+
+---
+
+## 7. Verifikasi API platform: jangan percaya ingatan, jangan percaya nama
+
+Tiga kali berturut-turut kelas yang sama gagal, dengan pola identik: API
+Android dikira publik karena **namanya terdengar publik**.
+
+| Yang dikira | Kenyataan | Cara ketahuan |
+|---|---|---|
+| `getCodecStatus()` publik | `@SystemApi`/`@hide` | gagal COMPILE |
+| `getSupportedCodecTypes()` publik | ada di dokumentasi publik tapi butuh `BLUETOOTH_PRIVILEGED` (signature-level) | lolos compile, gagal RUNTIME |
+| `BluetoothCodecType.getCodecType()` ada | kelasnya hanya punya `getCodecName()`/`getCodecId()` | gagal COMPILE |
+
+**Aturan:** sebelum memakai API platform yang belum pernah dipakai di proyek
+ini, periksa dokumentasi resmi untuk **dua hal**:
+
+1. **Ada di daftar public methods?** Kalau tidak ada, itu `@hide`/`@SystemApi`.
+   Nama yang "terdengar publik" tidak membuktikan apa pun.
+2. **Ada anotasi `Requires <permission>`?** Kalau izinnya `signature|privileged`
+   (`BLUETOOTH_PRIVILEGED`, `MODIFY_PHONE_STATE`, `WRITE_SECURE_SETTINGS`, dan
+   sejenisnya), API itu **tidak bisa dipakai app biasa** ÃÂ¢ÃÂÃÂ walau
+   terkompilasi dengan mulus.
+
+Jenis kedua yang paling berbahaya: **lolos compile, gagal di perangkat.**
+Tidak ada satu pun alat lokal yang menangkapnya.
+
+### 7a. Akibat yang harus diterima
+
+Ketika API-nya ternyata tidak tersedia, **jangan** mencari jalan pintas atau
+mengisi nilainya dengan tebakan. Turunkan kontraknya ke apa yang benar-benar
+bisa dibaca, dan nyatakan sisanya tidak tersedia.
+
+Contoh nyata: kontrak A2DP turun dari
+`{ codec, sampleRate, bitsPerSample, bitrate }` (tidak mungkin diisi) menjadi
+`{ connected, deviceName, address }` (benar-benar bisa dibaca). UI menyatakan
+"codec tidak bisa dibaca Android" ÃÂ¢ÃÂÃÂ itu jawaban yang benar, bukan kegagalan.
+
+**Mengarang nilai yang masuk akal lebih buruk daripada menyatakan tidak tahu**,
+karena tidak ada yang bisa mendeteksinya.
