@@ -377,39 +377,24 @@ bool EngineManager::setRequestedDeviceId(int32_t deviceId) {
         return true;
     }
 
-    const bool exclusiveMode =
-        mEngine.isExclusive();
+    // Device dipilih: stream harus DIBUKA ULANG di perangkat baru, dan track
+    // dimuat ulang ke stream itu. Tanpa muat ulang, audio jadi senyap walau
+    // pilihan device berhasil.
+    reopenStreamPreservingPlayback();
 
-    // Perangkat sudah diganti di preferensi, jadi laju harus dihitung ulang
-    // dari kapabilitas perangkat BARU - bukan dari perangkat yang sedang
-    // berjalan. DAC 96 kHz bisa didukung, speaker internal mungkin tidak.
-    AudioDeviceManager::get().refreshDevices();
-    audio::DeviceRateDetector::refresh();
-
-    const int32_t requestedDevice =
-        resolveRequestedDeviceId();
-
-    const auto deviceRates = supportedRatesFor(requestedDevice);
+    // Laporan dibaca SESUDAH restart, dari keadaan stream yang baru.
+    const int32_t requestedDevice = resolveRequestedDeviceId();
 
     int32_t requestedRate = resolveRequestedRate();
     if (requestedRate > 0) {
-        requestedRate = pickBestRateFor(requestedRate, deviceRates);
+        requestedRate = pickBestRateFor(
+            requestedRate, supportedRatesFor(requestedDevice)
+        );
     }
 
-    mEngine.stop();
-
-    mEngine.start(
-        exclusiveMode,
-        requestedRate,
-        requestedDevice
-    );
-
-    // Perpindahan ke perangkat dengan jalur langsung (DAC) tidak otomatis
-    // berarti bit-perfect: AAudio masih bisa menolak exclusive, dan DAC bisa
-    // menolak laju file. Catat keduanya supaya tidak perlu menebak.
     __android_log_print(ANDROID_LOG_INFO, "EngineManager",
-        "setRequestedDeviceId: stream dibuka ulang pada device=%d (diminta %d) "
-        "rate=%d - device-dihormati=%s, laju-sama-dengan-file=%s, exclusive=%s, "
+        "setRequestedDeviceId: device=%d (diminta %d) rate=%d - "
+        "device-dihormati=%s, laju-sama-dengan-file=%s, exclusive=%s, "
         "jalur-mustahil-bit-perfect=%s",
         mEngine.actualDeviceId(), requestedDevice, requestedRate,
         mEngine.isDeviceHonored() ? "ya" : "TIDAK",
@@ -491,6 +476,94 @@ AudioDeviceDescriptor EngineManager::currentOutputDevice() const {
     return unknown;
 }
 
+void EngineManager::reopenStreamPreservingPlayback() {
+
+    std::lock_guard<std::mutex>
+        lock(mMutex);
+
+    // Posisi & status pemutaran diselamatkan DULU: stop() + loadTrack()
+    // me-reset keduanya, dan tanpa menyimpannya audio akan melompat ke awal
+    // setiap kali kabel headset tersentuh.
+    double savedSeconds = 0.0;
+    bool wasPlaying = false;
+    bool hadTrack = false;
+
+    if (mPlayback.isInitialized()) {
+        if (auto st = mPlayback.state()) {
+            savedSeconds = st->getPosition().positionMs / 1000.0;
+            wasPlaying =
+                st->getStatus() == playback::PlaybackStatus::Playing;
+        }
+    }
+
+    uint32_t savedFileRate = mPlayback.currentFileSampleRate();
+
+    // Track yang sedang dimuat, untuk dimuat ulang ke stream baru.
+    pristine::playback::TrackInfo current{};
+    if (auto q = mPlayback.queue()) {
+        if (auto t = q->current()) {
+            current = *t;
+            hadTrack = !current.uri.empty();
+        }
+    }
+
+    const bool exclusiveMode = mEngine.isExclusive();
+
+    const int32_t requestedDevice = resolveRequestedDeviceId();
+    const auto deviceRates = supportedRatesFor(requestedDevice);
+
+    int32_t requestedRate = resolveRequestedRate();
+    if (requestedRate > 0) {
+        requestedRate = pickBestRateFor(requestedRate, deviceRates);
+    }
+
+    const bool wasRunning = mEngine.isRunning();
+
+    mEngine.stop();
+
+    // start() membuka stream BARU. Ini yang memberi stream jalur ke device
+    // yang sekarang aktif (headset yang baru dicolok).
+    mEngine.start(exclusiveMode, requestedRate, requestedDevice);
+
+    // =============================================
+    // MUAT ULANG TRACK ke stream baru
+    // =============================================
+    //
+    // Inilah inti perbaikannya. Tanpa ini `PlaybackController` tetap memegang
+    // state lama: queue PCM kosong untuk stream baru -> render() senyap.
+    //
+    // Laju file dikembalikan SEBELUM loadTrack karena loadTrack membacanya
+    // dari TrackInfo, dan TrackInfo bisa saja tidak membawa laju (0) kalau
+    // track dimuat dari jalur lama.
+    if (hadTrack && mEngine.isRunning()) {
+        if (savedFileRate > 0) {
+            mPlayback.setStreamSampleRate(mEngine.actualSampleRate());
+        }
+
+        mPlayback.loadTrack(current);
+
+        // Kembalikan posisi. loadTrack me-reset ke 0, jadi seek dilakukan
+        // setelah decoder siap mengisinya.
+        if (savedSeconds > 0.5) {
+            mPlayback.seek(savedSeconds);
+        }
+
+        if (wasPlaying) {
+            mPlayback.play();
+        }
+
+        __android_log_print(ANDROID_LOG_INFO, "EngineManager",
+            "reopenStream: stream=%d, track dimuat ulang, posisi %.1fs, "
+            "playing=%s (sebelumnya running=%s)",
+            mEngine.actualSampleRate(), savedSeconds,
+            wasPlaying ? "ya" : "tidak", wasRunning ? "ya" : "tidak");
+    } else {
+        __android_log_print(ANDROID_LOG_INFO, "EngineManager",
+            "reopenStream: stream=%d, tidak ada track aktif untuk dimuat ulang",
+            mEngine.actualSampleRate());
+    }
+}
+
 void EngineManager::onDeviceRemoved(int32_t deviceId) {
 
     std::lock_guard<std::mutex>
@@ -529,30 +602,11 @@ void EngineManager::onDeviceRemoved(int32_t deviceId) {
         mRequestedDeviceId.store(0, std::memory_order_release);
     }
 
-    const bool exclusiveMode =
-        mEngine.isExclusive();
-
-    const int32_t requestedDevice =
-        resolveRequestedDeviceId();
-
-    const auto deviceRates = supportedRatesFor(requestedDevice);
-
-    int32_t requestedRate = resolveRequestedRate();
-    if (requestedRate > 0) {
-        requestedRate = pickBestRateFor(requestedRate, deviceRates);
-    }
-
-    mEngine.stop();
-
-    mEngine.start(
-        exclusiveMode,
-        requestedRate,
-        resolveRequestedDeviceId()
-    );
-
-    __android_log_print(ANDROID_LOG_INFO, "EngineManager",
-        "onDeviceRemoved: stream dipindah ke device=%d (diminta=%d)",
-        mEngine.actualDeviceId(), resolveRequestedDeviceId());
+    // Perpindahan device = stream baru. Memakai reopenStreamPreservingPlayback
+    // (bukan mEngine.stop()+start() mentah) karena stream baru butuh decoder
+    // yang benar-benar mengisi queue-nya - kalau tidak, audio jadi senyap
+    // tanpa error. Lihat catatan di EngineManager.h.
+    reopenStreamPreservingPlayback();
 }
 
 void EngineManager::stop() {
@@ -697,36 +751,17 @@ void EngineManager::setExclusiveMode(
     const bool wasRunning =
         mEngine.isRunning();
 
-    if (wasRunning) {
-
-        mEngine.stop();
-    }
-
+    // Preferensi diset DULU supaya restart di bawah memakai nilai baru.
+    // (Sebelumnya ada stop() terpisah di sini, tapi reopenStreamPreservingPlayback
+    // sudah menutup stream sendiri - memanggilnya dua kali hanya menambah jeda.)
     mState.setExclusiveMode(enabled);
 
     if (wasRunning) {
 
-        // Stream dibuka ULANG di sini. Kalau laju tidak diteruskan, toggle
-        // exclusive mode mengembalikan stream ke laju tertinggi perangkat
-        // dan membatalkan pilihan laju file yang sudah ditetapkan.
-        const int32_t requestedDevice =
-            resolveRequestedDeviceId();
-
-        const auto deviceRates = supportedRatesFor(requestedDevice);
-
-        int32_t requestedRate = resolveRequestedRate();
-        if (requestedRate > 0) {
-            requestedRate = pickBestRateFor(requestedRate, deviceRates);
-        }
-
-        // Perangkat juga harus diteruskan: membuka ulang tanpa id-nya
-        // mengembalikan audio ke perangkat default sistem, membatalkan
-        // pilihan DAC yang sedang berlaku.
-        mEngine.start(
-            enabled,
-            requestedRate,
-            requestedDevice
-        );
+        // Stream dibuka ULANG di sini. Memakai reopenStreamPreservingPlayback
+        // supaya track ikut dimuat ulang ke stream baru - kalau hanya stop+start,
+        // audio jadi senyap (queue PCM kosong untuk stream baru).
+        reopenStreamPreservingPlayback();
     }
 }
 

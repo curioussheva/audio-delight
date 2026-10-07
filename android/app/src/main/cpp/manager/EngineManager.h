@@ -95,6 +95,34 @@ public:
     // dibuka) - UI tidak boleh menampilkan nama DAC dalam keadaan itu.
     AudioDeviceDescriptor currentOutputDevice() const;
 
+    // =====================================================
+    // REOPEN STREAM (dipakai setelah device berubah)
+    // =====================================================
+    //
+    // Menutup dan membuka ulang stream TANPA membuang posisi pemutaran.
+    //
+    // KENAPA INI PERLU (bug "audio mati setelah colok headset", 2026-10-08)
+    //
+    // `onDeviceRemoved()` menutup stream saat headset dicabut. Stream hanya
+    // dibuka oleh `start()`, dan `start()` hanya dipanggil dari `nativePlay()`.
+    // Saat user menekan play lagi, `hasDecoder()` masih true (decoder tidak
+    // dibuang saat stream ditutup), sehingga `loadTrack()` DILEWATI - dan
+    // `PlaybackController` tetap memegang state lama (queue PCM kosong, clock
+    // ter-reset) terhadap stream baru. Hasilnya: stream jalan, callback jalan,
+    // tapi `render()` mengembalikan senyap. Tidak ada error, tidak ada log -
+    // audio "mati" begitu saja.
+    //
+    // Dulu bug ini tidak muncul karena `getController()` menyalakan engine di
+    // SETIAP JNI call, jadi stream selalu sudah terbuka lebih awal. Fix
+    // 2026-10-07 yang menunda start justru membukanya.
+    //
+    // Fungsi ini menutup dan membuka ulang stream, lalu MEMUAT ULANG track
+    // yang sama supaya decoder benar-benar mengisi queue untuk stream baru.
+    // Posisi dikembalikan setelahnya, jadi pemutaran tidak melompat ke awal.
+    //
+    // Aman dipanggil saat stream tidak berjalan (hanya memastikan terbuka).
+    void reopenStreamPreservingPlayback();
+
     // Device dicabut saat stream berjalan (dari AudioDeviceCallback).
     //
     // Kalau stream sedang memakai device itu - atau device itu yang diminta -
