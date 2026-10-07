@@ -34,6 +34,40 @@ export interface Spec extends TurboModule {
   setBrainwaveFreq(freq: number): void;
   setResonanceIntensity(intensity: number): void;
   setImmersiveEnabled(enabled: boolean): void;
+
+  /**
+   * Pilih mode pemrosesan: 0 = BitPerfect, 1 = DSP, 2 = Immersive.
+   *
+   * Live - mode dibaca dari atomic setiap buffer, jadi perubahan berlaku pada
+   * frame berikutnya tanpa restart stream dan tanpa jeda.
+   *
+   * Sebelumnya JNI-nya ada tapi tidak ter-expose ke Kotlin, sehingga mode
+   * ketiga mustahil dipilih dari JS.
+   */
+  setProcessingMode(mode: ProcessingModeValue): void;
+
+  /**
+   * Sakelar pemrosesan DSP di jalur produksi.
+   *
+   * Sebelum 2026-10-07 AudioPipeline tidak pernah dipanggil saat memutar lagu,
+   * jadi mode DSP/Immersive tidak berefek dan bit-perfect hanya benar secara
+   * kebetulan. Menyalakannya mengubah suara yang keluar.
+   *
+   * UI memakai ini untuk membandingkan "dengan DSP" vs "tanpa DSP" tanpa build
+   * ulang. Bukan preferensi user - ini kontrol diagnostik.
+   */
+  setDSPProcessingEnabled(enabled: boolean): void;
+  isDSPProcessingEnabled(): boolean;
 }
+
+/** Nilai `ProcessingMode` di C++ (core/AudioTypes.h). Jangan diacak. */
+export const ProcessingModeValue = {
+  BitPerfect: 0,
+  DSP: 1,
+  Immersive: 2,
+} as const;
+
+export type ProcessingModeValue =
+  (typeof ProcessingModeValue)[keyof typeof ProcessingModeValue];
 
 export default TurboModuleRegistry.getEnforcing<Spec>('NativeDSPModule');

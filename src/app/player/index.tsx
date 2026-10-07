@@ -212,7 +212,11 @@ export default function PlayerScreen() {
                     : bpStatus.actualSampleRate > 0
                       ? `BIT-PERFECT ${bpStatus.actualSampleRate / 1000}K`
                       : "BIT-PERFECT"
-                  : (audioMode?.toUpperCase() || "STANDARD")}
+                  : audioMode === "immersive"
+                    ? "IMMERSIVE"
+                    : audioMode === "dsp"
+                      ? "DSP"
+                      : "STANDARD"}
               </Text>
             </View>
           </View>

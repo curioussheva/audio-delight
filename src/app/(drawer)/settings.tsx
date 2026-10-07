@@ -25,8 +25,7 @@ import {
   ChevronRight,
   CheckCircle,
   RefreshCw,
-  Globe,
-  Wifi,
+  Sparkles,
   Database,
 } from "lucide-react-native";
 import { useLibraryStore } from "@/features/library/store/libraryStore"; // Pastikan path benar
@@ -37,6 +36,7 @@ import * as Haptics from "expo-haptics";
 
 import { useTheme } from "@/context/ThemeContext";
 import { useAudioOutput } from "@/features/hardware/hooks/useAudioOutput";
+import { useDSPProcessingGate } from "@/features/hardware/hooks/useDSPProcessingGate";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useBitPerfectStatus } from "@/features/player/hooks/useBitPerfectStatus";
 import { ThemePicker } from "@/shared/components/ui/ThemePicker";
@@ -206,6 +206,10 @@ export default function SettingsScreen() {
     selectDevice: selectOutputDevice,
   } = useAudioOutput();
 
+  // Sakelar diagnostik: bandingkan "dengan DSP" vs "tanpa DSP" saat pemutaran,
+  // tanpa build ulang. Lihat useDSPProcessingGate.
+  const dspGate = useDSPProcessingGate();
+
   const [showEQPicker, setShowEQPicker] = useState(false);
 
   const { activePresetId, applyPreset } = useEqualizerStore();
@@ -302,13 +306,46 @@ export default function SettingsScreen() {
     setPlaybackSpeed(clamped);
   };
 
-  const handleToggleAudioMode = (toBitPerfect: boolean) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  // Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Mode selector Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+  //
+  // Tiga mode, live - tidak ada restart stream, jadi perpindahan berlaku pada
+  // frame berikutnya. Ini menggantikan sakelar on/off lama yang menggabungkan
+  // "mode pemrosesan" dengan "syarat jalur" menjadi satu tombol.
+  const AUDIO_MODES = [
+    {
+      id: "bit-perfect" as const,
+      label: "Bit-Perfect",
+      hint: "Tanpa DSP sama sekali. Butuh jalur langsung ke DAC - kalau tidak, tetap berbunyi lewat mixer.",
+      Icon: ShieldCheck,
+      color: colors.status.warning,
+    },
+    {
+      id: "dsp" as const,
+      label: "DSP",
+      hint: "EQ, bass boost, limiter, stereo width aktif.",
+      Icon: Zap,
+      color: colors.primary[500],
+    },
+    {
+      id: "immersive" as const,
+      label: "Immersive",
+      hint: "DSP + resonansi solfeggio, harmonic, spatial, brainwave.",
+      Icon: Sparkles,
+      color: colors.primary[400] ?? colors.primary[500],
+    },
+  ];
 
-    if (toBitPerfect) {
+  const handleSelectMode = (mode: "bit-perfect" | "dsp" | "immersive") => {
+    if (mode === audioMode) return;
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    // Bit-perfect perlu penjelasan karena efeknya paling terasa: DSP mati.
+    // Mode lain langsung jalan - audio tidak pernah diblokir.
+    if (mode === "bit-perfect") {
       Alert.alert(
         "Aktifkan Bit-Perfect?",
-        "Mode ini menonaktifkan semua DSP (EQ, Bass, Reverb) untuk output murni tanpa pemrosesan.",
+        "Mode ini menonaktifkan semua DSP (EQ, Bass, Reverb) untuk output murni tanpa pemrosesan. Pemutaran tetap berjalan walau device tidak mendukung jalur langsung.",
         [
           { text: "Batal", style: "cancel" },
           {
@@ -317,12 +354,13 @@ export default function SettingsScreen() {
           },
         ],
       );
-    } else {
-      setAudioMode("dsp");
+      return;
     }
+
+    setAudioMode(mode);
   };
 
-  // ─── Sections ──────────────────────────────────────────────────────────────
+  // Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Sections Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 
   const renderTampilan = () => (
     <Section colors={colors} spacing={spacing}>
@@ -720,86 +758,136 @@ export default function SettingsScreen() {
 
       {showAudioSettings && (
         <View style={{ paddingBottom: spacing.sm }}>
-          {/* ── 1. Audio Mode Toggle ─────────────────────────────────────── */}
-          <SettingRow colors={colors} spacing={spacing} bordered={false}>
-            <View style={{ flex: 1, marginRight: spacing.md }}>
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-              >
-                {audioMode === "bit-perfect" ? (
-                  bpStatus.exclusiveFailed ? (
-                    // User minta bit-perfect, tapi AAudio menolak.
-                    <TriangleAlert
+          {/* ââ 1. Mode pemrosesan (3 mode) ââââââââââââââââââââââââââââââââ */}
+          <View style={{ paddingHorizontal: spacing.md, paddingBottom: spacing.sm }}>
+            <Text
+              style={{
+                color: colors.text.secondary,
+                fontSize: 12,
+                marginBottom: spacing.xs,
+              }}
+            >
+              Mode Audio
+            </Text>
+
+            {AUDIO_MODES.map((m) => {
+              const isActive = audioMode === m.id;
+              // bit-perfect yang gagal exclusive: tetap berbunyi, tapi
+              // kehilangan klaimnya. Ditandai berbeda, TIDAK dimatikan.
+              const isFallback =
+                m.id === "bit-perfect" && bpStatus.exclusiveFailed;
+
+              return (
+                <TouchableOpacity
+                  key={m.id}
+                  onPress={() => handleSelectMode(m.id)}
+                  style={[
+                    styles.dacItem,
+                    isActive && {
+                      backgroundColor: colors.primary[500] + "25",
+                      borderColor: colors.primary[500],
+                    },
+                  ]}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <m.Icon
                       size={16}
-                      color={colors.status.error}
+                      color={isFallback ? colors.status.error : m.color}
                       strokeWidth={2.2}
                     />
-                  ) : (
-                    <ShieldCheck
-                      size={16}
-                      color={colors.status.warning}
-                      strokeWidth={2.2}
-                    />
-                  )
-                ) : (
-                  <Zap
-                    size={16}
-                    color={colors.primary[500]}
-                    strokeWidth={2.2}
-                  />
-                )}
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{ color: colors.text.primary, fontWeight: "600" }}
+                      >
+                        {isFallback ? `${m.label} (Fallback)` : m.label}
+                      </Text>
+                      <Text
+                        style={{
+                          color: colors.text.tertiary,
+                          fontSize: 11,
+                          marginTop: 2,
+                          lineHeight: 15,
+                        }}
+                      >
+                        {isFallback
+                          ? "Device menolak exclusive. Tetap berbunyi, tapi lewat mixer sistem â tidak bit-perfect."
+                          : m.hint}
+                      </Text>
+                    </View>
+                    {isActive && (
+                      <CheckCircle
+                        size={20}
+                        color={colors.primary[500]}
+                        strokeWidth={2.5}
+                      />
+                    )}
+                  </View>
+
+                  {/* Status jalur untuk bit-perfect: dilaporkan, bukan diblokir. */}
+                  {m.id === "bit-perfect" && isActive && !isFallback && (
+                    <Text
+                      style={{
+                        color: colors.text.tertiary,
+                        fontSize: 10,
+                        marginTop: 6,
+                        marginLeft: 24,
+                        lineHeight: 14,
+                      }}
+                    >
+                      {bpStatus.streamExclusive
+                        ? `Output murni tanpa EQ/DSP${bpStatus.actualSampleRate > 0 ? ` @ ${bpStatus.actualSampleRate / 1000}kHz` : ""}.`
+                        : "Output murni tanpa EQ/DSP. Cocok untuk DAC eksternal."}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+
+          {/* Ã¢ÂÂÃ¢ÂÂ 1b. Diagnostik: pemrosesan DSP di jalur produksi Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ */}
+          {!dspGate.unavailable && (
+            <SettingRow colors={colors} spacing={spacing}>
+              <View style={{ flex: 1, marginRight: spacing.md }}>
                 <Text style={{ color: colors.text.primary, fontWeight: "600" }}>
-                  {audioMode === "bit-perfect"
-                    ? bpStatus.exclusiveFailed
-                      ? "Bit-Perfect Mode (Fallback)"
-                      : "Bit-Perfect Mode"
-                    : "DSP Mode"}
+                  Proses DSP di Jalur Audio
                 </Text>
-              </View>
-              <Text
-                style={{
-                  color: colors.text.tertiary,
-                  fontSize: 11,
-                  marginTop: 2,
-                }}
-              >
-                {audioMode === "bit-perfect"
-                  ? bpStatus.exclusiveFailed
-                    ? // Device menolak exclusive — sampel lewat mixer sistem.
-                      "AAudio menolak exclusive. Output lewat mixer sistem — tidak bit-perfect."
-                    : bpStatus.streamExclusive
-                      ? `Output murni tanpa EQ/DSP${bpStatus.actualSampleRate > 0 ? ` @ ${bpStatus.actualSampleRate / 1000}kHz` : ""}.`
-                      : "Output murni tanpa EQ/DSP. Cocok untuk DAC eksternal."
-                  : "EQ, Bass Boost & efek aktif."}
-              </Text>
-              {audioMode === "bit-perfect" && bpStatus.exclusiveFailed && (
                 <Text
                   style={{
-                    color: colors.status.error,
-                    fontSize: 10,
-                    marginTop: 4,
-                    lineHeight: 14,
+                    color: colors.text.tertiary,
+                    fontSize: 11,
+                    marginTop: 2,
+                    lineHeight: 15,
                   }}
                 >
-                  Beberapa device/MIUI membatasi exclusive mode. Coba colok
-                  USB DAC atau restart pemutaran.
+                  {dspGate.enabled
+                    ? "Aktif Ã¢ÂÂ mode DSP & Immersive benar-benar memproses PCM."
+                    : "Mati Ã¢ÂÂ PCM lewat tanpa diproses. Pakai ini untuk membandingkan suara tanpa build ulang."}
                 </Text>
-              )}
-            </View>
-            <Switch
-              value={audioMode === "bit-perfect"}
-              onValueChange={handleToggleAudioMode}
-              trackColor={{
-                false: colors.primary[500] + "88",
-                true: colors.status.warning + "88",
-              }}
-              thumbColor={
-                audioMode === "bit-perfect"
-                  ? colors.status.warning
-                  : colors.primary[500]
-              }
-            />
-          </SettingRow>
+                <Text
+                  style={{
+                    color: colors.text.tertiary,
+                    fontSize: 10,
+                    marginTop: 4,
+                  }}
+                >
+                  Kontrol diagnostik, bukan preferensi. Tidak disimpan.
+                </Text>
+              </View>
+              <Switch
+                value={dspGate.enabled}
+                onValueChange={dspGate.setEnabled}
+                trackColor={{
+                  false: colors.background.tertiary,
+                  true: colors.primary[500],
+                }}
+                thumbColor={
+                  dspGate.enabled ? colors.text.primary : colors.text.secondary
+                }
+              />
+            </SettingRow>
+          )}
+
 
           {/* ── 2. Default EQ Preset ─────────────────────────────────────── */}
           <SettingRow colors={colors} spacing={spacing}>

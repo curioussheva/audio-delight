@@ -7,6 +7,7 @@
 
 #include "../manager/EngineManager.h"
 #include "../core/AudioTypes.h"
+#include "../core/DSPProcessingGate.h"
 
 #define LOG_TAG "NativeDSP"
 
@@ -149,6 +150,36 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setProcessingMode(
         .setProcessingMode(
             static_cast<ProcessingMode>(mode)
         );
+}
+
+// =====================================================
+// DSP PROCESSING GATE
+// =====================================================
+//
+// Sakelar pemrosesan AudioPipeline di jalur produksi. Sebelum 2026-10-07
+// pipeline tidak pernah dipanggil saat memutar lagu, jadi mode DSP tidak
+// berefek. Lihat core/DSPProcessingGate.h dan docs/adr/0001-*.
+JNIEXPORT void JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_setNativeDSPProcessingEnabled(
+    JNIEnv*,
+    jobject,
+    jboolean enabled
+) {
+
+    DSPProcessingGate::setEnabled(enabled == JNI_TRUE);
+
+    __android_log_print(ANDROID_LOG_INFO, "NativeDSPModule",
+        "DSP processing in production: %s",
+        DSPProcessingGate::enabled() ? "AKTIF" : "mati");
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_nativeIsDSPProcessingEnabled(
+    JNIEnv*,
+    jobject
+) {
+
+    return DSPProcessingGate::enabled() ? JNI_TRUE : JNI_FALSE;
 }
 
 // =====================================================

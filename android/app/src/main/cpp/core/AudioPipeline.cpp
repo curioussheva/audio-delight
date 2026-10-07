@@ -31,6 +31,12 @@ void AudioPipeline::prepare(
         sampleRate,
         maxFrames
     );
+
+    // Immersive ikut disiapkan di sini, bukan saat mode dipilih: perpindahan
+    // mode harus bisa terjadi live, dan menyiapkan rantai resonan di audio
+    // thread saat user menekan tombol berarti alokasi + perhitungan koefisien
+    // di jalur realtime.
+    mImmersive.prepare(sampleRate);
 }
 
 // =====================================================
@@ -40,6 +46,8 @@ void AudioPipeline::prepare(
 void AudioPipeline::reset() {
 
     mDSP.reset();
+
+    mImmersive.reset();
 }
 
 // =====================================================
@@ -144,15 +152,18 @@ void AudioPipeline::processImmersive(
     );
 
     // =============================================
-    // FUTURE:
-    // - Solfeggio resonance
-    // - binaural beat
-    // - harmonic field
-    // - spatial enhancement
-    // - meditation ambience
+    // IMMERSIVE CHAIN
     // =============================================
-
-    (void)params;
+    //
+    // Rantai nyata (Solfeggio -> Harmonic -> Spatial -> Brainwave), dipindahkan
+    // dari cpp/modes/ImmersivePipeline. Sebelumnya blok ini hanya komentar
+    // "FUTURE" - sekarang benar-benar memproses.
+    mImmersive.process(
+        left,
+        right,
+        frames,
+        params
+    );
 }
 
 } // namespace pristine 

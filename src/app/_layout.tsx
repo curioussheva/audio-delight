@@ -112,7 +112,16 @@ const performInitialization = useCallback(async () => {
     const savedMode = await AsyncStorage.getItem("audio_mode_preference");
     const eqStore = useEqualizerStore.getState();
 
-    if (savedMode === "bit-perfect") {
+    // Tiga mode, sesuai prinsip desain app. `immersive` ikut dibaca supaya
+    // pilihan itu tidak hilang saat app dibuka ulang.
+    //
+    // EQ hanya dimatikan di bit-perfect: di situ DSP memang dilewati, jadi
+    // menyalakan EQ akan berbohong (slider bergerak tapi tidak ada efek).
+    // Di immersive, EQ justru bagian dari rantainya - mematikannya akan
+    // menghapus separuh efek.
+    if (savedMode === "immersive") {
+      await setAudioMode("immersive");
+    } else if (savedMode === "bit-perfect") {
       await setAudioMode("bit-perfect");
       eqStore.setEQEnabled(false);
     } else {

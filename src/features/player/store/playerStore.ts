@@ -22,7 +22,22 @@ export interface LyricLine {
 }
 
 export type RepeatMode = "off" | "all" | "track";
-export type AudioMode = "bit-perfect" | "dsp";
+
+/**
+ * Mode pemrosesan audio. Tiga mode, sesuai prinsip desain app.
+ *
+ * - `bit-perfect` : DSP dilewati sepenuhnya. bit-perfect HANYA tercapai kalau
+ *                   syarat jalurnya terpenuhi (device langsung/exclusive,
+ *                   dan laju file didukung). Kalau tidak, audio TETAP jalan -
+ *                   hanya melewati mixer (status dilaporkan, tidak diblokir).
+ * - `dsp`         : DSP chain aktif (EQ, bass boost, limiter, stereo width).
+ * - `immersive`   : DSP + rantai immersive (solfeggio, harmonic, spatial,
+ *                   brainwave).
+ *
+ * Pilihan mode TIDAK memblokir pemutaran: apa pun mode-nya, audio selalu
+ * berbunyi. Mode hanya menentukan pemrosesan.
+ */
+export type AudioMode = "bit-perfect" | "dsp" | "immersive";
 
 // AsyncStorage keys
 const KEYS = {
@@ -802,10 +817,43 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     await AsyncStorage.setItem(KEYS.EQ, eq);
   },
 
+  /**
+   * Ganti mode pemrosesan. LIVE: tidak ada restart stream, tanpa jeda.
+   *
+   * Dua hal yang dikirim ke native, dan keduanya terpisah:
+   *
+   *  1. `setProcessingMode` - mode PEMROSESAN (bit-perfect/dsp/immersive).
+   *     Dibaca per-buffer dari atomic, jadi efeknya pada frame berikutnya.
+   *
+   *  2. `toggleExclusiveMode` - hanya untuk bit-perfect. Ini syarat JALUR
+   *     (bypass mixer), bukan pemrosesan. Gagal di sini TIDAK memblokir audio:
+   *     stream tetap jalan lewat shared mode dan statusnya dilaporkan UI.
+   *
+   * Mode immersive/dsp tidak menyentuh exclusive - membiarkannya menyala saat
+   * pindah dari bit-perfect akan salah, dan mematikan paksa akan membuang
+   * pilihan user tanpa alasan.
+   */
   setAudioMode: async (mode: AudioMode) => {
+    const previous = get().audioMode;
+
     set({ audioMode: mode });
     await AsyncStorage.setItem(KEYS.MODE, mode);
-    await audioEngine.toggleExclusiveMode(mode === "bit-perfect");
+
+    // Pemrosesan: berlaku untuk ketiga mode.
+    audioEngine.setProcessingMode(mode);
+
+    // Jalur: hanya relevan untuk bit-perfect.
+    //
+    // Menyalakan exclusive saat MASUK bit-perfect, dan mematikannya saat
+    // KELUAR - membiarkannya menyala saat pindah ke DSP/Immersive akan
+    // membuang kesempatan memakai mixer (yang justru aman untuk DSP), dan
+    // membiarkannya mati tidak apa-apa. Tapi kalau sebelumnya bukan
+    // bit-perfect, tidak ada yang perlu dimatikan.
+    if (mode === "bit-perfect") {
+      await audioEngine.toggleExclusiveMode(true);
+    } else if (previous === "bit-perfect") {
+      await audioEngine.toggleExclusiveMode(false);
+    }
   },
 
   setSleepTimer: (minutes: number | null) => {

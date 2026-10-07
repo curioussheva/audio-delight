@@ -7,6 +7,7 @@ import {
   stopVisualizer,
 } from "@/features/visualizer/native/VisualizerBridge";
 import NativePlaybackService from "@/specs/NativePlaybackService";
+import { ProcessingModeValue as NativeDSPModuleValue } from "@/specs/NativeDSPModule";
 
 interface AudioEngineConfig {
   minBufferMs?: number;
@@ -50,6 +51,29 @@ export class AudioEngine {
     } catch (error) {
       console.error("❌ [AudioEngine] Setup Failed:", error);
       throw error;
+    }
+  }
+
+  /**
+   * Kirim mode pemrosesan ke native. LIVE - berlaku pada buffer berikutnya.
+   *
+   * Terpisah dari toggleExclusiveMode() dengan sengaja: exclusive itu syarat
+   * JALUR (bypass mixer), sedangkan ini PEMROSESAN. Bit-perfect gagal
+   * exclusive tetap harus berbunyi; yang hilang hanya klaimnya, bukan audionya.
+   */
+  setProcessingMode(mode: string): void {
+    const value =
+      mode === "bit-perfect"
+        ? NativeDSPModuleValue.BitPerfect
+        : mode === "immersive"
+          ? NativeDSPModuleValue.Immersive
+          : NativeDSPModuleValue.DSP;
+
+    try {
+      (NativeDSPModule as any)?.setProcessingMode?.(value);
+      console.log(`ðï¸ [AudioEngine] Mode pemrosesan -> ${mode} (${value})`);
+    } catch (e) {
+      console.warn("[AudioEngine] setProcessingMode gagal:", e);
     }
   }
 

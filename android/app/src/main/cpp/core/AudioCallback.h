@@ -11,6 +11,7 @@
 #include "AudioPipeline.h"
 #include "AudioState.h"
 #include "AudioTypes.h"
+#include "DSPProcessingGate.h"
 #include "../visualizer/VisualizerBuffer.h"
 
 namespace pristine::playback {
@@ -126,6 +127,22 @@ private:
     // =============================================
 
     DSPParameters mParams;
+
+    // =============================================
+    // PIPELINE KE JALUR PRODUKSI
+    // =============================================
+
+    // Terapkan AudioPipeline (tiga mode) ke buffer interleaved hasil render().
+    //
+    // render() menghasilkan satu buffer interleaved; pipeline menerima dua
+    // buffer terpisah (left/right). Jadi: deinterleave -> proses -> interleave.
+    //
+    // Memakai mLeft/mRight yang sudah ada supaya tidak ada alokasi di jalur
+    // realtime (keduanya berukuran kMaxFramesPerCallback).
+    void applyPipeline(
+        float* interleaved,
+        int32_t numFrames
+    ) noexcept;
 
     // =============================================
     // HELPERS

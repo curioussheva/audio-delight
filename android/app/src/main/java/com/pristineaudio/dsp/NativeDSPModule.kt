@@ -53,6 +53,22 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     private external fun setNativeResonanceIntensity(intensity: Float)
     private external fun setNativeImmersiveEnabled(enabled: Boolean)
 
+    // Ã°ÂÂÂ¥ Mode pemrosesan (BitPerfect=0, DSP=1, Immersive=2).
+    //
+    // JNI-nya sudah ada sejak lama (NativeDSPModule.cpp) tapi TIDAK PERNAH
+    // di-expose ke Kotlin, sehingga mode ketiga mustahil dipilih dari JS.
+    // Itu satu-satunya sebab enum ProcessingMode::Immersive tidak pernah
+    // tercapai. Lihat docs/adr/0001-tiga-mode-satu-sumber-kebenaran.md.
+    private external fun setNativeProcessingMode(mode: Int)
+
+    // Ã°ÂÂÂ¥ Sakelar pemrosesan DSP di jalur produksi.
+    //
+    // Sebelum 2026-10-07 AudioPipeline tidak pernah dipanggil saat memutar
+    // lagu, jadi mode DSP tidak berefek. Menyalakannya mengubah suara yang
+    // keluar, jadi dipisah supaya bisa dibandingkan dan dibalik tanpa revert.
+    private external fun setNativeDSPProcessingEnabled(enabled: Boolean)
+    private external fun nativeIsDSPProcessingEnabled(): Boolean
+
     // ===================== REACT METHODS =====================
 
     @ReactMethod
@@ -140,6 +156,36 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     fun setExclusiveMode(enabled: Boolean) {
         if (engineAvailable) toggleNativeExclusiveMode(enabled)
     }
+
+    /**
+     * Pilih mode pemrosesan: 0 = BitPerfect, 1 = DSP, 2 = Immersive.
+     *
+     * Live: mode dibaca dari Atomic di AudioState setiap buffer, jadi
+     * perubahan berlaku pada frame berikutnya tanpa restart stream. Kalau
+     * sakelar DSP produksi mati (lihat setDSPProcessingEnabled), pilihan ini
+     * tersimpan tapi belum berpengaruh ke PCM.
+     */
+    @ReactMethod
+    fun setProcessingMode(mode: Int) {
+        if (engineAvailable) setNativeProcessingMode(mode)
+    }
+
+    /**
+     * Nyalakan/matikan pemrosesan DSP (AudioPipeline) di jalur produksi.
+     *
+     * Sebelum 2026-10-07 pipeline tidak pernah dipanggil saat memutar lagu,
+     * jadi mode DSP/Immersive tidak berefek dan bit-perfect hanya benar
+     * secara kebetulan. Menyalakannya mengubah suara yang keluar - karena itu
+     * terpisah dan bisa dibalik tanpa build ulang.
+     */
+    @ReactMethod
+    fun setDSPProcessingEnabled(enabled: Boolean) {
+        if (engineAvailable) setNativeDSPProcessingEnabled(enabled)
+    }
+
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    fun isDSPProcessingEnabled(): Boolean =
+        if (engineAvailable) nativeIsDSPProcessingEnabled() else false
 
     // 🔥 Status stream AKTUAL — bukan yang diminta.
     // AAudio bisa menolak exclusive; UI butuh tahu untuk jujur ke user

@@ -10,7 +10,6 @@ export * from "./components/Controls";
 export * from "./components/FloatingPlayer";
 export * from "./components/FullLyricsView";
 export * from "./components/LyricPreview";
-export * from "./components/OutputSettings";
 export * from "./components/PlaybackSpeed";
 export * from "./components/QueueManager";
 export * from "./components/SleepTimerModal";

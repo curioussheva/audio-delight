@@ -19,7 +19,7 @@ import * as MediaLibrary from "expo-media-library";
 import { Image } from "expo-image";
 import { DSPPipeline } from "@/features/visualizer/api/DSPPipeline";
 
-type AudioMode = "bit-perfect" | "dsp";
+type AudioMode = "bit-perfect" | "dsp" | "immersive";
 
 interface ModeCardProps {
   mode: AudioMode;
@@ -240,6 +240,17 @@ export default function OnboardingScreen() {
           icon="pulse"
           tags={["EQ", "FX"]}
           isSelected={selectedMode === "dsp"}
+          onSelect={handleSelectMode}
+          colors={colors}
+        />
+
+        <ModeCard
+          mode="immersive"
+          title="Immersive Mode"
+          description="DSP + resonansi solfeggio, harmonic exciter, spatial field, & binaural beat."
+          icon="planet"
+          tags={["SPATIAL", "RESONANCE"]}
+          isSelected={selectedMode === "immersive"}
           onSelect={handleSelectMode}
           colors={colors}
         />

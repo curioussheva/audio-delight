@@ -6,6 +6,8 @@
 
 #include "../dsp/DSPChain.h"
 
+#include "ImmersiveStage.h"
+
 namespace pristine {
 
 // =====================================================
@@ -28,7 +30,6 @@ public:
     );
 
     void reset();
-
     // =============================================
     // PROCESS
     // =============================================
@@ -64,6 +65,11 @@ private:
 private:
 
     DSPChain mDSP;
+
+    // Rantai proses mode Immersive. Dipindahkan dari cpp/modes/ImmersivePipeline
+    // (dihapus 5a386f0a9) - lihat docs/adr/0001-tiga-mode-satu-sumber-kebenaran.md.
+    // Hidup sepanjang umur AudioPipeline; prepare() dipanggil saat stream dibuka.
+    ImmersiveStage mImmersive;
 
     int32_t mSampleRate = 48000;
 

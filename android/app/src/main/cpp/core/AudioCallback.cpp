@@ -63,6 +63,23 @@ AudioCallback::onAudioReady(
             2,                // stereo
             mSampleRate       // sample rate dari AudioStreamController
         );
+
+        // =============================================
+        // PIPELINE (tiga mode)
+        // =============================================
+        //
+        // ð¥ FIX (2026-10-07): dulu fungsi ini `return` di sini, sehingga
+        // AudioPipeline - tempat mode BitPerfect/DSP/Immersive hidup - TIDAK
+        // PERNAH dipanggil saat memutar lagu. Akibatnya mode DSP tidak
+        // melakukan apa pun dan bit-perfect hanya benar secara kebetulan.
+        //
+        // Sekarang pipeline dipanggil di belakang sakelar yang bisa dimatikan
+        // tanpa revert (lihat DSPProcessingGate). Defaultnya masih perilaku
+        // lama sampai diuji di perangkat.
+        if (DSPProcessingGate::enabled()) {
+            applyPipeline(output, numFrames);
+        }
+
         return oboe::DataCallbackResult::Continue;
     } else {
         __android_log_print(ANDROID_LOG_DEBUG, "AudioCallback",
@@ -128,6 +145,53 @@ void AudioCallback::updateParameters() {
     mParams.brainwaveFreq = mState.brainwaveFreq();
     mParams.resonanceIntensity = mState.resonanceIntensity();
     mParams.processingMode = mState.processingMode();
+}
+
+// =====================================================
+// APPLY PIPELINE
+// =====================================================
+//
+// Menjembatani bentuk buffer: render() memberi interleaved, pipeline meminta
+// left/right terpisah.
+//
+// SELURUH loop di sini berjalan di audio thread: tanpa alokasi, tanpa lock.
+// mLeft/mRight sudah dialokasikan sebagai member (kMaxFramesPerCallback).
+void AudioCallback::applyPipeline(
+    float* interleaved,
+    int32_t numFrames
+) noexcept {
+
+    if (!interleaved || numFrames <= 0 || numFrames > kMaxFramesPerCallback) {
+        return;
+    }
+
+    // Parameter dibaca SEKALI per buffer. Mode dan nilai DSP dibaca dari
+    // AudioState (atomic), jadi perpindahan mode berlaku pada buffer berikutnya
+    // tanpa restart stream - itu syarat live switch.
+    updateParameters();
+
+    // ---- deinterleave -----------------------------------------------------
+
+    for (int32_t i = 0; i < numFrames; ++i) {
+        mLeft[i]  = interleaved[i * 2];
+        mRight[i] = interleaved[i * 2 + 1];
+    }
+
+    // ---- proses (BitPerfect / DSP / Immersive) ----------------------------
+
+    mPipeline.process(mLeft, mRight, numFrames, mParams);
+
+    // ---- interleave + rapi-kan --------------------------------------------
+    //
+    // softClip/zapDenormal sama seperti jalur fallback: pipeline bisa
+    // menaikkan level (harmonic exciter, brainwave), jadi output tetap harus
+    // dijaga dari clipping dan denormal.
+    for (int32_t i = 0; i < numFrames; ++i) {
+        interleaved[i * 2]     = softClip(zapDenormal(mLeft[i]));
+        interleaved[i * 2 + 1] = softClip(zapDenormal(mRight[i]));
+    }
+
+    mVisualizer.write(mLeft, mRight, numFrames);
 }
 
 // =====================================================
