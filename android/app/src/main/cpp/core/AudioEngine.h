@@ -36,14 +36,26 @@ public:
     // Diisi supaya sampel dikirim ke DAC pada laju aslinya. Kalau device/DAC
     // tidak mendukung laju itu, stream tetap dibuka di laju terdekat dan
     // laju sebenarnya bisa dibaca lewat actualSampleRate().
+    //
+    // `requestedDeviceId` = id numerik perangkat output yang diminta (dari
+    // AudioDeviceManager). 0 = tidak ada preferensi, Android yang memilih.
+    // Diisi supaya pilihan DAC benar-benar dipakai, bukan hanya tercatat.
     bool start(
         bool exclusiveMode = false,
-        int32_t requestedSampleRate = 0
+        int32_t requestedSampleRate = 0,
+        int32_t requestedDeviceId = 0
     );
 
     // Laju yang BENAR-BENAR dipakai stream. Dipakai decoder sebagai target
     // resample supaya tidak ada konversi yang tidak perlu.
     int32_t actualSampleRate() const;
+
+    // Id perangkat yang BENAR-BENAR dipakai stream. 0 = dipilih sistem.
+    // Bandingkan dengan yang diminta untuk tahu apakah pilihan dihormati.
+    int32_t actualDeviceId() const;
+
+    // true kalau stream yang berjalan memakai perangkat yang diminta.
+    bool isDeviceHonored() const;
 
     // true kalau Oboe stream BENAR-BENAR exclusive (AAudio menerimanya).
     //
@@ -56,6 +68,14 @@ public:
     // true kalau stream jatuh ke OpenSLES (AAudio gagal). OpenSLES tidak punya
     // jalur exclusive, jadi bit-perfect ke DAC tidak tersedia di jalur itu.
     bool usingOpenSLESFallback() const;
+
+    // true kalau jalur yang berjalan memang tidak bisa bit-perfect: perangkat
+    // tidak punya jalur langsung (speaker/jack/Bluetooth) atau stream jatuh ke
+    // OpenSLES.
+    //
+    // Dipakai UI supaya pembedakan "memang tidak mungkin" dari "mungkin tapi
+    // ditolak". Lihat AudioStreamController::isPathInherentlyLossy().
+    bool isPathInherentlyLossy() const;
 
     void stop();
 

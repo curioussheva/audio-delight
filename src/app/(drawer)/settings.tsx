@@ -36,7 +36,7 @@ import { Search } from "lucide-react-native"; // Icon tambahan jika ingin lebih 
 import * as Haptics from "expo-haptics";
 
 import { useTheme } from "@/context/ThemeContext";
-import { useUSBDAC } from "@/features/hardware/hooks/useUSBDAC";
+import { useAudioOutput } from "@/features/hardware/hooks/useAudioOutput";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useBitPerfectStatus } from "@/features/player/hooks/useBitPerfectStatus";
 import { ThemePicker } from "@/shared/components/ui/ThemePicker";
@@ -185,18 +185,25 @@ export default function SettingsScreen() {
   const [showLibrarySettings, setShowLibrarySettings] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
 
+  // useUSBDAC tidak lagi dipakai di layar ini: pemilihan perangkat sekarang
+  // lewat useAudioOutput di bawah, yang melihat SEMUA perangkat dan benar-benar
+  // meneruskan pilihannya ke engine.
+
+  // Jalur output audio yang sebenarnya: SEMUA perangkat (speaker, jack, USB
+  // DAC, Bluetooth, HDMI), bukan hanya USB. useUSBDAC di atas tidak dipakai
+  // untuk pemilihan lagi - ia hanya melihat perangkat USB dan metode
+  // setSampleRate/setExclusiveMode-nya tidak punya JNI (selalu sukses palsu).
   const {
-    dacs,
-    currentDAC,
-    isExclusiveMode,
-    loading,
-    error,
-    config,
-    scanDACs,
-    selectDAC,
-    toggleExclusiveMode,
-    setSampleRate,
-  } = useUSBDAC();
+    devices: outputDevices,
+    currentDevice: activeOutputDevice,
+    status: outputStatus,
+    pathLossy,
+    canBeBitPerfect,
+    loading: outputLoading,
+    error: outputError,
+    refresh: refreshOutput,
+    selectDevice: selectOutputDevice,
+  } = useAudioOutput();
 
   const [showEQPicker, setShowEQPicker] = useState(false);
 
@@ -210,23 +217,12 @@ export default function SettingsScreen() {
     setAudioMode, // <--- Add this
   } = usePlayerStore();
 
-  const isExclusive = audioMode === "bit-perfect";
-
   // 🔥 Status JUJUR: audioMode hanya mencatat pilihan user. AAudio bisa
   // menolak exclusive → fallback shared diam-diam. Tanpa ini UI bilang
   // "Bit-Perfect Mode" padahal mixer masih menyentuh sampel.
   const bpStatus = useBitPerfectStatus();
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
-
-  const handleScanDAC = async () => {
-    try {
-      await scanDACs();
-      Alert.alert("Sukses", "Scan USB DAC selesai");
-    } catch {
-      Alert.alert("Error", "Gagal scan USB DAC");
-    }
-  };
 
   const handleToggle = (setter: (v: boolean) => void, value: boolean) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -407,181 +403,279 @@ export default function SettingsScreen() {
     </Section>
   );
 
-  const renderDAC = () => (
-    <Section colors={colors} spacing={spacing}>
-      <SectionHeader
-        icon={<Cpu size={24} color={colors.primary[500]} strokeWidth={2.2} />}
-        title="USB DAC"
-        colors={colors}
-        spacing={spacing}
-        collapsible
-        expanded={showDacSettings}
-        onPress={() => setShowDacSettings((v) => !v)}
-        rightSlot={
-          currentDAC ? (
-            <View
-              style={[
-                styles.statusDot,
-                { backgroundColor: colors.status.success },
-              ]}
-            />
-          ) : null
-        }
-      />
+  // âââ renderAudioOutput ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  //
+  // Section jalur output audio. Menggantikan section "USB DAC" yang lama, yang
+  // hanya melihat perangkat USB sehingga speaker/jack/Bluetooth/HDMI tidak
+  // pernah bisa dipilih - dan yang pilihan device-nya tidak sampai ke native.
+  //
+  // Semua perangkat di sini benar-benar bisa dipilih: pilihannya diteruskan ke
+  // engine dan stream dibuka ulang di perangkat itu, dengan laju dihitung dari
+  // kapabilitas perangkat BARU.
+  const renderAudioOutput = () => {
+    const pathLabel =
+      pathLossy || outputStatus?.pathLossy
+        ? "lewat mixer sistem - tidak bisa bit-perfect"
+        : canBeBitPerfect === true
+          ? "jalur langsung - bit-perfect mungkin"
+          : "belum diketahui";
 
-      {showDacSettings && (
-        <View style={{ padding: spacing.md }}>
-          {error && (
+    return (
+      <Section colors={colors} spacing={spacing}>
+        <SectionHeader
+          icon={
+            <Cpu size={24} color={colors.primary[500]} strokeWidth={2.2} />
+          }
+          title="Audio Output"
+          colors={colors}
+          spacing={spacing}
+          collapsible
+          expanded={showDacSettings}
+          onPress={() => setShowDacSettings((v) => !v)}
+          rightSlot={
+            activeOutputDevice ? (
+              <View
+                style={[
+                  styles.statusDot,
+                  {
+                    backgroundColor: outputStatus?.honored
+                      ? colors.status.success
+                      : colors.status.warning,
+                  },
+                ]}
+              />
+            ) : null
+          }
+        />
+
+        {showDacSettings && (
+          <View style={{ padding: spacing.md }}>
+            {(outputError) && (
+              <View
+                style={[
+                  styles.alertBox,
+                  {
+                    backgroundColor: colors.status.error + "20",
+                    borderColor: colors.status.error,
+                  },
+                ]}
+              >
+                <Text style={{ color: colors.status.error, fontSize: 12 }}>
+                  Error: {outputError}
+                </Text>
+              </View>
+            )}
+
+            {/* Perangkat yang SEDANG mengeluarkan suara.
+                Ini yang boleh disebut namanya - bukan yang dipilih. Kalau
+                pilihan DAC tidak dihormati, di sini yang muncul speaker
+                internal. */}
             <View
+              style={{
+                backgroundColor: colors.background.tertiary,
+                borderRadius: spacing.sm,
+                padding: spacing.sm,
+                marginBottom: spacing.md,
+              }}
+            >
+              <Text
+                style={{
+                  color: colors.text.tertiary,
+                  fontSize: 10,
+                  letterSpacing: 0.6,
+                }}
+              >
+                OUTPUT AKTIF
+              </Text>
+              <Text
+                style={{
+                  color: colors.text.primary,
+                  fontWeight: "600",
+                  marginTop: 2,
+                }}
+              >
+                {activeOutputDevice
+                  ? activeOutputDevice.name
+                  : "Dikelola sistem"}
+              </Text>
+              <Text
+                style={{
+                  color: outputStatus?.honored
+                    ? colors.text.secondary
+                    : colors.status.warning,
+                  fontSize: 11,
+                  marginTop: 2,
+                }}
+              >
+                {activeOutputDevice
+                  ? `${activeOutputDevice.id} â¢ ${activeOutputDevice.sampleRate / 1000} kHz maks â¢ ${pathLabel}`
+                  : "Tidak ada perangkat spesifik yang dipilih - Android menentukan sendiri."}
+              </Text>
+
+              {/* Pilihan tidak dihormati: DAC dipilih tapi stream tetap keluar
+                  di perangkat lain. Dulu ini tidak terlihat sama sekali. */}
+              {outputStatus && outputStatus.requested > 0 && !outputStatus.honored && (
+                <Text
+                  style={{
+                    color: colors.status.warning,
+                    fontSize: 11,
+                    marginTop: spacing.xs,
+                    lineHeight: 15,
+                  }}
+                >
+                  Perangkat {outputStatus.requested} diminta tapi stream memakai{" "}
+                  {outputStatus.actual}. Android mengabaikan permintaannya -
+                  audio keluar dari perangkat lain.
+                </Text>
+              )}
+
+              {/* Laju stream berbeda dari laju file: sampel dikonversi. */}
+              {outputStatus && outputStatus.actual > 0 && !outputStatus.rateHonored && (
+                <Text
+                  style={{
+                    color: colors.text.tertiary,
+                    fontSize: 11,
+                    marginTop: spacing.xs,
+                    lineHeight: 15,
+                  }}
+                >
+                  Laju stream belum sama dengan laju file - sampel masih
+                  dikonversi.
+                </Text>
+              )}
+            </View>
+
+            {/* Scan Button */}
+            <TouchableOpacity
+              onPress={async () => {
+                await refreshOutput();
+              }}
+              disabled={outputLoading}
               style={[
-                styles.alertBox,
+                styles.pill,
                 {
-                  backgroundColor: colors.status.error + "20",
-                  borderColor: colors.status.error,
+                  backgroundColor: colors.primary[500],
+                  marginBottom: spacing.md,
                 },
               ]}
             >
-              <Text style={{ color: colors.status.error, fontSize: 12 }}>
-                Error: {error}
+              <Text style={{ color: colors.background.primary, fontSize: 12 }}>
+                {outputLoading ? "Scanning..." : "Pindai Perangkat Output"}
               </Text>
-            </View>
-          )}
+            </TouchableOpacity>
 
-          {/* Scan Button */}
-          <TouchableOpacity
-            onPress={handleScanDAC}
-            disabled={loading}
-            style={[
-              styles.pill,
-              {
-                backgroundColor: colors.primary[500],
-                marginBottom: spacing.md,
-              },
-            ]}
-          >
-            <Text style={{ color: colors.background.primary, fontSize: 12 }}>
-              {loading ? "Scanning..." : "Scan USB DAC"}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Daftar DAC */}
-          {dacs.length > 0 && (
-            <View style={{ marginBottom: spacing.md }}>
-              <Text
-                style={{
-                  color: colors.text.secondary,
-                  fontSize: 12,
-                  marginBottom: spacing.xs,
-                }}
-              >
-                Device Tersedia:
-              </Text>
-              {dacs.map((dac) => (
-                <TouchableOpacity
-                  key={dac.id}
-                  onPress={() => selectDAC(dac.id)}
-                  style={[
-                    styles.dacItem,
-                    currentDAC?.id === dac.id && {
-                      backgroundColor: colors.primary[500] + "25",
-                    },
-                  ]}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      style={{ color: colors.text.primary, fontWeight: "600" }}
-                    >
-                      {dac.name}
-                    </Text>
-                    <Text
-                      style={{ color: colors.text.secondary, fontSize: 11 }}
-                    >
-                      {dac.id} • {dac.channelCounts} Channels
-                    </Text>
-                  </View>
-                  {currentDAC?.id === dac.id && (
-                    <CheckCircle
-                      size={22}
-                      color={colors.primary[500]}
-                      strokeWidth={2.5}
-                    />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-
-          {/* Exclusive Mode & Sample Rate */}
-          {currentDAC && (
-            <>
-              <SettingRow colors={colors} spacing={spacing}>
-                <Text style={{ color: colors.text.primary }}>
-                  Exclusive Mode
-                </Text>
-                <Switch
-                  value={isExclusive}
-                  onValueChange={(value) => {
-                    // This updates the Zustand store, which then triggers the engine
-                    setAudioMode(value ? "bit-perfect" : "dsp");
-                  }}
-                  trackColor={{
-                    false: colors.background.tertiary,
-                    true: colors.primary[500],
-                  }}
-                  thumbColor={
-                    isExclusive ? colors.text.primary : colors.text.secondary
-                  }
-                />
-              </SettingRow>
-
-              {/* Sample Rate Selector */}
-              <View style={{ marginTop: spacing.sm }}>
+            {/* Daftar SEMUA perangkat output */}
+            {outputDevices.length > 0 && (
+              <View style={{ marginBottom: spacing.md }}>
                 <Text
                   style={{
                     color: colors.text.secondary,
+                    fontSize: 12,
                     marginBottom: spacing.xs,
                   }}
                 >
-                  Sample Rate
+                  Perangkat Tersedia ({outputDevices.length}):
                 </Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={{ flexDirection: "row", gap: spacing.xs }}>
-                    {currentDAC.sampleRates?.map((rate) => (
-                      <TouchableOpacity
-                        key={rate}
-                        onPress={() => setSampleRate(rate)}
-                        style={[
-                          styles.pill,
-                          {
-                            backgroundColor:
-                              config?.sampleRate === rate
-                                ? colors.primary[500]
-                                : colors.background.tertiary,
-                          },
-                        ]}
-                      >
+                {outputDevices.map((device) => {
+                  const isActive = activeOutputDevice?.id === device.id;
+                  return (
+                    <TouchableOpacity
+                      key={device.id}
+                      onPress={() => selectOutputDevice(device.id)}
+                      style={[
+                        styles.dacItem,
+                        isActive && {
+                          backgroundColor: colors.primary[500] + "25",
+                        },
+                      ]}
+                    >
+                      <View style={{ flex: 1 }}>
                         <Text
                           style={{
-                            color:
-                              config?.sampleRate === rate
-                                ? colors.background.primary
-                                : colors.text.primary,
-                            fontSize: 12,
+                            color: colors.text.primary,
+                            fontWeight: "600",
                           }}
                         >
-                          {rate / 1000}kHz
+                          {device.name}
                         </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </ScrollView>
+                        <Text
+                          style={{ color: colors.text.secondary, fontSize: 11 }}
+                        >
+                          {device.id} â¢ {device.sampleRate / 1000} kHz â¢{" "}
+                          {device.type}
+                          {device.exclusive ? " â¢ jalur langsung" : ""}
+                        </Text>
+                      </View>
+                      {isActive && (
+                        <CheckCircle
+                          size={22}
+                          color={colors.primary[500]}
+                          strokeWidth={2.5}
+                        />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
-            </>
-          )}
-        </View>
-      )}
-    </Section>
-  );
+            )}
+
+            {outputDevices.length === 0 && !outputLoading && (
+              <Text
+                style={{
+                  color: colors.text.tertiary,
+                  fontSize: 12,
+                  marginBottom: spacing.md,
+                }}
+              >
+                Belum ada perangkat terbaca. Tekan pindai.
+              </Text>
+            )}
+
+            {/* Mode bit-perfect - hanya masuk akal kalau jalurnya sanggup. */}
+            <SettingRow colors={colors} spacing={spacing}>
+              <View style={{ flex: 1, marginRight: spacing.sm }}>
+                <Text style={{ color: colors.text.primary }}>
+                  Bit-Perfect Mode
+                </Text>
+                <Text
+                  style={{
+                    color: colors.text.tertiary,
+                    fontSize: 11,
+                    marginTop: 2,
+                    lineHeight: 15,
+                  }}
+                >
+                  {pathLossy
+                    ? "Jalur perangkat ini selalu lewat mixer sistem. Bit-perfect tidak mungkin di sini - pakai USB DAC."
+                    : canBeBitPerfect === true
+                      ? "Jalur langsung. Bit-perfect mungkin kalau device menerima exclusive."
+                      : "Pilih perangkat dulu untuk tahu apakah jalurnya sanggup."}
+                </Text>
+              </View>
+              <Switch
+                value={audioMode === "bit-perfect"}
+                disabled={pathLossy}
+                onValueChange={(value) => {
+                  // Zustand store yang meneruskan ke engine.
+                  setAudioMode(value ? "bit-perfect" : "dsp");
+                }}
+                trackColor={{
+                  false: colors.background.tertiary,
+                  true: colors.primary[500],
+                }}
+                thumbColor={
+                  audioMode === "bit-perfect"
+                    ? colors.text.primary
+                    : colors.text.secondary
+                }
+              />
+            </SettingRow>
+          </View>
+        )}
+      </Section>
+    );
+  };
+
 
   // ─── renderAudio ──────────────────────────────────────────────────────────────
 
@@ -1113,7 +1207,7 @@ export default function SettingsScreen() {
       </Text>
 
       {renderTampilan()}
-      {renderDAC()}
+      {renderAudioOutput()}
       {renderAudio()}
       {renderLibrary()}
       {renderAbout()}

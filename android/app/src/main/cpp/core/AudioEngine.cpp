@@ -39,7 +39,8 @@ AudioEngine::~AudioEngine() {
 
 bool AudioEngine::start(
     bool exclusiveMode,
-    int32_t requestedSampleRate
+    int32_t requestedSampleRate,
+    int32_t requestedDeviceId
 ) {
 
     if (
@@ -72,7 +73,8 @@ bool AudioEngine::start(
         !mStreamController.open(
             &mCallback,
             exclusiveMode,
-            requestedSampleRate
+            requestedSampleRate,
+            requestedDeviceId
         )
     ) {
         return false;
@@ -93,8 +95,10 @@ bool AudioEngine::start(
     );
 
     __android_log_print(ANDROID_LOG_INFO, "AudioEngine",
-        "start: diminta=%d, dipakai=%d, exclusive=%s, api=%s%s",
-        requestedSampleRate, actualRate,
+        "start: diminta rate=%d device=%d, dipakai rate=%d device=%d, "
+        "exclusive=%s, api=%s%s",
+        requestedSampleRate, requestedDeviceId,
+        actualRate, mStreamController.actualDeviceId(),
         exclusiveMode ? "ya" : "tidak",
         mStreamController.usingOpenSLESFallback() ? "OpenSLES" : "AAudio",
         mStreamController.usingOpenSLESFallback()
@@ -124,12 +128,29 @@ int32_t AudioEngine::actualSampleRate() const {
     return mStreamController.actualSampleRate();
 }
 
+int32_t AudioEngine::actualDeviceId() const {
+    return mStreamController.actualDeviceId();
+}
+
+bool AudioEngine::isDeviceHonored() const {
+    // Tidak ada preferensi = tidak ada yang perlu dihormati.
+    const int32_t requested = mStreamController.requestedDeviceId();
+    if (requested <= 0) {
+        return true;
+    }
+    return mStreamController.actualDeviceId() == requested;
+}
+
 bool AudioEngine::isExclusive() const {
     return mStreamController.isExclusive();
 }
 
 bool AudioEngine::usingOpenSLESFallback() const {
     return mStreamController.usingOpenSLESFallback();
+}
+
+bool AudioEngine::isPathInherentlyLossy() const {
+    return mStreamController.isPathInherentlyLossy();
 }
 
 void AudioEngine::stop() {

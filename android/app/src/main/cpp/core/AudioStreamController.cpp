@@ -4,8 +4,10 @@
 
 #include "AudioStreamController.h"
 
+#include "../devices/AudioDeviceManager.h"
 
 #include <android/log.h>
+#include <string>
 #include <utility>
 
 namespace pristine {
@@ -34,12 +36,23 @@ AudioStreamController::
 bool AudioStreamController::open(
     oboe::AudioStreamCallback* callback,
     bool exclusive,
-    int32_t requestedSampleRate
+    int32_t requestedSampleRate,
+    int32_t deviceId
 ) {
 
     close();
 
     mOpenSLESFallback.store(false, std::memory_order_release);
+
+    // Simpan permintaan supaya restart() (device/laju berubah) membuka ulang
+    // dengan nilai yang sama, bukan kembali ke default.
+    mRequestedSampleRate.store(requestedSampleRate, std::memory_order_release);
+    mRequestedDeviceId.store(deviceId, std::memory_order_release);
+    mActualDeviceId.store(0, std::memory_order_release);
+
+    __android_log_print(ANDROID_LOG_INFO, "AudioStreamController",
+        "open: diminta laju=%d device=%d exclusive=%s",
+        requestedSampleRate, deviceId, exclusive ? "ya" : "tidak");
 
     // =============================================
     // PERCOBAAN 1: AAudio
@@ -55,7 +68,7 @@ bool AudioStreamController::open(
     {
         oboe::AudioStreamBuilder builder;
 
-        if (!buildStream(builder, callback, exclusive, requestedSampleRate)) {
+        if (!buildStream(builder, callback, exclusive, requestedSampleRate, deviceId)) {
             return false;
         }
         builder.setAudioApi(oboe::AudioApi::AAudio);
@@ -66,8 +79,9 @@ bool AudioStreamController::open(
         if (result == oboe::Result::OK && stream) {
             mStream = std::move(stream);
             __android_log_print(ANDROID_LOG_INFO, "AudioStreamController",
-                "open: AAudio BERHASIL (requested=%d, actual=%d, exclusive=%s)",
+                "open: AAudio BERHASIL (requested=%d, actual=%d, device=%d, exclusive=%s)",
                 requestedSampleRate, mStream->getSampleRate(),
+                mStream->getDeviceId(),
                 exclusive ? "ya" : "tidak");
         } else {
             __android_log_print(ANDROID_LOG_WARN, "AudioStreamController",
@@ -82,7 +96,7 @@ bool AudioStreamController::open(
     if (!mStream) {
         oboe::AudioStreamBuilder builder;
 
-        if (!buildStream(builder, callback, exclusive, requestedSampleRate)) {
+        if (!buildStream(builder, callback, exclusive, requestedSampleRate, deviceId)) {
             return false;
         }
         builder.setAudioApi(oboe::AudioApi::OpenSLES);
@@ -104,10 +118,32 @@ bool AudioStreamController::open(
         // lewat mixer sistem. Dicatat sebagai peringatan supaya tidak
         // dilaporkan sebagai bit-perfect padahal bukan.
         __android_log_print(ANDROID_LOG_WARN, "AudioStreamController",
-            "open: OpenSLES fallback dipakai (actual=%d). "
+            "open: OpenSLES fallback dipakai (actual=%d, device=%d). "
             "TIDAK ada jalur exclusive - bit-perfect ke DAC tidak tersedia "
             "di jalur ini.",
-            mStream->getSampleRate());
+            mStream->getSampleRate(), mStream->getDeviceId());
+    }
+
+    // =============================================
+    // VERIFIKASI PERANGKAT
+    // =============================================
+    //
+    // Kalau user memilih perangkat tapi stream terbuka di perangkat lain,
+    // pilihan itu TIDAK berlaku. Lebih baik tercatat sebagai peringatan
+    // eksplisit daripada UI mengaku sedang memakai DAC padahal bukan.
+    //
+    // Ini bisa terjadi karena Oboe/AAudio boleh mengabaikan deviceId (mis.
+    // perangkat sudah dicabut, atau tidak bisa dibuka exclusive).
+    {
+        const int32_t actualDevice = mStream ? mStream->getDeviceId() : 0;
+        mActualDeviceId.store(actualDevice, std::memory_order_release);
+
+        if (deviceId > 0 && actualDevice != deviceId) {
+            __android_log_print(ANDROID_LOG_WARN, "AudioStreamController",
+                "DEVICE MISMATCH: diminta device=%d, dapat=%d - permintaan "
+                "tidak dihormati (perangkat dicabut / tidak bisa dibuka?)",
+                deviceId, actualDevice);
+        }
     }
 
     // ð¥ DEBUG: log actual stream rate
@@ -174,7 +210,8 @@ bool AudioStreamController::buildStream(
     oboe::AudioStreamBuilder& builder,
     oboe::AudioStreamCallback* callback,
     bool exclusive,
-    int32_t requestedSampleRate
+    int32_t requestedSampleRate,
+    int32_t deviceId
 ) {
 
     builder.setDirection(
@@ -203,12 +240,25 @@ bool AudioStreamController::buildStream(
     // supaya sampel tidak dikonversi di mixer Android. Pemanggil yang menentukan
     // laju (dari kapabilitas DAC atau laju file); kalau 0, pakai 48000 sebagai
     // default yang aman.
-    //
-    // CATATAN: setAudioApi() TIDAK di sini. Pemilihan API dilakukan di open()
-    // supaya bisa mencoba AAudio dulu lalu jatuh ke OpenSLES.
     builder.setSampleRate(
         requestedSampleRate > 0 ? requestedSampleRate : 48000
     );
+
+    // 🔥 FIX (2026-10-07): pilih PERANGKAT output, bukan hanya lajunya.
+    //
+    // Tanpa ini pilihan DAC di UI hanya tercatat dan tidak mengubah apa pun -
+    // stream tetap dibuka di perangkat default sistem, jadi audio keluar dari
+    // speaker walau DAC terpasang dan terpilih.
+    //
+    // deviceId == 0 (kUnspecified) = tidak ada preferensi; Android memilih.
+    // Oboe boleh mengabaikan nilai ini (perangkat hilang / tidak bisa dibuka),
+    // jadi open() memverifikasi getDeviceId() setelah stream terbuka.
+    //
+    // CATATAN: OpenSLES tidak mendukung pemilihan perangkat; di jalur fallback
+    // ini nilai diabaikan dan device tetap dipilih sistem.
+    if (deviceId > 0) {
+        builder.setDeviceId(deviceId);
+    }
 
     builder.setFramesPerCallback(
         oboe::Unspecified
@@ -298,12 +348,24 @@ bool AudioStreamController::restart(
     const bool exclusive =
         isExclusive();
 
+    // Laju dan perangkat yang diminta DULU, bukan default: restart biasanya
+    // dipicu oleh perubahan salah satunya, dan membuka ulang tanpa nilainya
+    // akan membatalkan pilihan yang sedang berlaku (stream kembali ke 48000
+    // dan perangkat sistem). `close()` tidak menghapus nilai tersimpan ini.
+    const int32_t rate =
+        mRequestedSampleRate.load(std::memory_order_acquire);
+
+    const int32_t device =
+        mRequestedDeviceId.load(std::memory_order_acquire);
+
     close();
 
     if (
         !open(
             callback,
-            exclusive
+            exclusive,
+            rate,
+            device
         )
     ) {
         return false;
@@ -358,6 +420,72 @@ int32_t AudioStreamController::actualSampleRate() const noexcept {
 
 bool AudioStreamController::usingOpenSLESFallback() const noexcept {
     return mOpenSLESFallback.load(std::memory_order_acquire);
+}
+
+int32_t AudioStreamController::actualDeviceId() const noexcept {
+    // Ambil dari stream yang hidup kalau ada - itu sumber paling akurat
+    // setelah error callback menutup stream. Cache dipakai sebagai cadangan.
+    if (mStream) {
+        return mStream->getDeviceId();
+    }
+    return mActualDeviceId.load(std::memory_order_acquire);
+}
+
+bool AudioStreamController::isDeviceHonored() const noexcept {
+    const int32_t requested =
+        mRequestedDeviceId.load(std::memory_order_acquire);
+
+    if (requested <= 0) {
+        return true;
+    }
+
+    return actualDeviceId() == requested;
+}
+
+// Jalur yang secara arsitektur tidak bisa bit-perfect: perangkatnya tidak
+// punya jalur langsung ke perangkat keras, atau stream jatuh ke OpenSLES.
+//
+// Kenapa perlu: pada jalur ini AAudio/OpenSLES SELALU menolak exclusive, jadi
+// `isExclusive()` false - dan tanpa pembedaan ini UI akan menampilkan
+// "exclusive ditolak" seolah-olah ada yang salah, padahal itu memang batas
+// jalurnya. Sebaliknya pada USB DAC + AAudio, exclusive yang ditolak adalah
+// kegagalan nyata yang harus dilaporkan.
+bool AudioStreamController::isPathInherentlyLossy() const noexcept {
+
+    // OpenSLES tidak punya mode exclusive sama sekali.
+    if (mOpenSLESFallback.load(std::memory_order_acquire)) {
+        return true;
+    }
+
+    const int32_t apiDevice = actualDeviceId();
+
+    // 0 = Android memilih (tidak ada preferensi maupun info). Tidak bisa
+    // disimpulkan - biarkan ditentukan oleh isExclusive().
+    if (apiDevice <= 0) {
+        return false;
+    }
+
+    // Id numerik perangkat hanya berarti di daftar yang dimuat
+    // AudioDeviceManager. Kalau daftarnya kosong (belum di-refresh), jangan
+    // mengarang jawaban.
+    const auto devices =
+        AudioDeviceManager::get().getAvailableDevices();
+
+    if (devices.empty()) {
+        return false;
+    }
+
+    const std::string wanted = std::to_string(apiDevice);
+
+    for (const auto& d : devices) {
+        if (d.id == wanted) {
+            return !d.supportsExclusive;
+        }
+    }
+
+    // Perangkat tidak ada di daftar (sudah dicabut / belum dikenal): jangan
+    // menyimpulkan apa pun.
+    return false;
 }
 
 int32_t AudioStreamController::sampleRate() const noexcept {

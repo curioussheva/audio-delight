@@ -26,6 +26,13 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
     private external fun nativeSetActiveDevice(deviceId: String): Boolean
     private external fun nativeOnDeviceAdded(deviceId: String)
     private external fun nativeOnDeviceRemoved(deviceId: String)
+    private external fun nativeGetActiveDeviceStatus(): IntArray
+
+    /**
+     * Perangkat yang SEDANG mengeluarkan suara (hasil stream, bukan yang
+     * diminta). null kalau stream memilih sendiri atau belum dibuka.
+     */
+    private external fun nativeGetCurrentOutputDevice(): AudioDeviceInfo?
 
     override fun getName() = NAME
 
@@ -174,11 +181,78 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun setActiveDevice(deviceId: String, promise: Promise) {
         try {
+            // Native sekaligus meneruskan pilihan ke engine (menutup & membuka
+            // ulang stream di perangkat ini) dan mengembalikan true hanya kalau
+            // id-nya benar-benar ada di daftar device.
             val ok = nativeSetActiveDevice(deviceId)
-            // Mengembalikan hasil NYATA: false kalau id tidak ada di daftar.
             promise.resolve(ok)
         } catch (e: Exception) {
             promise.reject("DEVICE_ERROR", e.message)
+        }
+    }
+
+    /**
+     * Status perangkat yang BENAR-BENAR dipakai stream.
+     *
+     * Mengembalikan { requested, actual, honored, pathLossy, rateHonored }:
+     *   - requested:   id yang diminta (0 = tidak ada preferensi)
+     *   - actual:      id yang benar-benar dipakai stream (0 = dipilih sistem)
+     *   - honored:     true kalau permintaan device dihormati
+     *   - pathLossy:   true kalau jalur ini memang TIDAK BISA bit-perfect
+     *                  (speaker internal, jack, Bluetooth, OpenSLES) - jadi
+     *                  exclusive yang ditolak bukan kegagalan, melainkan batas
+     *   - rateHonored: true kalau laju stream sama dengan laju file
+     *
+     * Dipakai UI untuk jujur: jangan tampilkan "DAC aktif" kalau stream
+     * ternyata masih keluar di perangkat lain, dan jangan tampilkan
+     * "bit-perfect" kalau sampelnya di-resample.
+     * Sebelumnya tidak ada cara membedakan "sedang memakai DAC" dari
+     * "mengira memakai DAC".
+     */
+    @ReactMethod
+    fun getActiveDeviceStatus(promise: Promise) {
+        try {
+            val status = nativeGetActiveDeviceStatus()
+            val map = Arguments.createMap()
+            map.putInt("requested", status.getOrElse(0) { 0 })
+            map.putInt("actual", status.getOrElse(1) { 0 })
+            map.putBoolean("honored", status.getOrElse(2) { 1 } == 1)
+            map.putBoolean("pathLossy", status.getOrElse(3) { 0 } == 1)
+            map.putBoolean("rateHonored", status.getOrElse(4) { 0 } == 1)
+            promise.resolve(map)
+        } catch (e: Throwable) {
+            promise.reject("DEVICE_STATUS_FAILED", e)
+        }
+    }
+
+    /**
+     * Perangkat yang SEDANG mengeluarkan suara.
+     *
+     * Beda penting dari getDevices(): itu daftar yang TERSEDIA, ini satu
+     * perangkat yang benar-benar dipakai. Kalau pilihan DAC tidak dihormati,
+     * di sini yang muncul speaker internal - dan UI tidak bisa menyebut nama
+     * DAC yang salah.
+     *
+     * resolve(null) kalau stream memilih sendiri atau belum dibuka.
+     */
+    @ReactMethod
+    fun getCurrentOutputDevice(promise: Promise) {
+        try {
+            val device = nativeGetCurrentOutputDevice()
+            if (device == null) {
+                promise.resolve(null)
+                return
+            }
+            val map = Arguments.createMap()
+            map.putString("id", device.id)
+            map.putString("name", device.name)
+            map.putString("type", device.type)
+            map.putInt("sampleRate", device.sampleRate)
+            map.putBoolean("exclusive", device.exclusive)
+            map.putBoolean("isUsb", device.isUsb)
+            promise.resolve(map)
+        } catch (e: Throwable) {
+            promise.reject("CURRENT_DEVICE_FAILED", e)
         }
     }
 

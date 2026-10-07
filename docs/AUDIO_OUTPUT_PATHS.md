@@ -314,48 +314,166 @@ bermasalah), stream dibuka lewat OpenSLES, `mOpenSLESFallback = true`, dan
 
 ## 6. Ringkasan masalah, urut dampak
 
-| # | Masalah | Dampak | Bukti |
-|---|---|---|---|
-| 1 | `setDeviceId()` tidak pernah dipanggil | **Pilihan device di UI tidak berpengaruh** — audio selalu ke device default sistem | `activeDeviceIdNumeric()` 0 pemanggil |
-| 2 | Komentar header mengklaim `setDeviceId()` "yang dipakai" | Menyesatkan pembaca berikutnya | `AudioDeviceManager.h:30` |
-| 3 | `NativeDeviceModule` tidak dikonsumsi JS | Daftar perangkat nyata tidak sampai ke UI | 0 import |
-| 4 | UI pakai `USBDACModule` yang filter USB saja | Speaker/jack/BT/HDMI tidak muncul di UI | `USBDACModule.kt:78` `isUsbDevice()` |
-| 5 | `USBDACModule.setSampleRate`/`setExclusiveMode` stub | Slider laju & tombol exclusive tidak berefek | nol JNI di file itu |
-| 6 | `isBitPerfectFor()` tidak mengecualikan Bluetooth | **Badge bit-perfect menyala di A2DP** (lossy) | `DeviceRateDetector.cpp:292` |
-| 7 | 4 kelas USB C++ mati + izin USB diminta tanpa dipakai | Jalur bit-perfect terpendek tidak tersambung | 0 referensi; manifest punya intent-filter |
-| 8 | `AudioRouteManager` stub total | Nama menjanjikan routing, tidak ada isi | `AudioRouteManager.cpp` semua stub |
-| 9 | Chromecast/DLNA/AirPlay tidak ada | Fitur belum ada (bukan bug) | grep NIHIL |
+Status per **2026-10-07** (setelah sambungan di ÃÂ§9).
+
+| # | Masalah | Dampak | Bukti | Status |
+|---|---|---|---|---|
+| 1 | `setDeviceId()` tidak pernah dipanggil | **Pilihan device di UI tidak berpengaruh** Ã¢ÂÂ audio selalu ke device default sistem | `activeDeviceIdNumeric()` 0 pemanggil | Ã¢ÂÂ SELESAI |
+| 2 | Komentar header mengklaim `setDeviceId()` "yang dipakai" | Menyesatkan pembaca berikutnya | `AudioDeviceManager.h:30` | Ã¢ÂÂ SELESAI |
+| 3 | `NativeDeviceModule` tidak dikonsumsi JS | Daftar perangkat nyata tidak sampai ke UI | 0 import | Ã¢ÂÂ SELESAI |
+| 4 | UI pakai `USBDACModule` yang filter USB saja | Speaker/jack/BT/HDMI tidak muncul di UI | `USBDACModule.kt:78` `isUsbDevice()` | Ã¢ÂÂ SELESAI |
+| 5 | `USBDACModule.setSampleRate`/`setExclusiveMode` stub | Slider laju & tombol exclusive tidak berefek | nol JNI di file itu | Ã¢ÂÂ¡Ã¯Â¸Â tak lagi dipakai UI |
+| 6 | `isBitPerfectFor()` tidak mengecualikan Bluetooth | **Badge bit-perfect menyala di A2DP** (lossy) | `DeviceRateDetector.cpp:292` | Ã¢ÂÂ SELESAI |
+| 7 | 4 kelas USB C++ mati + izin USB diminta tanpa dipakai | Jalur bit-perfect terpendek tidak tersambung | 0 referensi; manifest punya intent-filter | Ã¢ÂÂª terbuka |
+| 8 | `AudioRouteManager` stub total | Nama menjanjikan routing, tidak ada isi | `AudioRouteManager.cpp` semua stub | Ã¢ÂÂª masih stub |
+| 9 | Chromecast/DLNA/AirPlay tidak ada | Fitur belum ada (bukan bug) | grep NIHIL | Ã¢ÂÂª fitur |
 
 ---
 
-## 7. Urutan perbaikan yang disarankan
+## 7. Urutan perbaikan Ã¢ÂÂ sudah dikerjakan
 
 **Untuk membuat pemilihan device benar-benar bekerja (jalur AAudio/Oboe):**
 
-1. Simpan id numerik device aktif, dan panggil
-   `builder.setDeviceId(AudioDeviceManager::get().activeDeviceIdNumeric())` di
-   `AudioStreamController::buildStream()`. Tambah field `mDeviceId` di kelas itu.
-   — inilah satu-satunya perubahan yang membuat pilihan device berdampak.
-2. Stream harus dibuka ulang saat device dipilih (satu stream = satu device),
-   sama polanya dengan restart karena laju di langkah 3 `RATE_CHAIN_AUDIT.md`.
-3. Perbaiki komentar `AudioDeviceManager.h:27-33` supaya tidak lagi mengklaim
-   sesuatu yang belum ada.
+1. Ã¢ÂÂ Id numerik device diteruskan sampai `buildStream()` lewat
+   `builder.setDeviceId(deviceId)`. `open()` menerima `deviceId`, dan
+   `restart()` meneruskannya ulang (kalau tidak, restart diam-diam kembali ke
+   perangkat default sistem).
+2. Ã¢ÂÂ Stream dibuka ulang saat device dipilih Ã¢ÂÂ `EngineManager::setRequestedDeviceId()`
+   menutup dan membuka ulang stream, dengan laju dihitung dari kapabilitas
+   perangkat **baru**.
+3. Ã¢ÂÂ Komentar `AudioDeviceManager.h` diperbaiki supaya tidak lagi mengklaim
+   sesuatu yang tidak ada.
 
 **Untuk UI yang jujur:**
 
-4. Ganti UI hardware agar memakai `NativeDeviceModule` (semua tipe perangkat),
-   bukan `USBDACModule` yang filter USB.
-5. `isBitPerfectFor()` → kembalikan false kalau perangkat aktif Bluetooth.
-6. Ikat badge bit-perfect ke laju aktual vs laju file (`actualSampleRate`
-   sudah tersedia lewat `useBitPerfectStatus`).
+4. Ã¢ÂÂ UI memakai `NativeDeviceModule` (semua tipe perangkat) lewat
+   `useAudioOutput`, bukan `USBDACModule` yang menyaring USB.
+5. Ã¢ÂÂ Jalur/perangkat yang tidak sanggup bit-perfect tidak lagi bisa
+   mengklaim bit-perfect Ã¢ÂÂ lihat `isPathInherentlyLossy()` di ÃÂ§9.
+6. Ã¢ÂÂ Klaim bit-perfect diikat ke laju aktual vs laju **file**
+   (`isRateHonored()`), bukan ke flag permintaan. Ini menutup celah badge
+   bit-perfect menyala di A2DP.
 
 **Untuk jalur bit-perfect terpendek (opsional, paling besar):**
 
-7. Putuskan `USBDeviceManager`/`USBStreamSession`: sambungkan (USB host API
-   langsung ke DAC) atau hapus bersama izin USB di manifest. Membiarkan izin USB
-   diminta tanpa dipakai adalah utang yang menyesatkan.
+7. Ã¢ÂÂª Belum diputuskan: `USBDeviceManager`/`USBStreamSession` disambungkan
+   (USB host API langsung ke DAC) atau dihapus bersama izin USB di manifest.
+   Membiarkan izin USB diminta tanpa dipakai adalah utang yang menyesatkan.
 
 ---
+
+## 8. Yang belum bisa diuji di sini
+
+Tidak ada SDK/NDK di Termux, jadi tidak ada APK yang bisa dijalankan di
+perangkat. Yang **sudah** terverifikasi di mesin ini:
+
+- `bash scripts/check.sh` untuk semua file C++ yang diubah Ã¢ÂÂ lulus.
+- `tsc --noEmit` Ã¢ÂÂ exit 0.
+- `pnpm lint:check` Ã¢ÂÂ 0 error (warning `settings.tsx` 7 Ã¢ÂÂ 5).
+- `pnpm test` (jest) Ã¢ÂÂ logika murni TS.
+
+Yang **harus** dilihat di logcat saat menguji APK dari CI:
+
+```
+EngineManager  start: laju file=96000 -> laju stream=96000 (bit-perfect=ya, perangkat=23)
+EngineManager  start: perangkat diminta=23 (0 = pilih sistem)
+AudioStreamController  OPEN RESULT: ACTUAL rate=96000, framesPerBurst=..., api=AAudio
+EngineManager  start: hasil -> laju diminta=96000 dipakai=96000 (sama=ya),
+               exclusive=ya, jalur-mustahil-bit-perfect=tidak, bit-perfect=YA
+```
+
+Kalau `exclusive=tidak` sementara `jalur-mustahil-bit-perfect=tidak`, itu
+kegagalan NYATA (AAudio menolak) Ã¢ÂÂ bukan batas jalur. Kalau
+`jalur-mustahil-bit-perfect=ya`, itu speaker/jack/Bluetooth dan memang tidak
+mungkin; UI tidak boleh menampilkannya sebagai kesalahan.
+
+---
+
+## 9. Apa yang disambungkan (2026-10-07)
+
+### 9.1 Native: perangkat benar-benar dipakai saat stream dibuka
+
+- `AudioStreamController::buildStream()` Ã¢ÂÂ `builder.setDeviceId(deviceId)` saat
+  `deviceId > 0`. Komentar lama di `AudioDeviceManager.h` yang mengklaim ini
+  sudah dipakai sudah dikoreksi.
+- `AudioStreamController` menyimpan `mRequestedDeviceId` + `mActualDeviceId`,
+  dan `restart()` membuka ulang di perangkat yang SAMA.
+- Verifikasi setelah stream terbuka: `getDeviceId()` dibandingkan dengan yang
+  diminta, dan ketidaksesuaian dicatat sebagai `DEVICE MISMATCH` di logcat.
+  `isDeviceHonored()` menjawabnya untuk UI.
+
+### 9.2 Native: laju dihitung dari perangkat yang DIPILIH
+
+Sebelumnya laju diambil dari `DeviceRateDetector`, yang membaca perangkat
+output **aktif menurut Android** Ã¢ÂÂ dan itu belum tentu perangkat yang kita
+minta (AudioFlinger memindahkan rute setelah stream dibuka).
+
+- `EngineManager::supportedRatesFor(deviceId)` membaca laju dari deskriptor
+  perangkat yang dipilih di `AudioDeviceManager`.
+- `EngineManager::pickBestRateFor(fileRate, deviceRates)` memilih laju
+  terhadap daftar laju perangkat ITU (laju persis Ã¢ÂÂ kelipatan bulat Ã¢ÂÂ laju
+  tertinggi yang tidak melebihi laju file Ã¢ÂÂ laju terendah perangkat).
+- `EngineManager::start()` sekarang menentukan perangkat **lebih dulu**,
+  me-refresh daftar perangkat, baru menghitung laju. Urutan ini penting: kalau
+  laju dihitung dari perangkat lama, DAC 384 kHz yang baru dicolok tetap
+  dibuka di 48 kHz.
+- Tiga jalur restart (`setRequestedDeviceId`, `onDeviceRemoved`,
+  `setExclusiveMode`) semuanya memakai perangkat + laju yang sama-sama baru.
+
+### 9.3 Kejujuran: "mustahil" dibedakan dari "ditolak"
+
+Ini yang mencegah dua kesalahan yang berlawanan Ã¢ÂÂ mengklaim bit-perfect di
+jalur yang mustahil, dan melaporkan batas jalur sebagai kegagalan.
+
+- `AudioStreamController::isPathInherentlyLossy()` Ã¢ÂÂ true kalau (a) stream
+  jatuh ke OpenSLES (tidak punya mode exclusive sama sekali), atau (b)
+  perangkatnya sendiri tidak punya jalur langsung (`supportsExclusive` false:
+  speaker internal, jack, Bluetooth). Perangkat dicari di
+  `AudioDeviceManager` lewat id stream yang SEDANG berjalan.
+- `EngineManager::isRateHonored()` Ã¢ÂÂ membandingkan laju stream **aktual**
+  dengan laju **file**. Bukan hasil `pickBestRate()`: kalau perangkat menolak
+  laju yang diminta, stream terbuka di laju lain dan perbandingan ini
+  menangkapnya. Menghitung dari yang diminta akan selalu mengaku bit-perfect.
+- `EngineManager::currentOutputDevice()` Ã¢ÂÂ memakai `actualDeviceId()`, bukan
+  yang diminta. Kalau pilihan DAC tidak dihormati, yang dikembalikan speaker
+  internal, dan UI tidak bisa menyebut nama DAC yang salah.
+- Satu baris log ringkas di akhir `start()`:
+  `bit-perfect=YA` hanya kalau laju dipertahankan **dan** exclusive diterima.
+
+### 9.4 Lintas lapisan: JS Ã¢ÂÂ Kotlin Ã¢ÂÂ JNI
+
+| Lapisan | Tambahan |
+|---|---|
+| C++ | `isPathInherentlyLossy()`, `isRateHonored()`, `currentOutputDevice()`, `supportedRatesFor()`, `pickBestRateFor()` |
+| JNI (`NativeDeviceModule.cpp`) | `nativeGetActiveDeviceStatus()` Ã¢ÂÂ 5 int (tambah `pathLossy`, `rateHonored`); `nativeGetCurrentOutputDevice()` Ã¢ÂÂ satu objek perangkat |
+| Kotlin (`NativeDeviceModule.kt`) | `getActiveDeviceStatus()` mengembalikan 5 field; `getCurrentOutputDevice()` baru |
+| TS spec (`NativeDeviceModule.ts`) | tipe `AudioDeviceDescriptor`, `ActiveDeviceStatus`, `getCurrentOutputDevice` |
+| API (`features/hardware/api/audioOutput.ts`) | `AudioOutputService` + `pathKindOf()` + `canBeBitPerfect()` |
+| Hook (`features/hardware/hooks/useAudioOutput.ts`) | daftar perangkat, perangkat aktif, pilih, status, poll 3 detik |
+| UI (`app/(drawer)/settings.tsx`) | section "Audio Output" menggantikan "USB DAC"; menampilkan perangkat AKTIF, peringatan saat pilihan tidak dihormati, dan sakelar bit-perfect yang mati di jalur yang mustahil |
+
+`useUSBDAC` tidak lagi dipakai di layar settings. Modulnya masih ada dan masih
+dipakai layar `analyzer.tsx`, tapi `setSampleRate`/`setExclusiveMode`-nya tetap
+stub tanpa JNI Ã¢ÂÂ kalau nanti mau dibersihkan, itu tempatnya.
+
+---
+
+## 10. Yang masih terbuka
+
+1. **Bluetooth tidak punya penanganan codec sama sekali.** Tidak ada
+   `BluetoothCodecConfig`, tidak ada `BLUETOOTH_CONNECT`, dan tidak ada cara
+   menampilkan codec yang sedang dipakai (SBC/aptX/LDAC). A2DP **selalu
+   lossy**, jadi bit-perfect mustahil Ã¢ÂÂ itu sudah ditangani di UI, tapi
+   "codec apa yang aktif" belum bisa ditampilkan. Butuh JNI baru ke
+   `BluetoothA2dp.getCodecStatus()` (API 33+) dan izin `BLUETOOTH_CONNECT`
+   di manifest.
+2. **`AudioRouteManager` masih stub total.** Empat kelas USB C++ juga masih
+   0 referensi, dan izin USB di manifest masih diminta tanpa dipakai.
+3. **eARC tidak ditangani khusus.** HDMI ditandai sebagai jalur langsung,
+   jadi ia akan muncul sebagai kandidat bit-perfect; belum diuji apakah
+   `setDeviceId()` pada HDMI benar-benar menghasilkan jalur langsung.
+4. **Belum ada bukti dari perangkat.** Semua di atas terverifikasi di level
+   kode + compile, bukan di audio yang keluar speaker/DAC.
 
 **Status dokumen:** diverifikasi lewat pembacaan kode + audit pemanggil, 2026-10-07.
 Setiap klaim "tidak ada pemanggil" berasal dari grep yang definisinya dikecualikan.
