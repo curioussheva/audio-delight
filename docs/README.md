@@ -10,6 +10,10 @@
 | [`TESTING.md`](./TESTING.md) | Verifikasi lokal tanpa Gradle, apa yang diuji CI, manual QA |
 | [`TROUBLESHOOTING.md`](./TROUBLESHOOTING.md) | Build error yang sudah pernah ketemu & fix-nya - cek dulu sebelum debug dari nol |
 | [`VISUAL_HEALTH.md`](./VISUAL_HEALTH.md) | Utang visual terukur: kontras & spacing |
+| [`DECODER_RESAMPLER_ANALYSIS.md`](./DECODER_RESAMPLER_ANALYSIS.md) | Analisis konsistensi decoder/resampler: bug timing, dead code, semantic mismatch (2026-10-07) |
+| [`PLAYBACK_CONSISTENCY_ANALYSIS.md`](./PLAYBACK_CONSISTENCY_ANALYSIS.md) | Analisis konsistensi playback cpp→JNI→Kotlin→JS: dead spec, missing methods (2026-10-07) |
+| [`NATIVE_MODULES_CONSISTENCY.md`](./NATIVE_MODULES_CONSISTENCY.md) | Analisis konsistensi semua native modules: 1 bug, 3 clean, dead code inventory (2026-10-07) |
+| [`RATE_CHAIN_AUDIT.md`](./RATE_CHAIN_AUDIT.md) | Alur sample rate hulu→hilir: autodetect device/DAC status, di mana rantai putus, jalan ke bit-perfect (2026-10-07) |
 | [`THREAT_MODEL.md`](./THREAT_MODEL.md) | Aset yang dilindungi, skenario ancaman, status mitigasi |
 | [`PRIVACY.md`](./PRIVACY.md) | Data apa yang diproses lokal vs keluar device, izin yang diminta |
 | [`ACCEPTABLE_USE.md`](./ACCEPTABLE_USE.md) | Batas penggunaan yang sah |
