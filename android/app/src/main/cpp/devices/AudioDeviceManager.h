@@ -27,11 +27,18 @@ namespace pristine {
 // Yang tersedia:
 //   - membaca daftar device (dipakai di sini)
 //   - AudioTrack.setPreferredDevice() -> PREFERENSI, sistem bisa mengabaikan
-//   - Oboe AudioStreamBuilder.setDeviceId() -> lebih kuat, diterapkan saat
-//     stream dibuka. Ini yang dipakai AudioStreamController.
+//   - Oboe AudioStreamBuilder.setDeviceId() -> paling kuat, diterapkan saat
+//     stream dibuka
 //
-// Karena itu setActiveDevice() di sini mencatat pilihan dan memvalidasinya
-// terhadap daftar device; penerapan sebenarnya terjadi saat stream dibuka.
+// ⚠️ setDeviceId() BELUM DIPAKAI. AudioStreamController tidak punya field
+// device id dan buildStream() tidak memanggil setDeviceId(), sehingga
+// activeDeviceIdNumeric() di bawah saat ini TIDAK ADA PEMANGGIL: pilihan
+// device tercatat tapi tidak mengubah stream, dan audio tetap keluar di
+// perangkat default sistem. Lihat docs/AUDIO_OUTPUT_PATHS.md §3.1.
+//
+// Karena itu setActiveDevice() di sini hanya mencatat pilihan dan
+// memvalidasinya terhadap daftar device; penerapan sebenarnya BELUM terjadi
+// saat stream dibuka - itu yang perlu disambungkan.
 class AudioDeviceManager {
 public:
     static AudioDeviceManager& get();

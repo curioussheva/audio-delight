@@ -14,6 +14,7 @@
 | [`PLAYBACK_CONSISTENCY_ANALYSIS.md`](./PLAYBACK_CONSISTENCY_ANALYSIS.md) | Analisis konsistensi playback cpp→JNI→Kotlin→JS: dead spec, missing methods (2026-10-07) |
 | [`NATIVE_MODULES_CONSISTENCY.md`](./NATIVE_MODULES_CONSISTENCY.md) | Analisis konsistensi semua native modules: 1 bug, 3 clean, dead code inventory (2026-10-07) |
 | [`RATE_CHAIN_AUDIT.md`](./RATE_CHAIN_AUDIT.md) | Alur sample rate hulu→hilir: autodetect device/DAC status, di mana rantai putus, jalan ke bit-perfect (2026-10-07) |
+| [`AUDIO_OUTPUT_PATHS.md`](./AUDIO_OUTPUT_PATHS.md) | Audit jalur output audio: speaker/jack/USB DAC/HDMI/Bluetooth-A2DP/cast, mana yang bisa bit-perfect (2026-10-07) |
 | [`THREAT_MODEL.md`](./THREAT_MODEL.md) | Aset yang dilindungi, skenario ancaman, status mitigasi |
 | [`PRIVACY.md`](./PRIVACY.md) | Data apa yang diproses lokal vs keluar device, izin yang diminta |
 | [`ACCEPTABLE_USE.md`](./ACCEPTABLE_USE.md) | Batas penggunaan yang sah |
