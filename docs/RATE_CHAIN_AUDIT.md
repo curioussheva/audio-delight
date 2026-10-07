@@ -204,22 +204,76 @@ yang sudah tersedia lewat `streamSampleRate()`.
 
 Bukan deteksi perangkat. Yang kurang adalah **penyaluran laju file ke stream**:
 
-1. **Tambah parameter laju di `EngineManager::start()`** — sekarang `void start();`,
-   perlu menerima laju yang diminta dan meneruskannya ke `mEngine.start(exclusive, rate)`.
+1. ~~**Tambah parameter laju di `EngineManager::start()`**~~ — ✅ **SELESAI**
+   (commit `ed8ca0e78`). `EngineManager` sekarang punya `setRequestedSampleRate(fileRate)`
+   dan `resolveRequestedRate()`, dan meneruskan laju hasil `pickBestRate()` ke
+   `mEngine.start(exclusive, rate)` di kedua call site (start + toggle exclusive).
 
-2. **Panggil `pickBestRate(fileRate)`** saat track dibuka, lalu pakai hasilnya
-   sebagai laju yang diminta. Implementasinya sudah ada dan sudah benar; hanya
-   belum tersambung.
+2. ~~**Panggil `pickBestRate(fileRate)`** saat track dibuka~~ — ✅ **SELESAI**.
+   `PlaybackController::loadTrack()` mengisi `setFileSampleRate(track.sampleRate)`,
+   dan `EngineManager::start()` memanggil `pickBestRate()` atasnya. `isBitPerfectFor()`
+   sekarang juga dipakai (di log start).
 
-3. **Buka ulang stream saat laju file berubah antar-track.** Satu stream = satu
-   laju. Kalau track berikutnya beda laju, stream harus di-restart. Belum ada
-   jalur restart-per-track.
+3. **Buka ulang stream saat laju file berubah antar-track.** — ⬜ **BELUM.**
+   Satu stream = satu laju. Kalau track berikutnya beda laju, stream harus
+   di-restart. Belum ada jalur restart-per-track.
 
-4. **Ganti stub `USBDACModule.setSampleRate`** dengan implementasi nyata, atau
-   hapus slider-nya supaya UI tidak menjanjikan yang tidak bisa dilakukan.
+4. **Ganti stub `USBDACModule.setSampleRate`** — ⬜ belum (nol JNI, lihat §2.4).
+   Slider di settings masih hanya menyimpan preferensi.
 
-5. **Pakai `isBitPerfectFor(fileRate)`** untuk badge UI — fungsinya sudah ada,
-   tinggal dipanggil. Sudah ada `useBitPerfectStatus` di sisi JS; sambungkan.
+5. **Pakai `isBitPerfectFor(fileRate)`** untuk badge UI — ⬜ belum; fungsinya
+   kini dipakai untuk log native, belum dikirim ke JS.
+
+**Gap yang diketahui pada hasil langkah 1–2:** stream dibuka sekali saat `play()`
+pertama (setelah queue terisi). Kalau user pindah ke track dengan laju berbeda
+dalam sesi yang sama, stream lama masih dipakai — laju baru baru berlaku setelah
+stream dibuka ulang. Itu yang jadi isi langkah 3.
+
+---
+
+## 7. Implementasi langkah 1 & 2 (2026-10-07)
+
+Laju file kini mengalir hulu→hilir sepanjang rantai:
+
+```
+JS  engine.setQueue(songs)  ──> uris + sampleRates per track
+      │
+Kotlin NativePlaybackService.setQueue(uris, sampleRates, promise)
+      │  (index laju dipetakan ke posisi SETELAH filter & resolve)
+Kotlin PlaybackNativeBridge.setQueue(uris, rates)
+      │
+Kotlin NativePlaybackModule.setQueue(uris, sampleRates) -> nativeSetQueue(uris, IntArray)
+      │
+JNI  nativeSetQueue(JNIEnv*, jobject, jobjectArray uris, jintArray rates)
+      │  TrackInfo.sampleRate diisi per track (nilai di luar rentang -> 0)
+      │
+C++  TrackQueue -> loadTrack(track) -> PlaybackController::setFileSampleRate()
+      │
+C++  EngineManager::start() -> pickBestRate(fileRate) -> AudioEngine::start(excl, rate)
+      │
+C++  AudioStreamController.open(requestedSampleRate) -> actualSampleRate()
+      │
+C++  decoder cfg.targetSampleRate = laju stream -> tanpa resample kalau sama
+```
+
+Perubahan urutan yang penting: **engine sekarang dinyalakan oleh `play()`, bukan
+saat library dimuat.** Dua jalur start dini dihapus/diubah:
+
+| Lokasi | Dulu | Sekarang |
+|---|---|---|
+| `jni/OnLoad.cpp:79` | `EngineManager::get().start()` saat JNI_OnLoad | tidak start (ditunda) |
+| `jni/NativePristineAudio.cpp:24` | `engine().start()` langsung | `EngineManager::get().start()` |
+| `jni/NativePlaybackModule.cpp` getController() | start engine di setiap JNI call | hanya init controller |
+| `jni/NativePlaybackModule.cpp` nativePlay() | start engine (tanpa preload) | start + preload track dulu |
+
+Tanpa perubahan itu, stream sudah terbuka di laju tertinggi perangkat sebelum
+laju file diketahui, `play()` menemukan engine sudah running, dan pemilihan laju
+per-file tidak pernah berlaku.
+
+**Verifikasi:** `scripts/check.sh` — 5 file C++, Passed 5 Failed 0.
+`tsc --noEmit` exit 0. `oxlint` 0 error. `jest` 139/139 lulus.
+Sisa pengujian yang belum mungkin di sini: mendengar hasilnya di device (butuh
+APK dari CI, karena SDK/NDK tidak ada di Termux).
 
 ---
 
