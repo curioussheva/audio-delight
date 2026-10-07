@@ -18,6 +18,7 @@
 | [`adr/0001-tiga-mode-satu-sumber-kebenaran.md`](./adr/0001-tiga-mode-satu-sumber-kebenaran.md) | ADR: di mana logika tiga mode hidup, dan mengapa `AudioPipeline` (2026-10-07) |
 | [`adr/0002-komparasi-modes.md`](./adr/0002-komparasi-modes.md) | Komparasi teknis nasib `cpp/modes/*`: port-lalu-hapus vs hidupkan kembali (2026-10-07) |
 | [`BOILERPLATE_AND_STUBS.md`](./BOILERPLATE_AND_STUBS.md) | Aturan penulisan stub & node penghubung: kosong boleh, bohong tidak (2026-10-07) |
+| [`IDEAS.md`](./IDEAS.md) | Penampung ide yang belum bisa direalisasikan + alasan penundaan eksplisit (2026-10-07) |
 | [`THREAT_MODEL.md`](./THREAT_MODEL.md) | Aset yang dilindungi, skenario ancaman, status mitigasi |
 | [`PRIVACY.md`](./PRIVACY.md) | Data apa yang diproses lokal vs keluar device, izin yang diminta |
 | [`ACCEPTABLE_USE.md`](./ACCEPTABLE_USE.md) | Batas penggunaan yang sah |
