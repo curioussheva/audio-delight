@@ -209,7 +209,13 @@ DecodeResult FFmpegDecoder::onDecode(
                 formatLogged_ = true;
             }
 
-            const int outSamples = swr_get_out_samples(swrCtx_, frame_->nb_samples) + 256;
+            // 🔥 FIX (2026-10-09, "96kHz crash"): margin buffer diperbesar
+            // dari +256 ke +1024. swr_get_out_samples() bisa under-estimate
+            // untuk rasio resample kompleks (96k→44.1k = 160:147), dan
+            // swr_convert() menulis melewati batas → heap corruption → SIGSEGV.
+            // Margin 1024 frames (4KB stereo float) cukup untuk semua kasus
+            // tanpa overhead signifikan.
+            const int outSamples = swr_get_out_samples(swrCtx_, frame_->nb_samples) + 1024;
 
             const int channels = 2; // output stereo
 
@@ -532,27 +538,31 @@ bool FFmpegDecoder::setupResampler() {
         return false;
     }
 
-    // 🔥 FIX: Upgrade resampler quality (default terlalu rendah → distorsi)
-    // 🔥 filter_size=128 = high quality (default FFmpeg = 32)
-    // NOTE: Turunkan ke 32/64 untuk performa di device low-end (fitur optimasi mendatang)
-    // FIX (Prioritas 7): filter_size KONSTAN 128 untuk semua rate.
-    // Sebelumnya adaptif (64 untuk >48kHz demi hemat CPU), tapi
-    // dikonfirmasi lewat A/B test filter_size=64 berkorelasi kuat
-    // dengan NaN residual di resampler untuk file hi-res (96kHz) —
-    // file 44.1kHz (filter_size=128) jauh lebih bersih pada durasi
-    // playback yang sama. Trade-off: CPU sedikit lebih berat untuk
-    // file hi-res, tapi menghilangkan sumber NaN yang terbukti.
+    // 🔥 FIX (2026-10-09, "noise di 44.1kHz"): dither HANYA diterapkan jika
+    // ada konversi sample rate. Output selalu AV_SAMPLE_FMT_FLT (float), jadi
+    // konversi format S16/S32→FLT tidak pernah mengurangi presisi — dither
+    // hanya menambah noise floor tanpa manfaat. Untuk passthrough rate
+    // (44.1k→44.1k), dither juga tidak perlu.
+    const bool needsResample = (codecCtx_->sample_rate != config().targetSampleRate);
+
     int filterSize = 128;
     av_opt_set_int(swrCtx_, "filter_size", filterSize, 0);
     av_opt_set_double(swrCtx_, "cutoff", 0.97, 0);
     av_opt_set_int(swrCtx_, "linear_interp", 0, 0);
-    av_opt_set_int(swrCtx_, "dither_method", SWR_DITHER_TRIANGULAR_HIGHPASS, 0);
-    av_opt_set_double(swrCtx_, "dither_scale", 0.5, 0);  // 🔥 turun dari 1.0
+
+    if (needsResample) {
+        av_opt_set_int(swrCtx_, "dither_method", SWR_DITHER_TRIANGULAR_HIGHPASS, 0);
+        av_opt_set_double(swrCtx_, "dither_scale", 0.5, 0);
+    } else {
+        // Passthrough: tanpa dither, tanpa noise tambahan
+        av_opt_set_int(swrCtx_, "dither_method", SWR_DITHER_NONE, 0);
+        av_opt_set_double(swrCtx_, "dither_scale", 0.0, 0);
+    }
 
     int init_ret = swr_init(swrCtx_);
     __android_log_print(ANDROID_LOG_INFO, "FFmpegDecoder",
-                        "setupResampler: swr_init ret=%d (filter_size=128, cutoff=0.97, dither=0.5)",
-                        init_ret);
+                        "setupResampler: swr_init ret=%d (filter_size=128, cutoff=0.97, dither=%s, needsResample=%d)",
+                        init_ret, needsResample ? "triangular_hp(0.5)" : "none", needsResample ? 1 : 0);
     return init_ret >= 0;
 }
 
