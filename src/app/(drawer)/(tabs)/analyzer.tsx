@@ -28,7 +28,7 @@ import {
 import { useTheme } from "@/shared/context/ThemeContext";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { FLOATING_PLAYER_CLEARANCE } from "@/features/player/layout";
-import { useUSBDAC } from "@/features/hardware/hooks/useUSBDAC";
+import { useAudioOutput } from "@/features/hardware/hooks/useAudioOutput";
 
 // Logic & Services
 import {
@@ -53,7 +53,13 @@ export default function AnalyzerScreen() {
   const currentSong = usePlayerStore((state) => state.currentSong);
   const isPlaying = usePlayerStore((state) => state.isPlaying);
   const audioSessionId = usePlayerStore((state) => state.audioSessionId);
-  const { isExclusiveMode, currentDAC } = useUSBDAC();
+  const {
+    currentDevice,
+    status: outputStatus,
+    pathKind,
+    pathLossy,
+    canBeBitPerfect,
+  } = useAudioOutput();
 
   // Local state
   const [bitDepthAnalysis, setBitDepthAnalysis] =
@@ -381,8 +387,12 @@ export default function AnalyzerScreen() {
         />
       </View>
 
-      {/* 5. DAC & HARDWARE */}
-      {currentDAC && (
+      {/* 5. OUTPUT AKTIF - dari useAudioOutput (data NYATA)
+          Sebelumnya blok ini memakai useUSBDAC, yang membaca modul stub
+          (USBDACModule.kt tanpa JNI) sehingga nilainya karangan: perangkatnya
+          bisa null, dan "Bit-Perfect (Direct)" muncul dari state lokal yang
+          tidak pernah mencerminkan stream sebenarnya. */}
+      {currentDevice && (
         <View
           style={[
             styles.card,
@@ -392,23 +402,52 @@ export default function AnalyzerScreen() {
           <View style={styles.cardHeader}>
             <Cpu size={16} color={colors.primary[500]} />
             <Text style={[styles.label, { color: colors.primary[500] }]}>
-              DAC OUTPUT
+              OUTPUT AKTIF
             </Text>
           </View>
-          <InfoRow label="Device" value={currentDAC.name} colors={colors} />
           <InfoRow
-            label="Manufacturer"
-            value={currentDAC.manufacturer}
+            label="Device"
+            value={currentDevice.name || "Tidak diketahui"}
+            colors={colors}
+          />
+          <InfoRow
+            label="Jenis"
+            value={currentDevice.type}
+            colors={colors}
+          />
+          <InfoRow
+            label="Laju"
+            value={
+              currentDevice.sampleRate
+                ? `${(currentDevice.sampleRate / 1000).toFixed(1)} kHz`
+                : "Tidak dilaporkan"
+            }
             colors={colors}
           />
           <InfoRow
             label="Mode"
-            value={isExclusiveMode ? "Bit-Perfect (Direct)" : "System Mixer"}
+            value={
+              canBeBitPerfect === null
+                ? "Tidak dapat disimpulkan"
+                : outputStatus?.rateHonored &&
+                    !outputStatus?.pathLossy &&
+                    outputStatus?.honored
+                  ? "Bit-Perfect"
+                  : pathLossy
+                    ? "Jalur mustahil bit-perfect"
+                    : "Bukan bit-perfect"
+            }
             colors={colors}
           />
           <InfoRow
-            label="Output Rate"
-            value={`${((currentDAC.currentSampleRate ?? 0) / 1000).toFixed(1)} kHz`}
+            label="Jalur"
+            value={
+              pathKind === "direct"
+                ? "Langsung ke perangkat"
+                : pathKind === "audioflinger"
+                  ? "Lewat mixer sistem"
+                  : "Tidak diketahui"
+            }
             colors={colors}
           />
         </View>

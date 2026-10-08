@@ -4,6 +4,7 @@
 #include <atomic>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "../core/AudioEngine.h"
@@ -188,7 +189,25 @@ private:
     // Prioritas: override eksplisit (setRequestedSampleRate) -> laju file dari
     // controller (diisi loadTrack) -> 0 (biar engine deteksi sendiri).
     // Dipanggil hanya saat mMutex sudah dipegang (start/toggle exclusive).
+    // Handler untuk stream yang DIPUTUS PAKSA sistem (onErrorAfterClose).
+
     int32_t resolveRequestedRate() const;
+
+    // =====================================================
+    // STREAM DIPUTUS PAKSA SISTEM
+    // =====================================================
+    //
+    // Dipanggil dari THREAD OBOE (onErrorAfterClose), saat Oboe sedang
+    // menutup stream. TIDAK boleh reopen langsung di sini:
+    //   - reopen menutup stream yang sedang ditutup Oboe -> deadlock,
+    //   - reopen mengambil mMutex yang mungkin sedang dipegang thread lain.
+    //
+    // Karena itu fungsi ini hanya menandai dan menyerahkan pekerjaan ke worker
+    // thread. Aman dipanggil dari thread audio: tanpa lock, tanpa alokasi.
+    void requestStreamRecovery();
+
+    // Worker yang benar-benar mengerjakan reopen. Berjalan di thread terpisah.
+    void runStreamRecovery();
 
     // Perangkat yang akan dipakai stream berikutnya (id numerik Android).
     // Prioritas: override eksplisit (setRequestedDeviceId) -> perangkat aktif
@@ -219,6 +238,15 @@ private:
 private:
 
     mutable std::mutex mMutex;
+
+    // true selagi ada permintaan recovery yang belum diproses worker. Dipakai
+    // untuk menggabungkan beberapa kejadian beruntun (colok-cabut-cepat) jadi
+    // satu reopen, dan mencegah worker menumpuk.
+    std::atomic<bool> mRecoveryPending{false};
+
+    // true selagi worker recovery berjalan; dipakai sebagai guard supaya hanya
+    // ada satu worker hidup pada satu waktu.
+    std::atomic<bool> mRecoveryRunning{false};
 
     AudioState mState;
 

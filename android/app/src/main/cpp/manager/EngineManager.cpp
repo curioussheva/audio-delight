@@ -6,6 +6,8 @@
 
 #include <android/log.h>
 
+#include <chrono>
+
 namespace pristine {
 
 // =====================================================
@@ -63,6 +65,32 @@ void EngineManager::start() {
 
     std::lock_guard<std::mutex>
         lock(mMutex);
+
+    // =================================================
+    // STREAM DIPUTUS PAKSA OLEH SISTEM
+    // =================================================
+    //
+    // Dipasang DI LUAR cek isRunning() di bawah: kalau dipasang setelah cek itu,
+    // stream yang sudah berjalan (kasus paling umum - user menekan play lagi)
+    // tidak punya penanganan disconnect, dan audio akan mati begitu headset
+    // dicolok. Pemasangan bersifat idempoten, jadi aman dipanggil berkali-kali.
+    //
+    // Kasus nyata: headset dicolok. Android memindahkan rute dan mengirim
+    // `request DISCONNECT in data callback`; stream ditutup paksa dan Oboe
+    // memanggil AudioStreamController::onErrorAfterClose(). Sebelum ada
+    // penanganan ini, stream hilang dan audio mati permanen sampai user
+    // mengganti device lewat jalur lain (onDeviceRemoved).
+    mEngine.setStreamDisconnectHandler([this] {
+        __android_log_print(ANDROID_LOG_WARN, "EngineManager",
+            "stream diputus sistem (headset dicolok / rute berubah) - "
+            "menjadwalkan recovery");
+
+        // PENTING: hanya menjadwalkan. Callback ini berjalan di thread Oboe
+        // saat Oboe sedang menutup stream; reopen di sini akan deadlock.
+        // Worker thread (requestStreamRecovery) yang mengerjakan reopen +
+        // muat ulang track.
+        requestStreamRecovery();
+    });
 
     if (
         mEngine.isRunning()
@@ -474,6 +502,76 @@ AudioDeviceDescriptor EngineManager::currentOutputDevice() const {
     unknown.id = wanted;
     unknown.type = DeviceType::UNKNOWN;
     return unknown;
+}
+
+void EngineManager::requestStreamRecovery() {
+
+    // Dipanggil dari THREAD OBOE. Syaratnya: tidak boleh lock, tidak boleh
+    // alokasi, tidak boleh reopen di sini. Lihat komentar di header.
+    //
+    // Kalau sudah ada permintaan tertunda, cukup tandai - worker yang sedang
+    // menunggu akan memprosesnya. Beberapa kejadian beruntun (colok-cabut
+    // cepat) jadi satu reopen, bukan menumpuk.
+    if (mRecoveryPending.exchange(true, std::memory_order_acq_rel)) {
+        __android_log_print(ANDROID_LOG_INFO, "EngineManager",
+            "requestStreamRecovery: sudah ada permintaan tertunda - digabung");
+        return;
+    }
+
+    // Hanya satu worker hidup pada satu waktu.
+    if (mRecoveryRunning.exchange(true, std::memory_order_acq_rel)) {
+        __android_log_print(ANDROID_LOG_INFO, "EngineManager",
+            "requestStreamRecovery: worker masih berjalan - ditangani di sana");
+        return;
+    }
+
+    __android_log_print(ANDROID_LOG_WARN, "EngineManager",
+        "requestStreamRecovery: stream diputus sistem - worker recovery dimulai");
+
+    std::thread([this] {
+        runStreamRecovery();
+    }).detach();
+}
+
+void EngineManager::runStreamRecovery() {
+
+    // Loop: selama ada permintaan tertunda, kerjakan. Kejadian yang datang
+    // SAAT recovery berjalan akan membuat satu putaran tambahan, jadi stream
+    // yang diputus lagi (kabel goyang) tetap ditangani.
+    //
+    // Batas percobaan mencegah loop tak berujung kalau device benar-benar
+    // rusak (mis. headset dicabut-colok terus-menerus) - setelah itu menyerah
+    // dan biarkan jalur device biasa yang menangani.
+    constexpr int kMaxAttempts = 5;
+
+    for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
+
+        if (!mRecoveryPending.exchange(false, std::memory_order_acq_rel)) {
+            break;
+        }
+
+        // Satu kesempatan bagi sistem untuk menyelesaikan perpindahan rute.
+        // Tanpa ini stream baru bisa dibuka sebelum Android selesai
+        // memindahkan rute, dan langsung diputus lagi.
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+
+        // reopenStreamPreservingPlayback() mengambil mMutex dan membuka ulang
+        // stream + memuat ulang track. Ini aman di sini karena kita TIDAK
+        // berada di thread Oboe - Oboe sudah selesai menutup stream lama.
+        reopenStreamPreservingPlayback();
+    }
+
+    mRecoveryRunning.store(false, std::memory_order_release);
+
+    // Kalau ada permintaan yang datang setelah loop keluar lewat batas
+    // percobaan, coba sekali lagi agar tidak ada yang tertinggal.
+    if (mRecoveryPending.load(std::memory_order_acquire) &&
+        !mRecoveryRunning.exchange(true, std::memory_order_acq_rel)) {
+
+        std::thread([this] {
+            runStreamRecovery();
+        }).detach();
+    }
 }
 
 void EngineManager::reopenStreamPreservingPlayback() {

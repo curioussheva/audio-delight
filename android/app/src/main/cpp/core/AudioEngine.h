@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <functional>
 #include <memory>
 #include "AudioBufferController.h"
 #include "AudioCallback.h"
@@ -44,6 +45,22 @@ public:
         bool exclusiveMode = false,
         int32_t requestedSampleRate = 0,
         int32_t requestedDeviceId = 0
+    );
+
+    // =============================================
+    // STREAM DISCONNECT
+    // =============================================
+
+    // Dipanggil saat stream DIPUTUS PAKSA oleh sistem (headset dicolok,
+    // perubahan rute). Sudah tidak ada stream yang bisa dipakai saat ini:
+    // pemilik (EngineManager) yang tahu cara membuka ulang + memuat ulang
+    // track ke stream baru.
+    //
+    // Dipasang oleh EngineManager saat initialize(); kalau kosong, tidak ada
+    // yang menangani dan audio akan mati sampai device berubah lagi -
+    // perilaku lama yang justru jadi bug.
+    void setStreamDisconnectHandler(
+        std::function<void()> handler
     );
 
     // Laju yang BENAR-BENAR dipakai stream. Dipakai decoder sebagai target
@@ -196,6 +213,10 @@ private:
 
     AudioPipeline mPipeline;
     AudioCallback mCallback;
+
+    // Diteruskan ke mStreamController sebagai disconnect handler; diset oleh
+    // EngineManager. Lihat setStreamDisconnectHandler().
+    std::function<void()> mStreamDisconnectHandler;
 
     AudioStreamController
         mStreamController;

@@ -32,7 +32,7 @@ const warnIfMissing = () => {
   if (getPlatformOS() === "android" && !NativeVisualizerBridge) {
     console.warn(
       "[VisualizerBridge] NativeVisualizerBridge tidak ditemukan. " +
-      "Pastikan sudah terdaftar di USBDACPackage.kt dan MainApplication.kt",
+      "Pastikan sudah terdaftar di PristineAudioPackage.kt",
     );
     warnedMissing = true;
   }

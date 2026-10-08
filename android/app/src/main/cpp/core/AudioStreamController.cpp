@@ -575,8 +575,24 @@ noexcept {
 void AudioStreamController::
 onErrorAfterClose(
     oboe::AudioStream*,
-    oboe::Result
+    oboe::Result error
 ) {
+
+    // Kasus nyata yang memicu ini: headset dicolok. Android memindahkan rute
+    // dan mengirim `request DISCONNECT in data callback`; stream yang berjalan
+    // ditutup paksa. Log perangkat untuk kasus ini:
+    //
+    //   onAudioDeviceUpdate() devices 3 => 3033
+    //   onAudioDeviceUpdate() request DISCONNECT in data callback
+    //   checkForDisconnectRequest() mRequestDisconnect acknowledged
+    //   AAudioStream_requestStop(s#1) called   (state 4 -> 9)
+    //
+    // Oboe memanggil callback ini SETELAH stream ditutup. Pada titik ini
+    // stream tidak bisa dipakai lagi.
+    __android_log_print(ANDROID_LOG_WARN, "AudioStreamController",
+        "STREAM TERPUTUS oleh sistem (%s) - stream dibuang, minta pemilik "
+        "membuka ulang",
+        oboe::convertToText(error));
 
     mRunning.store(
         false,
@@ -584,6 +600,19 @@ onErrorAfterClose(
     );
 
     mStream.reset();
+
+    // Beri tahu pemilik (AudioEngine -> EngineManager). DI SINI kunci
+    // perbaikannya: sebelum ini callback hanya reset + diam, sehingga audio
+    // mati permanen setelah headset dicolok - tidak ada yang membuka stream
+    // kembali maupun memuat ulang track ke stream baru.
+    //
+    // Salin handler dulu: pemilik boleh menggantinya dari thread lain saat
+    // restart, dan kita tidak mau memanggil std::function yang sedang diubah.
+    std::function<void()> handler = mDisconnectHandler;
+
+    if (handler) {
+        handler();
+    }
 }
 
 } // namespace pristine

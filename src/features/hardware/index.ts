@@ -1,9 +1,9 @@
 // Hardware Feature Exports
 
 // api
-export * from "./api/USBDACModule";
+export * from "./api/audioOutput";
 
 // hooks
-export * from "./hooks/useUSBDAC";
+export * from "./hooks/useAudioOutput";
 
 // native

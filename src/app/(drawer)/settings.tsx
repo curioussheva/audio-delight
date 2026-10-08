@@ -185,14 +185,11 @@ export default function SettingsScreen() {
   const [showLibrarySettings, setShowLibrarySettings] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
 
-  // useUSBDAC tidak lagi dipakai di layar ini: pemilihan perangkat sekarang
-  // lewat useAudioOutput di bawah, yang melihat SEMUA perangkat dan benar-benar
-  // meneruskan pilihannya ke engine.
-
   // Jalur output audio yang sebenarnya: SEMUA perangkat (speaker, jack, USB
-  // DAC, Bluetooth, HDMI), bukan hanya USB. useUSBDAC di atas tidak dipakai
-  // untuk pemilihan lagi - ia hanya melihat perangkat USB dan metode
-  // setSampleRate/setExclusiveMode-nya tidak punya JNI (selalu sukses palsu).
+  // DAC, Bluetooth, HDMI). Modul lama yang hanya melihat USB DAC
+  // (USBDACModule/useUSBDAC) sudah dihapus 2026-10-08: metode
+  // setSampleRate/setExclusiveMode-nya tidak punya JNI dan selalu mengembalikan
+  // sukses palsu.
   const {
     devices: outputDevices,
     currentDevice: activeOutputDevice,

@@ -38,7 +38,7 @@ const warnIfMissing = () => {
   if (warnedMissing) return;
   if (getPlatformOS() === "android" && !NativeDSPModule) {
     console.warn(
-      "[NativeDSPModule] Not available. Check USBDACPackage registration.",
+      "[NativeDSPModule] Not available. Check PristineAudioPackage registration.",
     );
     warnedMissing = true;
   }

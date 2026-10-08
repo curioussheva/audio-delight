@@ -10,6 +10,45 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/). Versi mengikut
 
 ## [Unreleased] - 2026-10-03
 
+### Fixed
+
+- **Audio mati permanen setelah headset dicolok.** Bukti dari logcat perangkat
+  (`logcat_recording_2026-10-08`): saat headset dicolok, Android mengirim
+  `onAudioDeviceUpdate() request DISCONNECT in data callback` lalu menutup paksa
+  stream AAudio (`checkForDisconnectRequest() mRequestDisconnect acknowledged`,
+  `AAudioStream_requestStop` state 4 -> 9). Oboe memanggil
+  `AudioStreamController::onErrorAfterClose()`, dan isinya hanya `mStream.reset()`
+  lalu **diam** - tidak ada yang membuka ulang stream maupun memuat ulang track.
+  Akibatnya audio mati sampai user mengganti device (yang lewat jalur berbeda,
+  `onDeviceRemoved`). Jalur recovery baru:
+
+  - `AudioStreamController::setDisconnectHandler()` - pemilik stream diberi tahu
+    saat stream terputus paksa.
+  - `AudioEngine::setStreamDisconnectHandler()` - meneruskan ke EngineManager,
+    dipasang saat `start()` **sebelum** cek `isRunning()` (kalau setelah, stream
+    yang sedang berjalan - kasus paling umum - tidak punya penanganan).
+  - `EngineManager::requestStreamRecovery()` + `runStreamRecovery()` - callback
+    Oboe berjalan di thread audio saat Oboe sedang menutup stream; reopen langsung
+    di sana akan deadlock. Karena itu callback hanya menandai, dan worker thread
+    terpisah yang mengerjakan `reopenStreamPreservingPlayback()`. Beberapa kejadian
+    beruntun digabung jadi satu reopen; batas 5 percobaan mencegah loop tak berujung.
+
+### Removed
+
+- **`USBDACModule` (Kotlin) + `USBDACModule.ts` + `specs/USBDACModule.ts` +
+  `useUSBDAC`** - modul stub tanpa JNI (`grep -c "external fun"` = 0). Metodenya
+  mengembalikan **sukses palsu**: `setSampleRate()` selalu `success: true` tanpa
+  mengubah laju apa pun, `getRecommendedSettings()` mengarang 192 kHz / 24-bit /
+  buffer 512. Persis pola yang dilarang `AGENTS.md`: "Stub boleh kosong, TIDAK
+  boleh mengembalikan sukses."
+  - `analyzer.tsx` memakai `useUSBDAC` untuk menampilkan blok "DAC OUTPUT" -
+    nilainya karangan ("Bit-Perfect (Direct)" muncul dari state lokal yang tidak
+    pernah mencerminkan stream). Diganti `useAudioOutput` (data NYATA:
+    `currentDevice`, `status`, `pathKind`, `pathLossy`, `canBeBitPerfect`).
+  - `PristineAudioPackage.kt` tidak lagi mendaftarkan modul itu.
+  - Pesan debug yang menyebut `USBDACPackage.kt` (kelas yang sudah tidak ada)
+    diperbaiki ke `PristineAudioPackage.kt` di `VisualizerBridge` dan `NativeDSPModule`.
+
 ### Added
 
 - **Test otomatis pertama** - Jest + ts-jest, **98 test di 6 suite** untuk logika murni TS:

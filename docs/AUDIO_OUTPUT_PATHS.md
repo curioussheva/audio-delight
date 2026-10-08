@@ -420,6 +420,47 @@ minta (AudioFlinger memindahkan rute setelah stream dibuka).
 - Tiga jalur restart (`setRequestedDeviceId`, `onDeviceRemoved`,
   `setExclusiveMode`) semuanya memakai perangkat + laju yang sama-sama baru.
 
+### 9.2b Empat jalur, bukan tiga: stream diputus paksa sistem
+
+Ada jalur keempat yang awalnya terlewat, dan itu justru yang paling sering:
+**headset dicolok**. Android memindahkan rute dan memutus stream dari dalam data
+callback, bukan lewat device add/remove:
+
+```
+onAudioDeviceUpdate() devices 3 => 3033
+onAudioDeviceUpdate() request DISCONNECT in data callback
+checkForDisconnectRequest() mRequestDisconnect acknowledged
+AAudioStream_requestStop(s#1) called          (state 4 -> 9)
+processAudioBuffer(3032): EVENT_MORE_DATA requested 6080 bytes but callback returned -1
+```
+
+Oboe meresponsnya lewat `AudioStreamController::onErrorAfterClose()`. Sampai
+2026-10-08 isi callback itu hanya `mStream.reset()` - stream dibuang, **tidak ada
+yang membuka ulang**. Akibatnya audio mati permanen setelah headset dicolok,
+sampai ada peristiwa device lain yang kebetulan menutupinya.
+
+Rantai recovery sekarang:
+
+| Lapisan | Fungsi | Catatan |
+|---|---|---|
+| `core/AudioStreamController` | `setDisconnectHandler()` + `onErrorAfterClose()` | Dipanggil dari **thread Oboe** saat Oboe sedang menutup stream |
+| `core/AudioEngine` | `setStreamDisconnectHandler()` | Dipasang di `start()` **sebelum** cek `isRunning()` |
+| `manager/EngineManager` | `requestStreamRecovery()` + `runStreamRecovery()` | Thread terpisah; reopen di thread Oboe = deadlock |
+
+Dua hal yang menentukan bentuk perbaikan ini:
+
+1. **Tidak boleh reopen di dalam callback.** `onErrorAfterClose` berjalan saat
+   Oboe menutup stream; memanggil `mEngine.stop()` dari sana berarti menutup
+   stream yang sedang ditutup. Karena itu callback hanya menandai, dan worker
+   thread yang mengerjakan `reopenStreamPreservingPlayback()`.
+2. **Harus memberitahu pemilik, bukan sekadar reset.** Stream baru butuh decoder
+   yang mengisi queue-nya; tanpa `loadTrack()` ulang, `render()` mengembalikan
+   senyap walau stream terbuka. Karena itu recovery memakai jalur yang sama
+   dengan perpindahan device.
+
+Beberapa kejadian beruntun (kabel goyang) digabung jadi satu reopen; batas 5
+percobaan mencegah loop tak berujung pada device yang benar-benar rusak.
+
 ### 9.3 Kejujuran: "mustahil" dibedakan dari "ditolak"
 
 Ini yang mencegah dua kesalahan yang berlawanan Ã¢ÂÂ mengklaim bit-perfect di
@@ -452,9 +493,14 @@ jalur yang mustahil, dan melaporkan batas jalur sebagai kegagalan.
 | Hook (`features/hardware/hooks/useAudioOutput.ts`) | daftar perangkat, perangkat aktif, pilih, status, poll 3 detik |
 | UI (`app/(drawer)/settings.tsx`) | section "Audio Output" menggantikan "USB DAC"; menampilkan perangkat AKTIF, peringatan saat pilihan tidak dihormati, dan sakelar bit-perfect yang mati di jalur yang mustahil |
 
-`useUSBDAC` tidak lagi dipakai di layar settings. Modulnya masih ada dan masih
-dipakai layar `analyzer.tsx`, tapi `setSampleRate`/`setExclusiveMode`-nya tetap
-stub tanpa JNI Ã¢ÂÂ kalau nanti mau dibersihkan, itu tempatnya.
+`useUSBDAC` **sudah dihapus 2026-10-08** bersama `USBDACModule` (Kotlin),
+`USBDACModule.ts`, dan `specs/USBDACModule.ts`. Alasannya bukan sekadar "tidak
+dipakai lagi": modul itu **stub tanpa JNI** (`grep -c "external fun"` = 0) yang
+mengembalikan sukses palsu - `setSampleRate()` selalu `success: true` tanpa
+mengubah laju, `getRecommendedSettings()` mengarang 192 kHz/24-bit/buffer 512.
+Persis pola yang dilarang `AGENTS.md`. `analyzer.tsx` yang masih memakainya untuk
+menampilkan "DAC OUTPUT" kini memakai `useAudioOutput` (data nyata dari
+`NativeDeviceModule`).
 
 ---
 

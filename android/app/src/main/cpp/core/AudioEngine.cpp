@@ -37,6 +37,26 @@ AudioEngine::~AudioEngine() {
 // START
 // =====================================================
 
+void AudioEngine::setStreamDisconnectHandler(
+    std::function<void()> handler
+) {
+
+    mStreamDisconnectHandler = std::move(handler);
+
+    // Teruskan ke controller. Dipasang SEKARANG (saat initialize), bukan saat
+    // start(), supaya stream yang diputus paksa tetap ada penanganannya.
+    //
+    // Lamba menangkap `this`: controller hidup di dalam AudioEngine, jadi
+    // selama engine hidup, `this` valid saat callback dipanggil. Handler ini
+    // dilepas saat engine mati (destruktor controller belum tentu ada
+    // callback), jadi tidak ada use-after-free.
+    mStreamController.setDisconnectHandler([this] {
+        if (mStreamDisconnectHandler) {
+            mStreamDisconnectHandler();
+        }
+    });
+}
+
 bool AudioEngine::start(
     bool exclusiveMode,
     int32_t requestedSampleRate,

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
 #include <memory>
 
 #include <oboe/Oboe.h>
@@ -140,6 +141,30 @@ public:
     // ERROR CALLBACK
     // =============================================
 
+    // Dipanggil Oboe saat stream DIPUTUS PAKSA oleh sistem - kasus yang paling
+    // sering adalah headset dicolok: Android memindahkan rute dan memberi
+    // `request DISCONNECT in data callback`, lalu menutup stream ini.
+    //
+    // Di sini stream sudah tidak bisa dipakai (`all you can do is close it`).
+    // Yang kita lakukan:
+    //   1. tandai tidak berjalan + buang stream,
+    //   2. panggil `disconnectHandler_` - PEMILIK stream (AudioEngine ->
+    //      EngineManager) yang tahu cara membuka ulang DAN memuat ulang track
+    //      ke stream baru.
+    //
+    // Tanpa langkah 2, audio mati permanen: stream hilang, tidak ada yang
+    // membukanya kembali. Itu yang terjadi sebelumnya (hanya reset + diam) dan
+    // sebabnya audio mati setelah headset dicolok.
+    //
+    // Handler boleh null (mis. dipanggil saat destruksi atau di test yang
+    // tidak memasang handler) - kalau null, cukup tandai tidak berjalan seperti
+    // dulu, tanpa crash.
+    void setDisconnectHandler(
+        std::function<void()> handler
+    ) {
+        mDisconnectHandler = std::move(handler);
+    }
+
     void onErrorAfterClose(
         oboe::AudioStream* stream,
         oboe::Result error
@@ -197,6 +222,11 @@ private:
 
     oboe::SharingMode mSharingMode =
         oboe::SharingMode::Shared;
+
+    // Dipanggil dari onErrorAfterClose() (thread Oboe) saat stream diputus
+    // paksa sistem. Diset oleh pemilik stream lewat setDisconnectHandler().
+    // Null = tidak ada yang menangani; stream hanya ditandai berhenti.
+    std::function<void()> mDisconnectHandler;
 };
 
 } // namespace pristine
