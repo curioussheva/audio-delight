@@ -53,7 +53,19 @@ Semua status diverifikasi 2026-10-03 langsung ke kode.
     **belum teruji device**. Lihat
     `wiki/root-causes/clock-2x-dan-sigsegv-transisi.md`.
 - [ ] Verifikasi playback dasar: play/pause/seek/next/prev dengan file nyata
-- [ ] Verifikasi tiga mode: apakah BitPerfect benar-benar melewati DSP (bukan hanya konstan defaultnya berubah)
+- [~] Verifikasi tiga mode: apakah BitPerfect benar-benar melewati DSP (bukan hanya konstan defaultnya berubah)
+  - **2026-10-09**: wiring 3-mode **terverifikasi tersambung** ke `render()`
+    lewat `AudioCallback::applyPipeline()` (sebelumnya `onAudioReady()` cuma
+    `return` — lihat `adr/0001` F1). Rantai:
+    `playerStore.setAudioMode` → `engine.setProcessingMode` →
+    `NativeDSPModule` → `EngineManager` → `AudioState` (atomic) →
+    dibaca `updateParameters()` tiap buffer → `AudioPipeline.process()`
+    bercabang 3 (`processBitPerfect` no-op / `processDSP` /
+    `processImmersive`). `DSPProcessingGate::enabled()` default **ON**
+    (`PRISTINE_DSP_IN_PRODUCTION 1`).
+  - **Yang belum**: `DSPChain` belum pernah dieksekusi di laju/latency nyata
+    (`adr/0001` §6). Bug DSP — kalau ada — baru muncul setelah APK ini
+    dipasang. Gate bisa dimatikan tanpa revert kalau perlu.
 - [ ] Verifikasi kualitas audio: bandingkan output BitPerfect vs DSP secara subjektif
 - [ ] Verifikasi USB DAC: deteksi device, pemilihan output, apakah audio keluar dari DAC
 - [ ] Verifikasi scan library: apakah MediaStore mengembalikan lagu, apakah progress UI benar

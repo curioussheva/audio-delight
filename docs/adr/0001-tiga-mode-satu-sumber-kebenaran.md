@@ -103,10 +103,19 @@ Alasan itu **salah**, dan dokumen ini membatalkannya:
 
 ## 6. Yang belum diverifikasi
 
-Menyalakan `AudioPipeline` di jalur produksi **mengubah suara yang keluar** Ã¢ÂÂ
+**2026-10-09**: penyambungan ke jalur produksi **sudah dilakukan** —
+`AudioCallback::onAudioReady()` tidak lagi `return` sebelum pipeline; sekarang
+memanggil `applyPipeline()` di belakang `DSPProcessingGate` (default ON).
+Rantai lengkap terverifikasi ke kode: `playerStore.setAudioMode` →
+`engine.setProcessingMode` → `NativeDSPModule` → `EngineManager` →
+`AudioState` (atomic) → `updateParameters()` tiap buffer →
+`AudioPipeline.process()`.
+
+Menyalakan `AudioPipeline` di jalur produksi **mengubah suara yang keluar** —
 selama ini mode DSP tidak melakukan apa pun, jadi `DSPChain` belum pernah
-benar-benar dieksekusi pada laju/latency nyata. Wajib diuji di perangkat
-(butuh APK dari CI; SDK/NDK tidak tersedia di Termux) sebelum dijadikan default.
+benar-benar dieksekusi pada laju/latensi nyata. Wajib diuji di perangkat
+(butuh APK dari CI; SDK/NDK tidak tersedia di Termux). Yang tersisa:
+**verifikasi dengar**, bukan penyambungan kode.
 
 ---
 
