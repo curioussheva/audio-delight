@@ -18,6 +18,7 @@ import * as Haptics from "expo-haptics";
 import * as MediaLibrary from "expo-media-library";
 import { Image } from "expo-image";
 import { DSPPipeline } from "@/features/visualizer/api/DSPPipeline";
+import { usePlayerStore } from "@/features/player/store/playerStore";
 
 type AudioMode = "bit-perfect" | "dsp" | "immersive";
 
@@ -92,6 +93,7 @@ export default function OnboardingScreen() {
   const { theme } = useTheme();
   const { colors } = theme;
   const router = useRouter();
+  const setAudioMode = usePlayerStore((s) => s.setAudioMode);
   const [selectedMode, setSelectedMode] = useState<AudioMode | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -172,6 +174,26 @@ export default function OnboardingScreen() {
 
       // 🟢 3. Set Processing Mode
       await DSPPipeline.setProcessingMode(selectedMode);
+
+      // 🟢 3b. Jalur exclusive (hanya bit-perfect)
+      //
+      // 🔥 FIX (2026-10-09): onboarding hanya mengirim mode PEMROSESAN
+      // (setProcessingMode) tapi tidak pernah memanggil setAudioMode(). Mode
+      // jalur (exclusive mode Oboe) tidak pernah dinyalakan saat pertama kali
+      // user memilih bit-perfect di onboarding.
+      //
+      // Dampaknya: setelah onboarding, stream masih SharedMode → sampel lewat
+      // AudioFlinger mixer (resample + gain) — bit-perfect hanya namanya.
+      // Audio tetap berbunyi, jadi user tidak tahu kalau exclusive mati.
+      // Log yang membuktikan: "[Onboarding] Finishing with mode: bit-perfect"
+      // tapi tidak ada "🚀 [AudioEngine] Exclusive Mode: ON".
+      //
+      // setAudioMode() melakukan DUA hal sekaligus (lihat playerStore):
+      //   1. setProcessingMode — sama seperti DSPPipeline di atas
+      //   2. toggleExclusiveMode(true) untuk bit-perfect
+      // Ini juga cara Settings mengganti mode (handleSelectMode), jadi
+      // onboarding sekarang konsisten dengan Settings.
+      await setAudioMode(selectedMode);
 
       // Success haptic feedback
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
