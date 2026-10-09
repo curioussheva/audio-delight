@@ -209,21 +209,50 @@ DecodeResult FFmpegDecoder::onDecode(
                 formatLogged_ = true;
             }
 
-            // 🔥 FIX (2026-10-09, "96kHz crash"): margin buffer diperbesar
-            // dari +256 ke +1024. swr_get_out_samples() bisa under-estimate
-            // untuk rasio resample kompleks (96k→44.1k = 160:147), dan
-            // swr_convert() menulis melewati batas → heap corruption → SIGSEGV.
-            // Margin 1024 frames (4KB stereo float) cukup untuk semua kasus
-            // tanpa overhead signifikan.
-            const int outSamples = swr_get_out_samples(swrCtx_, frame_->nb_samples) + 1024;
+            // 🔥 FIX (2026-10-09, "96kHz crash"): guard tiga lapis terhadap
+            // swr_convert() yang menulis melewati estimasi swr_get_out_samples().
+            //
+            // Gejala: SIGSEGV SEGV_ACCERR (memcpy 18432 B, src page-aligned
+            // PROT_NONE) di thread decoder, 26 ms setelah FORMAT CHECK pertama
+            // FLAC 96kHz → 48kHz, tepat saat auto-advance EOF → loadTrack.
+            //
+            // swr_get_out_samples() adalah ESTIMASI. Untuk rasio kompleks
+            // (96k→48k = 2:1) + konversi format planar→packed, output bisa
+            // sedikit melebihi estimasi pada frame awal (priming/delay filter
+            // filter_size=128). Margin 1024 ternyata TIDAK cukup.
+            //
+            // Lapis 1: margin dinaikkan ke +4096 frames (16 KB stereo float).
+            // Lapis 2: scratchBuffer_ selalu dialokasi ULANG dengan slack ×4,
+            //          bukan ×2, supaya realloc di tengah loop tidak pernah
+            //          membebani pointer `temp` (vector resize menyalin lama
+            //          lalu membebaskan lama → pointer lama dangling).
+            // Lapis 3: converted di-CLAMP ke outSamples. swr_convert dijamin
+            //          tidak menulis lebih dari yang kita sediakan, tapi nilai
+            //          kembali yang lebih besar langsung meledakkan insert()
+            //          di bawah → ini yang menghasilkan memcpy 18432 B dari
+            //          region PROT_NONE.
+            const int estSamples =
+                swr_get_out_samples(swrCtx_, frame_->nb_samples);
+            const int outSamples =
+                (estSamples > 0 ? estSamples : 0) + 4096;
 
             const int channels = 2; // output stereo
 
             const size_t neededSize = static_cast<size_t>(outSamples) * channels;
-            if (scratchBuffer_.size() < neededSize) {
-                scratchBuffer_.resize(neededSize * 2);
+            if (scratchBuffer_.size() < neededSize * 4) {
+                // Alokasi penuh + slack. resize() pada vector Kosong aman;
+                // resize() pada vector berisi menyalin data lama dulu, tapi
+                // kita selalu mengambil `temp` SETELAH ini.
+                scratchBuffer_.resize(neededSize * 4);
             }
             float* temp = scratchBuffer_.data();
+            if (!temp) {
+                __android_log_print(ANDROID_LOG_ERROR, "FFmpegDecoder",
+                    "scratchBuffer_ null (size=%zu) — skip frame",
+                    scratchBuffer_.size());
+                av_frame_unref(frame_);
+                continue;
+            }
 
             uint8_t* out[] = {
                 reinterpret_cast<uint8_t*>(temp)
@@ -235,6 +264,15 @@ DecodeResult FFmpegDecoder::onDecode(
                 outSamples,
                 const_cast<const uint8_t**>(frame_->extended_data),
                 frame_->nb_samples);
+
+            // 🔥 Lapis 3: clamp. Jangan pernah percaya nilai kembali melebihi
+            // buffer yang kita sediakan.
+            if (converted > outSamples) {
+                __android_log_print(ANDROID_LOG_ERROR, "FFmpegDecoder",
+                    "swr_convert overflow: converted=%d > outSamples=%d — clamped",
+                    converted, outSamples);
+                converted = outSamples;
+            }
 
             if (converted > 0) {
 
