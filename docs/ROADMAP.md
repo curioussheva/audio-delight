@@ -45,7 +45,13 @@ Semua status diverifikasi 2026-10-03 langsung ke kode.
 
 **Kenapa ini nomor satu:** 193 file C++ dan 33 file Kotlin tidak pernah dibuktikan berjalan. Semua klaim "berfungsi" di `FEATURES.md` adalah klaim statis. Selama ini belum ditutup, menambah fitur baru hanya menumpuk klaim yang belum dibuktikan - persis pola yang sudah menimpa persona (`persona/docs/COMPETITIVE_LANDSCAPE.md` bagian 4).
 
-- [ ] Build APK dan pasang di device - `pnpm build:dev` atau trigger `build-dev.yml`
+- [~] Build APK dan pasang di device - `pnpm build:dev` atau trigger `build-dev.yml`
+  - **2026-10-09**: CI `37915049714` sukses, APK 214 MB terdownload ke Termux
+    (`$TMPDIR/apk_dl/app-debug.apk`). **Belum di-install ke device.**
+  - Bug ditemukan dari logcat device: speed 2.00x konstan + SIGSEGV saat
+    transisi trek 96 kHz — fixed di commit `12b1cb026`, `31f23d142`, tapi
+    **belum teruji device**. Lihat
+    `wiki/root-causes/clock-2x-dan-sigsegv-transisi.md`.
 - [ ] Verifikasi playback dasar: play/pause/seek/next/prev dengan file nyata
 - [ ] Verifikasi tiga mode: apakah BitPerfect benar-benar melewati DSP (bukan hanya konstan defaultnya berubah)
 - [ ] Verifikasi kualitas audio: bandingkan output BitPerfect vs DSP secara subjektif
@@ -81,6 +87,12 @@ Test otomatis baru ada di lapisan tipis: **98 test Jest di 6 suite** (`LrcParser
 - [ ] Test spacing: cegah literal baru (checker `check_layout.ts` sudah jalan, tinggal dijadikan gerbang)
 - [ ] Angkat typecheck + `pnpm test` ke CI sebagai job terpisah yang lebih dulu jalan (pola `verify` -> `build` persona: kegagalan JS muncul dalam 2 menit, bukan setelah 16 menit build)
 - [ ] Test C++ - **masih nol**. Padanan pola persona: kompilasi modul murni lalu jalankan di host, bandingkan dengan implementasi independen
+  - **2026-10-09**: celah terukur. Bug satuan sample/frame
+    (`advanceFrames(readSamples)` vs `readSamples/channels`) lolos dari
+    semua tool yang ada — clangd lulus, CI sukses, crash hanya terlihat di
+    device. Test yang dibutuhkan: assertion `advanceFrames` untuk
+    `{mono, stereo, 5.1}` × `{44.1k, 48k, 96k}`. Lihat
+    `wiki/root-causes/clock-2x-dan-sigsegv-transisi.md` §Test.
 
 ## Fase 4 - Visual (utang terukur)
 

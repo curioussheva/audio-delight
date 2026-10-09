@@ -18,7 +18,7 @@ bash scripts/check.sh core/AudioEngine.cpp     # atau satu file (jauh lebih cepa
 
 ---
 
-## Sebelas pola berulang (cek ini dulu)
+## Tiga belas pola berulang (cek ini dulu)
 
 Sebelum menginvestigasi error C++ dari nol, periksa apakah ini salah satu pola yang sudah terbukti berulang. Semuanya pernah terjadi lebih dari sekali di proyek ini.
 
@@ -227,6 +227,100 @@ pause 80%→90% / resume 40%→60%, guard magnitudo ±2.0.
 4. **Reproduksi lokal lebih cepat dari menebak**: FFmpeg/swresample standalone
    di Termux (lihat `scripts/test_domain_96k.cpp`) mengeluarkan parameter
    resampler sebagai tersangka dalam hitungan menit.
+
+---
+
+### Clock playback 2x lipat di file stereo (semua sample rate)
+
+**Gejala**: `[DIAG] PLAYING pos=15136ms speed=2.00x` konstan. Audio terdengar
+normal, tapi UI/progress bar maju 2x lebih cepat dari suara. Mono tidak terkena.
+
+**Cara diagnosis**:
+
+```bash
+# 1. Cek channel file yang sedang diputar — kalau stereo, curiga satuan
+grep "render readSamples" <logcat>
+#    readSamples=1664 (frames=832 ch=2) → 1664/2 = 832. Clock dapat 1664? BUG.
+
+# 2. Bandingkan dengan sample rate: 48kHz harusnya speed=1.00x
+grep "speed=" <logcat>
+#    Kalau 48kHz muncul 2.00x → ini satuan, BUKAN domain mismatch
+```
+
+**Root cause 2026-10-09**: `PCMQueue` bekerja dalam satuan **sample** (elemen
+array), tapi `clock_->advanceFrames(readSamples)` menerima angka itu sebagai
+**frame**. Stereo → clock maju 2x. Berbeda dengan domain mismatch 2026-10-06
+yang hanya menimpa file 96 kHz/44.1 kHz — ini menimpa **semua file stereo**.
+
+```cpp
+// PlaybackController.cpp — sebelum
+clock_->advanceFrames(readSamples);              // 1664 = BUG
+
+// sesudah
+const uint32_t advancedFrames = readSamples / channels;   // 832 = BENAR
+clock_->advanceFrames(advancedFrames);
+```
+
+**Cara membedakan dari domain mismatch**: domain mismatch file-spesifik
+(96 kHz → 2.00x, 44.1 kHz → 1.088x, 48 kHz → 1.00x). Bug satuan
+channel-spesifik (**48 kHz pun muncul 2.00x**). Lihat tabel di
+`wiki/root-causes/clock-2x-dan-sigsegv-transisi.md`.
+
+**Pelajaran transferable**:
+
+1. **Satuan adalah bug tersembunyi kelas domain mismatch.** `sample` vs
+   `frame` memberikan angka rasional yang sama (stereo → 2.00x). Pembedanya:
+   cek sample rate file — kalau 48 kHz juga 2.00x, itu satuan.
+2. **Fix satu bug bisa menutup yang lain.** `getPositionSeconds()` diperbaiki
+   2026-10-06, tapi `advanceFrames()` tetap salah satuan dan baru terlihat
+   setelah error pertama hilang. **Cek semua jalur yang mengonsumsi counter
+   yang sama.**
+3. **`render readSamples=... (frames=... ch=...)`** adalah log diagnostik
+   satu baris yang langsung membongkar kelas bug ini — pertahankan.
+
+---
+
+### SIGSEGV saat transisi trek (auto-advance ke 96 kHz)
+
+**Gejala**: app crash saat auto-advance dari MP3 ke FLAC 96 kHz. Backtrace
+`libpristine-audio.so` (stripped), fault di `memcpy` internal, register
+menunjukkan read out-of-bounds dari buffer decoder.
+
+**Cara diagnosis**:
+
+```bash
+# Bandingkan BuildId di tombstone — kalau identik di beberapa crash, reproducible
+grep "BuildId" <tombstone>
+
+# Cek apakah crash tepat setelah transisi trek
+grep -B5 "signal 11" <logcat>
+```
+
+**Root cause 2026-10-09** (dua penyebab, keduanya berdiri sendiri):
+
+1. **Race `decoderWorker_`**: `render()` (audio thread, tiap ~10 ms) membaca
+   `decoderWorker_` tanpa lock, sementara `advanceThread` menjalankan
+   `stopDecoder()` → `reset()` saat transisi trek (~80 ms). Fix:
+   `std::recursive_mutex decoderMutex_` di titik baca `render()` dan titik
+   tulis `stopDecoder()`/`startDecoder()`.
+2. **`swr_convert` under-estimation**: `swr_get_out_samples()` dokumentasinya
+   "estimated", bukan jaminan. `result.samples.insert()` membaca
+   `converted*channels` float tanpa cek kapasitas. Fix: margin +4096,
+   slack ×4, **clamp `converted` ke `outSamples`** + log.
+
+**Pelajaran transferable**:
+
+1. **Unique pointer lintas thread = race yang menunggu terjadi.** Audio
+   callback real-time membaca pointer yang thread lain reset. Mitigasi: lock,
+   atau snapshot ke stack sebelum dipakai.
+2. **Estimasi library bukan jaminan.** Validasi return value sebelum pakai
+   buffer berdasarkan estimasi, atau clamp + log.
+3. **`--strip-unneeded` menghancurkan post-mortem.** Crash reproducible jadi
+   tidak bisa di-resolve ke baris. Simpan unstripped `.so` atau map file di
+   CI artifact kalau crash masih aktif.
+4. **BuildId di tombstone = sidik jari build.** Bandingkan BuildId dulu saat
+   menerima log user — untuk memastikan APK yang dites memuat fix yang
+   dimaksud.
 
 ---
 
