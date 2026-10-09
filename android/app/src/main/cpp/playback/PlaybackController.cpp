@@ -408,7 +408,27 @@ if (renderDebugCount % 100 == 0 && readSamples > 0) {
         );
     }
 
-    clock_->advanceFrames(frames);
+    // 🔥 FIX (2026-10-09): clock hanya boleh maju untuk audio nyata.
+    //
+    // BUG: advanceFrames(frames) dipanggil di SETIAP callback, termasuk saat
+    // PAUSED. Saat paused, pcmQueue_->read() return 0 (queue kosong/habis),
+    // output diisi silence, tapi clock TETAP bertambah. Setelah pause lama,
+    // posisi yang dilaporkan ke JS terakumulasi:
+    //
+    //   log 2026-10-09: [DIAG] PAUSED pos=4343488ms speed=0.77x
+    //   72.39 menit × 48000 = 208.483.200 frames = 4.343.488 ms  ← persis
+    //
+    // Efek di UI: progress bar melompat ke 72 menit padahal lagu 4 menit,
+    // dan speed dihitung diagnostics jadi 0.77x/2.75x (false positive).
+    //
+    // Sekarang clock hanya maju sebanyak frames yang benar-benar dibaca dari
+    // queue. Saat underrun parsial clock tertinggal sedikit (mengikuti data
+    // nyata) — itu lebih benar daripada maju saat tidak ada audio sama sekali.
+    const uint32_t advancedFrames =
+        channels > 0 ? static_cast<uint32_t>(readSamples / channels) : 0;
+    if (advancedFrames > 0) {
+        clock_->advanceFrames(advancedFrames);
+    }
 
     // 🔥 FIX: sync position & duration ke state (untuk JS getPosition)
     if (state_ && clock_ && sampleRate > 0) {
