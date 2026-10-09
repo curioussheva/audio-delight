@@ -335,11 +335,28 @@ void PlaybackController::render(float* output,
     // queue benar-benar lapar. 30% (6.5 detik) terlalu lama untuk file hi-res
     // yang butuh 2x throughput — saat akhirnya resume, queue sudah hampir
     // kosong dan underrun tidak bisa dihindari.
-    if (pcmQueue_ && decoderWorker_) {
-        size_t avail = pcmQueue_->availableFrames();
-        size_t cap = pcmQueue_->capacityFrames();
-        if (avail < cap * 60 / 100 && decoderWorker_->isPaused()) {
-            decoderWorker_->resume();
+    //
+    // 🔥 FIX (2026-10-09, crash auto-advance): render() jalan di AUDIO THREAD
+    // dan membaca decoderWorker_ (unique_ptr) TANPA sinkronisasi. Saat
+    // auto-advance EOF, advanceThread (thread biasa) memanggil loadTrack() →
+    // stopDecoder() → decoderWorker_.reset() + make_unique. Antara reset()
+    // dan make_unique(), decoderWorker_ = nullptr → unique_ptr dibaca dari
+    // dua thread bersamaan = data race (TSAN) dan bisa membaca objek
+    // setengah-terbangun.
+    //
+    // Kondisi `clearing_` sudah melindungi wilayah ini untuk pcmQueue_, tapi
+    // cek decoderWorker_ tambahan dipindah ke bawah pengecekan clearing_ dan
+    // dilindungi lock decoderMutex_ supaya pembacaan unique_ptr aman.
+    if (pcmQueue_ && !clearing_.load(std::memory_order_acquire)) {
+        // Snapshot pointer di bawah lock. advanceThread memegang lock yang
+        // sama saat stopDecoder(), jadi tidak bisa reset di tengah baca.
+        std::lock_guard<std::recursive_mutex> decoderLock(decoderMutex_);
+        if (decoderWorker_) {
+            size_t avail = pcmQueue_->availableFrames();
+            size_t cap = pcmQueue_->capacityFrames();
+            if (avail < cap * 60 / 100 && decoderWorker_->isPaused()) {
+                decoderWorker_->resume();
+            }
         }
     }
 
@@ -410,20 +427,17 @@ if (renderDebugCount % 100 == 0 && readSamples > 0) {
 
     // 🔥 FIX (2026-10-09): clock hanya boleh maju untuk audio nyata.
     //
-    // BUG: advanceFrames(frames) dipanggil di SETIAP callback, termasuk saat
-    // PAUSED. Saat paused, pcmQueue_->read() return 0 (queue kosong/habis),
-    // output diisi silence, tapi clock TETAP bertambah. Setelah pause lama,
-    // posisi yang dilaporkan ke JS terakumulasi:
-    //
-    //   log 2026-10-09: [DIAG] PAUSED pos=4343488ms speed=0.77x
+    // BUG A (posisi melompat ke 72 menit): advanceFrames(frames) dipanggil
+    // di SETIAP callback, termasuk saat PAUSED. Saat paused queue kosong,
+    // output diisi silence, tapi clock TETAP bertambah.
+    //   log: [DIAG] PAUSED pos=4343488ms speed=0.77x
     //   72.39 menit × 48000 = 208.483.200 frames = 4.343.488 ms  ← persis
     //
-    // Efek di UI: progress bar melompat ke 72 menit padahal lagu 4 menit,
-    // dan speed dihitung diagnostics jadi 0.77x/2.75x (false positive).
-    //
-    // PCMQueue::read() mengembalikan jumlah FRAMES (bukan samples), jadi
-    // nilainya langsung dipakai untuk advance clock.
-    const uint32_t advancedFrames = static_cast<uint32_t>(readSamples);
+    // BUG B (speed 2.00x konstan): PCMQueue menghitung SAMPLE, bukan FRAME.
+    //   log: render readSamples=1664 (frames=832 ch=2)
+    // Stereo → clock maju 2x lipat. Bagi channel dulu.
+    const uint32_t ch = (channels > 0) ? channels : 1;
+    const uint32_t advancedFrames = static_cast<uint32_t>(readSamples) / ch;
     if (advancedFrames > 0) {
         clock_->advanceFrames(advancedFrames);
     }
@@ -447,11 +461,16 @@ if (renderDebugCount % 100 == 0 && readSamples > 0) {
             state_->setDuration(msDur);
         }
         else if (decoderWorker_) {
-            const double decDur = decoderWorker_->getDuration();
-            if (decDur > 0.0) {
-                state_->setDuration(
-                    static_cast<uint64_t>(decDur * 1000.0)
-                );
+            // 🔥 FIX (2026-10-09): baca di bawah decoderMutex_ — audio thread
+            // vs advanceThread yang reset unique_ptr. Lihat decoderMutex_.
+            std::lock_guard<std::recursive_mutex> decoderLock(decoderMutex_);
+            if (decoderWorker_) {
+                const double decDur = decoderWorker_->getDuration();
+                if (decDur > 0.0) {
+                    state_->setDuration(
+                        static_cast<uint64_t>(decDur * 1000.0)
+                    );
+                }
             }
         }
     }
@@ -495,6 +514,10 @@ uint32_t PlaybackController::currentFileSampleRate() const noexcept {
 
 bool PlaybackController::startDecoder(const TrackInfo& track) {
     try {
+        // 🔥 FIX (2026-10-09): sinkron dengan render() (audio thread) yang
+        // membaca decoderWorker_. Lihat decoderMutex_ di header.
+        std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+
         __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                             "startDecoder(): creating decoder for uri=%s",
                             track.uri.c_str());
@@ -682,6 +705,10 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
 }
 
 void PlaybackController::stopDecoder() {
+    // 🔥 FIX (2026-10-09): ambil lock supaya audio thread (render()) yang
+    // membaca decoderWorker_ tidak pernah melihat pointer setengah-reset.
+    std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+
     if (!decoderWorker_)
         return;
 

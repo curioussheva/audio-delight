@@ -116,6 +116,13 @@ private:
 
     std::unique_ptr<decoder::DecoderWorker> decoderWorker_;
 
+    // 🔥 FIX (2026-10-09, crash auto-advance): decoderWorker_ dibaca dari
+    // audio thread (render()) dan ditulis ulang oleh advanceThread (loadTrack
+    // → stopDecoder → reset + make_unique). Lock ini menyinkronkan keduanya.
+    // recursive supaya aman jika loadTrack dipanggil dari thread yang sedang
+    // memegang lock (mis. sync dari seek).
+    std::recursive_mutex decoderMutex_;
+
     // 🔥 Thread untuk advance queue setelah EOF (lihat scheduleAdvance).
     std::thread advanceThread_;
 
