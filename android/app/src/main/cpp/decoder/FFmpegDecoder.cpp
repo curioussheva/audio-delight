@@ -543,7 +543,8 @@ bool FFmpegDecoder::setupResampler() {
     // konversi format S16/S32→FLT tidak pernah mengurangi presisi — dither
     // hanya menambah noise floor tanpa manfaat. Untuk passthrough rate
     // (44.1k→44.1k), dither juga tidak perlu.
-    const bool needsResample = (codecCtx_->sample_rate != config().targetSampleRate);
+    const bool needsResample =
+        (codecCtx_->sample_rate != static_cast<int>(config().targetSampleRate));
 
     int filterSize = 128;
     av_opt_set_int(swrCtx_, "filter_size", filterSize, 0);

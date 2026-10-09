@@ -421,11 +421,9 @@ if (renderDebugCount % 100 == 0 && readSamples > 0) {
     // Efek di UI: progress bar melompat ke 72 menit padahal lagu 4 menit,
     // dan speed dihitung diagnostics jadi 0.77x/2.75x (false positive).
     //
-    // Sekarang clock hanya maju sebanyak frames yang benar-benar dibaca dari
-    // queue. Saat underrun parsial clock tertinggal sedikit (mengikuti data
-    // nyata) — itu lebih benar daripada maju saat tidak ada audio sama sekali.
-    const uint32_t advancedFrames =
-        channels > 0 ? static_cast<uint32_t>(readSamples / channels) : 0;
+    // PCMQueue::read() mengembalikan jumlah FRAMES (bukan samples), jadi
+    // nilainya langsung dipakai untuk advance clock.
+    const uint32_t advancedFrames = static_cast<uint32_t>(readSamples);
     if (advancedFrames > 0) {
         clock_->advanceFrames(advancedFrames);
     }
