@@ -37,11 +37,19 @@ class MediaSessionManager(private val service: PlaybackService) {
 
     private val sessionCallback = object : MediaSessionCompat.Callback() {
         override fun onPlay() {
+            // 🔥 FIX (2026-10-10): tombol play dari notification/lock screen
+            // harus update UI JS, tidak cuma native. Sebelumnya hanya
+            // PlaybackNativeBridge.play() — UI React tetap nunjukin "paused"
+            // sampai polling 500ms berikutnya, dan syncFromNative tidak
+            // dipanggil sama sekali.
             PlaybackNativeBridge.play()
+            notifyPlaybackStateChanged()
         }
 
         override fun onPause() {
+            // 🔥 FIX (2026-10-10): sama — pause dari notif harus sync ke JS.
             PlaybackNativeBridge.pause()
+            notifyPlaybackStateChanged()
         }
 
         override fun onSkipToNext() {
@@ -58,10 +66,12 @@ class MediaSessionManager(private val service: PlaybackService) {
 
         override fun onSeekTo(pos: Long) {
             PlaybackNativeBridge.seek(pos)
+            notifyPlaybackStateChanged()
         }
 
         override fun onStop() {
             PlaybackNativeBridge.stop()
+            notifyPlaybackStateChanged()
         }
     }
 
@@ -71,6 +81,20 @@ class MediaSessionManager(private val service: PlaybackService) {
     //
     // Dulu ini cuma refreshNotification() (gambar ulang notifikasi doang),
     // namanya menyesatkan. Sekarang juga emit event ke JS lewat bridge.
+    // 🔥 FIX (2026-10-10): play/pause/seek/stop dari notification/lock screen
+    // juga harus sync ke JS — tidak cuma ganti trek. emitPlaybackStateChanged
+    // kasih tahu React supaya tombol UI langsung berubah, tanpa nunggu
+    // polling 500ms yang bisa terlihat telat.
+    private fun notifyPlaybackStateChanged() {
+        try {
+            val isPlaying = PlaybackNativeBridge.isPlaying()
+            PlaybackNativeBridge.emitPlaybackStateChanged(isPlaying)
+            refreshNotification()
+        } catch (e: Exception) {
+            android.util.Log.w("MediaSessionManager", "notifyPlaybackStateChanged: ${e.message}")
+        }
+    }
+
     private fun notifyQueueChanged() {
         try {
             val cur = PlaybackNativeBridge.getCurrentTrack()

@@ -126,6 +126,26 @@ object PlaybackNativeBridge {
         PlaybackService.instance?.updatePlaybackState(isPlaying, positionMs)
     }
 
+    // 🔥 FIX (2026-10-10): status play/pause untuk emit ke JS.
+    // getStatus() native: 1=PLAYING, 2=PAUSED, 0=IDLE/STOPPED.
+    fun isPlaying(): Boolean = NativePlaybackModule.instance?.getStatusFromService() == 1
+
+    // 🔥 FIX (2026-10-10): event native→JS untuk perubahan status play/pause
+    // yang dipicu dari notification / lock screen / bluetooth.
+    // Sebelumnya UI React hanya tahu lewat polling getPosition() tiap 500ms
+    // (di useAudioPlayer), jadi tombol notif terasa telat / mismatch.
+    fun emitPlaybackStateChanged(isPlaying: Boolean) {
+        try {
+            val module = NativePlaybackModule.instance ?: return
+            val ctx = module.reactContext
+            ctx.getJSModule(com.facebook.react.modules.core.DeviceEventManagerModule
+                .RCTDeviceEventEmitter::class.java)
+                .emit("onPlaybackStateChanged", isPlaying)
+        } catch (e: Exception) {
+            android.util.Log.w("PlaybackNativeBridge", "emitPlaybackStateChanged: ${e.message}")
+        }
+    }
+
     // 🔥 Event native→JS: kirim info trek ke JS tanpa polling.
     // Dipanggil saat track berganti dari sisi native (notification / C++ advance).
     fun emitTrackChanged(uri: String, index: Int) {

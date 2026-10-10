@@ -294,6 +294,28 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       console.log("[Player] 🎵 Native track-ended listener registered");
     }
 
+    // 🔥 FIX (2026-10-10): event native→JS untuk play/pause/seek/stop yang
+    // dipicu dari notification / lock screen / bluetooth / media button.
+    // Sebelumnya UI React hanya tahu lewat polling 500ms, jadi tombol UI
+    // ketinggalan vs notifikasi.
+    if (!(globalThis as any).__nativePlaybackStateListener) {
+      const { NativeEventEmitter } = require("react-native");
+      const emitter = new NativeEventEmitter(NativePlaybackService);
+      const subscription = emitter.addListener(
+        "onPlaybackStateChanged",
+        async (isPlaying: boolean) => {
+          console.log("[Player] ▶️ native playback-state event:", isPlaying);
+          set({ isPlaying });
+
+          // Sinkronkan juga posisi + trek supaya slider dan judul benar —
+          // kalau seek dari notif, posisi UI harus ikut.
+          await get().syncFromNative();
+        },
+      );
+      (globalThis as any).__nativePlaybackStateListener = subscription;
+      console.log("[Player] ▶️ Native playback-state listener registered");
+    }
+
     // 🔥 FIX #4: event native→JS kalau user pencet next/prev di lock screen.
     // Native sudah ganti trek (PlaybackNativeBridge.next()), JS tinggal sync.
     if (!(globalThis as any).__nativeTrackChangedListener) {
