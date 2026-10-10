@@ -1,147 +1,113 @@
 # Audit Mode DSP: Hulu → Hilir
 
-**Tanggal:** 2026-10-10 | **Commit:** `c8b6350aa` | **Metode:** pembacaan jalur pemanggilan + grep pemanggil nyata (bukan grep "ada referensi")
+**Tanggal:** 2026-10-10 | **Commit:** `c8b6350aa` | **Revisi:** v2 (koreksi)
 
-Aturan yang dipakai: `docs/BOILERPLATE_AND_STUBS.md` §6 — *"bukti sah cuma ada jalur
-pemanggilan dari jalur produksi"*. Setiap klaim di bawah disertai pemanggil.
+> **Koreksi v1 → v2.** v1 menyatakan "`ImmersiveStage` 4 tahap NYATA" dan
+> mengusulkan menghapus 9 kelas yatim sebagai "dead code". **Keduanya salah.**
+> Rantai immersive hanya punya **1 dari 4** tahap yang nyata, dan kelas yatim
+> adalah **fitur yang belum diimplementasi**, bukan sampah — koreksi dari
+> operator. v2 memakai klasifikasi tiga tingkat dan tidak mengusulkan
+> penghapusan.
 
-Klasifikasi: **NYATA** (ada jalur pemanggilan produksi) / **PUTUS** (jalur ada tapi
-terpotong di tengah) / **YATIM** (nol pemanggil).
+**Metode:** pembacaan jalur pemanggilan + grep pemanggil nyata, bukan grep "ada
+referensi". Aturan: `docs/BOILERPLATE_AND_STUBS.md` §6.
+
+**Klasifikasi:**
+- **NYATA** — ada jalur pemanggilan produksi *dan* perilakunya sesuai namanya
+- **STUB-DIPANGGIL** — dipanggil jalur produksi, tapi perilakunya bukan yang dijanjikan nama
+- **BELUM** — belum diimplementasi, nol pemanggil (fitur masa depan, bukan sampah)
 
 ---
 
 ## 1. Ringkasan eksekutif
 
-| Tingkat | Temuan | Dampak |
+| # | Tingkat | Temuan |
 |---|---|---|
-| 🔴 KRITIS | `DSPChain::applyConfig()` nol pemanggil dari luar `dsp/` | Konfigurasi DSP dari UI **tidak pernah sampai** ke rantai |
-| 🔴 KRITIS | `AudioEngine::setEqBand()` + `setBassBoost()` bodi kosong | Slider EQ & bass-boost UI adalah **no-op total** |
-| 🔴 KRITIS | Mode DSP menghasilkan output **identik** dengan BitPerfect | Tiga mode secara terdengar = dua mode |
-| 🟠 TINGGI | `setDSPEnabled(false)` tidak berefek | Sakelar DSP tidak menggerbang apa pun |
-| 🟠 TINGGI | `setLimiterEnabled(false)` tidak berefek | Sakelar limiter tidak menggerbang apa pun |
-| 🟡 SEDANG | 4 field `DSPParameters` ditulis, nol pembaca | Parameter diset tapi dibuang |
-| 🟡 SEDANG | 8 kelas DSP yatim (0 pemanggil) | "Tampak tersedia padahal tidak ada" |
-| ⚪ INFO | `softClip` waveshaper → sudah diperbaiki (`c8b6350aa`) | Sebelumnya distorsi di seluruh rentang |
+| 1 | 🔴 KRITIS | `DSPChain::applyConfig()` nol pemanggil dari luar `dsp/` — config UI tidak pernah sampai |
+| 2 | 🔴 KRITIS | `AudioEngine::setEqBand()` + `setBassBoost()` bodi kosong; Kotlin tetap `resolve(true)` |
+| 3 | 🔴 KRITIS | Mode DSP ≈ BitPerfect untuk seluruh sinyal di bawah 0.98 FS |
+| 4 | 🔴 KRITIS | `BrainwaveGenerator` **menolkan buffer** — audio hilang total kalau `brainwaveFreq > 0` |
+| 5 | 🟠 TINGGI | `HarmonicExciter` bukan exciter — ia **gain linear +6 dB** di intensitas default |
+| 6 | 🟠 TINGGI | `SpatialFieldProcessor` dipanggil tapi `do nothing` |
+| 7 | 🟠 TINGGI | `setDSPEnabled`/`setLimiterEnabled` → ditulis ke `mParams`, **nol pembaca** |
+| 8 | 🟡 SEDANG | `HeadphoneCorrection::loadProfile()` `return true` tanpa memuat apa pun |
+| 9 | 🟡 SEDANG | UI `settings.tsx:852` mengklaim "DSP & Immersive benar-benar memproses PCM" |
+| 10 | ⚪ INFO | `softClip` waveshaper → sudah diperbaiki (`c8b6350aa`) |
 
 ---
 
-## 2. Jalur hulu → hilir (yang ada)
+## 2. Jalur hulu → hilir
+
+### 2.1 Yang PUTUS
 
 ```
-JS  equalizerStore / useEqualizer / engine.ts
+JS  equalizerStore / useEqualizer
      ↓  NativeDSPModule.setFullEqualizer(gains, sessionId)
 Kotlin  NativeDSPModule.kt:86  @ReactMethod setFullEqualizer
-     ↓  loop → setNativeEqualizerBand(i, gain)        ✅ NYATA
+     ↓  loop → setNativeEqualizerBand(i, gain)        ✅
 JNI  NativeDSPModule.cpp:30  Java_..._setNativeEqualizerBand
-     ↓  EngineManager::get().setEqBand(band, gainDb)  ✅ NYATA
+     ↓  EngineManager::get().setEqBand(band, gainDb)  ✅
 C++  EngineManager.cpp:760  setEqBand
-     ↓  mEngine.setEqBand(band, gainDb)               ✅ NYATA
+     ↓  mEngine.setEqBand(band, gainDb)               ✅
 C++  AudioEngine.cpp:339  setEqBand(int, float)
-     ╳  { /* reserved for DSP pipeline param sync */ }  🔴 PUTUS DI SINI
+     ╳  { /* reserved for DSP pipeline param sync */ }   ← PUTUS
 ```
 
-Jalur `setBassBoost` **putus persis di tempat yang sama**: `AudioEngine.cpp:328`.
+`setBassBoost` putus persis sama (`AudioEngine.cpp:328`).
 
-Jalur yang benar-benar utuh hanya jalur **mode** dan **immersive**:
+### 2.2 Yang UTUH
 
 ```
 JS setProcessingMode(n) → Kotlin → JNI:148 → EngineManager::setProcessingMode
-   → AudioEngine::setProcessingMode → AudioState.setProcessingMode(atomic)
-   → AudioCallback::updateParameters() → mParams.processingMode
-   → AudioPipeline::process() switch                        ✅ NYATA
+   → AudioEngine → AudioState (atomic) → AudioCallback::updateParameters()
+   → mParams.processingMode → AudioPipeline::process() switch        ✅
 ```
-
-`processingMode`, `solfeggioFreq`, `brainwaveFreq`, `resonanceIntensity`,
-`stereoWidth` — kelimanya punya pembaca. Sisanya tidak.
 
 ---
 
-## 3. Bukti per temuan
+## 3. Temuan
 
 ### 3.1 `DSPChain::applyConfig()` — nol pemanggil 🔴
 
 ```bash
 $ grep -rn "applyConfig" --include=*.cpp --include=*.h . | grep -v oboe
-./dsp/DSPChain.h:32        (deklarasi)
-./dsp/DSPChain.cpp:58      (definisi → mGraph.applyConfig)
-./dsp/graph/DSPNode.h:31   (virtual kosong)
-./dsp/graph/DSPGraph.h:26  (deklarasi)
-./dsp/graph/DSPGraph.cpp:56 (definisi → loop node->applyConfig)
-./dsp/dynamics/LimiterNode.{h,cpp}
-./dsp/spatial/StereoWidenerNode.{h,cpp}
-./dsp/tone/EQNode.{h,cpp}
-./dsp/tone/GainNode.{h,cpp}
 ```
+Semua hasil berada di dalam `dsp/` sendiri. **Nol pemanggil** dari `core/`,
+`manager/`, `playback/`, `jni/`. `AudioPipeline` hanya memanggil tiga method
+`DSPChain`: `prepare()`, `reset()`, `process()`.
 
-**Nol pemanggil dari `core/`, `manager/`, `playback/`, `jni/`.** Semua referensi
-berputar di dalam `dsp/` sendiri — pola "lingkaran tertutup" yang sama dengan
-kasus `modes/` di `BOILERPLATE_AND_STUBS.md` §4.3.
+Akibat: `DSPChain::mConfig` (`DSPChain.h:58`) tetap pada `DSPConfig{}` selamanya.
 
-`AudioPipeline` hanya memanggil tiga method `DSPChain`:
-
-```bash
-$ grep -rn "mDSP\." core/   # → prepare(), reset(), process()
-```
-
-Akibatnya `DSPChain::mConfig` (`DSPChain.h:58`) tetap pada konstruktor default
-`DSPConfig{}`:
-
-| Field `DSPConfig` | Default | Sumber nilai sebenarnya |
-|---|---|---|
-| `enabled` | `true` | tak pernah diubah |
-| `limiterEnabled` | `true` | tak pernah diubah |
-| `masterGain` | `1.0f` | `AudioState.masterGain()` — tapi hanya dipakai Immersive |
-| `balance` | `0.0f` | tak pernah dibaca |
-| `stereoWidth` | `1.0f` | `AudioState.stereoWidth()` — dipakai Immersive |
-| `eqGain[10]` | semua `0.0f` | **tidak ada pembaca di jalur hulu** |
-| `bassBoost` | `0.0f` | **tidak ada pembaca di jalur hulu** |
-
-### 3.2 `AudioEngine::setEqBand` / `setBassBoost` — bodi kosong 🔴
+### 3.2 EQ & bass-boost UI = no-op 🔴
 
 ```cpp
-// core/AudioEngine.cpp:328
-void AudioEngine::setBassBoost(float gainDb) {
-    // reserved for DSP pipeline param sync     ← tidak menyentuh apa pun
-}
-
-// core/AudioEngine.cpp:339
-void AudioEngine::setEqBand(int, float) {
-    // reserved for DSP pipeline param sync     ← tidak menyentuh apa pun
-}
+// core/AudioEngine.cpp:328 / :339
+void AudioEngine::setBassBoost(float gainDb) { /* reserved ... */ }
+void AudioEngine::setEqBand(int, float)      { /* reserved ... */ }
 ```
 
-Ini **stub yang mengembalikan sukses tanpa efek** — tepat yang dilarang
-`BOILERPLATE_AND_STUBS.md` §2. Bedanya dengan kasus `USBDACModule`: di sini
-fungsi `void`, jadi tidak ada `promise.resolve(true)`. Tapi JNI-nya juga `void`,
-dan Kotlin-nya `promise.resolve(true)` setelah memanggilnya:
+Kotlin tetap melaporkan sukses:
 
 ```kotlin
 // NativeDSPModule.kt:75
-fun setEqualizer(band: Int, level: Float, sessionId: Int, promise: Promise) {
-    if (!engineAvailable) { promise.resolve(false); return }
-    try {
-        setNativeEqualizerBand(band, level)   // → berakhir di bodi kosong
-        promise.resolve(true)                 // ← SUKSES PALSU
-    } catch (e: Exception) { promise.reject("DSP_ERROR", e.message) }
-}
+setNativeEqualizerBand(band, level)   // → berakhir di bodi kosong
+promise.resolve(true)                 // ← SUKSES PALSU
 ```
 
-**UI menerima `true`, audio tidak berubah.** Inilah "utang kejujuran" yang
-disebut §1 dokumen itu.
+**UI menerima `true`, audio tidak berubah.** Pelanggaran `BOILERPLATE_AND_STUBS.md` §2.
 
-### 3.3 Mode DSP = BitPerfect secara terdengar 🔴
+### 3.3 Mode DSP ≈ BitPerfect 🔴
 
-Rantai `DSPChain::buildGraph()` (`DSPChain.cpp:98`) memasang 4 node berurutan.
-Keempatnya, dengan konfigurasi default yang benar-benar berlaku:
+Keempat node `DSPChain::buildGraph()` (`DSPChain.cpp:98`) dengan config default:
 
-| Node | Parameter efektif | Perilaku |
+| Node | Nilai efektif | Perilaku |
 |---|---|---|
-| `EQNode` | `mBandGain[10]` semua `0.0f`, `mBandEnabled[10]` semua `false`, `mBassEnabled=false` | **identity** — `EQProcessor::process` hanya melewati `left[i]=l` |
-| `StereoWidenerNode` | `mWidth = 1.0f` (`StereoWidenerNode.h:32`) | **identity** — `StereoWidener::process` width 1.0 = "original" (lihat tabel komentar di `StereoWidener.h`) |
-| `GainNode` | `mGainL = mGainR = 1.0f` (`GainNode.h`) | **identity** |
-| `LimiterNode` | threshold `0.98`, identity di bawahnya | **identity** untuk sinyal normal |
+| `EQNode` | `mBandGain[10]` = 0.0f, `mBandEnabled[10]` = false | identity |
+| `StereoWidenerNode` | `mWidth = 1.0f` | identity (`left = mid + side×1.0`) |
+| `GainNode` | `mGainL = mGainR = 1.0f` | identity |
+| `LimiterNode` | threshold 0.98 | identity di bawah 0.98 |
 
-Verifikasi gate EQ:
+Gate EQ terverifikasi:
 
 ```cpp
 // EQProcessor.cpp:135
@@ -150,146 +116,220 @@ mBandEnabled[band] = std::fabs(gainDb) > 0.001f;   // 0 dB → false
 if (mBandEnabled[b]) { l = mLeft[b].process(l); }   // → dilewati
 ```
 
-**Kesimpulan:** memilih mode DSP memberi output PCM yang identik dengan mode
-BitPerfect untuk seluruh sinyal di bawah 0.98 full-scale. Tiga mode secara
-terdengar = **dua** mode (BitPerfect ≡ DSP), plus Immersive.
+**Node-nya benar.** Yang tidak ada adalah jalur yang membawa *nilai* ke node.
+Implementasinya siap: `BiquadFilter::setPeakingEQ` menghitung koefisien RBJ
+cookbook sungguhan, `EQProcessor::updateBand` memasangnya ke `mLeft[band]`.
 
-Ini bukan bug implementasi node — node-nya benar. Yang tidak ada adalah jalur
-yang membawa *nilai* ke node.
-
-### 3.4 Sakelar `setDSPEnabled` / `setLimiterEnabled` tidak menggerbang apa pun 🟠
-
-Nilai sampai ke `AudioState` (NYATA) dan disalin ke `mParams`:
+### 3.4 `BrainwaveGenerator` menolkan buffer 🔴
 
 ```cpp
-// AudioCallback.cpp:159
-mParams.dspEnabled     = mState.isDSPEnabled();
-mParams.limiterEnabled = mState.isLimiterEnabled();
+// dsp/immersive/BrainwaveGenerator.cpp:9
+void BrainwaveGenerator::generate(float* left, float* right, int32_t numFrames, float) {
+    // stub: fill with zeros
+    for (int32_t i = 0; i < numFrames; ++i) {
+        left[i] = 0.0f;
+        right[i] = 0.0f;
+    }
+}
 ```
 
-Tapi `mParams.dspEnabled` dan `mParams.limiterEnabled` **nol pembaca**:
+Dipanggil **terakhir** di `ImmersiveStage::process` (`ImmersiveStage.cpp:106`),
+tanpa menjumlahkan — ia **menimpa** hasil seluruh rantai:
+
+```cpp
+if (params.brainwaveFreq > 0.0f) {
+    mBrainwave.generate(left, right, numFrames, mSampleRate);   // ← nolkan
+}
+```
+
+**Saat ini tidak terjangkau**: default `mBrainwaveFreq{0.0f}` (`AudioState.h:363`)
+dan `setBrainwaveFreq` nol pemanggil di `src/`. Tapi begitu ada UI yang
+menyentuhnya, seluruh audio menjadi senyap — bukan efek, tapi kehilangan suara.
+
+### 3.5 `HarmonicExciter` = gain +6 dB, bukan exciter 🟠
+
+```cpp
+// dsp/immersive/HarmonicExciter.cpp:11
+void HarmonicExciter::setDrive(float driveDb) {
+    mDrive = driveDb;
+    mCoeff = std::pow(10.0f, driveDb / 20.0f);
+}
+void HarmonicExciter::process(...) {
+    // stub: just apply gain
+    left[i] *= mCoeff;  right[i] *= mCoeff;
+}
+```
+
+`ImmersiveStage.cpp:84`: `mHarmonic.setDrive(params.resonanceIntensity * 12.0f)`.
+Default `mResonanceIntensity{0.5f}` (`AudioState.h:366`) → drive 6.0 dB →
+`mCoeff = 1.995`.
+
+**Mode Immersive diam-diam menaikkan level +6 dB.** Nama kelasnya menjanjikan
+penambahan harmonisa; yang terjadi perkalian linear. Ini satu-satunya tahap
+immersive yang *terdengar* selain Solfeggio — tapi bukan karena efeknya, karena
+volumenya.
+
+### 3.6 `SpatialFieldProcessor` dipanggil, tidak melakukan apa pun 🟠
+
+```cpp
+void SpatialFieldProcessor::process(float* left, float* right, int32_t numFrames) {
+    // stub: do nothing
+    (void)left; (void)right; (void)numFrames;
+}
+```
+
+`setWidth`/`setDepth` menyimpan nilai yang tidak pernah dibaca.
+
+### 3.7 Sakelar DSP & limiter tidak menggerbang apa pun 🟠
 
 ```bash
 $ for f in masterGain balance stereoWidth dspEnabled limiterEnabled ...; do
     grep -rn "params\.$f" | grep -v "mParams\.$f =" | wc -l; done
-masterGain:    0     ← ditulis, tidak dibaca
-balance:       0     ← ditulis, tidak dibaca
-stereoWidth:   1     ← dibaca (ImmersiveStage::process)
-dspEnabled:    0     ← ditulis, tidak dibaca
-limiterEnabled:0     ← ditulis, tidak dibaca
-solfeggioFreq: 1     ← dibaca (ImmersiveStage)
-brainwaveFreq: 2     ← dibaca (ImmersiveStage)
+masterGain:      0     ← ditulis, tidak dibaca
+balance:         0     ← ditulis, tidak dibaca
+dspEnabled:      0     ← ditulis, tidak dibaca
+limiterEnabled:  0     ← ditulis, tidak dibaca
+stereoWidth:     1     ← dibaca (ImmersiveStage)
+solfeggioFreq:   1     ← dibaca
+brainwaveFreq:   2     ← dibaca
 resonanceIntensity: 4 ← dibaca
-processingMode: 3    ← dibaca (AudioPipeline switch)
+processingMode:  3    ← dibaca
 ```
 
-Gate DSP yang sebenarnya adalah `DSPProcessingGate` (sakelar diagnostik global,
-default ON) — bukan `dspEnabled` per-sesi. Gate limiter yang sebenarnya adalah
-`DSPConfig.limiterEnabled` (default `true`) via `LimiterNode::applyConfig` —
-yang **tidak pernah dipanggil** (§3.1). Jadi menekan tombol limiter di UI tidak
-mengubah perilaku limiter.
+Gate DSP yang sebenarnya: `DSPProcessingGate` (diagnostik global, default ON).
+Gate limiter yang sebenarnya: `DSPConfig.limiterEnabled` via `LimiterNode::applyConfig`
+— **yang tidak pernah dipanggil** (§3.1).
 
-### 3.5 Kelas yatim (0 pemanggil) 🟡
-
-Diperiksa dengan pola AGENTS.md (grep nama kelas, buang file yang namanya sama):
-
-| Kelas | Rujukan lain |
-|---|---|
-| `OutputStage` | **0** |
-| `ConvolverNode` | **0** |
-| `HeadphoneCorrection` | **0** |
-| `CrossfeedProcessor` | **0** |
-| `FFTResonanceAnalyzer` | **0** |
-| `PartitionedConvolver` | **0** |
-| `StateVariableFilter` | **0** |
-| `ToneControl` | **0** |
-| `BinauralRenderer` | 1 (hanya `ImmersiveStage.h` — dan `mBinaural` tak dipakai di `process()`) |
-
-`OutputStage` layak diperhatikan: ia punya `setGain()`, `setBalance()`,
-`setLimiterEnabled()` sendiri — **duplikat limbah** dari `GainNode` +
-`LimiterNode`. Ini bentuk §4.3 ("dua struktur paralel untuk hal yang sama")
-yang belum dibersihkan, dan berbahaya persis karena namanya menjanjikan
-fungsionalitas yang sudah dimiliki jalur lain.
-
-### 3.6 Konfirmasi: tidak ada jalur AudioEffect Android
-
-`android.media.audiofx.Equalizer` tidak dipakai — satu-satunya pemakaian
-`android.media.audiofx` adalah `Visualizer` di `NativeVisualizerBridge.kt:5`.
-Jadi hipotesis "EQ mungkin jalan lewat audiofx meski C++ tidak" **tertutup**:
-tidak ada jalur FX per-sesi. EQ benar-benar hanya lewat `DSPChain`.
-
----
-
-## 4. Peta status
-
-### NYATA (10)
-`processingMode` · `AudioPipeline::process` switch 3 cabang · `DSPProcessingGate` ·
-`ImmersiveStage` 4 tahap (Solfeggio → Harmonic → Spatial → Brainwave) ·
-solfeggioFreq · brainwaveFreq · resonanceIntensity · stereoWidth (Immersive) ·
-`EQNode`/`GainNode`/`StereoWidenerNode`/`LimiterNode` sebagai implementasi ·
-`Limiter` baru (`c8b6350aa`) · `sanitizeOutput`
-
-### PUTUS (5)
-1. `AudioEngine::setEqBand` → `DSPChain::applyConfig` (bodi kosong)
-2. `AudioEngine::setBassBoost` → `DSPChain::applyConfig` (bodi kosong)
-3. `mParams.masterGain` → tidak ada pembaca (Immersive pakai `AudioState` langsung)
-4. `mParams.balance` → tidak ada pembaca
-5. `mParams.dspEnabled` / `mParams.limiterEnabled` → tidak ada pembaca
-
-### YATIM (9)
-`OutputStage` · `ConvolverNode` · `HeadphoneCorrection` · `CrossfeedProcessor` ·
-`FFTResonanceAnalyzer` · `PartitionedConvolver` · `StateVariableFilter` ·
-`ToneControl` · `BinauralRenderer`
-
----
-
-## 5. Langkah perbaikan (butuh keputusan)
-
-### Opsi A — Sambungkan jalur yang putus (mode DSP benar-benar bekerja)
-
-1. `AudioEngine` menyimpan `DSPConfig` dan meneruskan ke `AudioPipeline` →
-   `DSPChain::applyConfig`.
-2. `setEqBand`/`setBassBoost` mengisi `DSPConfig::eqGain[]`/`bassBoost`, lalu
-   panggil `applyConfig` (deferred ke audio thread atau lewat snapshot atomic —
-   `applyConfig` melakukan `mEQ.setBandGain` yang menghitung koefisien biquad;
-   **tidak boleh di thread UI**).
-3. `updateParameters()` menyertakan `eqGain[]` + `bassBoostGain` ke `mParams`,
-   dan `processDSP` meneruskan `mParams` ke `mDSP` (sekarang parameter `params`
-   sengaja tak bernama: `const DSPParameters&) noexcept`).
-
-**Risiko:** `applyConfig` → `updateBand()` menghitung koefisien + alokasi
-potensial. Perlu jalur aman realtime (pre-computed, double-buffer, atau
-pindah ke `prepare()`).
-
-### Opsi B — Nyatakan apa adanya (jujur, tanpa fitur baru)
-
-Per `BOILERPLATE_AND_STUBS.md` §2, ganti bodi kosong dengan kegagalan berisik:
+### 3.8 Stub yang mengaku jadi 🟡
 
 ```cpp
-void AudioEngine::setEqBand(int, float) {
-    // BELUM TERSAMBUNG. Jangan resolve(true) di Kotlin.
+// dsp/headphone/HeadphoneCorrection.cpp:8
+bool HeadphoneCorrection::loadProfile(const std::string& model) {
+    (void)model;
+    // stub: load some default coefficients
+    mFilterLeft = {1.0f};  mFilterRight = {1.0f};
+    return true;           // ← sukses tanpa memuat apa pun
 }
 ```
 
-…plus `promise.reject("NOT_IMPLEMENTED", ...)` di Kotlin, dan tandai di
-`FEATURES.md` bahwa EQ C++ belum aktif. UI berhenti berbohong; tidak ada fitur
-baru yang dijanjikan.
+`applyFIR` hanya `inout[i] *= coeffs[0]` → `×1.0` = identity. Nama `loadProfile`
+menjanjikan pemuatan profil; yang terjadi pengembalian `true`.
 
-### Opsi C — Bersihkan yang yatim
+```cpp
+// dsp/immersive/BinauralRenderer.cpp:8
+// stub: copy input to both channels
+outLeft[i] = monoInput[i]; outRight[i] = monoInput[i];
+```
 
-Hapus 9 kelas yatim (termasuk `OutputStage` yang duplikat). Satu unit utuh,
-seperti pola `AudioRouteManager` + izin USB.
+```cpp
+// dsp/immersive/FFTResonanceAnalyzer.cpp:19
+float FFTResonanceAnalyzer::getDominantFrequency() const { return 0.0f; // stub }
+```
 
-**Catatan:** A dan B saling eksklusif untuk EQ. C bisa jalan sendiri.
+Ketiganya mengembalikan hasil tanpa arti, bukan kegagalan berisik.
+
+### 3.9 Klaim UI yang tidak lagi benar 🟡
+
+```
+src/app/(drawer)/settings.tsx:852
+  "Aktif — mode DSP & Immersive benar-benar memproses PCM."
+```
+
+Untuk DSP: hanya limiter di atas 0.98 FS yang aktif — EQ/gain/width identity.
+Untuk Immersive: Solfeggio nyata, exciter = gain, spatial = no-op.
+
+### 3.10 Konfirmasi: tidak ada jalur Android audiofx
+
+`android.media.audiofx.Equalizer` tidak dipakai. Satu-satunya pemakaian
+`android.media.audiofx` adalah `Visualizer` (`NativeVisualizerBridge.kt:5`).
+Hipotesis "EQ jalan lewat audiofx meski C++ putus" **tertutup**.
+
+---
+
+## 4. Klasifikasi per node
+
+### NYATA (6)
+`processingMode` switch · `DSPProcessingGate` · **`SolfeggioResonator`** (biquad RBJ
+sungguhan, Q = 0.7 + intensity×7.3, wet/dry) · `BiquadFilter` · `Limiter` baru ·
+`sanitizeOutput`
+
+### STUB-DIPANGGIL (3)
+| Kelas | Di mana dipanggil | Yang sebenarnya terjadi |
+|---|---|---|
+| `HarmonicExciter` | `ImmersiveStage.cpp:86` | gain linear +6 dB |
+| `SpatialFieldProcessor` | `ImmersiveStage.cpp:93` | tidak ada |
+| `BrainwaveGenerator` | `ImmersiveStage.cpp:106` | menolkan buffer |
+
+### BELUM (9) — fitur belum diimplementasi, **bukan sampah**
+
+| Kelas | Isi | Catatan |
+|---|---|---|
+| `HeadphoneCorrection` | `loadProfile` → `true` palsu | perlu kegagalan berisik |
+| `BinauralRenderer` | copy mono ke L/R | HRTF belum ada |
+| `FFTResonanceAnalyzer` | akumulasi buffer, `mPlan` tak dipakai | analisis belum ada |
+| `ConvolverNode` + `FIRFilter` | konvolusi nyata, butuh IR | belum ada pemuat IR |
+| `PartitionedConvolver` | `prepare`/`reset` saja, **tanpa `process`** | belum lengkap |
+| `IRLoader` | `// TODO:` | belum ada |
+| `CrossfeedProcessor` | **algoritma nyata** (blend L/R) | tinggal disambungkan |
+| `StateVariableFilter` · `ToneControl` · `DCBlocker` | **implementasi nyata** | komponen siap pakai |
+| `OutputStage` | gain + limiter + DC blocker | **duplikat** `GainNode`+`LimiterNode` |
+
+**Penting:** `CrossfeedProcessor`, `StateVariableFilter`, `ToneControl`,
+`DCBlocker`, `FIRFilter`, `ConvolverNode` sudah **berfungsi** — hanya belum
+tersambung. Yang benar-benar belum jadi: `HeadphoneCorrection`,
+`BinauralRenderer`, `FFTResonanceAnalyzer`, `PartitionedConvolver`, `IRLoader`.
+
+`OutputStage` berbeda: ia duplikat konsep yang sudah dimiliki `DSPChain`. Ini
+bentuk §4.3 ("dua struktur paralel untuk hal yang sama") — bukan fitur masa
+depan, tapi risiko divergensi.
+
+---
+
+## 5. Langkah perbaikan
+
+### Prioritas 1 — Kejujuran (wajib, terlepas dari opsi lain)
+
+1. `AudioEngine::setEqBand`/`setBassBoost` → jangan resolve sukses. Sesuai §2:
+   kegagalan berisik.
+2. `HeadphoneCorrection::loadProfile` → `return false` sampai profil nyata ada.
+3. `BrainwaveGenerator::generate` → **jangan menolkan buffer**; minimal
+   `return` tanpa menyentuh audio. Ini satu-satunya temuan yang bisa
+   menghilangkan suara.
+4. `settings.tsx:852` → perbaiki klaim agar sesuai kenyataan.
+
+### Prioritas 2 — Sambungkan jalur DSP (butuh keputusan)
+
+1. `AudioEngine` menyimpan `DSPConfig`, meneruskan ke `AudioPipeline` →
+   `DSPChain::applyConfig`.
+2. `setEqBand`/`setBassBoost` mengisi `DSPConfig::eqGain[]`/`bassBoost`.
+3. `updateParameters()` menyertakan `eqGain[]` + `bassBoostGain` ke `mParams`;
+   `processDSP` meneruskan `mParams` (sekarang tak bernama:
+   `const DSPParameters&) noexcept`).
+
+**Risiko realtime:** `applyConfig` → `updateBand` → `setPeakingEQ` menjalankan
+`powf`/`cosf`/`sinf` dan menulis `coeffs` (struct non-atomik) yang dibaca
+`process()` di audio thread. Perlu jalur aman: pre-compute di luar audio thread
+lalu tukar pointer/indeks, atau snapshot atomic. **Tidak boleh langsung dari
+thread UI.**
+
+### Prioritas 3 — Rapikan immersive
+`HarmonicExciter` ganti nama atau implementasi sungguhan; `SpatialFieldProcessor`
+isi atau lepas dari rantai.
+
+### Prioritas 4 — Bersihkan duplikasi
+`OutputStage` — putuskan mana yang berlaku (`DSPChain` sudah punya keduanya).
 
 ---
 
 ## 6. Catatan proses
 
-Temuan ini konsisten dengan pola #9 di `TROUBLESHOOTING.md`
-(*"parameter config yang tidak dibaca tidak ada gunanya"*) — kasus kelima di
-proyek ini setelah `chunkFrames`, `kLimiterThreshold`, `setTargetFormat`, dan
-`setDurationFrames`. Semuanya muncul dengan bentuk sama: **struktur lengkap,
-terkompilasi, terdokumentasi, tanpa jalur pemanggilan.**
+Pola ini konsisten dengan #9 `TROUBLESHOOTING.md` ("parameter config yang tidak
+dibaca tidak ada gunanya") — kasus kelima setelah `chunkFrames`,
+`kLimiterThreshold`, `setTargetFormat`, `setDurationFrames`.
 
-Audit ini belum mengubah kode apa pun. Menunggu keputusan Opsi A/B/C.
+**Pelajaran v1 → v2:** "nol pemanggil" tidak sama dengan "sampah". Yang
+diperlukan bukan penghapusan, tapi **pelacakan status per node**. Kelas yang
+belum diimplementasi harus dibedakan dari kelas yang sudah jalan tapi belum
+tersambung, dan keduanya dari yang mengaku jadi.
+
+Audit ini belum mengubah kode apa pun.

@@ -194,6 +194,38 @@ masalah latency nyata = kontrol yang membingungkan tanpa manfaat.
 
 **Yang membuka jalan.** Laporan underrun/glitch pada device tertentu.
 
+### I-12. Fitur DSP yang belum diimplementasi (9 kelas di `dsp/`)
+
+**Apa.** Sembilan kelas di `android/app/src/main/cpp/dsp/` yang **nol pemanggil**
+dari jalur produksi. Ini **bukan dead code** — ini fitur yang belum
+diimplementasi, atau sudah jadi tapi belum tersambung. Jangan dihapus.
+
+| Kelas | Keadaan | Yang membuka jalan |
+|---|---|---|
+| `CrossfeedProcessor` | **algoritma nyata**, belum tersambung | UI crossfeed headphone |
+| `StateVariableFilter` | **implementasi nyata**, belum dipakai | filter parametrik/LPF-HPF di UI |
+| `ToneControl` | **implementasi nyata** (low/high shelf) | kontrol bass/treble terpisah dari EQ 10-band |
+| `DCBlocker` | **implementasi nyata** | dipakai `OutputStage`; butuh keputusan `OutputStage` dulu |
+| `ConvolverNode` + `FIRFilter` | **konvolusi nyata**, butuh IR | `IRLoader` diisi + UI pemilihan IR |
+| `HeadphoneCorrection` | `loadProfile` → `true` palsu, FIR trivial | basis data profil headphone |
+| `BinauralRenderer` | copy mono ke L/R, tanpa HRTF | HRTF dataset + renderer |
+| `FFTResonanceAnalyzer` | akumulasi buffer; `mPlan` tak dipakai; `getDominantFrequency` → 0 | analisis spektrum nyata (FFT-nya sudah ada) |
+| `PartitionedConvolver` | `prepare`/`reset` saja, **tanpa `process`** | IR panjang (reverb) |
+| `IRLoader` | `// TODO:` | format IR + pemuat berkas |
+
+**Mengapa belum.** Tidak ada jalur UI yang meminta fitur ini; `FEATURES.md`
+menandainya `SEBAGIAN / belum diverifikasi` untuk `convolution/` + `headphone/`.
+
+**Yang membuka jalan.** Permintaan fitur nyata dari sisi pengguna (koreksi
+headphone, crossfeed, reverb IR). Sampai itu ada, kelas-kelas ini **tidak
+merugikan** selama tidak mengaku jadi — lihat Prioritas 1 di
+`DSP_CHAIN_AUDIT.md` untuk dua yang saat ini mengaku jadi
+(`HeadphoneCorrection::loadProfile`, `BinauralRenderer`).
+
+**Catatan.** `OutputStage` **bukan** bagian dari daftar ini: ia duplikat konsep
+yang sudah dimiliki `DSPChain` (`GainNode` + `LimiterNode`), jadi masuk kategori
+§4.3 `BOILERPLATE_AND_STUBS.md` (dua struktur paralel), bukan fitur masa depan.
+
 ---
 
 ## Catatan: ide yang sudah dinilai dan ditolak
