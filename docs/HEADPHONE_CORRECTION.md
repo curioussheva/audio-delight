@@ -196,8 +196,8 @@ Bukan "filenya ada".
 |---|---|---|
 | **A** | `setHighShelf()` di `BiquadFilter`; buka error laten `ToneControl` | **✅ SELESAI 2026-10-10** |
 | **B** | `BiquadCascade` — 16 biquad, `setFilter(i, type, freq, q, gain)`, preamp | **✅ SELESAI 2026-10-10** |
-| **C** | Parser parametrik (AutoEQ/Squiglink `.txt`) | B ✅ |
-| **D** | Storage + UI: daftar profil, pilih, aktif/nonaktif | C |
+| **C** | Parser parametrik (AutoEQ/Squiglink `.txt`) | **✅ SELESAI 2026-10-10** |
+| **D** | Storage + UI: daftar profil, pilih, aktif/nonaktif | C ✅ |
 | **E** | Database model populer (kurasi terbatas) | D |
 | **F** | Parser graphic EQ 127-band | B ✅ |
 | **G** | Parser `.vdc` (opsional) | B ✅ |
@@ -238,6 +238,49 @@ Regresi: `test_dsp_wiring` 9/9 dan `test_highshelf` 14/14 tetap lulus.
 **Belum tersambung.** `BiquadCascade` belum punya pemanggil dari jalur produksi
 — statusnya **STUB SIAP**, bukan NYATA. Penyambungannya butuh parser (Fase C)
 dan keputusan di mana ia duduk di `DSPChain`.
+
+### 10.3 Fase C ✅ — `dsp/PresetParser.{h,cpp}`
+
+Parser teks AutoEQ/Squiglink parametrik. **Murni** — tidak membuka berkas,
+tidak menyentuh I/O; pemanggil yang membaca berkas. Itu yang membuatnya bisa
+diuji standalone di Termux tanpa device.
+
+API:
+- `parseParametricPreset(text, name)` → `ParseResult { ok, preset, error, warnings }`
+- `applyPreset(cascade, preset, sampleRate)` → isi `BiquadCascade`
+
+Yang ditangani:
+- `Preamp: -6.8 dB`, termasuk koma desimal (`-3,5`)
+- `Filter N: ON|OFF PK|LSC|HSC Fc .. Hz Gain .. dB Q ..`
+- Alias tipe: `PK`/`PEQ`/`PEAK`/`PEAKING`, `LSC`/`LS`/`LOWSHELF`,
+  `HSC`/`HS`/`HIGHSHELF`
+- Satuan opsional (`Hz`, `kHz` — dikonversi, `dB`)
+- **Urutan kunci bebas** (`Q 0.5 Fc 2000 Hz Gain -4.5 dB`)
+- Komentar `#`, baris kosong
+- `Filter ... OFF` dilewati tanpa menggeser urutan filter aktif
+
+**Preset cacat DITOLAK, tidak diterapkan sebagian.** Ini yang membedakannya dari
+parser yang "baik hati": kalau 1 dari 3 baris filter gagal dibaca, hasilnya
+gagal dengan `"hanya 2 dari 3 baris filter yang terbaca"` — bukan 2 filter yang
+diam-diam diterapkan.
+
+Diverifikasi `scripts/test_preset_parser.cpp` — **44/44 lulus**:
+
+| # | Yang diuji | Hasil |
+|---|---|---|
+| 1 | preset AutoEQ nyata (4 filter + preamp) | semua nilai tepat, tanpa peringatan |
+| 2 | 6 alias tipe filter | semua terpetakan benar |
+| 3 | urutan bebas + koma desimal | preamp −3.5, Fc 2000, gain −4.5, Q 0.5 |
+| 4 | cacat: baris rusak / tanpa filter / kosong / 20 filter | semuanya GAGAL dengan alasan |
+| 5 | filter OFF | 2 dari 4 aktif; yang OFF tidak berefek (100 Hz = −0.97 dB, cuma preamp) |
+| 6 | respons audio preset nyata | 700 Hz −6.48, 60 Hz +1.37, 16 kHz −8.58 dB |
+| 7 | laju 44.1k & 96k | +6.00 dB di keduanya |
+
+Regresi: `test_biquad_cascade` 16/16, `test_highshelf` 14/14, `test_dsp_wiring`
+9/9 tetap lulus.
+
+**Belum tersambung.** Sama seperti B: parser punya pemanggil di test, belum di
+jalur produksi. Fase D (storage + UI) yang menyambungkannya.
 
 ## 11. Verifikasi yang direncanakan
 
