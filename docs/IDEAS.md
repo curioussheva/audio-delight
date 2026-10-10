@@ -226,6 +226,70 @@ merugikan** selama tidak mengaku jadi — lihat Prioritas 1 di
 yang sudah dimiliki `DSPChain` (`GainNode` + `LimiterNode`), jadi masuk kategori
 §4.3 `BOILERPLATE_AND_STUBS.md` (dua struktur paralel), bukan fitur masa depan.
 
+### I-13. Impor profil koreksi headphone (Squiglink / AutoEQ / Viper DDC)
+
+**Apa.** Satu mesin cascade biquad dengan beberapa parser format. Ketiga acuan
+pada dasarnya mesin yang **sama** — bedanya hanya dari mana koefisien datang:
+
+| Acuan | Bentuk data | Koefisien |
+|---|---|---|
+| **ViPER DDC** | `.vdc` — 5 float per filter (`b0,b1,b2,a1,a2`), `arrSize/5` filter | sudah jadi, **precomputed hanya untuk 44100 & 48000** |
+| **Wavelet** | AutoEQ graphic EQ **127 band** | gain di grid tetap → turunkan koefisien |
+| AutoEQ / squiglink parametric | `Fc / Q / Gain / tipe` (`PK`/`LSC`/`HSC`) | hitung saat runtime |
+
+**Biaya CPU** (5 mult/sample/biquad × 2 ch @ 48 kHz):
+
+| Pendekatan | Filter | Mult/detik | State |
+|---|---|---|---|
+| Graphic 127-band | 127 | **61.0 M** | 6.9 KB |
+| Parametric | 5-16 | **2.4-7.7 M** | ~0.5 KB |
+
+127-band **8-25× lebih mahal** dan kurang akurat: `Fc` dibulatkan ke grid 127
+titik, jadi filter presisi (mis. notch 6.3 kHz) meleset. Parametric menaruh
+filter tepat di `Fc` yang diminta.
+
+**Keunggulan yang sudah kita punya.** Viper DDC hanya punya 2 set koefisien
+(44.1k & 48k) karena `.vdc` menyimpan koefisien **statis**. Kita menghitung
+koefisien saat runtime dengan laju stream **nyata** (`EQNode::prepare(sampleRate)`,
+diperbaiki 2026-10-10) — jadi berlaku untuk 44.1/48/88.2/96/176.4/192 kHz tanpa
+tabel tambahan.
+
+**Mengapa ini layak.** `docs/archive/ConsolidationV2.md` (F2, 15 Sep) sudah
+menetapkannya sebagai diferensiasi: **AutoEQ Import — Wavelet ⚠️ Manual · V4A
+✅ Manual · PristineAudio ✅ Built-in**. Dokumen itu juga mencatat kenapa
+built-in lebih *benar*, bukan sekadar lebih mudah:
+
+```
+Player (AudioTrack) → AudioFlinger Mixer ← V4A/Wavelet inject DI SINI
+                      → Audio HAL → DAC
+```
+
+Implikasi yang dicatat di sana: kalau volume < 100%, sample **sudah di-scale
+sebelum DSP**; notifikasi ter-mix dengan musik. Pipeline Oboe milik Pristine
+berada **sebelum** mixer, di dalam proses sendiri.
+
+**Blocker.** `BiquadFilter` tidak punya `setHighShelf()` — `ToneControl.h:33`
+memanggilnya dan **gagal dikompilasi** (error laten: badan member non-template
+hanya di-emit kalau odr-used). Preset AutoEQ/squiglink hampir selalu memuat `HSC`.
+Harus ditutup lebih dulu. Sudah diverifikasi bahwa `ToneControl` satu-satunya
+dari 15 header `dsp/` yang bermasalah; CMake memakai `GLOB_RECURSE` sehingga
+seluruh 24 `.cpp` di `dsp/` ikut dikompilasi.
+
+**Preamp wajib.** Preset AutoEQ selalu menyertakan preamp negatif (mis.
+−6.8 dB) justru karena band di-boost. Tanpa itu limiter bekerja terus.
+
+**Mengapa belum.** Fitur baru, bukan perbaikan wiring: parser, storage, UI
+pemilihan. `HeadphoneCorrection` sekarang berbentuk **FIR**
+(`applyFIR()`, `mFilterLeft: vector<float>`) — bentuk untuk impulse response,
+bukan parametric. Untuk Squiglink komponennya harus diubah bentuk.
+
+**Yang membuka jalan.** Keputusan operator soal (1) format impor pertama,
+(2) posisi di chain — sebelum user EQ 10-band atau menggantikannya,
+(3) database profil bawaan vs murni impor berkas.
+
+**Catatan.** Koreksi headphone mengubah sinyal, jadi hanya boleh aktif di mode
+DSP/Immersive — **tidak** di BitPerfect.
+
 ---
 
 ## Catatan: ide yang sudah dinilai dan ditolak
