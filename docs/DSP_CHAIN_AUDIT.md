@@ -381,6 +381,27 @@ biquad dihitung dengan laju 48 kHz → tiap band meleset ~8.8% (band 1 kHz jatuh
 di ~919 Hz). Laten selama EQ belum tersambung; langsung terdengar begitu
 dinyalakan.
 
+**Bass boost: slider 0..1000 diteruskan sebagai dB.** `HorizontalSlider` JS
+berjalan 0..1000 (persen), tapi Kotlin meneruskannya apa adanya ke
+`setNativeBassBoost(gainDb)` → low-shelf. Slider 50% = **+500 dB** di 100 Hz.
+Laten selama `AudioEngine::setBassBoost()` bodi kosong; terbangun begitu jalur
+disambungkan. Sekarang dipetakan ke 0..+12 dB (sejajar rentang band EQ UI).
+
+**Stereo widener tidak pernah melebarkan.** `setVirtualizer` mengirim
+`strength/1000` → 0.0..1.0, sedangkan `StereoWidener` memakai skala 0.0 = mono,
+1.0 = stereo asli, 2.0 = ultra wide. Jadi slider "WIDTH" hanya bisa dari mono
+sampai stereo asli — namanya widener, perilakunya narrower. Sekarang
+`1.0 + strength/1000` → 0 = tidak berubah, 1000 = side ×2.0.
+
+> Sengaja **bukan** 0.0..2.0: dengan pemetaan itu, nilai default `0` (dan posisi
+> 50%) akan melebur stereo jadi mono hanya karena user menyalakan EQ. Melebar
+> tidak boleh menghilangkan stereo. Rentang 0..1000 mengikuti konvensi
+> `android.media.audiofx.Virtualizer.setStrength()`, asal slider ini — di sana
+> 0 berarti "tidak ada efek", bukan "mono".
+
+Clipping di width tinggi ditahan `LimiterNode`, yang berada **setelah**
+`StereoWidenerNode` dalam graph (`EQ → Widener → Gain → Limiter`).
+
 ### 7.3 Verifikasi
 
 `scripts/test_dsp_wiring.cpp` — standalone, mengompilasi sumber DSP asli

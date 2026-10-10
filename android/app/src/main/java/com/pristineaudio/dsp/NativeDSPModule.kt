@@ -135,7 +135,27 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     fun setVirtualizer(strength: Float, sessionId: Int, promise: Promise) {
         if (!engineAvailable) { promise.resolve(false); return }
         try {
-            setNativeStereoWide(strength / 1000.0f)
+            // �� FIX (2026-10-10): slider ini bernama "WIDTH" di UI, jadi harus
+            // benar-benar MELEBARKAN.
+            //
+            // `StereoWidener` (dsp/StereoWidener.h) memakai skala:
+            //     0.0 = mono   1.0 = stereo asli   2.0 = ultra wide
+            // dan meng-clamp ke [0,2].
+            //
+            // Sebelumnya: `strength / 1000.0f` -> 0.0..1.0. Jadi slider hanya
+            // bisa dari MONO sampai stereo asli, dan tidak pernah melebihi
+            // aslinya. Namanya widener, perilakunya narrower.
+            //
+            // Sekarang: 0 -> 1.0 (tidak ada perubahan), 1000 -> 2.0 (ultra
+            // wide). Rentang 0..1000 ini konvensi `android.media.audiofx.
+            // Virtualizer.setStrength()`, tempat slider ini berasal - di sana
+            // 0 berarti "tidak ada efek", bukan "mono".
+            //
+            // Sengaja BUKAN 0.0..2.0: kalau begitu, nilai default 0 (dan posisi
+            // 50%) akan melebur stereo jadi mono hanya karena user menyalakan
+            // EQ. Melebar tidak boleh menghilangkan stereo.
+            val width = 1.0f + strength / 1000.0f
+            setNativeStereoWide(width)
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("DSP_ERROR", e.message)
