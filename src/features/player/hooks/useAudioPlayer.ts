@@ -13,6 +13,19 @@ export const useAudioPlayer = () => {
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
 
+  // 🔥 FIX (2026-10-10): ambil currentSong dari STORE, bukan useState lokal.
+  //
+  // Sebelumnya currentSong duplikat: useState lokal di hook + field di store.
+  // loadSong() memanggil setCurrentSong(song) — tapi setCurrentSong yang mana?
+  // Hook memanggil store.setCurrentSong (line bawah), JADI store diperbarui.
+  // TAPI yang membaca currentSong dari useAudioPlayer() dapat undefined
+  // permanen, karena hook tidak expose currentSong apa pun.
+  //
+  // Akibat: auto-advance native (track-ended) memperbarui store lewat
+  // syncFromNative(), tapi komponen yang membaca currentSong dari hook ini
+  // tetap menunjuk lagu lama → UI mismatch.
+  const currentSong = usePlayerStore((state) => state.currentSong);
+
   // Ambil actions dari Player Store
   const setCurrentSong = usePlayerStore((state) => state.setCurrentSong);
   const setPositionStore = usePlayerStore((state) => state.setPosition);
@@ -62,8 +75,13 @@ useEffect(() => {
   const interval = setInterval(async () => {
     try {
       const status = await NativePlaybackService.getStatus();
-      setIsPlaying(status === 1);
       const pos = await NativePlaybackService.getPosition();
+
+      // 🔥 FIX (2026-10-10): sinkronkan local state dengan STATUS NATIVE
+      // (1=PLAYING), bukan kondisi sebelumnya. Ini sumber kebenaran untuk
+      // isPlaying UI setelah pause: getStatus() native kembali 2 (PAUSED)
+      // setelah pause() berhasil, jadi isPlaying lokal akan false.
+      setIsPlaying(status === 1);
       setPosition(pos / 1000);
       setPositionStore(pos / 1000);
       setDurationStore(duration);
@@ -160,6 +178,10 @@ useEffect(() => {
     isPlaying,
     position,
     duration,
+    // 🔥 FIX (2026-10-10): expose currentSong dari store (sumber tunggal).
+    // Auto-advance native memperbarui store lewat syncFromNative();
+    // komponen yang membaca ini tidak boleh tertinggal di lagu lama.
+    currentSong,
     isLoading: !isReady.current,
   };
 };

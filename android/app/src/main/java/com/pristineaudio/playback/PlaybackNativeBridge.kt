@@ -14,12 +14,34 @@ object PlaybackNativeBridge {
             return false
         }
         android.util.Log.d("PlaybackNativeBridge", "play() called")
-        return inst.playFromService()
+        val ok = inst.playFromService()
+
+        // 🔥 FIX (2026-10-10): mirror perbaikan pause() — MediaSession harus
+        // diupdate di jalur native juga, bukan hanya dari JS position watcher.
+        if (ok) {
+            val positionMs = inst.getPositionFromService()
+            PlaybackService.instance?.updatePlaybackState(true, positionMs.toLong())
+        }
+        return ok
     }
 
     fun pause() {
         android.util.Log.d("PlaybackNativeBridge", "pause() called")
         NativePlaybackModule.instance?.pauseFromService()
+
+        // 🔥 FIX (2026-10-10): update MediaSession setelah pause native.
+        //
+        // Sebelumnya pause() hanya memanggil native (menghentikan decoder),
+        // tapi tidak pernah memberi tahu MediaSession. MediaSessionManager
+        // hanya diupdate lewat updatePlaybackState(isPlaying=false, ...) yang
+        // dipanggil dari JS (position watcher). Kalau JS bridge lambat atau
+        // playback state di-push saat isPlaying masih true, lock screen /
+        // notification tetap menampilkan PLAYING.
+        //
+        // Bukti dari log 2026-10-10_02-06-52: "pause() called" 2x, tapi
+        // MediaSessionService melaporkan 657x state=PLAYING(3), 0x PAUSED.
+        val positionMs = NativePlaybackModule.instance?.getPositionFromService() ?: 0.0
+        PlaybackService.instance?.updatePlaybackState(false, positionMs.toLong())
     }
 
     fun stop() {

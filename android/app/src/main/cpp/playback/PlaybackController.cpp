@@ -103,7 +103,28 @@ bool PlaybackController::hasDecoder() const noexcept {
 
 bool PlaybackController::next() {
     if (!queue_) return false;
-    auto track = queue_->next();
+
+    // 🔥 FIX (2026-10-10): pakai advance(), BUKAN next() (peek const).
+    //
+    // BUG: next() sebelumnya memanggil queue_->next() yang adalah peeker
+    // const — mengembalikan queue[idx+1] TANPA memperbarui mCurrentIndex.
+    // Audio berpindah ke trek berikutnya (loadTrack jalan), tapi pointer
+    // internal queue masih di trek lama.
+    //
+    // Konsekuensi:
+    //   1. getCurrentTrack()/current() masih laporkan trek lama → UI mismatch
+    //      ("lagu di UI ≠ lagu yang diputar").
+    //   2. Auto-advance EOF berikutnya memanggil advance() yang menambah
+    //      mCurrentIndex dari POSISI LAMA — melompati trek atau memutar trek
+    //      sama dua kali (log: playSong A, next → B, lalu EOF advance dari
+    //      index 0 → B lagi).
+    //
+    // advance() memperbarui mCurrentIndex sesuai repeat mode, lalu current()
+    // memberikan trek yang benar. Sama seperti yang scheduleAdvance() lakukan
+    // untuk auto-advance EOF.
+    if (!queue_->advance()) return false;
+
+    auto track = queue_->current();
     if (track) {
         return loadTrack(*track);
     }
@@ -112,7 +133,15 @@ bool PlaybackController::next() {
 
 bool PlaybackController::previous() {
     if (!queue_) return false;
-    auto track = queue_->previous();
+
+    // 🔥 FIX (2026-10-10): pakai retreat(), BUKAN previous() (peek const).
+    // Alasan sama dengan next(): previous() const hanya peek queue[idx-1]
+    // tanpa memperbarui mCurrentIndex. Keluhan "previous cuma seek awal,
+    // lagu tidak berubah" berasal dari sini — loadTrack jalan, tapi queue
+    // pointer tidak mundur, sehingga trek setelahnya kacau.
+    if (!queue_->retreat()) return false;
+
+    auto track = queue_->current();
     if (track) {
         return loadTrack(*track);
     }
@@ -354,7 +383,19 @@ void PlaybackController::render(float* output,
         if (decoderWorker_) {
             size_t avail = pcmQueue_->availableFrames();
             size_t cap = pcmQueue_->capacityFrames();
-            if (avail < cap * 60 / 100 && decoderWorker_->isPaused()) {
+            // 🔥 FIX (2026-10-10): JANGAN resume decoder saat user menekan pause.
+            //
+            // BUG: render() dipanggil tiap ~10ms oleh audio thread. Cek
+            // avail < 60% ini untuk menjaga queue terisi — TANPA memeriksa
+            // playing_. User menekan pause → pause() memanggil
+            // decoderWorker_->pause() → tapi 10ms kemudian render() melihat
+            // queue sudah < 60% (karena drain) → memanggil resume() → decoder
+            // balai mengisi lagi → audio TIDAK PERNAH berhenti.
+            //
+            // Bukti dari log 2026-10-10_02-06-52: 2x "pause() called",
+            // tapi system MediaSession 657x state=PLAYING(3), 0x state=PAUSED.
+            // Audio terus jalan, posisi terus merangkak naik (4136→5160→6168).
+            if (avail < cap * 60 / 100 && playing_.load(std::memory_order_acquire)) {
                 decoderWorker_->resume();
             }
         }
@@ -425,7 +466,7 @@ if (renderDebugCount % 100 == 0 && readSamples > 0) {
         );
     }
 
-    // 🔥 FIX (2026-10-09): clock hanya boleh maju untuk audio nyata.
+    // 🔥 FIX (2026-10-10): clock hanya boleh maju untuk audio nyata.
     //
     // BUG A (posisi melompat ke 72 menit): advanceFrames(frames) dipanggil
     // di SETIAP callback, termasuk saat PAUSED. Saat paused queue kosong,
@@ -436,9 +477,22 @@ if (renderDebugCount % 100 == 0 && readSamples > 0) {
     // BUG B (speed 2.00x konstan): PCMQueue menghitung SAMPLE, bukan FRAME.
     //   log: render readSamples=1664 (frames=832 ch=2)
     // Stereo → clock maju 2x lipat. Bagi channel dulu.
+    //
+    // BUG C (2026-10-10, "position merangkak saat paused"): clock maju
+    // untuk sampel YANG MASIH ADA DI QUEUE saat user menekan pause.
+    // DecoderWorker::pause() menghentikan pengisian, tapi PCMQueue masih
+    // menyisa ~1-2 detik audio ter-buffer. render() terus memanggil read()
+    // (mengosongkan queue ke speaker = benar, drain itu yang diinginkan)
+    // dan clock ikut maju untuk audio itu — padahal user sudah pause.
+    //   log: pause() @ 02:08:29 → MediaSession posisi 4136 → 5160 → 6168
+    //   Tapi DIAG melaporkan PAUSED pos=5896ms (posisi benar setelah drain).
+    //
+    // Jadi: saat paused, audio memang boleh drain (lebih baik diam),
+    // tapi clock harus berhenti. Posisi yang dilaporkan kembali ke posisi
+    // saat pause ditekan, bukan posisi setelah buffer habis.
     const uint32_t ch = (channels > 0) ? channels : 1;
     const uint32_t advancedFrames = static_cast<uint32_t>(readSamples) / ch;
-    if (advancedFrames > 0) {
+    if (advancedFrames > 0 && playing_.load(std::memory_order_acquire)) {
         clock_->advanceFrames(advancedFrames);
     }
 

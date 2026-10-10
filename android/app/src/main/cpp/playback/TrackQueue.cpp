@@ -257,10 +257,21 @@ bool TrackQueue::retreat() {
 
     std::lock_guard lock(mMutex);
 
-    if (
-        mTracks.empty() ||
-        mCurrentIndex == 0
-    ) {
+    if (mTracks.empty()) {
+        return false;
+    }
+
+    // 🔥 FIX (2026-10-10): wrap-around saat repeat All.
+    //
+    // Versi lama langsung return false kalau mCurrentIndex == 0, jadi
+    // previous() di trek pertama no-op meskipun repeat All aktif. Tombol
+    // previous() PlaybackController memakai retreat() sekarang, jadi
+    // perilaku ini jadi terlihat oleh user.
+    if (mCurrentIndex == 0) {
+        if (mRepeatMode == RepeatMode::All && !activeQueue().empty()) {
+            mCurrentIndex = activeQueue().size() - 1;
+            return true;
+        }
         return false;
     }
 
