@@ -7,6 +7,7 @@
 
 #include <functional>
 #include <memory>
+#include <string>
 #include "AudioBufferController.h"
 #include "AudioCallback.h"
 #include "AudioMetrics.h"
@@ -153,6 +154,29 @@ public:
     void setBassBoost(
         float gainDb
     );
+
+    // =============================================
+    // KOREKSI HEADPHONE (Fase D)
+    // =============================================
+    //
+    // Menerima TEKS preset (format AutoEQ/Squiglink). Parsing dilakukan DI
+    // SINI — di thread pemanggil (UI thread), bukan di audio thread. Hasilnya
+    // dikonversi ke bentuk POD lalu disimpan lewat seqlock.
+    //
+    // Mengembalikan false kalau preset tidak bisa dibaca. Pemanggil WAJIB
+    // memeriksa: preset cacat ditolak, bukan diterapkan sebagian.
+    bool loadHeadphonePreset(
+        const std::string& presetText,
+        const std::string& name = ""
+    );
+
+    void clearHeadphonePreset();
+
+    void setHeadphoneCorrectionEnabled(
+        bool enabled
+    );
+
+    bool isHeadphoneCorrectionEnabled() const;
 
     void setEqBand(
         int band,

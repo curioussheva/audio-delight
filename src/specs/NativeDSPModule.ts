@@ -82,6 +82,29 @@ export interface Spec extends TurboModule {
    */
   setDSPProcessingEnabled(enabled: boolean): void;
   isDSPProcessingEnabled(): boolean;
+
+  // =============================================
+  // KOREKSI HEADPHONE
+  // =============================================
+
+  /**
+   * Muat preset koreksi headphone dari teks (format AutoEQ/Squiglink).
+   *
+   * Resolve `true` kalau preset terpasang, `false` kalau ditolak. Preset cacat
+   * DITOLAK seluruhnya, tidak diterapkan sebagian - pemanggil WAJIB memeriksa
+   * hasilnya dan memberi tahu user.
+   */
+  loadHeadphonePreset(presetText: string): Promise<boolean>;
+
+  clearHeadphonePreset(): Promise<boolean>;
+
+  /**
+   * Nyalakan/matikan koreksi. Koreksi hanya berlaku kalau ada preset
+   * terpasang; tanpa preset, node dilewati sepenuhnya.
+   */
+  setHeadphoneCorrectionEnabled(enabled: boolean): void;
+
+  isHeadphoneCorrectionEnabled(): Promise<boolean>;
 }
 
 /**

@@ -777,6 +777,40 @@ void EngineManager::setBassBoost(
     );
 }
 
+// =====================================================
+// KOREKSI HEADPHONE (Fase D)
+// =====================================================
+
+bool EngineManager::loadHeadphonePreset(
+    const std::string& presetText,
+    const std::string& name
+) {
+
+    return mEngine.loadHeadphonePreset(
+        presetText,
+        name
+    );
+}
+
+void EngineManager::clearHeadphonePreset() {
+
+    mEngine.clearHeadphonePreset();
+}
+
+void EngineManager::setHeadphoneCorrectionEnabled(
+    bool enabled
+) {
+
+    mEngine.setHeadphoneCorrectionEnabled(
+        enabled
+    );
+}
+
+bool EngineManager::isHeadphoneCorrectionEnabled() const {
+
+    return mEngine.isHeadphoneCorrectionEnabled();
+}
+
 void EngineManager::setSolfeggioFreq(float freq) {
     mEngine.setSolfeggioFreq(freq);
 }

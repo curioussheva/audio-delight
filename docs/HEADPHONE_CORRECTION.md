@@ -179,16 +179,19 @@ Bukan "filenya ada".
 | Node | Status | Bukti / yang kurang |
 |---|---|---|
 | `BiquadFilter` (RBJ) | **NYATA** | `setPeakingEQ` + `setLowShelf` dipakai `EQProcessor`; diverifikasi `scripts/test_dsp_wiring.cpp` |
-| `BiquadFilter::setHighShelf` | **BELUM** | belum ada — §8.1 |
+| `BiquadFilter::setHighShelf` | **NYATA** | dipakai `BiquadCascade`; `scripts/test_highshelf.cpp` 14/14 |
 | `EQProcessor` (10-band) | **NYATA** | tersambung 2026-10-10 (`applyDSPConfig`) |
-| `HeadphoneCorrection` | **PUTUS** | nol pemanggil; `loadProfile` → `false` |
-| Parser parametrik | **BELUM** | belum ditulis |
-| Parser graphic | **BELUM** | belum ditulis |
-| Parser `.vdc` | **BELUM** | belum ditulis |
-| Storage profil | **BELUM** | belum ada |
-| UI pemilihan profil | **BELUM** | belum ada |
-| Preamp | **BELUM** | `GainNode` ada, tapi tidak ada yang menyetel preamp |
-| Database model populer | **BELUM** | belum ada |
+| `BiquadCascade` | **NYATA** | dipakai `HeadphoneCorrectionNode` di `DSPChain`; `test_biquad_cascade.cpp` 16/16 |
+| `PresetParser` (parametrik) | **NYATA** | dipanggil `AudioEngine::loadHeadphonePreset` ← JNI ← Kotlin; `test_preset_parser.cpp` 44/44 |
+| `HeadphoneCorrectionNode` | **NYATA** | node ke-1 di `DSPChain::buildGraph()`; terdengar lewat `test_phase_d.cpp` §6 |
+| Jembatan JNI/Kotlin/TS | **NYATA** | 21 external fun berpasangan (`check_jni_pairs.py`); `loadHeadphonePreset` di `specs/NativeDSPModule.ts` |
+| `HeadphoneCorrection` (lama) | **PUTUS** | nol pemanggil; FIR placeholder, bukan parametrik. Digantikan `BiquadCascade` — hapus kalau tidak ada rencana FIR |
+| Parser graphic 127-band | **BELUM** | Fase F |
+| Parser `.vdc` | **BELUM** | Fase G (opsional) |
+| Storage profil (persist) | **BELUM** | preset belum bertahan setelah app ditutup |
+| UI pemilihan profil | **BELUM** | belum ada layar |
+| Preamp | **NYATA** | `BiquadCascade::setPreamp`, diterapkan sebelum filter |
+| Database model populer | **BELUM** | Fase E |
 
 ## 10. Tahapan
 
@@ -197,8 +200,8 @@ Bukan "filenya ada".
 | **A** | `setHighShelf()` di `BiquadFilter`; buka error laten `ToneControl` | **✅ SELESAI 2026-10-10** |
 | **B** | `BiquadCascade` — 16 biquad, `setFilter(i, type, freq, q, gain)`, preamp | **✅ SELESAI 2026-10-10** |
 | **C** | Parser parametrik (AutoEQ/Squiglink `.txt`) | **✅ SELESAI 2026-10-10** |
-| **D** | Storage + UI: daftar profil, pilih, aktif/nonaktif | C ✅ |
-| **E** | Database model populer (kurasi terbatas) | D |
+| **D** | Storage + UI: daftar profil, pilih, aktif/nonaktif | **✅ SELESAI 2026-10-10** |
+| **E** | Database model populer (kurasi terbatas) | D ✅ |
 | **F** | Parser graphic EQ 127-band | B ✅ |
 | **G** | Parser `.vdc` (opsional) | B ✅ |
 
@@ -281,6 +284,71 @@ Regresi: `test_biquad_cascade` 16/16, `test_highshelf` 14/14, `test_dsp_wiring`
 
 **Belum tersambung.** Sama seperti B: parser punya pemanggil di test, belum di
 jalur produksi. Fase D (storage + UI) yang menyambungkannya.
+
+### 10.4 Fase D ✅ — tersambung ke jalur produksi
+
+Ini fase yang mengubah seluruh rantai dari STUB SIAP jadi **NYATA**. Preset kini
+benar-benar melewati pemrosesan audio.
+
+Jalur lengkap, hulu → hilir:
+
+```
+JS: NativeDSPModule.loadHeadphonePreset(teks)
+  → Kotlin: @ReactMethod loadHeadphonePreset
+    → JNI: nativeLoadHeadphonePreset        (parse di UI thread)
+      → AudioEngine::loadHeadphonePreset    (parseParametricPreset + toPresetData)
+        → AudioState::setHeadphonePreset    (seqlock write, POD ~272 byte)
+          ── batas thread ──
+          → AudioCallback::updateParameters (seqlock read, di luar loop sample)
+            → DSPParameters.headphonePreset
+              → AudioPipeline::applyDSPConfig
+                → DSPConfig.headphonePreset
+                  → HeadphoneCorrectionNode::applyConfig
+                    → BiquadCascade::setFilter  (koefisien dihitung di sini)
+```
+
+**Keputusan yang diambil:**
+
+| Masalah | Keputusan | Alasan |
+|---|---|---|
+| Teks preset harus menyeberang ke audio thread | Parse di UI thread, kirim POD | Audio thread tidak boleh mengalokasi (`std::string`/`std::vector` dilarang) |
+| Transfer antar-thread | **Seqlock**, bukan mutex | Mutex membuat audio thread menunggu UI thread = glitch |
+| Koefisien biquad mahal (`powf/cosf/sinf`) | Hitung saat preset **berubah** saja | Menghitung 16 biquad tiap buffer membebani audio thread tanpa manfaat |
+| Posisi di rantai | Sebelum `EQNode` | Koreksi = netralisasi alat, EQ = selera (§5) |
+| Preset gagal dibaca | `return false`, tidak memasang apa pun | §2: gagal berisik |
+
+**Diverifikasi** `scripts/test_phase_d.cpp` — **36/36 lulus** (stabil di 3 kali
+jalan):
+
+| # | Yang diuji | Hasil |
+|---|---|---|
+| 1 | `toPresetData` (kode produksi, bukan salinan) | tipe/freq/preamp tepat; POD `trivially_copyable` |
+| 2 | **Seqlock di bawah konkurensi** | 823.655 penulisan vs 107.141 pembacaan, **0 robek** |
+| 3 | node menerapkan preset | 700 Hz −6.48, 60 Hz +1.37, 16 kHz −8.58 dB |
+| 4 | bypass saat nonaktif / tanpa preset | buffer **bit-exact** |
+| 5 | ganti preset saat koreksi aktif | −6.56 → +6.00 dB (benar-benar dihitung ulang) |
+| 6 | **END-TO-END lewat `DSPChain` nyata** | koreksi terdengar di rantai; tanpa koreksi puncak tetap 0.2000 |
+
+Uji #2 dan #6 yang paling penting. #6 membuktikan jalur lengkap — kalau node
+tidak ada di rantai, ketiga frekuensi akan sama-sama 0 dB. #2 membuktikan
+transfer antar-thread tidak robek.
+
+**Dua bug nyata yang ditangkap test ini:**
+
+1. `DSPNode::mEnabled` default `true` → node koreksi "aktif" padahal belum ada
+   preset terpasang. Ditutup: `prepare()` memanggil `setEnabled(false)`.
+2. Seqlock punya jalur fallback "pakai data terakhir yang terbaca" setelah 8
+   percobaan gagal — itu mengembalikan snapshot **robek**. Test konkurensi
+   menangkap 3 robek dari 1,28 juta pembacaan. Ditutup: jalur gagal
+   mengembalikan `false` (lewati koreksi satu buffer — tak terdengar) daripada
+   menerapkan koefisien campuran (bisa menimbulkan pop).
+
+Regresi: `test_preset_parser` 44/44, `test_biquad_cascade` 16/16,
+`test_highshelf` 14/14, `test_dsp_wiring` 9/9, Jest 139/139, `tsc` 0 error,
+`check_jni_pairs.py` 21 external fun cocok.
+
+**Yang belum ada:** storage persisten (preset hilang saat app ditutup), layar
+pemilihan profil, dan database model populer (Fase E).
 
 ## 11. Verifikasi yang direncanakan
 

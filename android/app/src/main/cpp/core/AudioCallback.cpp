@@ -176,6 +176,19 @@ void AudioCallback::updateParameters() {
     }
 
     mParams.bassBoostGain = mState.bassBoost();
+
+    // 🔥 FASE D (2026-10-10): preset koreksi headphone ikut dibaca.
+    //
+    // Yang disalin hanya POD (~272 byte), dan itu di luar loop sample.
+    // Seqlock di AudioState memastikan pembacaan konsisten walau UI thread
+    // sedang menulis preset baru. Kalau tidak ada preset, filterCount = 0 dan
+    // node koreksi dilewati sepenuhnya.
+    mParams.headphoneCorrectionEnabled =
+        mState.isHeadphoneCorrectionEnabled();
+
+    mState.headphonePreset(
+        mParams.headphonePreset
+    );
 }
 
 // =====================================================

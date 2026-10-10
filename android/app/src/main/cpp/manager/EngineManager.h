@@ -144,6 +144,18 @@ public:
     void setLimiterEnabled(bool enabled);
     void setEqBand(int band, float gainDb);
     void setBassBoost(float gainDb);
+
+    // =============================================
+    // KOREKSI HEADPHONE (Fase D)
+    // =============================================
+    //
+    // `presetText` = teks preset AutoEQ/Squiglink. Parsing di thread pemanggil.
+    // Mengembalikan false kalau preset cacat — pemanggil WAJIB memeriksa.
+    bool loadHeadphonePreset(const std::string& presetText,
+                             const std::string& name = "");
+    void clearHeadphonePreset();
+    void setHeadphoneCorrectionEnabled(bool enabled);
+    bool isHeadphoneCorrectionEnabled() const;
     void setMasterGain(float gain);
     void setBalance(float balance);
     void setStereoWide(float width);

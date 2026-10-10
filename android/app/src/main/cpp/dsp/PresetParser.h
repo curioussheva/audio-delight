@@ -33,6 +33,8 @@
 #include <string>
 #include <vector>
 
+#include "../core/AudioTypes.h"
+
 #include "BiquadCascade.h"
 
 namespace pristine {
@@ -95,6 +97,19 @@ bool applyPreset(
     BiquadCascade& cascade,
     const ParsedPreset& preset,
     float sampleRate
+);
+
+// Konversi hasil parse ke bentuk POD yang bisa menyeberangi batas thread.
+//
+// Dipisah dari AudioEngine supaya jalur konversi ini bisa diuji standalone
+// tanpa menarik seluruh engine (JNI, android/log.h). Test yang menyalin ulang
+// logika konversi hanya menguji salinannya, bukan kode produksi.
+//
+// Mengembalikan false kalau tidak ada filter aktif atau jumlahnya melebihi
+// kapasitas. `out` hanya ditulis kalau berhasil.
+bool toPresetData(
+    const ParsedPreset& preset,
+    HeadphonePresetData& out
 );
 
 } // namespace pristine

@@ -6,6 +6,7 @@
 #include "DeviceRateDetector.h"
 #include <android/log.h>
 #include "../playback/PlaybackController.h"
+#include "../dsp/PresetParser.h"
 
 namespace pristine {
 
@@ -350,6 +351,57 @@ void AudioEngine::setEqBand(
     // sehingga EQ 10-band di UI tidak berefek. `setEqGain` sudah ada di
     // AudioState sejak awal tapi nol pemanggil.
     mState.setEqGain(band, gainDb);
+}
+
+// =====================================================
+// KOREKSI HEADPHONE (Fase D)
+// =====================================================
+
+bool AudioEngine::loadHeadphonePreset(
+    const std::string& presetText,
+    const std::string& name
+) {
+
+    // Parsing di thread PEMANGGIL (UI thread). Ini yang menjaga audio thread
+    // bebas dari alokasi dan dari powf/cosf/sinf untuk 16 biquad.
+    const ParseResult parsed =
+        parseParametricPreset(presetText, name);
+
+    if (!parsed.ok) {
+        // Preset cacat: JANGAN pasang apa pun. Mengembalikan false, bukan
+        // memasang sebagian. Lihat docs/BOILERPLATE_AND_STUBS.md §2.
+        return false;
+    }
+
+    HeadphonePresetData data;
+
+    // Konversi di PresetParser (dipakai bersama test), bukan disalin di sini.
+    if (!toPresetData(parsed.preset, data)) {
+        return false;
+    }
+
+    mState.setHeadphonePreset(data);
+
+    return true;
+}
+
+void AudioEngine::clearHeadphonePreset() {
+
+    mState.setHeadphonePreset(
+        HeadphonePresetData{}
+    );
+}
+
+void AudioEngine::setHeadphoneCorrectionEnabled(
+    bool enabled
+) {
+
+    mState.setHeadphoneCorrectionEnabled(enabled);
+}
+
+bool AudioEngine::isHeadphoneCorrectionEnabled() const {
+
+    return mState.isHeadphoneCorrectionEnabled();
 }
 
 // =====================================================

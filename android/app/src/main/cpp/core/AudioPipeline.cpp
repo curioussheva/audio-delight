@@ -166,6 +166,34 @@ bool dspConfigEquals(
         if (a.eqGain[i] != b.eqGain[i]) return false;
     }
 
+    // �� FASE D (2026-10-10): preset koreksi headphone WAJIB dibandingkan.
+    //
+    // Tanpa ini, memilih headphone lain saat koreksi sudah aktif tidak akan
+    // terkirim ke rantai — flag-nya tidak berubah, jadi config dianggap sama.
+    // Bug-nya senyap: UI berubah, suara tidak.
+    if (a.headphoneCorrectionEnabled != b.headphoneCorrectionEnabled) {
+        return false;
+    }
+
+    if (a.headphonePreset.preampDb != b.headphonePreset.preampDb) {
+        return false;
+    }
+
+    if (a.headphonePreset.filterCount != b.headphonePreset.filterCount) {
+        return false;
+    }
+
+    for (int i = 0; i < a.headphonePreset.filterCount; ++i) {
+
+        const auto& fa = a.headphonePreset.filters[i];
+        const auto& fb = b.headphonePreset.filters[i];
+
+        if (fa.type != fb.type) return false;
+        if (fa.freqHz != fb.freqHz) return false;
+        if (fa.q != fb.q) return false;
+        if (fa.gainDb != fb.gainDb) return false;
+    }
+
     return true;
 }
 
@@ -187,6 +215,17 @@ void AudioPipeline::applyDSPConfig(
     for (int i = 0; i < 10; ++i) {
         mDspConfig.eqGain[i] = params.eqGains[i];
     }
+
+    // 🔥 FASE D (2026-10-10): preset koreksi headphone ikut dikirim.
+    //
+    // Bandingkan juga di dspConfigEquals — preset berubah tanpa flag berubah
+    // harus tetap terkirim, kalau tidak, memilih headphone lain saat koreksi
+    // sudah aktif tidak akan terdengar.
+    mDspConfig.headphoneCorrectionEnabled =
+        params.headphoneCorrectionEnabled;
+
+    mDspConfig.headphonePreset =
+        params.headphonePreset;
 
     // `enabled` sengaja SELALU true, bukan `params.dspEnabled`.
     //

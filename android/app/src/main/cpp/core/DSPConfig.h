@@ -87,9 +87,15 @@ struct DSPConfig {
     // =============================================
     // HEADPHONE CORRECTION
     // =============================================
+    //
+    // 🔥 FASE D (2026-10-10): preset hasil parse ikut di sini supaya node
+    // `HeadphoneCorrectionNode` bisa menerapkannya lewat jalur `applyConfig()`
+    // yang sama dengan node lain — tanpa jalur samping.
 
     bool headphoneCorrectionEnabled =
         false;
+
+    HeadphonePresetData headphonePreset;
 
     // =============================================
     // RESET
@@ -122,6 +128,9 @@ struct DSPConfig {
 
         headphoneCorrectionEnabled =
             false;
+
+        headphonePreset =
+            HeadphonePresetData{};
     }
 };
 

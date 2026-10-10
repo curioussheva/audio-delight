@@ -334,6 +334,125 @@ public:
         );
     }
 
+    // =============================================
+    // HEADPHONE CORRECTION
+    // =============================================
+    //
+    // 🔥 FASE D (2026-10-10): jalur koreksi headphone.
+    //
+    // Transfer preset dari UI thread ke audio thread memakai SEQLOCK, bukan
+    // mutex: audio thread TIDAK BOLEH memblokir. Mutex akan membuat audio
+    // thread menunggu UI thread, dan itu berarti glitch.
+    //
+    // Penulis (UI thread) menaikkan seq jadi GANJIL, menulis data, lalu
+    // menaikkannya lagi jadi GENAP. Pembaca (audio thread) membaca seq,
+    // menyalin, lalu membaca seq lagi — kalau berubah, penulisan sedang
+    // berlangsung dan pembacaan diulang. Pembaca tidak pernah menulis apa pun,
+    // jadi tidak ada risiko deadlock.
+    //
+    // Yang disalin hanya ~272 byte, dan itu terjadi di luar loop sample.
+
+    inline void setHeadphoneCorrectionEnabled(
+        bool value
+    ) {
+
+        mHeadphoneCorrectionEnabled.store(
+            value,
+            std::memory_order_release
+        );
+    }
+
+    inline bool isHeadphoneCorrectionEnabled() const {
+
+        return mHeadphoneCorrectionEnabled.load(
+            std::memory_order_acquire
+        );
+    }
+
+    // Penulis: UI thread. Tidak boleh dipanggil dari audio thread.
+    inline void setHeadphonePreset(
+        const HeadphonePresetData& preset
+    ) {
+
+        const uint32_t seq =
+            mPresetSeq.load(
+                std::memory_order_relaxed
+            );
+
+        // Ganjil = penulisan sedang berlangsung.
+        mPresetSeq.store(
+            seq + 1,
+            std::memory_order_relaxed
+        );
+
+        std::atomic_thread_fence(
+            std::memory_order_release
+        );
+
+        mHeadphonePreset = preset;
+
+        std::atomic_thread_fence(
+            std::memory_order_release
+        );
+
+        // Genap = penulisan selesai.
+        mPresetSeq.store(
+            seq + 2,
+            std::memory_order_relaxed
+        );
+    }
+
+    // Pembaca: audio thread. Menyalin ke `out`.
+    //
+    // Mengembalikan true hanya kalau snapshot terbaca KONSISTEN dan ada preset
+    // terpasang. Mengembalikan false kalau:
+    //   - belum ada preset (filterCount 0), atau
+    //   - penulisan sedang berlangsung dan tidak selesai dalam batas percobaan.
+    //
+    // Jalur gagal mengembalikan false, BUKAN data yang mungkin robek.
+    // Dulu di sini ada fallback "pakai data terakhir yang terbaca" — itu
+    // mengembalikan snapshot yang bisa berisi campuran dua preset, dan test
+    // konkurensi menangkapnya: 3 robek dari 1,28 juta pembacaan. Melewatkan
+    // koreksi satu buffer tidak terdengar; menerapkan koefisien robek bisa
+    // menimbulkan pop. Gagal berisik, jangan sukses palsu
+    // (docs/BOILERPLATE_AND_STUBS.md §2).
+    inline bool headphonePreset(
+        HeadphonePresetData& out
+    ) const {
+
+        for (int attempt = 0; attempt < 8; ++attempt) {
+
+            const uint32_t before =
+                mPresetSeq.load(
+                    std::memory_order_acquire
+                );
+
+            // Ganjil: penulisan sedang berlangsung, coba lagi.
+            if (before & 1u) {
+                continue;
+            }
+
+            out = mHeadphonePreset;
+
+            std::atomic_thread_fence(
+                std::memory_order_acquire
+            );
+
+            const uint32_t after =
+                mPresetSeq.load(
+                    std::memory_order_relaxed
+                );
+
+            if (before == after) {
+                return out.filterCount > 0;
+            }
+        }
+
+        // Penulisan belum selesai setelah 8 percobaan: lewati koreksi buffer
+        // ini. `out` sengaja TIDAK dijamin isinya.
+        return false;
+    }
+
 private:
 
     // =============================================
@@ -406,6 +525,22 @@ private:
     // jadi `AudioEngine::setBassBoost()` tidak punya tempat menyimpan.
     std::atomic<float>
         mBassBoost{0.0f};
+
+    // =============================================
+    // HEADPHONE CORRECTION (Fase D)
+    // =============================================
+    //
+    // Seqlock: `mPresetSeq` ganjil saat penulisan berlangsung, genap saat
+    // selesai. Lihat komentar di setHeadphonePreset()/headphonePreset().
+
+    std::atomic<bool>
+        mHeadphoneCorrectionEnabled{false};
+
+    HeadphonePresetData
+        mHeadphonePreset;
+
+    std::atomic<uint32_t>
+        mPresetSeq{0};
 };
 
 } // namespace pristine

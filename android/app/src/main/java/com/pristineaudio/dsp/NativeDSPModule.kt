@@ -69,12 +69,25 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     // tercapai. Lihat docs/adr/0001-tiga-mode-satu-sumber-kebenaran.md.
     private external fun setNativeProcessingMode(mode: Int)
 
-    // Ã°ÂÂÂ¥ Sakelar pemrosesan DSP di jalur produksi.
+    // Sakelar pemrosesan DSP di jalur produksi.
     //
     // Sebelum 2026-10-07 AudioPipeline tidak pernah dipanggil saat memutar
     // lagu, jadi mode DSP tidak berefek. Menyalakannya mengubah suara yang
     // keluar, jadi dipisah supaya bisa dibandingkan dan dibalik tanpa revert.
     private external fun setNativeDSPProcessingEnabled(enabled: Boolean)
+
+    // ===================== KOREKSI HEADPHONE (Fase D) =====================
+    //
+    // Teks preset AutoEQ/Squiglink dikirim utuh ke native. Parsing terjadi di
+    // sana, di thread pemanggil (bukan audio thread) — lihat
+    // AudioEngine::loadHeadphonePreset().
+    //
+    // nativeLoadHeadphonePreset mengembalikan false kalau preset cacat.
+    // Pemanggil WAJIB memeriksa: preset ditolak, bukan diterapkan sebagian.
+    private external fun nativeLoadHeadphonePreset(presetText: String): Boolean
+    private external fun nativeClearHeadphonePreset()
+    private external fun setNativeHeadphoneCorrectionEnabled(enabled: Boolean)
+    private external fun nativeIsHeadphoneCorrectionEnabled(): Boolean
     private external fun nativeIsDSPProcessingEnabled(): Boolean
 
     // ===================== REACT METHODS =====================
@@ -213,6 +226,67 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     @ReactMethod
     fun setProcessingMode(mode: Int) {
         if (engineAvailable) setNativeProcessingMode(mode)
+    }
+
+    // ===================== KOREKSI HEADPHONE (Fase D) =====================
+
+    /**
+     * Muat preset koreksi headphone dari teks (format AutoEQ/Squiglink).
+     *
+     * Parsing terjadi di native, di thread pemanggil — BUKAN di audio thread.
+     * Resolve `true` kalau preset terpasang, `false` kalau ditolak.
+     *
+     * Preset cacat DITOLAK, tidak diterapkan sebagian: kalau ada baris filter
+     * yang gagal dibaca, tidak ada satu pun filter yang dipasang. Pemanggil
+     * harus memeriksa hasilnya dan memberi tahu user.
+     */
+    @ReactMethod
+    fun loadHeadphonePreset(presetText: String, promise: Promise) {
+        if (!engineAvailable) {
+            promise.reject("DSP_UNAVAILABLE", "Engine tidak tersedia")
+            return
+        }
+
+        try {
+            val ok = nativeLoadHeadphonePreset(presetText)
+            promise.resolve(ok)
+        } catch (e: Exception) {
+            promise.reject("DSP_ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun clearHeadphonePreset(promise: Promise) {
+        if (!engineAvailable) {
+            promise.reject("DSP_UNAVAILABLE", "Engine tidak tersedia")
+            return
+        }
+
+        try {
+            nativeClearHeadphonePreset()
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("DSP_ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun setHeadphoneCorrectionEnabled(enabled: Boolean) {
+        if (engineAvailable) setNativeHeadphoneCorrectionEnabled(enabled)
+    }
+
+    @ReactMethod
+    fun isHeadphoneCorrectionEnabled(promise: Promise) {
+        if (!engineAvailable) {
+            promise.resolve(false)
+            return
+        }
+
+        try {
+            promise.resolve(nativeIsHeadphoneCorrectionEnabled())
+        } catch (e: Exception) {
+            promise.reject("DSP_ERROR", e.message)
+        }
     }
 
     /**

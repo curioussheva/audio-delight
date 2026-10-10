@@ -105,6 +105,53 @@ enum class OutputDeviceType : uint8_t {
 };
 
 // =====================================================
+// HEADPHONE CORRECTION PRESET
+// Bentuk POD yang siap dipakai audio thread
+// =====================================================
+//
+// Hasil parse preset koreksi headphone, sudah dalam bentuk siap pakai.
+// POD murni: tanpa std::string, tanpa std::vector, tanpa alokasi. Ukurannya
+// tetap sehingga bisa disalin di audio thread.
+//
+// 🔥 PENTING: teks preset TIDAK di-parse di audio thread. Parsing dilakukan
+// di UI thread (mahal, mengalokasi), hasilnya ditulis ke struct ini, dan
+// audio thread hanya menyalinnya. Lihat AudioState::headphonePreset().
+
+struct HeadphoneFilterParams {
+
+    // 0 = Peaking, 1 = LowShelf, 2 = HighShelf.
+    // Sengaja int, bukan enum class, supaya struct ini tetap POD dan
+    // bisa disalin dengan memcpy.
+    int32_t type =
+        0;
+
+    float freqHz =
+        0.0f;
+
+    float q =
+        0.707f;
+
+    float gainDb =
+        0.0f;
+};
+
+struct HeadphonePresetData {
+
+    float preampDb =
+        0.0f;
+
+    // 0..16. Di atas itu preset ditolak saat parse, tidak dipotong.
+    int32_t filterCount =
+        0;
+
+    // Sama dengan BiquadCascade::kMaxFilters. Duplikasi angka ini disengaja:
+    // AudioTypes.h adalah header dasar yang tidak boleh mengimpor dsp/.
+    static constexpr int32_t kMaxFilters = 16;
+
+    HeadphoneFilterParams filters[kMaxFilters];
+};
+
+// =====================================================
 // DSP PARAMETERS
 // =====================================================
 
@@ -159,6 +206,18 @@ struct DSPParameters {
 
     float resonanceIntensity =
         0.5f;
+
+    // =============================================
+    // HEADPHONE CORRECTION
+    // =============================================
+    //
+    // Preset hasil parse, dalam bentuk POD. Disalin dari AudioState tiap
+    // buffer (16 filter = ~272 byte, murah) — TIDAK di-parse di sini.
+
+    HeadphonePresetData headphonePreset;
+
+    bool headphoneCorrectionEnabled =
+        false;
 };
 
 // =====================================================

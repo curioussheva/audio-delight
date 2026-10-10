@@ -5,6 +5,8 @@
 #include <jni.h>
 #include <android/log.h>
 
+#include <string>
+
 #include "../manager/EngineManager.h"
 #include "../core/AudioTypes.h"
 #include "../core/DSPProcessingGate.h"
@@ -251,6 +253,59 @@ Java_com_pristineaudio_dsp_NativeDSPModule_nativeGetActualSampleRate(
     JNIEnv*, jobject) {
     return static_cast<jint>(
         EngineManager::get().actualSampleRate()
+    );
+}
+
+// =====================================================
+// KOREKSI HEADPHONE (Fase D)
+// =====================================================
+//
+// Teks preset diterima sebagai jstring, di-parse DI SINI (thread pemanggil =
+// UI thread), hasilnya dikonversi ke POD dan disimpan lewat seqlock di
+// AudioState. Audio thread tidak pernah melihat teks maupun mengalokasi.
+
+JNIEXPORT jboolean JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_nativeLoadHeadphonePreset(
+    JNIEnv* env, jobject, jstring presetText) {
+
+    if (presetText == nullptr) {
+        return static_cast<jboolean>(false);
+    }
+
+    const char* chars =
+        env->GetStringUTFChars(presetText, nullptr);
+
+    if (chars == nullptr) {
+        return static_cast<jboolean>(false);
+    }
+
+    const bool ok =
+        EngineManager::get().loadHeadphonePreset(
+            std::string(chars)
+        );
+
+    env->ReleaseStringUTFChars(presetText, chars);
+
+    return static_cast<jboolean>(ok);
+}
+
+JNIEXPORT void JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_nativeClearHeadphonePreset(
+    JNIEnv*, jobject) {
+    EngineManager::get().clearHeadphonePreset();
+}
+
+JNIEXPORT void JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_setNativeHeadphoneCorrectionEnabled(
+    JNIEnv*, jobject, jboolean enabled) {
+    EngineManager::get().setHeadphoneCorrectionEnabled(enabled);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_nativeIsHeadphoneCorrectionEnabled(
+    JNIEnv*, jobject) {
+    return static_cast<jboolean>(
+        EngineManager::get().isHeadphoneCorrectionEnabled()
     );
 }
 

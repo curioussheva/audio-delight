@@ -378,4 +378,58 @@ bool applyPreset(
     return true;
 }
 
+// =====================================================
+// KONVERSI KE BENTUK POD
+// =====================================================
+
+bool toPresetData(
+    const ParsedPreset& preset,
+    HeadphonePresetData& out
+) {
+    HeadphonePresetData data;
+    data.preampDb = preset.preampDb;
+
+    int count = 0;
+
+    for (const auto& f : preset.filters) {
+
+        if (!f.enabled) {
+            continue;
+        }
+
+        if (count >= HeadphonePresetData::kMaxFilters) {
+            return false;
+        }
+
+        auto& dst = data.filters[count];
+
+        switch (f.type) {
+            case FilterType::LowShelf:
+                dst.type = 1;
+                break;
+            case FilterType::HighShelf:
+                dst.type = 2;
+                break;
+            case FilterType::Peaking:
+            default:
+                dst.type = 0;
+                break;
+        }
+
+        dst.freqHz = f.freqHz;
+        dst.q = f.q;
+        dst.gainDb = f.gainDb;
+
+        ++count;
+    }
+
+    if (count <= 0) {
+        return false;
+    }
+
+    data.filterCount = count;
+    out = data;
+    return true;
+}
+
 } // namespace pristine
