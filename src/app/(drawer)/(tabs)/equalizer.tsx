@@ -35,6 +35,7 @@ import { EqualizerBand } from "@/features/equalizer/components/Band";
 import { HorizontalSlider } from "@/features/equalizer/components/HorizontalSlider";
 import { PresetChip } from "@/features/equalizer/components/PresetChip";
 import { SavePresetModal } from "@/features/equalizer/components/SavePresetModal";
+import { HeadphoneSection } from "@/features/headphone/components/HeadphoneSection";
 import { FLOATING_PLAYER_CLEARANCE } from "@/features/player/layout";
 
 if (
@@ -196,6 +197,12 @@ export default function EqualizerScreen() {
               <RotateCcw size={18} color="#666" />
             </TouchableOpacity>
           </View>
+
+          {/* 0. KOREKSI HEADPHONE — diletakkan PALING ATAS karena diproses
+              paling awal di DSPChain (sebelum EQ). Koreksi menetralkan alat,
+              EQ menyetel selera; menaruh kontrol EQ di atas akan menyesatkan
+              tentang urutan yang sebenarnya. */}
+          <HeadphoneSection />
 
           {/* 1. GRAPH SECTION */}
           {visibleSections.graph && (

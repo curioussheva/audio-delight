@@ -96,6 +96,14 @@ export interface Spec extends TurboModule {
    */
   loadHeadphonePreset(presetText: string): Promise<boolean>;
 
+  /**
+   * Parse saja: memvalidasi teks preset TANPA memasangnya.
+   *
+   * Resolve jumlah filter aktif, atau `-1` kalau preset ditolak. Dipakai alur
+   * impor supaya memeriksa preset tidak mengubah suara yang sedang keluar.
+   */
+  validateHeadphonePreset(presetText: string): Promise<number>;
+
   clearHeadphonePreset(): Promise<boolean>;
 
   /**

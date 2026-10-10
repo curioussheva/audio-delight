@@ -792,6 +792,15 @@ bool EngineManager::loadHeadphonePreset(
     );
 }
 
+int EngineManager::validateHeadphonePreset(
+    const std::string& presetText
+) const {
+
+    return mEngine.validateHeadphonePreset(
+        presetText
+    );
+}
+
 void EngineManager::clearHeadphonePreset() {
 
     mEngine.clearHeadphonePreset();

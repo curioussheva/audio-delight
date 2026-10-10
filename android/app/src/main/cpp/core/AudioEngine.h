@@ -170,6 +170,18 @@ public:
         const std::string& name = ""
     );
 
+    // Parse SAJA: memvalidasi teks preset tanpa mengubah state audio.
+    //
+    // Dipakai alur impor di UI. Tanpa ini, satu-satunya cara memvalidasi adalah
+    // `loadHeadphonePreset()`, yang juga LANGSUNG menerapkan preset — artinya
+    // menekan "periksa" pada preset yang belum ingin dipakai akan mengubah
+    // suara yang sedang keluar.
+    //
+    // Mengembalikan jumlah filter aktif, atau -1 kalau preset ditolak.
+    int validateHeadphonePreset(
+        const std::string& presetText
+    ) const;
+
     void clearHeadphonePreset();
 
     void setHeadphoneCorrectionEnabled(

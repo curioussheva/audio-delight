@@ -153,6 +153,10 @@ public:
     // Mengembalikan false kalau preset cacat — pemanggil WAJIB memeriksa.
     bool loadHeadphonePreset(const std::string& presetText,
                              const std::string& name = "");
+
+    // Parse saja. -1 kalau preset ditolak, selain itu jumlah filter aktif.
+    // Tidak mengubah state audio.
+    int validateHeadphonePreset(const std::string& presetText) const;
     void clearHeadphonePreset();
     void setHeadphoneCorrectionEnabled(bool enabled);
     bool isHeadphoneCorrectionEnabled() const;

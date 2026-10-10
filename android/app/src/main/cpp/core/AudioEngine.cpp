@@ -385,6 +385,27 @@ bool AudioEngine::loadHeadphonePreset(
     return true;
 }
 
+int AudioEngine::validateHeadphonePreset(
+    const std::string& presetText
+) const {
+
+    // Murni baca: parse lalu hitung. Tidak menyentuh AudioState sama sekali.
+    const ParseResult parsed =
+        parseParametricPreset(presetText);
+
+    if (!parsed.ok) {
+        return -1;
+    }
+
+    HeadphonePresetData data;
+
+    if (!toPresetData(parsed.preset, data)) {
+        return -1;
+    }
+
+    return static_cast<int>(data.filterCount);
+}
+
 void AudioEngine::clearHeadphonePreset() {
 
     mState.setHeadphonePreset(

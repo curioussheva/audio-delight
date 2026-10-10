@@ -188,10 +188,11 @@ Bukan "filenya ada".
 | `HeadphoneCorrection` (lama) | **PUTUS** | nol pemanggil; FIR placeholder, bukan parametrik. Digantikan `BiquadCascade` — hapus kalau tidak ada rencana FIR |
 | Parser graphic 127-band | **BELUM** | Fase F |
 | Parser `.vdc` | **BELUM** | Fase G (opsional) |
-| Storage profil (persist) | **BELUM** | preset belum bertahan setelah app ditutup |
-| UI pemilihan profil | **BELUM** | belum ada layar |
+| Storage profil (persist) | **NYATA** | `headphoneStore` + AsyncStorage; 157 test Jest lulus |
+| UI pemilihan profil | **NYATA** | `HeadphoneSection` di layar Equalizer, `src/app/(drawer)/(tabs)/equalizer.tsx` |
 | Preamp | **NYATA** | `BiquadCascade::setPreamp`, diterapkan sebelum filter |
-| Database model populer | **BELUM** | Fase E |
+| Ikatan profil per perangkat | **NYATA** | `deviceBinding.ts` (murni) + `useAudioOutput()`; 18 test |
+| Database model populer | **BELUM** | Fase H |
 
 ## 10. Tahapan
 
@@ -200,10 +201,11 @@ Bukan "filenya ada".
 | **A** | `setHighShelf()` di `BiquadFilter`; buka error laten `ToneControl` | **✅ SELESAI 2026-10-10** |
 | **B** | `BiquadCascade` — 16 biquad, `setFilter(i, type, freq, q, gain)`, preamp | **✅ SELESAI 2026-10-10** |
 | **C** | Parser parametrik (AutoEQ/Squiglink `.txt`) | **✅ SELESAI 2026-10-10** |
-| **D** | Storage + UI: daftar profil, pilih, aktif/nonaktif | **✅ SELESAI 2026-10-10** |
-| **E** | Database model populer (kurasi terbatas) | D ✅ |
+| **D** | Penyambungan ke jalur produksi — JNI/Kotlin/TS + node di `DSPChain` | **✅ SELESAI 2026-10-10** |
+| **E** | Storage + UI: daftar profil, impor, aktif/nonaktif, ikatan per perangkat | **✅ SELESAI 2026-10-10** |
 | **F** | Parser graphic EQ 127-band | B ✅ |
 | **G** | Parser `.vdc` (opsional) | B ✅ |
+| **H** | Database model populer (kurasi terbatas) | E ✅ |
 
 ### 10.1 Fase A ✅ — `BiquadFilter::setHighShelf()`
 
@@ -348,7 +350,68 @@ Regresi: `test_preset_parser` 44/44, `test_biquad_cascade` 16/16,
 `check_jni_pairs.py` 21 external fun cocok.
 
 **Yang belum ada:** storage persisten (preset hilang saat app ditutup), layar
-pemilihan profil, dan database model populer (Fase E).
+pemilihan profil, dan database model populer — dikerjakan di Fase E.
+
+### 10.5 Fase E ✅ — storage, UI, dan ikatan per perangkat
+
+**Keputusan operator (2026-10-10):**
+
+| # | Pertanyaan | Keputusan |
+|---|---|---|
+| 1 | Letak UI | **Seksi di layar Equalizer** — satu tempat: pilih headphone lalu tuning EQ di bawahnya |
+| 2 | Cara impor | **Tempel teks** — nol dependensi native baru |
+| 3 | Ingat per perangkat | **Ya** — profil diingat per perangkat output |
+
+**Berkas baru:**
+
+```
+src/features/headphone/
+  types.ts                        HeadphoneProfile, DeviceProfileMap
+  deviceBinding.ts                logika murni (teruji)
+  store/headphoneStore.ts         zustand + persist + AsyncStorage
+  hooks/useHeadphoneCorrection.ts ikatan ke useAudioOutput()
+  components/HeadphoneSection.tsx UI seksi
+```
+
+**Keputusan desain:**
+
+| Masalah | Keputusan | Alasan |
+|---|---|---|
+| Store terpisah dari `equalizerStore`? | **Ya, terpisah** | Bentuk data berbeda (cascade parametrik vs 10-band), dan `resetToDefault()` EQ tidak boleh ikut menghapus profil headphone |
+| Parser di JS? | **Tidak** | Native yang memutuskan diterima/ditolak. Dua parser = dua kebenaran, dan yang di JS tidak pernah dipakai untuk audio |
+| Impor perlu validasi tanpa efek samping? | **Tambah `validateHeadphonePreset`** | Tanpa itu, memeriksa preset sekaligus mengubah suara yang sedang keluar |
+| Kunci deviceId | **`AudioDeviceInfo.getId()` sebagai string** | `Record<number,_>` tidak bertahan lewat JSON AsyncStorage |
+| Perangkat tanpa ikatan | **Jangan sentuh koreksi yang aktif** | Mematikannya otomatis akan membatalkan pilihan manual user |
+
+**`validateHeadphonePreset` ditambahkan di seluruh lapisan** (C++ → JNI →
+Kotlin → TS): `AudioEngine::validateHeadphonePreset()` → `EngineManager` → JNI
+→ `@ReactMethod` → `specs/NativeDSPModule.ts`. JNI external fun jadi 22.
+
+**Diverifikasi** `src/__tests__/features/headphone/deviceBinding.test.ts` —
+**18/18 lulus**. Logika pengikatan dipisah ke `deviceBinding.ts` (murni, tanpa
+React/zustand/native) justru supaya bisa diuji: `jest.config.cjs` hanya
+menjalankan logika murni.
+
+| Yang diuji | Hasil |
+|---|---|
+| `deviceKey` — id numerik → string, `0` tetap valid | ✓ |
+| `pruneDeviceProfiles` — buang ikatan basi, objek asli tak berubah | ✓ |
+| `resolveProfileForDevice` — ikatan ke profil terhapus → `null`, bukan id mati | ✓ |
+| `shouldAutoActivate` — tidak memuat ulang profil yang sudah aktif | ✓ |
+| Perangkat tanpa ikatan tidak melepas koreksi aktif | ✓ |
+| Dua perangkat → masing-masing memicu profilnya sendiri | ✓ |
+
+Regresi: Jest **157/157** (9 suite), `test_phase_d` 36/36, `test_preset_parser`
+44/44, `test_biquad_cascade` 16/16, `test_highshelf` 14/14, `test_dsp_wiring`
+9/9, `tsc` 0 error, `oxlint` 0 warning, `check_jni_pairs.py` 22 external fun.
+
+**Batasan yang diketahui (jujur):**
+
+- `filters` di `HeadphoneProfile` **kosong** untuk preset hasil impor. Native
+  hanya mengembalikan jumlah filter, bukan rincian Fc/Gain/Q, jadi UI
+  menampilkan jumlah — bukan mengarang nilai yang tidak dibaca. Menampilkan
+  rincian butuh jalur baca tambahan (calon pekerjaan berikutnya).
+- Storage profil belum diuji di device; yang teruji adalah logika pengikatan.
 
 ## 11. Verifikasi yang direncanakan
 

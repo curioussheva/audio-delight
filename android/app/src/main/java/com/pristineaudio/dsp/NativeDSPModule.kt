@@ -85,6 +85,10 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     // nativeLoadHeadphonePreset mengembalikan false kalau preset cacat.
     // Pemanggil WAJIB memeriksa: preset ditolak, bukan diterapkan sebagian.
     private external fun nativeLoadHeadphonePreset(presetText: String): Boolean
+
+    // Parse SAJA: memvalidasi tanpa mengubah state audio.
+    // Mengembalikan jumlah filter aktif, atau -1 kalau preset ditolak.
+    private external fun nativeValidateHeadphonePreset(presetText: String): Int
     private external fun nativeClearHeadphonePreset()
     private external fun setNativeHeadphoneCorrectionEnabled(enabled: Boolean)
     private external fun nativeIsHeadphoneCorrectionEnabled(): Boolean
@@ -250,6 +254,29 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
         try {
             val ok = nativeLoadHeadphonePreset(presetText)
             promise.resolve(ok)
+        } catch (e: Exception) {
+            promise.reject("DSP_ERROR", e.message)
+        }
+    }
+
+    /**
+     * Parse saja: memvalidasi teks preset TANPA memasangnya.
+     *
+     * Dipakai alur impor: user menempel teks, kita periksa dulu, baru ia
+     * memutuskan menyimpan. Tanpa jalur ini, satu-satunya cara memvalidasi
+     * adalah [loadHeadphonePreset], yang sekaligus langsung mengubah suara.
+     *
+     * Resolve jumlah filter aktif, atau `-1` kalau preset ditolak.
+     */
+    @ReactMethod
+    fun validateHeadphonePreset(presetText: String, promise: Promise) {
+        if (!engineAvailable) {
+            promise.resolve(-1)
+            return
+        }
+
+        try {
+            promise.resolve(nativeValidateHeadphonePreset(presetText))
         } catch (e: Exception) {
             promise.reject("DSP_ERROR", e.message)
         }

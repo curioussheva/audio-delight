@@ -289,6 +289,31 @@ Java_com_pristineaudio_dsp_NativeDSPModule_nativeLoadHeadphonePreset(
     return static_cast<jboolean>(ok);
 }
 
+JNIEXPORT jint JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_nativeValidateHeadphonePreset(
+    JNIEnv* env, jobject, jstring presetText) {
+
+    if (presetText == nullptr) {
+        return -1;
+    }
+
+    const char* chars =
+        env->GetStringUTFChars(presetText, nullptr);
+
+    if (chars == nullptr) {
+        return -1;
+    }
+
+    const int count =
+        EngineManager::get().validateHeadphonePreset(
+            std::string(chars)
+        );
+
+    env->ReleaseStringUTFChars(presetText, chars);
+
+    return static_cast<jint>(count);
+}
+
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_nativeClearHeadphonePreset(
     JNIEnv*, jobject) {
