@@ -53,6 +53,22 @@ public:
         float sampleRate
     );
 
+    // 🔥 FIX (2026-10-10): high shelf — cerminan `setLowShelf` (RBJ cookbook).
+    //
+    // Sebelumnya tidak ada, padahal `dsp/filters/ToneControl.h:33` sudah
+    // memanggilnya sejak lama. Karena `ToneControl` nol pemanggil, badan member
+    // non-template yang didefinisikan in-class tidak pernah di-emit → error
+    // kompilasi laten, tidak terlihat sampai kelas itu benar-benar dipakai.
+    //
+    // Dibutuhkan preset AutoEQ/Squiglink: tipe `HSC` (high shelf) hampir selalu
+    // ada. Lihat docs/HEADPHONE_CORRECTION.md §8.1.
+    void setHighShelf(
+        float freq,
+        float Q,
+        float gainDb,
+        float sampleRate
+    );
+
     // =============================================
     // PROCESS
     // =============================================

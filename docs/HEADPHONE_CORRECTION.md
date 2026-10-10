@@ -136,23 +136,31 @@ ruang untuk preset yang lebih panjang tanpa alokasi dinamis di audio thread.
 
 ## 8. Blocker yang harus ditutup lebih dulu
 
-### 8.1 `BiquadFilter::setHighShelf()` tidak ada — ERROR LATEN
+### 8.1 `BiquadFilter::setHighShelf()` — **SELESAI** (2026-10-10)
 
-```
-dsp/filters/ToneControl.h:33:17: error:
-    no member named 'setHighShelf' in 'pristine::BiquadFilter'
-```
+Dulu tidak ada, padahal `dsp/filters/ToneControl.h:33` sudah memanggilnya sejak
+lama — **error kompilasi laten** yang tidak muncul karena `ToneControl` nol
+pemanggil (badan member non-template yang didefinisikan in-class hanya di-emit
+kalau odr-used).
 
-`ToneControl.h` sudah memanggilnya sejak lama dan **tidak bisa dikompilasi**.
-Tidak pernah muncul karena `ToneControl` nol pemanggil: badan member
-non-template yang didefinisikan in-class hanya di-emit kalau odr-used.
+Sekarang ada (RBJ cookbook, cerminan `setLowShelf`). Diverifikasi
+`scripts/test_highshelf.cpp` — **14/14 lulus**:
 
-Preset AutoEQ/Squiglink hampir selalu memuat `HSC` (high shelf). Tanpa ini,
-preset masuk tapi filter treble-nya hilang.
+| # | Yang diuji | Hasil |
+|---|---|---|
+| 1 | gain 0 dB = identity | +0.0000 dB; `b0=1`, `b1=a1`, `b2=a2` (kutub-nol meniadakan → `H(z)=1` persis) |
+| 2 | boost +6 dB @8 kHz | +5.66 dB di 16 kHz, +0.03 dB di 1 kHz |
+| 3 | cut −6 dB @8 kHz | −5.66 dB di 16 kHz |
+| 4 | cerminan low shelf | high shelf tidak menyentuh bass; low shelf tidak menyentuh treble |
+| 5 | laju 44.1 kHz | +5.74 dB di 16 kHz — benar di laju non-48k |
+| 6 | preset AutoEQ `HSC 10000 Hz −2.0 dB Q 0.70` | −1.90 dB di 18 kHz |
 
-**Sudah diverifikasi:** `ToneControl` satu-satunya dari 15 header `dsp/` yang
-bermasalah. CMake memakai `GLOB_RECURSE` (`dsp/*.cpp`, `dsp/*/*.cpp`) sehingga
-seluruh 24 `.cpp` di `dsp/` ikut dikompilasi.
+Stabilitas diperiksa di semua kasus (kutub di dalam lingkaran satuan:
+`|a2| < 1` dan `|a1| < 1 + a2`).
+
+**Sudah diverifikasi juga:** `ToneControl` satu-satunya dari 15 header `dsp/`
+yang bermasalah. CMake memakai `GLOB_RECURSE` (`dsp/*.cpp`, `dsp/*/*.cpp`)
+sehingga seluruh 24 `.cpp` di `dsp/` ikut dikompilasi.
 
 ### 8.2 `HeadphoneCorrection` berbentuk FIR, bukan parametrik
 
@@ -186,16 +194,16 @@ Bukan "filenya ada".
 
 | Fase | Isi | Prasyarat |
 |---|---|---|
-| **A** | `setHighShelf()` di `BiquadFilter`; buka error laten `ToneControl` | — |
-| **B** | `BiquadCascade` — 16 biquad, `setFilter(i, type, freq, q, gain)`, preamp | A |
+| **A** | `setHighShelf()` di `BiquadFilter`; buka error laten `ToneControl` | **✅ SELESAI 2026-10-10** |
+| **B** | `BiquadCascade` — 16 biquad, `setFilter(i, type, freq, q, gain)`, preamp | A ✅ |
 | **C** | Parser parametrik (AutoEQ/Squiglink `.txt`) | B |
 | **D** | Storage + UI: daftar profil, pilih, aktif/nonaktif | C |
 | **E** | Database model populer (kurasi terbatas) | D |
 | **F** | Parser graphic EQ 127-band | B |
 | **G** | Parser `.vdc` (opsional) | B |
 
-Fase A **tidak** menunggu keputusan apa pun — itu menutup error laten yang
-sudah ada. Bisa dikerjakan kapan saja.
+Fase A selesai — error laten `ToneControl` tertutup, dan `HSC` tersedia untuk
+preset AutoEQ. Fase B bisa langsung dikerjakan.
 
 ## 11. Verifikasi yang direncanakan
 

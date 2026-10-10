@@ -202,4 +202,108 @@ void BiquadFilter::setLowShelf(
         ) / a0;
 }
 
+// =====================================================
+// HIGH SHELF
+// =====================================================
+
+void BiquadFilter::setHighShelf(
+    float freq,
+    float Q,
+    float gainDb,
+    float sampleRate
+) {
+
+    // =============================================
+    // SAFETY
+    // =============================================
+
+    if (
+        freq <= 0.0f ||
+        sampleRate <= 0.0f ||
+        Q <= 0.0f
+    ) {
+        return;
+    }
+
+    // =============================================
+    // RBJ COOKBOOK
+    // =============================================
+    //
+    // Cerminan low shelf: semua tanda `cosW0` dibalik. Sama seperti low shelf,
+    // di sini `Q` adalah slope S (RBJ memakai S untuk shelf, bukan Q), jadi
+    // alpha = sin(w0)/2 * sqrt((A + 1/A)*(1/S - 1) + 2).
+
+    const float A =
+        powf(
+            10.0f,
+            gainDb / 40.0f
+        );
+
+    const float w0 =
+        2.0f *
+        static_cast<float>(M_PI) *
+        freq /
+        sampleRate;
+
+    const float cosW0 =
+        cosf(w0);
+
+    const float sinW0 =
+        sinf(w0);
+
+    const float alpha =
+        (sinW0 / 2.0f) *
+        sqrtf(
+            ((A + (1.0f / A)) * ((1.0f / Q) - 1.0f)) + 2.0f
+        );
+
+    const float beta =
+        2.0f *
+        sqrtf(A) *
+        alpha;
+
+    const float a0 =
+        (A + 1.0f) -
+        ((A - 1.0f) * cosW0) +
+        beta;
+
+    coeffs.b0 =
+        A *
+        (
+            (A + 1.0f) +
+            ((A - 1.0f) * cosW0) +
+            beta
+        ) / a0;
+
+    coeffs.b1 =
+        -2.0f *
+        A *
+        (
+            (A - 1.0f) +
+            ((A + 1.0f) * cosW0)
+        ) / a0;
+
+    coeffs.b2 =
+        A *
+        (
+            (A + 1.0f) +
+            ((A - 1.0f) * cosW0) -
+            beta
+        ) / a0;
+
+    coeffs.a1 =
+        2.0f *
+        (
+            (A - 1.0f) -
+            ((A + 1.0f) * cosW0)
+        ) / a0;
+
+    coeffs.a2 =
+        (
+            (A + 1.0f) -
+            ((A - 1.0f) * cosW0) -
+            beta
+        ) / a0;
+}
+
 } // namespace pristine
