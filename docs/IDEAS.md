@@ -204,7 +204,7 @@ diimplementasi, atau sudah jadi tapi belum tersambung. Jangan dihapus.
 |---|---|---|
 | `CrossfeedProcessor` | **algoritma nyata**, belum tersambung | UI crossfeed headphone |
 | `StateVariableFilter` | **implementasi nyata**, belum dipakai | filter parametrik/LPF-HPF di UI |
-| `ToneControl` | **implementasi nyata** (low/high shelf) | kontrol bass/treble terpisah dari EQ 10-band |
+| `ToneControl` | **tidak bisa dikompilasi** — `BiquadFilter::setHighShelf()` tidak ada (dipanggil di baris 33). Error laten: badan member non-template hanya di-emit kalau odr-used, dan kelas ini nol pemanggil | tambah `setHighShelf()` ke `BiquadFilter` |
 | `DCBlocker` | **implementasi nyata** | dipakai `OutputStage`; butuh keputusan `OutputStage` dulu |
 | `ConvolverNode` + `FIRFilter` | **konvolusi nyata**, butuh IR | `IRLoader` diisi + UI pemilihan IR |
 | `HeadphoneCorrection` | `loadProfile` → `true` palsu, FIR trivial | basis data profil headphone |
