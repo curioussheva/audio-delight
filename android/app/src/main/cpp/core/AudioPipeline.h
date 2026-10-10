@@ -64,6 +64,35 @@ private:
 
 private:
 
+    // =============================================
+    // KONFIGURASI DSP
+    // =============================================
+    //
+    // �� FIX (2026-10-10): `DSPChain::applyConfig()` dulu NOL pemanggil dari
+    // jalur produksi — semua referensinya berputar di dalam `dsp/` sendiri.
+    // Akibatnya `DSPChain::mConfig` selamanya default, dan keempat node
+    // (EQ, StereoWidener, Gain, Limiter) berjalan sebagai identity:
+    // mode DSP mengeluarkan PCM yang identik dengan BitPerfect.
+    //
+    // Sekarang config dibangun dari `DSPParameters` dan dikirim ke rantai
+    // HANYA saat nilainya berubah — `applyConfig()` menghitung koefisien
+    // biquad (powf/cosf/sinf), jadi memanggilnya tiap buffer akan membebani
+    // audio thread tanpa manfaat.
+    //
+    // Lihat docs/DSP_CHAIN_AUDIT.md.
+    void applyDSPConfig(
+        const DSPParameters& params
+    ) noexcept;
+
+    DSPConfig mDspConfig;
+
+    // Snapshot config yang terakhir benar-benar dikirim ke rantai. Dipakai
+    // untuk mendeteksi perubahan.
+    DSPConfig mAppliedConfig;
+
+    // false = belum pernah dikirim, jadi kirim pertama selalu dilakukan.
+    bool mConfigApplied = false;
+
     DSPChain mDSP;
 
     // Rantai proses mode Immersive. Dipindahkan dari cpp/modes/ImmersivePipeline

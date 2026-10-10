@@ -132,6 +132,22 @@ void EQProcessor::setBandGain(
         return;
     }
 
+    // 🔥 FIX (2026-10-10, realtime): jangan hitung ulang koefisien kalau nilai
+    // tidak berubah.
+    //
+    // `updateBand()` memanggil `BiquadFilter::setPeakingEQ()` yang memakai
+    // powf/cosf/sinf. Sejak EQ tersambung ke jalur produksi, `applyConfig()`
+    // dipanggil TIAP BUFFER (~25x/detik) — tanpa guard ini, 10 band × 3 fungsi
+    // transendental berjalan terus-menerus di audio thread hanya untuk nilai
+    // yang sama. Dengan guard, trig hanya jalan saat user benar-benar
+    // menggeser slider atau memuat preset.
+    //
+    // Perbandingan float di sini aman: nilainya berasal dari slider yang
+    // sudah dibulatkan, bukan hasil akumulasi.
+    if (mBandGain[band] == gainDb) {
+        return;
+    }
+
     mBandGain[band] =
         gainDb;
 
@@ -149,6 +165,13 @@ void EQProcessor::setBandGain(
 void EQProcessor::setBassBoost(
     float gainDb
 ) noexcept {
+
+    // �� FIX (2026-10-10, realtime): sama seperti setBandGain — `updateBass()`
+    // memakai trig, dan `applyConfig()` dipanggil tiap buffer. Tanpa guard,
+    // koefisien bass dihitung ulang terus untuk nilai yang sama.
+    if (mBassBoost == gainDb) {
+        return;
+    }
 
     mBassBoost =
         gainDb;

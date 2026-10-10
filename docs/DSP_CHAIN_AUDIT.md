@@ -1,6 +1,12 @@
 # Audit Mode DSP: Hulu → Hilir
 
-**Tanggal:** 2026-10-10 | **Commit:** `c8b6350aa` | **Revisi:** v2 (koreksi)
+**Tanggal:** 2026-10-10 | **Commit:** `c8b6350aa` | **Revisi:** v3 (perbaikan diterapkan)
+
+> **Status perbaikan (v3).** Temuan #1, #2, #3, #7 dan bug sample-rate EQ sudah
+> **disambungkan** — lihat §7. Temuan #4, #5, #6 (`BrainwaveGenerator`,
+> `HarmonicExciter`, `SpatialFieldProcessor`) **belum** disentuh: ketiganya stub
+> yang dipanggil, dan memperbaikinya = mengimplementasi fitur baru, bukan
+> menyambungkan jalur. Temuan #8, #9 menunggu keputusan.
 
 > **Koreksi v1 → v2.** v1 menyatakan "`ImmersiveStage` 4 tahap NYATA" dan
 > mengusulkan menghapus 9 kelas yatim sebagai "dead code". **Keduanya salah.**
@@ -332,4 +338,76 @@ diperlukan bukan penghapusan, tapi **pelacakan status per node**. Kelas yang
 belum diimplementasi harus dibedakan dari kelas yang sudah jalan tapi belum
 tersambung, dan keduanya dari yang mengaku jadi.
 
-Audit ini belum mengubah kode apa pun.
+Audit ini **tidak** mengubah kode. Perbaikan dikerjakan terpisah — lihat §7.
+
+---
+
+## 7. Perbaikan yang diterapkan (v3)
+
+**Keputusan operator:** opsi **A** — koefisien dihitung di audio thread, tapi
+hanya saat parameter berubah.
+
+### 7.1 Yang disambungkan
+
+| # | File | Perubahan |
+|---|---|---|
+| 1 | `core/AudioState.h` | tambah `mBassBoost` + `setBassBoost()`/`bassBoost()` (`mEqGain[10]` sudah ada sejak awal, nol pemakai) |
+| 2 | `core/AudioEngine.cpp` | `setEqBand()` + `setBassBoost()` — bodi kosong → tulis ke `mState` |
+| 3 | `core/AudioCallback.cpp` | `updateParameters()` salin 10 band + `bassBoostGain` ke `mParams` |
+| 4 | `dsp/tone/EQNode.cpp` | `prepare()` → `mEQ.prepare(sampleRate)` (sebelumnya bodi kosong) |
+| 5 | `dsp/EQProcessor.cpp` | guard perubahan di `setBandGain()` + `setBassBoost()` sebelum `updateBand`/`updateBass` |
+| 6 | `core/AudioPipeline.{h,cpp}` | `applyDSPConfig()` — bangun `DSPConfig` dari `DSPParameters`, kirim ke `mDSP.applyConfig()` hanya saat berubah; dipanggil di `processDSP` **dan** `processImmersive` |
+
+**Gerbang.** `mDspConfig.enabled` sengaja selalu `true`, **bukan**
+`params.dspEnabled`. `dspEnabled` tidak punya pemanggil di JS dan defaultnya
+`false`; kalau ia jadi gerbang, `DSPChain::process()` langsung `return` dan mode
+DSP tetap tidak berefek — persis bug yang sedang diperbaiki. Gerbang yang sah
+adalah mode itu sendiri: `applyDSPConfig()` hanya dipanggil dari cabang
+DSP/Immersive.
+
+**Realtime.** `applyConfig()` → `updateBand()` → `setPeakingEQ()` memakai
+`powf`/`cosf`/`sinf`. Guard di `EQProcessor` membuat trig hanya berjalan saat
+nilai benar-benar berubah. Nol alokasi, nol lock (`BiquadFilter` = 5 float
+koefisien + 2 state, POD).
+
+**Jalur BitPerfect tidak tersentuh** — `applyConfig()` tidak dipanggil di
+`processBitPerfect()`.
+
+### 7.2 Bug yang ikut tertutup
+
+**EQ memakai sample rate salah.** `EQNode::prepare()` kosong, jadi
+`EQProcessor::mSampleRate` tetap default `48000`. Untuk file 44.1 kHz, koefisien
+biquad dihitung dengan laju 48 kHz → tiap band meleset ~8.8% (band 1 kHz jatuh
+di ~919 Hz). Laten selama EQ belum tersambung; langsung terdengar begitu
+dinyalakan.
+
+### 7.3 Verifikasi
+
+`scripts/test_dsp_wiring.cpp` — standalone, mengompilasi sumber DSP asli
+(`DSPChain`, `DSPGraph`, 4 node, `EQProcessor`, `BiquadFilter`). **9/9 lulus:**
+
+| # | Yang diuji | Hasil |
+|---|---|---|
+| 1 | config flat = identity | 0.0000 dB |
+| 2 | EQ +6 dB band 5 (1 kHz) | +5.99 dB di 1 kHz, +0.00 dB di 16 kHz |
+| 3 | bass boost +9 dB | +7.95 dB di 60 Hz, +0.00 dB di 5 kHz |
+| 4 | laju salah (rancang 48000, stream 44100) | +5.99 dB vs +5.66 dB — bug terukur |
+| 5 | master gain 0.5 / width 0 | −6.02 dB / melebur mono |
+| 6 | limiter on/off di atas ambang | −2.48 dB vs +0.00 dB |
+
+Plus: `tsc --noEmit` exit 0, 139 Jest lulus, `scripts/check.sh` pada 5 file C++
+yang diubah — semua ✅.
+
+### 7.4 Yang BELUM diperbaiki (sengaja)
+
+- **#4 `BrainwaveGenerator` menolkan buffer** — masih ranjau: `brainwaveFreq > 0`
+  akan menghapus suara. Tidak terjangkau sekarang (`setBrainwaveFreq` nol
+  pemanggil di `src/`).
+- **#5 `HarmonicExciter` = gain +6 dB** di intensitas default. Mode Immersive
+  akan menaikkan level, bukan menambah harmonisa.
+- **#6 `SpatialFieldProcessor`** no-op.
+- **#8 `HeadphoneCorrection::loadProfile()` `return true`** — menunggu keputusan.
+- **#9 klaim UI `settings.tsx:852`** — menunggu keputusan.
+
+Memperbaiki #4/#5/#6 berarti **mengimplementasi fitur**, bukan menyambungkan
+jalur. Itu di luar lingkup "hidupkan fitur yang sudah ada".

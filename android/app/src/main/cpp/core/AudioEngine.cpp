@@ -329,7 +329,12 @@ void AudioEngine::setBassBoost(
     float gainDb
 ) {
 
-    // reserved for DSP pipeline param sync
+    // 🔥 FIX (2026-10-10): dulu bodi kosong. Slider bass di UI memanggil
+    // `setFullEqualizer`/`setBassBoost` -> JNI -> EngineManager -> sini, lalu
+    // berhenti: nilainya tidak pernah disimpan, jadi `EQProcessor` tidak
+    // pernah menerima gain apa pun. Sekarang disimpan di AudioState dan
+    // dibaca `AudioCallback::updateParameters()` tiap buffer.
+    mState.setBassBoost(gainDb);
 }
 
 // =====================================================
@@ -337,11 +342,14 @@ void AudioEngine::setBassBoost(
 // =====================================================
 
 void AudioEngine::setEqBand(
-    int,
-    float
+    int band,
+    float gainDb
 ) {
 
-    // reserved for DSP pipeline param sync
+    // 🔥 FIX (2026-10-10): sama seperti setBassBoost — dulu bodi kosong,
+    // sehingga EQ 10-band di UI tidak berefek. `setEqGain` sudah ada di
+    // AudioState sejak awal tapi nol pemanggil.
+    mState.setEqGain(band, gainDb);
 }
 
 // =====================================================

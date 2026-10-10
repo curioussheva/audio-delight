@@ -309,6 +309,31 @@ public:
         );
     }
 
+    // =============================================
+    // BASS BOOST
+    // =============================================
+    //
+    // 🔥 FIX (2026-10-10): dulu `AudioEngine::setBassBoost()` bodi kosong
+    // (`reserved for DSP pipeline param sync`), jadi slider bass di UI tidak
+    // pernah sampai ke `EQProcessor::setBassBoost()`. Nilainya sekarang
+    // disimpan di sini dan dibaca `AudioCallback::updateParameters()`.
+    inline void setBassBoost(
+        float gainDb
+    ) {
+
+        mBassBoost.store(
+            gainDb,
+            std::memory_order_release
+        );
+    }
+
+    inline float bassBoost() const {
+
+        return mBassBoost.load(
+            std::memory_order_acquire
+        );
+    }
+
 private:
 
     // =============================================
@@ -376,6 +401,11 @@ private:
         0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
         0.0f, 0.0f, 0.0f, 0.0f, 0.0f
     };
+
+    // 🔥 FIX (2026-10-10): bass boost (dB). Dulu tidak ada di state sama sekali,
+    // jadi `AudioEngine::setBassBoost()` tidak punya tempat menyimpan.
+    std::atomic<float>
+        mBassBoost{0.0f};
 };
 
 } // namespace pristine

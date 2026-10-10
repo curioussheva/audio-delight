@@ -38,13 +38,15 @@ Aturan `[x]` = "**ada pemanggil nyata**", bukan "filenya ada". Semua status di b
 | Dekode FLAC/WAV/MP3/AAC | MVP | ADA | `cpp/decoder/` (16 file): `FFmpegDecoder`, `PCMDecoder`, `DecoderFactory` |
 | Resampling | MVP | ADA | `cpp/resampler/` (8 file), `StreamResampler.cpp` |
 | Flow control (queue penuh/kosong) | MVP | ADA | commit `fix(audio): flow control pause/resume decoder on queue full/low` |
-| Tiga mode: BitPerfect / DSP / Immersive | MVP | **TIDAK TERSAMBUNG** | `cpp/modes/` (6 file). Kelas ada tapi **nol pemakai** di jalur audio - lihat catatan di bawah |
-| BitPerfect sebagai default | MVP | **TIDAK TERSAMBUNG** | `AudioTypes.h` default `ProcessingMode::BitPerfect`, tapi pipeline tidak dipanggil dari `render()` |
+| Tiga mode: BitPerfect / DSP / Immersive | MVP | ADA | `core/AudioPipeline.cpp`, dipanggil `AudioCallback::applyPipeline()`; mode dibaca atomik tiap buffer → live switch. `cpp/modes/` dihapus, logikanya diadopsi (ADR-0001) |
+| BitPerfect sebagai default | MVP | ADA | `AudioTypes.h` default `ProcessingMode::BitPerfect`; `processBitPerfect()` no-op total - nol gain, nol limiter |
 | **Laju stream dari DAC/file (tidak hardcoded)** | MVP | ADA | `core/DeviceRateDetector.cpp` - baca `AudioManager.getDevices()`, pilih laju per-file |
 | **AAudio utama, OpenSLES fallback** | MVP | ADA | `core/AudioStreamController.cpp` - AAudio dicoba dulu (punya mode exclusive) |
 | Laju stream sampai ke decoder | MVP | ADA | `PlaybackController::setStreamSampleRate()` -> `DecodeConfig.targetSampleRate` |
-| DSP chain (biquad, EQ, limiter) | MVP | ADA | `cpp/dsp/` (56 file), `DSPChain.cpp` |
-| Convolution / spatial / headphone | P2 | SEBAGIAN | subdir `convolution/`, `spatial/`, `headphone/` ada di `dsp/`; tingkat keterhubungan belum diverifikasi |
+| DSP chain (biquad, EQ, limiter) | MVP | ADA | `cpp/dsp/` (56 file). Config disalurkan `AudioPipeline::applyDSPConfig()` → `DSPChain::applyConfig()`; dibuktikan `scripts/test_dsp_wiring.cpp` (9/9) |
+| EQ 10-band + bass boost | MVP | ADA | `AudioState` → `AudioCallback::updateParameters()` → `DSPConfig` → `EQNode::applyConfig` → `EQProcessor` |
+| Convolution / spatial / headphone | P2 | BELUM | subdir ada; `ConvolverNode`+`FIRFilter` nyata tapi belum disambung, `HeadphoneCorrection`/`BinauralRenderer` masih stub - `docs/IDEAS.md` I-12 |
+| Crossfeed / ToneControl / StateVariableFilter | P2 | BELUM | implementasi nyata, nol pemanggil - `docs/IDEAS.md` I-12 |
 | Ring buffer & metrics | MVP | ADA | `core/RingBuffer.h`, `core/AudioMetrics.cpp` |
 | ASAN/NaN detection | P1 | SEBAGIAN | commit `debug(audio): NaN/Inf detection + cleanup for FLAC 24-bit`; alat ada, **bukan CI step** |
 

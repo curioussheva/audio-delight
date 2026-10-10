@@ -162,6 +162,20 @@ void AudioCallback::updateParameters() {
     mParams.brainwaveFreq = mState.brainwaveFreq();
     mParams.resonanceIntensity = mState.resonanceIntensity();
     mParams.processingMode = mState.processingMode();
+
+    // 🔥 FIX (2026-10-10): EQ 10-band + bass boost ikut dibaca.
+    //
+    // Dulu keduanya tidak pernah disalin, jadi walau `AudioPipeline` nanti
+    // memanggil `DSPChain::applyConfig()`, `config.eqGain[]` selalu nol dan
+    // EQ tetap identity. Sekarang nilainya ikut mengalir.
+    //
+    // 10 atomic load per buffer — di luar loop sample, jadi tidak menambah
+    // beban per-frame. `relaxed` tidak dipakai; aksesornya `acquire`.
+    for (int i = 0; i < 10; ++i) {
+        mParams.eqGains[i] = mState.eqGain(i);
+    }
+
+    mParams.bassBoostGain = mState.bassBoost();
 }
 
 // =====================================================

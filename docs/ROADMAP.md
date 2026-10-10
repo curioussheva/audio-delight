@@ -63,9 +63,18 @@ Semua status diverifikasi 2026-10-03 langsung ke kode.
     bercabang 3 (`processBitPerfect` no-op / `processDSP` /
     `processImmersive`). `DSPProcessingGate::enabled()` default **ON**
     (`PRISTINE_DSP_IN_PRODUCTION 1`).
+  - **2026-10-10**: jalur DSP **disambungkan** — `DSPChain::applyConfig()` dulu
+    nol pemanggil, jadi EQ/gain/width semuanya identity dan mode DSP identik
+    dengan BitPerfect. Sekarang `AudioPipeline::applyDSPConfig()` mengirim
+    `DSPConfig` (dari `DSPParameters`) ke rantai, hanya saat berubah. Bug ikut
+    tertutup: `EQNode::prepare()` kosong → koefisien EQ dihitung dengan 48000
+    meski stream 44100 (band meleset ~8.8%). Diverifikasi
+    `scripts/test_dsp_wiring.cpp` (9/9). Lihat `docs/DSP_CHAIN_AUDIT.md` §7.
   - **Yang belum**: `DSPChain` belum pernah dieksekusi di laju/latency nyata
-    (`adr/0001` §6). Bug DSP — kalau ada — baru muncul setelah APK ini
-    dipasang. Gate bisa dimatikan tanpa revert kalau perlu.
+    (`adr/0001` §6) — butuh uji perangkat. Tiga stub di rantai immersive
+    (`BrainwaveGenerator`, `HarmonicExciter`, `SpatialFieldProcessor`) belum
+    diperbaiki; `BrainwaveGenerator` masih bisa menghapus suara kalau
+    `brainwaveFreq > 0`. Gate bisa dimatikan tanpa revert kalau perlu.
 - [ ] Verifikasi kualitas audio: bandingkan output BitPerfect vs DSP secara subjektif
 - [ ] Verifikasi USB DAC: deteksi device, pemilihan output, apakah audio keluar dari DAC
 - [ ] Verifikasi scan library: apakah MediaStore mengembalikan lagu, apakah progress UI benar
