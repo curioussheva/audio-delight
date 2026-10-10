@@ -154,6 +154,14 @@ export interface DSPNativeResponse {
 // ============================================================================
 
 export const createFlatEQ = (bandCount: number = 10): EqualizerBand[] => {
+  // 🔥 FIX (2026-10-10): daftar ini adalah SALINAN KETIGA frekuensi band, dan
+  // nilai 32/64-nya menyimpang dari `EQProcessor::kBandFreqs` (native: 31/62)
+  // yang benar-benar diterapkan. Sudah diverifikasi `createFlatEQ` nol
+  // konsumen di jalur produksi (hanya definisi + test) — jadi ini dead list,
+  // bukan sumber kebenaran.
+  //
+  // Jangan dipakai untuk membangun band yang dikirim ke native. Kalau nanti
+  // benar-benar dipakai, selaraskan dulu ke `presets.ts::EQ_FREQUENCIES`.
   const frequencies =
     bandCount === 5
       ? [60, 230, 910, 3600, 14000]

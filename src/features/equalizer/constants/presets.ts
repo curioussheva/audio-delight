@@ -4,9 +4,18 @@ import { Preset, EqualizerBand, BandType } from "@/features/equalizer/types";
 /**
  * 1. Definisi Frekuensi Standar (ISO Standard)
  * Digunakan sebagai label di atas vertical sliders.
+ *
+ * 🔥 FIX (2026-10-10): dua nilai pertama dulu 32 & 64, sedangkan yang
+ * BENAR-BENAR diterapkan `EQProcessor::kBandFreqs` (native) adalah 31 & 62.
+ * Frekuensi tidak pernah dikirim ke native — JS hanya mengirim gain per indeks
+ * — jadi `kBandFreqs` adalah satu-satunya sumber kebenaran dan daftar ini
+ * murni label. Label 32/64 membuat user melihat angka yang tidak pernah
+ * diterapkan; 8 band lain sudah cocok.
+ *
+ * Diselaraskan ke nilai native supaya label = yang terdengar.
  */
 export const EQ_FREQUENCIES = [
-  32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000,
+  31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000,
 ];
 
 /**
