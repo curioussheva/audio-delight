@@ -79,11 +79,15 @@
       │        pcmQueue_->read(output, frames*2)             │
       │        guard NaN/Inf + magnitudo                     │
       │        clock_->advanceFrames(frames)                 │
-      │      return  ◀── KELUAR DI SINI, pipeline tidak dipanggil
+      │      if DSPProcessingGate::enabled():                │
+      │        applyPipeline(output, numFrames)              │
+      │          BitPerfect  → sanitize saja (bit-exact)     │
+      │          DSP/Immersive → Limiter + sanitize          │
+      │      return                                          │
       │    else:                                             │
       │      bufferController.popStereo()                    │
       │      if isDSPEnabled: mPipeline.process(...)   ◀── jalur DSP
-      │      softClip + zapDenormal                          │
+      │      Limiter (DSP/Immersive) + sanitizeOutput        │
       └──────────────────────────────────────────────────────┘
                                 │
                                 ▼

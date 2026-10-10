@@ -109,9 +109,26 @@ AudioCallback::onAudioReady(
         mPipeline.process(mLeft, mRight, numFrames, mParams);
     }
 
+    // �� FIX (2026-10-10): jalur fallback juga tidak lagi memakai waveshaper
+    // lama. Mode BitPerfect hanya disanitasi; DSP/Immersive lewat limiter.
+    const bool fallbackShaped =
+        (mParams.processingMode != ProcessingMode::BitPerfect);
+
     for (int32_t i = 0; i < numFrames; ++i) {
-        output[i * 2]     = softClip(zapDenormal(mLeft[i]));
-        output[i * 2 + 1] = softClip(zapDenormal(mRight[i]));
+
+        float l = mLeft[i];
+        float r = mRight[i];
+
+        if (fallbackShaped) {
+            l = Limiter::apply(l);
+            r = Limiter::apply(r);
+        }
+
+        sanitizeOutput(l);
+        sanitizeOutput(r);
+
+        output[i * 2]     = l;
+        output[i * 2 + 1] = r;
     }
 
     mVisualizer.write(mLeft, mRight, numFrames);
@@ -183,31 +200,59 @@ void AudioCallback::applyPipeline(
 
     // ---- interleave + rapi-kan --------------------------------------------
     //
-    // softClip/zapDenormal sama seperti jalur fallback: pipeline bisa
-    // menaikkan level (harmonic exciter, brainwave), jadi output tetap harus
-    // dijaga dari clipping dan denormal.
+    // 🔥 FIX (2026-10-10, "noise di beberapa file"): dulu di sini ada
+    //     softClip(zapDenormal(x))
+    // untuk SETIAP sample, di SETIAP mode. softClip lama = x/(1+|x|) —
+    // nonlinear di seluruh rentang (-6.02 dB di full scale, THD 10.4% di
+    // amplitudo 0.9). Itu yang terdengar sebagai noise di sebagian file.
+    //
+    // Sekarang mode BitPerfect TIDAK melewati limiter sama sekali — hanya
+    // sanitasi:
+    //   jalur BitPerfect : sanitize saja        (bit-exact, nol distorsi)
+    //   jalur DSP/Immersive : limiter + sanitize (identity di bawah 0.98)
+    //
+    // Limiter tetap ada di DSP/Immersive karena rantai itu (EQ, harmonic
+    // exciter, brainwave) bisa menaikkan level melewati full scale. Di bawah
+    // ambang 0.98 ia identity, jadi tidak menambah distorsi pada sinyal biasa.
+    const bool shaped =
+        (mParams.processingMode != ProcessingMode::BitPerfect);
+
     for (int32_t i = 0; i < numFrames; ++i) {
-        interleaved[i * 2]     = softClip(zapDenormal(mLeft[i]));
-        interleaved[i * 2 + 1] = softClip(zapDenormal(mRight[i]));
+
+        float l = mLeft[i];
+        float r = mRight[i];
+
+        if (shaped) {
+            l = Limiter::apply(l);
+            r = Limiter::apply(r);
+        }
+
+        sanitizeOutput(l);
+        sanitizeOutput(r);
+
+        interleaved[i * 2]     = l;
+        interleaved[i * 2 + 1] = r;
     }
 
     mVisualizer.write(mLeft, mRight, numFrames);
 }
 
 // =====================================================
-// ZAP DENORMAL
+// SANITASI KELUARAN
 // =====================================================
 
-inline float AudioCallback::zapDenormal(float x) noexcept {
-    return (std::fabs(x) < kDenormalThreshold) ? 0.0f : x;
-}
-
-// =====================================================
-// SOFT CLIP
-// =====================================================
-
-inline float AudioCallback::softClip(float x) noexcept {
-    return x / (1.0f + std::fabs(x));
+inline void AudioCallback::sanitizeOutput(float& x) noexcept {
+    if (std::isnan(x) || std::isinf(x)) {
+        x = 0.0f;
+        return;
+    }
+    if (x > 2.0f || x < -2.0f) {
+        x = 0.0f;
+        return;
+    }
+    if (std::fabs(x) < kDenormalThreshold) {
+        x = 0.0f;
+    }
 }
 
 } // namespace pristine 

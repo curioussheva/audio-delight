@@ -12,6 +12,7 @@
 #include "AudioState.h"
 #include "AudioTypes.h"
 #include "DSPProcessingGate.h"
+#include "../dsp/Limiter.h"
 #include "../visualizer/VisualizerBuffer.h"
 
 namespace pristine::playback {
@@ -150,12 +151,35 @@ private:
 
     void updateParameters();
 
-    inline float zapDenormal(
-        float x
-    ) noexcept;
-
-    inline float softClip(
-        float x
+    // =============================================
+    // SANITASI KELUARAN
+    // =============================================
+    //
+    // 🔥 FIX (2026-10-10, "noise di beberapa file"): fungsi `softClip(x)` lama -
+    //     x / (1 + |x|)
+    // diterapkan ke SETIAP sample output tanpa syarat. Itu bukan limiter; itu
+    // waveshaper yang aktif di seluruh rentang:
+    //
+    //     amplitudo 0.10 -> gain -0.83 dB, THD 1.62%
+    //     amplitudo 0.30 -> gain -2.28 dB, THD 4.40%
+    //     amplitudo 0.50 -> gain -3.52 dB, THD 6.70%
+    //     amplitudo 0.90 -> gain -5.58 dB, THD 10.35%
+    //     full scale 1.0 -> gain -6.02 dB (setengah amplitudo!)
+    //
+    // THD naik ~6.4x dari level pelan ke level keras. Itu tepat menjelaskan
+    // gejala "hanya SEBAGIAN file yang noise": master yang dikompresi keras
+    // punya level rata-rata tinggi, jadi distorsinya paling terdengar.
+    //
+    // Sekarang keluaran hanya disanitasi - nilai yang secara fisik mustahil
+    // dibuang, sinyal musik lewat utuh:
+    //   - NaN/Inf  -> 0
+    //   - |x| > 2  -> 0  (bit pattern malloc garbage; swr_convert selalu [-1,1])
+    //   - denormal -> 0  (< kDenormalThreshold = 1e-30f)
+    //
+    // Angka lengkap + pembuktiannya: scripts/test_noise_softclip.cpp.
+    // Jalur BitPerfect tidak lagi melewati limiter apa pun di sini.
+    inline void sanitizeOutput(
+        float& x
     ) noexcept;
 };
 

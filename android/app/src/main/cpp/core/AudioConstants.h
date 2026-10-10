@@ -86,9 +86,23 @@ constexpr int32_t kDefaultFramesPerBurst =
 // DSP SAFETY
 // =====================================================
 
+// 🔥 FIX (2026-10-10, "noise di beberapa file"): dulu 1e-15f — itu ambang
+// denormal untuk DOUBLE, bukan float.
+//
+// Denormal float mulai sekitar 1.2e-38 (FLT_MIN). Ambang 1e-15 berarti setiap
+// sample dengan magnitudo di bawah 1e-15 dipaksa ke nol — yaitu decay reverb,
+// ekor ambience, dan fade-out panjang. Sinyal yang seharusnya turun mulus ke
+// -300 dB dipotong mendadak di -300 dB. Audible sebagai tail yang "hilang".
+//
+// 1e-30f aman: jauh di bawah ambang dengar di semua format, tapi masih di atas
+// FLT_MIN sehingga benar-benar menangkap denormal.
 constexpr float kDenormalThreshold =
-    1e-15f;
+    1e-30f;
 
+// Ambang limiter. Sampai 2026-10-10 konstanta ini TIDAK DIBACA di mana pun —
+// yang dipakai `softClip(x)=x/(1+|x|)` yang nonlinear di SELURUH rentang
+// (-6 dB di full scale, THD 6.7% di amplitudo 0.5). Sekarang benar-benar
+// dipakai oleh Limiter yang identity di bawah ambang.
 constexpr float kLimiterThreshold =
     0.98f;
 
