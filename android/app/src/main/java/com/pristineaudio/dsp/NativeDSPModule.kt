@@ -14,6 +14,14 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     companion object {
         const val NAME = "NativeDSPModule"
         private const val TAG = "NativeDSPModule"
+
+        // 🔥 FIX (2026-10-10): batas atas bass boost dalam dB.
+        //
+        // Slider "INTENSITY" di UI berjalan 0..1000 (persen). Nilai itu
+        // dipetakan ke 0..kMaxBassBoostDb sebelum masuk engine C++. Dipilih 12
+        // dB supaya sejajar dengan rentang band EQ di UI (-12..+12 dB);
+        // nilai lebih besar akan mendorong limiter bekerja terus-menerus.
+        private const val kMaxBassBoostDb = 12.0f
     }
 
     init {
@@ -99,7 +107,24 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     fun setBassBoost(strength: Float, sessionId: Int, promise: Promise) {
         if (!engineAvailable) { promise.resolve(false); return }
         try {
-            setNativeBassBoost(strength)
+            // 🔥 FIX (2026-10-10): konversi satuan.
+            //
+            // `strength` datang dari `HorizontalSlider` JS dengan rentang
+            // 0..1000 (ditampilkan sebagai persen: value/10). Sebelumnya nilai
+            // itu diteruskan APA ADANYA ke `setNativeBassBoost(gainDb)`, yang
+            // membacanya sebagai dB — jadi slider di 50% berarti low-shelf
+            // +500 dB di 100 Hz.
+            //
+            // Bug ini laten selama `AudioEngine::setBassBoost()` masih bodi
+            // kosong. Begitu jalur itu disambungkan (commit f39ce5445), nilai
+            // mentah 0..1000 akan langsung terdengar sebagai distorsi keras.
+            //
+            // Dipetakan ke 0..+12 dB supaya konsisten dengan rentang band EQ
+            // di UI (-12..+12 dB). Normalisasi di sini, bukan di JS, supaya
+            // API native tetap ber-dB — sama seperti `setVirtualizer` yang
+            // membagi 1000 sebelum memanggil `setNativeStereoWide`.
+            val gainDb = strength / 1000.0f * kMaxBassBoostDb
+            setNativeBassBoost(gainDb)
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("DSP_ERROR", e.message)
