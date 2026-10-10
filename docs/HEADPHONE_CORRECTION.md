@@ -195,15 +195,49 @@ Bukan "filenya ada".
 | Fase | Isi | Prasyarat |
 |---|---|---|
 | **A** | `setHighShelf()` di `BiquadFilter`; buka error laten `ToneControl` | **✅ SELESAI 2026-10-10** |
-| **B** | `BiquadCascade` — 16 biquad, `setFilter(i, type, freq, q, gain)`, preamp | A ✅ |
-| **C** | Parser parametrik (AutoEQ/Squiglink `.txt`) | B |
+| **B** | `BiquadCascade` — 16 biquad, `setFilter(i, type, freq, q, gain)`, preamp | **✅ SELESAI 2026-10-10** |
+| **C** | Parser parametrik (AutoEQ/Squiglink `.txt`) | B ✅ |
 | **D** | Storage + UI: daftar profil, pilih, aktif/nonaktif | C |
 | **E** | Database model populer (kurasi terbatas) | D |
-| **F** | Parser graphic EQ 127-band | B |
-| **G** | Parser `.vdc` (opsional) | B |
+| **F** | Parser graphic EQ 127-band | B ✅ |
+| **G** | Parser `.vdc` (opsional) | B ✅ |
 
-Fase A selesai — error laten `ToneControl` tertutup, dan `HSC` tersedia untuk
-preset AutoEQ. Fase B bisa langsung dikerjakan.
+### 10.1 Fase A ✅ — `BiquadFilter::setHighShelf()`
+
+RBJ cookbook, cerminan `setLowShelf`. Diverifikasi `scripts/test_highshelf.cpp`
+(14/14). Error laten `ToneControl` tertutup.
+
+### 10.2 Fase B ✅ — `dsp/BiquadCascade.{h,cpp}`
+
+Rantai filter: preamp + 16 biquad statis (nol alokasi dinamis — berbeda dari
+`HeadphoneCorrection` lama yang memakai `std::vector`).
+
+API:
+- `setFilter(index, type, freqHz, q, gainDb, sampleRate)` — `FilterType` =
+  `Peaking` / `LowShelf` / `HighShelf`
+- `setActiveCount(n)`, `activeCount()`
+- `setPreamp(gainDb)`, `preamp()`
+- `setSampleRate(rate)` — **menghitung ulang koefisien** seluruh filter
+- `process(left, right, frames)`, `reset()`, `clear()`
+- `isActive()`, `overflowed()` — preset yang dipotong **ditandai**, bukan
+  didiamkan
+
+Diverifikasi `scripts/test_biquad_cascade.cpp` — **16/16 lulus**:
+
+| # | Yang diuji | Hasil |
+|---|---|---|
+| 1 | kosong = buffer tidak disentuh | bit-exact, `isActive()` false |
+| 2 | preamp −6 dB | terukur −6.00 dB |
+| 3 | preset AutoEQ 4 filter | preamp mendominasi di 700 Hz (−6.48 dB), 60 Hz +1.37 dB, 16 kHz −8.58 dB |
+| 4 | `setSampleRate` 96 kHz | +6.00 dB tetap di 1 kHz; puncak **tidak** bergeser ke 2 kHz |
+| 5 | kapasitas 16 | ke-17 ditolak + `overflowed()` true |
+| 6 | gain ekstrem (shelf +12, PK −12 Q4, PK +10 Q6, HSC +8) | tetap stabil, tidak meledak |
+
+Regresi: `test_dsp_wiring` 9/9 dan `test_highshelf` 14/14 tetap lulus.
+
+**Belum tersambung.** `BiquadCascade` belum punya pemanggil dari jalur produksi
+— statusnya **STUB SIAP**, bukan NYATA. Penyambungannya butuh parser (Fase C)
+dan keputusan di mana ia duduk di `DSPChain`.
 
 ## 11. Verifikasi yang direncanakan
 
