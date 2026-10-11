@@ -59,6 +59,19 @@ class VisualizerService {
   private retryCount: number = 0;
   private readonly maxRetries = 3;
 
+  /**
+   * Berapa kali berturut-turut pembacaan data gagal.
+   *
+   * Dipakai untuk memisahkan "gagal sekali" dari "gagal terus". Kegagalan
+   * sekali wajar (sesi audio baru dibuat, buffer belum terisi); kegagalan
+   * terus berarti ada yang salah dan perlu dilaporkan - tapi hanya sekali,
+   * karena polling berjalan 20x per detik.
+   */
+  private consecutiveFailures: number = 0;
+
+  /** Dipanggil sekali saat kegagalan pertama terjadi. Dilihat layar analyzer. */
+  private onError: ((error: unknown) => void) | null = null;
+
   // Config
   private config: VisualizerConfig = {
     smoothingFactor: 0.3,
@@ -320,9 +333,21 @@ class VisualizerService {
         const data = await NativeVisualizerBridge?.getFFTData();
         if (data && Array.isArray(data)) {
           this.handleFftData(data);
+          this.consecutiveFailures = 0;
         }
       } catch (error) {
-        // Jangan spam log
+        // Native sekarang menolak (reject) saat terjadi kegagalan nyata -
+        // sebelumnya ia mengembalikan array kosong sehingga masalahnya tidak
+        // terlihat. Log pertama saja, lalu naikkan hitungan supaya kesalahan
+        // yang berulang tidak membanjiri log 20x per detik.
+        this.consecutiveFailures++;
+        if (this.consecutiveFailures === 1) {
+          console.warn(
+            "[VisualizerService] Gagal membaca data visualizer:",
+            error,
+          );
+          this.onError?.(error);
+        }
       }
     }, intervalMs);
   }

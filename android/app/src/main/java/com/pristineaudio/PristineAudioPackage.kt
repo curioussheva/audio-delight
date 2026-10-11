@@ -6,7 +6,7 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.uimanager.ViewManager
 
 import com.pristineaudio.dsp.NativeDSPModule
-import com.pristineaudio.NativeVisualizerBridge
+import com.pristineaudio.visualizer.NativeVisualizerBridge
 import com.pristineaudio.MediaStoreModule
 import com.pristineaudio.audio.NativePristineAudio
 import com.pristineaudio.audio.NativePlaybackModule

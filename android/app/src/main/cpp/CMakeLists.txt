@@ -223,6 +223,17 @@ if(PRISTINE_FFMPEG_AVAILABLE)
     target_link_libraries(pristine-audio PRIVATE ${FFMPEG_LIBRARIES})
 endif()
 
+# PRISTINE_HAVE_LIBLOG
+#
+# Menandai bahwa liblog (android/log.h) tersedia. Dipakai FFTPlan.cpp untuk
+# memilih antara __android_log_print dan no-op.
+#
+# Kenapa perlu flag eksplisit: lingkungan pengembangan (Termux) JUGA mendefinisikan
+# __ANDROID__ dan __ANDROID_API__ karena memang berjalan di Android, tapi tanpa
+# liblog - sehingga #ifdef berbasis makro Android memilih cabang yang salah saat
+# file C++ diuji di mesin host. Flag ini hanya ada saat dibangun lewat NDK.
+target_compile_definitions(pristine-audio PRIVATE PRISTINE_HAVE_LIBLOG=1)
+
 target_compile_options(pristine-audio PRIVATE
   -Wall -Wextra
   -Werror=return-type -Werror=uninitialized

@@ -71,10 +71,22 @@ void VisualizerBuffer::read(
     int32_t size
 ) const {
 
+    // Baca dari buffer yang TIDAK sedang ditulis.
+    //
+    // Sebelumnya baris ini memakai `readBuffer` dari `mWriteBuffer` - nilai
+    // yang sama dengan yang dibaca `write()`. Karena `mWriteBuffer` tidak
+    // pernah di-flip (tidak ada pemanggil yang menulisnya selain konstruktor),
+    // kedua sisi selalu memilih `mBufferA`: audio thread menulis ke sana
+    // sementara UI thread membaca dari sana secara bersamaan. Hasilnya data
+    // robek (tearing) - spektrum bergerak acak, bukan mengikuti audio.
+    //
+    // Ambil kebalikannya: kalau penulis memakai A (0), pembaca memakai B.
     const int readBuffer =
         mWriteBuffer.load(
-            std::memory_order_acquire
-        );
+            std::memory_order_relaxed
+        ) == 0
+        ? 1
+        : 0;
 
     const float* src =
         readBuffer == 0
