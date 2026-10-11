@@ -11,6 +11,9 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 
+import { useTheme } from "@/shared/context/ThemeContext";
+import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const SLIDER_WIDTH = SCREEN_WIDTH - 60;
 
@@ -29,6 +32,9 @@ export const HorizontalSlider = ({
   color,
   disabled,
 }: SliderProps) => {
+  const { theme } = useTheme();
+  const colors = theme.colors;
+
   const translateX = useSharedValue(
     interpolate(value, [0, 1000], [0, SLIDER_WIDTH]),
   );
@@ -62,21 +68,56 @@ export const HorizontalSlider = ({
     transform: [{ translateX: translateX.value - 10 }],
   }));
 
+  // Warna track HARUS dari tema: dulu `#1A1A1A` hardcoded, yang berarti di
+  // tema terang track-nya tetap hitam dan tidak terlihat.
+  const trackColor = colors.background.elevated ?? colors.background.tertiary;
+
+  // Angka persen dulu memakai warna aksen mentah. Aksen gelap di tema gelap
+  // (mis. primary[500] = #1A1A1A di atas kartu gelap) jadi tak terbaca, jadi
+  // warnanya dipilih dengan mengukur: aksen kalau lulus, kalau tidak jatuh ke
+  // teks tema.
+  const valueColor =
+    pickReadable([color, colors.text.primary], trackColor, AA_NORMAL) ??
+    colors.text.primary;
+
+  // Label dulu `#888` hardcoded (rasio 5.58 di atas #0A0A0A - lolos, tapi hanya
+  // kebetulan karena latarnya gelap; di tema terang ia gagal). Sekarang token.
+  const labelColor = colors.text.secondary;
+
   return (
     <View style={[styles.container, disabled && { opacity: 0.4 }]}>
       <View style={styles.labelRow}>
-        <Text style={styles.label}>{label}</Text>
-        <Text style={[styles.value, { color }]}>{Math.round(value / 10)}%</Text>
+        <Text style={[styles.label, { color: labelColor }]}>{label}</Text>
+        <Text style={[styles.value, { color: valueColor }]}>
+          {Math.round(value / 10)}%
+        </Text>
       </View>
 
       <GestureDetector gesture={gesture}>
-        <View style={styles.track}>
+        <View
+          style={[
+            styles.track,
+            {
+              backgroundColor: trackColor,
+              borderWidth: 1,
+              borderColor: colors.border.medium,
+            },
+          ]}
+        >
           {/* Progress Fill */}
           <Animated.View style={[styles.fill, animatedFillStyle]} />
 
           {/* Thumb / Handle */}
           <Animated.View style={[styles.thumb, animatedThumbStyle]}>
-            <View style={[styles.thumbInner, { backgroundColor: color }]} />
+            <View
+              style={[
+                styles.thumbInner,
+                {
+                  backgroundColor: color,
+                  borderColor: colors.text.inverse,
+                },
+              ]}
+            />
           </Animated.View>
         </View>
       </GestureDetector>
@@ -96,7 +137,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   label: {
-    color: "#888",
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.5,
@@ -109,7 +149,6 @@ const styles = StyleSheet.create({
   track: {
     height: 6,
     width: SLIDER_WIDTH,
-    backgroundColor: "#1A1A1A",
     borderRadius: 3,
     justifyContent: "center",
   },
@@ -133,6 +172,5 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 2,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.5)",
   },
 });

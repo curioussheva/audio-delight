@@ -30,6 +30,7 @@ export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
   const { theme } = useTheme();
 
   const colors = theme.colors;
+  const spacing = theme.spacing;
   const tint = accent ?? colors.primary[500];
 
   const {
@@ -77,7 +78,16 @@ export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
   };
 
   return (
-    <View style={styles.wrap}>
+    <View
+      style={[
+        styles.wrap,
+        {
+          paddingHorizontal: spacing.md,
+          paddingTop: spacing.md,
+          paddingBottom: spacing.xs,
+        },
+      ]}
+    >
       <View style={styles.headerRow}>
         <Text style={[styles.title, { color: colors.text.primary }]}>
           Koreksi Headphone
@@ -118,7 +128,7 @@ export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.list}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { gap: spacing.sm }]}
         >
           {profiles.map((p) => {
             const isActive = enabled && p.id === activeProfile?.id;
@@ -168,7 +178,7 @@ export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
         </ScrollView>
       )}
 
-      <View style={styles.actions}>
+      <View style={[styles.actions, { gap: spacing.sm }]}>
         <TouchableOpacity
           onPress={() => setShowImport(true)}
           style={[styles.action, { borderColor: tint }]}
@@ -205,8 +215,21 @@ export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
         animationType="fade"
         onRequestClose={() => setShowImport(false)}
       >
-        <View style={styles.modalBg}>
-          <View style={[styles.modal, { backgroundColor: colors.background.elevated }]}>
+        <View
+          style={[
+            styles.modalBackdrop,
+            { backgroundColor: colors.background.overlay ?? "rgba(0,0,0,0.55)" },
+          ]}
+        >
+          <View
+            style={[
+              styles.modal,
+              {
+                backgroundColor: colors.background.elevated,
+                marginHorizontal: spacing.lg,
+              },
+            ]}
+          >
             <Text style={[styles.modalTitle, { color: colors.text.primary }]}>
               Impor preset
             </Text>
@@ -238,7 +261,9 @@ export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
             />
 
             {importError && (
-              <Text style={styles.error}>{importError}</Text>
+              <Text style={[styles.error, { color: colors.status.error }]}>
+                {importError}
+              </Text>
             )}
 
             <View style={styles.modalActions}>
@@ -281,7 +306,11 @@ export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
 };
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
+  // Angka spacing diambil dari token tema (`theme.spacing`), bukan literal -
+  // layar lain memakai skala yang sama, jadi ritmenya konsisten.
+  // Warna sengaja TIDAK di sini: semuanya dari `theme.colors` saat render.
+  wrap: {},
+
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -299,7 +328,8 @@ const styles = StyleSheet.create({
   bound: { fontSize: 12, marginTop: 2, fontWeight: "500" },
   empty: { fontSize: 13, marginTop: 10 },
   list: { marginTop: 10 },
-  listContent: { gap: 8 },
+  listContent: {},
+
   card: {
     borderWidth: 1,
     borderRadius: 10,
@@ -309,7 +339,8 @@ const styles = StyleSheet.create({
   },
   cardTitle: { fontSize: 13, fontWeight: "600" },
   cardMeta: { fontSize: 11, marginTop: 2 },
-  actions: { flexDirection: "row", gap: 8, marginTop: 12 },
+  actions: { flexDirection: "row", marginTop: 12 },
+
   action: {
     flex: 1,
     borderWidth: 1,
@@ -318,12 +349,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   actionText: { fontSize: 13, fontWeight: "500" },
-  modalBg: {
-    flex: 1,
-    backgroundColor: "#00000088",
-    justifyContent: "center",
-    padding: 20,
-  },
+  modalBackdrop: { flex: 1, justifyContent: "center" },
   modal: { borderRadius: 14, padding: 16 },
   modalTitle: { fontSize: 16, fontWeight: "600", marginBottom: 12 },
   input: {
@@ -335,7 +361,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   inputMulti: { minHeight: 110, textAlignVertical: "top" },
-  error: { color: "#FF6B6B", fontSize: 12, marginBottom: 8 },
+  error: { fontSize: 12, marginBottom: 8 },
   modalActions: { flexDirection: "row", gap: 8, marginTop: 4 },
   modalBtn: {
     flex: 1,

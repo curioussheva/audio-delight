@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, Dimensions } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 
 import { GestureDetector, Gesture } from "react-native-gesture-handler";
 
@@ -9,10 +9,11 @@ import Animated, {
   interpolate,
   runOnJS,
   withSpring,
-  withTiming,
 } from "react-native-reanimated";
 
-// Tambah di atas file, atau import dari file types
+import { useTheme } from "@/shared/context/ThemeContext";
+import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+
 interface BandProps {
   frequency: number;
   gain: number;
@@ -21,7 +22,6 @@ interface BandProps {
   disabled?: boolean;
 }
 
-const { width } = Dimensions.get("window");
 const BAND_WIDTH = 65; // Ukuran lebar yang pas untuk scroll horizontal
 const SLIDER_HEIGHT = 160; // Tinggi area geser
 
@@ -32,6 +32,18 @@ export const EqualizerBand = ({
   color,
   disabled,
 }: BandProps) => {
+  const { theme } = useTheme();
+  const colors = theme.colors;
+
+  // Fader butuh warna aksen nyata. `primary[500]` di tema gelap adalah shade
+  // GELAP (charcoal-black #1A1A1A, midnight-blue #0F1E3D), jadi fader-nya
+  // nyaris tak terlihat di atas kartu gelap. Token `text.primary` bukan aksen,
+  // jadi tidak bisa dipakai untuk elemen grafis. Yang dipakai: aksen tema kalau
+  // ada, kalau tidak `primary[500]` - dan permukaan kartu dibuat kontras
+  // terhadapnya di layar.
+  const accent =
+    color ?? colors.accent?.blue ?? colors.primary?.[500] ?? colors.text.primary;
+
   const translateY = useSharedValue(
     interpolate(gain, [-12, 12], [SLIDER_HEIGHT, 0]),
   );
@@ -57,33 +69,58 @@ export const EqualizerBand = ({
 
   const animatedThumbStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value - 12 }],
-    backgroundColor: gain === 0 ? "#333" : color,
-    shadowColor: color,
+    backgroundColor: gain === 0 ? colors.background.tertiary : accent,
+    shadowColor: accent,
   }));
 
   const animatedFillStyle = useAnimatedStyle(() => ({
     height: SLIDER_HEIGHT - translateY.value,
-    backgroundColor: color,
+    backgroundColor: accent,
     opacity: interpolate(Math.abs(gain), [0, 12], [0.2, 0.8]),
   }));
 
   const freqLabel = frequency < 1000 ? `${frequency}` : `${frequency / 1000}k`;
 
+  // Nilai dB di atas fader. Warna dulu aksen mentah / `#555` hardcoded.
+  // Diukur terhadap latar kartu supaya angka gain selalu terbaca - elemen ini
+  // menampilkan nilai numerik, jadi 4.5 berlaku (bukan 3.0).
+  const cardBg = colors.background.secondary;
+  const gainColor =
+    gain === 0
+      ? colors.text.tertiary
+      : (pickReadable([accent, colors.text.primary], cardBg, AA_NORMAL) ??
+         colors.text.primary);
+
   return (
-    <View style={[styles.container, { opacity: disabled ? 0.3 : 1 }]}>
+    <View style={[styles.container, { opacity: disabled ? 0.35 : 1 }]}>
       {/* DB Value di atas */}
-      <Text style={[styles.gainText, { color: gain !== 0 ? color : "#555" }]}>
+      <Text style={[styles.gainText, { color: gainColor }]}>
         {gain > 0 ? `+${gain.toFixed(0)}` : gain.toFixed(0)}
       </Text>
 
       <GestureDetector gesture={gesture}>
-        <View style={styles.faderTrack}>
+        <View
+          style={[
+            styles.faderTrack,
+            {
+              backgroundColor: colors.background.primary,
+              borderColor: colors.border.medium,
+            },
+          ]}
+        >
           {/* Garis-garis Skala (Tick Marks) */}
           <View style={styles.ticks}>
             {[12, 6, 0, -6, -12].map((v) => (
               <View
                 key={v}
-                style={[styles.tickLine, v === 0 && styles.tickZero]}
+                style={[
+                  styles.tickLine,
+                  { backgroundColor: colors.border.medium },
+                  v === 0 && {
+                    width: 20,
+                    backgroundColor: colors.border.light ?? colors.border.medium,
+                  },
+                ]}
               />
             ))}
           </View>
@@ -98,7 +135,9 @@ export const EqualizerBand = ({
         </View>
       </GestureDetector>
 
-      <Text style={styles.freqText}>{freqLabel}</Text>
+      <Text style={[styles.freqText, { color: colors.text.secondary }]}>
+        {freqLabel}
+      </Text>
     </View>
   );
 };
@@ -118,12 +157,10 @@ const styles = StyleSheet.create({
   faderTrack: {
     width: 30, // Area sentuh lebih lebar
     height: SLIDER_HEIGHT,
-    backgroundColor: "#080808",
     borderRadius: 4,
     justifyContent: "flex-end",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#151515",
     overflow: "visible",
   },
   ticks: {
@@ -135,11 +172,6 @@ const styles = StyleSheet.create({
   tickLine: {
     width: 10,
     height: 1,
-    backgroundColor: "#222",
-  },
-  tickZero: {
-    width: 20,
-    backgroundColor: "#333",
   },
   fill: {
     width: 4,
@@ -154,7 +186,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 1,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
+    borderColor: "rgba(255,255,255,0.25)",
     justifyContent: "center",
     alignItems: "center",
     elevation: 8,
@@ -165,13 +197,12 @@ const styles = StyleSheet.create({
   thumbLine: {
     width: 15,
     height: 2,
-    backgroundColor: "rgba(255,255,255,0.5)",
+    backgroundColor: "rgba(255,255,255,0.55)",
     borderRadius: 1,
   },
   freqText: {
     marginTop: 12,
     fontSize: 10,
-    color: "#666",
     fontWeight: "bold",
   },
 });
