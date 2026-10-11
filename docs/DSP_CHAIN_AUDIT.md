@@ -318,9 +318,35 @@ depan, tapi risiko divergensi.
 lalu tukar pointer/indeks, atau snapshot atomic. **Tidak boleh langsung dari
 thread UI.**
 
-### Prioritas 3 — Rapikan immersive
+### Prioritas 3 â Rapikan immersive â SELESAI 2026-10-11
 `HarmonicExciter` ganti nama atau implementasi sungguhan; `SpatialFieldProcessor`
 isi atau lepas dari rantai.
+
+**Dikerjakan.** Tiga kelas yang menyetub kini berimplementasi nyata:
+
+| Kelas | Sebelum | Sesudah |
+|---|---|---|
+| `HarmonicExciter` | kalikan buffer dengan gain linear | shaper `tanh(k*x)/k + 1.2(xÂ²â0.25)`; menghasilkan harmonisa orde 2 dan 3 |
+| `SpatialFieldProcessor` | `/* stub: do nothing */` | pelebar mid/side + ambience tiga tap silang |
+| `BrainwaveGenerator` | **menolkan buffer** â keheningan total | menambahkan binaural beat (carrier 200 Hz, selisih per band) |
+
+Dua bug nyata ditangkap test saat implementasi:
+
+1. **Harmonisa genap tidak muncul.** Suku `xÂ²Â·sign(x)` ternyata fungsi
+   **ganjil** â `(âx)Â²Â·(â1) = âxÂ²` â jadi ia hanya menyumbang harmonisa ganjil.
+   Orde 2 terukur ~3e-33 (nol numerik). Diganti `xÂ²` (genap murni).
+2. **Level naik +5.17 dB.** Normalisasi `tanh(kÂ·x)/tanh(k)` menguatkan sinyal
+   kecil. Diganti bagi `k` sehingga slope di nol = 1; gain kini â1.10 dB.
+
+Selain itu posisi chain diperbaiki: `AudioPipeline::processImmersive()` dulu
+memanggil `applyDSPConfig()` + `mDSP.process()` lebih dulu, sehingga EQ, bass,
+dan pelebar stereo IKUT memproses di mode Immersive â tiga mode tidak
+benar-benar terpisah. Sekarang immersive hanya menjalankan rantai resonansinya
+sendiri, ditambah master gain dan balance (keduanya soal level/panorama, bukan
+karakter suara).
+
+Verifikasi: `scripts/test_immersive.cpp` â **14/14 lulus**.
+
 
 ### Prioritas 4 — Bersihkan duplikasi
 `OutputStage` — putuskan mana yang berlaku (`DSPChain` sudah punya keduanya).

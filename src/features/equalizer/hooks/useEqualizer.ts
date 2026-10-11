@@ -35,7 +35,17 @@ export const useEqualizer = () => {
     resetToDefault,
   } = useEqualizerStore();
 
-  const isDSPDisabled = audioMode === "bit-perfect";
+  // DUA mode mematikan mesin DSP, bukan satu.
+  //
+  // Mode Bit-Perfect melewati pemrosesan supaya output murni. Mode Immersive
+  // TIDAK memakai mesin DSP sama sekali - ia menjalankan rantai resonansinya
+  // sendiri (solfeggio, exciter, spatial, brainwave). Menyalakan EQ/bass/width
+  // di mode Immersive berarti kontrol di layar EQ mengaku mengubah suara,
+  // padahal yang memproses justru rangkaian lain. Karena itu keduanya beku.
+  //
+  // Satu-satunya mode yang menghidupkan mesin ini adalah `dsp`.
+  const isDSPDisabled =
+    audioMode === "bit-perfect" || audioMode === "immersive";
 
   // --- Wrapper Actions dengan Guard Bit-Perfect ---
 

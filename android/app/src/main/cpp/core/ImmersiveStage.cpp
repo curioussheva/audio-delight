@@ -86,9 +86,18 @@ void ImmersiveStage::process(
     mHarmonic.process(left, right, numFrames);
 
     // ---- 3. Spatial field --------------------------------------------------
+    //
+    // Width 0 = jangan lebar-kan di sini. Sejak immersive berhenti memakai
+    // `DSPChain`, pelebar stereo sepenuhnya tugas spasial ini. Nilai width
+    // dibaca dari parameter yang sama dengan mode DSP supaya slider-nya tidak
+    // terasa "mati" saat pindah mode.
 
     mSpatial.setWidth(params.stereoWidth);
-    mSpatial.setDepth(params.resonanceIntensity * 0.5f);
+
+    // Depth: seberapa banyak ruang ditambahkan. Diikat ke intensitas resonansi
+    // supaya satu kontrol mengendalikan seluruh karakter immersive, tapi
+    // maksimum 0.4 - lebih dari itu ruangnya menenggelamkan sumber.
+    mSpatial.setDepth(params.resonanceIntensity * 0.4f);
 
     mSpatial.process(left, right, numFrames);
 

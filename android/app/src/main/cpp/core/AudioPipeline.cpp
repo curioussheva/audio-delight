@@ -4,6 +4,8 @@
 
 #include "AudioPipeline.h"
 
+#include <cmath>
+
 namespace pristine {
 
 // =====================================================
@@ -259,27 +261,45 @@ void AudioPipeline::processImmersive(
 ) noexcept {
 
     // =============================================
-    // BASE DSP
+    // TIGA MODE TERPISAH - IMMERSIVE TANPA DSPChain
     // =============================================
     //
-    // �� FIX (2026-10-10): mode Immersive menjalankan `DSPChain` lebih dulu
-    // (EQ/gain/width), lalu rantai resonan. Tanpa applyDSPConfig di sini,
-    // bagian base-nya tetap identity — sama seperti mode DSP sebelumnya.
-    applyDSPConfig(params);
+    // Sebelumnya blok ini memanggil `applyDSPConfig(params)` lalu
+    // `mDSP.process()` lebih dulu, sehingga EQ, bass boost, dan pelebar
+    // stereo IKUT memproses di mode Immersive. Akibatnya mode tidak
+    // benar-benar terpisah: kontrol EQ diam-diam mengubah suara immersive.
+    //
+    // Sekarang immersive murni: hanya rantai resonansinya sendiri.
+    //
+    // Master gain dan balance tetap berlaku, karena keduanya soal LEVEL dan
+    // PANORAMA output, bukan karakter suara. Tanpa keduanya, slider volume
+    // di mode immersive akan diam saja.
 
-    mDSP.process(
-        left,
-        right,
-        frames
-    );
+    // ---- Master gain & balance -------------------------------------------
+
+    const float gain = params.masterGain;
+    const float bal = params.balance;
+
+    // Constant-power pan: jumlah kuadrat kiri+kanan tetap 1, jadi
+    // memindahkan balance tidak mengubah persepsi kekerasan.
+    const float balClamped = bal < -1.0f ? -1.0f : (bal > 1.0f ? 1.0f : bal);
+    const float angle = (balClamped + 1.0f) * 0.25f * 3.14159265f;
+    const float gainL = gain * std::cos(angle);
+    const float gainR = gain * std::sin(angle);
+
+    // Lewati kalau benar-benar netral supaya tidak ada pembulatan tak perlu.
+    if (gainL != 1.0f || gainR != 1.0f) {
+        for (int32_t i = 0; i < frames; ++i) {
+            left[i] *= gainL;
+            right[i] *= gainR;
+        }
+    }
 
     // =============================================
     // IMMERSIVE CHAIN
     // =============================================
     //
-    // Rantai nyata (Solfeggio -> Harmonic -> Spatial -> Brainwave), dipindahkan
-    // dari cpp/modes/ImmersivePipeline. Sebelumnya blok ini hanya komentar
-    // "FUTURE" - sekarang benar-benar memproses.
+    // Rantai nyata (Solfeggio -> Harmonic -> Spatial -> Brainwave).
     mImmersive.process(
         left,
         right,

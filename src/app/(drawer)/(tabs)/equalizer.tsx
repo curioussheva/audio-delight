@@ -28,7 +28,11 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { useTheme } from "@/context/ThemeContext";
 import { useEqualizer } from "@/features/equalizer/hooks/useEqualizer";
-import { usePlayerStore } from "@/features/player/store/playerStore";
+import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+import {
+  usePlayerStore,
+  type AudioMode,
+} from "@/features/player/store/playerStore";
 import { FrequencyGraph } from "@/features/equalizer/components/Graph";
 import { EqualizerBand } from "@/features/equalizer/components/Band";
 import { HorizontalSlider } from "@/features/equalizer/components/HorizontalSlider";
@@ -125,7 +129,7 @@ export default function EqualizerScreen() {
   const spacing = theme.spacing;
 
   const eq = useEqualizer();
-  const { audioMode } = usePlayerStore();
+  const { audioMode, setAudioMode } = usePlayerStore();
 
   const [isModalVisible, setModalVisible] = useState(false);
 
@@ -173,6 +177,18 @@ export default function EqualizerScreen() {
   const modeLabel =
     MODE_LABELS[String(audioMode ?? "")] ??
     String(audioMode ?? "-").toUpperCase();
+
+  // Tiga mode, masing-masing punya mesinnya sendiri. Pemrosesan DSP (EQ, bass,
+  // pelebar, koreksi headphone) HANYA hidup di mode `dsp`; Immersive memakai
+  // rantai resonansinya sendiri dan tidak memakai seksi di bawah.
+  const modes: Array<{ id: AudioMode; label: string; hint: string }> = [
+    { id: "bit-perfect", label: "Bit-Perfect", hint: "tanpa pemrosesan" },
+    { id: "dsp", label: "DSP", hint: "EQ & efek" },
+    { id: "immersive", label: "Immersive", hint: "resonansi" },
+  ];
+
+  // Mode apa pun selain `dsp` membekukan kontrol di layar ini.
+  const isDSPFrozen = audioMode !== "dsp";
 
   const bassColor =
     colors.accent?.orange ?? colors.status.warning ?? colors.primary[500];
@@ -310,6 +326,66 @@ export default function EqualizerScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* 0. PEMILIH MODE - tiga mode, tiga mesin.
+              Mode `bit-perfect` melewati DSP, mode `immersive` memakai rantai
+              resonansi sendiri. Keduanya membekukan seksi DSP di bawah; hanya
+              `dsp` yang menghidupkannya. Kontrol mode ada DI SINI supaya orang
+              tidak perlu pindah layar untuk membuat kontrol di layar ini
+              berfungsi - dan supaya jelas mode mana yang sedang memproses. */}
+          <View style={[styles.modeWrap, { marginHorizontal: spacing.md }]}>
+            {modes.map((m) => {
+              const isActive = audioMode === m.id;
+              const bg = isActive ? masterColor : colors.background.tertiary;
+              return (
+                <TouchableOpacity
+                  key={m.id}
+                  onPress={() => void setAudioMode(m.id)}
+                  style={[
+                    styles.modeBtn,
+                    {
+                      backgroundColor: bg,
+                      borderColor: isActive ? masterColor : colors.border.medium,
+                    },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isActive }}
+                  accessibilityLabel={`Mode ${m.label} - ${m.hint}`}
+                >
+                  <Text
+                    style={[
+                      styles.modeLabel,
+                      {
+                        color: pickReadable(
+                          [colors.text.inverse, colors.text.primary],
+                          bg,
+                          AA_NORMAL,
+                        ),
+                      },
+                    ]}
+                  >
+                    {m.label}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.modeHint,
+                      {
+                        color: isActive
+                          ? pickReadable(
+                              [colors.text.inverse, colors.text.secondary],
+                              bg,
+                              AA_NORMAL,
+                            )
+                          : colors.text.tertiary,
+                      },
+                    ]}
+                  >
+                    {m.hint}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
           {/* 0a. SAKELAR UTAMA.
               Dulu layar ini TIDAK punya sakelar master: `isEQEnabled` bernilai
               false secara default dan hanya pernah dimatikan
@@ -360,7 +436,7 @@ export default function EqualizerScreen() {
           {/* 0b. Mode Bit-Perfect memblokir seluruh DSP. Dulu kontrol hanya
               diam-diam tidak bereaksi (`if (isDSPDisabled) return`) tanpa
               penjelasan apa pun di layar. */}
-          {eq.isDSPDisabled && (
+          {isDSPFrozen && (
             <View
               style={[
                 styles.warningCard,
@@ -380,9 +456,13 @@ export default function EqualizerScreen() {
                   { color: colors.text.primary, marginLeft: spacing.sm },
                 ]}
               >
-                Mode Bit-Perfect aktif — seluruh DSP dilewati supaya output
-                murni. Pilih mode DSP di Pengaturan untuk memakai kontrol di
-                layar ini.
+                {audioMode === "bit-perfect"
+                  ? "Mode Bit-Perfect aktif — seluruh DSP dilewati supaya " +
+                    "output murni. Pilih mode DSP di atas untuk memakai " +
+                    "kontrol di layar ini."
+                  : "Mode Immersive aktif — layar ini mengendalikan mesin " +
+                    "DSP, sedangkan Immersive memakai rantai resonansinya " +
+                    "sendiri. Pilih mode DSP di atas kalau ingin menyetel EQ."}
               </Text>
             </View>
           )}
@@ -628,6 +708,33 @@ export default function EqualizerScreen() {
 }
 
 const styles = StyleSheet.create({
+  // PEMILIH MODE - tiga tombol berdampingan. Target sentuh 44dp (Apple HIG);
+  // sebelumnya kontrol mode nyaris tak bisa ditekan di layar kecil.
+  modeWrap: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 16,
+  },
+  modeBtn: {
+    flex: 1,
+    minHeight: 44,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modeLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  modeHint: {
+    fontSize: 10,
+    marginTop: 2,
+    textAlign: "center",
+  },
+
   container: { flex: 1 },
   viewControls: {
     flexDirection: "row",
