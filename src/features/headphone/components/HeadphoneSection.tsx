@@ -19,6 +19,7 @@ import {
 } from "react-native";
 
 import { useTheme } from "@/context/ThemeContext";
+import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import { useHeadphoneCorrection } from "../hooks/useHeadphoneCorrection";
 
 interface Props {
@@ -114,7 +115,7 @@ export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
       </Text>
 
       {hasBinding && (
-        <Text style={[styles.bound, { color: tint }]}>
+        <Text style={[styles.bound, { color: colors.text.secondary }]}>
           Terikat ke perangkat ini - profil dipasang otomatis
         </Text>
       )}
@@ -157,7 +158,10 @@ export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
                   numberOfLines={1}
                   style={[
                     styles.cardTitle,
-                    { color: isActive ? tint : colors.text.primary },
+                    {
+                      color: colors.text.primary,
+                      fontWeight: isActive ? "700" : "600",
+                    },
                   ]}
                 >
                   {p.name}
@@ -168,7 +172,7 @@ export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
                 </Text>
 
                 {isBound && (
-                  <Text style={[styles.cardMeta, { color: tint }]}>
+                  <Text style={[styles.cardMeta, { color: colors.text.secondary }]}>
                     terikat
                   </Text>
                 )}
@@ -183,7 +187,21 @@ export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
           onPress={() => setShowImport(true)}
           style={[styles.action, { borderColor: tint }]}
         >
-          <Text style={[styles.actionText, { color: tint }]}>
+          {/* Warna teks DIPILIH dari kandidat yang lulus AA di atas latar ini.
+              `tint` (primary[500]) gagal di banyak tema gelap - mis. 1.30 pada
+              midnight-blue - karena di tema gelap primary[500] justru gelap. */}
+          <Text
+            style={[
+              styles.actionText,
+              {
+                color: pickReadable(
+                  [tint, colors.text.primary],
+                  colors.background.primary,
+                  AA_NORMAL,
+                ),
+              },
+            ]}
+          >
             Impor preset
           </Text>
         </TouchableOpacity>
@@ -290,9 +308,24 @@ export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
                 ]}
               >
                 {importing ? (
-                  <ActivityIndicator color="#fff" />
+                  <ActivityIndicator
+                    color={pickReadable(
+                      [colors.text.inverse, colors.text.primary],
+                      tint,
+                      AA_NORMAL,
+                    )}
+                  />
                 ) : (
-                  <Text style={{ color: "#fff", fontWeight: "600" }}>
+                  <Text
+                    style={{
+                      color: pickReadable(
+                        [colors.text.inverse, colors.text.primary],
+                        tint,
+                        AA_NORMAL,
+                      ),
+                      fontWeight: "600",
+                    }}
+                  >
                     Simpan
                   </Text>
                 )}
