@@ -161,11 +161,55 @@ belum ada (`NativeVisualizerModule.cpp` hanya mengembalikan sample mentah), jadi
 Kotlin menghitung sendiri supaya visualizer berfungsi tanpa jalur JNI baru.
 
 Risikonya jelas: dua salinan algoritma bisa menyimpang. Karena itu ada
-`scripts/test_fft_parity.cpp` + `VisualizerFFTParityTest.kt` yang membandingkan
-keduanya atas input identik. **Kalau salah satu diubah, jalankan uji paritas.**
+`scripts/test_fft_parity.cpp`, yang menjalankan **kedua algoritma** atas input
+identik dan membandingkan spektrumnya. **Kalau salah satu diubah, jalankan uji
+paritas.**
+
+```bash
+g++ -std=c++17 -O2 -Iandroid/app/src/main/cpp/fft \
+    scripts/test_fft_parity.cpp \
+    android/app/src/main/cpp/fft/FFTPlan.cpp -o "$TMPDIR/parity" && "$TMPDIR/parity"
+```
+
+Hasil terakhir: selisih maksimum `1.99e-06` (skala 0..1).
 
 Kalau nanti FFT dipindah sepenuhnya ke native, yang perlu dihapus: `fftInPlace`,
 `computeSpectrum`, `mapToLogBins`, `logIndex` di Kotlin.
+
+### Kotlin tidak bisa dikompilasi di Termux
+
+Tidak ada `kotlinc`, tidak ada gradle. Setiap kesalahan tipe Kotlin baru
+terlihat setelah build CI berjalan ~6 menit - dan build gagal berarti satu
+siklus terbuang. Ini terjadi dua kali pada perubahan ini:
+
+1. `maxOf(linear: Float, 1e-9: Double)` - `maxOf` tidak punya overload untuk
+   tipe campuran.
+2. `sqrt(re[i] * re[i] + ...)` - `kotlin.math.sqrt` hanya punya overload
+   Double untuk argumen skalar.
+
+Kotlin **tidak** mempromosikan tipe numerik secara implisit seperti C++.
+Operasi antara `Float` dan `Double` adalah error kompilasi, bukan konversi
+otomatis - jadi setiap `.toDouble()`/`.toFloat()` harus eksplisit.
+
+Sebelum commit yang menyentuh `.kt`, periksa manual pola-pola ini:
+
+```bash
+grep -nE "sqrt\(|ln\(|log\(|log10\(|pow\(|maxOf|minOf|coerce" \
+  android/app/src/main/java/**/*.kt
+```
+
+Percobaan membuat pemeriksa statis (`scripts/check_kotlin.py`) **gagal** -
+ia melewatkan kedua kasus nyata di atas sekaligus melaporkan false positive
+pada `sqrt` yang sebenarnya benar, lalu dihapus. Alat yang tidak bisa dipercaya
+lebih berbahaya daripada tidak ada, karena memberi rasa aman palsu.
+
+### Test Kotlin tidak dijalankan CI
+
+`android/app/build.gradle` tidak punya `testImplementation` untuk junit, dan
+tidak ada workflow yang menjalankan `gradlew test`. Karena itu uji paritas
+sengaja ditulis di C++ (`scripts/test_fft_parity.cpp`) yang bisa dijalankan
+lokal, bukan sebagai `src/test/**.kt` yang akan menggagalkan kompilasi karena
+`org.junit` tidak ditemukan.
 
 ### `PRISTINE_HAVE_LIBLOG`
 

@@ -186,10 +186,17 @@ class NativeVisualizerBridge(reactContext: ReactApplicationContext) :
         fftInPlace(re, im)
 
         // Magnitude hanya sampai Nyquist (paruh pertama), lalu dikelompokkan.
+        //
+        // `kotlin.math.sqrt` hanya punya overload Double untuk argumen skalar,
+        // jadi hasil perkalian Float di sini dikonversi eksplisit. Ini kena
+        // pada build pertama: maxOf(Float, Double) di bawah juga error,
+        // keduanya pola yang sama - Kotlin tidak mempromosikan tipe numerik
+        // secara implisit seperti C++.
         val half = FFT_SIZE / 2
         val magnitude = FloatArray(half)
         for (i in 0 until half) {
-            magnitude[i] = sqrt(re[i] * re[i] + im[i] * im[i]) / half
+            val power = (re[i] * re[i] + im[i] * im[i]).toDouble()
+            magnitude[i] = (sqrt(power) / half).toFloat()
         }
 
         return mapToLogBins(magnitude)
@@ -281,7 +288,11 @@ class NativeVisualizerBridge(reactContext: ReactApplicationContext) :
             val linear = if (count > 0) sum / count else 0.0f
 
             // dB, lalu petakan ke 0.0-1.0.
-            val db = 20.0 * ln(maxOf(linear, 1e-9).toDouble()) / ln(10.0)
+            //
+            // `coerceAtLeast`, bukan `maxOf`: `linear` bertipe Float sementara
+            // ambangnya Double, dan maxOf tidak punya overload untuk tipe
+            // campuran (error kompilasi, bukan konversi otomatis).
+            val db = 20.0 * ln(linear.coerceAtLeast(1e-9f).toDouble()) / ln(10.0)
             val normalized = ((db - DB_FLOOR) / (DB_CEIL - DB_FLOOR)).coerceIn(0.0, 1.0)
 
             out[b] = normalized.toFloat()
