@@ -9,7 +9,16 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
+import Constants from "expo-constants";
 import { useTheme } from "@/context/ThemeContext";
+
+// Versi dibaca dari app.json supaya tidak menyimpang dari APK yang terpasang.
+// Sebelumnya label di sini hardcoded "v1.0.0-PRO" sementara app.json sudah di
+// 1.0.37 - dua angka berbeda yang sama-sama mengaku versi aplikasi.
+const APP_VERSION =
+  Constants.expoConfig?.version ??
+  (Constants.manifest as { version?: string } | null)?.version ??
+  "-";
 
 export default function AboutScreen() {
   const { theme } = useTheme();
@@ -60,7 +69,7 @@ export default function AboutScreen() {
           PristineAudio
         </Text>
         <Text style={[styles.version, { color: colors.text.tertiary }]}>
-          v1.0.0-PRO
+          v{APP_VERSION}
         </Text>
       </View>
 
