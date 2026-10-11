@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useTheme } from "@/context/ThemeContext";
+import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import * as MediaLibrary from "expo-media-library";
@@ -279,8 +280,30 @@ export default function OnboardingScreen() {
       </View>
 
       <View style={styles.footer}>
+        {/* Tombol ini MENGIRIM IZIN setelah mode dipilih.
+            Dulu tidak ada petunjuk apa pun bahwa menekan "Continue" akan
+            memunculkan dialog izin media + notifikasi; user hanya melihat
+            dialog sistem muncul tanpa penjelasan. Label sekarang menyebutkan
+            apa langkah berikutnya, dan warna teks tombol mengikuti kontras
+            terukur (dulu "#000" hardcoded - gagal di tema dengan primary
+            yang gelap). */}
+        {selectedMode && !isSubmitting && (
+          <Text style={[styles.permHint, { color: colors.text.tertiary }]}>
+            Langkah berikutnya: izin akses media &amp; notifikasi
+          </Text>
+        )}
+
         <TouchableOpacity
           disabled={!selectedMode || isSubmitting}
+          accessibilityRole="button"
+          accessibilityLabel={
+            isSubmitting
+              ? "Menyiapkan"
+              : selectedMode
+                ? "Lanjut, lalu minta izin media dan notifikasi"
+                : "Pilih mode dulu untuk melanjutkan"
+          }
+          accessibilityState={{ disabled: !selectedMode || isSubmitting }}
           style={[
             styles.nextButton,
             {
@@ -298,12 +321,16 @@ export default function OnboardingScreen() {
               {
                 color:
                   selectedMode && !isSubmitting
-                    ? "#000"
+                    ? pickReadable(
+                        [colors.text.inverse, "#FFFFFF", "#000000"],
+                        colors.primary[500],
+                        AA_NORMAL,
+                      )
                     : colors.text.secondary,
               },
             ]}
           >
-            {isSubmitting ? "Setting up..." : "Continue"}
+            {isSubmitting ? "Menyiapkan..." : "Lanjut"}
           </Text>
         </TouchableOpacity>
 
@@ -374,6 +401,7 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   nextButtonText: { fontSize: 16, fontWeight: "700" },
+  permHint: { fontSize: 12, marginBottom: 8, textAlign: "center" },
   hintText: { fontSize: 12, marginTop: 12, textAlign: "center" },
 });
  

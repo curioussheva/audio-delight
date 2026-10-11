@@ -7,7 +7,15 @@
 
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
-    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+
+    <!-- RECORD_AUDIO SENGAJA TIDAK ADA.
+         App ini hanya MEMUTAR audio; tidak ada perekaman di kode aplikasi
+         (satu-satunya pemakaian ada di contoh vendor `cpp/oboe/samples/` dan
+         `cpp/oboe/apps/`, yang tidak ikut dibangun). Izin ini dulu ada dan
+         ikut diminta di `shared/utils/permissions.ts`, sehingga user melihat
+         dialog "izinkan merekam audio" dari pemutar musik.
+         Kalau nanti butuh rekam (mis. visualizer dari mikrofon), tambahkan
+         kembali di sini DAN di requestAudioPermissions() - keduanya satu unit. -->
 
     <!-- Foreground service (audio playback) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>

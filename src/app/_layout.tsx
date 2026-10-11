@@ -19,6 +19,7 @@ import { AudioPropertyToast } from "@/features/player/components/AudioPropertyTo
 import { audioEngine } from "@/features/player/api/engine";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
+import { requestAudioPermissions } from "@/shared/utils/permissions";
 
 // 🔥 DIAGNOSTICS
 import {
@@ -63,6 +64,63 @@ export default function RootLayout() {
 const performInitialization = useCallback(async () => {
   try {
     console.log("[BOOT] 1. Initializing Audio Engine & Stores...");
+
+    // ==========================================================
+    // URUTAN IZIN - SEBELUM ENGINE
+    // ==========================================================
+    //
+    // Dulu `audioEngine.initialize()` dipanggil PERTAMA, dan di dalamnya ada
+    // `NativePlaybackService.startService()` -> `startForeground()`. Di
+    // Android 13+ (API 33+) foreground service butuh izin POST_NOTIFICATIONS;
+    // kalau belum ada, sistem menampilkan permintaan izin SAAT ITU JUGA -
+    // jadi dialog izin muncul sebelum layar onboarding sempat dirender.
+    //
+    // User melihat dialog izin sistem di atas splash, tanpa konteks. Setelah
+    // itu onboarding MEMINTA LAGI (media + notifikasi) di langkah terakhir.
+    // Dua permintaan untuk hal yang sama, dan yang pertama tanpa penjelasan.
+    //
+    // Perbaikan: izin diminta di sini HANYA kalau onboarding sudah selesai.
+    // Kalau belum, onboarding yang memintanya - di sana user sudah tahu
+    // aplikasi apa ini dan kenapa izinnya dibutuhkan.
+    let needsOnboarding = true;
+
+    try {
+      needsOnboarding =
+        (await AsyncStorage.getItem("has_onboarded")) !== "true";
+
+      if (!needsOnboarding) {
+        const { PermissionsAndroid, Platform } = require("react-native");
+
+        if (Platform.OS === "android" && Platform.Version >= 33) {
+          const granted = await PermissionsAndroid.check(
+            PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+          );
+
+          if (!granted) {
+            console.log(
+              "[BOOT] Onboarding selesai - meminta POST_NOTIFICATIONS",
+            );
+            await PermissionsAndroid.request(
+              PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+            );
+          }
+        }
+
+        // Izin baca media: READ_MEDIA_AUDIO di API 33+, READ_EXTERNAL_STORAGE
+        // di bawahnya. Diminta di sini supaya layar Library tidak menemukan
+        // izin kosong saat pertama kali dibuka.
+        await requestAudioPermissions();
+      } else {
+        console.log(
+          "[BOOT] Onboarding belum selesai - izin diminta di layar onboarding",
+        );
+      }
+    } catch (e) {
+      // Kegagalan izin tidak fatal: audio tetap bisa diputar untuk berkas yang
+      // sudah ada di library. Yang hilang hanya notifikasi/pemindaian baru.
+      console.warn("[BOOT] Pemeriksaan izin awal dilewati:", e);
+    }
+
     await audioEngine.initialize();
     await initStore();
 
@@ -128,32 +186,10 @@ const performInitialization = useCallback(async () => {
       await setAudioMode("dsp");
     }
 
-    // Izin notifikasi (Android 13+).
-    //
-    // Diminta di sini juga, bukan hanya di onboarding: user yang sudah
-    // melewati onboarding (has_onboarded = true) tidak akan pernah diminta
-    // lagi. Tanpa izin ini, startForeground() tetap jalan tapi notifikasinya
-    // TIDAK TAMPIL - dan itulah gejala "notification player tidak keluar".
-    // Kegagalan di sini sengaja tidak fatal: aplikasi tetap bisa memutar audio.
-    try {
-      const { PermissionsAndroid, Platform } = require("react-native");
-      if (Platform.OS === "android" && Platform.Version >= 33) {
-        const granted = await PermissionsAndroid.check(
-          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
-        );
-        if (!granted) {
-          console.log("[BOOT] Meminta izin POST_NOTIFICATIONS...");
-          const result = await PermissionsAndroid.request(
-            PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
-          );
-          console.log(`[BOOT] Izin POST_NOTIFICATIONS: ${result}`);
-        } else {
-          console.log("[BOOT] Izin POST_NOTIFICATIONS sudah ada");
-        }
-      }
-    } catch (e) {
-      console.warn("[BOOT] Permintaan izin notifikasi dilewati:", e);
-    }
+    // Izin media + notifikasi sudah ditangani di blok URUTAN IZIN di atas.
+    // Blok lama di sini meminta POST_NOTIFICATIONS lagi tanpa syarat, yang
+    // berarti user baru akan melihat permintaan yang sama dua kali (sekali
+    // tanpa konteks dari sini, sekali dari onboarding).
 
     console.log("[BOOT] Engine & Store initialization success.");
     setAppState("loading");
