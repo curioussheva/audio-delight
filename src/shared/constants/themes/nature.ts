@@ -39,6 +39,16 @@ export const FOREST_GREEN: Theme = {
       error: "#EF4444",
       info: "#3B82F6",
     },
+            accent: {
+      blue: "#3B82F6",
+      purple: "#8B5CF6",
+      orange: "#F59E0B",
+      red: "#EF4444",
+      green: "#10B981",
+      primary: "#2D5A27",
+      onPrimary: "#F0F7EF",
+      onPrimaryKey: "#F0F7EF",
+      },
     border: {
       light: "#3A4739",
       medium: "#636D62",
@@ -91,6 +101,16 @@ export const OCEAN_WAVE: Theme = {
       error: "#EF4444",
       info: "#3B82F6",
     },
+            accent: {
+      blue: "#3B82F6",
+      purple: "#8B5CF6",
+      orange: "#F59E0B",
+      red: "#EF4444",
+      green: "#10B981",
+      primary: "#1A4B77",
+      onPrimary: "#E6F3FF",
+      onPrimaryKey: "#E6F3FF",
+      },
     border: {
       light: "#374651",
       medium: "#606D75",

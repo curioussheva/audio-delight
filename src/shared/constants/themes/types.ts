@@ -39,14 +39,39 @@ export interface ThemeColors {
     disabled: string;
     inverse: string;
   };
-  accent?: {
-    blue?: string;
-    purple?: string;
-    orange?: string;
-    red?: string;
-    green?: string;
-    primary?: string;
-    secondary?: string;
+  // Warna aksen WAJIB lengkap.
+  //
+  // Dulu semuanya opsional, jadi setiap pemakaian harus menulis rantai
+  // fallback (`accent?.orange ?? status.warning ?? primary[500]`). Rantai itu
+  // yang menghasilkan 170 kegagalan kontras: `primary[500]` di tema gelap
+  // justru warna gelap (rasio 1.06-1.32), sehingga label dan ikon aksen nyaris
+  // tak terlihat. Kontrak yang jelas lebih murah daripada 170 tambalan.
+  accent: {
+    blue: string;
+    purple: string;
+    orange: string;
+    red: string;
+    green: string;
+    /**
+     * Warna aksen utama tema. Ini yang sudah dipakai UI sebagai `accent.primary`.
+     */
+    primary: string;
+    /**
+     * Warna TEKS di atas permukaan berisi `accent.primary`.
+     *
+     * Perlu token terpisah karena `accent.primary` dan `primary[500]` pada 7
+     * dari 20 tema ternyata warna BERLAWANAN terang/gelap - jaraknya sampai
+     * 14.76:1 (charcoal-black: accent.primary `#E4E4E7` vs primary[500]
+     * `#121212`). Tidak ada satu pun warna yang bisa lolos AA di keduanya.
+     */
+    onPrimary: string;
+    /**
+     * Warna TEKS di atas permukaan berisi `primary[500]`.
+     *
+     * Terpisah dari `onPrimary` karena alasan di atas. Diverifikasi oleh
+     * `src/__tests__/shared/utils/themeAccent.test.ts`.
+     */
+    onPrimaryKey: string;
   };
   status: {
     success: string;

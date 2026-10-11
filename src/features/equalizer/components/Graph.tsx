@@ -14,6 +14,7 @@ import { useDerivedValue, SharedValue } from "react-native-reanimated";
 
 import { EqualizerBand } from "@/features/equalizer/types";
 import { useTheme } from "@/context/ThemeContext";
+import { accentOn } from "@/shared/utils/contrast";
 
 interface Props {
   bands: SharedValue<EqualizerBand[]> | EqualizerBand[]; // Terima dua-duanya agar fleksibel
@@ -74,14 +75,14 @@ export const FrequencyGraph: React.FC<Props> = ({
   const colors = useMemo(
     () => ({
       primary: theme.colors.primary[500],
-      accent: theme.colors.accent?.blue ?? "#00D4AA",
+      accent: accentOn([theme.colors.accent.blue], theme.colors.background.secondary, [theme.colors.text.primary]),
       fillGradient: [
         `${theme.colors.primary[500]}44`,
         "transparent",
       ] as string[],
       lineGradient: [
         theme.colors.primary[500],
-        theme.colors.accent?.blue ?? "#00D4AA",
+        accentOn([theme.colors.accent.blue], theme.colors.background.secondary, [theme.colors.text.primary]),
       ] as string[],
       border: theme.colors.border.light,
     }),

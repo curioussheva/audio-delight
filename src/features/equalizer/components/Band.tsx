@@ -12,7 +12,11 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { useTheme } from "@/shared/context/ThemeContext";
-import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+import {
+  accentOn,
+  pickReadable,
+  AA_NORMAL,
+} from "@/shared/utils/contrast";
 
 interface BandProps {
   frequency: number;
@@ -42,7 +46,7 @@ export const EqualizerBand = ({
   // ada, kalau tidak `primary[500]` - dan permukaan kartu dibuat kontras
   // terhadapnya di layar.
   const accent =
-    color ?? colors.accent?.blue ?? colors.primary?.[500] ?? colors.text.primary;
+    color ?? accentOn([colors.accent.blue], colors.background.secondary, [colors.text.primary]);
 
   const translateY = useSharedValue(
     interpolate(gain, [-12, 12], [SLIDER_HEIGHT, 0]),

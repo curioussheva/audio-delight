@@ -28,7 +28,11 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { useTheme } from "@/context/ThemeContext";
 import { useEqualizer } from "@/features/equalizer/hooks/useEqualizer";
-import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+import {
+  accentOn,
+  pickReadable,
+  AA_NORMAL,
+} from "@/shared/utils/contrast";
 import {
   usePlayerStore,
   type AudioMode,
@@ -190,11 +194,37 @@ export default function EqualizerScreen() {
   // Mode apa pun selain `dsp` membekukan kontrol di layar ini.
   const isDSPFrozen = audioMode !== "dsp";
 
-  const bassColor =
-    colors.accent?.orange ?? colors.status.warning ?? colors.primary[500];
-  const widthColor = colors.accent?.blue ?? colors.primary[500];
-  const reverbColor = colors.accent?.purple ?? colors.primary[500];
-  const masterColor = colors.accent?.green ?? colors.primary[500];
+  // Warna aksen dipilih lewat pengukuran terhadap permukaan tempat ia dipakai.
+  //
+  // Rantai lama (`accent?.orange ?? status.warning ?? primary[500]`) gagal
+  // kontras di banyak tema: primary[500] pada tema gelap justru warna gelap
+  // (charcoal-black 1.12:1, midnight-blue 1.30:1), sehingga fader dan label
+  // nyaris tak terlihat. `accentOn` mengembalikan aksen tema selama terbaca,
+  // dan jatuh ke warna teks kalau tidak.
+  const onCard = colors.background.secondary;
+
+  const accentTextFallback = [colors.text.primary, colors.text.secondary];
+
+  const bassColor = accentOn(
+    [colors.accent.orange],
+    onCard,
+    accentTextFallback,
+  );
+  const widthColor = accentOn(
+    [colors.accent.blue],
+    onCard,
+    accentTextFallback,
+  );
+  const reverbColor = accentOn(
+    [colors.accent.purple],
+    onCard,
+    accentTextFallback,
+  );
+  const masterColor = accentOn(
+    [colors.accent.green],
+    onCard,
+    accentTextFallback,
+  );
 
   return (
     <SafeAreaView

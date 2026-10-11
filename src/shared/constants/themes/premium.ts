@@ -39,6 +39,16 @@ export const GOLDEN_HOUR: Theme = {
       error: "#EF4444",
       info: "#3B82F6",
     },
+            accent: {
+      blue: "#3B82F6",
+      purple: "#8B5CF6",
+      orange: "#F59E0B",
+      red: "#EF4444",
+      green: "#10B981",
+      primary: "#D4A373",
+      onPrimary: "#1A1410",
+      onPrimaryKey: "#1A1410",
+      },
     border: {
       light: "#433E3B",
       medium: "#6A6664",
@@ -91,6 +101,16 @@ export const ROSE_GOLD: Theme = {
       error: "#EF4444",
       info: "#3B82F6",
     },
+            accent: {
+      blue: "#3B82F6",
+      purple: "#8B5CF6",
+      orange: "#F59E0B",
+      red: "#EF4444",
+      green: "#10B981",
+      primary: "#E6B0B0",
+      onPrimary: "#1F1A1A",
+      onPrimaryKey: "#1F1A1A",
+      },
     border: {
       light: "#474343",
       medium: "#6D6A6A",

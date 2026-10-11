@@ -16,6 +16,7 @@ import { X, Shuffle, Check } from "lucide-react-native";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { ALL_THEMES, THEME_CATEGORIES } from "@/shared/constants/theme";
 import type { Theme } from "@/shared/constants/themes/types";
+import { accentOn } from "@/shared/utils/contrast";
 
 const { width } = Dimensions.get("window");
 const COLUMN_WIDTH = (width - 64) / 3;
@@ -104,7 +105,7 @@ export const ThemePicker: React.FC<{
             {[
               t.colors.primary[500],
               t.colors.status?.success || "#10B981",
-              t.colors.accent?.primary || t.colors.primary[300],
+              accentOn([t.colors.accent.primary], t.colors.background.secondary, [t.colors.text.primary]),
             ].map((bg, i) => (
               <View
                 key={i}

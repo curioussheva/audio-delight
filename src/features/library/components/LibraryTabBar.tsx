@@ -22,6 +22,7 @@ import {
 
 import { useTheme } from "@/context/ThemeContext";
 import type { LibraryTab } from "../types/scan";
+import { accentOn } from "@/shared/utils/contrast";
 
 // ── Tab Configuration ────────────────────────────────────────────────────────
 export const TABS: { id: LibraryTab; label: string; icon: any }[] = [
@@ -139,7 +140,7 @@ export const LibraryTabBar = ({
             <View style={[styles.progressRow, isScanning && { marginTop: 8 }]}>
               <ActivityIndicator
                 size="small"
-                color={colors.accent?.purple ?? "#8B5CF6"}
+                color={accentOn([colors.accent.purple], colors.background.secondary, [colors.text.primary])}
                 style={{ transform: [{ scale: 0.8 }] }}
               />
               <Text style={[styles.scanText, { color: colors.text.secondary }]}>
@@ -151,7 +152,7 @@ export const LibraryTabBar = ({
                 <Text
                   style={[
                     styles.pctText,
-                    { color: colors.accent?.purple ?? "#8B5CF6" },
+                    { color: accentOn([colors.accent.purple], colors.background.secondary, [colors.text.primary]) },
                   ]}
                 >
                   {Math.floor(((enrichProgress ?? 0) / enrichTotal) * 100)}%
@@ -172,7 +173,7 @@ export const LibraryTabBar = ({
                 style={[
                   styles.progressFill,
                   {
-                    backgroundColor: colors.accent?.purple ?? "#8B5CF6",
+                    backgroundColor: accentOn([colors.accent.purple], colors.background.secondary, [colors.text.primary]),
                     width: `${Math.floor(((enrichProgress ?? 0) / (enrichTotal ?? 1)) * 100)}%`,
                   },
                 ]}

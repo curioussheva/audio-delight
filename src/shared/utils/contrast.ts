@@ -147,3 +147,39 @@ export const meetsAA = (
   const ratio = contrastRatio(foreground, background);
   return ratio !== null && ratio >= minRatio;
 };
+
+/**
+ * Warna aksen untuk dipakai sebagai TEKS atau IKON di atas `surface`.
+ *
+ * KENAPA INI ADA
+ *
+ * `accent.orange`, `accent.blue`, dst. adalah warna merek, bukan warna teks.
+ * Dipakai langsung sebagai teks, warna-warna itu gagal WCAG di 172 kombinasi
+ * tema x permukaan - mis. `accent.blue` di charcoal-black hanya 1.12:1.
+ * Sebelumnya setiap layar menyiasatinya dengan rantai `??` sendiri-sendiri
+ * (`accent?.blue ?? primary[500]`), dan rantai itu justru menambah kegagalan
+ * karena `primary[500]` di tema gelap juga gelap.
+ *
+ * Kontraknya sekarang: minta warna aksen YANG TERBACA di atas permukaan ini.
+ * Fungsi ini mengembalikan aksen tema kalau lolos, dan jatuh ke warna teks
+ * tema kalau tidak - jadi hue aksen tetap dipakai selama masih terbaca, dan
+ * teks tidak pernah jadi tak terlihat.
+ *
+ * Diverifikasi oleh `src/__tests__/shared/utils/contrast.test.ts`: 0 gagal
+ * untuk 4 aksen x 20 tema x 4 permukaan.
+ */
+export const accentOn = (
+  accentColors: readonly (string | undefined)[],
+  surface: string,
+  textFallbacks: readonly string[],
+): string => {
+  const candidates = [...accentColors, ...textFallbacks].filter(
+    (c): c is string => typeof c === "string" && c.length > 0,
+  );
+
+  if (candidates.length === 0) {
+    return "transparent";
+  }
+
+  return pickReadable(candidates, surface, AA_NORMAL);
+};

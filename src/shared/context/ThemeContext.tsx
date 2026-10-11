@@ -8,18 +8,16 @@ import {
   ALL_THEMES,
   getThemeById,
   getRandomTheme,
-  THEMES_LIST,
   DEFAULT_THEME,
 } from "@/shared/constants/theme";
+import { resolveToggleTarget } from "@/shared/utils/themeMode";
 
 interface ThemeContextType {
   theme: Theme;
   themeId: ThemeId;
-  availableThemes: typeof THEMES_LIST;
   isDarkMode: boolean;
   setTheme: (themeId: ThemeId) => Promise<void>;
   toggleTheme: () => void;
-  nextTheme: () => void;
   randomTheme: () => Promise<void>;
 }
 
@@ -72,15 +70,15 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  // Toggle terang <-> gelap untuk tema AKTIF, bukan lompat ke tema tetap.
+  //
+  // Versi lama hanya mengenal dua dari 20 tema: dari tema apa pun yang gelap ia
+  // melempar ke "light-elegant", dan dari yang terang ke "emerald-noir". Jadi
+  // memakai toggle saat berada di "rose-gold" membuang pilihan user ke tema
+  // yang sama sekali lain. Sekarang ia mencari kandidat dengan mode berlawanan
+  // dengan jarak warna terdekat, supaya toggle terasa seperti membalik mode.
   const toggleTheme = () => {
-    const newId: ThemeId = theme.isDark ? "light-elegant" : "emerald-noir";
-    setTheme(newId);
-  };
-
-  const nextTheme = () => {
-    const currentIndex = THEMES_LIST.findIndex((t) => t.id === themeId);
-    const nextIndex = (currentIndex + 1) % THEMES_LIST.length;
-    setTheme(THEMES_LIST[nextIndex].id as ThemeId);
+    void setTheme(resolveToggleTarget(themeId));
   };
 
   const randomTheme = async () => {
@@ -93,11 +91,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
       value={{
         theme,
         themeId,
-        availableThemes: THEMES_LIST,
         isDarkMode: theme.isDark,
         setTheme,
         toggleTheme,
-        nextTheme,
         randomTheme,
       }}
     >

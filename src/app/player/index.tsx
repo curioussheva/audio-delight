@@ -25,6 +25,7 @@ import { useSafePadding } from "@/shared/hooks/useSafePadding";
 
 // ✅ Import SpectogramView (bukan SpectrumAnalyzer)
 import { SpectogramView } from "@/features/visualizer/components/SpectogramView";
+import { accentOn } from "@/shared/utils/contrast";
 
 // Lucide Icons
 import {
@@ -131,7 +132,7 @@ export default function PlayerScreen() {
   if (!currentSong) return null;
 
   // Helper warna dinamis
-  const goldColor = colors.accent?.primary || colors.primary[500] || "#D4AF37";
+  const goldColor = accentOn([colors.accent.primary], colors.background.primary, [colors.text.primary]);
   const primaryColor = colors.primary[500];
   const textPrimary = colors.text.primary;
   const textSecondary = colors.text.secondary;

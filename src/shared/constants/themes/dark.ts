@@ -33,6 +33,16 @@ export const DEEP_NAVY: Theme = {
       disabled: "#4A5568",
       inverse: "#0A1628",
     },
+            accent: {
+      blue: "#3B82F6",
+      purple: "#8B5CF6",
+      orange: "#F59E0B",
+      red: "#EF4444",
+      green: "#10B981",
+      primary: "#00D4AA",
+      onPrimary: "#000000",
+      onPrimaryKey: "#000000",
+      },
     status: {
       success: "#10B981",
       warning: "#F59E0B",
@@ -89,9 +99,16 @@ export const MIDNIGHT_BLUE: Theme = {
       disabled: "#4A5568",
       inverse: "#0B1424",
     },
-    accent: {
+                      accent: {
+      blue: "#8B5CF6",
+      purple: "#8B5CF6",
+      orange: "#F59E0B",
+      red: "#EF4444",
+      green: "#10B981",
       primary: "#F59E0B",
-    },
+      onPrimary: "#0B1424",
+      onPrimaryKey: "#F0F4F8",
+      },
     status: {
       success: "#10B981",
       warning: "#F59E0B",
@@ -146,7 +163,16 @@ export const CHARCOAL_BLACK: Theme = {
       disabled: "#404040",
       inverse: "#000000",
     },
-    accent: { primary: "#E4E4E7" },
+                accent: {
+      blue: "#71717A",
+      purple: "#8B5CF6",
+      orange: "#F59E0B",
+      red: "#EF4444",
+      green: "#10B981",
+      primary: "#E4E4E7",
+      onPrimary: "#000000",
+      onPrimaryKey: "#FFFFFF",
+      },
     status: {
       success: "#10B981",
       warning: "#F59E0B",
@@ -203,10 +229,16 @@ export const EMERALD_NOIR: Theme = {
       disabled: "#446654",
       inverse: "#0A0F0C",
     },
-    accent: {
-      primary: "#D4AF37", // Metallic gold
-      secondary: "#B8942E",
-    },
+                accent: {
+      blue: "#D4AF37",
+      purple: "#8B5CF6",
+      orange: "#F59E0B",
+      red: "#EF4444",
+      green: "#10B981",
+      primary: "#D4AF37",
+      onPrimary: "#0A0F0C",
+      onPrimaryKey: "#0A0F0C",
+      },
     status: {
       success: "#10B981",
       warning: "#F59E0B",
@@ -263,10 +295,16 @@ export const COZY_METALLIC: Theme = {
       disabled: "#5C4E44",
       inverse: "#1A1410",
     },
-    accent: {
-      primary: "#D4A574", // Brass
-      secondary: "#E8A87C", // Rose gold accent
-    },
+                      accent: {
+      blue: "#C87A36",
+      purple: "#8B5CF6",
+      orange: "#E8A435",
+      red: "#E85D4A",
+      green: "#34A56F",
+      primary: "#C87A36",
+      onPrimary: "#0F1620",
+      onPrimaryKey: "#000000",
+      },
     status: {
       success: "#4CAF7C",
       warning: "#E8A435",
@@ -323,10 +361,16 @@ export const BLUE_JEANS: Theme = {
       disabled: "#4A5A6E",
       inverse: "#0F1620",
     },
-    accent: {
-      primary: "#C87A36", // Copper
-      secondary: "#A8C4E0", // Faded denim
-    },
+                accent: {
+      blue: "#E8D5B0",
+      purple: "#8B5CF6",
+      orange: "#D4A03A",
+      red: "#D45A4A",
+      green: "#4A9E6D",
+      primary: "#C4883C",
+      onPrimary: "#080808",
+      onPrimaryKey: "#FFFFFF",
+      },
     status: {
       success: "#34A56F",
       warning: "#E8A435",
@@ -383,10 +427,16 @@ export const VINYL_NOIR: Theme = {
       disabled: "#5A5248",
       inverse: "#080808",
     },
-    accent: {
-      primary: "#C4883C", // Amber
-      secondary: "#E8D5B0", // Cream
-    },
+                accent: {
+      blue: "#D4A060",
+      purple: "#8B5CF6",
+      orange: "#D4A040",
+      red: "#C85A4A",
+      green: "#4A8C6D",
+      primary: "#D4A060",
+      onPrimary: "#120C08",
+      onPrimaryKey: "#000000",
+      },
     status: {
       success: "#4A9E6D",
       warning: "#D4A03A",
@@ -443,10 +493,16 @@ export const AGED_WHISKEY: Theme = {
       disabled: "#6A5440",
       inverse: "#120C08",
     },
-    accent: {
-      primary: "#D4A060",
-      secondary: "#C4884A",
-    },
+                accent: {
+      blue: "#6E9AAC",
+      purple: "#8B5CF6",
+      orange: "#C8A040",
+      red: "#C86050",
+      green: "#4A9E7A",
+      primary: "#6E9AAC",
+      onPrimary: "#12181C",
+      onPrimaryKey: "#EDF2F5",
+      },
     status: {
       success: "#4A8C6D",
       warning: "#D4A040",
@@ -503,10 +559,16 @@ export const GRAPHITE_SLATE: Theme = {
       disabled: "#4A5C66",
       inverse: "#12181C",
     },
-    accent: {
+            accent: {
+      blue: "#6E9AAC",
+      purple: "#8B5CF6",
+      orange: "#C8A040",
+      red: "#C86050",
+      green: "#4A9E7A",
       primary: "#6E9AAC",
-      secondary: "#8AACBC",
-    },
+      onPrimary: "#12181C",
+      onPrimaryKey: "#EDF2F5",
+      },
     status: {
       success: "#4A9E7A",
       warning: "#C8A040",

@@ -67,6 +67,55 @@ const BASE_SHADOWS: ThemeShadows = {
   },
 };
 
+// Obsidian - didaftarkan ke ALL_THEMES lewat kunci "obsidian".
+// Sebelumnya didefinisikan inline TANPA kunci, jadi tidak bisa diakses
+// walau namanya sudah muncul di THEME_CATEGORIES.dark.
+const OBSIDIAN: Theme = {
+    id: "obsidian",
+    name: "Obsidian",
+    isDark: true,
+    colors: {
+      primary: { 500: "#22D3EE" },
+      secondary: { 500: "#C084FC" },
+      background: {
+        primary: "#0F0F0F",
+        secondary: "#1A1A1A",
+        tertiary: "#252525",
+        elevated: "#2F2F2F",
+      },
+      text: {
+        primary: "#FAFAFA",
+        secondary: "#E5E5E5",
+        tertiary: "#A3A3A3",
+        disabled: "#525252",
+        inverse: "#000000",
+      },
+                  accent: {
+      blue: "#22D3EE",
+      purple: "#C084FC",
+      orange: "#FB923C",
+      red: "#F87171",
+      green: "#4ADE80",
+      primary: "#22D3EE",
+      onPrimary: "#000000",
+      onPrimaryKey: "#000000",
+      },
+      status: {
+        success: "#4ADE80",
+        warning: "#FB923C",
+        error: "#F87171",
+        info: "#22D3EE",
+      },
+      warning: {
+        500: "#F59E0B",
+      },
+      border: { medium: "#404040", light: "#252525" },
+    },
+    spacing: SPACING,
+    shadows: BASE_SHADOWS,
+    typography: BASE_TYPOGRAPHY,
+};
+
 export const ALL_THEMES: Record<ThemeId, Theme> = {
   "deep-navy": {
     id: "deep-navy",
@@ -88,12 +137,15 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
         disabled: "#4A5568",
         inverse: "#000000",
       },
-      accent: {
-        blue: "#3B82F6",
-        purple: "#8B5CF6",
-        orange: "#F59E0B",
-        red: "#EF4444",
-        green: "#10B981",
+                  accent: {
+      blue: "#3B82F6",
+      purple: "#8B5CF6",
+      orange: "#F59E0B",
+      red: "#EF4444",
+      green: "#10B981",
+      primary: "#00D4AA",
+      onPrimary: "#000000",
+      onPrimaryKey: "#000000",
       },
       status: {
         success: "#10B981",
@@ -111,49 +163,6 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
       ...BASE_SHADOWS,
       xl: { ...BASE_SHADOWS.xl!, shadowColor: "#00D4AA", shadowOpacity: 0.3 },
     },
-    typography: BASE_TYPOGRAPHY,
-  },
-
-  obsidian: {
-    id: "obsidian",
-    name: "Obsidian",
-    isDark: true,
-    colors: {
-      primary: { 500: "#22D3EE" },
-      secondary: { 500: "#C084FC" },
-      background: {
-        primary: "#0F0F0F",
-        secondary: "#1A1A1A",
-        tertiary: "#252525",
-        elevated: "#2F2F2F",
-      },
-      text: {
-        primary: "#FAFAFA",
-        secondary: "#E5E5E5",
-        tertiary: "#A3A3A3",
-        disabled: "#525252",
-        inverse: "#000000",
-      },
-      accent: {
-        blue: "#22D3EE",
-        purple: "#C084FC",
-        orange: "#FB923C",
-        red: "#F87171",
-        green: "#4ADE80",
-      },
-      status: {
-        success: "#4ADE80",
-        warning: "#FB923C",
-        error: "#F87171",
-        info: "#22D3EE",
-      },
-      warning: {
-        500: "#F59E0B",
-      },
-      border: { medium: "#404040", light: "#252525" },
-    },
-    spacing: SPACING,
-    shadows: BASE_SHADOWS,
     typography: BASE_TYPOGRAPHY,
   },
 
@@ -177,12 +186,15 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
         disabled: "#94A3B8",
         inverse: "#FFFFFF",
       },
-      accent: {
-        blue: "#2563EB",
-        purple: "#7C3AED",
-        orange: "#D97706",
-        red: "#DC2626",
-        green: "#00B386",
+                  accent: {
+      blue: "#2563EB",
+      purple: "#7C3AED",
+      orange: "#D97706",
+      red: "#DC2626",
+      green: "#00B386",
+      primary: "#00B386",
+      onPrimary: "#0F172A",
+      onPrimaryKey: "#0F172A",
       },
       status: {
         success: "#10B981",
@@ -220,12 +232,15 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
         disabled: "#A1A1AA",
         inverse: "#FFFFFF",
       },
-      accent: {
-        blue: "#0EA5E9",
-        purple: "#8B5CF6",
-        orange: "#F97316",
-        red: "#F43F5E",
-        green: "#14B8A6",
+                  accent: {
+      blue: "#0EA5E9",
+      purple: "#8B5CF6",
+      orange: "#F97316",
+      red: "#F43F5E",
+      green: "#14B8A6",
+      primary: "#14B8A6",
+      onPrimary: "#18181B",
+      onPrimaryKey: "#18181B",
       },
       status: {
         success: "#10B981",
@@ -244,6 +259,7 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
   },
 
   // Imported themes
+  obsidian: OBSIDIAN,
   "light-gray": LIGHT_GRAY,
   "pure-white": PURE_WHITE,
   "midnight-blue": MIDNIGHT_BLUE,
@@ -275,7 +291,16 @@ export const getRandomTheme = (): Theme => {
 export const THEMES_LIST = Object.values(ALL_THEMES);
 export const DEFAULT_THEME = ALL_THEMES["emerald-noir"]; // Diperbarui ke emerald-noir
 
-export const THEME_CATEGORIES = {
+// Kategori tema.
+//
+// DITURUNKAN dari ALL_THEMES, bukan ditulis tangan.
+//
+// Versi sebelumnya adalah daftar literal yang bisa (dan sudah) menyimpang:
+// "obsidian" ada di daftar `dark` padahal tidak terdaftar di ALL_THEMES,
+// sehingga ThemePicker merender item yang tidak bisa dibuka. Sekarang setiap
+// nama di sini DIVERIFIKASI ada di ALL_THEMES, dan tema yang tidak disebut
+// tetap muncul lewat bucket "Lainnya" - tidak ada yang bisa hilang diam-diam.
+const CATEGORY_MEMBERS: Record<string, ThemeId[]> = {
   light: ["light-gray", "pure-white", "light-elegant", "light-silver"],
   dark: [
     "deep-navy",
@@ -285,12 +310,39 @@ export const THEME_CATEGORIES = {
     "neon-cyber",
     "sunset-orange",
     "emerald-noir",
-    "cozy-metallic", // ✨ Baru
-    "blue-jeans", // ✨ Baru
-    "vinyl-noir", // ✨ Baru
-    "aged-whiskey", // ✨ Baru
-    "graphite-slate", // ✨ Baru
+    "cozy-metallic",
+    "blue-jeans",
+    "vinyl-noir",
+    "aged-whiskey",
+    "graphite-slate",
   ],
   nature: ["forest-green", "ocean-wave"],
   premium: ["golden-hour", "rose-gold"],
 };
+
+const allIds = Object.keys(ALL_THEMES) as ThemeId[];
+
+const claimed = new Set<string>(
+  Object.values(CATEGORY_MEMBERS).flat().filter((id) => id in ALL_THEMES),
+);
+
+export const THEME_CATEGORIES: Record<string, ThemeId[]> = {
+  ...Object.fromEntries(
+    Object.entries(CATEGORY_MEMBERS).map(([key, ids]) => [
+      key,
+      ids.filter((id) => id in ALL_THEMES),
+    ]),
+  ),
+  // Jaring pengaman: tema yang belum dimasukkan ke kategori mana pun tetap
+  // bisa dipilih. Tanpa ini, menambah tema baru ke ALL_THEMES membuatnya
+  // tidak muncul di picker - kegagalan diam-diam.
+  lainnya: allIds.filter((id) => !claimed.has(id)),
+};
+
+// Nama kategori yang sudah tidak dipakai (mis. kalau semua anggotanya tidak
+// ada di ALL_THEMES) dibuang supaya picker tidak merender tab kosong.
+for (const key of Object.keys(THEME_CATEGORIES)) {
+  if (THEME_CATEGORIES[key].length === 0) {
+    delete THEME_CATEGORIES[key];
+  }
+}
