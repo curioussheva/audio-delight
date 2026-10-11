@@ -30,7 +30,7 @@ export const LIGHT_GRAY: Theme = {
     text: {
       primary: "#0F172A",
       secondary: "#334155",
-      tertiary: "#64748B",
+      tertiary: "#5A687D",
       disabled: "#94A3B8",
       inverse: "#FFFFFF",
     },
@@ -114,7 +114,7 @@ export const PURE_WHITE: Theme = {
     text: {
       primary: "#171717",
       secondary: "#404040",
-      tertiary: "#737373",
+      tertiary: "#707070",
       disabled: "#A3A3A3",
       inverse: "#FFFFFF",
     },

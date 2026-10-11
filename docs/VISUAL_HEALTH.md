@@ -1,6 +1,6 @@
 # Visual Health - PristineAudio
 
-> Terukur **2026-10-03**; **kontras diperbaiki 2026-10-04**.
+> Terukur **2026-10-03**; kontras diperbaiki **2026-10-04** dan **2026-10-10**.
 > Kontras: dihitung langsung dari `src/shared/constants/theme.ts` + `src/shared/constants/themes/*.ts`.
 > Spacing: `check_layout.ts` dari skill `rn-layout-composition` (`npx --yes tsx .../check_layout.ts src`).
 > Kedua angka bisa diperiksa ulang dengan menjalankan alat yang sama.
@@ -11,7 +11,23 @@
 
 ## Kontras
 
-**0 pasangan gagal dari 102 diperiksa.** (Sebelumnya: 16 gagal.)
+**0 pasangan gagal dari 240 diperiksa.** (Sebelumnya: 16 gagal di lingkup border, lalu 7 gagal di lingkup teks.)
+
+### Putaran kedua (2026-10-10) - lingkup diperluas ke seluruh peran teks
+
+Lingkup putaran pertama hanya `border.*` vs `background.primary`, jadi ia melaporkan "bersih" sementara **tujuh** kegagalan teks di atas permukaan berwarna belum pernah diperiksa. Checker kini menyapu seluruh peran teks x permukaan; ia juga sudah diperbaiki agar melewatkan kategori yang memang dikecualikan WCAG 1.4.3 (`disabled` dan `inverse`, yang secara spesifikasi bukan teks-di-atas-latar-aplikasi). Tanpa itu, 160 non-temuan menutupi 7 temuan nyata.
+
+| Tema | Token | Lama | rasio | Baru | rasio |
+|---|---|---|---|---|---|
+| light-elegant | `text.tertiary` | `#64748B` | 4.34 | `#617187` | 4.54 |
+| light-silver | `text.tertiary` | `#71717A` | 3.81 | `#65656D` | 4.55 |
+| light-gray | `text.tertiary` | `#64748B` | 3.86 | `#5A687D` | 4.59 |
+| pure-white | `text.tertiary` | `#737373` | 4.35 | `#707070` | 4.54 |
+| neon-cyber | `text.tertiary` | `#FF00FF` | 3.92 | `#FF4DFF` | 4.54 |
+
+Nilai baru adalah **pergeseran minimum** yang lulus (hue dipertahankan; tema gelap dilighten, tema terang digelapkan), bukan warna baru. Untuk `neon-cyber`, `#FF00FF` adalah magenta primer tema - mempertahankan hue penting supaya identitas temanya tidak berubah.
+
+**Catatan:** `DEEP_NAVY` di `themes/dark.ts` tetap dead code seperti disebut di atas; perubahan di atas menyentuh tema yang benar-benar dipakai.
 
 ### Yang diperbaiki (2026-10-04)
 
@@ -44,7 +60,7 @@ Status: `ADA` lulus AA (4.5:1 teks) | `SEBAGIAN` lulus large-text saja (3:1) | `
 
 ## Spacing
 
-**519 literal hardcoded di 52 file** (172 dipindai, 10 file token dikecualikan). Status: `BELUM`
+**521 literal hardcoded di 52 file** (195 dipindai, 10 file token dikecualikan). Status: `BELUM`
 
 ### Menurut nilai
 
@@ -67,16 +83,21 @@ Status: `ADA` lulus AA (4.5:1 teks) | `SEBAGIAN` lulus large-text saja (3:1) | `
 ### File terburuk
 
 ```
-28x  src/app/(drawer)/settings.tsx
+35x  src/app/(drawer)/settings.tsx
 26x  src/app/(drawer)/song/[id].tsx
 26x  src/features/library/components/ArtistList.tsx
-23x  src/app/(drawer)/(tabs)/equalizer.tsx
 23x  src/features/library/components/FolderList.tsx
 22x  src/features/library/components/AlbumGrid.tsx
 20x  src/app/(drawer)/(tabs)/analyzer.tsx
 20x  src/app/player/index.tsx
 20x  src/features/library/components/PlaylistList.tsx
+19x  src/features/headphone/components/HeadphoneSection.tsx
 ```
+
+**Layar EQ turun 23 -> 7** (2026-10-10), sehingga keluar dari daftar terburuk.
+`HeadphoneSection.tsx` masih 19; sisa literal di sana adalah ukuran tipografi/
+aspek (mis. rasio thumb fader), bukan ritme spacing - belum ditokenkan dan
+**tidak diklaim selesai**.
 
 ### Akar masalahnya: `SPACING` tidak punya padanan
 

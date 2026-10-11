@@ -173,7 +173,7 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
       text: {
         primary: "#0F172A",
         secondary: "#334155",
-        tertiary: "#64748B",
+        tertiary: "#617187",
         disabled: "#94A3B8",
         inverse: "#FFFFFF",
       },
@@ -216,7 +216,7 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
       text: {
         primary: "#18181B",
         secondary: "#3F3F46",
-        tertiary: "#71717A",
+        tertiary: "#65656D",
         disabled: "#A1A1AA",
         inverse: "#FFFFFF",
       },

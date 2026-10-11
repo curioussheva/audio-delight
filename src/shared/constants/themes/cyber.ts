@@ -30,7 +30,7 @@ export const NEON_CYBER: Theme = {
     text: {
       primary: "#FFFFFF",
       secondary: "#00F0FF",
-      tertiary: "#FF00FF",
+      tertiary: "#FF4DFF",
       disabled: "#4A4A6A",
       inverse: "#0D0B1A",
     },
