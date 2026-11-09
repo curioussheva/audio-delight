@@ -57,6 +57,17 @@ fi
 # Jalankan build untuk semua arsitektur sekaligus
 cd "$WORK_DIR/ffmpeg-android-maker"
 
+# FIX 2026-11-09: runner GitHub pindah ubuntu-24.04 -> ubuntu-26.04 dan
+# Texinfo barunya tidak lagi punya method `gdt` yang dipakai doc generator
+# FFmpeg 6.1.2 (doc/t2h.pm) — build jebol di `make install` saat generate
+# dokumentasi HTML. Library-nya sendiri berhasil ke-build; dokumentasi tidak
+# kita butuhkan, jadi matikan lewat --disable-doc.
+# Catatan: EXTRA_BUILD_CONFIGURATION_FLAGS tidak bisa dipakai karena
+# export-build-variables.sh selalu me-reset-nya jadi kosong.
+sed -i 's|^  --pkg-config=${PKG_CONFIG_EXECUTABLE} \\$|  --pkg-config=${PKG_CONFIG_EXECUTABLE} \\\n  --disable-doc \\|' scripts/ffmpeg/build.sh
+grep -q -- "--disable-doc" scripts/ffmpeg/build.sh || { echo "❌ Gagal menyisipkan --disable-doc ke scripts/ffmpeg/build.sh"; exit 1; }
+echo "✅ --disable-doc disisipkan ke scripts/ffmpeg/build.sh"
+
 echo "🔨 Building FFmpeg for ABIs: ${ARCHS[*]}..."
 
 ./ffmpeg-android-maker.sh \
