@@ -77,6 +77,15 @@ public:
     void setErrorCallback(
         ErrorCallback callback);
 
+    // 🔥 FIX (2026-11-10, P-M10): callback KHUSUS error decode (cabang
+    // Error/FatalError workerLoop). Berbeda dari setErrorCallback: yang itu
+    // juga dipanggil untuk error start ("Failed to open decoder") dan seek
+    // ("Seek failed") — seek gagal TIDAK boleh men-skip track, jadi
+    // controller butuh kanal terpisah yang hanya menyala untuk error
+    // decode di tengah stream (file korup / format tak didukung / I/O).
+    void setDecodeErrorCallback(
+        ErrorCallback callback);
+
     void setEofCallback(
         EofCallback callback);
 
@@ -120,6 +129,10 @@ private:
 
     DecodeCallback decodeCallback_;
     ErrorCallback errorCallback_;
+    // 🔥 FIX (2026-11-10, P-M10): hanya cabang Error/FatalError workerLoop
+    // yang memanggil ini (lihat workerLoop). Dipisah dari errorCallback_
+    // supaya error start/seek tidak ikut men-skip track.
+    ErrorCallback decodeErrorCallback_;
     EofCallback eofCallback_;
 
     mutable std::mutex mutex_;

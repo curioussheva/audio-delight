@@ -153,6 +153,10 @@ void DecoderWorker::setErrorCallback(ErrorCallback callback) {
     errorCallback_ = std::move(callback);
 }
 
+void DecoderWorker::setDecodeErrorCallback(ErrorCallback callback) {
+    decodeErrorCallback_ = std::move(callback);
+}
+
 void DecoderWorker::setEofCallback(EofCallback callback) {
     eofCallback_ = std::move(callback);
 }
@@ -257,6 +261,13 @@ void DecoderWorker::workerLoop() {
                 __android_log_print(ANDROID_LOG_ERROR, "DecoderWorker",
                     "Error: %s", result.errorMessage.c_str());
                 if (errorCallback_) errorCallback_(result.errorMessage);
+                // 🔥 FIX (2026-11-10, P-M10): kanal khusus error decode —
+                // controller memakai ini untuk men-skip ke track berikutnya.
+                // errorCallback_ umum TIDAK dipakai untuk skip (juga menyala
+                // untuk error start/seek).
+                if (decodeErrorCallback_) {
+                    decodeErrorCallback_(result.errorMessage);
+                }
                 break;
 
             } else if (result.status == DecodeStatus::NeedMoreData) {

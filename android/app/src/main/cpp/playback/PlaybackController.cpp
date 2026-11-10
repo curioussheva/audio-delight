@@ -1021,6 +1021,32 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
             scheduleAdvance(uri);
         });
 
+        // 🔥 FIX (2026-11-10, P-M10): error decode (file korup / format
+        // tidak didukung / I/O gagal di tengah decode) HARUS men-skip ke
+        // track berikutnya. Sebelumnya error hilang diam-diam: worker log +
+        // break, controller tidak pernah tahu, UI menampilkan "playing"
+        // tanpa suara.
+        //
+        // Diperlakukan seperti EOF: tandai decoderFinished_ (audio yang
+        // sudah di-decode tetap dimainkan sampai habis — drain-wait di
+        // scheduleAdvance) lalu scheduleAdvance. Kalau decoder error di
+        // awal (0 frame ter-decode), queue kosong dan advance langsung.
+        //
+        // Callback ini HANYA menyala dari cabang Error/FatalError
+        // workerLoop (lihat DecoderWorker::setDecodeErrorCallback) — error
+        // start/seek tidak lewat sini, jadi seek gagal TIDAK men-skip track.
+        worker->setDecodeErrorCallback([this](const std::string& message) {
+            const std::string uri = [&]() {
+                std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+                return currentTrack_.uri;
+            }();
+            __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
+                "decode error pada %s: %s — skip ke track berikutnya",
+                uri.c_str(), message.c_str());
+            decoderFinished_.store(true, std::memory_order_release);
+            scheduleAdvance(uri);
+        });
+
         // 🔥 FIX (2026-11-10, P-M4): callback menangkap weak_ptr ke worker
         // yang memilikinya, BUKAN membaca decoderWorker_ (member). Cabang
         // backpressure ini jalan di thread decoder di bawah decodeMutex_;
@@ -1198,22 +1224,46 @@ void PlaybackController::scheduleAdvance(const std::string& finishedUri) {
 
         if (advanceCancelled_.load(std::memory_order_acquire)) return;
 
-        if (queue_->advance()) {
+        // 🔥 FIX (2026-11-10, P-M10): lewati track yang tidak bisa dimuat.
+        //
+        // loadTrack() gagal kalau startDecoder gagal (file korup / tidak
+        // bisa dibuka) — sebelumnya advance berhenti diam-diam di situ:
+        // tidak ada emit, tidak ada advance lagi, UI "playing" tanpa suara.
+        // Sekarang: coba track berikutnya sampai ada yang berhasil dimuat.
+        //
+        // Batas percobaan = ukuran queue — melindungi Repeat One: advance()
+        // mengembalikan true TANPA pindah di bawah One, jadi tanpa batas,
+        // satu-satunya track yang korup membuat loop ini tidak pernah
+        // berakhir. (Satu track korup di bawah One = queue habis setelah
+        // N percobaan, masuk cabang exhausted di bawah.)
+        const size_t maxAttempts = std::max<size_t>(queue_->size(), 1);
+        bool loaded = false;
+        for (size_t attempt = 0; attempt < maxAttempts; ++attempt) {
+            if (!queue_->advance()) break;
             auto nextTrack = queue_->current();
-            if (nextTrack) {
-                __android_log_print(
-                    ANDROID_LOG_INFO, "PlaybackController",
-                    "EOF: advancing to next track uri=%s",
-                    nextTrack->uri.c_str());
-                if (loadTrack(*nextTrack)) {
-                    // Ekor track lama SUDAH habis terdengar — sekarang
-                    // waktunya JS tahu track itu berakhir.
-                    pristine::playback::emitTrackEnded(finishedUri);
-                }
+            if (!nextTrack) break;
+            __android_log_print(
+                ANDROID_LOG_INFO, "PlaybackController",
+                "advance: next track uri=%s (attempt %zu/%zu)",
+                nextTrack->uri.c_str(), attempt + 1, maxAttempts);
+            if (loadTrack(*nextTrack)) {
+                loaded = true;
+                break;
             }
+            __android_log_print(
+                ANDROID_LOG_WARN, "PlaybackController",
+                "advance: loadTrack gagal untuk %s, coba berikutnya",
+                nextTrack->uri.c_str());
+        }
+
+        if (loaded) {
+            // Ekor track lama SUDAH habis terdengar — sekarang waktunya JS
+            // tahu track itu berakhir.
+            pristine::playback::emitTrackEnded(finishedUri);
         } else {
             __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
-                                "EOF: queue exhausted (repeat off)");
+                                "advance: queue exhausted (repeat off atau "
+                                "semua track gagal dimuat)");
             // 🔥 FIX (2026-11-10, p-m4): antrean habis = status Completed,
             // bukan Playing yang membeku di akhir trek. JS polling
             // status === 1 (Playing) jadi tahu playback benar-benar selesai.
