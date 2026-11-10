@@ -47,8 +47,7 @@ public:
     // berguna untuk membandingkan "dengan DSP" vs "tanpa DSP" secara langsung.
     static void setEnabled(bool enabled) noexcept;
 
-    // Bawaan yang dipilih saat build (dari PRISTINE_DSP_IN_PRODUCTION).
-    static bool buildDefault() noexcept;
+    // (buildDefault() dihapus 2026-11-10: 0 caller.)
 };
 
 } // namespace pristine

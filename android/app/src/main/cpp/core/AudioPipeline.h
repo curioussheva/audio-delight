@@ -100,9 +100,8 @@ private:
     // Hidup sepanjang umur AudioPipeline; prepare() dipanggil saat stream dibuka.
     ImmersiveStage mImmersive;
 
-    int32_t mSampleRate = 48000;
-
-    int32_t mMaxFrames = 1920;
+    // (mSampleRate/mMaxFrames dihapus 2026-11-10: hanya ditulis di prepare(),
+    // tidak pernah dibaca.)
 };
 
 } // namespace pristine 

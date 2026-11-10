@@ -108,9 +108,8 @@ private:
 
     int32_t mSampleRate{kDefaultSampleRate};
 
-    float mScratchInterleaved[
-        kMaxFramesPerCallback * 2
-    ];
+    // (mScratchInterleaved dihapus 2026-11-10: hanya di-memset di konstruktor,
+    // tidak pernah dipakai.)
 
     // =============================================
     // TEMP BUFFERS

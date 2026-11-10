@@ -23,12 +23,8 @@ void AudioPipeline::prepare(
     int32_t maxFrames
 ) {
 
-    mSampleRate =
-        sampleRate;
-
-    mMaxFrames =
-        maxFrames;
-
+    // (mSampleRate/mMaxFrames dihapus 2026-11-10: hanya ditulis, tidak
+    // pernah dibaca. Parameter langsung diteruskan ke bawah.)
     mDSP.prepare(
         sampleRate,
         maxFrames

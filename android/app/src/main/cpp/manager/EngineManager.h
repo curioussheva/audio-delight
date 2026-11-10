@@ -30,24 +30,11 @@ public:
 
     // lifecycle
     void start();
-    void stop();
 
-    // Laju stream yang diminta, dipilih dari laju FILE lewat kapabilitas
-    // perangkat (DeviceRateDetector::pickBestRate).
-    //
-    // Tanpa ini stream selalu dibuka di laju TERTINGGI yang didukung
-    // perangkat, bukan laju file — file 44.1 kHz di DAC 384 kHz jadi
-    // upsampling 8.7x, kebalikan dari bit-perfect.
-    //
-    // fileRate <= 0 = laju file tidak diketahui -> biarkan engine mendeteksi
-    // sendiri (perilaku lama, laju tertinggi perangkat).
-    //
-    // Nilai ini disimpan dan dipakai ulang saat toggle exclusive mode, supaya
-    // stream yang dibuka ulang tidak kembali ke laju tertinggi perangkat.
-    void setRequestedSampleRate(int32_t fileRate);
-
-    // Laju yang diminta saat ini. 0 = belum ditentukan / auto.
-    int32_t requestedSampleRate() const;
+    // (setRequestedSampleRate() + requestedSampleRate() dihapus 2026-11-10:
+    // 0 caller di seluruh tree — override laju eksplisit tidak pernah
+    // terhubung ke JNI/UI. Laju stream selalu berasal dari laju file lewat
+    // resolveRequestedRate().)
 
     // =====================================================
     // PERANGKAT OUTPUT
@@ -58,8 +45,6 @@ public:
     //
     // Kalau stream sedang berjalan, stream ditutup dan dibuka ulang di
     // perangkat baru - pilihan device hanya berlaku saat stream dibuka.
-    // Berbeda dengan setRequestedSampleRate() yang hanya menyimpan nilai,
-    // di sini restart memang tujuannya.
     //
     // 0 = hapus preferensi, kembalikan pemilihan ke Android.
     // Mengembalikan false kalau id tidak ada di daftar device yang dikenal.
@@ -151,9 +136,9 @@ public:
     // yang dilakukan.
     void onDeviceRemoved(int32_t deviceId);
 
-    // playback
-    void play();
-    void pause();
+    // (play()/pause() dihapus 2026-11-10: 0 caller. JNI memakai
+    // gPlaybackController->play()/pause() langsung. EngineManager::stop()
+    // juga dihapus: engine hanya di-stop lewat mEngine.stop() di reopen().)
 
     // dsp
     void setDSPEnabled(bool enabled);
@@ -199,8 +184,8 @@ public:
     bool isExclusive() const;
     int32_t actualSampleRate() const;
 
-    // metrics
-    EngineStats getStats() const;
+    // (getStats() dihapus 2026-11-10: 0 caller. JNI membaca
+    // engine().getStats() langsung.)
 
 private:
 
@@ -217,8 +202,7 @@ private:
         const EngineManager&
     ) = delete;
 
-    // Laju yang akan dipakai stream berikutnya, dalam Hz.
-    // Prioritas: override eksplisit (setRequestedSampleRate) -> laju file dari
+    // Laju yang akan dipakai stream berikutnya, dalam Hz: laju file dari
     // controller (diisi loadTrack) -> 0 (biar engine deteksi sendiri).
     // Hanya membaca atomic, jadi aman dipanggil tanpa mMutex (dipakai juga
     // oleh onTrackLoaded() dan logging pasca-reopen).
@@ -291,11 +275,6 @@ private:
     std::atomic<bool> mReopening{false};
 
     AudioState mState;
-
-    // Laju stream yang diminta (hasil pickBestRate dari laju file).
-    // 0 = belum ditentukan -> engine mendeteksi sendiri dari perangkat.
-    // Atomic karena dibaca tanpa mMutex (requestedSampleRate() const).
-    std::atomic<int32_t> mRequestedSampleRate{0};
 
     // Perangkat output yang diminta (id numerik Android).
     // 0 = belum ditentukan -> pakai perangkat aktif AudioDeviceManager, atau

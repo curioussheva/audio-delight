@@ -28,14 +28,8 @@ bool AudioBufferController::pushInterleaved(
             samples
         );
 
-    if (!ok) {
-
-        mOverruns.fetch_add(
-            1,
-            std::memory_order_relaxed
-        );
-    }
-
+    // (Counter overrun dihapus 2026-11-10: tidak pernah dibaca — metrik
+    // xrun yang hidup ada di AudioMetrics, dicatat AudioCallback.)
     return ok;
 }
 
@@ -57,11 +51,7 @@ uint32_t AudioBufferController::popStereo(
 
     if (available < samplesNeeded) {
 
-        mUnderruns.fetch_add(
-            1,
-            std::memory_order_relaxed
-        );
-
+        // (Counter underrun dihapus 2026-11-10: tidak pernah dibaca.)
         return 0;
     }
 
@@ -120,19 +110,6 @@ const noexcept {
 }
 
 // =====================================================
-// FREE FRAMES
-// =====================================================
-
-uint32_t
-AudioBufferController::freeFrames()
-const noexcept {
-
-    return static_cast<uint32_t>(
-        mBuffer.freeSpace() / 2
-    );
-}
-
-// =====================================================
 // EMPTY
 // =====================================================
 
@@ -142,48 +119,7 @@ const noexcept {
     return mBuffer.empty();
 }
 
-// =====================================================
-// UNDERRUNS
-// =====================================================
-
-uint64_t
-AudioBufferController::underruns()
-const noexcept {
-
-    return mUnderruns.load(
-        std::memory_order_relaxed
-    );
-}
-
-// =====================================================
-// OVERRUNS
-// =====================================================
-
-uint64_t
-AudioBufferController::overruns()
-const noexcept {
-
-    return mOverruns.load(
-        std::memory_order_relaxed
-    );
-}
-
-// =====================================================
-// RESET METRICS
-// =====================================================
-
-void AudioBufferController::resetMetrics()
-noexcept {
-
-    mUnderruns.store(
-        0,
-        std::memory_order_relaxed
-    );
-
-    mOverruns.store(
-        0,
-        std::memory_order_relaxed
-    );
-}
+// (freeFrames()/underruns()/overruns()/resetMetrics() dihapus 2026-11-10:
+// 0 caller. Metrik xrun yang hidup ada di AudioMetrics.)
 
 } // namespace pristine

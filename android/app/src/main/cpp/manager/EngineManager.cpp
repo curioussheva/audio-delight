@@ -224,52 +224,14 @@ void EngineManager::start() {
 // =====================================================
 // REQUESTED SAMPLE RATE
 // =====================================================
-
-void EngineManager::setRequestedSampleRate(
-    int32_t fileRate
-) {
-
-    std::lock_guard<std::mutex>
-        lock(mMutex);
-
-    // Baru diadopsi sebagai laju stream saat start() berikutnya - stream yang
-    // sedang berjalan tidak diubah di sini. Mengubah laju satu stream yang
-    // sudah terbuka berarti menutup dan membukanya ulang, dan itu keputusan
-    // pemanggil (buka stream di laju lain), bukan efek samping setter.
-    const int32_t prev =
-        mRequestedSampleRate.exchange(
-            fileRate,
-            std::memory_order_acq_rel
-        );
-
-    if (prev != fileRate) {
-        __android_log_print(ANDROID_LOG_INFO, "EngineManager",
-            "setRequestedSampleRate: %d -> %d Hz",
-            prev, fileRate);
-    }
-}
-
-int32_t EngineManager::requestedSampleRate() const {
-
-    return mRequestedSampleRate.load(
-        std::memory_order_acquire
-    );
-}
-
-// Prioritas: override eksplisit -> laju file dari controller (loadTrack).
 //
-// Controller dijadikan sumber kedua karena jalur normal memang lewat sana:
-// JS memuat track (loadTrack) sebelum engine start, dan loadTrack-lah yang
-// tahu laju track. Override eksplisit (setRequestedSampleRate) menang karena
-// itu preferensi yang sengaja diminta pemanggil.
+// (setRequestedSampleRate() dihapus 2026-11-10: 0 caller. Laju stream selalu
+// berasal dari laju file — lihat resolveRequestedRate().)
+//
+// Laju file dari controller (loadTrack). Jalur normal memang lewat sana: JS
+// memuat track (loadTrack) sebelum engine start, dan loadTrack-lah yang
+// tahu laju track.
 int32_t EngineManager::resolveRequestedRate() const {
-
-    const int32_t explicitRate =
-        mRequestedSampleRate.load(std::memory_order_acquire);
-
-    if (explicitRate > 0) {
-        return explicitRate;
-    }
 
     const uint32_t fileRate =
         mPlayback.currentFileSampleRate();
@@ -795,33 +757,11 @@ void EngineManager::onDeviceRemoved(int32_t deviceId) {
     reopenStreamPreservingPlayback();
 }
 
-void EngineManager::stop() {
+// (EngineManager::stop() dihapus 2026-11-10: 0 caller. Engine hanya
+// di-stop lewat mEngine.stop() di reopen().)
 
-    std::lock_guard<std::mutex>
-        lock(mMutex);
-
-    if (
-        !mEngine.isRunning()
-    ) {
-        return;
-    }
-
-    mEngine.stop();
-}
-
-// =====================================================
-// PLAYBACK
-// =====================================================
-
-void EngineManager::play() {
-
-    mPlayback.play();
-}
-
-void EngineManager::pause() {
-
-    mPlayback.pause();
-}
+// (EngineManager::play()/pause() dihapus 2026-11-10: 0 caller. JNI memakai
+// gPlaybackController->play()/pause() langsung.)
 
 // =====================================================
 // DSP CONTROL
@@ -1003,14 +943,8 @@ void EngineManager::setExclusiveMode(
 }
 
 // =====================================================
-// METRICS
-// =====================================================
-
-EngineStats
-EngineManager::getStats() const {
-
-    return mEngine.getStats();
-}
+// (EngineManager::getStats() dihapus 2026-11-10: 0 caller. JNI membaca
+// engine().getStats() langsung.)
 
 bool EngineManager::isExclusive() const {
     return mEngine.isExclusive();

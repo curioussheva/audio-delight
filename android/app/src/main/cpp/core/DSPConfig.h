@@ -61,28 +61,10 @@ struct DSPConfig {
     float bassBoost =
         0.0f;
 
-    // =============================================
-    // IMMERSIVE AUDIO LAB
-    // =============================================
-
-    bool immersiveEnabled =
-        false;
-
-    float solfeggioFreq =
-        528.0f;
-
-    float brainwaveFreq =
-        0.0f;
-
-    float resonanceIntensity =
-        0.5f;
-
-    // =============================================
-    // CONVOLUTION
-    // =============================================
-
-    bool convolverEnabled =
-        false;
+    // (Field immersiveEnabled/solfeggioFreq/brainwaveFreq/resonanceIntensity/
+    // convolverEnabled dihapus 2026-11-10: tidak pernah dibaca — ImmersiveStage
+    // membaca parameter langsung dari DSPParameters, bukan lewat DSPConfig.
+    // Lihat dspConfigEquals yang memang sengaja tidak membandingkannya.)
 
     // =============================================
     // HEADPHONE CORRECTION
@@ -117,14 +99,6 @@ struct DSPConfig {
         eqGain.fill(0.0f);
 
         bassBoost = 0.0f;
-
-        immersiveEnabled = false;
-
-        solfeggioFreq = 528.0f;
-        brainwaveFreq = 0.0f;
-        resonanceIntensity = 0.5f;
-
-        convolverEnabled = false;
 
         headphoneCorrectionEnabled =
             false;

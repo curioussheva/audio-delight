@@ -62,7 +62,7 @@ public:
 
     void reset();
 
-    bool isPrepared() const { return mPrepared; }
+    // (isPrepared() dihapus 2026-11-10: 0 caller.)
 
 private:
 

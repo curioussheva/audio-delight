@@ -11,7 +11,8 @@
 #include "AudioBufferController.h"
 #include "AudioCallback.h"
 #include "AudioMetrics.h"
-#include "AudioModeManager.h"
+// (AudioModeManager.h dihapus 2026-11-10: class mati, 0 caller. Mode
+// switching yang hidup ada di EngineManager::setProcessingMode.)
 #include "AudioPipeline.h"
 #include "AudioState.h"
 #include "AudioStreamController.h"

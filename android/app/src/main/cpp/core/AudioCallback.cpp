@@ -32,7 +32,6 @@ AudioCallback::AudioCallback(
 
     std::memset(mLeft, 0, sizeof(mLeft));
     std::memset(mRight, 0, sizeof(mRight));
-    std::memset(mScratchInterleaved, 0, sizeof(mScratchInterleaved));
 }
 
 // =====================================================

@@ -10,7 +10,11 @@
 #include <android/log.h>
 
 #include "PristineAudioSpec.h"
-#include "manager/EngineManager.h"
+// (#include "manager/EngineManager.h" dihapus 2026-11-10: tidak dipakai —
+// file ini hanya menyimpan pointer JavaVM, EngineManager hanya disebut
+// di string log. Menghapus include ini TIDAK memutus DT_NEEDED
+// libappmodules.so -> libpristine-audio.so: dependensi itu berasal dari
+// 4 panggilan init JavaVM di file ini, bukan dari include.)
 #include "decoder/ContentUriResolver.h"
 #include "core/DeviceRateDetector.h"
 #include "devices/AudioDeviceManager.h"

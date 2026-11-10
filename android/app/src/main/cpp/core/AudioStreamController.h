@@ -58,38 +58,23 @@ public:
 
     void close();
 
-    bool restart(
-        oboe::AudioStreamCallback* callback
-    );
+    // (restart() dihapus 2026-11-10: 0 caller. Reopen dikerjakan
+    // EngineManager::reopenStreamPreservingPlayback() via stop()+start().)
 
     // =============================================
     // STATE
     // =============================================
 
-    bool isOpen() const noexcept;
-
     bool isRunning() const noexcept;
 
     bool isExclusive() const noexcept;
 
-    int32_t sampleRate() const noexcept;
-
+    // (isOpen()/sampleRate()/format()/api()/performanceMode()/sharingMode()/
+    // stream() dihapus 2026-11-10: 0 caller. channelCount() tetap dipakai
+    // — dibaca AudioEngine::start() untuk metrik.)
     int32_t channelCount() const noexcept;
 
     int32_t framesPerBurst() const noexcept;
-
-    oboe::AudioFormat format() const noexcept;
-
-    oboe::AudioApi api() const noexcept;
-
-    oboe::PerformanceMode
-    performanceMode() const noexcept;
-
-    oboe::SharingMode
-    sharingMode() const noexcept;
-
-    oboe::AudioStream*
-    stream() noexcept;
 
     // Laju yang BENAR-BENAR dipakai stream setelah dibuka. Bisa berbeda dari
     // yang diminta kalau device/DAC tidak mendukung laju itu. Dipakai untuk
@@ -114,10 +99,9 @@ public:
         return mRequestedDeviceId.load(std::memory_order_acquire);
     }
 
-    // Laju yang diminta saat open() terakhir (0 = diserahkan ke deteksi).
-    int32_t requestedSampleRate() const noexcept {
-        return mRequestedSampleRate.load(std::memory_order_acquire);
-    }
+    // (requestedSampleRate() dihapus 2026-11-10: 0 caller. Membernya sudah
+    // dihapus di langkah yang sama — getter ini tertinggal dan merujuk
+    // member yang tidak ada; ketahuan saat verifikasi grep sebelum commit.)
 
     // true kalau stream yang berjalan benar-benar memakai perangkat yang
     // diminta. Kalau false, pilihan device tidak dihormati - UI harus jujur
@@ -215,27 +199,16 @@ private:
 
     int32_t mFramesPerBurst = 0;
 
-    oboe::AudioFormat mFormat =
-        oboe::AudioFormat::Float;
-
-    oboe::AudioApi mApi =
-        oboe::AudioApi::Unspecified;
-
     // true kalau AAudio gagal dan stream dibuka ulang dengan OpenSLES.
     std::atomic<bool> mOpenSLESFallback{false};
 
-    // Nilai yang diminta saat open() terakhir. Disimpan supaya restart()
-    // membuka ulang stream dengan laju dan perangkat yang SAMA - kalau tidak,
-    // restart diam-diam kembali ke default (48000 + perangkat sistem) dan
-    // membatalkan pilihan laju maupun DAC.
-    std::atomic<int32_t> mRequestedSampleRate{0};
+    // Perangkat yang diminta saat open() terakhir (dibaca isDeviceHonored()).
+    // (mRequestedSampleRate dihapus 2026-11-10: hanya dibaca restart() yang
+    // sudah dihapus.)
     std::atomic<int32_t> mRequestedDeviceId{0};
 
     // Id perangkat yang benar-benar dipakai stream. 0 = dipilih sistem.
     std::atomic<int32_t> mActualDeviceId{0};
-
-    oboe::PerformanceMode mPerfMode =
-        oboe::PerformanceMode::LowLatency;
 
     oboe::SharingMode mSharingMode =
         oboe::SharingMode::Shared;

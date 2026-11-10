@@ -40,8 +40,6 @@ void DSPProcessingGate::setEnabled(bool enabled) noexcept {
     gEnabled.store(enabled, std::memory_order_release);
 }
 
-bool DSPProcessingGate::buildDefault() noexcept {
-    return kBuildDefault;
-}
+// (DSPProcessingGate::buildDefault() dihapus 2026-11-10: 0 caller.)
 
 } // namespace pristine

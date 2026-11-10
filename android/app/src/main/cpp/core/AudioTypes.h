@@ -47,18 +47,7 @@ enum class AudioRoute : int32_t {
     Default
 };
 
-// =====================================================
-// STREAM STATE
-// =====================================================
-
-enum class StreamState : uint8_t {
-
-    Stopped = 0,
-    Starting,
-    Running,
-    Stopping,
-    Error
-};
+// (StreamState dihapus 2026-11-10: 0 pemakai.)
 
 // =====================================================
 // AUDIO FORMAT
@@ -82,27 +71,7 @@ enum class PerformanceMode : uint8_t {
     PowerSaving
 };
 
-// =====================================================
-// VISUALIZER MODE
-// =====================================================
-
-enum class VisualizerMode : uint8_t {
-
-    Waveform = 0,
-    Spectrum = 1
-};
-
-// =====================================================
-// OUTPUT DEVICE TYPE
-// =====================================================
-
-enum class OutputDeviceType : uint8_t {
-
-    Speaker = 0,
-    WiredHeadset,
-    Bluetooth,
-    USBDAC
-};
+// (VisualizerMode + OutputDeviceType dihapus 2026-11-10: 0 pemakai.)
 
 // =====================================================
 // HEADPHONE CORRECTION PRESET
@@ -220,117 +189,9 @@ struct DSPParameters {
         false;
 };
 
-// =====================================================
-// STEREO FRAME
-// =====================================================
-
-struct StereoFrame {
-
-    Sample left  = 0.0f;
-    Sample right = 0.0f;
-};
-
-// =====================================================
-// AUDIO BUFFER VIEW
-// =====================================================
-
-struct AudioBufferView {
-
-    Sample* data = nullptr;
-
-    int32_t frames = 0;
-
-    int32_t channels = 2;
-};
-
-// =====================================================
-// INTERLEAVED BUFFER VIEW
-// =====================================================
-
-struct InterleavedBufferView {
-
-    Sample* data = nullptr;
-
-    int32_t samples = 0;
-};
-
-// =====================================================
-// LATENCY INFO
-// =====================================================
-
-struct LatencyInfo {
-
-    float inputMs  = 0.0f;
-    float outputMs = 0.0f;
-    float totalMs  = 0.0f;
-};
-
-// =====================================================
-// DEVICE INFO - USANG, JANGAN DIPAKAI
-// =====================================================
-//
-// Struct ini TIDAK dipakai di mana pun (diverifikasi 2026-10-05: hanya
-// dirinya sendiri yang menyebutnya). Dibiarkan ada supaya tidak menghapus
-// sesuatu yang mungkin masih direferensikan di luar tree ini, tapi JANGAN
-// dipakai untuk kode baru.
-//
-// Kenapa menyesatkan: `sampleRate` di sini HARDCODED 48000, dan `exclusive`
-// hardcoded false. Kalau ada yang memakainya, ia akan menyimpulkan laju
-// device selalu 48000 - persis bug yang baru diperbaiki.
-//
-// Yang benar:
-//   - struct pristine::AudioDeviceDescriptor (devices/AudioDeviceDescriptor.h)
-//     untuk deskripsi perangkat, dengan supportedSampleRates yang NYATA
-//   - pristine::AudioDeviceManager (devices/AudioDeviceManager.h)
-//     untuk membaca daftar perangkat dari Android
-//   - pristine::audio::DeviceRateDetector (core/DeviceRateDetector.h)
-//     untuk memilih laju stream
-struct [[deprecated("Usang dan menyesatkan (laju hardcoded). "
-                    "Pakai AudioDeviceDescriptor + AudioDeviceManager.")]]
-AudioDeviceInfo {
-
-    OutputDeviceType type =
-        OutputDeviceType::Speaker;
-
-    AudioRoute route =
-        AudioRoute::Default;
-
-    int32_t sampleRate =
-        48000;
-
-    int32_t channelCount =
-        2;
-
-    bool exclusive =
-        false;
-};
-
-// =====================================================
-// ENGINE CONFIG
-// =====================================================
-
-struct EngineConfig {
-
-    ProcessingMode mode =
-        ProcessingMode::DSP;
-
-    AudioFormat format =
-        AudioFormat::Float32;
-
-    PerformanceMode performance =
-        PerformanceMode::LowLatency;
-
-    int32_t sampleRate =
-        48000;
-
-    int32_t channelCount =
-        2;
-
-    int32_t framesPerCallback =
-        192;
-
-    bool exclusiveMode =
-        false;
-};
+// (StereoFrame / AudioBufferView / InterleavedBufferView / LatencyInfo /
+// AudioDeviceInfo (deprecated) / EngineConfig dihapus 2026-11-10:
+// 0 pemakai di seluruh tree. AudioDeviceInfo yang hidup adalah
+// android.media.AudioDeviceInfo di JNI, bukan struct ini.)
 
 } // namespace pristine 

@@ -44,9 +44,8 @@ bool AudioStreamController::open(
 
     mOpenSLESFallback.store(false, std::memory_order_release);
 
-    // Simpan permintaan supaya restart() (device/laju berubah) membuka ulang
-    // dengan nilai yang sama, bukan kembali ke default.
-    mRequestedSampleRate.store(requestedSampleRate, std::memory_order_release);
+    // Simpan permintaan supaya isDeviceHonored() bisa membandingkan yang
+    // diminta dengan yang didapat.
     mRequestedDeviceId.store(deviceId, std::memory_order_release);
     mActualDeviceId.store(0, std::memory_order_release);
 
@@ -186,7 +185,11 @@ bool AudioStreamController::open(
     // =============================================
     // CACHE STREAM INFO
     // =============================================
-
+    //
+    // Hanya yang masih dibaca yang disimpan (M5/dead-code, 2026-11-10):
+    // mSampleRate (fallback actualSampleRate), mChannelCount + mFramesPerBurst
+    // (getter hidup), mSharingMode (untuk mExclusive di bawah). mFormat/mApi/
+    // mPerfMode dihapus — getter-nya mati.
     mSampleRate =
         opened->getSampleRate();
 
@@ -195,15 +198,6 @@ bool AudioStreamController::open(
 
     mFramesPerBurst =
         opened->getFramesPerBurst();
-
-    mFormat =
-        opened->getFormat();
-
-    mApi =
-        opened->getAudioApi();
-
-    mPerfMode =
-        opened->getPerformanceMode();
 
     mSharingMode =
         opened->getSharingMode();
@@ -365,50 +359,8 @@ void AudioStreamController::close() {
 
 // =====================================================
 // RESTART
-// =====================================================
-
-bool AudioStreamController::restart(
-    oboe::AudioStreamCallback* callback
-) {
-
-    const bool exclusive =
-        isExclusive();
-
-    // Laju dan perangkat yang diminta DULU, bukan default: restart biasanya
-    // dipicu oleh perubahan salah satunya, dan membuka ulang tanpa nilainya
-    // akan membatalkan pilihan yang sedang berlaku (stream kembali ke 48000
-    // dan perangkat sistem). `close()` tidak menghapus nilai tersimpan ini.
-    const int32_t rate =
-        mRequestedSampleRate.load(std::memory_order_acquire);
-
-    const int32_t device =
-        mRequestedDeviceId.load(std::memory_order_acquire);
-
-    close();
-
-    if (
-        !open(
-            callback,
-            exclusive,
-            rate,
-            device
-        )
-    ) {
-        return false;
-    }
-
-    return start();
-}
-
-// =====================================================
-// IS OPEN
-// =====================================================
-
-bool AudioStreamController::isOpen()
-const noexcept {
-
-    return streamCopy() != nullptr;
-}
+// (restart() dihapus 2026-11-10: 0 caller. Reopen dikerjakan
+// EngineManager::reopenStreamPreservingPlayback() via stop()+start().)
 
 // =====================================================
 // IS RUNNING
@@ -519,15 +471,6 @@ bool AudioStreamController::isPathInherentlyLossy() const noexcept {
     return false;
 }
 
-int32_t AudioStreamController::sampleRate() const noexcept {
-
-    return mSampleRate;
-}
-
-// =====================================================
-// CHANNEL COUNT
-// =====================================================
-
 int32_t AudioStreamController::channelCount()
 const noexcept {
 
@@ -542,61 +485,6 @@ int32_t AudioStreamController::framesPerBurst()
 const noexcept {
 
     return mFramesPerBurst;
-}
-
-// =====================================================
-// FORMAT
-// =====================================================
-
-oboe::AudioFormat
-AudioStreamController::format()
-const noexcept {
-
-    return mFormat;
-}
-
-// =====================================================
-// API
-// =====================================================
-
-oboe::AudioApi
-AudioStreamController::api()
-const noexcept {
-
-    return mApi;
-}
-
-// =====================================================
-// PERFORMANCE MODE
-// =====================================================
-
-oboe::PerformanceMode
-AudioStreamController::performanceMode()
-const noexcept {
-
-    return mPerfMode;
-}
-
-// =====================================================
-// SHARING MODE
-// =====================================================
-
-oboe::SharingMode
-AudioStreamController::sharingMode()
-const noexcept {
-
-    return mSharingMode;
-}
-
-// =====================================================
-// STREAM
-// =====================================================
-
-oboe::AudioStream*
-AudioStreamController::stream()
-noexcept {
-
-    return mStream.get();
 }
 
 // =====================================================

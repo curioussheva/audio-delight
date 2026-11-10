@@ -50,26 +50,14 @@ public:
 
     uint32_t availableFrames() const noexcept;
 
-    uint32_t freeFrames() const noexcept;
-
     bool empty() const noexcept;
 
-    // =============================================
-    // METRICS
-    // =============================================
-
-    uint64_t underruns() const noexcept;
-
-    uint64_t overruns() const noexcept;
-
-    void resetMetrics() noexcept;
+    // (freeFrames()/underruns()/overruns()/resetMetrics() dihapus 2026-11-10:
+    // 0 caller.)
 
 private:
 
     RingBuffer<float> mBuffer;
-
-    std::atomic<uint64_t> mUnderruns{0};
-    std::atomic<uint64_t> mOverruns{0};
 };
 
 } // namespace pristine
