@@ -277,11 +277,29 @@ class NativePlaybackModule(
             val ext = resolver.getType(uri)?.substringAfterLast('/') ?: "cache"
             val cacheFile = java.io.File(cacheDir, "audio_${uriString.hashCode()}.$ext")
 
+            // 🔥 FIX (2026-11-11, D-M9): tulis ke temp + rename atomik —
+            // file target hanya muncul kalau isinya lengkap; kill di tengah
+            // copy meninggalkan .tmp, bukan hit palsu (lihat
+            // NativePlaybackService.resolveContentUriToPath).
             if (!cacheFile.exists() || cacheFile.length() == 0L) {
-                resolver.openInputStream(uri)?.use { input ->
-                    cacheFile.outputStream().use { output ->
-                        input.copyTo(output)
+                val tmpFile = java.io.File(cacheDir, "${cacheFile.name}.${System.nanoTime()}.tmp")
+                try {
+                    resolver.openInputStream(uri)?.use { input ->
+                        tmpFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
                     }
+                    if (!tmpFile.renameTo(cacheFile)) {
+                        android.util.Log.e(
+                            "NativePlaybackModule",
+                            "resolveContentUri: rename ${tmpFile.name} gagal"
+                        )
+                        tmpFile.delete()
+                        return uriString
+                    }
+                } catch (e: Exception) {
+                    tmpFile.delete()
+                    throw e
                 }
             }
 

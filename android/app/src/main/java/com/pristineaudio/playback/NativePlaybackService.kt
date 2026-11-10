@@ -444,17 +444,36 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
                 return file.absolutePath
             }
 
-            // Copy dari content resolver
+            // Copy dari content resolver — tulis ke temp + rename atomik
+            // (D-M9, 2026-11-11): file target hanya muncul kalau isinya
+            // lengkap; kill/exception di tengah copy meninggalkan .tmp,
+            // bukan hit palsu. Nama temp unik per panggilan (nanoTime)
+            // supaya dua resolve bersamaan untuk URI yang sama tidak
+            // menulis ke file temp yang sama.
             val inputStream = resolver.openInputStream(uri)
                 ?: run {
                     android.util.Log.e(LOG_TAG, "openInputStream null for $uriString")
                     return uriString
                 }
 
-            inputStream.use { input ->
-                file.outputStream().use { output ->
-                    input.copyTo(output)
+            val tmpFile = File(
+                reactApplicationContext.cacheDir,
+                "${file.name}.${System.nanoTime()}.tmp"
+            )
+            try {
+                inputStream.use { input ->
+                    tmpFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
                 }
+                if (!tmpFile.renameTo(file)) {
+                    android.util.Log.e(LOG_TAG, "rename ${tmpFile.name} -> ${file.name} gagal")
+                    tmpFile.delete()
+                    return uriString
+                }
+            } catch (e: Exception) {
+                tmpFile.delete()
+                throw e
             }
 
             android.util.Log.d(

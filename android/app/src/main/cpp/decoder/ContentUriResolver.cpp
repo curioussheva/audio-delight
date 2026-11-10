@@ -1,8 +1,10 @@
 #include "ContentUriResolver.h"
 
 #include <android/log.h>
+#include <atomic>
 #include <cstdio>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #undef LOG_TAG
@@ -306,8 +308,11 @@ PRISTINE_EXPORT std::string ContentUriResolver::resolve(const std::string& uri) 
     jbyteArray buf = env->NewByteArray(CHUNK);
     if (!buf) { LOGE("resolve: gagal alokasi buffer"); return ""; }
 
-    // Dibaca penuh ke memori dulu, baru ditulis: file cache tidak pernah
-    // setengah jadi kalau proses mati di tengah salinan.
+    // Dibaca penuh ke memori dulu, baru ditulis ke file temp + rename
+    // atomik (D-M9, 2026-11-11): file cache di path target tidak pernah
+    // setengah jadi. (Komentar lama mengklaim baca-penuh-ke-memori saja
+    // sudah menjamin itu — SALAH: kill di antara fopen dan fclose tetap
+    // meninggalkan file parsial.)
     std::vector<uint8_t> data;
     data.reserve(8u * 1024u * 1024u);
 
@@ -336,16 +341,36 @@ PRISTINE_EXPORT std::string ContentUriResolver::resolve(const std::string& uri) 
         return "";
     }
 
-    if (FILE* fp = std::fopen(target.c_str(), "wb")) {
+    // 🔥 FIX (2026-11-11, D-M9): tulis ke file TEMP lalu rename() atomik.
+    //
+    // Sebelumnya fopen(target, "wb") membuat/meng-truncate target SEGERA —
+    // kill/crash di tengah salinan meninggalkan file parsial yang lolos hit
+    // check (exists() && length() > 0) dan dilayani sebagai hit. rename()
+    // dalam satu filesystem bersifat atomik: target hanya muncul kalau
+    // isinya sudah lengkap. Nama temp unik per panggilan (counter atomik)
+    // supaya dua resolve bersamaan untuk URI yang sama tidak menulis ke
+    // file temp yang sama (d-m35). Sisa file .tmp dari proses yang mati
+    // dibersihkan cold boot (clearCache) — dan tidak pernah dilayani
+    // sebagai hit karena namanya tidak cocok pola audio_*.
+    static std::atomic<unsigned> s_tmpCounter{0};
+    const std::string tmpTarget =
+        target + ".tmp." +
+        std::to_string(s_tmpCounter.fetch_add(1, std::memory_order_relaxed));
+    if (FILE* fp = std::fopen(tmpTarget.c_str(), "wb")) {
         size_t written = std::fwrite(data.data(), 1, data.size(), fp);
         std::fclose(fp);
         if (written != data.size()) {
             LOGE("resolve: tulis tidak lengkap (%zu/%zu)", written, data.size());
-            std::remove(target.c_str());
+            std::remove(tmpTarget.c_str());
+            return "";
+        }
+        if (std::rename(tmpTarget.c_str(), target.c_str()) != 0) {
+            LOGE("resolve: rename %s -> %s gagal", tmpTarget.c_str(), target.c_str());
+            std::remove(tmpTarget.c_str());
             return "";
         }
     } else {
-        LOGE("resolve: tidak bisa menulis %s", target.c_str());
+        LOGE("resolve: tidak bisa menulis %s", tmpTarget.c_str());
         return "";
     }
 
