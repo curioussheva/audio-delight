@@ -314,3 +314,23 @@ Catatan penghapusan: menghapus simbol-simbol di atas aman diverifikasi oleh buil
 ## Perbaikan 2026-11-11 — BELUM DIKERJAKAN (catat dulu)
 
 Sesuai metode kerja: temuan dicatat dulu, csheva memilih apa yang diperbaiki dan urutannya. Kandidat perbaikan berikutnya yang paling berdampak menurut audit ini: **D-M1** (satu file 96 kHz bisa crash app; dan tes M1 yang sudah lama tertunda adalah tes yang membuktikannya).
+
+---
+
+## Perbaikan 2026-11-11 — DIKERJAKAN (csheva: "perbaiki semua 9 major")
+
+Semua 9 MAJOR diperbaiki dalam 7 commit terpisah (D-M5+D-M6+D-M7 satu commit karena ketiganya mati bersama file yang sama), lalu SATU build Dev gabungan di akhir. Tidak ada file JS/TS yang berubah (murni native C++ + Kotlin).
+
+| Temuan | Commit | Perbaikan |
+|---|---|---|
+| D-M1 double resampling + heap OOB | `7e6fd5a6` | `AudioDecoder::needsResampling()` dijadikan virtual; `FFmpegDecoder` override → `false` (swr sudah output target rate + stereo, base tidak boleh resample lagi). `startDecoder()` memanggil `setTargetFormat()` (target rate swr + 2 ch) supaya `getOutputFormat()` jujur. Komentar invarian di `FFmpegDecoder.cpp:333` (framesDecoded SENGAJA domain input; applyResampling tidak boleh jalan untuk decoder ini). `framesDecoded` TIDAK diubah domainnya (akuntansi 2026-10-06 dipertahankan). |
+| D-M2 track pertama non-48 kHz 2× cepat | `05e2c77c` | `startDecoder()`: `cfg.targetSampleRate` = laju stream bila valid, else laju file (`track.sampleRate`), else default 48000. Target dicatat di `decoderTargetRate_`; `EngineManager::start()` setelah stream terbuka memanggil `reloadIfDecoderRateMismatch(actualRate)` — muat ulang track kalau decoder dibuat dengan target berbeda (kasus perangkat tidak mendukung laju file). `start()` melepas `mMutex` dulu (pola B1) supaya reload → `onTrackLoaded` → `reopen` tidak deadlock. |
+| D-M3 loadTrack konkuren | `7d885550` | `loadTrackMutex_` (`std::recursive_mutex`) dipegang sepanjang `loadTrack()`. Recursive karena nesting `loadTrack → listener → onTrackLoaded → reopen → loadTrack` di thread yang sama. `cancelPendingAdvance()` dipindah ke SEBELUM ambil lock, supaya flag batal terlihat advance thread sebelum thread manual ter-block di mutex. |
+| D-M4 `~AudioDecoder` virtual murni | `85d52b85` | `close()` dihapus dari `~AudioDecoder()` (virtual dispatch saat destruksi base = terminate). `onClose()` tetap pure virtual (subclass baru wajib implementasi). Terverifikasi harness standalone: decoder dihancurkan saat open tanpa `close()` eksplisit → tidak terminate. |
+| D-M5 + D-M6 + D-M7 factory/PCMDecoder mati + rusak | `3bbd1267` | `git rm` `DecoderFactory.{h,cpp}` + `PCMDecoder.{h,cpp}` (−752 baris; 0 pemakai terverifikasi grep ulang sebelum hapus; CMakeLists glob — tidak perlu diubah). D-M6 (AIFF/WAV/fmtSize) dan D-M7 (SIGFPE `channels==0`, alokasi 4 GB) mati bersama file-nya. Komentar D-M4 di `AudioDecoder.cpp` disesuaikan (tidak lagi merujuk `PCMDecoder::~PCMDecoder`). |
+| D-M8 penamaan cache 3 jalur | `bffef97e` | Legacy `NativePlaybackModule.resolveContentUri`: `track_` → `audio_`, ext default `"tmp"` → `"cache"` (sama dengan service + native). Cleanup service yang menghapus `audio_*` DAN `track_*` dibiarkan — berguna membersihkan file `track_` sisa instalasi lama. Sisa: `setQueue` modul masih resolve eager semua URI (dorman; bukan jalur hidup). |
+| D-M9 cache-hit palsu | `217f59bf` | Tulis ke file temp + `rename()` atomik di ketiga jalur: native `ContentUriResolver.cpp` (nama temp unik per panggilan via counter atomik — menutup juga d-m35), `NativePlaybackService.resolveContentUriToPath` dan `NativePlaybackModule.resolveContentUri` (nama temp unik via `nanoTime()`). Komentar native yang salah ("file cache tidak pernah setengah jadi") diperbaiki. Sisa file `.tmp` dari proses mati dibersihkan cold boot (`clearCache`) dan tidak pernah lolos hit check (nama tidak cocok pola `audio_*`). |
+
+**Build gabungan:** SATU build Dev — BELUM dijalankan saat seksi ini ditulis; nomor run + hasil diisi setelah build selesai (jangan klaim sukses sebelum ada buktinya).
+
+**Residual yang sengaja tidak dikerjakan (tetap minor):** d-m1…d-m40 (lihat tabel minor di atas) — belum dipilih. Dua yang paling layak berikutnya bila csheva mau: d-m4 (flush NULL saat EOF — ekor delay codec ~10–20 ms hilang tiap track) dan d-m31 (SincResampler stub — kalau kualitas resample mau dinaikkan, harus ditulis ulang).
