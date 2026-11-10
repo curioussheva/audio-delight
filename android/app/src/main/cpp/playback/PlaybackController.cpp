@@ -35,7 +35,6 @@ bool PlaybackController::initialize() {
     // WAJIB power of 2: PCMQueue pakai bitmask, bukan modulo!
     pcmQueue_ = std::make_shared<PCMQueue>(1 << 21);  // 🔥 21.8s buffer
     clock_ = std::make_shared<PlaybackClock>();
-    metrics_ = std::make_shared<MetricsCollector>();
     state_ = std::make_shared<PlaybackState>();
     queue_ = std::make_shared<TrackQueue>();
 
@@ -65,7 +64,6 @@ void PlaybackController::shutdown() {
 
     pcmQueue_.reset();
     clock_.reset();
-    metrics_.reset();
     state_.reset();
     queue_.reset();
 }
@@ -80,10 +78,6 @@ bool PlaybackController::isInitialized() const noexcept {
 
 std::shared_ptr<PlaybackState> PlaybackController::state() const noexcept {
     return state_;
-}
-
-std::shared_ptr<MetricsCollector> PlaybackController::metrics() const noexcept {
-    return metrics_;
 }
 
 std::shared_ptr<PlaybackClock> PlaybackController::clock() const noexcept {
@@ -828,10 +822,6 @@ size_t PlaybackController::render(float* output,
                 }
             }
         }
-    }
-
-    if (metrics_) {
-        metrics_->recordFrameRendered(frames);
     }
 
     // Jumlah sample OUTPUT yang benar-benar dihasilkan — AudioCallback

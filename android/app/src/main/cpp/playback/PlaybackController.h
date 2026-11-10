@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 #include "PlaybackState.h"
-#include "PlaybackMetrics.h"
 #include "PlaybackClock.h"
 #include "PCMQueue.h"
 #include "PlaybackTypes.h"
@@ -106,7 +105,6 @@ public:
 
     // State accessors
     std::shared_ptr<PlaybackState> state() const noexcept;
-    std::shared_ptr<MetricsCollector> metrics() const noexcept;
     std::shared_ptr<PlaybackClock> clock() const noexcept;
     std::shared_ptr<PCMQueue> pcmQueue() const noexcept;
 
@@ -147,7 +145,6 @@ private:
     TrackInfo currentTrack_{};
 
     std::shared_ptr<PlaybackState> state_;
-    std::shared_ptr<MetricsCollector> metrics_;
     std::shared_ptr<PlaybackClock> clock_;
     std::shared_ptr<PCMQueue> pcmQueue_;
 
