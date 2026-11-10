@@ -202,6 +202,16 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
     __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                         "loadTrack(): DONE startDecoder=%s",
                         result ? "true" : "false");
+
+    // Beri tahu EngineManager: track baru berhasil dimuat. Kalau laju file
+    // berubah, EngineManager membuka ulang stream di laju baru (M1) —
+    // selama ini tidak ada yang melakukannya, jadi bit-perfect hilang
+    // diam-diam di tiap pergantian track. Hanya saat berhasil; kalau decoder
+    // gagal, tidak ada yang perlu di-reopen.
+    if (result && trackLoadedListener_) {
+        trackLoadedListener_();
+    }
+
     return result;
 }
 
@@ -530,6 +540,10 @@ size_t PlaybackController::render(float* output,
 
 void PlaybackController::setMetrics(pristine::AudioMetrics* metrics) noexcept {
     metricsEngine_ = metrics;
+}
+
+void PlaybackController::setTrackLoadedListener(std::function<void()> listener) {
+    trackLoadedListener_ = std::move(listener);
 }
 
 size_t PlaybackController::bufferedFrames() const noexcept {

@@ -25,6 +25,10 @@ EngineManager::EngineManager()
     // (queue penuh, data dibuang) tercatat di EngineStats (M5, 2026-11-10).
     // mEngine dideklarasi sebelum mPlayback, jadi sudah dibangun di sini.
     mPlayback.setMetrics(&mEngine.metrics());
+
+    // Beri tahu EngineManager setiap track berhasil dimuat, supaya stream
+    // bisa dibuka ulang kalau laju file berubah (M1, 2026-11-10).
+    mPlayback.setTrackLoadedListener([this]() { onTrackLoaded(); });
 }
 
 // =====================================================
@@ -589,6 +593,23 @@ void EngineManager::runStreamRecovery() {
 
 void EngineManager::reopenStreamPreservingPlayback() {
 
+    // Guard reentrancy (M1): onTrackLoaded() dipanggil dari loadTrack(),
+    // dan loadTrack() dipanggil DARI reopen() ini — tanpa flag, handler
+    // akan memanggil reopen lagi dari dalam reopen (deadlock di mMutex).
+    // RAII supaya flag selalu kembali false walau ada exception.
+    struct ReopenGuard {
+        std::atomic<bool>& flag;
+        explicit ReopenGuard(std::atomic<bool>& f) : flag(f) {
+            flag.store(true, std::memory_order_release);
+        }
+        ~ReopenGuard() {
+            flag.store(false, std::memory_order_release);
+        }
+        ReopenGuard(const ReopenGuard&) = delete;
+        ReopenGuard& operator=(const ReopenGuard&) = delete;
+    };
+    ReopenGuard reopenGuard(mReopening);
+
     std::lock_guard<std::mutex>
         lock(mMutex);
 
@@ -673,6 +694,51 @@ void EngineManager::reopenStreamPreservingPlayback() {
             "reopenStream: stream=%d, tidak ada track aktif untuk dimuat ulang",
             mEngine.actualSampleRate());
     }
+}
+
+void EngineManager::onTrackLoaded() {
+
+    // Reopen sedang berjalan (termasuk reopen yang memanggil loadTrack ini)
+    // — lewati. Reopen sudah memakai laju terbaru.
+    if (mReopening.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    // Stream belum berjalan: start() berikutnya sudah memakai laju file
+    // lewat resolveRequestedRate(). Tidak ada yang perlu dibuka ulang.
+    if (!mEngine.isRunning()) {
+        return;
+    }
+
+    // Laju yang SEHARUSNYA dipakai — dihitung persis seperti di
+    // reopenStreamPreservingPlayback(): laju yang diminta (override
+    // eksplisit -> laju file) dipetakan ke laju terbaik perangkat.
+    const int32_t requestedDevice = resolveRequestedDeviceId();
+    const auto deviceRates = supportedRatesFor(requestedDevice);
+
+    int32_t wanted = resolveRequestedRate();
+    if (wanted > 0) {
+        wanted = pickBestRateFor(wanted, deviceRates);
+    }
+
+    if (wanted <= 0) {
+        return;
+    }
+
+    // Stream sudah di laju yang benar — tidak ada yang dilakukan.
+    // Perbandingan ini yang membuat handler idempotent: loadTrack() DI DALAM
+    // reopen() memanggil handler ini lagi, dan di titik itu stream sudah
+    // berjalan di laju baru.
+    if (mEngine.actualSampleRate() == wanted) {
+        return;
+    }
+
+    __android_log_print(ANDROID_LOG_INFO, "EngineManager",
+        "onTrackLoaded: laju file berubah (stream=%d, seharusnya=%d) - "
+        "membuka ulang stream",
+        mEngine.actualSampleRate(), wanted);
+
+    reopenStreamPreservingPlayback();
 }
 
 void EngineManager::onDeviceRemoved(int32_t deviceId) {

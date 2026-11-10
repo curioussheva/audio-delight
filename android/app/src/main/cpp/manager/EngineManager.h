@@ -130,6 +130,16 @@ public:
     // (lihat setRequestedDeviceId / onDeviceRemoved / setExclusiveMode).
     void reopenStreamPreservingPlayback();
 
+    // Dipanggil setiap loadTrack() berhasil (via PlaybackController).
+    // Membuka ulang stream kalau laju yang SEHARUSNYA dipakai (dari laju
+    // file / override eksplisit) berbeda dari laju stream yang berjalan —
+    // inilah perbaikan M1 (bit-perfect hilang diam-diam saat ganti track).
+    // Idempotent: kalau stream sudah di laju yang benar, tidak melakukan
+    // apa-apa. Tidak melakukan apa-apa juga kalau stream tidak berjalan
+    // (start() berikutnya sudah memakai laju file) atau kalau sebuah reopen
+    // sedang berjalan (mReopening).
+    void onTrackLoaded();
+
     // Device dicabut saat stream berjalan (dari AudioDeviceCallback).
     //
     // Kalau stream sedang memakai device itu - atau device itu yang diminta -
@@ -210,7 +220,8 @@ private:
     // Laju yang akan dipakai stream berikutnya, dalam Hz.
     // Prioritas: override eksplisit (setRequestedSampleRate) -> laju file dari
     // controller (diisi loadTrack) -> 0 (biar engine deteksi sendiri).
-    // Dipanggil hanya saat mMutex sudah dipegang (start/toggle exclusive).
+    // Hanya membaca atomic, jadi aman dipanggil tanpa mMutex (dipakai juga
+    // oleh onTrackLoaded() dan logging pasca-reopen).
     // Handler untuk stream yang DIPUTUS PAKSA sistem (onErrorAfterClose).
 
     int32_t resolveRequestedRate() const;
@@ -234,7 +245,8 @@ private:
     // Perangkat yang akan dipakai stream berikutnya (id numerik Android).
     // Prioritas: override eksplisit (setRequestedDeviceId) -> perangkat aktif
     // dari AudioDeviceManager -> 0 (biarkan sistem memilih).
-    // Dipanggil hanya saat mMutex sudah dipegang.
+    // Hanya membaca atomic + AudioDeviceManager (bermutex sendiri), jadi aman
+    // dipanggil tanpa mMutex.
     int32_t resolveRequestedDeviceId() const;
 
     // Laju yang didukung satu perangkat tertentu.
@@ -269,6 +281,14 @@ private:
     // true selagi worker recovery berjalan; dipakai sebagai guard supaya hanya
     // ada satu worker hidup pada satu waktu.
     std::atomic<bool> mRecoveryRunning{false};
+
+    // true selagi reopenStreamPreservingPlayback() berjalan (M1, 2026-11-10).
+    // onTrackLoaded() (yang dipanggil dari loadTrack, termasuk loadTrack DI
+    // DALAM reopen) mengembalikan awal kalau flag ini true — kalau tidak,
+    // handler akan memanggil reopen lagi dari dalam reopen (reentrancy) dan
+    // deadlock di mMutex. Reopen sudah memakai laju terbaru, jadi tidak ada
+    // yang terlewat saat flag ini aktif.
+    std::atomic<bool> mReopening{false};
 
     AudioState mState;
 

@@ -3,6 +3,7 @@
 #include <memory>
 #include <atomic>
 #include <chrono>
+#include <functional>
 #include <mutex>
 #include <string>
 #include "PlaybackState.h"
@@ -56,6 +57,11 @@ public:
     // Dipakai untuk mencatat overrun saat decoder membuang data karena queue
     // penuh. Boleh null — PlaybackController tetap jalan tanpa metrik.
     void setMetrics(pristine::AudioMetrics* metrics) noexcept;
+
+    // Dipanggil setiap loadTrack() berhasil (M1, 2026-11-10): EngineManager
+    // memakai ini untuk membuka ulang stream kalau laju file berubah.
+    // Boleh null. Dipanggil di AKHIR loadTrack, di luar lock apa pun.
+    void setTrackLoadedListener(std::function<void()> listener);
 
     // Laju stream yang SEDANG dipakai. Diisi oleh pemilik stream (AudioEngine
     // lewat AudioCallback) supaya decoder tahu target laju yang benar.
@@ -120,6 +126,11 @@ private:
     // singleton EngineManager), jadi pointer ini tidak pernah dangling.
     // Dipakai untuk mencatat overrun di decode callback (M5, 2026-11-10).
     pristine::AudioMetrics* metricsEngine_{nullptr};
+
+    // Dipanggil setiap loadTrack() berhasil (M1, 2026-11-10). Diset sekali
+    // dari EngineManager. std::function dibaca tanpa lock — hanya ditulis
+    // sekali di konstruksi EngineManager, sebelum ada loadTrack.
+    std::function<void()> trackLoadedListener_;
     std::atomic<bool> clearing_{false};
 
     // Laju stream aktual (dari device/DAC). 0 = belum diketahui.
