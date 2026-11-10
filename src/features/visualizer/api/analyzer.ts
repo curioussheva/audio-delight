@@ -1,7 +1,12 @@
 // src/features/visualizer/api/analyzer.ts
 
 import { Song } from "@/shared/types/audio";
-import * as FileSystem from "expo-file-system";
+// FIX (2026-11-10): import dari "expo-file-system/legacy". Entry utama
+// expo-file-system di SDK 54+ adalah API baru (File/Directory); fungsi
+// legacy seperti getInfoAsync/copyAsync di sana THROW saat runtime —
+// analyzeSong gagal untuk setiap track ("Audio analysis failed").
+// API legacy lengkap tetap tersedia lewat subpath /legacy.
+import * as FileSystem from "expo-file-system/legacy";
 import * as MediaLibrary from "expo-media-library";
 import { getAudioMetadata } from "@missingcore/audio-metadata";
 
