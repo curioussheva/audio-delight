@@ -117,6 +117,9 @@ private:
     // 🔥 FIX (2026-11-10, P-M1): batalkan advance yang sedang menunggu drain.
     // Dipanggil stop()/loadTrack()/shutdown() sebelum pekerjaan mereka.
     void cancelPendingAdvance() noexcept;
+    // 🔥 FIX (2026-11-10, p-m12): tunggu in-flight render() selesai (maks
+    // 100 ms) setelah clearing_ dikibarkan, sebelum pcmQueue_->clear().
+    void waitForRenderIdle() noexcept;
     void updatePlaybackState();
 
     std::atomic<bool> initialized_{false};
@@ -140,6 +143,12 @@ private:
     // sekali di konstruksi EngineManager, sebelum ada loadTrack.
     std::function<void()> trackLoadedListener_;
     std::atomic<bool> clearing_{false};
+
+    // 🔥 FIX (2026-11-10, p-m12): jumlah render() yang sedang berjalan
+    // (audio thread). loadTrack/stop/seek menunggu angka ini 0 setelah
+    // mengibarkan clearing_ — ganti sleep 10 ms yang tidak menjamin
+    // in-flight render selesai (periode callback ~20 ms).
+    std::atomic<int> renderActive_{0};
 
     // Laju stream aktual (dari device/DAC). 0 = belum diketahui.
     std::atomic<uint32_t> streamSampleRate_{0};

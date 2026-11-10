@@ -197,7 +197,11 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
 
     stopDecoder();
     clearing_.store(true, std::memory_order_release);
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    // 🔥 FIX (2026-11-10, p-m12): tunggu in-flight render selesai, ganti
+    // sleep 10 ms. Periode callback ~20 ms (960 frame @48 kHz), jadi sleep
+    // 10 ms tidak menjamin render yang sudah lolos cek clearing_ selesai —
+    // ia masih bisa copy slot basi selama 1 callback.
+    waitForRenderIdle();
 
     // 🔥 FIX (2026-11-10, P-M4): tulis di bawah lock. EOF callback (thread
     // decoder), play(), dan updatePlaybackState() membaca currentTrack_ dari
@@ -383,8 +387,14 @@ bool PlaybackController::stop() {
 
     stopDecoder();
 
+    // 🔥 FIX (2026-11-10, p-m12): kibarkan clearing_ + tunggu in-flight
+    // render selesai sebelum clear — stop() sebelumnya tidak memakai
+    // clearing_ sama sekali.
+    clearing_.store(true, std::memory_order_release);
+    waitForRenderIdle();
     pcmQueue_->clear();
     clock_->reset();
+    clearing_.store(false, std::memory_order_release);
 
     // 🔥 FIX (2026-11-10, p-m23): reset laju file/stream supaya tidak basi
     // ke siklus start berikutnya (pola sama dengan m5 audit manager+core).
@@ -427,7 +437,14 @@ bool PlaybackController::seek(double seconds) {
     // Fix: pause producer dulu supaya tidak ada writer aktif saat clear.
     worker->pause();
 
+    // 🔥 FIX (2026-11-10, p-m12): kibarkan clearing_ + tunggu in-flight
+    // render selesai sebelum clear — seek() sebelumnya tidak memakai
+    // clearing_ sama sekali, jadi render yang sedang berjalan bisa copy
+    // slot basi selama 1 callback.
+    clearing_.store(true, std::memory_order_release);
+    waitForRenderIdle();
     pcmQueue_->clear();
+    clearing_.store(false, std::memory_order_release);
 
     // 🔥 FIX (2026-11-10, p-m10): seek decoder DULU, clock HANYA kalau
     // berhasil. Sebelumnya clock digeser dulu (:333) baru decoder di-seek
@@ -475,11 +492,31 @@ bool PlaybackController::seek(double seconds) {
 // AUDIO RENDER (REALTIME CRITICAL)
 // =====================================================
 
+// RAII: menandai render() sedang berjalan (p-m12, 2026-11-10). Counter
+// renderActive_ dibaca waitForRenderIdle() dari loadTrack/stop/seek.
+// noexcept: fetch_add/fetch_sub tidak pernah throw.
+struct RenderActiveGuard {
+    explicit RenderActiveGuard(std::atomic<int>& counter) noexcept
+        : counter_(counter) {
+        counter_.fetch_add(1, std::memory_order_acq_rel);
+    }
+    ~RenderActiveGuard() {
+        counter_.fetch_sub(1, std::memory_order_acq_rel);
+    }
+    RenderActiveGuard(const RenderActiveGuard&) = delete;
+    RenderActiveGuard& operator=(const RenderActiveGuard&) = delete;
+    std::atomic<int>& counter_;
+};
+
 size_t PlaybackController::render(float* output,
                                 uint32_t frames,
                                 uint32_t channels,
                                 uint32_t sampleRate) noexcept {
     if (!output || frames == 0) return 0;
+
+    // Hitung render yang sedang berjalan — semua return di bawah melewati
+    // destruktor guard ini.
+    const RenderActiveGuard renderGuard(renderActive_);
 
     // Laju stream datang dari pemilik stream (AudioEngine). Disimpan supaya
     // startDecoder() bisa memakai laju yang BENAR sebagai target resample,
@@ -1070,6 +1107,25 @@ void PlaybackController::scheduleAdvance(const std::string& finishedUri) {
 
 void PlaybackController::cancelPendingAdvance() noexcept {
     advanceCancelled_.store(true, std::memory_order_release);
+}
+
+void PlaybackController::waitForRenderIdle() noexcept {
+    // clearing_ SUDAH dikibarkan pemanggil: render baru langsung return
+    // senyap tanpa membaca queue. Yang ditunggu di sini hanya render yang
+    // sudah terlanjur masuk sebelum clearing_ naik. Timeout 100 ms (5x
+    // periode callback) supaya tidak menggantung kalau audio thread macet;
+    // setelah timeout, clear() tetap aman (satu atomic store — hanya data
+    // basi ≤1 callback, seperti perilaku lama).
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
+    while (renderActive_.load(std::memory_order_acquire) > 0) {
+        if (std::chrono::steady_clock::now() >= deadline) {
+            __android_log_print(ANDROID_LOG_WARN, "PlaybackController",
+                "waitForRenderIdle: timeout, lanjut (render masih jalan)");
+            return;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
 }
 
 void PlaybackController::updatePlaybackState() {
