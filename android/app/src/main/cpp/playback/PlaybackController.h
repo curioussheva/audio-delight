@@ -12,6 +12,7 @@
 #include "PlaybackTypes.h"
 #include "TrackQueue.h"
 #include "../decoder/DecoderWorker.h"
+#include "../core/AudioMetrics.h"
 
 namespace pristine::playback {
 
@@ -42,8 +43,19 @@ public:
     void setRepeatMode(RepeatMode mode);
     std::shared_ptr<TrackQueue> queue() const noexcept;
 
-    // Audio thread
-    void render(float* output, uint32_t frames, uint32_t channels, uint32_t sampleRate) noexcept;
+    // Audio thread. Mengembalikan jumlah SAMPLE yang benar-benar dibaca dari
+    // queue (bisa kurang dari frames*channels kalau queue lapar = underrun).
+    // AudioCallback memakainya untuk metrik + mengisi sisa dengan senyap.
+    size_t render(float* output, uint32_t frames, uint32_t channels, uint32_t sampleRate) noexcept;
+
+    // Jumlah frame yang menunggu di queue (untuk metrik bufferedSamples).
+    // Dipanggil dari audio thread — hanya atomic load, tanpa lock.
+    size_t bufferedFrames() const noexcept;
+
+    // Metrik engine (diset EngineManager dari AudioEngine::metrics()).
+    // Dipakai untuk mencatat overrun saat decoder membuang data karena queue
+    // penuh. Boleh null — PlaybackController tetap jalan tanpa metrik.
+    void setMetrics(pristine::AudioMetrics* metrics) noexcept;
 
     // Laju stream yang SEDANG dipakai. Diisi oleh pemilik stream (AudioEngine
     // lewat AudioCallback) supaya decoder tahu target laju yang benar.
@@ -102,6 +114,12 @@ private:
     std::shared_ptr<MetricsCollector> metrics_;
     std::shared_ptr<PlaybackClock> clock_;
     std::shared_ptr<PCMQueue> pcmQueue_;
+
+    // Metrik engine (AudioEngine::mMetrics) — pointer mentah, bukan owner.
+    // Diset sekali dari EngineManager; AudioEngine hidup selama app (anggota
+    // singleton EngineManager), jadi pointer ini tidak pernah dangling.
+    // Dipakai untuk mencatat overrun di decode callback (M5, 2026-11-10).
+    pristine::AudioMetrics* metricsEngine_{nullptr};
     std::atomic<bool> clearing_{false};
 
     // Laju stream aktual (dari device/DAC). 0 = belum diketahui.

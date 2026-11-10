@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <oboe/Oboe.h>
 #include "AudioBufferController.h"
 #include "AudioConstants.h"
@@ -150,6 +151,16 @@ private:
     // =============================================
 
     void updateParameters();
+
+    // Metrik per callback (M5, 2026-11-10): waktu callback + beban CPU +
+    // latensi output (latensi di-throttle tiap 16 callback). Hanya atomic
+    // store + getTimestamp Oboe (baca shared memory, tanpa binder) — aman
+    // di audio thread.
+    void updateCallbackMetrics(
+        oboe::AudioStream* stream,
+        int32_t numFrames,
+        std::chrono::steady_clock::time_point started
+    ) noexcept;
 
     // =============================================
     // SANITASI KELUARAN

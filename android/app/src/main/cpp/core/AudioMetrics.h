@@ -223,8 +223,11 @@ private:
     std::atomic<bool>
         mExclusiveMode{false};
 
+    // Default harus sama dengan AudioState (mDSPEnabled default false di
+    // sana): metrik mencerminkan state, bukan menebak. Diisi ulang dari
+    // AudioState saat stream start (AudioEngine::start).
     std::atomic<bool>
-        mDSPEnabled{true};
+        mDSPEnabled{false};
 };
 
 } // namespace pristine

@@ -103,6 +103,29 @@ void AudioMetrics::reset() noexcept {
         0.0f,
         std::memory_order_relaxed
     );
+
+    // Dulu reset() tidak menyentuh 4 field ini — nilai stream lama bertahan
+    // melewati stop() dan dibaca sebagai kondisi stream yang sudah tidak ada.
+    // (M5, 2026-11-10.)
+    mSampleRate.store(
+        48000,
+        std::memory_order_relaxed
+    );
+
+    mChannelCount.store(
+        2,
+        std::memory_order_relaxed
+    );
+
+    mExclusiveMode.store(
+        false,
+        std::memory_order_relaxed
+    );
+
+    mDSPEnabled.store(
+        false,
+        std::memory_order_relaxed
+    );
 }
 
 } // namespace pristine

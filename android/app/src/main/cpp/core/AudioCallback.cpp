@@ -7,8 +7,10 @@
 #include "../playback/PlaybackController.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstring>
+#include <ctime>
 #include <android/log.h>
 
 namespace pristine {
@@ -39,29 +41,50 @@ AudioCallback::AudioCallback(
 
 oboe::DataCallbackResult
 AudioCallback::onAudioReady(
-    oboe::AudioStream*,
+    oboe::AudioStream* stream,
     void* audioData,
     int32_t numFrames
 ) {
     auto* output = static_cast<float*>(audioData);
 
-    if (numFrames <= 0 || numFrames > kMaxFramesPerCallback) {
+    // Guard (fix 2026-11-10, m1): JANGAN memset dengan numFrames <= 0 —
+    // sizeof(float) * numFrames * 2 dikonversi ke size_t raksasa dan menulis
+    // jauh melewati buffer (UB). numFrames > kMax tetap di-silence penuh
+    // (buffer Oboe memang sebesar itu) karena pipeline tidak bisa memakai
+    // scratch mLeft/mRight yang lebih kecil.
+    if (numFrames <= 0) {
+        return oboe::DataCallbackResult::Continue;
+    }
+    if (numFrames > kMaxFramesPerCallback) {
         std::memset(output, 0, sizeof(float) * numFrames * 2);
         return oboe::DataCallbackResult::Continue;
     }
+
+    // Waktu mulai callback, untuk metrik (M5). steady_clock di audio thread:
+    // tanpa alokasi, tanpa lock, hanya atomic store di akhir.
+    const auto callbackStart = std::chrono::steady_clock::now();
 
     // =============================================
     // Jika PlaybackController tersedia, gunakan sebagai sumber audio
     // =============================================
 
     if (mPlaybackController) {
-        __android_log_print(ANDROID_LOG_DEBUG, "AudioCallback",
-                            "using PlaybackController, frames=%d", (int)numFrames);
-        mPlaybackController->render(
+        // (Log DEBUG per callback dihapus 2026-11-10 (C-M2): ~50-250
+        // log/detik + IPC ke logd di jalur realtime.)
+        const size_t readSamples = mPlaybackController->render(
             output,
             static_cast<uint32_t>(numFrames),
             2,                // stereo
             mSampleRate       // sample rate dari AudioStreamController
+        );
+
+        // Underrun: queue tidak cukup mengisi buffer (M5). Dulu short read
+        // diam-diam — counter underrun selalu 0.
+        if (readSamples < static_cast<size_t>(numFrames) * 2) {
+            mMetrics.recordUnderrun();
+        }
+        mMetrics.updateBufferedSamples(
+            mPlaybackController->bufferedFrames()
         );
 
         // =============================================
@@ -80,10 +103,8 @@ AudioCallback::onAudioReady(
             applyPipeline(output, numFrames);
         }
 
+        updateCallbackMetrics(stream, numFrames, callbackStart);
         return oboe::DataCallbackResult::Continue;
-    } else {
-        __android_log_print(ANDROID_LOG_DEBUG, "AudioCallback",
-                            "using AudioBufferController fallback");
     }
 
     // =============================================
@@ -134,7 +155,59 @@ AudioCallback::onAudioReady(
     mVisualizer.write(mLeft, mRight, numFrames);
     mMetrics.updateBufferedSamples(mBufferController.availableFrames());
 
+    updateCallbackMetrics(stream, numFrames, callbackStart);
     return oboe::DataCallbackResult::Continue;
+}
+
+// =====================================================
+// METRIK PER CALLBACK (M5, 2026-11-10)
+// =====================================================
+//
+// Dulu tidak ada yang menulis metrik di jalur live — getStats() selalu
+// mengembalikan callbackTimeMs=0, cpuLoad=0, latencyMs=0. Sekarang ketiganya
+// diukur di sini, dengan atomic store saja (tanpa alokasi, tanpa lock).
+void AudioCallback::updateCallbackMetrics(
+    oboe::AudioStream* stream,
+    int32_t numFrames,
+    std::chrono::steady_clock::time_point started
+) noexcept {
+    // Waktu callback: durasi kerja onAudioReady ini.
+    const auto now = std::chrono::steady_clock::now();
+    const float callbackMs =
+        std::chrono::duration<float, std::milli>(now - started).count();
+    mMetrics.updateCallbackTimeMs(callbackMs);
+
+    // Beban CPU: fraksi periode realtime yang dipakai callback ini.
+    // Periode = numFrames / sampleRate. >1.0 = callback tidak selesai
+    // sebelum buffer berikutnya diminta (xrun menunggu).
+    if (mSampleRate > 0 && numFrames > 0) {
+        const float periodMs =
+            static_cast<float>(numFrames) * 1000.0f /
+            static_cast<float>(mSampleRate);
+        if (periodMs > 0.0f) {
+            mMetrics.updateCpuLoad(callbackMs / periodMs);
+        }
+    }
+
+    // Latensi output: frame yang sudah ditulis tapi belum sampai ke speaker,
+    // dari timestamp Oboe. Di-throttle tiap 16 callback (~160 ms) — cukup
+    // untuk diagnostik, tanpa membebani jalur realtime. getTimestamp()
+    // AAudio hanya baca shared memory (tanpa binder); kalau gagal (mis.
+    // OpenSLES), latensi lama dipertahankan.
+    static uint32_t latencyCounter = 0;
+    if (stream != nullptr && (++latencyCounter % 16) == 0) {
+        const auto ts = stream->getTimestamp(CLOCK_MONOTONIC);
+        if (ts.error == oboe::Result::OK && mSampleRate > 0) {
+            const int64_t framesInFlight =
+                stream->getFramesWritten() - ts.value.position;
+            if (framesInFlight >= 0) {
+                const float latencyMs =
+                    static_cast<float>(framesInFlight) * 1000.0f /
+                    static_cast<float>(mSampleRate);
+                mMetrics.updateLatencyMs(latencyMs);
+            }
+        }
+    }
 }
 
 // =====================================================

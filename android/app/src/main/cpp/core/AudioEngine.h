@@ -240,6 +240,10 @@ public:
 
     void reset();
 
+    // Akses metrik untuk EngineManager (diteruskan ke PlaybackController
+    // supaya overrun decoder tercatat — M5, 2026-11-10).
+    AudioMetrics& metrics() noexcept { return mMetrics; }
+
 private:
     AudioState mState;
     AudioMetrics mMetrics;

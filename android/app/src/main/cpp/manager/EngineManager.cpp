@@ -21,6 +21,10 @@ EngineManager::EngineManager()
 
     mPlayback() {
 
+    // Teruskan metrik engine ke PlaybackController supaya overrun decoder
+    // (queue penuh, data dibuang) tercatat di EngineStats (M5, 2026-11-10).
+    // mEngine dideklarasi sebelum mPlayback, jadi sudah dibangun di sini.
+    mPlayback.setMetrics(&mEngine.metrics());
 }
 
 // =====================================================

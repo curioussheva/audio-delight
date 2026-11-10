@@ -138,6 +138,18 @@ bool AudioEngine::start(
     mState.setExclusiveMode(exclusiveMode);
     mState.setRunning(true);
 
+    // Metrik diisi dari kondisi stream NYATA (M5, 2026-11-10): dulu
+    // getStats() selalu mengembalikan default (laju 48000, exclusive false,
+    // dsp true) karena tidak ada yang menulis field-field ini.
+    mMetrics.updateSampleRate(
+        static_cast<uint32_t>(actualRate)
+    );
+    mMetrics.updateChannelCount(
+        static_cast<uint32_t>(mStreamController.channelCount())
+    );
+    mMetrics.setExclusiveMode(exclusiveMode);
+    mMetrics.setDSPEnabled(mState.isDSPEnabled());
+
     return true;
 }
 
@@ -250,6 +262,8 @@ void AudioEngine::setDSPEnabled(
 ) {
 
     mState.setDSPEnabled(enabled);
+    // Metrik mengikuti state (M5): flag ini dibaca getStats().
+    mMetrics.setDSPEnabled(enabled);
 }
 
 // =====================================================

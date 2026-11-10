@@ -333,11 +333,11 @@ bool PlaybackController::seek(double seconds) {
 // AUDIO RENDER (REALTIME CRITICAL)
 // =====================================================
 
-void PlaybackController::render(float* output,
+size_t PlaybackController::render(float* output,
                                 uint32_t frames,
                                 uint32_t channels,
                                 uint32_t sampleRate) noexcept {
-    if (!output || frames == 0) return;
+    if (!output || frames == 0) return 0;
 
     // Laju stream datang dari pemilik stream (AudioEngine). Disimpan supaya
     // startDecoder() bisa memakai laju yang BENAR sebagai target resample,
@@ -352,7 +352,7 @@ void PlaybackController::render(float* output,
     // 🔥 RACE FIX
     if (clearing_.load(std::memory_order_acquire)) {
         std::fill(output, output + requestedSamples, 0.0f);
-        return;
+        return 0;
     }
 
     const size_t readSamples =
@@ -440,24 +440,9 @@ void PlaybackController::render(float* output,
                             "render readSamples=%zu/%zu (frames=%u ch=%u)",
                             readSamples, requestedSamples, frames, channels);
     }
-// 🔥 DEBUG: cek nilai min/max/mean sampel
-static int renderDebugCount = 0;
-renderDebugCount++;
-if (renderDebugCount % 100 == 0 && readSamples > 0) {
-    float minV = 1e9f, maxV = -1e9f;
-    double sumAbs = 0.0;
-    for (size_t i = 0; i < readSamples; i++) {
-        float v = output[i];
-        if (v < minV) minV = v;
-        if (v > maxV) maxV = v;
-        sumAbs += (v < 0 ? -v : v);
-    }
-    float meanAbs = static_cast<float>(sumAbs / readSamples);
-
-    __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
-        "SAMPLE min=%.4f max=%.4f mean_abs=%.4f (n=%zu)",
-        minV, maxV, meanAbs, readSamples);
-}
+    // (Blok debug min/max/mean per 100 callback dihapus 2026-11-10 (M5):
+    // satu pass penuh atas buffer + log di audio thread — debug yang
+    // ketinggalan, bukan metrik.)
     if (readSamples < requestedSamples) {
         std::fill(
             output + readSamples,
@@ -532,11 +517,25 @@ if (renderDebugCount % 100 == 0 && readSamples > 0) {
     if (metrics_) {
         metrics_->recordFrameRendered(frames);
     }
+
+    // Jumlah sample yang benar-benar dibaca — AudioCallback memakainya
+    // untuk metrik underrun (M5, 2026-11-10). Sisa buffer (kalau ada)
+    // sudah diisi senyap di atas.
+    return readSamples;
 }
 
 // =====================================================
 // DECODER CONTROL
 // =====================================================
+
+void PlaybackController::setMetrics(pristine::AudioMetrics* metrics) noexcept {
+    metricsEngine_ = metrics;
+}
+
+size_t PlaybackController::bufferedFrames() const noexcept {
+    if (!pcmQueue_) return 0;
+    return pcmQueue_->availableFrames();
+}
 
 void PlaybackController::setStreamSampleRate(uint32_t rate) noexcept {
     if (rate >= 8000 && rate <= 768000) {
@@ -697,6 +696,13 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
 
                     // 🔥 FIX 1: detect data drop (silent overflow)
                     if (written < result.samples.size()) {
+                        // Overrun nyata: decoder memproduksi lebih cepat
+                        // daripada queue dikonsumsi. Catat ke metrik (M5) —
+                        // dulu counter overrun selalu 0 karena tidak ada yang
+                        // menulisnya.
+                        if (metricsEngine_) {
+                            metricsEngine_->recordOverrun();
+                        }
                         static int dropCount = 0;
                         dropCount++;
                         if (dropCount % 20 == 0) {
