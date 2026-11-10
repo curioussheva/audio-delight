@@ -2,6 +2,8 @@
 
 #include <atomic>
 #include <cstdint>
+#include <mutex>
+#include <utility>
 
 namespace pristine::playback {
 
@@ -16,33 +18,30 @@ public:
     void seekToFrame(uint64_t frame) noexcept;
     void seekToSeconds(double seconds, uint32_t sampleRate) noexcept;
 
-    // Position (atomic snapshot safe)
-    [[nodiscard]] uint64_t positionFrames() const noexcept;
-    [[nodiscard]] double positionSeconds(uint32_t sampleRate) const noexcept;
-
-    // Duration
+    // Duration (atomic, satu field). Di-set loadTrack() dari durasi decoder
+    // / metadata (P-M8, 2026-11-10) — sebelumnya tidak pernah di-set siapa
+    // pun sehingga selalu 0.
     void setDurationFrames(uint64_t frames) noexcept;
-    [[nodiscard]] uint64_t durationFrames() const noexcept;
-    [[nodiscard]] double durationSeconds(uint32_t sampleRate) const noexcept;
 
-    // Progress (snapshot consistent)
-    [[nodiscard]] double progress() const noexcept;
-
-    [[nodiscard]] bool isNearEnd(uint64_t thresholdFrames) const noexcept;
-
-    // Stats
-    [[nodiscard]] uint64_t totalFramesRendered() const noexcept;
+    // Pasangan posisi+durasi yang KONSISTEN (satu generasi).
+    //
+    // 🔥 FIX (2026-11-10, p-m17): dulu reset() melakukan tiga store terpisah
+    // dan progress() dua load terpisah — pembaca bisa melihat posisi track
+    // baru + durasi track lama. Komentar "snapshot consistent" tidak dijamin
+    // implementasi. Sekarang pasangan ini dibaca/ditulis di bawah satu mutex
+    // (hanya reset() dan method ini yang menguncinya; advanceFrames tetap
+    // lock-free karena satu atomic op sudah konsisten sendiri).
+    [[nodiscard]] std::pair<uint64_t, uint64_t> snapshotPositionAndDuration() const noexcept;
 
     void reset() noexcept;
 
 private:
     alignas(64) std::atomic<uint64_t> positionFrames_{0};
     alignas(64) std::atomic<uint64_t> durationFrames_{0};
-    alignas(64) std::atomic<uint64_t> totalFramesRendered_{0};
 
-private:
-    [[nodiscard]] inline uint64_t snapshotPosition() const noexcept;
-    [[nodiscard]] inline uint64_t snapshotDuration() const noexcept;
+    // Hanya melindungi pasangan (position, duration) di reset() +
+    // snapshotPositionAndDuration(). Tidak pernah dipegang bersama lock lain.
+    mutable std::mutex snapshotMutex_;
 };
 
-} // namespace pristine::playback 
+} // namespace pristine::playback

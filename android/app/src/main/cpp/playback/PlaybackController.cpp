@@ -234,6 +234,31 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
 
     bool result = startDecoder(track);
     clearing_.store(false, std::memory_order_release);
+
+    // 🔥 FIX (2026-11-10, P-M8): isi durationFrames clock. Sebelumnya
+    // setDurationFrames tidak punya pemanggil sehingga duration selalu 0
+    // (progress() selalu 0.0, isNearEnd() selalu true, fallback durasi
+    // decoder jalan tiap callback). Sumber: durasi decoder (paling akurat)
+    // kalau ada, kalau tidak metadata track. Laju konversi: stream rate
+    // kalau sudah diketahui, kalau tidak laju file, kalau tidak 48000
+    // (domain frame clock = laju stream, lihat fix 2026-10-07 di seek()).
+    if (result && clock_) {
+        double durSec = 0.0;
+        if (auto worker = snapshotWorker()) {
+            durSec = worker->getDuration();
+        }
+        if (durSec <= 0.0 && track.durationMs > 0) {
+            durSec = static_cast<double>(track.durationMs) / 1000.0;
+        }
+        if (durSec > 0.0) {
+            uint32_t rate = streamSampleRate();
+            if (rate == 0) rate = track.sampleRate;
+            if (rate == 0) rate = 48000;
+            clock_->setDurationFrames(
+                static_cast<uint64_t>(durSec * rate));
+        }
+    }
+
     __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                         "loadTrack(): DONE startDecoder=%s",
                         result ? "true" : "false");
@@ -595,32 +620,30 @@ size_t PlaybackController::render(float* output,
 
     // 🔥 FIX: sync position & duration ke state (untuk JS getPosition)
     if (state_ && clock_ && sampleRate > 0) {
-        uint64_t framesPos = clock_->positionFrames();
+        // Pasangan konsisten (p-m17): posisi + durasi dari generasi yang sama.
+        const auto [framesPos, framesDur] =
+            clock_->snapshotPositionAndDuration();
         uint64_t msPos = (framesPos * 1000ULL) / sampleRate;
         state_->setPosition(msPos);
 
-        // BUG (2026-10-06): clock_->durationFrames() TIDAK PERNAH di-set
-        // (setDurationFrames tak punya pemanggil), jadi blok ini no-op dan
-        // duration state hanya berasal dari track.durationMs di loadTrack.
-        // Karena framesDur==0 di-skip, tidak ada yang ditimpa — aman, tapi
-        // tidak ada cross-check. Saat decoder membuka file hi-res, track
-        // duration dari MediaMetadataRetriever bisa 0 → UI durasi 0:00.
-        // Pakai durasi decoder bila tersedia.
-        uint64_t framesDur = clock_->durationFrames();
         if (framesDur > 0) {
             uint64_t msDur = (framesDur * 1000ULL) / sampleRate;
             state_->setDuration(msDur);
-        }
-        else {
-            // 🔥 FIX (2026-11-10, p-m21 + P-M4): baca lewat snapshot, bukan
-            // `else if (decoderWorker_)` tanpa lock. Dulu pemakaian aman
-            // karena re-check di bawah lock, tapi balapan bacaannya tersisa.
+        } else {
+            // Self-heal (P-M8/p-m11): kalau duration clock masih 0 (mis.
+            // loadTrack tidak tahu durasi karena metadata 0 dan decoder
+            // belum selesai open), isi dari durasi decoder sekarang juga.
+            // Setelah terisi, callback berikutnya memakai cabang di atas —
+            // fallback ini tidak lagi jalan tiap callback. Saat decoder
+            // membuka file hi-res, track duration dari MediaMetadataRetriever
+            // bisa 0 → UI durasi 0:00; durasi decoder menutup lubang itu.
             if (auto worker = snapshotWorker()) {
                 const double decDur = worker->getDuration();
                 if (decDur > 0.0) {
+                    clock_->setDurationFrames(
+                        static_cast<uint64_t>(decDur * sampleRate));
                     state_->setDuration(
-                        static_cast<uint64_t>(decDur * 1000.0)
-                    );
+                        static_cast<uint64_t>(decDur * 1000.0));
                 }
             }
         }
