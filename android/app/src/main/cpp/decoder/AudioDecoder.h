@@ -82,8 +82,13 @@ public:
         const AudioFormat& format
     );
 
+    // Virtual: subclass yang me-resample SENDIRI ke format target (mis.
+    // FFmpegDecoder via swr) meng-override ke false — base class tidak boleh
+    // me-resample lagi (D-M1, 2026-11-11: resample kedua dengan frame-count
+    // salah domain = heap OOB + tempo salah). Default base: bandingkan
+    // format input vs output.
     [[nodiscard]]
-    bool needsResampling() const noexcept;
+    virtual bool needsResampling() const noexcept;
 
     // =====================================================
     // STATE

@@ -49,6 +49,11 @@ protected:
 
     AudioFormat onGetInputFormat() const override;
 
+    // 🔥 FIX (2026-11-11, D-M1): selalu false — decoder ini me-resample
+    // sendiri via swr ke target rate + stereo. Base class tidak boleh
+    // me-resample lagi (frame-count salah domain → heap OOB).
+    bool needsResampling() const noexcept override;
+
     DecoderCapabilities
     getCapabilities() const override;
 

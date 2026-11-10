@@ -915,8 +915,20 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
 
         // Worker lokal dulu (M3): dipublikasikan ke decoderWorker_ hanya
         // setelah start() berhasil, di bawah lock.
+        auto decoder = std::make_unique<decoder::FFmpegDecoder>(cfg);
+
+        // 🔥 FIX (2026-11-11, D-M1): beri tahu base class format yang
+        // BENAR-BENAR keluar dari decoder ini (target rate swr + stereo),
+        // supaya getOutputFormat() jujur. Sebelumnya outputFormat_ selalu
+        // default 48000/2 karena setTargetFormat tidak pernah dipanggil
+        // siapa pun — bookkeeping format berbohong soal laju output.
+        decoder::AudioFormat targetFormat;
+        targetFormat.sampleRate = cfg.targetSampleRate;
+        targetFormat.channels = 2;
+        decoder->setTargetFormat(targetFormat);
+
         auto worker = std::make_shared<decoder::DecoderWorker>(
-            std::make_unique<decoder::FFmpegDecoder>(cfg)
+            std::move(decoder)
         );
 
         // 🔥 EOF callback: decoder selesai membaca seluruh stream.

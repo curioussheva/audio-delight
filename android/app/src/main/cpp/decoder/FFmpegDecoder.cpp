@@ -331,6 +331,13 @@ DecodeResult FFmpegDecoder::onDecode(
         temp + converted * channels);
 
     // ✅ FIX: framesDecoded = input frames (44.1k), currentFrame_ = output frames (48k)
+    // ⚠️ INVARIAN (D-M1, 2026-11-11): framesDecoded SENGAJA domain input,
+    // sementara result.samples berisi frame domain OUTPUT (converted).
+    // Karena itu applyResampling() base class TIDAK BOLEH jalan untuk
+    // decoder ini — ia memakai framesDecoded sebagai jumlah frame buffer
+    // (lihat AudioDecoder::applyResampling) dan akan membaca melewati akhir
+    // buffer. needsResampling() di-override false di bawah; jangan hapus
+    // override itu tanpa memperbaiki domain framesDecoded dulu.
     result.framesDecoded += frame_->nb_samples;
     currentFrame_ += converted;
     // FIX (Prioritas 1): counter output lokal — INI yang dipakai exit condition
@@ -451,6 +458,17 @@ bool FFmpegDecoder::onSeekToFrame(
 // =====================================================
 // FORMAT INFO
 // =====================================================
+
+// 🔥 FIX (2026-11-11, D-M1): decoder ini me-resample SENDIRI via swr ke
+// cfg.targetSampleRate + stereo (lihat setupResampler) — base class TIDAK
+// boleh me-resample lagi. Dulu needsResampling() base membandingkan laju
+// FILE vs outputFormat_ default 48000, jadi untuk file non-48 kHz
+// applyResampling() jalan dengan framesDecoded domain INPUT melawan buffer
+// domain OUTPUT → heap OOB read (96 kHz → SIGSEGV, terbukti harness ASAN),
+// tempo salah (44,1 kHz → −8,8%), dan 2× cepat di stream 96 kHz.
+bool FFmpegDecoder::needsResampling() const noexcept {
+    return false;
+}
 
 AudioFormat FFmpegDecoder::onGetInputFormat() const {
     AudioFormat format;
