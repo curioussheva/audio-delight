@@ -21,8 +21,7 @@ AudioDecoder::AudioDecoder(
 // Semua jalur destruksi saat ini menutup dulu (DecoderWorker::stop() →
 // decoder_->close() sebelum worker dihancurkan), dan tiap derived
 // membersihkan sumber dayanya di destruktornya sendiri
-// (FFmpegDecoder::~FFmpegDecoder → cleanup(),
-// PCMDecoder::~PCMDecoder → onClose()) — jadi tidak ada yang hilang
+// (FFmpegDecoder::~FFmpegDecoder → cleanup()) — jadi tidak ada yang hilang
 // dengan menghapus close() dari sini. onClose() tetap pure virtual supaya
 // subclass baru wajib mengimplementasikannya.
 AudioDecoder::~AudioDecoder()
