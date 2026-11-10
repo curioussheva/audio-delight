@@ -130,7 +130,13 @@ bool PlaybackController::next() {
     // advance() memperbarui mCurrentIndex sesuai repeat mode, lalu current()
     // memberikan trek yang benar. Sama seperti yang scheduleAdvance() lakukan
     // untuk auto-advance EOF.
-    if (!queue_->advance()) return false;
+    //
+    // 🔥 FIX (2026-11-10, P-M5): tombol Next pakai advanceManual(), BUKAN
+    // advance(). advance() dengan Repeat One return true TANPA bergerak
+    // (benar untuk EOF: lagu yang sama diulang), jadi Next me-restart lagu
+    // yang sama. advanceManual() selalu maju satu langkah apa pun repeat
+    // mode-nya.
+    if (!queue_->advanceManual()) return false;
 
     auto track = queue_->current();
     if (track) {

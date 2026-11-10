@@ -69,6 +69,12 @@ public:
 
     bool advance();
 
+    // Manual next (tombol Next): SELALU maju satu langkah, apa pun repeat
+    // mode-nya. Beda dengan advance() yang dipakai auto-advance EOF: di sana
+    // Repeat One memang harus me-reload trek yang sama. Tombol Next dengan
+    // Repeat One harus pindah ke trek berikut (P-M5, 2026-11-10).
+    bool advanceManual();
+
     bool retreat();
 
     bool jumpTo(

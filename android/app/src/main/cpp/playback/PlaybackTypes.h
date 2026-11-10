@@ -61,10 +61,19 @@ struct TrackInfo {
     // setShuffleMode/setTracks untuk menjaga trek yang sedang diputar
     // tetap di posisi yang benar saat mode shuffle berubah.
     // URI unik per trek (content:// media id), jadi itu identitasnya.
+    //
+    // 🔥 FIX (2026-11-10, p-m6): bandingkan juga durationMs + sampleRate.
+    // URI yang sama bisa muncul dua kali (lagu yang sama ditambahkan 2x);
+    // find() mengembalikan kecocokan PERTAMA, dan dua entri dengan URI sama
+    // tapi metadata berbeda (mis. jalur resolve berbeda) bisa tertukar saat
+    // toggle shuffle. Dua entri yang byte-identical tetap dianggap trek yang
+    // sama — tidak ada beda yang teramati (audio dan metadata identik).
     bool operator==(
         const TrackInfo& other
     ) const {
-        return uri == other.uri;
+        return uri == other.uri &&
+               durationMs == other.durationMs &&
+               sampleRate == other.sampleRate;
     }
 
     bool operator!=(

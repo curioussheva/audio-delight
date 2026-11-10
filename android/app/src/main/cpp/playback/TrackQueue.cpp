@@ -253,6 +253,40 @@ bool TrackQueue::advance() {
     return false;
 }
 
+// 🔥 FIX (2026-11-10, P-M5): manual next SELALU maju, apa pun repeat mode.
+//
+// advance() dipakai bersama untuk dua keperluan berbeda — auto-advance EOF
+// dan tombol Next manual — dan semantik repeat-one yang benar hanya untuk
+// EOF. Akibatnya dengan Repeat One, Next me-restart lagu yang sama (advance
+// return true tanpa bergerak), sementara Previous tetap mundur (retreat
+// tidak memeriksa repeat mode) — asimetris dan membingungkan.
+//
+// advanceManual() dipakai PlaybackController::next() saja. Di ujung queue:
+// wrap ke 0 kalau repeat menyala (One/All), diam kalau Off.
+bool TrackQueue::advanceManual() {
+
+    std::lock_guard lock(mMutex);
+
+    if (mTracks.empty()) {
+        return false;
+    }
+
+    if (
+        mCurrentIndex + 1 <
+        activeQueue().size()
+    ) {
+        ++mCurrentIndex;
+        return true;
+    }
+
+    if (mRepeatMode != RepeatMode::Off) {
+        mCurrentIndex = 0;
+        return true;
+    }
+
+    return false;
+}
+
 bool TrackQueue::retreat() {
 
     std::lock_guard lock(mMutex);
