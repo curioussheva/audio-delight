@@ -10,9 +10,23 @@ AudioDecoder::AudioDecoder(
 {
 }
 
+// 🔥 FIX (2026-11-11, D-M4): JANGAN panggil close() di sini.
+//
+// close() memanggil onClose() (pure virtual). Saat destruktor BASE berjalan,
+// bagian derived sudah dihancurkan dan vtable sudah kembali ke base —
+// memanggil virtual murni = "pure virtual method called" + terminate
+// (terdemonstrasi di harness audit: decoder yang dihancurkan saat masih
+// open langsung terminate).
+//
+// Semua jalur destruksi saat ini menutup dulu (DecoderWorker::stop() →
+// decoder_->close() sebelum worker dihancurkan), dan tiap derived
+// membersihkan sumber dayanya di destruktornya sendiri
+// (FFmpegDecoder::~FFmpegDecoder → cleanup(),
+// PCMDecoder::~PCMDecoder → onClose()) — jadi tidak ada yang hilang
+// dengan menghapus close() dari sini. onClose() tetap pure virtual supaya
+// subclass baru wajib mengimplementasikannya.
 AudioDecoder::~AudioDecoder()
 {
-    close();
 }
 
 bool AudioDecoder::open(
