@@ -409,31 +409,19 @@ bool FFmpegDecoder::onSeek(
 
     avcodec_flush_buffers(codecCtx_);
 
-    // 🔥 FIX (2026-11-10, p-m10): posisi AKTUAL setelah seek, bukan posisi
-    // yang diminta.
-    //
-    // av_seek_frame(AVSEEK_FLAG_BACKWARD) mendarat di keyframe ≤ target —
-    // audio mulai dari keyframe, tapi dulu currentFrame_ ditulis dengan
-    // posisi yang DIMINTA, jadi clock (dan UI) mendahului audio. Kecil
-    // untuk MP3/FLAC (frame independen, offset ≤ ~1 frame), tapi bisa
-    // hitungan detik untuk format keyframe jarang.
-    //
-    // Setelah seek, stream->cur_dts adalah DTS keyframe tujuan (dalam
-    // time_base stream). Pakai itu sebagai posisi; kalau tidak tersedia
-    // (AV_NOPTS_VALUE / stream tidak valid), fallback ke posisi yang diminta
-    // = perilaku lama.
-    double actualSeconds = positionSeconds;
-    if (audioStreamIndex_ >= 0 &&
-        audioStreamIndex_ < static_cast<int>(formatCtx_->nb_streams)) {
-        AVStream* stream = formatCtx_->streams[audioStreamIndex_];
-        if (stream && stream->cur_dts != AV_NOPTS_VALUE) {
-            const double dtsSec = static_cast<double>(stream->cur_dts) *
-                                  av_q2d(stream->time_base);
-            if (dtsSec >= 0.0 && dtsSec <= positionSeconds + 1.0) {
-                actualSeconds = dtsSec;
-            }
-        }
-    }
+    // KOREKSI (2026-11-10): percobaan p-m10 memakai `stream->cur_dts`
+    // sebagai posisi AKTUAL pasca-seek DIHAPUS — field itu TIDAK ADA di
+    // AVStream publik FFmpeg 6.1.2 (dipakai repo ini); `cur_dts` hanya ada
+    // di FFmpeg 2.x dan sejak 3.0 pindah ke AVStreamInternal yang tidak
+    // bisa diakses. Build Dev 42832521358 gagal kompilasi tepat di dua
+    // baris itu. Tidak ada accessor publik "DTS saat ini" di libavformat
+    // 60 — posisi pasca-seek yang sebenarnya baru diketahui saat paket
+    // berikutnya dibaca. Jadi kembali ke perilaku lama: currentFrame_
+    // dari posisi yang DIMINTA. Untuk file audio (MP3/FLAC/AAC) galatnya
+    // kecil: seek mendarat di keyframe ≤ target dan frame audio hampir
+    // independen (offset ≤ ~1 frame). Bagian p-m10 yang PENTING — urutan
+    // seek (decoder dulu, clock dari getPosition() hanya bila sukses) —
+    // ada di PlaybackController::seek() dan TIDAK tersentuh koreksi ini.
 
     // 🔥 FIX (2026-10-06): domain currentFrame_ adalah OUTPUT (targetSampleRate),
     // bukan codecCtx_->sample_rate. Bug kembar getPositionSeconds: untuk FLAC
@@ -442,7 +430,7 @@ bool FFmpegDecoder::onSeek(
     // yang keluar tidak cocok dengan posisi yang dilaporkan.
     currentFrame_ =
         static_cast<uint64_t>(
-            actualSeconds * config().targetSampleRate);
+            positionSeconds * config().targetSampleRate);
 
     return true;
 }
