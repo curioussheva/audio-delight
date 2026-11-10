@@ -401,6 +401,11 @@ bool PlaybackController::stop() {
 }
 
 bool PlaybackController::seek(double seconds) {
+    // 🔥 FIX (2026-11-10, p-m13): seek SELAMA INI tanpa satu pun log —
+    // tidak terlihat di logcat, padahal play/pause/stop/loadTrack semua log.
+    __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                        "seek(): target=%.3fs", seconds);
+
     // 🔥 FIX (2026-11-10, P-M4): pakai snapshot. Dulu cek-lalu-pakai
     // decoderWorker_ tanpa lock; kalau stopDecoder() memindahkan pointer di
     // antara cek (:306) dan pause()/seek() (:315/:335) → deref null. Salinan
@@ -408,8 +413,11 @@ bool PlaybackController::seek(double seconds) {
     // worker lama yang sudah di-stop mengembalikan false dengan bersih
     // (decoder sudah close) alih-alih crash.
     auto worker = snapshotWorker();
-    if (!worker)
+    if (!worker) {
+        __android_log_print(ANDROID_LOG_WARN, "PlaybackController",
+                            "seek(): FAILED - no decoder");
         return false;
+    }
 
     // 🩹 FIX (Prioritas 2): PCMQueue adalah SPSC lock-free ring buffer
     // — HANYA aman diakses oleh 1 producer (decoder thread) + 1
@@ -420,6 +428,22 @@ bool PlaybackController::seek(double seconds) {
     worker->pause();
 
     pcmQueue_->clear();
+
+    // 🔥 FIX (2026-11-10, p-m10): seek decoder DULU, clock HANYA kalau
+    // berhasil. Sebelumnya clock digeser dulu (:333) baru decoder di-seek
+    // (:335) — kalau decoder seek gagal, clock sudah pindah tapi audio
+    // lanjut dari posisi lama → offset posisi persisten sampai loadTrack
+    // berikutnya. Posisi clock diambil dari posisi AKTUAL decoder setelah
+    // seek (bisa mundur ke keyframe — lihat FFmpegDecoder::onSeek), bukan
+    // dari target yang diminta.
+    bool ok = worker->seek(seconds);
+    if (!ok) {
+        __android_log_print(ANDROID_LOG_WARN, "PlaybackController",
+                            "seek(): FAILED - decoder seek returned false, "
+                            "clock tidak digeser");
+        worker->resume();
+        return false;
+    }
 
     // 🩹 FIX (2026-10-07): laju clock HARUS laju stream aktual, bukan 48000
     // tetap. Decoder meresample PCM ke laju stream (lihat startDecoder:
@@ -435,13 +459,16 @@ bool PlaybackController::seek(double seconds) {
     if (seekRate == 0) {
         seekRate = 48000;
     }
-    clock_->seekToSeconds(seconds, seekRate);
-
-    bool ok = worker->seek(seconds);
+    const double actualSeconds = worker->getPosition();
+    clock_->seekToSeconds(
+        actualSeconds > 0.0 ? actualSeconds : seconds, seekRate);
 
     worker->resume();
 
-    return ok;
+    __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                        "seek(): OK target=%.3fs actual=%.3fs",
+                        seconds, actualSeconds);
+    return true;
 }
 
 // =====================================================
