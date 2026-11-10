@@ -15,6 +15,8 @@
 | [`NATIVE_MODULES_CONSISTENCY.md`](./NATIVE_MODULES_CONSISTENCY.md) | Analisis konsistensi semua native modules: 1 bug, 3 clean, dead code inventory (2026-10-07) |
 | [`RATE_CHAIN_AUDIT.md`](./RATE_CHAIN_AUDIT.md) | Alur sample rate hulu→hilir: autodetect device/DAC status, di mana rantai putus, jalan ke bit-perfect (2026-10-07) |
 | [`AUDIT_2026-11-10.md`](./AUDIT_2026-11-10.md) | Audit hulu→hilir 2026-11-10: initiation→playback, tiga mode, visualizer session, UI — semua temuan + aksi perbaikan (graphify 5.291 node, spot-check grep) |
+| [`NATIVE_CPP_MAP.md`](./NATIVE_CPP_MAP.md) | Peta 178 file C++ dalam 12 section + urutan audit (manager+core dulu) — 2026-11-10 |
+| [`AUDIT_NATIVE_CPP_MANAGER_CORE_2026-11-10.md`](./AUDIT_NATIVE_CPP_MANAGER_CORE_2026-11-10.md) | Deep audit native C++ manager+core 2026-11-10: 1 blocker + 9 major + dead code, beserta perbaikan 6 commit di hari yang sama |
 | [`VISUALIZER_CARA_KERJA.md`](./VISUALIZER_CARA_KERJA.md) | Deep-dive visualizer: cara kerja langkah demi langkah + cara app dibangun (5 lapis), peta file, kenapa jalur ini mati (2026-11-10) |
 | [`AUDIO_OUTPUT_PATHS.md`](./AUDIO_OUTPUT_PATHS.md) | Audit jalur output audio: speaker/jack/USB DAC/HDMI/Bluetooth-A2DP/cast, mana yang bisa bit-perfect (2026-10-07) |
 | [`adr/0001-tiga-mode-satu-sumber-kebenaran.md`](./adr/0001-tiga-mode-satu-sumber-kebenaran.md) | ADR: di mana logika tiga mode hidup, dan mengapa `AudioPipeline` (2026-10-07) |
