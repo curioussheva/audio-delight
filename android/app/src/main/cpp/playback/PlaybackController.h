@@ -12,6 +12,7 @@
 #include "PCMQueue.h"
 #include "PlaybackTypes.h"
 #include "TrackQueue.h"
+#include "FadeEngine.h"
 #include "../decoder/DecoderWorker.h"
 #include "../core/AudioMetrics.h"
 
@@ -120,6 +121,11 @@ private:
     // 🔥 FIX (2026-11-10, p-m12): tunggu in-flight render() selesai (maks
     // 100 ms) setelah clearing_ dikibarkan, sebelum pcmQueue_->clear().
     void waitForRenderIdle() noexcept;
+    // 🔥 FIX (2026-11-10, P-M7): aplikasikan fade-in (awal track) dan
+    // fade-out (ekor, saat decoderFinished_) ke buffer output render().
+    // Dipanggil di akhir render(), setelah zero-fill dan clock.
+    void applyTrackFades(float* output, uint32_t frames, uint32_t channels,
+                         size_t readSamples) noexcept;
     void updatePlaybackState();
 
     std::atomic<bool> initialized_{false};
@@ -149,6 +155,17 @@ private:
     // mengibarkan clearing_ — ganti sleep 10 ms yang tidak menjamin
     // in-flight render selesai (periode callback ~20 ms).
     std::atomic<int> renderActive_{0};
+
+    // 🔥 FIX (2026-11-10, P-M7): fade-in di awal track + fade-out di ekor.
+    // Kurva dibuat loadTrack() (bukan audio thread — generateCurve
+    // mengalokasi vector) dan HANYA dibaca render() saat clearing_ false,
+    // jadi tidak ada race dengan loadTrack (waitForRenderIdle menunggu
+    // render selesai sebelum kurva dibuat ulang).
+    FadeEngine fadeIn_;
+    FadeEngine fadeOut_;
+    // Frame yang sudah di-render sejak loadTrack/seek/play terakhir.
+    // Di-increment render() (audio thread), di-reset loadTrack/seek/play.
+    std::atomic<uint32_t> framesSinceLoad_{0};
 
     // Laju stream aktual (dari device/DAC). 0 = belum diketahui.
     std::atomic<uint32_t> streamSampleRate_{0};

@@ -19,6 +19,15 @@ void FadeEngine::generateCurve(
     fadeInCurve_.resize(durationFrames_);
     fadeOutCurve_.resize(durationFrames_);
 
+    // 🔥 FIX (2026-11-10, p-m9): durasi 0/1 frame tidak bisa difade — builder
+    // membagi (durationFrames_ - 1) = 0 → t = 0/0 = NaN → gain NaN ke output.
+    // Isi kurva identitas (tanpa fade) dan jangan panggil builder.
+    if (durationFrames_ <= 1) {
+        std::fill(fadeInCurve_.begin(), fadeInCurve_.end(), 1.0f);
+        std::fill(fadeOutCurve_.begin(), fadeOutCurve_.end(), 1.0f);
+        return;
+    }
+
     switch (type) {
 
         case FadeCurve::Linear:
@@ -199,6 +208,13 @@ void FadeEngine::crossfade(
         !fadeInBuffer ||
         !outputBuffer
     ) {
+        return;
+    }
+
+    // 🔥 FIX (2026-11-10, p-m9): tanpa kurva, kedua gain = 1.0 (lihat
+    // fadeInGainAt/fadeOutGainAt) sehingga output = jumlah kedua buffer
+    // (sampai 2x, clipping). Jangan tulis apa-apa kalau kurva kosong.
+    if (empty()) {
         return;
     }
 

@@ -227,6 +227,21 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
     clock_->reset();
     if (state_) state_->setPosition(0);  // 🔥 FIX: reset posisi state juga
 
+    // 🔥 FIX (2026-11-10, P-M7): siapkan kurva fade untuk track baru —
+    // fade-in 300 ms di awal track, fade-out 500 ms di ekor (saat decoder
+    // selesai, lihat render()). Dibuat di sini (bukan audio thread) karena
+    // generateCurve mengalokasi vector. Laju: stream kalau sudah diketahui,
+    // kalau tidak laju file, kalau tidak 48000 — selisih beberapa ms tidak
+    // terdengar.
+    {
+        uint32_t fadeRate = streamSampleRate();
+        if (fadeRate == 0) fadeRate = track.sampleRate;
+        if (fadeRate == 0) fadeRate = 48000;
+        fadeIn_.generateCurve(FadeCurve::SCurve, fadeRate * 300 / 1000);
+        fadeOut_.generateCurve(FadeCurve::SCurve, fadeRate * 500 / 1000);
+    }
+    framesSinceLoad_.store(0, std::memory_order_release);
+
     // 🔥 FIX: set duration dari metadata track
     if (state_ && track.durationMs > 0) {
         state_->setDuration(static_cast<uint64_t>(track.durationMs));
@@ -348,6 +363,11 @@ bool PlaybackController::play() {
     playing_.store(true, std::memory_order_release);
     updatePlaybackState();  // 🔥 FIX
 
+    // 🔥 FIX (2026-11-10, P-M7): resume dimulai dengan fade-in singkat
+    // (300 ms) supaya tidak ada klik saat audio jalan lagi setelah pause.
+    // loadTrack() sudah me-reset untuk track baru; reset di sini idempotent.
+    framesSinceLoad_.store(0, std::memory_order_release);
+
     // resume() di salinan aman walau stopDecoder() berjalan bersamaan:
     // resume() hanya atomic store + notify (lihat M3).
     worker->resume();
@@ -400,6 +420,10 @@ bool PlaybackController::stop() {
     // ke siklus start berikutnya (pola sama dengan m5 audit manager+core).
     fileSampleRate_.store(0, std::memory_order_release);
     streamSampleRate_.store(0, std::memory_order_release);
+
+    // Tidak ada lagi track yang "sudah selesai" setelah stop (P-M7).
+    decoderFinished_.store(false, std::memory_order_release);
+    framesSinceLoad_.store(0, std::memory_order_release);
 
     // 🔥 FIX (2026-11-10, p-m4): stop = Stopped, bukan Paused.
     // updatePlaybackState() hanya tahu Playing/Paused (dari playing_), jadi
@@ -479,6 +503,11 @@ bool PlaybackController::seek(double seconds) {
     const double actualSeconds = worker->getPosition();
     clock_->seekToSeconds(
         actualSeconds > 0.0 ? actualSeconds : seconds, seekRate);
+
+    // 🔥 FIX (2026-11-10, P-M7): seek = awal baru — fade-in singkat supaya
+    // tidak klik di titik seek, dan decoder belum selesai (baru di-seek).
+    framesSinceLoad_.store(0, std::memory_order_release);
+    decoderFinished_.store(false, std::memory_order_release);
 
     worker->resume();
 
@@ -652,6 +681,11 @@ size_t PlaybackController::render(float* output,
         );
     }
 
+    // 🔥 FIX (2026-11-10, P-M7): fade-in awal track + fade-out ekor.
+    // Dipanggil SEBELUM clock maju, supaya offset fade-in memakai
+    // framesSinceLoad_ SEBELUM callback ini.
+    applyTrackFades(output, frames, channels, readSamples);
+
     // 🔥 FIX (2026-10-10): clock hanya boleh maju untuk audio nyata.
     //
     // BUG A (posisi melompat ke 72 menit): advanceFrames(frames) dipanggil
@@ -680,6 +714,8 @@ size_t PlaybackController::render(float* output,
     const uint32_t advancedFrames = static_cast<uint32_t>(readSamples) / ch;
     if (advancedFrames > 0 && playing_.load(std::memory_order_acquire)) {
         clock_->advanceFrames(advancedFrames);
+        // Hitung untuk fade-in (P-M7): frame sejak loadTrack/seek/play.
+        framesSinceLoad_.fetch_add(advancedFrames, std::memory_order_relaxed);
     }
 
     // 🔥 FIX: sync position & duration ke state (untuk JS getPosition)
@@ -1125,6 +1161,42 @@ void PlaybackController::waitForRenderIdle() noexcept {
             return;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
+
+void PlaybackController::applyTrackFades(float* output, uint32_t frames,
+                                        uint32_t channels,
+                                        size_t readSamples) noexcept {
+    if (!output || frames == 0 || channels == 0) return;
+
+    // ---- fade-in: 300 ms pertama sejak loadTrack/seek/play ----
+    // (framesSinceLoad_ di sini = nilai SEBELUM callback ini, karena
+    // increment-nya terjadi di blok clock advance setelah pemanggilan ini.)
+    const uint32_t sinceLoad =
+        framesSinceLoad_.load(std::memory_order_acquire);
+    const uint32_t fadeInFrames = fadeIn_.durationFrames();
+    if (!fadeIn_.empty() && sinceLoad < fadeInFrames) {
+        fadeIn_.applyFadeIn(output, frames, channels, sinceLoad);
+    }
+
+    // ---- fade-out: 500 ms terakhir, hanya kalau decoder sudah selesai ----
+    // Decoder selesai = tidak ada lagi audio yang akan masuk queue, jadi
+    // sisa queue saat ini adalah EKOR track yang sebenarnya. (Tanpa flag
+    // ini, fade-out akan salah memotong tengah track setiap kali queue
+    // kebetulan tinggal sedikit.)
+    if (!fadeOut_.empty() &&
+        decoderFinished_.load(std::memory_order_acquire)) {
+        const uint32_t fadeOutFrames = fadeOut_.durationFrames();
+        const size_t remainingSamples =
+            (pcmQueue_ ? pcmQueue_->availableSamples() : 0) + readSamples;
+        const uint32_t remainingFrames =
+            static_cast<uint32_t>(remainingSamples / channels);
+        if (remainingFrames <= fadeOutFrames) {
+            // Frame pertama buffer ini berada di posisi
+            // (fadeOutFrames - remainingFrames) dalam kurva fade-out.
+            fadeOut_.applyFadeOut(output, frames, channels,
+                                  fadeOutFrames - remainingFrames);
+        }
     }
 }
 
