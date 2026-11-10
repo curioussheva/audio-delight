@@ -226,6 +226,21 @@ private:
     // (baca bisa mendarat di antara move-out dan reset → deref null).
     std::shared_ptr<decoder::DecoderWorker> decoderWorker_;
 
+    // 🔥 FIX (2026-11-11, D-M3): serialisasi loadTrack() antar thread.
+    //
+    // loadTrack() dipanggil dari thread JS (next/previous/play) DAN dari
+    // advance thread (scheduleAdvance). Tanpa mutex, dua startDecoder()
+    // bisa berjalan bersamaan pada worker berbeda — keduanya menulis ke
+    // PCMQueue yang SPSC dan track yang berbunyi bisa beda dari indeks
+    // queue. cancelPendingAdvance() hanya menutup jendela drain-wait, bukan
+    // jendela antara cek-batal terakhir dan loadTrack() itu sendiri.
+    //
+    // RECURSIVE (bukan mutex biasa): loadTrack() memanggil
+    // trackLoadedListener di akhirnya → onTrackLoaded() → reopen →
+    // loadTrack() lagi di thread YANG SAMA (sinkron). Mutex biasa =
+    // deadlock di jalur reopen.
+    std::recursive_mutex loadTrackMutex_;
+
     // 🔥 FIX (2026-10-09, crash auto-advance): decoderWorker_ dibaca dari
     // audio thread (render()) dan ditulis ulang oleh advanceThread (loadTrack
     // → stopDecoder → reset + make_unique). Lock ini menyinkronkan keduanya.

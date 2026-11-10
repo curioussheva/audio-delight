@@ -191,6 +191,21 @@ float PlaybackController::playbackRate() const noexcept {
 // =====================================================
 
 bool PlaybackController::loadTrack(const TrackInfo& track) {
+    // 🔥 FIX (2026-11-11, D-M3): batalkan advance DULU, sebelum mengambil
+    // loadTrackMutex_. Flag ini harus terlihat oleh iterasi skip-loop
+    // advance thread SEBELUM thread ini ter-block di mutex — kalau tidak,
+    // advance yang sudah lolos cek-batal terakhir tetap memuat track basi
+    // setelah navigasi manual dimulai, dan (karena mutex) muatannya bisa
+    // mendarat SETELAH muatan manual. cancelPendingAdvance() hanya atomic
+    // store, jadi aman dipanggil di luar lock.
+    cancelPendingAdvance();
+
+    // 🔥 FIX (2026-11-11, D-M3): serialisasi loadTrack() antar thread JS +
+    // advance (lihat loadTrackMutex_ di header). Lock dipegang sepanjang
+    // fungsi — termasuk FFmpeg open — supaya dua decoder tidak pernah hidup
+    // bersamaan menulis ke PCMQueue SPSC.
+    std::lock_guard<std::recursive_mutex> loadLock(loadTrackMutex_);
+
     if (!initialized_.load(std::memory_order_acquire)) {
         __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
                             "loadTrack(): FAILED - not initialized");
@@ -200,11 +215,10 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
     __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                         "loadTrack(): START uri=%s", track.uri.c_str());
 
-    // 🔥 FIX (2026-11-10, P-M1/P-M3): loadTrack manual (next/prev/jumpTo/play)
-    // membatalkan advance yang sedang menunggu drain dari EOF sebelumnya —
-    // navigasi manual menang, advance basi tidak boleh memuat track lain
-    // setelahnya.
-    cancelPendingAdvance();
+    // (Pembatalan advance sudah dilakukan di awal fungsi, sebelum lock —
+    // lihat komentar D-M3 di atas. Dulu cancelPendingAdvance() ada di sini;
+    // dipindah ke atas supaya flag terlihat sebelum thread ini ter-block
+    // di loadTrackMutex_.)
 
     stopDecoder();
     clearing_.store(true, std::memory_order_release);
