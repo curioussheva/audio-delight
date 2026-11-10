@@ -38,8 +38,14 @@ DecoderWorker::~DecoderWorker() {
 // =====================================================
 
 bool DecoderWorker::start(const std::string& uri, double startPosition) {
-    // 🔥 FIX: jangan silent-fail — force stop+join kalau masih running
-    if (running_.load()) {
+    // 🔥 FIX (2026-11-10, p-m19): jangan silent-fail — force stop+join
+    // kalau masih running ATAU thread lama masih joinable. running_ saja
+    // tidak cukup: workerLoop menyetel running_=false saat keluar (EOF /
+    // error), tapi thread-nya tetap joinable sampai stop() dipanggil.
+    // Menimpa std::thread yang masih joinable = std::terminate.
+    // (Dalam praktik tiap track memakai worker baru, jadi ini pertahanan —
+    // tapi terminate di audio thread adalah crash yang tidak boleh ada.)
+    if (running_.load() || workerThread_.joinable()) {
         __android_log_print(ANDROID_LOG_WARN, "DecoderWorker",
                             "start(): already running — forcing stop() (uri=%s)",
                             uri.c_str());

@@ -43,7 +43,9 @@ namespace pristine::playback {
 
 class PCMQueue {
 public:
-    explicit PCMQueue(size_t capacitySamplesPowerOfTwo);
+    // Kapasitas dibulatkan ke atas ke power of two berikutnya kalau yang
+    // diberikan bukan power of two (p-m18, 2026-11-10) — mask_ butuh itu.
+    explicit PCMQueue(size_t capacitySamples);
 
     // Producer (decoder thread). `frames` = jumlah SAMPLE (bukan frame stereo).
     size_t write(const float* input, size_t frames);
@@ -74,6 +76,15 @@ private:
     // monotonik dan selisihnya dijaga < capacity_.
     alignas(64) std::atomic<uint64_t> writeCount_{0};
     alignas(64) std::atomic<uint64_t> readCount_{0};
+
+    // 🔥 FIX (2026-11-10, p-m18): generasi queue. clear() menaikkan epoch;
+    // write() menangkap epoch di awal dan membuang publish kalau epoch
+    // berubah sebelum store — supaya write yang balapan dengan clear()
+    // tidak menghidupkan lagi sample yang baru di-clear. read() TIDAK
+    // memakai epoch: sisi baca dilindungi clearing_ + waitForRenderIdle
+    // di PlaybackController (p-m12), jadi tidak ada read yang sedang
+    // berjalan saat clear().
+    std::atomic<uint64_t> epoch_{0};
 
 private:
     inline size_t indexMask(size_t v) const noexcept;

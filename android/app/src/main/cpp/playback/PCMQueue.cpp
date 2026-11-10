@@ -9,10 +9,23 @@ namespace pristine::playback {
 // CONSTRUCTOR
 // =====================================================
 
-PCMQueue::PCMQueue(size_t capacitySamplesPowerOfTwo)
-    : buffer_(capacitySamplesPowerOfTwo)
-    , capacity_(capacitySamplesPowerOfTwo)
-    , mask_(capacitySamplesPowerOfTwo - 1) {}
+// 🔥 FIX (2026-11-10, p-m18): kapasitas DIBULATKAN ke power of two
+// berikutnya kalau caller memberi bukan power of two. Sebelumnya ctor
+// memakai nilai apa adanya dan mask_ = capacity - 1 — kalau capacity
+// bukan power of two, indexMask() salah dan read/write mendarat di slot
+// yang salah (korupsi senyap). Satu-satunya pemanggil saat ini memberi
+// 1<<21 (sudah power of two), jadi ini pertahanan, bukan perbaikan bug
+// yang sedang terjadi.
+static size_t roundUpPowerOfTwo(size_t v) noexcept {
+    size_t p = 1;
+    while (p < v) p <<= 1;
+    return p;
+}
+
+PCMQueue::PCMQueue(size_t capacitySamples)
+    : buffer_(roundUpPowerOfTwo(capacitySamples))
+    , capacity_(roundUpPowerOfTwo(capacitySamples))
+    , mask_(roundUpPowerOfTwo(capacitySamples) - 1) {}
 
 // =====================================================
 // FAST INDEX MASK (NO MODULO)
@@ -29,6 +42,23 @@ inline size_t PCMQueue::indexMask(size_t v) const noexcept {
 size_t PCMQueue::write(const float* input, size_t frames) {
 
     if (!input || frames == 0) return 0;
+
+    // 🔥 FIX (2026-11-10, p-m18): epoch guard lawan clear().
+    //
+    // Race lama: write() menghitung w/free lalu memcpy, sementara clear()
+    // dari thread lain menyetel readCount_ = writeCount_ (lama). Kalau
+    // clear() mendarat di tengah memcpy, store writeCount_ = w + toWrite
+    // di akhir write() menghidupkan lagi sample yang baru saja di-clear —
+    // audio track LAMA muncul di awal track BARU.
+    //
+    // Sekarang: tangkap epoch di awal; clear() menaikkan epoch SEBELUM
+    // me-reset readCount_. Kalau epoch berubah sebelum publish, buang
+    // tulisan ini (data sudah tersalin ke buffer tapi tidak dipublish —
+    // slot itu akan ditimpa write berikutnya, tidak pernah terbaca).
+    // Sisa jendela: clear() yang mendarat tepat di antara pengecekan epoch
+    // dan store di bawah (1-2 instruksi) — diterima; sebelumnya jendela
+    // itu seluruh memcpy (puluhan mikrodetik).
+    const uint64_t epoch = epoch_.load(std::memory_order_acquire);
 
     const uint64_t w = writeCount_.load(std::memory_order_relaxed);
     const uint64_t r = readCount_.load(std::memory_order_acquire);
@@ -49,6 +79,9 @@ size_t PCMQueue::write(const float* input, size_t frames) {
         std::memcpy(&buffer_[0], input + first, (toWrite - first) * sizeof(float));
     }
 
+    if (epoch_.load(std::memory_order_acquire) != epoch) {
+        return 0;  // clear() terjadi selama copy — jangan publish
+    }
     writeCount_.store(w + toWrite, std::memory_order_release);
     return toWrite;
 }
@@ -94,6 +127,12 @@ size_t PCMQueue::read(float* output, size_t frames) {
 // readCount_ == writeCount_. Menyamakan keduanya cukup dengan SATU store,
 // jadi tidak ada jendela race sama sekali.
 void PCMQueue::clear() noexcept {
+    // 🔥 FIX (2026-11-10, p-m18): naikkan epoch DULU, baru reset read.
+    // Urutan ini penting: write() yang sudah menangkap epoch lama akan
+    // melihat perubahan di pengecekan sebelum publish dan membuang
+    // tulisannya (lihat write()). Write yang mulai SETELAH bump ini
+    // menangkap epoch baru dan berjalan normal.
+    epoch_.fetch_add(1, std::memory_order_acq_rel);
     // Baca nilai write terkini, lalu set read = write. Satu store atomic.
     // Setelah ini available == 0 dan free == capacity_.
     const uint64_t w = writeCount_.load(std::memory_order_acquire);
