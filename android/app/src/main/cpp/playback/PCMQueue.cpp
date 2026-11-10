@@ -9,10 +9,10 @@ namespace pristine::playback {
 // CONSTRUCTOR
 // =====================================================
 
-PCMQueue::PCMQueue(size_t capacityFramesPowerOfTwo)
-    : buffer_(capacityFramesPowerOfTwo)
-    , capacity_(capacityFramesPowerOfTwo)
-    , mask_(capacityFramesPowerOfTwo - 1) {}
+PCMQueue::PCMQueue(size_t capacitySamplesPowerOfTwo)
+    : buffer_(capacitySamplesPowerOfTwo)
+    , capacity_(capacitySamplesPowerOfTwo)
+    , mask_(capacitySamplesPowerOfTwo - 1) {}
 
 // =====================================================
 // FAST INDEX MASK (NO MODULO)
@@ -152,18 +152,18 @@ void PCMQueue::clear() noexcept {
 // QUERIES
 // =====================================================
 
-size_t PCMQueue::availableFrames() const noexcept {
+size_t PCMQueue::availableSamples() const noexcept {
     const uint64_t w = writeCount_.load(std::memory_order_acquire);
     const uint64_t r = readCount_.load(std::memory_order_acquire);
     return safeDiff(w, r);
 }
 
-size_t PCMQueue::freeFrames() const noexcept {
-    const size_t used = availableFrames();
+size_t PCMQueue::freeSamples() const noexcept {
+    const size_t used = availableSamples();
     return (used < capacity_) ? (capacity_ - used) : 0u;
 }
 
-size_t PCMQueue::capacityFrames() const noexcept {
+size_t PCMQueue::capacitySamples() const noexcept {
     return capacity_;
 }
 

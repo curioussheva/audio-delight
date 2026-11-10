@@ -47,11 +47,14 @@ public:
     // Audio thread. Mengembalikan jumlah SAMPLE yang benar-benar dibaca dari
     // queue (bisa kurang dari frames*channels kalau queue lapar = underrun).
     // AudioCallback memakainya untuk metrik + mengisi sisa dengan senyap.
+    // Pengecualian (P-M2/p-m14, 2026-11-10): saat paused/clearing, buffer
+    // diisi senyap dan return = requestedSamples — buffer MEMANG terisi,
+    // jadi bukan underrun.
     size_t render(float* output, uint32_t frames, uint32_t channels, uint32_t sampleRate) noexcept;
 
-    // Jumlah frame yang menunggu di queue (untuk metrik bufferedSamples).
+    // Jumlah SAMPLE yang menunggu di queue (untuk metrik bufferedSamples).
     // Dipanggil dari audio thread — hanya atomic load, tanpa lock.
-    size_t bufferedFrames() const noexcept;
+    size_t bufferedSamples() const noexcept;
 
     // Metrik engine (diset EngineManager dari AudioEngine::metrics()).
     // Dipakai untuk mencatat overrun saat decoder membuang data karena queue

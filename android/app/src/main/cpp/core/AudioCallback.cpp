@@ -83,7 +83,7 @@ AudioCallback::onAudioReady(
             mMetrics.recordUnderrun();
         }
         mMetrics.updateBufferedSamples(
-            mPlaybackController->bufferedFrames()
+            mPlaybackController->bufferedSamples()
         );
 
         // =============================================

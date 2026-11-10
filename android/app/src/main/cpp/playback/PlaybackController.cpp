@@ -442,7 +442,28 @@ size_t PlaybackController::render(float* output,
     // 🔥 RACE FIX
     if (clearing_.load(std::memory_order_acquire)) {
         std::fill(output, output + requestedSamples, 0.0f);
-        return 0;
+        // 🔥 FIX (2026-11-10, p-m14): laporkan buffer penuh (requestedSamples),
+        // bukan 0. Buffer MEMANG terisi (dengan senyap) — AudioCallback
+        // mencatat underrun kalau return < requested, jadi tiap ganti track
+        // dulu menambah counter underrun padahal queue memang sengaja
+        // dikosongkan.
+        return requestedSamples;
+    }
+
+    // 🔥 FIX (2026-11-10, P-M2): JANGAN drain queue saat paused/stopped.
+    //
+    // Sebelumnya render() membaca queue tanpa cek playing_ — pause() hanya
+    // menghentikan producer (decoder), queue 60–90% penuh (~13–20 dtk)
+    // tetap mengalir ke speaker. Audio terus jalan belasan detik setelah
+    // pause ditekan.
+    //
+    // Sekarang: isi buffer dengan senyap dan laporkan penuh (p-m14 — buffer
+    // memang terisi, jadi bukan underrun). Clock sudah di-gate playing_
+    // sejak 2026-10-10, jadi posisi berhenti; decoder juga tidak di-resume
+    // saat paused (cek di bawah).
+    if (!playing_.load(std::memory_order_acquire)) {
+        std::fill(output, output + requestedSamples, 0.0f);
+        return requestedSamples;
     }
 
     const size_t readSamples =
@@ -472,8 +493,8 @@ size_t PlaybackController::render(float* output,
         // saat stopDecoder(), jadi snapshot tidak pernah melihat pointer
         // setengah-reset; objek tetap hidup lewat shared ownership.
         if (auto worker = snapshotWorker()) {
-            size_t avail = pcmQueue_->availableFrames();
-            size_t cap = pcmQueue_->capacityFrames();
+            size_t avail = pcmQueue_->availableSamples();
+            size_t cap = pcmQueue_->capacitySamples();
             // 🔥 FIX (2026-10-10): JANGAN resume decoder saat user menekan pause.
             //
             // BUG: render() dipanggil tiap ~10ms oleh audio thread. Cek
@@ -627,9 +648,9 @@ void PlaybackController::setTrackLoadedListener(std::function<void()> listener) 
     trackLoadedListener_ = std::move(listener);
 }
 
-size_t PlaybackController::bufferedFrames() const noexcept {
+size_t PlaybackController::bufferedSamples() const noexcept {
     if (!pcmQueue_) return 0;
-    return pcmQueue_->availableFrames();
+    return pcmQueue_->availableSamples();
 }
 
 void PlaybackController::setStreamSampleRate(uint32_t rate) noexcept {
@@ -827,8 +848,8 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
                             __android_log_print(ANDROID_LOG_WARN, "PlaybackController",
                                 "DATA DROP: wrote %zu/%zu (queue %zu/%zu) [total drops=%d]",
                                 written, result.samples.size(),
-                                pcmQueue_->availableFrames(),
-                                pcmQueue_->capacityFrames(),
+                                pcmQueue_->availableSamples(),
+                                pcmQueue_->capacitySamples(),
                                 dropCount);
                         }
                     }
@@ -842,8 +863,8 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
                     // overhead membuat loop hanya 11/detik x 2238 = 24.8k fps —
                     // di bawah 48k realtime → queue habis → NaN di render.
                     // Jendela 30% lebih sempit = decoder lebih serang.
-                    size_t avail = pcmQueue_->availableFrames();
-                    size_t cap = pcmQueue_->capacityFrames();
+                    size_t avail = pcmQueue_->availableSamples();
+                    size_t cap = pcmQueue_->capacitySamples();
                     if (avail > cap * 90 / 100) {
                         if (auto w = weakWorker.lock()) {
                             if (!w->isPaused()) {
@@ -965,7 +986,7 @@ void PlaybackController::scheduleAdvance(const std::string& finishedUri) {
                 return;
             }
             if (!pcmQueue_) return;
-            if (pcmQueue_->availableFrames() == 0) break;
+            if (pcmQueue_->availableSamples() == 0) break;
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
 

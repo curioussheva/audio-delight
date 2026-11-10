@@ -43,7 +43,7 @@ namespace pristine::playback {
 
 class PCMQueue {
 public:
-    explicit PCMQueue(size_t capacityFramesPowerOfTwo);
+    explicit PCMQueue(size_t capacitySamplesPowerOfTwo);
 
     // Producer (decoder thread). `frames` = jumlah SAMPLE (bukan frame stereo).
     size_t write(const float* input, size_t frames);
@@ -62,9 +62,9 @@ public:
     void clear() noexcept;
 
     // Queries (approximate, RT safe)
-    size_t availableFrames() const noexcept;
-    size_t freeFrames() const noexcept;
-    size_t capacityFrames() const noexcept;
+    size_t availableSamples() const noexcept;
+    size_t freeSamples() const noexcept;
+    size_t capacitySamples() const noexcept;
 
 private:
     std::vector<float> buffer_;
