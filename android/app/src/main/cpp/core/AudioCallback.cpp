@@ -196,9 +196,11 @@ void AudioCallback::updateCallbackMetrics(
     static uint32_t latencyCounter = 0;
     if (stream != nullptr && (++latencyCounter % 16) == 0) {
         const auto ts = stream->getTimestamp(CLOCK_MONOTONIC);
-        if (ts.error == oboe::Result::OK && mSampleRate > 0) {
+        // Oboe ResultWithValue: error()/value() adalah METHOD, bukan field
+        // (diperbaiki 2026-11-10 setelah build 42811297970 gagal kompilasi).
+        if (ts.error() == oboe::Result::OK && mSampleRate > 0) {
             const int64_t framesInFlight =
-                stream->getFramesWritten() - ts.value.position;
+                stream->getFramesWritten() - ts.value().position;
             if (framesInFlight >= 0) {
                 const float latencyMs =
                     static_cast<float>(framesInFlight) * 1000.0f /
