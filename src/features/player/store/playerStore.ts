@@ -761,6 +761,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           console.warn("[Player] probe queue size gagal:", probeErr);
         }
 
+        // 🔥 FIX (2026-11-10, P-M9): terapkan kecepatan tersimpan ke native
+        // sebelum play. initStore hanya me-restore speed ke Zustand; native
+        // default 1.0 setelah app restart. Tanpa ini, speed 1.5x dari sesi
+        // lalu tidak berlaku sampai user mengubahnya lagi di UI. Idempotent
+        // (native mengabaikan laju yang sama) dan dibungkus try/catch supaya
+        // kegagalan rate tidak menggagalkan play.
+        try {
+          const speed = get().playbackSpeed;
+          if (speed && speed !== 1.0) {
+            await audioEngine.setPlaybackRate(speed);
+          }
+        } catch (rateErr) {
+          console.warn("[Player] terapkan playbackSpeed gagal:", rateErr);
+        }
+
         // Kalau native menolak (dekoder gagal), jangan tandai playing.
         try {
           await timedCall("play", () => NativePlaybackService.play());
@@ -844,9 +859,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setPlaybackSpeed: async (speed: number) => {
     try {
-      console.warn("[Player] setPlaybackSpeed belum didukung custom service");
       set({ playbackSpeed: speed });
       await AsyncStorage.setItem(KEYS.SPEED, speed.toString());
+      // 🔥 FIX (2026-11-10, P-M9): kecepatan sekarang benar-benar diteruskan
+      // ke native (WSOLA time-stretch). Sebelumnya hanya disimpan — placebo.
+      await audioEngine.setPlaybackRate(speed);
     } catch (error) {
       console.error("[Player] setPlaybackSpeed failed:", error);
     }

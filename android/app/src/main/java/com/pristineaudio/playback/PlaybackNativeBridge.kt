@@ -74,6 +74,12 @@ object PlaybackNativeBridge {
         NativePlaybackModule.instance?.setRepeatModeFromService(mode)
     }
 
+    // 🔥 FIX (2026-11-10, P-M9): laju playback (WSOLA time-stretch).
+    fun setPlaybackRate(rate: Float) {
+        android.util.Log.d("PlaybackNativeBridge", "setPlaybackRate($rate) called")
+        NativePlaybackModule.instance?.setPlaybackRateFromService(rate)
+    }
+
     fun getQueue(): Array<String>? {
         android.util.Log.d("PlaybackNativeBridge", "getQueue() called")
         return NativePlaybackModule.instance?.getQueueFromService()

@@ -155,6 +155,17 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
         }
     }
 
+    // 🔥 FIX (2026-11-10, P-M9): laju playback (WSOLA time-stretch).
+    @ReactMethod
+    fun setPlaybackRate(rate: Double, promise: Promise) {
+        try {
+            PlaybackNativeBridge.setPlaybackRate(rate.toFloat())
+            promise.resolve(null)
+        } catch (e: Exception) {
+            promise.reject("SET_RATE_FAILED", e)
+        }
+    }
+
     // ============================================================
     // 🔥 SET QUEUE — LAZY RESOLVE + PROMISE
     // ============================================================

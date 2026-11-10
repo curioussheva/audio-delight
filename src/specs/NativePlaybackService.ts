@@ -15,6 +15,8 @@ export interface Spec extends TurboModule {
   seek(positionMs: number): Promise<void>;
   setShuffle(enabled: boolean): Promise<void>;
   setRepeatMode(mode: number): Promise<void>;
+  // 🔥 FIX (2026-11-10, P-M9): laju playback 0.5–2.0 (WSOLA time-stretch).
+  setPlaybackRate(rate: number): Promise<void>;
   setQueue(uris: string[], sampleRates: number[] | null): Promise<void>;
 
   // Query

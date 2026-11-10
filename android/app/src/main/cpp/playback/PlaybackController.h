@@ -6,6 +6,7 @@
 #include <functional>
 #include <mutex>
 #include <string>
+#include <vector>
 #include "PlaybackState.h"
 #include "PlaybackMetrics.h"
 #include "PlaybackClock.h"
@@ -13,6 +14,7 @@
 #include "PlaybackTypes.h"
 #include "TrackQueue.h"
 #include "FadeEngine.h"
+#include "PlaybackRateProcessor.h"
 #include "../decoder/DecoderWorker.h"
 #include "../core/AudioMetrics.h"
 
@@ -45,12 +47,21 @@ public:
     void setRepeatMode(RepeatMode mode);
     std::shared_ptr<TrackQueue> queue() const noexcept;
 
-    // Audio thread. Mengembalikan jumlah SAMPLE yang benar-benar dibaca dari
-    // queue (bisa kurang dari frames*channels kalau queue lapar = underrun).
-    // AudioCallback memakainya untuk metrik + mengisi sisa dengan senyap.
-    // Pengecualian (P-M2/p-m14, 2026-11-10): saat paused/clearing, buffer
-    // diisi senyap dan return = requestedSamples — buffer MEMANG terisi,
-    // jadi bukan underrun.
+    // 🔥 FIX (2026-11-10, P-M9): laju playback 0.5x–2.0x (WSOLA time-stretch,
+    // tanpa perubahan pitch). Sebelumnya placebo: UI hanya menulis Zustand +
+    // AsyncStorage, tidak ada jalur ke native. Laju disimpan atomic dan
+    // DITERAPKAN render() di audio thread (reset buffer WSOLA di sana) —
+    // setPlaybackRate sendiri tidak menyentuh vector prosesor supaya tidak
+    // ada race dengan audio thread. Rate 1.0 = bypass (nol overhead).
+    void setPlaybackRate(float rate) noexcept;
+    [[nodiscard]] float playbackRate() const noexcept;
+
+    // Audio thread. Mengembalikan jumlah SAMPLE OUTPUT yang benar-benar
+    // dihasilkan (bisa kurang dari frames*channels kalau queue lapar =
+    // underrun). AudioCallback memakainya untuk metrik + mengisi sisa dengan
+    // senyap. Pengecualian (P-M2/p-m14, 2026-11-10): saat paused/clearing,
+    // buffer diisi senyap dan return = requestedSamples — buffer MEMANG
+    // terisi, jadi bukan underrun.
     size_t render(float* output, uint32_t frames, uint32_t channels, uint32_t sampleRate) noexcept;
 
     // Jumlah SAMPLE yang menunggu di queue (untuk metrik bufferedSamples).
@@ -124,8 +135,10 @@ private:
     // 🔥 FIX (2026-11-10, P-M7): aplikasikan fade-in (awal track) dan
     // fade-out (ekor, saat decoderFinished_) ke buffer output render().
     // Dipanggil di akhir render(), setelah zero-fill dan clock.
+    // inputReadSamples = sample yang dibaca dari queue callback ini,
+    // rate = laju playback (fade-out dihitung dalam frame OUTPUT).
     void applyTrackFades(float* output, uint32_t frames, uint32_t channels,
-                         size_t readSamples) noexcept;
+                         size_t inputReadSamples, float rate) noexcept;
     void updatePlaybackState();
 
     std::atomic<bool> initialized_{false};
@@ -165,7 +178,21 @@ private:
     FadeEngine fadeOut_;
     // Frame yang sudah di-render sejak loadTrack/seek/play terakhir.
     // Di-increment render() (audio thread), di-reset loadTrack/seek/play.
+    // Dihitung dalam frame OUTPUT (bukan input — di 2x, 300 ms output =
+    // 600 ms input; durasi fade adalah durasi yang didengar).
     std::atomic<uint32_t> framesSinceLoad_{0};
+
+    // 🔥 FIX (2026-11-10, P-M9): WSOLA time-stretch untuk laju playback.
+    // playbackRate_ = target dari JS (atomic, ditulis thread JS, dibaca
+    // audio thread). rateApplied_ = laju yang sedang dipakai prosesor
+    // (HANYA audio thread yang menulis — render() menerapkan perubahan
+    // laju di sana supaya reset buffer tidak race dengan push/pull).
+    // rateScratch_ = buffer baca sementara saat rate != 1.0 (input dibaca
+    // dari queue ke sini dulu, baru didorong ke prosesor).
+    PlaybackRateProcessor rateProcessor_;
+    std::atomic<float> playbackRate_{1.0f};
+    float rateApplied_ = 1.0f;
+    std::vector<float> rateScratch_;
 
     // Laju stream aktual (dari device/DAC). 0 = belum diketahui.
     std::atomic<uint32_t> streamSampleRate_{0};

@@ -175,6 +175,32 @@ void PlaybackController::setRepeatMode(RepeatMode mode) {
     if (queue_) queue_->setRepeatMode(mode);
 }
 
+// 🔥 FIX (2026-11-10, P-M9): laju playback (WSOLA time-stretch).
+//
+// Hanya menyimpan target ke atomic — penerapan (reset buffer WSOLA)
+// dilakukan render() di audio thread, karena vector prosesor tidak boleh
+// di-clear dari thread JS sementara render() sedang push/pull. Perubahan
+// laju efektif paling lambat satu callback (~10–20 ms) setelah panggilan.
+// Rentang 0.5–2.0 = rentang UI; di luar itu / non-finite diabaikan.
+void PlaybackController::setPlaybackRate(float rate) noexcept {
+    if (!std::isfinite(rate) || rate < 0.5f || rate > 2.0f) {
+        __android_log_print(ANDROID_LOG_WARN, "PlaybackController",
+                            "setPlaybackRate: laju %.2f di luar 0.5-2.0, "
+                            "diabaikan", rate);
+        return;
+    }
+    const float old = playbackRate_.exchange(rate, std::memory_order_acq_rel);
+    if (old != rate) {
+        __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                            "setPlaybackRate: %.2fx (sebelumnya %.2fx)",
+                            rate, old);
+    }
+}
+
+float PlaybackController::playbackRate() const noexcept {
+    return playbackRate_.load(std::memory_order_acquire);
+}
+
 // =====================================================
 // TRANSPORT
 // =====================================================
@@ -241,6 +267,10 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
         fadeOut_.generateCurve(FadeCurve::SCurve, fadeRate * 500 / 1000);
     }
     framesSinceLoad_.store(0, std::memory_order_release);
+    // 🔥 FIX (2026-11-10, P-M9): buang sisa WSOLA track lama (audio basi
+    // tidak boleh keluar di track baru). Aman di sini: clearing_ +
+    // waitForRenderIdle sudah memastikan render() tidak sedang push/pull.
+    rateProcessor_.reset();
 
     // 🔥 FIX: set duration dari metadata track
     if (state_ && track.durationMs > 0) {
@@ -414,6 +444,9 @@ bool PlaybackController::stop() {
     waitForRenderIdle();
     pcmQueue_->clear();
     clock_->reset();
+    // 🔥 FIX (2026-11-10, P-M9): buang sisa WSOLA. Di dalam jendela
+    // clearing_ (pola yang sama dengan loadTrack/seek).
+    rateProcessor_.reset();
     clearing_.store(false, std::memory_order_release);
 
     // 🔥 FIX (2026-11-10, p-m23): reset laju file/stream supaya tidak basi
@@ -468,6 +501,10 @@ bool PlaybackController::seek(double seconds) {
     clearing_.store(true, std::memory_order_release);
     waitForRenderIdle();
     pcmQueue_->clear();
+    // 🔥 FIX (2026-11-10, P-M9): buang sisa WSOLA posisi lama. HARUS di
+    // dalam jendela clearing_ (sebelum store false di bawah) — render()
+    // tidak sedang push/pull di sini.
+    rateProcessor_.reset();
     clearing_.store(false, std::memory_order_release);
 
     // 🔥 FIX (2026-11-10, p-m10): seek decoder DULU, clock HANYA kalau
@@ -584,8 +621,44 @@ size_t PlaybackController::render(float* output,
         return requestedSamples;
     }
 
-    const size_t readSamples =
-        pcmQueue_->read(output, requestedSamples);
+    // 🔥 FIX (2026-11-10, P-M9): laju playback (WSOLA time-stretch).
+    //
+    // Rate 1.0 = bypass (nol overhead, jalur bit-perfect tidak tersentuh).
+    // Rate != 1.0: baca frames * rate dari queue (input), dorong ke
+    // prosesor, tarik `frames` output. Clock maju mengikuti frame INPUT
+    // (posisi track), bukan frame output — di 2x, posisi maju 2x lipat
+    // per detik wall-clock.
+    //
+    // Perubahan laju diterapkan DI SINI (audio thread), bukan di
+    // setPlaybackRate (thread JS): reset buffer WSOLA harus terjadi di
+    // thread yang sama dengan push/pull, kalau tidak vector di-clear
+    // sementara render() sedang membacanya.
+    const float rate = playbackRate_.load(std::memory_order_acquire);
+    if (rate != rateApplied_) {
+        rateProcessor_.setRate(rate);  // reset buffer bila laju berubah
+        rateApplied_ = rate;
+    }
+    const bool useRate = (rate != 1.0f);
+    const size_t inputFrames =
+        useRate ? static_cast<size_t>(static_cast<float>(frames) * rate +
+                                      0.5f)
+                : frames;
+    const size_t inputSamples = inputFrames * channels;
+    size_t readSamples = 0;    // input: sample yang dibaca dari queue
+    size_t outputSamples = 0;  // output: sample yang benar-benar dihasilkan
+    if (useRate) {
+        if (rateScratch_.size() < inputSamples) {
+            rateScratch_.resize(inputSamples);
+        }
+        readSamples = pcmQueue_->read(rateScratch_.data(), inputSamples);
+        rateProcessor_.push(rateScratch_.data(), readSamples / channels,
+                            channels);
+        outputSamples =
+            rateProcessor_.pull(output, frames, channels) * channels;
+    } else {
+        readSamples = pcmQueue_->read(output, requestedSamples);
+        outputSamples = readSamples;
+    }
 
     // 🔥 FIX 2: resume decoder kalau queue 60% (naik dari 30%)
     //
@@ -631,10 +704,12 @@ size_t PlaybackController::render(float* output,
         }
     }
 
-    // 🔥 SAFETY NET: cleanup NaN/Inf di render (untuk sisa race boundary)
+    // 🔥 SAFETY NET: cleanup NaN/Inf di render (untuk sisa race boundary).
+    // Berjalan atas OUTPUT (setelah WSOLA) — input kotor dari decoder juga
+    // tertangkap di sini karena WSOLA meneruskannya ke output.
     {
         int nanCount = 0;
-        for (size_t i = 0; i < readSamples; ++i) {
+        for (size_t i = 0; i < outputSamples; ++i) {
             const float v = output[i];
             if (std::isnan(v) || std::isinf(v)) {
                 output[i] = 0.0f;
@@ -667,15 +742,15 @@ size_t PlaybackController::render(float* output,
     renderCount++;
     if (renderCount % 5000 == 0) {
         __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
-                            "render readSamples=%zu/%zu (frames=%u ch=%u)",
-                            readSamples, requestedSamples, frames, channels);
+                            "render readSamples=%zu outputSamples=%zu/%zu (frames=%u ch=%u rate=%.2f)",
+                            readSamples, outputSamples, requestedSamples, frames, channels, rate);
     }
     // (Blok debug min/max/mean per 100 callback dihapus 2026-11-10 (M5):
     // satu pass penuh atas buffer + log di audio thread — debug yang
     // ketinggalan, bukan metrik.)
-    if (readSamples < requestedSamples) {
+    if (outputSamples < requestedSamples) {
         std::fill(
-            output + readSamples,
+            output + outputSamples,
             output + requestedSamples,
             0.0f
         );
@@ -684,7 +759,7 @@ size_t PlaybackController::render(float* output,
     // 🔥 FIX (2026-11-10, P-M7): fade-in awal track + fade-out ekor.
     // Dipanggil SEBELUM clock maju, supaya offset fade-in memakai
     // framesSinceLoad_ SEBELUM callback ini.
-    applyTrackFades(output, frames, channels, readSamples);
+    applyTrackFades(output, frames, channels, readSamples, rate);
 
     // 🔥 FIX (2026-10-10): clock hanya boleh maju untuk audio nyata.
     //
@@ -711,11 +786,17 @@ size_t PlaybackController::render(float* output,
     // tapi clock harus berhenti. Posisi yang dilaporkan kembali ke posisi
     // saat pause ditekan, bukan posisi setelah buffer habis.
     const uint32_t ch = (channels > 0) ? channels : 1;
+    // Frame INPUT (posisi track): di 2x, satu callback 20 ms membaca 40 ms
+    // audio — clock maju 40 ms. Bukan frame output (itu selalu 20 ms).
     const uint32_t advancedFrames = static_cast<uint32_t>(readSamples) / ch;
     if (advancedFrames > 0 && playing_.load(std::memory_order_acquire)) {
         clock_->advanceFrames(advancedFrames);
-        // Hitung untuk fade-in (P-M7): frame sejak loadTrack/seek/play.
-        framesSinceLoad_.fetch_add(advancedFrames, std::memory_order_relaxed);
+    }
+    // Hitung untuk fade-in (P-M7): frame OUTPUT sejak loadTrack/seek/play
+    // (bukan frame input — di 2x, 300 ms output = 600 ms input; durasi
+    // fade adalah durasi yang didengar, jadi hitung output).
+    if (playing_.load(std::memory_order_acquire)) {
+        framesSinceLoad_.fetch_add(frames, std::memory_order_relaxed);
     }
 
     // 🔥 FIX: sync position & duration ke state (untuk JS getPosition)
@@ -753,10 +834,12 @@ size_t PlaybackController::render(float* output,
         metrics_->recordFrameRendered(frames);
     }
 
-    // Jumlah sample yang benar-benar dibaca — AudioCallback memakainya
-    // untuk metrik underrun (M5, 2026-11-10). Sisa buffer (kalau ada)
-    // sudah diisi senyap di atas.
-    return readSamples;
+    // Jumlah sample OUTPUT yang benar-benar dihasilkan — AudioCallback
+    // memakainya untuk metrik underrun (M5, 2026-11-10). Sisa buffer (kalau
+    // ada) sudah diisi senyap di atas. Saat rate != 1.0, angka ini adalah
+    // hasil pull WSOLA (bukan yang dibaca dari queue — queue dibaca
+    // frames * rate).
+    return outputSamples;
 }
 
 // =====================================================
@@ -1166,7 +1249,8 @@ void PlaybackController::waitForRenderIdle() noexcept {
 
 void PlaybackController::applyTrackFades(float* output, uint32_t frames,
                                         uint32_t channels,
-                                        size_t readSamples) noexcept {
+                                        size_t inputReadSamples,
+                                        float rate) noexcept {
     if (!output || frames == 0 || channels == 0) return;
 
     // ---- fade-in: 300 ms pertama sejak loadTrack/seek/play ----
@@ -1187,10 +1271,14 @@ void PlaybackController::applyTrackFades(float* output, uint32_t frames,
     if (!fadeOut_.empty() &&
         decoderFinished_.load(std::memory_order_acquire)) {
         const uint32_t fadeOutFrames = fadeOut_.durationFrames();
-        const size_t remainingSamples =
-            (pcmQueue_ ? pcmQueue_->availableSamples() : 0) + readSamples;
-        const uint32_t remainingFrames =
-            static_cast<uint32_t>(remainingSamples / channels);
+        // Sisa dalam frame OUTPUT (yang didengar): queue + yang baru dibaca
+        // adalah frame INPUT — bagi rate (di 2x, 1000 frame input tinggal
+        // 500 frame output).
+        const size_t remainingInputSamples =
+            (pcmQueue_ ? pcmQueue_->availableSamples() : 0) + inputReadSamples;
+        const float safeRate = (rate > 0.0f) ? rate : 1.0f;
+        const uint32_t remainingFrames = static_cast<uint32_t>(
+            (remainingInputSamples / channels) / safeRate);
         if (remainingFrames <= fadeOutFrames) {
             // Frame pertama buffer ini berada di posisi
             // (fadeOutFrames - remainingFrames) dalam kurva fade-out.

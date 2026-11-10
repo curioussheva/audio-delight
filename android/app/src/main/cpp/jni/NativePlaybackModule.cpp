@@ -196,6 +196,11 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeS
     if (controller) controller->setRepeatMode(static_cast<pristine::playback::RepeatMode>(mode));
 }
 
+JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSetPlaybackRate(JNIEnv*, jobject, jfloat rate) {
+    auto* controller = getController();
+    if (controller) controller->setPlaybackRate(rate);
+}
+
 JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetQueue(JNIEnv* env, jobject) {
     auto* controller = getController();
     if (!controller) return env->NewObjectArray(0, env->FindClass("java/lang/String"), nullptr);

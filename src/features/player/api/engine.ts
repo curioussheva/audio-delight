@@ -300,7 +300,10 @@ export class AudioEngine {
   }
 
   async setPlaybackRate(rate: number): Promise<void> {
-    console.log("setPlaybackRate not implemented yet", rate);
+    // 🔥 FIX (2026-11-10, P-M9): kecepatan sekarang benar-benar diteruskan
+    // ke native (WSOLA time-stretch di PlaybackController). Sebelumnya stub
+    // console.log — UI 0.5x–2.0x adalah placebo.
+    await NativePlaybackService.setPlaybackRate(rate);
   }
 
   async getPlaybackState() {

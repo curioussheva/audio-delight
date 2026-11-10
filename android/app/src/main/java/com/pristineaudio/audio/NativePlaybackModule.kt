@@ -93,6 +93,7 @@ class NativePlaybackModule(
     private external fun nativePrevious()
     private external fun nativeSetShuffle(enabled: Boolean)
     private external fun nativeSetRepeatMode(mode: Int)
+    private external fun nativeSetPlaybackRate(rate: Float)
     private external fun nativeGetQueue(): Array<String>
     private external fun nativeSetQueue(uris: Array<String>, sampleRates: IntArray)
     private external fun nativeGetCurrentTrack(): String
@@ -161,6 +162,13 @@ class NativePlaybackModule(
     fun setRepeatMode(mode: Int) {
         if (!ensureNativeReady()) return
         nativeSetRepeatMode(mode)
+    }
+
+    // 🔥 FIX (2026-11-10, P-M9): laju playback (WSOLA time-stretch).
+    @ReactMethod
+    fun setPlaybackRate(rate: Double) {
+        if (!ensureNativeReady()) return
+        nativeSetPlaybackRate(rate.toFloat())
     }
 
     // `sampleRates` = laju file (Hz) per entry di `uris`, boleh null.
@@ -293,6 +301,7 @@ class NativePlaybackModule(
     fun previousFromService() { if (ensureNativeReady()) nativePrevious() }
     fun setShuffleFromService(enabled: Boolean) { if (ensureNativeReady()) nativeSetShuffle(enabled) }
     fun setRepeatModeFromService(mode: Int) { if (ensureNativeReady()) nativeSetRepeatMode(mode) }
+    fun setPlaybackRateFromService(rate: Float) { if (ensureNativeReady()) nativeSetPlaybackRate(rate) }
     fun getQueueFromService(): Array<String> = if (ensureNativeReady()) nativeGetQueue() else emptyArray()
     fun setQueueFromService(uris: Array<String>, sampleRates: IntArray = IntArray(uris.size)) {
         if (ensureNativeReady()) nativeSetQueue(uris, sampleRates)
