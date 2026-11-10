@@ -345,11 +345,32 @@ bool PlaybackController::pause() {
 bool PlaybackController::stop() {
     playing_.store(false, std::memory_order_release);
 
+    // 🔥 FIX (2026-11-10, P-M3): batalkan + join advance thread. Sebelumnya
+    // stop() tidak menyentuh advanceThread_ sama sekali: EOF yang datang
+    // sesaat sebelum stop membuat loadTrack tetap jalan di thread itu dan
+    // menghidupkan lagi audio setelah stop (render tanpa gate playing, P-M2).
+    // Cancel dulu supaya join tidak menggantung sampai drain selesai (bisa
+    // ~20 dtk kalau user pause di tengah ekor).
+    cancelPendingAdvance();
+    if (advanceThread_.joinable()) {
+        advanceThread_.join();
+    }
+
     stopDecoder();
 
     pcmQueue_->clear();
     clock_->reset();
-    updatePlaybackState();  // 🔥 FIX
+
+    // 🔥 FIX (2026-11-10, p-m23): reset laju file/stream supaya tidak basi
+    // ke siklus start berikutnya (pola sama dengan m5 audit manager+core).
+    fileSampleRate_.store(0, std::memory_order_release);
+    streamSampleRate_.store(0, std::memory_order_release);
+
+    // 🔥 FIX (2026-11-10, p-m4): stop = Stopped, bukan Paused.
+    // updatePlaybackState() hanya tahu Playing/Paused (dari playing_), jadi
+    // status di-set eksplisit di sini dan updatePlaybackState() TIDAK
+    // dipanggil — kalau dipanggil, Stopped langsung tertimpa Paused lagi.
+    if (state_) state_->setStatus(PlaybackStatus::Stopped);
 
     return true;
 }
