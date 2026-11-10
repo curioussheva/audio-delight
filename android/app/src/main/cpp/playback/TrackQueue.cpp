@@ -386,17 +386,29 @@ void TrackQueue::setShuffleMode(
 ShuffleMode
 TrackQueue::getShuffleMode() const {
 
+    std::lock_guard lock(mMutex);
+
     return mShuffleMode;
 }
 
+// 🔥 FIX (2026-11-10, P-M6): tulis mRepeatMode DI BAWAH lock.
+//
+// Sebelumnya tanpa lock, sementara advance()/retreat() membaca mRepeatMode
+// di bawah mMutex (thread advance) dan JNI thread menulisnya lewat
+// nativeSetRepeatMode — data race (UB; praktis benign di arm64, tapi TSan
+// menandainya). Sama seperti setShuffleMode() di atas.
 void TrackQueue::setRepeatMode(
     RepeatMode mode
 ) {
+    std::lock_guard lock(mMutex);
+
     mRepeatMode = mode;
 }
 
 RepeatMode
 TrackQueue::getRepeatMode() const {
+
+    std::lock_guard lock(mMutex);
 
     return mRepeatMode;
 }
@@ -439,6 +451,12 @@ TrackQueue::size() const {
 
 size_t
 TrackQueue::currentIndex() const {
+
+    // 🔥 FIX (2026-11-10, p-m3): baca di bawah lock. mCurrentIndex bukan
+    // atomik; advance() (advanceThread) dan setTracks (JS thread) menulisnya
+    // di bawah mMutex sementara JNI nativeGetCurrentTrackIndex membaca dari
+    // thread JNI/UI tanpa lock.
+    std::lock_guard lock(mMutex);
 
     return mCurrentIndex;
 }
