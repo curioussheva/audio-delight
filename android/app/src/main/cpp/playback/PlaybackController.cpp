@@ -94,7 +94,15 @@ std::shared_ptr<TrackQueue> PlaybackController::queue() const noexcept {
 }
 
 bool PlaybackController::hasDecoder() const noexcept {
+    // 🔥 FIX (2026-11-10, P-M4): baca di bawah lock. Dulu baca member mentah
+    // tanpa lock dari JNI sementara stopDecoder() memindahkannya.
+    std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
     return decoderWorker_ != nullptr;
+}
+
+std::shared_ptr<decoder::DecoderWorker> PlaybackController::snapshotWorker() const {
+    std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+    return decoderWorker_;
 }
 
 // =====================================================
@@ -174,7 +182,13 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
     clearing_.store(true, std::memory_order_release);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-    currentTrack_ = track;
+    // 🔥 FIX (2026-11-10, P-M4): tulis di bawah lock. EOF callback (thread
+    // decoder), play(), dan updatePlaybackState() membaca currentTrack_ dari
+    // thread lain — tulis mentah tanpa lock adalah data race std::string.
+    {
+        std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+        currentTrack_ = track;
+    }
 
     // 🔥 FIX (2026-10-07): bawa laju FILE ke EngineManager lewat controller.
     //
@@ -236,14 +250,23 @@ bool PlaybackController::play() {
         return false;
     }
 
-    // 🔥 FIX: load track baru kalau decoder belum ada ATAU track berubah
-    // (sebelumnya cuma cek !decoderWorker_, jadi kalau decoder sudah ada
-    // dari track sebelumnya, track baru dari queue tidak pernah di-load)
-    bool needsLoad = !decoderWorker_ || track->uri != currentTrack_.uri;
+    // 🔥 FIX (2026-11-10, P-M4): snapshot worker + URI di bawah lock singkat,
+    // lalu pakai salinan TANPA lock. Dulu cek-lalu-pakai decoderWorker_ /
+    // currentTrack_ tanpa lock sementara loadTrack() (advanceThread) bisa
+    // menggantinya di antara dua baca (TOCTOU). Lock TIDAK dipegang melewati
+    // loadTrack() — itu akan mengembalikan masalah M3 (render ter-block
+    // selama FFmpeg open).
+    auto worker = snapshotWorker();
+    std::string currentUri;
+    {
+        std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+        currentUri = currentTrack_.uri;
+    }
+    bool needsLoad = !worker || track->uri != currentUri;
 
     __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                         "play(): decoderWorker_=%s, needsLoad=%s, uri=%s",
-                        decoderWorker_ ? "exists" : "null",
+                        worker ? "exists" : "null",
                         needsLoad ? "true" : "false",
                         track->uri.c_str());
 
@@ -259,8 +282,13 @@ bool PlaybackController::play() {
         }
     }
 
+    // 🔥 FIX (2026-11-10, P-M4): ambil ulang worker SETELAH loadTrack —
+    // loadTrack bisa mengganti worker (decoder baru). Pakai snapshot, bukan
+    // baca member mentah.
+    worker = snapshotWorker();
+
     // 🔥 FIX: guard decoderWorker_ null (startDecoder bisa gagal silent)
-    if (!decoderWorker_) {
+    if (!worker) {
         __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
                             "play(): FAILED - decoderWorker_ null after needsLoad (uri=%s)",
                             track->uri.c_str());
@@ -270,21 +298,24 @@ bool PlaybackController::play() {
     playing_.store(true, std::memory_order_release);
     updatePlaybackState();  // 🔥 FIX
 
-    if (decoderWorker_) {
-        decoderWorker_->resume();
-    }
+    // resume() di salinan aman walau stopDecoder() berjalan bersamaan:
+    // resume() hanya atomic store + notify (lihat M3).
+    worker->resume();
 
     __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                         "play(): SUCCESS");
     return true;
-} 
+}
 
 bool PlaybackController::pause() {
     playing_.store(false, std::memory_order_release);
     updatePlaybackState();  // 🔥 FIX
 
-    if (decoderWorker_) {
-        decoderWorker_->pause();
+    // 🔥 FIX (2026-11-10, P-M4): pakai snapshot, bukan baca member mentah.
+    // pause() boleh block di decodeMutex_ sampai chunk selesai (p-m22), jadi
+    // dipanggil DI LUAR decoderMutex_ supaya render() tidak ikut ter-block.
+    if (auto worker = snapshotWorker()) {
+        worker->pause();
     }
 
     return true;
@@ -303,7 +334,14 @@ bool PlaybackController::stop() {
 }
 
 bool PlaybackController::seek(double seconds) {
-    if (!decoderWorker_)
+    // 🔥 FIX (2026-11-10, P-M4): pakai snapshot. Dulu cek-lalu-pakai
+    // decoderWorker_ tanpa lock; kalau stopDecoder() memindahkan pointer di
+    // antara cek (:306) dan pause()/seek() (:315/:335) → deref null. Salinan
+    // shared_ptr menjaga objek hidup walau member sudah diganti; seek pada
+    // worker lama yang sudah di-stop mengembalikan false dengan bersih
+    // (decoder sudah close) alih-alih crash.
+    auto worker = snapshotWorker();
+    if (!worker)
         return false;
 
     // 🩹 FIX (Prioritas 2): PCMQueue adalah SPSC lock-free ring buffer
@@ -312,7 +350,7 @@ bool PlaybackController::seek(double seconds) {
     // (JNI/seek caller) bisa menyebabkan writeIndex_/readIndex_ desync
     // kalau kebetulan race dengan decoder thread yang masih write().
     // Fix: pause producer dulu supaya tidak ada writer aktif saat clear.
-    decoderWorker_->pause();
+    worker->pause();
 
     pcmQueue_->clear();
 
@@ -332,9 +370,9 @@ bool PlaybackController::seek(double seconds) {
     }
     clock_->seekToSeconds(seconds, seekRate);
 
-    bool ok = decoderWorker_->seek(seconds);
+    bool ok = worker->seek(seconds);
 
-    decoderWorker_->resume();
+    worker->resume();
 
     return ok;
 }
@@ -376,21 +414,22 @@ size_t PlaybackController::render(float* output,
     // kosong dan underrun tidak bisa dihindari.
     //
     // 🔥 FIX (2026-10-09, crash auto-advance): render() jalan di AUDIO THREAD
-    // dan membaca decoderWorker_ (unique_ptr) TANPA sinkronisasi. Saat
-    // auto-advance EOF, advanceThread (thread biasa) memanggil loadTrack() →
-    // stopDecoder() → decoderWorker_.reset() + make_unique. Antara reset()
-    // dan make_unique(), decoderWorker_ = nullptr → unique_ptr dibaca dari
-    // dua thread bersamaan = data race (TSAN) dan bisa membaca objek
-    // setengah-terbangun.
+    // dan membaca decoderWorker_ TANPA sinkronisasi. Saat auto-advance EOF,
+    // advanceThread (thread biasa) memanggil loadTrack() → stopDecoder() →
+    // decoderWorker_.reset() + make_unique. Antara reset() dan make_unique(),
+    // decoderWorker_ = nullptr → unique_ptr dibaca dari dua thread bersamaan
+    // = data race (TSAN) dan bisa membaca objek setengah-terbangun.
     //
     // Kondisi `clearing_` sudah melindungi wilayah ini untuk pcmQueue_, tapi
     // cek decoderWorker_ tambahan dipindah ke bawah pengecekan clearing_ dan
-    // dilindungi lock decoderMutex_ supaya pembacaan unique_ptr aman.
+    // diambil lewat snapshotWorker() (P-M4, 2026-11-10): salinan shared_ptr
+    // di bawah lock singkat, dipakai tanpa lock.
     if (pcmQueue_ && !clearing_.load(std::memory_order_acquire)) {
-        // Snapshot pointer di bawah lock. advanceThread memegang lock yang
-        // sama saat stopDecoder(), jadi tidak bisa reset di tengah baca.
-        std::lock_guard<std::recursive_mutex> decoderLock(decoderMutex_);
-        if (decoderWorker_) {
+        // Snapshot pointer di bawah lock singkat, lalu pakai salinan TANPA
+        // lock (P-M4, 2026-11-10): advanceThread memegang lock yang sama
+        // saat stopDecoder(), jadi snapshot tidak pernah melihat pointer
+        // setengah-reset; objek tetap hidup lewat shared ownership.
+        if (auto worker = snapshotWorker()) {
             size_t avail = pcmQueue_->availableFrames();
             size_t cap = pcmQueue_->capacityFrames();
             // 🔥 FIX (2026-10-10): JANGAN resume decoder saat user menekan pause.
@@ -406,7 +445,7 @@ size_t PlaybackController::render(float* output,
             // tapi system MediaSession 657x state=PLAYING(3), 0x state=PAUSED.
             // Audio terus jalan, posisi terus merangkak naik (4136→5160→6168).
             if (avail < cap * 60 / 100 && playing_.load(std::memory_order_acquire)) {
-                decoderWorker_->resume();
+                worker->resume();
             }
         }
     }
@@ -509,12 +548,12 @@ size_t PlaybackController::render(float* output,
             uint64_t msDur = (framesDur * 1000ULL) / sampleRate;
             state_->setDuration(msDur);
         }
-        else if (decoderWorker_) {
-            // 🔥 FIX (2026-10-09): baca di bawah decoderMutex_ — audio thread
-            // vs advanceThread yang reset unique_ptr. Lihat decoderMutex_.
-            std::lock_guard<std::recursive_mutex> decoderLock(decoderMutex_);
-            if (decoderWorker_) {
-                const double decDur = decoderWorker_->getDuration();
+        else {
+            // 🔥 FIX (2026-11-10, p-m21 + P-M4): baca lewat snapshot, bukan
+            // `else if (decoderWorker_)` tanpa lock. Dulu pemakaian aman
+            // karena re-check di bawah lock, tapi balapan bacaannya tersisa.
+            if (auto worker = snapshotWorker()) {
+                const double decDur = worker->getDuration();
                 if (decDur > 0.0) {
                     state_->setDuration(
                         static_cast<uint64_t>(decDur * 1000.0)
@@ -629,7 +668,7 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
 
         // Worker lokal dulu (M3): dipublikasikan ke decoderWorker_ hanya
         // setelah start() berhasil, di bawah lock.
-        auto worker = std::make_unique<decoder::DecoderWorker>(
+        auto worker = std::make_shared<decoder::DecoderWorker>(
             std::make_unique<decoder::FFmpegDecoder>(cfg)
         );
 
@@ -669,7 +708,13 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
             // Guard: kalau EOF untuk URI yang SAMA datang terlalu cepat
             // (< 500ms), anggap decoder stuck dan berhenti. UI tidak perlu
             // ratusan event identik.
-            const std::string uri = currentTrack_.uri;
+            const std::string uri = [&]() {
+                // 🔥 FIX (2026-11-10, P-M4): salin di bawah lock. Dulu baca
+                // currentTrack_.uri mentah dari thread decoder sementara
+                // loadTrack() menulisnya dari thread JS/advance.
+                std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+                return currentTrack_.uri;
+            }();
             const auto now = std::chrono::steady_clock::now();
             {
                 // 🔥 FIX (2026-10-06): std::atomic<std::string> tidak valid
@@ -700,8 +745,18 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
             scheduleAdvance();
         });
 
+        // 🔥 FIX (2026-11-10, P-M4): callback menangkap weak_ptr ke worker
+        // yang memilikinya, BUKAN membaca decoderWorker_ (member). Cabang
+        // backpressure ini jalan di thread decoder di bawah decodeMutex_;
+        // membaca member tanpa lock di sini adalah TOCTOU yang sama seperti
+        // di play()/pause()/seek(). weak_ptr memastikan pause() hanya
+        // menyasar worker yang benar-benar memproduksi data ini — kalau
+        // worker sudah diganti loadTrack, lock() gagal dan cabang dilewati
+        // (queue baru saja di-clear loadTrack, jadi tidak ada yang perlu
+        // di-pause).
         worker->setDecodeCallback(
-            [this](decoder::DecodeResult&& result) {
+            [this, weakWorker = std::weak_ptr<decoder::DecoderWorker>(worker)](
+                decoder::DecodeResult&& result) {
                 if (pcmQueue_ && !result.samples.empty()) {
                     size_t written = pcmQueue_->write(
                         result.samples.data(),
@@ -741,14 +796,16 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
                     size_t avail = pcmQueue_->availableFrames();
                     size_t cap = pcmQueue_->capacityFrames();
                     if (avail > cap * 90 / 100) {
-                        if (decoderWorker_ && !decoderWorker_->isPaused()) {
-                            decoderWorker_->pause();
-                            static int pauseCount = 0;
-                            pauseCount++;
-                            if (pauseCount % 20 == 0) {
-                                __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
-                                    "Decoder PAUSED (queue %zu%% full) [total pauses=%d]",
-                                    100 * avail / cap, pauseCount);
+                        if (auto w = weakWorker.lock()) {
+                            if (!w->isPaused()) {
+                                w->pause();
+                                static int pauseCount = 0;
+                                pauseCount++;
+                                if (pauseCount % 20 == 0) {
+                                    __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                                        "Decoder PAUSED (queue %zu%% full) [total pauses=%d]",
+                                        100 * avail / cap, pauseCount);
+                                }
                             }
                         }
                     }
@@ -769,12 +826,14 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
             return false;
         }
 
-        // Publikasikan di bawah lock: render() hanya membaca pointer di bawah
-        // lock yang sama, jadi tidak pernah melihat setengah-bangun.
-        // (Menimpa worker lama di sini aman: destructor-nya join sendiri.)
+        // Publikasikan di bawah lock: render() hanya membaca pointer lewat
+        // snapshot di bawah lock yang sama, jadi tidak pernah melihat
+        // setengah-bangun. (Menimpa worker lama di sini aman: shared_ptr
+        // lama tetap hidup di tangan siapa pun yang sudah menyalinnya, dan
+        // destructor-nya join sendiri saat referensi terakhir hilang.)
         {
             std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
-            decoderWorker_ = std::move(worker);
+            decoderWorker_ = worker;
         }
 
         return true;
@@ -805,10 +864,11 @@ void PlaybackController::stopDecoder() {
     // jadi resume() dari render() yang sudah terlanjur masuk tidak pernah
     // use-after-free — dan resume() sendiri hanya atomic store + notify,
     // aman dipanggil bersamaan dengan stop().
-    std::unique_ptr<decoder::DecoderWorker> worker;
+    std::shared_ptr<decoder::DecoderWorker> worker;
     {
         std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
-        worker = std::move(decoderWorker_);
+        worker = decoderWorker_;
+        decoderWorker_.reset();
     }
 
     if (worker) {
@@ -860,7 +920,14 @@ void PlaybackController::updatePlaybackState() {
             : PlaybackStatus::Paused
     );
 
-    state_->setCurrentTrack(currentTrack_);
+    // 🔥 FIX (2026-11-10, P-M4): salin di bawah lock — currentTrack_ ditulis
+    // loadTrack() dari thread lain.
+    TrackInfo trackCopy;
+    {
+        std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+        trackCopy = currentTrack_;
+    }
+    state_->setCurrentTrack(trackCopy);
 }
 
 } // namespace pristine::playback 

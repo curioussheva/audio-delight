@@ -143,14 +143,27 @@ private:
 
     std::shared_ptr<TrackQueue> queue_;
 
-    std::unique_ptr<decoder::DecoderWorker> decoderWorker_;
+    // 🔥 FIX (2026-11-10, P-M4): shared_ptr, BUKAN unique_ptr.
+    //
+    // Pembaca (play/pause/seek/render/decode callback) menyalin pointer di
+    // bawah lock singkat, lalu memakai salinan TANPA lock — objek tetap hidup
+    // lewat shared ownership walau stopDecoder() sudah mengganti member.
+    // Pola cek-lalu-pakai unique_ptr tanpa lock sebelumnya adalah TOCTOU
+    // (baca bisa mendarat di antara move-out dan reset → deref null).
+    std::shared_ptr<decoder::DecoderWorker> decoderWorker_;
 
     // 🔥 FIX (2026-10-09, crash auto-advance): decoderWorker_ dibaca dari
     // audio thread (render()) dan ditulis ulang oleh advanceThread (loadTrack
     // → stopDecoder → reset + make_unique). Lock ini menyinkronkan keduanya.
     // recursive supaya aman jika loadTrack dipanggil dari thread yang sedang
-    // memegang lock (mis. sync dari seek).
-    std::recursive_mutex decoderMutex_;
+    // memegang lock (mis. sync dari seek). mutable supaya hasDecoder() const
+    // dan snapshotWorker() const bisa menguncinya.
+    mutable std::recursive_mutex decoderMutex_;
+
+    // Salinan decoderWorker_ saat ini, diambil di bawah decoderMutex_.
+    // Dipakai play/pause/seek/render supaya tidak pernah membaca unique_ptr
+    // (dulu) / member mentah tanpa lock (P-M4).
+    [[nodiscard]] std::shared_ptr<decoder::DecoderWorker> snapshotWorker() const;
 
     // 🔥 Thread untuk advance queue setelah EOF (lihat scheduleAdvance).
     std::thread advanceThread_;
