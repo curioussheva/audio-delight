@@ -122,6 +122,12 @@ public:
     // Posisi dikembalikan setelahnya, jadi pemutaran tidak melompat ke awal.
     //
     // Aman dipanggil saat stream tidak berjalan (hanya memastikan terbuka).
+    //
+    // KONTRAK LOCK (fix 2026-11-10, BLOCKER B1): fungsi ini MENGAMBIL
+    // mMutex sendiri (lock_guard di badan fungsi). JANGAN PERNAH memanggilnya
+    // saat mMutex sudah dipegang — std::mutex bukan rekursif, jadi itu
+    // deadlock. Pemanggil yang memegang lock HARUS lock.unlock() dulu
+    // (lihat setRequestedDeviceId / onDeviceRemoved / setExclusiveMode).
     void reopenStreamPreservingPlayback();
 
     // Device dicabut saat stream berjalan (dari AudioDeviceCallback).

@@ -358,7 +358,10 @@ int32_t EngineManager::pickBestRateFor(
 
 bool EngineManager::setRequestedDeviceId(int32_t deviceId) {
 
-    std::lock_guard<std::mutex>
+    // unique_lock (bukan lock_guard): lock HARUS dilepas sebelum
+    // reopenStreamPreservingPlayback() di bawah — fungsi itu mengambil mMutex
+    // sendiri, dan memanggilnya saat lock dipegang = deadlock (B1, 2026-11-10).
+    std::unique_lock<std::mutex>
         lock(mMutex);
 
     if (deviceId > 0) {
@@ -408,6 +411,12 @@ bool EngineManager::setRequestedDeviceId(int32_t deviceId) {
     // Device dipilih: stream harus DIBUKA ULANG di perangkat baru, dan track
     // dimuat ulang ke stream itu. Tanpa muat ulang, audio jadi senyap walau
     // pilihan device berhasil.
+    //
+    // LEPAS lock dulu: reopenStreamPreservingPlayback() mengambil mMutex
+    // sendiri (B1). Pembacaan setelah reopen memakai getter atomik, jadi
+    // aman tanpa lock. Reopen membaca state yang diminta di bawah lock-nya
+    // sendiri, jadi tidak ada state basi.
+    lock.unlock();
     reopenStreamPreservingPlayback();
 
     // Laporan dibaca SESUDAH restart, dari keadaan stream yang baru.
@@ -664,7 +673,12 @@ void EngineManager::reopenStreamPreservingPlayback() {
 
 void EngineManager::onDeviceRemoved(int32_t deviceId) {
 
-    std::lock_guard<std::mutex>
+    // unique_lock (bukan lock_guard): lock HARUS dilepas sebelum
+    // reopenStreamPreservingPlayback() di bawah — fungsi itu mengambil mMutex
+    // sendiri, dan memanggilnya saat lock dipegang = deadlock (B1, 2026-11-10).
+    // Method ini jalan di main thread (AudioDeviceCallback) — deadlock di sini
+    // = ANR.
+    std::unique_lock<std::mutex>
         lock(mMutex);
 
     if (!mEngine.isRunning()) {
@@ -704,6 +718,10 @@ void EngineManager::onDeviceRemoved(int32_t deviceId) {
     // (bukan mEngine.stop()+start() mentah) karena stream baru butuh decoder
     // yang benar-benar mengisi queue-nya - kalau tidak, audio jadi senyap
     // tanpa error. Lihat catatan di EngineManager.h.
+    //
+    // LEPAS lock dulu: reopenStreamPreservingPlayback() mengambil mMutex
+    // sendiri (B1).
+    lock.unlock();
     reopenStreamPreservingPlayback();
 }
 
@@ -886,7 +904,10 @@ void EngineManager::setExclusiveMode(
     bool enabled
 ) {
 
-    std::lock_guard<std::mutex>
+    // unique_lock (bukan lock_guard): lock HARUS dilepas sebelum
+    // reopenStreamPreservingPlayback() di bawah — fungsi itu mengambil mMutex
+    // sendiri, dan memanggilnya saat lock dipegang = deadlock (B1, 2026-11-10).
+    std::unique_lock<std::mutex>
         lock(mMutex);
 
     const bool wasRunning =
@@ -902,6 +923,11 @@ void EngineManager::setExclusiveMode(
         // Stream dibuka ULANG di sini. Memakai reopenStreamPreservingPlayback
         // supaya track ikut dimuat ulang ke stream baru - kalau hanya stop+start,
         // audio jadi senyap (queue PCM kosong untuk stream baru).
+        //
+        // LEPAS lock dulu: reopenStreamPreservingPlayback() mengambil mMutex
+        // sendiri (B1). setExclusiveMode di atas sudah selesai (atomik),
+        // jadi tidak ada state yang perlu dilindungi melewati reopen.
+        lock.unlock();
         reopenStreamPreservingPlayback();
     }
 }
