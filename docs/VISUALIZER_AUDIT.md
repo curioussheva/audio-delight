@@ -63,6 +63,14 @@ chunk selang-seling ke dua buffer); test baru
 TIDAK BERFUNGSI sampai Fase 1 device verification membuktikan rantai hidup
 di device** — perbaikan kode belum sama dengan perbaikan terverifikasi.
 
+**Bukti device 2026-11-10** (logcat 12:00:32–12:02:40, APK 0b7f0cae): rantai
+data TERBUKTI hidup — sesi 4105, service + bridge start, `SpectrumAnalyzer`
+start 2x, `SpectogramView` menerima FFT nyata yang bervariasi (FFT max
+0.55–0.77). Status tetap TIDAK BERFUNGSI sampai konfirmasi visual (bar
+bergerak di layar) — masih ada error EGL `SurfaceTexture ... EGLConsumer is
+not attached` 1543x yang perlu dijawab mata, meski error pertamanya
+mendahului service start (kemungkinan spam surface detached / quirk MIUI).
+
 ## Gejala yang dilaporkan
 
 > "bagian visualizer/spectogram view, baru analizer"

@@ -95,18 +95,24 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
 
     frameCount.current++;
     const maxVal = Math.max(...newData);
+    const isReal = maxVal > 0.01;
+    // Keputusan dihitung di JS thread dan dikirim sebagai argumen primitif.
+    // JANGAN baca frameCount (ref biasa) di dalam worklet: ref yang sudah
+    // diserahkan ke worklet tidak boleh diubah lagi dari JS thread —
+    // Reanimated melempar warning "Tried to modify key `current`..." tiap
+    // frame (20x/detik, 1089x di logcat 2026-11-10) dan worklet membaca
+    // nilai basi, jadi hasRealData tidak kunjung bersih setelah hening.
+    const shouldClear = !isReal && frameCount.current > 10;
 
-    const sv = freqData;
-    const hrSV = hasRealData;
-    runOnUI(() => {
+    runOnUI((data: number[], real: boolean, clear: boolean) => {
       "worklet";
-      sv.value = newData;
-      if (maxVal > 0.01) {
-        hrSV.value = true;
-      } else if (frameCount.current > 10) {
-        hrSV.value = false;
+      freqData.value = data;
+      if (real) {
+        hasRealData.value = true;
+      } else if (clear) {
+        hasRealData.value = false;
       }
-    })();
+    })(newData, isReal, shouldClear);
   }, []);
 
   // Start/Stop berdasarkan isPlaying dan audioSessionId.
