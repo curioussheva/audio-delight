@@ -265,9 +265,17 @@ class NativePlaybackModule(
 
             // 🔥 FIX: Copy ke cache dir (reliable, tidak ada race condition GC)
             // detachFd() menyebabkan fd di-close oleh GC sebelum FFmpeg buka
+            //
+            // 🔥 FIX (2026-11-11, D-M8): penamaan cache DISATUKAN dengan
+            // NativePlaybackService + ContentUriResolver native: prefix
+            // `audio_` dan ext default `cache`. Sebelumnya modul ini memakai
+            // `track_` + `tmp`, jadi satu URI yang sama menghasilkan DUA file
+            // cache (audio_<hash>.mpeg dan track_<hash>.tmp) kalau pernah
+            // lewat jalur ini — dan hit check jalur lain tidak melihat file
+            // dari jalur ini.
             val cacheDir = reactApplicationContext.cacheDir
-            val ext = resolver.getType(uri)?.substringAfterLast('/') ?: "tmp"
-            val cacheFile = java.io.File(cacheDir, "track_${uriString.hashCode()}.$ext")
+            val ext = resolver.getType(uri)?.substringAfterLast('/') ?: "cache"
+            val cacheFile = java.io.File(cacheDir, "audio_${uriString.hashCode()}.$ext")
 
             if (!cacheFile.exists() || cacheFile.length() == 0L) {
                 resolver.openInputStream(uri)?.use { input ->
