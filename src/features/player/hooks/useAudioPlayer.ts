@@ -50,6 +50,12 @@ export const useAudioPlayer = () => {
       if (id && id > 0) {
         console.log("🎵 [Player] Syncing Audio Session ID:", id);
         setAudioSessionId(id);
+
+        // FIX B1 (2026-11-10): jembatani ID yang sama ke player store —
+        // visualizer.tsx + SpectrumAnalyzer membaca dari sana, bukan dari
+        // equalizer store. (Startup sudah ditangani initStore; ini menjaga
+        // kedua store tetap sinkron bila play datang dari Search.)
+        usePlayerStore.getState().setAudioSessionId(id);
       }
     } catch (e) {
       console.warn("Gagal mendapatkan Audio Session ID:", e);

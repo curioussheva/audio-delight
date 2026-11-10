@@ -1,7 +1,67 @@
 # Audit Visualizer / Spectrogram
 
-Status: **DIPERBAIKI** (lihat "Perbaikan"). Dokumen ini menyimpan diagnosis asal
+Status: **TIDAK BERFUNGSI** (koreksi 2026-11-10 — lihat "Koreksi status 2026-11-10" di bawah). Dokumen ini menyimpan diagnosis asal
 supaya kalau gejalanya muncul lagi, jejaknya ada.
+
+## Koreksi status 2026-11-10
+
+Audit hulu-ke-hilir 2026-11-10 (`AUDIT_2026-11-10.md`, branch
+`fix/ffmpeg-disable-doc` @ `c63b4421`) menemukan visualizer live **mati total**
+— tiga blocker bertumpuk, masing-masing berdiri sendiri sudah cukup mematikan
+jalur ini. Status "DIPERBAIKI" di atas **salah** dan dikoreksi di sini; isi
+dokumen ini di bawah tetap berlaku sebagai catatan diagnosis & perbaikan
+Oktober 2026, kecuali yang dikoreksi di bawah.
+
+1. **Session ID tidak pernah sampai (blocker).**
+   `playerStore.audioSessionId` tidak pernah ditulis siapa pun
+   (`playerStore.ts:181` initial `null`, setter `:918` nol pemanggil di `src/`).
+   Satu-satunya penulis session ID adalah `useAudioPlayer.ts:35-52` — ke
+   **equalizer store**, bukan player store. Akibatnya `visualizer.tsx:30`
+   `hasValidSession` selalu false dan `VisualizerService` tidak pernah di-start.
+   `engine.enableVisualizer()` (`engine.ts:236`) juga tanpa pemanggil.
+2. **JNI 256 sample vs FFT 2048 (blocker).**
+   `NativeVisualizerModule.cpp:23` `kVisualizerSize = 256`, sementara
+   `FFT_SIZE = 2048` (`NativeVisualizerBridge.kt:59`) dan Kotlin menolak
+   `< 2048` (`:140-142`, `VISUALIZER_SHORT_BUFFER`). `getFFTData()` selalu
+   reject — bahkan bila blocker 1 diperbaiki. "Perbaikan" di bawah (Kotlin
+   memeriksa panjang buffer dan menolak) adalah **diagnosis, bukan perbaikan
+   ukuran buffer** — ukuran JNI-nya tetap 256.
+3. **Buffer baca tidak pernah ditulis; `read()` selalu nol (blocker).**
+   `VisualizerBuffer.h:39` `mWriteBuffer{0}`; `write()` load di `:30`, `read()`
+   load di `:85` — **tidak ada `store` di file mana pun**. "Perbaikan" di bawah
+   (`read()` mengambil buffer kebalikan, commit 9848ed0d) membuat write selalu
+   ke mBufferA dan read selalu dari mBufferB, yang hanya di-`memset` 0 di
+   konstruktor. Sebelumnya robek, sesudahnya selalu nol. Kalaupun blocker 1+2
+   diperbaiki, data yang dibaca tetap nol.
+
+Yang tampil di layar hari ini bukan spektrum nyata, melainkan animasi sinus
+palsu (`SpectrumAnalyzer.tsx:160-172`, tanpa indikator di build release).
+
+**Yang tetap benar dari dokumen ini:** perbaikan nama package JNI (#1),
+FFT radix-2 nyata di `FFTPlan` (#3/4), dan hasil uji matematika FFT di bawah
+(20/20, paritas 3/3).
+
+**Yang salah di dokumen ini (selain status):**
+- "VisualizerService melaporkan kegagalan pertama lewat `onError`" — salah:
+  field `onError` (`VisualizerService.ts:73`) **tidak punya setter**, jadi
+  `this.onError?.(error)` (`:349`) tidak pernah fire.
+- "FFT ada di dua tempat" — sekarang **tiga** tempat (ditambah C++
+  `SpectrumAnalyzer`/`FFTProcessor`/`SpectrumVisualizer` di `fft/`, nyata tapi
+  nol pemanggil di luar `fft/`).
+- Klaim Jest 187/187 di bawah adalah suite repo, bukan jalur ini — nol test
+  visualizer di `src/__tests__`.
+
+**Perbaikan 2026-11-10** (lihat `AUDIT_2026-11-10.md` § "Perbaikan
+2026-11-10"): ketiga blocker diperbaiki di kode — session ID ditulis ke
+player store saat startup (`initStore` + getter `getSessionId()` baru) dan
+dijembatani dari `syncAudioSession`; `kVisualizerSize` JNI 256 → 2048; `read()`
+kembali membaca buffer yang sama dengan `write()` (koreksi: rekomendasi
+"flip per `write()`" dari audit semula salah — flip per panggilan menyebar
+chunk selang-seling ke dua buffer); test baru
+`scripts/test_visualizer_buffer.cpp` **6/6 lolos** (sebelum perbaikan 1/6).
+`tsc --noEmit` 0 error, Jest 187/187 lolos. **Status dokumen ini tetap
+TIDAK BERFUNGSI sampai Fase 1 device verification membuktikan rantai hidup
+di device** — perbaikan kode belum sama dengan perbaikan terverifikasi.
 
 ## Gejala yang dilaporkan
 

@@ -55,6 +55,19 @@ export class AudioEngine {
   }
 
   /**
+   * Session ID yang dibuat saat initialize() (FIX B1, 2026-11-10).
+   *
+   * Dipakai playerStore supaya visualizer tahu sesi audio valid — sebelumnya
+   * tidak ada yang menulis audioSessionId ke player store, jadi
+   * visualizer.tsx + SpectrumAnalyzer selalu membaca null dan service tidak
+   * pernah di-start. ID yang sama dipakai ulang (tanpa membuat session
+   * baru), supaya tidak menambah session Android yang tidak terpakai.
+   */
+  public getSessionId(): number | null {
+    return this.sessionId;
+  }
+
+  /**
    * Kirim mode pemrosesan ke native. LIVE - berlaku pada buffer berikutnya.
    *
    * Terpisah dari toggleExclusiveMode() dengan sengaja: exclusive itu syarat

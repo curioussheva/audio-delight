@@ -1,5 +1,5 @@
 // src/features/visualizer/components/SpectrumAnalyzer.tsx
-import React, { useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { View, StyleSheet, Dimensions, Text } from "react-native";
 
 import {
@@ -66,7 +66,7 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
   const hasRealData = useSharedValue(false);
   const isPlayingSV = useSharedValue(isPlaying);
 
-  const isServiceInitialized = useRef(false);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
   const isStarted = useRef(false);
   const lastSessionId = useRef<number | null>(null);
   const frameCount = useRef(0);
@@ -88,47 +88,42 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
     return () => clearInterval(interval);
   }, [isPlaying]);
 
-  // Inisialisasi service sekali
-  useEffect(() => {
-    if (isServiceInitialized.current) return;
+  // Callback data — stabil (hanya memakai ref/SharedValue), jadi bisa
+  // dipakai ulang tiap kali effect start/stop subscribe ulang.
+  const handleData = useCallback((newData: number[]) => {
+    if (!newData || newData.length === 0) return;
 
-    visualizerService.setDataCallback((newData: number[]) => {
-      if (!newData || newData.length === 0) return;
+    frameCount.current++;
+    const maxVal = Math.max(...newData);
 
-      frameCount.current++;
-      const maxVal = Math.max(...newData);
-
-      const sv = freqData;
-      const hrSV = hasRealData;
-      runOnUI(() => {
-        "worklet";
-        sv.value = newData;
-        if (maxVal > 0.01) {
-          hrSV.value = true;
-        } else if (frameCount.current > 10) {
-          hrSV.value = false;
-        }
-      })();
-    });
-const success = true;
-
-    if (success) {
-      isServiceInitialized.current = true;
-      console.log("[SpectrumAnalyzer] Service initialized");
-    }
-
-    return () => {};
+    const sv = freqData;
+    const hrSV = hasRealData;
+    runOnUI(() => {
+      "worklet";
+      sv.value = newData;
+      if (maxVal > 0.01) {
+        hrSV.value = true;
+      } else if (frameCount.current > 10) {
+        hrSV.value = false;
+      }
+    })();
   }, []);
 
-  // Start/Stop berdasarkan isPlaying dan audioSessionId
+  // Start/Stop berdasarkan isPlaying dan audioSessionId.
+  //
+  // MULTI-SUBSCRIBER (2026-11-10): layar ini subscribe saat butuh data dan
+  // unsubscribe saat tidak — JANGAN panggil visualizerService.stop(), itu
+  // kill-switch global yang mematikan polling untuk layar lain juga
+  // (tab Analyzer, SpectogramView di player).
   useEffect(() => {
-    if (!isServiceInitialized.current) return;
-
     const shouldStart = isPlaying && audioSessionId && audioSessionId > 0;
 
     if (shouldStart) {
       if (!isStarted.current || lastSessionId.current !== audioSessionId) {
         console.log(`[SpectrumAnalyzer] Starting session ${audioSessionId}`);
+        unsubscribeRef.current?.();
+        unsubscribeRef.current =
+          visualizerService.setDataCallback(handleData);
         visualizerService.start(audioSessionId);
         isStarted.current = true;
         lastSessionId.current = audioSessionId;
@@ -141,7 +136,8 @@ const success = true;
     } else {
       if (isStarted.current) {
         console.log("[SpectrumAnalyzer] Stopping");
-        visualizerService.stop();
+        unsubscribeRef.current?.();
+        unsubscribeRef.current = null;
         isStarted.current = false;
         lastSessionId.current = null;
         runOnUI(() => {
@@ -152,7 +148,15 @@ const success = true;
         })();
       }
     }
-  }, [isPlaying, audioSessionId, barCount]);
+  }, [isPlaying, audioSessionId, barCount, handleData]);
+
+  // Cleanup saat unmount: lepas subscription (bukan stop() global).
+  useEffect(() => {
+    return () => {
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = null;
+    };
+  }, []);
 
   // Processed data — semua SharedValue, aman di worklet
   const processedData = useDerivedValue(() => {

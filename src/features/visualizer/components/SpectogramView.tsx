@@ -103,6 +103,7 @@ export const SpectogramView = React.memo(
 
     const gridRef = useRef<number[][]>(grid);
     const isServiceStarted = useRef(false);
+    const unsubscribeRef = useRef<(() => void) | null>(null);
 
     // Debug state untuk menampilkan max FFT
     const [debugMax, setDebugMax] = useState(0);
@@ -168,20 +169,25 @@ export const SpectogramView = React.memo(
         setGrid(emptyGrid);
         gridRef.current = emptyGrid;
         setDebugMax(0);
-        if (isServiceStarted.current) {
-          visualizerService.stop();
-          isServiceStarted.current = false;
-        }
+        // MULTI-SUBSCRIBER (2026-11-10): lepas subscription sendiri saja —
+        // jangan stop() service, itu kill-switch global yang mematikan
+        // polling untuk tab Analyzer/Visualizer juga.
+        unsubscribeRef.current?.();
+        unsubscribeRef.current = null;
+        isServiceStarted.current = false;
         return;
       }
 
-      visualizerService.setDataCallback(handleFFTData);
+      unsubscribeRef.current?.();
+      unsubscribeRef.current =
+        visualizerService.setDataCallback(handleFFTData);
 
       visualizerService.start(audioSessionId);
       isServiceStarted.current = true;
 
       return () => {
-        visualizerService.stop();
+        unsubscribeRef.current?.();
+        unsubscribeRef.current = null;
         isServiceStarted.current = false;
       };
     }, [isPlaying, audioSessionId, bins, maxRows, sensitivity]);

@@ -385,6 +385,24 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       }, 500);
       console.log("[Player] 📊 Position watcher started (500ms)");
     }
+
+    // FIX B1 (2026-11-10): tulis audioSessionId ke store saat startup.
+    //
+    // Sebelumnya tidak ada yang pernah menulis field ini (setter ada tapi
+    // nol pemanggil): satu-satunya penulis session ID,
+    // useAudioPlayer.syncAudioSession, menulis ke EQUALIZER store — dan itu
+    // pun hanya jalan 800 ms setelah play dari Search. Akibatnya
+    // visualizer.tsx + SpectrumAnalyzer selalu membaca null dan service
+    // tidak pernah di-start.
+    //
+    // ID-nya sudah dibuat di audioEngine.initialize() (jalan sebelum
+    // initStore di _layout performInitialization), jadi di sini tinggal
+    // diambil lewat getter — tanpa membuat session baru dan tanpa menyentuh
+    // jalur FX equalizer.
+    const bootSessionId = audioEngine.getSessionId();
+    if (bootSessionId && bootSessionId > 0) {
+      get().setAudioSessionId(bootSessionId);
+    }
   },
 
   // ── Core Playback ────────────────────────────────────────────────────────

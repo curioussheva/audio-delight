@@ -41,9 +41,18 @@ const NativeVisualizerBridge = NativeVisualizerBridgeSpec as
 // ============================================================================
 
 class VisualizerService {
-  // Output targets
-  private frequencyData: SharedValue<number[]> | null = null;
-  private dataCallback: ((data: number[]) => void) | null = null;
+  // Output targets — MULTI-SUBSCRIBER (2026-11-10).
+  //
+  // Sebelumnya hanya ada SATU slot (frequencyData ATAU dataCallback): komponen
+  // yang terakhir memanggil setDataCallback()/initialize() menang, yang lain
+  // berhenti menerima data tanpa pemberitahuan. Tiga layar memakai service
+  // ini sekaligus (tab Analyzer + tab Visualizer + SpectogramView di player),
+  // jadi satu slot selalu membuat salah satu beku — dan stop() dari satu
+  // layar mematikan polling untuk semuanya. Sekarang setiap subscriber
+  // terdaftar di Set dan semuanya menerima data yang sama; polling berhenti
+  // hanya kalau sudah tidak ada subscriber sama sekali.
+  private dataCallbacks = new Set<(data: number[]) => void>();
+  private sharedValues = new Set<SharedValue<number[]>>();
 
   private appStateSubscription: ReturnType<
     typeof AppState.addEventListener
@@ -128,56 +137,99 @@ class VisualizerService {
   // ============================================================================
 
   /**
-   * Set callback untuk menerima FFT data.
-   * Bisa dipanggil sebelum start().
+   * Daftarkan callback penerima FFT data. ADITIF — memanggilnya dari dua
+   * komponen TIDAK saling menimpa (beda dengan perilaku lama yang satu
+   * slot). Mengembalikan fungsi unsubscribe; panggil saat komponen tidak
+   * butuh data lagi (pause/unmount). Bila ada sesi yang tertunda dari
+   * start() yang dipanggil sebelum ada subscriber, polling langsung
+   * dimulai.
    */
   setDataCallback(
     callback: (data: number[]) => void,
     config?: Partial<VisualizerConfig>,
-  ): void {
+  ): () => void {
     if (typeof callback !== "function") {
       console.error(
         "[VisualizerService] setDataCallback() requires a function",
       );
-      return;
+      return () => {};
     }
-    if (config) this.config = { ...this.config, ...config };
-    this.dataCallback = callback;
-    this.frequencyData = null; // pilih mode callback
-    this.previousData = null;
+    return this.subscribeDataCallback(callback, config);
+  }
 
-    if (this.pendingSessionId > 0 && !this.isStarted) {
-      const sid = this.pendingSessionId;
-      this.pendingSessionId = 0;
-      this.doStart(sid).catch(() => {});
+  subscribeDataCallback(
+    callback: (data: number[]) => void,
+    config?: Partial<VisualizerConfig>,
+  ): () => void {
+    if (config) this.config = { ...this.config, ...config };
+    this.dataCallbacks.add(callback);
+    this.maybeStartForSubscribers();
+    return () => this.unsubscribeDataCallback(callback);
+  }
+
+  unsubscribeDataCallback(callback: (data: number[]) => void): void {
+    if (this.dataCallbacks.delete(callback)) {
+      this.maybeStopWhenIdle();
     }
   }
 
   /**
-   * Inisialisasi dengan SharedValue dari Reanimated.
-   * Harus dipanggil sebelum start() jika ingin update shared value.
+   * Daftarkan SharedValue Reanimated sebagai penerima data. Aditif, sama
+   * seperti setDataCallback. Mengembalikan unsubscribe. (Tidak ada pemakai
+   * saat ini — semua layar memakai setDataCallback — tapi kontraknya tetap
+   * dijaga supaya tidak ada yang mengira mode SharedValue sudah mati.)
    */
   initialize(
     sharedValue: SharedValue<number[]>,
     config?: Partial<VisualizerConfig>,
-  ): boolean {
+  ): () => void {
     if (!sharedValue || typeof sharedValue.value === "undefined") {
       console.error("[VisualizerService] Invalid SharedValue provided");
-      return false;
+      return () => {};
     }
+    return this.subscribeSharedValue(sharedValue, config);
+  }
 
+  subscribeSharedValue(
+    sharedValue: SharedValue<number[]>,
+    config?: Partial<VisualizerConfig>,
+  ): () => void {
     if (config) this.config = { ...this.config, ...config };
-    this.frequencyData = sharedValue;
-    this.dataCallback = null; // pilih mode shared value
-    this.previousData = null;
+    this.sharedValues.add(sharedValue);
+    this.maybeStartForSubscribers();
+    return () => this.unsubscribeSharedValue(sharedValue);
+  }
 
-    if (this.pendingSessionId > 0 && !this.isStarted) {
-      const sid = this.pendingSessionId;
-      this.pendingSessionId = 0;
-      this.doStart(sid).catch(() => {});
+  unsubscribeSharedValue(sharedValue: SharedValue<number[]>): void {
+    if (this.sharedValues.delete(sharedValue)) {
+      this.maybeStopWhenIdle();
     }
+  }
 
-    return true;
+  /**
+   * Mulai polling untuk subscriber yang baru mendaftar, bila ada sesi yang
+   * tertunda dari start() yang dipanggil sebelum ada subscriber. (Hanya
+   * pending — sesi yang sudah berjalan dihidupkan lagi lewat start().)
+   */
+  private maybeStartForSubscribers(): void {
+    if (this.isStarted || this.isPaused) return;
+    if (this.pendingSessionId <= 0) return;
+    const sid = this.pendingSessionId;
+    this.pendingSessionId = 0;
+    this.doStart(sid).catch(() => {});
+  }
+
+  /**
+   * Hentikan polling kalau sudah tidak ada subscriber. Dipanggil tiap
+   * unsubscribe. Sesi dipertahankan (lastSessionId) supaya subscribe +
+   * start berikutnya bisa lanjut tanpa membuat sesi baru.
+   */
+  private maybeStopWhenIdle(): void {
+    if (!this.isStarted) return;
+    if (this.dataCallbacks.size > 0 || this.sharedValues.size > 0) return;
+    this.isStarted = false;
+    this.stopPolling();
+    this.stopNativeVisualizer();
   }
 
   // ============================================================================
@@ -212,8 +264,10 @@ class VisualizerService {
     this.isPaused = false;
     this.retryCount = 0;
 
-    // Jika belum ada target output, simpan pending session ID
-    if (!this.dataCallback && !this.frequencyData) {
+    // Jika belum ada subscriber, simpan pending session ID — polling
+    // dimulai saat subscriber pertama mendaftar (lihat
+    // maybeStartForSubscribers).
+    if (this.dataCallbacks.size === 0 && this.sharedValues.size === 0) {
       console.log(
         "[VisualizerService] Output target not set yet, queuing session",
         sessionId,
@@ -283,7 +337,12 @@ class VisualizerService {
   }
 
   /**
-   * Stop complete
+   * Stop TOTAL (kill-switch global): hentikan polling + native, hapus sesi,
+   * kirim array nol ke SEMUA subscriber.
+   *
+   * JANGAN dipakai untuk lifecycle satu layar — unsubscribe-lah, supaya layar
+   * lain yang masih butuh data tidak ikut mati. Dipakai destroy() dan
+   * pemakaian lama (useAudioAnalyzer, saat ini mati).
    */
   stop(): void {
     console.log("[VisualizerService] Stopping...");
@@ -298,12 +357,16 @@ class VisualizerService {
     this.stopPolling();
     this.stopNativeVisualizer();
 
-    // Reset output target
-    if (this.frequencyData) {
-      this.frequencyData.value = new Array(128).fill(0);
-    } else if (this.dataCallback) {
+    // Kirim nol ke semua subscriber supaya tidak ada yang menampilkan
+    // data basi. Subscriber tetap terdaftar — start() berikutnya
+    // melanjutkan ke mereka.
+    const zeros = new Array(128).fill(0);
+    for (const sv of this.sharedValues) {
+      sv.value = [...zeros];
+    }
+    for (const cb of this.dataCallbacks) {
       try {
-        this.dataCallback(new Array(128).fill(0));
+        cb([...zeros]);
       } catch (_) {}
     }
   }
@@ -314,8 +377,8 @@ class VisualizerService {
   destroy(): void {
     this.stop();
     this.cleanupAppStateListener();
-    this.frequencyData = null;
-    this.dataCallback = null;
+    this.dataCallbacks.clear();
+    this.sharedValues.clear();
   }
 
   // ============================================================================
@@ -373,12 +436,13 @@ class VisualizerService {
 
     const smoothed = this.applySmoothing(data);
 
-    // Update sesuai mode
-    if (this.frequencyData) {
-      this.frequencyData.value = smoothed;
-    } else if (this.dataCallback) {
+    // Fan-out ke SEMUA subscriber (multi-subscriber, 2026-11-10).
+    for (const sv of this.sharedValues) {
+      sv.value = smoothed;
+    }
+    for (const cb of this.dataCallbacks) {
       try {
-        this.dataCallback(smoothed);
+        cb(smoothed);
       } catch (e) {
         console.error("[VisualizerService] Data callback error:", e);
       }
@@ -413,12 +477,15 @@ class VisualizerService {
     isPaused: boolean;
     sessionId: number;
     isInitialized: boolean;
+    subscriberCount: number;
   } {
     return {
       isStarted: this.isStarted,
       isPaused: this.isPaused,
       sessionId: this.lastSessionId,
-      isInitialized: this.dataCallback !== null || this.frequencyData !== null,
+      isInitialized:
+        this.dataCallbacks.size > 0 || this.sharedValues.size > 0,
+      subscriberCount: this.dataCallbacks.size + this.sharedValues.size,
     };
   }
 

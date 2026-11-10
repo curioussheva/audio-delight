@@ -15,7 +15,7 @@ import kotlin.math.sqrt
  * AudioCallback (C++, audio thread)
  *   -> VisualizerBuffer.write()          mono mixdown, ring buffer 2048
  *   -> EngineManager::engine().getVisualizerData()   (UI thread)
- *   -> JNI Java_..._getVisualizerData    mengembalikan 256 sample MENTAH
+ *   -> JNI Java_..._getVisualizerData    mengembalikan 2048 sample MENTAH
  *   -> [KELAS INI] FFT 2048 -> magnitude -> 128 bin log-scaled
  *   -> JS: getFFTData() -> number[128]
  * ```
@@ -24,7 +24,7 @@ import kotlin.math.sqrt
  *
  * Implementasi FFT native ada di `cpp/fft/FFTPlan.{h,cpp}` (radix-2), tapi
  * JNI yang mengeksposnya belum ada - `NativeVisualizerModule.cpp` hanya
- * mengembalikan sample mentah 256 float. Sampai itu tersambung, komputasi
+ * mengembalikan sample mentah 2048 float. Sampai itu tersambung, komputasi
  * spektrum dilakukan di sisi Kotlin memakai `java.lang.Math`/kotlin.math,
  * sehingga visualizer bisa berfungsi tanpa menambah jalur JNI baru.
  *

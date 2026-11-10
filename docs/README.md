@@ -14,6 +14,8 @@
 | [`PLAYBACK_CONSISTENCY_ANALYSIS.md`](./PLAYBACK_CONSISTENCY_ANALYSIS.md) | Analisis konsistensi playback cpp→JNI→Kotlin→JS: dead spec, missing methods (2026-10-07) |
 | [`NATIVE_MODULES_CONSISTENCY.md`](./NATIVE_MODULES_CONSISTENCY.md) | Analisis konsistensi semua native modules: 1 bug, 3 clean, dead code inventory (2026-10-07) |
 | [`RATE_CHAIN_AUDIT.md`](./RATE_CHAIN_AUDIT.md) | Alur sample rate hulu→hilir: autodetect device/DAC status, di mana rantai putus, jalan ke bit-perfect (2026-10-07) |
+| [`AUDIT_2026-11-10.md`](./AUDIT_2026-11-10.md) | Audit hulu→hilir 2026-11-10: initiation→playback, tiga mode, visualizer session, UI — semua temuan + aksi perbaikan (graphify 5.291 node, spot-check grep) |
+| [`VISUALIZER_CARA_KERJA.md`](./VISUALIZER_CARA_KERJA.md) | Deep-dive visualizer: cara kerja langkah demi langkah + cara app dibangun (5 lapis), peta file, kenapa jalur ini mati (2026-11-10) |
 | [`AUDIO_OUTPUT_PATHS.md`](./AUDIO_OUTPUT_PATHS.md) | Audit jalur output audio: speaker/jack/USB DAC/HDMI/Bluetooth-A2DP/cast, mana yang bisa bit-perfect (2026-10-07) |
 | [`adr/0001-tiga-mode-satu-sumber-kebenaran.md`](./adr/0001-tiga-mode-satu-sumber-kebenaran.md) | ADR: di mana logika tiga mode hidup, dan mengapa `AudioPipeline` (2026-10-07) |
 | [`adr/0002-komparasi-modes.md`](./adr/0002-komparasi-modes.md) | Komparasi teknis nasib `cpp/modes/*`: port-lalu-hapus vs hidupkan kembali (2026-10-07) |

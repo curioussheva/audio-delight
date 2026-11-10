@@ -71,22 +71,32 @@ void VisualizerBuffer::read(
     int32_t size
 ) const {
 
-    // Baca dari buffer yang TIDAK sedang ditulis.
+    // Baca dari buffer yang SAMA dengan yang ditulis.
     //
-    // Sebelumnya baris ini memakai `readBuffer` dari `mWriteBuffer` - nilai
-    // yang sama dengan yang dibaca `write()`. Karena `mWriteBuffer` tidak
-    // pernah di-flip (tidak ada pemanggil yang menulisnya selain konstruktor),
-    // kedua sisi selalu memilih `mBufferA`: audio thread menulis ke sana
-    // sementara UI thread membaca dari sana secara bersamaan. Hasilnya data
-    // robek (tearing) - spektrum bergerak acak, bukan mengikuti audio.
+    // KOREKSI 2026-11-10 (B3): sebelumnya baris ini mengambil buffer
+    // KEBALIKAN ("anti-tearing", commit 9848ed0d). Itu salah: mWriteBuffer
+    // tidak pernah di-flip (tidak ada store() di file mana pun), jadi
+    // penulis selalu ke mBufferA sementara pembaca selalu dari mBufferB —
+    // yang hanya berisi nol dari konstruktor. Hasilnya read() selalu nol,
+    // dan visualizer tidak pernah menerima data nyata.
     //
-    // Ambil kebalikannya: kalau penulis memakai A (0), pembaca memakai B.
+    // Membaca buffer yang sama aman di sini: read() mengambil snapshot
+    // mWritePos sekali (acquire) lalu menyalin jendela [pos-size, pos).
+    // Penulis hanya menulis DI DEPAN jendela itu (posisi >= pos), jadi tidak
+    // ada sample yang ditimpa saat sedang dibaca — kecuali pembacaan lebih
+    // lambat dari satu putaran ring (2048 sample, ~43 ms @ 48 kHz), yang
+    // tidak terjadi untuk salinan 2048 float.
+    //
+    // Jangan kembalikan logika "buffer kebalikan" tanpa memperbaiki
+    // flip-nya — dan flip per panggilan write() (store(mWriteBuffer ^ 1))
+    // JUGA salah: chunk yang berurutan akan tersebar selang-seling ke dua
+    // buffer, jadi satu buffer tidak pernah berisi 2048 sample terakhir
+    // yang utuh. (Koreksi atas rekomendasi P0 di AUDIT_2026-11-10.md —
+    // rekomendasi itu salah, lihat test_visualizer_buffer.cpp.)
     const int readBuffer =
         mWriteBuffer.load(
             std::memory_order_relaxed
-        ) == 0
-        ? 1
-        : 0;
+        );
 
     const float* src =
         readBuffer == 0

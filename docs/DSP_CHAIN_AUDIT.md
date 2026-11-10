@@ -254,6 +254,16 @@ Hipotesis "EQ jalan lewat audiofx meski C++ putus" **tertutup**.
 
 ## 4. Klasifikasi per node
 
+> **Penanda 2026-11-10 — status pra-perbaikan.** Klasifikasi di bawah adalah
+> keadaan **2026-10-10**, sebelum perbaikan. Ketiga kelas di
+> "STUB-DIPANGGIL (3)" sudah berimplementasi nyata sejak 2026-10-11 (lihat §5
+> Prioritas 3), dan keadaan itu **diverifikasi ulang** di audit 2026-11-10
+> (`AUDIT_2026-11-10.md` § Jalur 2): `BrainwaveGenerator` kini menambah (bukan
+> menolkan), `HarmonicExciter` shaper tanh nyata, `SpatialFieldProcessor`
+> mid/side + ambience nyata. Satu-satunya stub di rantai immersive yang hidup
+> (`BinauralRenderer`) dormant, tidak dipanggil, terdokumentasi sengaja
+> nonaktif. Jangan baca tabel di bawah sebagai status saat ini.
+
 ### NYATA (6)
 `processingMode` switch · `DSPProcessingGate` · **`SolfeggioResonator`** (biquad RBJ
 sungguhan, Q = 0.7 + intensity×7.3, wet/dry) · `BiquadFilter` · `Limiter` baru ·
