@@ -568,10 +568,12 @@ uint32_t PlaybackController::currentFileSampleRate() const noexcept {
 
 bool PlaybackController::startDecoder(const TrackInfo& track) {
     try {
-        // 🔥 FIX (2026-10-09): sinkron dengan render() (audio thread) yang
-        // membaca decoderWorker_. Lihat decoderMutex_ di header.
-        std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
-
+        // 🔥 FIX (2026-11-10, M3): JANGAN tahan decoderMutex_ melewati
+        // start(). Dulu lock dipegang sepanjang fungsi, termasuk
+        // worker->start() yang membuka file (FFmpeg I/O) — render() di audio
+        // thread ikut ter-block di lock yang sama di tiap ganti track.
+        // Sekarang worker dibangun + di-start DI LUAR lock; lock hanya
+        // dipakai sebentar saat publikasi pointer di bawah.
         __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                             "startDecoder(): creating decoder for uri=%s",
                             track.uri.c_str());
@@ -612,7 +614,9 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
             "startDecoder: targetSampleRate=%u (stream=%u) chunkFrames=%u",
             cfg.targetSampleRate, rate, cfg.chunkFrames);
 
-        decoderWorker_ = std::make_unique<decoder::DecoderWorker>(
+        // Worker lokal dulu (M3): dipublikasikan ke decoderWorker_ hanya
+        // setelah start() berhasil, di bawah lock.
+        auto worker = std::make_unique<decoder::DecoderWorker>(
             std::make_unique<decoder::FFmpegDecoder>(cfg)
         );
 
@@ -637,7 +641,7 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
         // currentSong.uri JS (Kotlin me-resolve content:// ke path cache).
         // Lihat emitTrackEnded di NativeEventEmitter: JS harus menangani
         // kedua bentuk.
-        decoderWorker_->setEofCallback([this]() {
+        worker->setEofCallback([this]() {
             __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                                 "EOF callback: track ended, advancing queue");
 
@@ -683,7 +687,7 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
             scheduleAdvance();
         });
 
-        decoderWorker_->setDecodeCallback(
+        worker->setDecodeCallback(
             [this](decoder::DecodeResult&& result) {
                 if (pcmQueue_ && !result.samples.empty()) {
                     size_t written = pcmQueue_->write(
@@ -732,19 +736,28 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
             }
         );
 
-        bool ok = decoderWorker_->start(track.uri, 0.0);
+        bool ok = worker->start(track.uri, 0.0);
         __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                             "startDecoder(): ok=%d, uri=%s",
                             ok ? 1 : 0, track.uri.c_str());
 
         if (!ok) {
-            // 🔥 FIX: reset decoder on failure
+            // start gagal: jangan publikasikan. Worker lokal dihancurkan di
+            // sini — destructor-nya memanggil stop() (join) sendiri.
             __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
-                                "startDecoder(): FAILED, resetting decoderWorker_");
-            decoderWorker_.reset();
+                                "startDecoder(): FAILED, worker dibuang");
+            return false;
         }
 
-        return ok;
+        // Publikasikan di bawah lock: render() hanya membaca pointer di bawah
+        // lock yang sama, jadi tidak pernah melihat setengah-bangun.
+        // (Menimpa worker lama di sini aman: destructor-nya join sendiri.)
+        {
+            std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+            decoderWorker_ = std::move(worker);
+        }
+
+        return true;
     }
     catch (const std::exception& e) {
         __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
@@ -759,15 +772,28 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
 }
 
 void PlaybackController::stopDecoder() {
-    // 🔥 FIX (2026-10-09): ambil lock supaya audio thread (render()) yang
-    // membaca decoderWorker_ tidak pernah melihat pointer setengah-reset.
-    std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+    // 🔥 FIX (2026-11-10, M3): JANGAN tahan decoderMutex_ melewati stop().
+    //
+    // Dulu: lock → worker->stop() (join thread decoder + FFmpeg close) →
+    // reset. Selama join itu, audio thread yang sedang render() ikut
+    // ter-block di lock yang sama → dropout/glitch di tiap ganti track.
+    //
+    // Sekarang: pindahkan worker keluar di bawah lock, lalu stop() DI LUAR
+    // lock. Invarian 2026-10-09 tetap terjaga: unique_ptr hanya disentuh di
+    // bawah lock, jadi render() tidak pernah melihat pointer setengah-reset.
+    // Worker tetap hidup (dipegang unique_ptr lokal) sampai stop() selesai,
+    // jadi resume() dari render() yang sudah terlanjur masuk tidak pernah
+    // use-after-free — dan resume() sendiri hanya atomic store + notify,
+    // aman dipanggil bersamaan dengan stop().
+    std::unique_ptr<decoder::DecoderWorker> worker;
+    {
+        std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+        worker = std::move(decoderWorker_);
+    }
 
-    if (!decoderWorker_)
-        return;
-
-    decoderWorker_->stop();
-    decoderWorker_.reset();
+    if (worker) {
+        worker->stop();
+    }
 }
 
 // 🔥 Advance queue + loadTrack setelah EOF, di thread terpisah.
