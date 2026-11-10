@@ -736,15 +736,42 @@ hanya temuan, belum ada satu baris kode pun yang diubah untuknya.
   mengeluarkan silence (underrun). Ditambah P-M1 — ekor lama memang dibuang,
   jadi "gap" bukan soal jeda antar track.
 
+## Perbaikan 2026-11-10 — DIKERJAKAN (csheva: "execute all, hasil inspeksi hampir akurat dengan kondisi riil app")
+
+Lima belas commit di `fix/ffmpeg-disable-doc`, satu build Dev gabungan di akhir.
+Verifikasi kompilasi hanya lewat build GitHub (VM Muse tidak punya NDK).
+
+| # | Commit | Isi |
+|---|---|---|
+| P-M6 | `0c788b98` | `TrackQueue::setRepeatMode()` kini mengunci `mMutex`; getter `getShuffleMode()` / `getRepeatMode()` / `currentIndex()` dibaca di bawah lock (p-m3, `mMutex` dijadikan `mutable`). |
+| P-M4 | `f1145fc3` | `decoderWorker_` `unique_ptr` → `shared_ptr`; helper `snapshotWorker()` (salin di bawah lock singkat, pakai tanpa lock); play()/pause()/seek() + callback decode/EOF + `updatePlaybackState()` + `hasDecoder()` + render() memakai snapshot (TOCTOU tertutup; lock tidak pernah dipegang melewati `loadTrack` — invarian M3). Decode callback menangkap `weak_ptr` ke worker pemiliknya (p-m21). |
+| P-M5 | `c7183ec7` | Baru `TrackQueue::advanceManual()` (selalu maju; bungkus di ujung kalau repeat ≠ Off); `PlaybackController::next()` memakainya. `advance()` (EOF) tidak berubah. `TrackInfo::operator==` kini membandingkan uri + durationMs + sampleRate (p-m6). |
+| P-M1 | `5b4400e6` | `scheduleAdvance(uri)` kini MENUNGGU queue drain (poll `availableSamples()==0` tiap 20 ms) sebelum advance/loadTrack; `advanceCancelled_` + `cancelPendingAdvance()` (dipanggil loadTrack/stop/shutdown); `emitTrackEnded` PINDAH dari EOF callback ke setelah advance benar-benar terjadi (dan cabang queue-habis) — event berarti audio track itu SUDAH habis terdengar. `decoderFinished_` baru; status Completed saat antrean habis (p-m4). |
+| P-M3 | `bc87e3e8` | `stop()` membatalkan + join `advanceThread_` + `stopDecoder()` + clear queue/clock + reset laju file/stream (p-m23) + status Stopped eksplisit (p-m4 — `updatePlaybackState()` sengaja TIDAK dipanggil di `stop()` karena akan menimpa Stopped dengan Paused). |
+| P-M2 | `9b65bfaf` | `render()` dapat gate `playing_` tepat setelah cabang `clearing_` — saat paused/stopped, buffer diisi senyap dan return `requestedSamples` (audio berhenti seketika, bukan drain ~19 dtk). Cabang `clearing_` juga return `requestedSamples` (p-m14 — membunuh underrun palsu tiap ganti track). Rename Frames→Samples (`availableSamples`, `capacitySamples`, `freeSamples`, `bufferedSamples()`) di PCMQueue + PlaybackController + AudioCallback (p-m15; `AudioBufferController::availableFrames` kelas lain, dibiarkan). |
+| P-M8 | `7edf6b3f` | `loadTrack()` mengisi `clock_->setDurationFrames()` dari durasi decoder (atau `track.durationMs`); render() self-heal kalau masih 0 (p-m11 — fallback decoder tidak lagi jalan tiap callback). Baru `PlaybackClock::snapshotPositionAndDuration()` (satu mutex, p-m17). Method clock mati dihapus: positionSeconds, durationSeconds, progress, isNearEnd, totalFramesRendered, positionFrames, durationFrames + member `totalFramesRendered_`. |
+| p-m10 | `738bb841` | `seek()` diurutkan ulang: pause → clear → seek DECODER dulu → clock diset HANYA kalau berhasil, dari `worker->getPosition()` (posisi aktual pasca-seek, bisa mundur ke keyframe). Gagal: log + resume + return false, clock tidak tersentuh. `FFmpegDecoder::onSeek()` kini menyetel `currentFrame_` dari posisi aktual pasca-seek (`cur_dts` via `time_base`, sanity-check, fallback ke target); `onSeekToFrame` mendelegasikan ke `onSeek`. Log target/hasil/aktual (p-m13). |
+| p-m12 | `03ed155c` | `RenderActiveGuard` RAII + `renderActive_` + `waitForRenderIdle()` (poll 1 ms, timeout 100 ms + WARN); loadTrack/stop/seek memakai clearing_ + wait sebelum clear. `sleep_for(10ms)` lama di loadTrack dihapus. |
+| P-M7 | `1ca6ef99` | FadeEngine disambungkan ke render: fade-in SCurve 300 ms (loadTrack/seek/resume) + fade-out SCurve 500 ms di ekor — hanya saat `decoderFinished_` (tanpa flag ini fade-out salah memotong tengah track). Kurva dibuat loadTrack() (bukan audio thread — alokasi vector), dibaca render() hanya saat clearing_ false, dilindungi `waitForRenderIdle`. p-m9: `generateCurve()` durasi ≤1 frame kini isi kurva identitas (bukan NaN dari 0/0); `crossfade()` no-op kalau kurva kosong (sebelumnya output = jumlah kedua buffer, sampai 2x/clipping). |
+| P-M9 | `6ced021f` | Baru `PlaybackRateProcessor` (WSOLA): Hann 1024, hop sintesis 512, hop analisis 512×rate, pencarian offset ±256 frame via cross-correlation mono + aturan 95%-terdekat-nominal + pakai nominal bila korelasinya ≥80% maks. Rate 1.0 = bypass (nol overhead, jalur bit-perfect utuh). render(): baca `frames×rate` dari queue → prosesor → tarik `frames` output; clock maju mengikuti frame INPUT (posisi track). Perubahan laju diterapkan render() di audio thread (atomic float saja yang lintas thread); loadTrack/seek/stop reset prosesor di dalam jendela clearing_. Wiring lengkap JNI → Kotlin module/service/bridge → spec → engine.ts (stub diganti panggilan nyata) → playerStore (setPlaybackSpeed + terapkan speed tersimpan saat play). Fade-out dihitung dalam frame OUTPUT. Test mandiri `scripts/test_rate_processor.cpp`: 24/24 lulus — durasi ≈ input/rate (1.0x: 0.996, 0.5x: 0.911, 1.5x: 1.040, 2.0x: 0.986), pitch terjaga (ZCR ~880/s), tanpa NaN. Dua bug ketemu saat ngetes: hop awal terbalik (Hs/rate) + bias korelasi → laju meleset & hang di 2.0x (best=0, loop tak berujung); window ditempatkan saat input menipis (advance 13–80) → durasi menggelembung — kini tunggu push berikutnya bila advance nominal tidak muat. tsc 0, Jest 192/192. |
+| P-M10 | `42772ef5` | Baru `DecoderWorker::setDecodeErrorCallback` — hanya cabang Error/FatalError workerLoop (dipisah dari `setErrorCallback` umum yang juga menyala untuk start/seek; seek gagal TIDAK boleh skip track). startDecoder memasangnya: log + `decoderFinished_=true` + `scheduleAdvance` (audio yang sudah ter-decode tetap dimainkan sampai habis via drain-wait). `scheduleAdvance` kini loop melewati track yang gagal dimuat (batas = ukuran queue — melindungi Repeat One); kalau semua gagal/antrean habis → Completed + emit. |
+| P-M11 | `dfe41126` | Hapus `PlaybackMetrics.{h,cpp}` (0 reader, tanpa JNI; satu-satunya writer hidup cuma `recordFrameRendered`). Controller: hapus member `metrics_`, accessor `metrics()`, make_shared, reset, dan pemanggilan di render(). `setMetrics(AudioMetrics*)`/`metricsEngine_` TIDAK disentuh — itu metrik engine yang hidup (M5). −565 baris. |
+| Dead code | `0f933be8` | Hapus file `DecodedAudioQueue.{h,cpp}`, `PrebufferManager.{h,cpp}` (stub), `TransportState.h`; `SchedulerTypes.h` dipangkas ke `FadeCurve`; TrackQueue: hapus peeker next/previous/peek/hasNext/hasPrevious + mutator appendTrack/insertTrack/removeTrack/clear (menutup p-m1/p-m2 laten); PlaybackState: hanya status + posisi (hapus snapshot, setQueueInfo, buffering, rate, repeat/shuffle, current-track + member-nya; sinkronisasi track di `updatePlaybackState` dihapus — write-only); PCMQueue: hapus zero-copy API + member-nya (menutup p-m8); DecoderWorker: hapus setChunkSize, getState, isRunning, getFormat, currentUri_ (`getPosition()` DIPERTAHANKAN — dipakai seek()); PlaybackController: hapus `stopping_`, accessor clock()/pcmQueue(), lokal `ratio` mati; perbaiki komentar drift (chunkFrames selalu 16384; initialize() 2^19 → 2^21). Semua penghapusan diverifikasi grep 0 pemakai SEBELUM dihapus. −1.265 baris. |
+| p-m18/19/20 | `9275b3f9` | p-m18: PCMQueue `epoch_` — write() menangkap epoch di awal, buang publish kalau clear() menaikkan epoch selama copy; ctor membulatkan kapasitas ke power of two berikutnya (sisa jendela 1–2 instruksi dicatat jujur). p-m19: `DecoderWorker::start()` stop() dulu bila `running_ || workerThread_.joinable()` (thread selesai tapi belum di-join + start ulang = `std::terminate`). p-m20: `NativeEventEmitter` — `g_jvm`/`g_moduleRef`/`g_methodId` di bawah mutex (emit menyalin ke lokal di bawah lock); `ExceptionCheck` + Describe + Clear setelah `CallVoidMethod`; null-check `NewStringUTF` (OOM). |
+
+**Status verifikasi:** perbaikan di atas terverifikasi di level kode (grep 0 caller
+sebelum hapus; WSOLA terverifikasi test mandiri 24/24; tsc 0, Jest 192/192).
+Bukti jalan di device **belum ada** — menunggu build Dev + tes device (pause harus
+langsung diam; track harus main sampai ekor penuh; Repeat One + Next harus pindah;
+file korup harus di-skip; kontrol speed harus benar-benar mengubah tempo).
+
 ## Yang belum dikerjakan
 
-Perbaikan menunggu pilihan csheva. Kandidat paling atas:
-**P-M1 ekor terpotong** (fungsi inti — tiap track kehilangan ~13–20 dtk),
-**P-M2 pause/stop drain** (audio jalan terus ~19 dtk setelah pause),
-**P-M5 Repeat One + Next**, **P-M4 race decoderWorker_** (TOCTOU),
-**P-M10 error decode diam-diam**, lalu P-M3 (stop vs advance), P-M6
-(lock sebaris), P-M7 (sambungkan/hapus FadeEngine), P-M8/P-M11/P-M9
-(clock, metrik yatim, time-stretch — P-M9 butuh kerja besar), dan
-bersih-bersih dead code. Section C++ berikutnya yang belum diaudit: decoder,
-dsp, resampler+fft, devices/jni/realtime/visualizer/utils (urutan di
-`NATIVE_CPP_MAP.md`).
+Residual yang SENGAJA tidak dikerjakan di ronde ini (sesuai framing audit):
+**p-m7** (`activeQueue()` full-copy per panggilan — dicatat saja),
+**p-m16** (clock maju per frame-dibaca, bukan frame hardware — drift hanya DUGAAN),
+**p-m22** (`DecoderWorker::pause()` block di `decodeMutex_` sampai chunk selesai —
+by design).
+
+Section C++ berikutnya yang belum diaudit: decoder, dsp, resampler+fft,
+devices/jni/realtime/visualizer/utils (urutan di `NATIVE_CPP_MAP.md`).
