@@ -104,6 +104,13 @@ export const SpectogramView = React.memo(
     const gridRef = useRef<number[][]>(grid);
     const isServiceStarted = useRef(false);
     const unsubscribeRef = useRef<(() => void) | null>(null);
+    // THROTTLE (2026-11-10): handleFFTData dipanggil ~20x/detik dan tiap
+    // panggilan me-render ulang grid 40x64 Rect Skia + 3 setState. Toggle ini
+    // membuang setiap frame genap -> update 10x/detik, separuh beban render.
+    // Spektrogram tetap mulus (1 baris = 100ms, 40 baris = 4 detik sejarah).
+    // Satu perbaikan per siklus: kalau jank saat player terbuka masih ada,
+    // langkah berikut SharedValue (tanpa setState sama sekali).
+    const frameSkipRef = useRef(false);
 
     // Debug state untuk menampilkan max FFT
     const [debugMax, setDebugMax] = useState(0);
@@ -119,6 +126,10 @@ export const SpectogramView = React.memo(
 
     const handleFFTData = (fftData: number[]) => {
       if (!fftData || fftData.length === 0) return;
+
+      // Throttle: proses hanya setiap frame ganjil (10 Hz, bukan 20 Hz).
+      frameSkipRef.current = !frameSkipRef.current;
+      if (frameSkipRef.current) return;
 
       const maxVal = Math.max(...fftData);
       const samples = fftData
