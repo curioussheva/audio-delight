@@ -3,6 +3,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <mutex>
 
 #include <oboe/Oboe.h>
 
@@ -185,6 +186,22 @@ private:
     std::shared_ptr<
         oboe::AudioStream
     > mStream;
+
+    // Mutex untuk mStream (fix M4, 2026-11-10): mStream ditulis dari thread
+    // error Oboe (onErrorAfterClose -> reset) dan dibaca dari JS thread
+    // (actualSampleRate/actualDeviceId via JNI) — shared_ptr tanpa proteksi
+    // = race/UB. Semua akses lewat streamCopy() atau dengan mengunci mutex
+    // ini. mutable supaya getter const bisa mengunci. Lock TIDAK PERNAH
+    // dipegang melewati panggilan ke Oboe (openStream/requestStart/close)
+    // — error callback Oboe bisa jalan di thread yang sama.
+    mutable std::mutex mStreamMutex;
+
+    // Salinan shared_ptr di bawah lock. Pemakaian salinan setelah unlock aman
+    // karena salinan menahan objek tetap hidup.
+    std::shared_ptr<oboe::AudioStream> streamCopy() const {
+        std::lock_guard<std::mutex> lock(mStreamMutex);
+        return mStream;
+    }
 
     std::atomic<bool>
         mRunning{false};

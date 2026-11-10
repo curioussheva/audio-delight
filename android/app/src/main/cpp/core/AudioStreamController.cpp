@@ -54,6 +54,13 @@ bool AudioStreamController::open(
         "open: diminta laju=%d device=%d exclusive=%s",
         requestedSampleRate, deviceId, exclusive ? "ya" : "tidak");
 
+    // Salinan lokal stream yang baru dibuka (fix M4, 2026-11-10): semua
+    // pembacaan di bawah memakai `opened`, bukan `mStream` — thread error
+    // Oboe bisa me-reset mStream kapan saja (onErrorAfterClose), dan
+    // membaca mStream langsung di sini = race. `opened` menahan objek tetap
+    // hidup sampai open() selesai.
+    std::shared_ptr<oboe::AudioStream> opened;
+
     // =============================================
     // PERCOBAAN 1: AAudio
     // =============================================
@@ -77,11 +84,15 @@ bool AudioStreamController::open(
         const auto result = builder.openStream(stream);
 
         if (result == oboe::Result::OK && stream) {
-            mStream = std::move(stream);
+            opened = stream;
+            {
+                std::lock_guard<std::mutex> lock(mStreamMutex);
+                mStream = opened;
+            }
             __android_log_print(ANDROID_LOG_INFO, "AudioStreamController",
                 "open: AAudio BERHASIL (requested=%d, actual=%d, device=%d, exclusive=%s)",
-                requestedSampleRate, mStream->getSampleRate(),
-                mStream->getDeviceId(),
+                requestedSampleRate, opened->getSampleRate(),
+                opened->getDeviceId(),
                 exclusive ? "ya" : "tidak");
         } else {
             __android_log_print(ANDROID_LOG_WARN, "AudioStreamController",
@@ -93,7 +104,7 @@ bool AudioStreamController::open(
     // =============================================
     // PERCOBAAN 2: OpenSLES (fallback device lama)
     // =============================================
-    if (!mStream) {
+    if (!opened) {
         oboe::AudioStreamBuilder builder;
 
         if (!buildStream(builder, callback, exclusive, requestedSampleRate, deviceId)) {
@@ -111,7 +122,11 @@ bool AudioStreamController::open(
             return false;
         }
 
-        mStream = std::move(stream);
+        opened = stream;
+        {
+            std::lock_guard<std::mutex> lock(mStreamMutex);
+            mStream = opened;
+        }
         mOpenSLESFallback.store(true, std::memory_order_release);
 
         // Penting: di OpenSLES tidak ada jalur exclusive, jadi sampel SELALU
@@ -121,7 +136,7 @@ bool AudioStreamController::open(
             "open: OpenSLES fallback dipakai (actual=%d, device=%d). "
             "TIDAK ada jalur exclusive - bit-perfect ke DAC tidak tersedia "
             "di jalur ini.",
-            mStream->getSampleRate(), mStream->getDeviceId());
+            opened->getSampleRate(), opened->getDeviceId());
     }
 
     // =============================================
@@ -135,7 +150,7 @@ bool AudioStreamController::open(
     // Ini bisa terjadi karena Oboe/AAudio boleh mengabaikan deviceId (mis.
     // perangkat sudah dicabut, atau tidak bisa dibuka exclusive).
     {
-        const int32_t actualDevice = mStream ? mStream->getDeviceId() : 0;
+        const int32_t actualDevice = opened ? opened->getDeviceId() : 0;
         mActualDeviceId.store(actualDevice, std::memory_order_release);
 
         if (deviceId > 0 && actualDevice != deviceId) {
@@ -148,12 +163,12 @@ bool AudioStreamController::open(
 
     // ð¥ DEBUG: log actual stream rate
     {
-        int32_t actualRate = mStream ? mStream->getSampleRate() : 0;
-        int32_t actualFrames = mStream ? mStream->getFramesPerBurst() : 0;
+        int32_t actualRate = opened ? opened->getSampleRate() : 0;
+        int32_t actualFrames = opened ? opened->getFramesPerBurst() : 0;
         __android_log_print(ANDROID_LOG_INFO, "AudioStreamController",
             "OPEN RESULT: ACTUAL rate=%d, framesPerBurst=%d, api=%s",
             actualRate, actualFrames,
-            mStream ? oboe::convertToText(mStream->getAudioApi()) : "?");
+            opened ? oboe::convertToText(opened->getAudioApi()) : "?");
 
         // Laju berbeda dari yang diminta = device/DAC tidak mendukung laju itu.
         // Bukan error fatal: yang penting decoder TAHU laju sebenarnya supaya
@@ -173,25 +188,25 @@ bool AudioStreamController::open(
     // =============================================
 
     mSampleRate =
-        mStream->getSampleRate();
+        opened->getSampleRate();
 
     mChannelCount =
-        mStream->getChannelCount();
+        opened->getChannelCount();
 
     mFramesPerBurst =
-        mStream->getFramesPerBurst();
+        opened->getFramesPerBurst();
 
     mFormat =
-        mStream->getFormat();
+        opened->getFormat();
 
     mApi =
-        mStream->getAudioApi();
+        opened->getAudioApi();
 
     mPerfMode =
-        mStream->getPerformanceMode();
+        opened->getPerformanceMode();
 
     mSharingMode =
-        mStream->getSharingMode();
+        opened->getSharingMode();
 
     mExclusive.store(
         mSharingMode ==
@@ -281,12 +296,15 @@ bool AudioStreamController::buildStream(
 
 bool AudioStreamController::start() {
 
-    if (!mStream) {
+    // Salinan lokal (M4): requestStart() dipanggil di luar lock supaya
+    // error callback Oboe tidak pernah block menunggu mutex ini.
+    auto stream = streamCopy();
+    if (!stream) {
         return false;
     }
 
     const auto result =
-        mStream->requestStart();
+        stream->requestStart();
 
     if (result != oboe::Result::OK) {
         return false;
@@ -306,11 +324,13 @@ bool AudioStreamController::start() {
 
 void AudioStreamController::stop() {
 
-    if (!mStream) {
+    // Salinan lokal (M4): requestStop() di luar lock.
+    auto stream = streamCopy();
+    if (!stream) {
         return;
     }
 
-    mStream->requestStop();
+    stream->requestStop();
 
     mRunning.store(
         false,
@@ -329,10 +349,16 @@ void AudioStreamController::close() {
         std::memory_order_release
     );
 
-    if (mStream) {
+    // Tutup lewat salinan lokal (M4), lalu nol-kan mStream di bawah lock.
+    // Kalau error callback sudah me-reset mStream, salinan null dan close()
+    // jadi no-op (stream sudah ditutup Oboe).
+    auto stream = streamCopy();
+    if (stream) {
+        stream->close();
+    }
 
-        mStream->close();
-
+    {
+        std::lock_guard<std::mutex> lock(mStreamMutex);
         mStream.reset();
     }
 }
@@ -381,7 +407,7 @@ bool AudioStreamController::restart(
 bool AudioStreamController::isOpen()
 const noexcept {
 
-    return mStream != nullptr;
+    return streamCopy() != nullptr;
 }
 
 // =====================================================
@@ -415,7 +441,10 @@ const noexcept {
 // Laju yang BENAR-BENAR dipakai stream. Sumber kebenaran untuk memberi tahu
 // decoder laju mana yang harus dijadikan target resample.
 int32_t AudioStreamController::actualSampleRate() const noexcept {
-    return mStream ? mStream->getSampleRate() : mSampleRate;
+    // Salinan lokal (M4): dibaca dari JS thread via JNI, sementara thread
+    // error Oboe bisa me-reset mStream kapan saja.
+    auto stream = streamCopy();
+    return stream ? stream->getSampleRate() : mSampleRate;
 }
 
 bool AudioStreamController::usingOpenSLESFallback() const noexcept {
@@ -425,8 +454,10 @@ bool AudioStreamController::usingOpenSLESFallback() const noexcept {
 int32_t AudioStreamController::actualDeviceId() const noexcept {
     // Ambil dari stream yang hidup kalau ada - itu sumber paling akurat
     // setelah error callback menutup stream. Cache dipakai sebagai cadangan.
-    if (mStream) {
-        return mStream->getDeviceId();
+    // Salinan lokal (M4): dibaca dari JS thread via JNI.
+    auto stream = streamCopy();
+    if (stream) {
+        return stream->getDeviceId();
     }
     return mActualDeviceId.load(std::memory_order_acquire);
 }
@@ -599,7 +630,12 @@ onErrorAfterClose(
         std::memory_order_release
     );
 
-    mStream.reset();
+    // Reset di bawah lock (M4): getter dari JS thread (actualSampleRate/
+    // actualDeviceId) membaca mStream lewat salinan yang sama.
+    {
+        std::lock_guard<std::mutex> lock(mStreamMutex);
+        mStream.reset();
+    }
 
     // Beri tahu pemilik (AudioEngine -> EngineManager). DI SINI kunci
     // perbaikannya: sebelum ini callback hanya reset + diam, sehingga audio
