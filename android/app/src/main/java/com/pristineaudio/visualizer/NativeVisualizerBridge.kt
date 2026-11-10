@@ -3,6 +3,7 @@ package com.pristineaudio.visualizer
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
 import android.util.Log
+import com.pristineaudio.NativeLibrary
 import kotlin.math.ln
 import kotlin.math.sqrt
 
@@ -49,7 +50,13 @@ import kotlin.math.sqrt
 class NativeVisualizerBridge(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
-    private var nativeAvailable = false
+    // 🔥 LAZY LOAD (2026-11-10): dulu `nativeAvailable` di-set di init via
+    // System.loadLibrary — memuat ~40MB .so di main thread saat cold start.
+    // Sekarang tiap akses memicu NativeLibrary.ensureLoaded(): load terjadi
+    // saat pertama kali dibutuhkan (JS thread), hasilnya di-cache. Semua
+    // `if (!nativeAvailable)` di bawah tidak berubah.
+    private val nativeAvailable: Boolean
+        get() = NativeLibrary.ensureLoaded()
 
     companion object {
         const val NAME = "NativeVisualizerBridge"
@@ -66,17 +73,6 @@ class NativeVisualizerBridge(reactContext: ReactApplicationContext) :
         // supaya puncak tidak langsung mentok di 1.0 dan terlihat "penuh".
         private const val DB_FLOOR = -80.0
         private const val DB_CEIL = -10.0
-    }
-
-    init {
-        nativeAvailable = try {
-            System.loadLibrary("pristine-audio")
-            Log.d(TAG, "Native engine loaded untuk visualizer")
-            true
-        } catch (e: UnsatisfiedLinkError) {
-            Log.w(TAG, "Native engine tidak tersedia: ${e.message}")
-            false
-        }
     }
 
     override fun getName() = NAME

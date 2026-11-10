@@ -15,8 +15,10 @@ class MainApplication : Application(), ReactApplication {
 
     init {
         Log.d("PristineApp", "MainApplication init")
-        System.loadLibrary("pristine-audio")
-        Log.d("PristineApp", "Library loaded")
+        // 🔥 LAZY LOAD (2026-11-10): System.loadLibrary TIDAK lagi di sini.
+        // Dulu baris ini memuat ~40MB .so di main thread saat cold start.
+        // Sekarang load terjadi di NativeLibrary.ensureLoaded(), saat
+        // pertama kali ada panggilan native (JS thread).
     }
 
     override val reactHost: ReactHost by lazy {

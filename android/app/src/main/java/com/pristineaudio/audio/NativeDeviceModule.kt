@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
+import com.pristineaudio.NativeLibrary
 
 @ReactModule(name = NativeDeviceModule.NAME)
 class NativeDeviceModule(reactContext: ReactApplicationContext) :
@@ -18,9 +19,10 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
         const val NAME = "NativeDeviceModule"
     }
 
-    init {
-        System.loadLibrary("pristine-audio")
-    }
+    // 🔥 LAZY LOAD (2026-11-10): System.loadLibrary TIDAK lagi di init.
+    // Load terjadi di NativeLibrary.ensureLoaded(), saat pertama kali ada
+    // panggilan native (JS thread) — bukan di main thread saat cold start.
+    // Setiap method di bawah memanggil ensureLoaded() dulu sebelum JNI.
 
     private external fun nativeGetDevices(): Array<Any>
     private external fun nativeSetActiveDevice(deviceId: String): Boolean
@@ -64,7 +66,7 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
                     android.util.Log.i("NativeDeviceModule",
                         "device ditambah: id=${d.id} type=${d.type} name=${d.productName}")
                     try {
-                        nativeOnDeviceAdded(d.id.toString())
+                        if (NativeLibrary.ensureLoaded()) nativeOnDeviceAdded(d.id.toString())
                     } catch (e: Throwable) {
                         android.util.Log.e("NativeDeviceModule", "nativeOnDeviceAdded gagal", e)
                     }
@@ -77,7 +79,7 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
                     android.util.Log.i("NativeDeviceModule",
                         "device dicabut: id=${d.id} type=${d.type} name=${d.productName}")
                     try {
-                        nativeOnDeviceRemoved(d.id.toString())
+                        if (NativeLibrary.ensureLoaded()) nativeOnDeviceRemoved(d.id.toString())
                     } catch (e: Throwable) {
                         android.util.Log.e("NativeDeviceModule", "nativeOnDeviceRemoved gagal", e)
                     }
@@ -143,6 +145,10 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
         // Sebelumnya fungsi ini hanya `promise.resolve(Arguments.createArray())`
         // tanpa memanggil JNI sama sekali, sehingga daftar device SELALU kosong
         // walau native-nya sudah benar. Sekarang JNI benar-benar dipanggil.
+        if (!NativeLibrary.ensureLoaded()) {
+            promise.reject("NATIVE_UNAVAILABLE", "Engine native belum termuat")
+            return
+        }
         try {
             val devices = nativeGetDevices()
             val array = Arguments.createArray()
@@ -180,6 +186,10 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun setActiveDevice(deviceId: String, promise: Promise) {
+        if (!NativeLibrary.ensureLoaded()) {
+            promise.reject("NATIVE_UNAVAILABLE", "Engine native belum termuat")
+            return
+        }
         try {
             // Native sekaligus meneruskan pilihan ke engine (menutup & membuka
             // ulang stream di perangkat ini) dan mengembalikan true hanya kalau
@@ -211,6 +221,10 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
      */
     @ReactMethod
     fun getActiveDeviceStatus(promise: Promise) {
+        if (!NativeLibrary.ensureLoaded()) {
+            promise.reject("NATIVE_UNAVAILABLE", "Engine native belum termuat")
+            return
+        }
         try {
             val status = nativeGetActiveDeviceStatus()
             val map = Arguments.createMap()
@@ -237,6 +251,10 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
      */
     @ReactMethod
     fun getCurrentOutputDevice(promise: Promise) {
+        if (!NativeLibrary.ensureLoaded()) {
+            promise.reject("NATIVE_UNAVAILABLE", "Engine native belum termuat")
+            return
+        }
         try {
             val device = nativeGetCurrentOutputDevice()
             if (device == null) {
@@ -258,6 +276,10 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun refreshDevices(promise: Promise) {
+        if (!NativeLibrary.ensureLoaded()) {
+            promise.reject("NATIVE_UNAVAILABLE", "Engine native belum termuat")
+            return
+        }
         try {
             val devices = nativeGetDevices()
             promise.resolve(devices.size)

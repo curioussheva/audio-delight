@@ -2,6 +2,7 @@ package com.pristineaudio.audio
 
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
+import com.pristineaudio.NativeLibrary
 
 @ReactModule(name = NativePristineAudio.NAME)
 class NativePristineAudio(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
@@ -9,9 +10,9 @@ class NativePristineAudio(reactContext: ReactApplicationContext) : ReactContextB
         const val NAME = "NativePristineAudio"
     }
 
-    init {
-        System.loadLibrary("pristine-audio")
-    }
+    // 🔥 LAZY LOAD (2026-11-10): System.loadLibrary TIDAK lagi di init.
+    // Load terjadi di NativeLibrary.ensureLoaded(), saat pertama kali ada
+    // panggilan native (JS thread) — bukan di main thread saat cold start.
 
     private external fun nativeStart()
     private external fun nativeStop()
@@ -23,11 +24,11 @@ class NativePristineAudio(reactContext: ReactApplicationContext) : ReactContextB
 
     override fun getName() = NAME
 
-    @ReactMethod fun startEngine() { nativeStart() }
-    @ReactMethod fun stopEngine() { nativeStop() }
-    @ReactMethod fun pushAudio(data: FloatArray, size: Int) { nativePushAudio(data, size) }
-    @ReactMethod fun isRunning(): Boolean = nativeIsRunning()
-    @ReactMethod fun getLatency(): Float = nativeGetLatency()
-    @ReactMethod fun getUnderruns(): Double = nativeGetUnderruns().toDouble()
-    @ReactMethod fun getOverruns(): Double = nativeGetOverruns().toDouble()
+    @ReactMethod fun startEngine() { if (NativeLibrary.ensureLoaded()) nativeStart() }
+    @ReactMethod fun stopEngine() { if (NativeLibrary.ensureLoaded()) nativeStop() }
+    @ReactMethod fun pushAudio(data: FloatArray, size: Int) { if (NativeLibrary.ensureLoaded()) nativePushAudio(data, size) }
+    @ReactMethod fun isRunning(): Boolean = if (NativeLibrary.ensureLoaded()) nativeIsRunning() else false
+    @ReactMethod fun getLatency(): Float = if (NativeLibrary.ensureLoaded()) nativeGetLatency() else 0f
+    @ReactMethod fun getUnderruns(): Double = if (NativeLibrary.ensureLoaded()) nativeGetUnderruns().toDouble() else 0.0
+    @ReactMethod fun getOverruns(): Double = if (NativeLibrary.ensureLoaded()) nativeGetOverruns().toDouble() else 0.0
 }

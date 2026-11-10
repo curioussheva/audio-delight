@@ -2,6 +2,7 @@ package com.pristineaudio.audio
 
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
+import com.pristineaudio.NativeLibrary
 import com.pristineaudio.playback.PlaybackNativeBridge
 
 @ReactModule(name = NativePlaybackModule.NAME)
@@ -20,11 +21,38 @@ class NativePlaybackModule(
     }
 
     init {
-        System.loadLibrary("pristine-audio")
         instance = this
-        // 🔥 Daftarkan reference untuk callback native→JS (butuh JNIEnv, dan
-        // init block jalan di thread yang punya JNIEnv).
-        nativeInitEventEmitter()
+        // 🔥 LAZY LOAD (2026-11-10): System.loadLibrary TIDAK lagi di sini.
+        // Dulu load di init memuat ~40MB .so di main thread saat modul
+        // dibuat (cold start). Sekarang load terjadi di ensureNativeReady(),
+        // saat pertama kali ada panggilan native (JS thread).
+        // Registrasi event emitter (panggilan JNI) ikut pindah ke sana —
+        // tidak bisa di init karena butuh library sudah termuat.
+    }
+
+    @Volatile
+    private var emitterRegistered = false
+
+    /**
+     * Pastikan library native termuat + event emitter terdaftar.
+     * Dipanggil di awal setiap method yang menyentuh JNI. Setelah berhasil
+     * sekali, panggilan berikutnya hanya cek flag (murah).
+     */
+    private fun ensureNativeReady(): Boolean {
+        if (!NativeLibrary.ensureLoaded()) return false
+        if (!emitterRegistered) {
+            synchronized(this) {
+                if (!emitterRegistered) {
+                    try {
+                        nativeInitEventEmitter()
+                    } catch (e: Throwable) {
+                        android.util.Log.e("NativePlaybackModule", "registrasi event emitter gagal", e)
+                    }
+                    emitterRegistered = true
+                }
+            }
+        }
+        return true
     }
 
     // Native methods
@@ -77,6 +105,10 @@ class NativePlaybackModule(
     // menampilkan "sedang diputar" padahal play() gagal di native.
     @ReactMethod
     fun play(promise: Promise) {
+        if (!ensureNativeReady()) {
+            promise.reject("NATIVE_UNAVAILABLE", "Engine native belum termuat")
+            return
+        }
         try {
             val ok = nativePlay()
             if (ok) {
@@ -91,36 +123,43 @@ class NativePlaybackModule(
 
     @ReactMethod
     fun pause() {
+        if (!ensureNativeReady()) return
         nativePause()
     }
 
     @ReactMethod
     fun stop() {
+        if (!ensureNativeReady()) return
         nativeStop()
     }
 
     @ReactMethod
     fun seek(positionMs: Double) {
+        if (!ensureNativeReady()) return
         nativeSeek(positionMs.toLong())
     }
 
     @ReactMethod
     fun next() {
+        if (!ensureNativeReady()) return
         nativeNext()
     }
 
     @ReactMethod
     fun previous() {
+        if (!ensureNativeReady()) return
         nativePrevious()
     }
 
     @ReactMethod
     fun setShuffle(enabled: Boolean) {
+        if (!ensureNativeReady()) return
         nativeSetShuffle(enabled)
     }
 
     @ReactMethod
     fun setRepeatMode(mode: Int) {
+        if (!ensureNativeReady()) return
         nativeSetRepeatMode(mode)
     }
 
@@ -132,6 +171,7 @@ class NativePlaybackModule(
     // native. Elemen yang tidak diketahui dikirim 0.
     @ReactMethod
     fun setQueue(uris: ReadableArray, sampleRates: ReadableArray?) {
+        if (!ensureNativeReady()) return
         val list = ArrayList<String>()
         for (i in 0 until uris.size()) {
             val uri = uris.getString(i)
@@ -161,14 +201,14 @@ class NativePlaybackModule(
 
     // Non-void return → WAJIB isBlockingSynchronousMethod = true
     @ReactMethod(isBlockingSynchronousMethod = true)
-    fun getPosition(): Double = nativeGetPosition().toDouble()
+    fun getPosition(): Double = if (ensureNativeReady()) nativeGetPosition().toDouble() else 0.0
 
     @ReactMethod(isBlockingSynchronousMethod = true)
-    fun getStatus(): Int = nativeGetStatus()
+    fun getStatus(): Int = if (ensureNativeReady()) nativeGetStatus() else 0
 
     @ReactMethod(isBlockingSynchronousMethod = true)
     fun getQueue(): WritableArray {
-        val queue = nativeGetQueue()
+        val queue = if (ensureNativeReady()) nativeGetQueue() else emptyArray<String>()
         val array = Arguments.createArray()
         for (item in queue) {
             array.pushString(item)
@@ -177,19 +217,23 @@ class NativePlaybackModule(
     }
 
     @ReactMethod(isBlockingSynchronousMethod = true)
-    fun getCurrentTrack(): String = nativeGetCurrentTrack()
+    fun getCurrentTrack(): String = if (ensureNativeReady()) nativeGetCurrentTrack() else ""
 
     // Indeks trek aktif menurut NATIVE. -1 kalau queue kosong.
     @ReactMethod(isBlockingSynchronousMethod = true)
-    fun getCurrentIndex(): Int = nativeGetCurrentIndex()
+    fun getCurrentIndex(): Int = if (ensureNativeReady()) nativeGetCurrentIndex() else -1
 
     @ReactMethod(isBlockingSynchronousMethod = true)
-    fun getQueueSize(): Int = nativeGetQueueSize()
+    fun getQueueSize(): Int = if (ensureNativeReady()) nativeGetQueueSize() else 0
 
     // Pindah ke indeks tertentu di queue native. Promise, bukan sync, karena
     // ini memuat trek (menyentuh disk) dan bisa gagal.
     @ReactMethod
     fun jumpTo(index: Int, promise: Promise) {
+        if (!ensureNativeReady()) {
+            promise.reject("NATIVE_UNAVAILABLE", "Engine native belum termuat")
+            return
+        }
         try {
             if (nativeJumpTo(index)) {
                 promise.resolve(null)
@@ -241,21 +285,22 @@ class NativePlaybackModule(
     }
 
     // ========== Service-friendly methods (tanpa React) ==========
-    fun playFromService(): Boolean = nativePlay()
-    fun pauseFromService() = nativePause()
-    fun stopFromService() = nativeStop()
-    fun seekFromService(positionMs: Long) = nativeSeek(positionMs)
-    fun nextFromService() = nativeNext()
-    fun previousFromService() = nativePrevious()
-    fun setShuffleFromService(enabled: Boolean) = nativeSetShuffle(enabled)
-    fun setRepeatModeFromService(mode: Int) = nativeSetRepeatMode(mode)
-    fun getQueueFromService(): Array<String> = nativeGetQueue()
-    fun setQueueFromService(uris: Array<String>, sampleRates: IntArray = IntArray(uris.size)) =
-        nativeSetQueue(uris, sampleRates)
-    fun getCurrentTrackFromService(): String = nativeGetCurrentTrack()
-    fun getPositionFromService(): Double = nativeGetPosition().toDouble()
-    fun getStatusFromService(): Int = nativeGetStatus()
-    fun getCurrentIndexFromService(): Int = nativeGetCurrentIndex()
-    fun getQueueSizeFromService(): Int = nativeGetQueueSize()
-    fun jumpToFromService(index: Int): Boolean = nativeJumpTo(index)
+    fun playFromService(): Boolean = if (ensureNativeReady()) nativePlay() else false
+    fun pauseFromService() { if (ensureNativeReady()) nativePause() }
+    fun stopFromService() { if (ensureNativeReady()) nativeStop() }
+    fun seekFromService(positionMs: Long) { if (ensureNativeReady()) nativeSeek(positionMs) }
+    fun nextFromService() { if (ensureNativeReady()) nativeNext() }
+    fun previousFromService() { if (ensureNativeReady()) nativePrevious() }
+    fun setShuffleFromService(enabled: Boolean) { if (ensureNativeReady()) nativeSetShuffle(enabled) }
+    fun setRepeatModeFromService(mode: Int) { if (ensureNativeReady()) nativeSetRepeatMode(mode) }
+    fun getQueueFromService(): Array<String> = if (ensureNativeReady()) nativeGetQueue() else emptyArray()
+    fun setQueueFromService(uris: Array<String>, sampleRates: IntArray = IntArray(uris.size)) {
+        if (ensureNativeReady()) nativeSetQueue(uris, sampleRates)
+    }
+    fun getCurrentTrackFromService(): String = if (ensureNativeReady()) nativeGetCurrentTrack() else ""
+    fun getPositionFromService(): Double = if (ensureNativeReady()) nativeGetPosition().toDouble() else 0.0
+    fun getStatusFromService(): Int = if (ensureNativeReady()) nativeGetStatus() else 0
+    fun getCurrentIndexFromService(): Int = if (ensureNativeReady()) nativeGetCurrentIndex() else -1
+    fun getQueueSizeFromService(): Int = if (ensureNativeReady()) nativeGetQueueSize() else 0
+    fun jumpToFromService(index: Int): Boolean = if (ensureNativeReady()) nativeJumpTo(index) else false
 } 

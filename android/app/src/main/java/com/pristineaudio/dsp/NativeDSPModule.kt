@@ -2,18 +2,23 @@ package com.pristineaudio.dsp
 
 import android.content.Context
 import android.media.AudioManager
-import android.util.Log
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
+import com.pristineaudio.NativeLibrary
 
 @ReactModule(name = NativeDSPModule.NAME)
 class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
-    private var engineAvailable = false
+    // 🔥 LAZY LOAD (2026-11-10): dulu `engineAvailable` di-set di init via
+    // System.loadLibrary — memuat ~40MB .so di main thread saat cold start.
+    // Sekarang tiap akses memicu NativeLibrary.ensureLoaded(): load terjadi
+    // saat pertama kali dibutuhkan (JS thread), hasilnya di-cache. Semua
+    // `if (engineAvailable)` di bawah tidak berubah.
+    private val engineAvailable: Boolean
+        get() = NativeLibrary.ensureLoaded()
 
     companion object {
         const val NAME = "NativeDSPModule"
-        private const val TAG = "NativeDSPModule"
 
         // 🔥 FIX (2026-10-10): batas atas bass boost dalam dB.
         //
@@ -22,20 +27,6 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
         // dB supaya sejajar dengan rentang band EQ di UI (-12..+12 dB);
         // nilai lebih besar akan mendorong limiter bekerja terus-menerus.
         private const val kMaxBassBoostDb = 12.0f
-    }
-
-    init {
-        engineAvailable = try {
-            System.loadLibrary("pristine-audio")
-            Log.d(TAG, "pristine-audio loaded")
-            true
-        } catch (e: UnsatisfiedLinkError) {
-            Log.e(TAG, "Native library tidak tersedia: ${e.message}")
-            false
-        } catch (e: Exception) {
-            Log.e(TAG, "Engine boot gagal: ${e.message}")
-            false
-        }
     }
 
     override fun getName() = NAME
