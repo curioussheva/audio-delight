@@ -47,6 +47,11 @@ void PlaybackController::shutdown() {
     if (!initialized_.exchange(false))
         return;
 
+    // 🔥 FIX (2026-11-10, P-M1): batalkan dulu advance yang sedang menunggu
+    // drain — kalau tidak, join di bawah menggantung selamanya (tidak ada
+    // render() lagi yang menguras queue).
+    cancelPendingAdvance();
+
     stopDecoder();
 
     // 🔥 Join advance thread: kalau lagi loadTrack untuk track berikutnya,
@@ -184,6 +189,12 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
     __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                         "loadTrack(): START uri=%s", track.uri.c_str());
 
+    // 🔥 FIX (2026-11-10, P-M1/P-M3): loadTrack manual (next/prev/jumpTo/play)
+    // membatalkan advance yang sedang menunggu drain dari EOF sebelumnya —
+    // navigasi manual menang, advance basi tidak boleh memuat track lain
+    // setelahnya.
+    cancelPendingAdvance();
+
     stopDecoder();
     clearing_.store(true, std::memory_order_release);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -216,6 +227,10 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
     if (state_ && track.durationMs > 0) {
         state_->setDuration(static_cast<uint64_t>(track.durationMs));
     }
+
+    // Decoder baru = file belum selesai dibaca. (P-M1: flag ini yang memberi
+    // tahu render() bahwa ekor track sudah dekat untuk fade-out P-M7.)
+    decoderFinished_.store(false, std::memory_order_release);
 
     bool result = startDecoder(track);
     clearing_.store(false, std::memory_order_release);
@@ -744,11 +759,18 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
                 lastEofTime_ = now;
             }
 
-            // Emit ke JS (thread-safe).
-            pristine::playback::emitTrackEnded(uri);
+            // Decoder selesai membaca file — tapi audio di queue BELUM habis
+            // dimainkan (P-M1). Tandai supaya render() tahu ekor sudah dekat
+            // (fade-out P-M7) dan advance thread tahu kapan drain selesai.
+            decoderFinished_.store(true, std::memory_order_release);
 
-            // Advance + loadTrack di thread terpisah — JANGAN di thread ini.
-            scheduleAdvance();
+            // Emit ke JS DITUNDA sampai advance benar-benar terjadi (lihat
+            // scheduleAdvance): event "track-ended" harus berarti audio
+            // track itu SUDAH habis terdengar, bukan decoder selesai baca.
+            // Kalau di-emit di sini, JS syncFromNative saat ekor masih
+            // dimainkan dan (setelah drain-wait P-M1) tidak pernah tahu
+            // kapan track berikutnya mulai.
+            scheduleAdvance(uri);
         });
 
         // 🔥 FIX (2026-11-10, P-M4): callback menangkap weak_ptr ke worker
@@ -889,14 +911,44 @@ void PlaybackController::stopDecoder() {
 // decoderWorker_.reset() menghancurkan object dari dalam dirinya sendiri
 // → use-after-free. Thread baru memutus dependensi ini.
 //
-// advanceThread_ di-join di destructor + stopDecoder supaya tidak bocor.
-void PlaybackController::scheduleAdvance() {
+// advanceThread_ di-join di shutdown() (destructor) — dan di stop() (P-M3)
+// supaya tidak bocor dan tidak menghidupkan lagi audio setelah stop.
+void PlaybackController::scheduleAdvance(const std::string& finishedUri) {
     if (advanceThread_.joinable()) {
         advanceThread_.join();
     }
 
-    advanceThread_ = std::thread([this]() {
+    // Advance baru = pembatalan sebelumnya tidak berlaku lagi.
+    advanceCancelled_.store(false, std::memory_order_release);
+
+    advanceThread_ = std::thread([this, finishedUri]() {
         if (!queue_) return;
+
+        // 🔥 FIX (2026-11-10, P-M1): TUNGGU ekor track habis dimainkan dulu.
+        //
+        // Sebelumnya scheduleAdvance langsung loadTrack → pcmQueue_->clear()
+        // membuang audio yang sudah di-decode tapi belum dimainkan. Decoder
+        // jalan 13–20 dtk di depan playback (queue 21,8 dtk, pause 90% /
+        // resume 60%), jadi tiap auto-advance memotong ekor sepanjang itu.
+        //
+        // Sekarang: decoder sudah selesai (EOF), tidak ada lagi yang mengisi
+        // queue — available hanya berkurang lewat render(). Tunggu sampai
+        // queue kosong, atau sampai dibatalkan (stop/loadTrack/shutdown).
+        // Kalau user pause di tengah ekor, drain berhenti (render tidak
+        // menarik saat paused, P-M2) dan thread ini menunggu sampai resume
+        // atau batal — ekor tidak hilang.
+        while (true) {
+            if (advanceCancelled_.load(std::memory_order_acquire)) {
+                __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                    "scheduleAdvance: dibatalkan saat menunggu drain");
+                return;
+            }
+            if (!pcmQueue_) return;
+            if (pcmQueue_->availableFrames() == 0) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+
+        if (advanceCancelled_.load(std::memory_order_acquire)) return;
 
         if (queue_->advance()) {
             auto nextTrack = queue_->current();
@@ -905,13 +957,27 @@ void PlaybackController::scheduleAdvance() {
                     ANDROID_LOG_INFO, "PlaybackController",
                     "EOF: advancing to next track uri=%s",
                     nextTrack->uri.c_str());
-                loadTrack(*nextTrack);
+                if (loadTrack(*nextTrack)) {
+                    // Ekor track lama SUDAH habis terdengar — sekarang
+                    // waktunya JS tahu track itu berakhir.
+                    pristine::playback::emitTrackEnded(finishedUri);
+                }
             }
         } else {
             __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                                 "EOF: queue exhausted (repeat off)");
+            // 🔥 FIX (2026-11-10, p-m4): antrean habis = status Completed,
+            // bukan Playing yang membeku di akhir trek. JS polling
+            // status === 1 (Playing) jadi tahu playback benar-benar selesai.
+            playing_.store(false, std::memory_order_release);
+            if (state_) state_->setStatus(PlaybackStatus::Completed);
+            pristine::playback::emitTrackEnded(finishedUri);
         }
     });
+}
+
+void PlaybackController::cancelPendingAdvance() noexcept {
+    advanceCancelled_.store(true, std::memory_order_release);
 }
 
 void PlaybackController::updatePlaybackState() {

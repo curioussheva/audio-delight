@@ -108,7 +108,12 @@ private:
 
     // 🔥 Advance queue + loadTrack setelah EOF (dipanggil dari thread decoder).
     // Lihat implementasi: harus di thread terpisah supaya tidak self-join.
-    void scheduleAdvance();
+    // finishedUri = URI trek yang baru berakhir (untuk event ke JS — di-emit
+    // SETELAH ekor habis dimainkan, bukan saat EOF, P-M1).
+    void scheduleAdvance(const std::string& finishedUri);
+    // 🔥 FIX (2026-11-10, P-M1): batalkan advance yang sedang menunggu drain.
+    // Dipanggil stop()/loadTrack()/shutdown() sebelum pekerjaan mereka.
+    void cancelPendingAdvance() noexcept;
     void updatePlaybackState();
 
     std::atomic<bool> initialized_{false};
@@ -167,6 +172,19 @@ private:
 
     // 🔥 Thread untuk advance queue setelah EOF (lihat scheduleAdvance).
     std::thread advanceThread_;
+
+    // 🔥 FIX (2026-11-10, P-M1): decoder sudah selesai membaca file (EOF),
+    // tapi audio di queue belum habis dimainkan. Di-set EOF callback,
+    // di-clear loadTrack()/startDecoder(). Dipakai render() untuk fade-out
+    // ekor track (P-M7) dan advance thread untuk tahu kapan drain selesai.
+    std::atomic<bool> decoderFinished_{false};
+
+    // 🔥 FIX (2026-11-10, P-M1/P-M3): batalkan advance yang sedang menunggu
+    // drain. Di-set stop()/loadTrack()/shutdown(), di-clear scheduleAdvance()
+    // saat advance baru dimulai. Tanpa ini, advance yang dijadwalkan EOF bisa
+    // menghidupkan lagi audio setelah user menekan stop atau pindah track
+    // manual di tengah ekor track.
+    std::atomic<bool> advanceCancelled_{false};
 
     // 🔥 FIX (2026-10-06): anti-flood EOF. Lihat setEofCallback di
     // PlaybackController.cpp — trek korup/0-byte bikin decoder EOF berulang
