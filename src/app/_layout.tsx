@@ -36,11 +36,19 @@ type AppInitState = "initializing" | "loading" | "ready" | "error";
 
 const DIAGNOSTIC_INTERVAL_MS = 5000;
 
+// Penjaga init di level modul (bukan ref): ref ikut reset saat RootLayout
+// remount (activity dibuat ulang), sehingga performInitialization bisa jalan
+// dua kali melawan engine/store yang sudah initialized. Teramati 2026-11-10:
+// "[BOOT] 1" muncul 2x di logcat, run kedua macet sebelum
+// "Engine & Store initialization success" dan splash tidak pernah hilang.
+// Proses baru me-reload modul ini, jadi guard reset tepat saat re-init yang
+// sesungguhnya dibutuhkan. Tombol Retry tetap bisa reset guard ini.
+let hasInitializedModule = false;
+
 export default function RootLayout() {
   const [appState, setAppState] = useState<AppInitState>("initializing");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const contentOpacity = useRef(new Animated.Value(0)).current;
-  const hasInitialized = useRef(false);
   const diagRef = useRef<AudioDiagnosticsHandle | null>(null);
 
   const initStore = usePlayerStore((s) => s.initStore);
@@ -216,11 +224,14 @@ const performInitialization = useCallback(async () => {
   // "[BOOT] 1. Initializing Audio Engine & Stores..." juga tidak muncul
   // (yang muncul hanya "[BOOT] 1. Index mount started" dari index.tsx).
   //
-  // hasInitialized sekarang benar-benar dipakai sebagai penjaga supaya
-  // inisialisasi tidak berjalan dua kali (React StrictMode / remount).
+  // hasInitializedModule (level modul) sekarang benar-benar dipakai sebagai
+  // penjaga supaya inisialisasi tidak berjalan dua kali (React StrictMode /
+  // remount). Ref gagal di sini: remount me-reset ref, dan pada 2026-11-10
+  // init jalan 2x lalu run kedua macet sebelum "Engine & Store
+  // initialization success" (splash tidak pernah hilang).
   useEffect(() => {
-    if (hasInitialized.current) return;
-    hasInitialized.current = true;
+    if (hasInitializedModule) return;
+    hasInitializedModule = true;
     performInitialization();
   }, [performInitialization]);
 
@@ -291,7 +302,7 @@ const performInitialization = useCallback(async () => {
               style={styles.retryButton}
               onPress={() => {
                 setAppState("initializing");
-                hasInitialized.current = false;
+                hasInitializedModule = false;
                 performInitialization();
               }}
             >
