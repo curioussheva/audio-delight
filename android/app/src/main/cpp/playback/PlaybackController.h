@@ -103,6 +103,14 @@ public:
     void setFileSampleRate(uint32_t rate) noexcept;
     uint32_t currentFileSampleRate() const noexcept;
 
+    // 🔥 FIX (2026-11-11, D-M2): muat ulang track saat ini kalau decoder
+    // dibuat dengan target laju yang berbeda dari laju stream aktual.
+    // Dipanggil EngineManager::start() setelah stream terbuka — hanya
+    // relevan untuk track pertama (stream masih 0 saat startDecoder).
+    // Berjalan di thread JS (bukan audio thread): loadTrack aman di sini.
+    // Return true kalau reload dilakukan.
+    bool reloadIfDecoderRateMismatch(uint32_t actualStreamRate);
+
     // State accessors
     // 🔥 DIPANGKAS (2026-11-10, dead-code playback): clock()/pcmQueue()
     // dihapus — 0 pemakai (yang hidup: state() dipakai JNI, queue()
@@ -200,6 +208,12 @@ private:
     // Terpisah dari streamSampleRate_ karena keduanya memang berbeda sampai
     // stream berhasil dibuka di laju file.
     std::atomic<uint32_t> fileSampleRate_{0};
+
+    // Laju target decoder yang sedang berjalan (cfg.targetSampleRate dari
+    // startDecoder). 0 = tidak ada decoder. Dipakai
+    // reloadIfDecoderRateMismatch() (D-M2, 2026-11-11) untuk mendeteksi
+    // decoder yang dibuat saat stream masih 0.
+    std::atomic<uint32_t> decoderTargetRate_{0};
 
     std::shared_ptr<TrackQueue> queue_;
 

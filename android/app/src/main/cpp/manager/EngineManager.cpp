@@ -71,7 +71,10 @@ EngineManager::state() {
 
 void EngineManager::start() {
 
-    std::lock_guard<std::mutex>
+    // unique_lock (bukan lock_guard): lock HARUS bisa dilepas sebelum
+    // reloadIfDecoderRateMismatch() di akhir fungsi (D-M2, 2026-11-11) —
+    // lihat komentar di sana.
+    std::unique_lock<std::mutex>
         lock(mMutex);
 
     // =================================================
@@ -218,6 +221,21 @@ void EngineManager::start() {
             mEngine.isExclusive() ? "ya" : "tidak",
             isPathInherentlyLossy() ? "ya" : "tidak",
             (isRateHonored() && mEngine.isExclusive()) ? "YA" : "tidak");
+    }
+
+    // 🔥 FIX (2026-11-11, D-M2): stream baru saja terbuka — kalau decoder
+    // dibuat saat stream masih 0 (track pertama), target-nya mungkin
+    // berbeda dari laju stream aktual (perangkat tidak mendukung laju file,
+    // jadi stream dibuka di laju lain). Muat ulang track supaya decoder
+    // menargetkan laju stream yang benar.
+    //
+    // LEPAS lock dulu (pola B1): reload memanggil loadTrack() →
+    // trackLoadedListener → onTrackLoaded() yang bisa memanggil
+    // reopenStreamPreservingPlayback() (mengambil mMutex sendiri).
+    // Memanggilnya saat lock dipegang = deadlock.
+    lock.unlock();
+    if (mEngine.isRunning()) {
+        mPlayback.reloadIfDecoderRateMismatch(mEngine.actualSampleRate());
     }
 }
 

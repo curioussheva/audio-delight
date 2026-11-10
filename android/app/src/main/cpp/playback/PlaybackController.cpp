@@ -868,6 +868,54 @@ uint32_t PlaybackController::currentFileSampleRate() const noexcept {
     return fileSampleRate_.load(std::memory_order_acquire);
 }
 
+// 🔥 FIX (2026-11-11, D-M2): muat ulang track saat ini kalau decoder dibuat
+// dengan target laju yang berbeda dari laju stream aktual.
+//
+// Hanya relevan untuk track pertama: startDecoder jalan saat stream masih 0
+// dan memakai laju file sebagai target; kalau perangkat ternyata tidak
+// mendukung laju file, EngineManager::start() membuka stream di laju lain
+// (pickBestRateFor) dan decoder harus dibuat ulang dengan target yang benar.
+//
+// Dipanggil dari EngineManager::start() (thread JS, setelah stream terbuka)
+// — loadTrack aman di sini (bukan audio thread). Track baru saja dimuat
+// (posisi ~0), jadi reload dari awal tidak terdengar sebagai lompatan.
+//
+// Aman terhadap reopen: loadTrack di sini memicu trackLoadedListener →
+// onTrackLoaded(); di titik itu stream sudah di laju `wanted`
+// (pickBestRateFor) sehingga tidak ada reopen kedua — kecuali engine tidak
+// menghormati laju yang diminta, dan saat itu reopen sekali (dijaga
+// mReopening) tetap konvergen ke laju aktual.
+bool PlaybackController::reloadIfDecoderRateMismatch(uint32_t actualStreamRate) {
+    if (actualStreamRate < 8000 || actualStreamRate > 768000) {
+        return false;
+    }
+
+    if (!snapshotWorker()) {
+        return false;
+    }
+
+    const uint32_t target = decoderTargetRate_.load(std::memory_order_acquire);
+    if (target == 0 || target == actualStreamRate) {
+        return false;
+    }
+
+    // Snapshot track di bawah lock singkat (pola P-M4).
+    TrackInfo current;
+    {
+        std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+        current = currentTrack_;
+    }
+    if (current.uri.empty()) {
+        return false;
+    }
+
+    __android_log_print(ANDROID_LOG_WARN, "PlaybackController",
+        "reloadIfDecoderRateMismatch: decoder target=%u, stream aktual=%u - "
+        "memuat ulang track",
+        target, actualStreamRate);
+    return loadTrack(current);
+}
+
 bool PlaybackController::startDecoder(const TrackInfo& track) {
     try {
         // 🔥 FIX (2026-11-10, M3): JANGAN tahan decoderMutex_ melewati
@@ -887,9 +935,20 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
         // Sebelumnya selalu default 48000, jadi semua file hi-res dikonversi
         // turun tanpa alasan.
         decoder::DecodeConfig cfg;
+        // 🔥 FIX (2026-11-11, D-M2): kalau stream belum dibuka (rate == 0,
+        // track pertama setelah cold start / stop), pakai laju FILE sebagai
+        // target — stream akan dibuka di laju file oleh EngineManager::start().
+        // Sebelumnya cfg tetap default 48000, jadi track pertama 96 kHz
+        // di-decode ke 48 kHz lalu dimainkan di stream 96 kHz = 2× cepat,
+        // dan reopen M1 tidak menyelamatkan (laju file == laju stream).
+        // Kalau perangkat ternyata tidak mendukung laju file, stream dibuka
+        // di laju lain — reloadIfDecoderRateMismatch() (dipanggil dari
+        // EngineManager::start) yang memperbaiki decoder-nya.
         const uint32_t rate = streamSampleRate();
         if (rate >= 8000 && rate <= 768000) {
             cfg.targetSampleRate = rate;
+        } else if (track.sampleRate >= 8000 && track.sampleRate <= 768000) {
+            cfg.targetSampleRate = track.sampleRate;
         }
 
         // 🔥 FIX (2026-10-06, "96kHz masih cacat"): chunkFrames dibesarkan
@@ -910,8 +969,13 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
             cfg.chunkFrames = 4096 * 4;  // 16384 — cukup untuk 4:1 downsample
         }
         __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
-            "startDecoder: targetSampleRate=%u (stream=%u) chunkFrames=%u",
-            cfg.targetSampleRate, rate, cfg.chunkFrames);
+            "startDecoder: targetSampleRate=%u (stream=%u file=%u) chunkFrames=%u",
+            cfg.targetSampleRate, rate, track.sampleRate, cfg.chunkFrames);
+
+        // 🔥 FIX (2026-11-11, D-M2): catat target decoder supaya
+        // reloadIfDecoderRateMismatch() bisa mendeteksi decoder yang dibuat
+        // saat stream masih 0.
+        decoderTargetRate_.store(cfg.targetSampleRate, std::memory_order_release);
 
         // Worker lokal dulu (M3): dipublikasikan ke decoderWorker_ hanya
         // setelah start() berhasil, di bawah lock.
@@ -1162,6 +1226,10 @@ void PlaybackController::stopDecoder() {
         worker = decoderWorker_;
         decoderWorker_.reset();
     }
+
+    // 🔥 FIX (2026-11-11, D-M2): tidak ada decoder lagi — target yang
+    // dicatat tidak boleh memicu reload basi.
+    decoderTargetRate_.store(0, std::memory_order_release);
 
     if (worker) {
         worker->stop();
