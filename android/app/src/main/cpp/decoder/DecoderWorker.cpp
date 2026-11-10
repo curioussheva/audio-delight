@@ -48,7 +48,6 @@ bool DecoderWorker::start(const std::string& uri, double startPosition) {
 
     stopRequested_.store(false);
     paused_.store(false);
-    currentUri_ = uri;
 
     if (!decoder_) {
         if (errorCallback_) errorCallback_("Decoder not set");
@@ -110,10 +109,6 @@ void DecoderWorker::resume() {
     pauseCv_.notify_all();
 }
 
-bool DecoderWorker::isRunning() const noexcept {
-    return running_.load();
-}
-
 bool DecoderWorker::isPaused() const noexcept {
     return paused_.load();
 }
@@ -141,10 +136,6 @@ bool DecoderWorker::seek(double positionSeconds) {
 // CONFIG
 // =====================================================
 
-void DecoderWorker::setChunkSize(uint32_t frames) {
-    chunkSize_ = frames;
-}
-
 void DecoderWorker::setDecodeCallback(DecodeCallback callback) {
     decodeCallback_ = std::move(callback);
 }
@@ -165,11 +156,6 @@ void DecoderWorker::setEofCallback(EofCallback callback) {
 // QUERY
 // =====================================================
 
-DecoderState DecoderWorker::getState() const {
-    if (!decoder_) return DecoderState::Idle;
-    return decoder_->getState();
-}
-
 double DecoderWorker::getPosition() const {
     if (!decoder_) return 0.0;
     return decoder_->getPositionSeconds();
@@ -178,11 +164,6 @@ double DecoderWorker::getPosition() const {
 double DecoderWorker::getDuration() const {
     if (!decoder_) return 0.0;
     return decoder_->getDurationSeconds();
-}
-
-AudioFormat DecoderWorker::getFormat() const {
-    if (!decoder_) return AudioFormat{};
-    return decoder_->getOutputFormat();
 }
 
 // =====================================================

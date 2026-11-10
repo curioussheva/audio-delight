@@ -104,9 +104,10 @@ public:
     uint32_t currentFileSampleRate() const noexcept;
 
     // State accessors
+    // 🔥 DIPANGKAS (2026-11-10, dead-code playback): clock()/pcmQueue()
+    // dihapus — 0 pemakai (yang hidup: state() dipakai JNI, queue()
+    // dipakai JNI + EngineManager).
     std::shared_ptr<PlaybackState> state() const noexcept;
-    std::shared_ptr<PlaybackClock> clock() const noexcept;
-    std::shared_ptr<PCMQueue> pcmQueue() const noexcept;
 
     // true kalau decoder untuk sebuah track sudah terbuka.
     //
@@ -141,7 +142,8 @@ private:
 
     std::atomic<bool> initialized_{false};
     std::atomic<bool> playing_{false};
-    std::atomic<bool> stopping_{false};
+    // 🔥 DIPANGKAS (2026-11-10, dead-code playback): stopping_ dihapus —
+    // hanya ditulis shutdown(), tidak pernah dibaca (write-only).
     TrackInfo currentTrack_{};
 
     std::shared_ptr<PlaybackState> state_;

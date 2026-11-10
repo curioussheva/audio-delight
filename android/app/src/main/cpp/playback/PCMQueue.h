@@ -51,14 +51,11 @@ public:
     // Consumer (audio thread). `frames` = jumlah SAMPLE.
     size_t read(float* output, size_t frames);
 
-    // Fast reserve/write API (zero-copy path)
-    float* beginWrite(size_t frames);
-    void commitWrite(size_t frames);
-
-    // Optional read control (future extension)
-    float* beginRead(size_t frames);
-    void commitRead(size_t frames);
-
+    // 🔥 DIPANGKAS (2026-11-10, dead-code playback): zero-copy API
+    // beginWrite/commitWrite/beginRead/commitRead dihapus — 0 pemakai di
+    // seluruh cpp/ (hanya write()/read() yang hidup). Menghapus API ini
+    // juga menghapus p-m8 laten audit (reserve tanpa commit / commit tanpa
+    // begin tidak dijaga).
     void clear() noexcept;
 
     // Queries (approximate, RT safe)
@@ -77,12 +74,6 @@ private:
     // monotonik dan selisihnya dijaga < capacity_.
     alignas(64) std::atomic<uint64_t> writeCount_{0};
     alignas(64) std::atomic<uint64_t> readCount_{0};
-
-    // internal state (for zero-copy staging)
-    float* writePtr_ = nullptr;
-    float* readPtr_  = nullptr;
-    size_t writeReserve_ = 0;
-    size_t readReserve_  = 0;
 
 private:
     inline size_t indexMask(size_t v) const noexcept;

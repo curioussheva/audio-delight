@@ -1,21 +1,15 @@
+// SchedulerTypes.h
+//
+// 🔥 DIPANGKAS (2026-11-10, dead-code playback): file ini dulu berisi
+// TransitionMode, TransitionConfig, SchedulerState, dan 3 struct event
+// untuk scheduler/prebuffer yang tidak pernah dibangun — 0 pemakai di
+// seluruh cpp/ (audit playback 2026-11-10). Yang tersisa hanya FadeCurve,
+// dipakai FadeEngine (sekarang hidup, P-M7). Kalau scheduler dibangun
+// lagi suatu hari, tipe-tipe itu dibuat ulang dari kebutuhan nyata,
+// bukan dari file ini.
 #pragma once
 
-#include "PlaybackTypes.h"
-
-#include <cstdint>
-
 namespace pristine::playback {
-
-// =====================================================
-// TRANSITION MODE
-// =====================================================
-
-enum class TransitionMode {
-    Gap,
-    Gapless,
-    Crossfade,
-    BitPerfect
-};
 
 // =====================================================
 // FADE CURVE
@@ -26,64 +20,6 @@ enum class FadeCurve {
     Logarithmic,
     Exponential,
     SCurve
-};
-
-// =====================================================
-// CONFIGURATION
-// =====================================================
-
-struct TransitionConfig {
-
-    TransitionMode mode =
-        TransitionMode::Gapless;
-
-    uint32_t prebufferFrames =
-        48000 * 5;
-
-    uint32_t crossfadeDurationFrames =
-        48000 * 2;
-
-    FadeCurve fadeCurve =
-        FadeCurve::SCurve;
-
-    uint32_t gapDurationFrames =
-        4800;
-
-    bool maintainFormat =
-        true;
-};
-
-// =====================================================
-// SCHEDULER STATE
-// =====================================================
-
-enum class SchedulerState {
-    Idle,
-    Monitoring,
-    PrebufferRequested,
-    TransitionPending,
-    Transitioning
-};
-
-// =====================================================
-// EVENTS
-// =====================================================
-
-struct PrebufferRequestedEvent {};
-
-struct TransitionRequestedEvent {
-    bool manual = false;
-    uint64_t triggerFrame = 0;
-};
-
-struct TransitionEvent {
-
-    TransitionMode mode =
-        TransitionMode::Gapless;
-
-    uint64_t transitionFrame = 0;
-
-    float progress = 0.0f;
 };
 
 }

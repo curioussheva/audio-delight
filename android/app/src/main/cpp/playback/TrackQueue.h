@@ -28,24 +28,14 @@ public:
     // Queue Management
     // =====================================
 
+    // 🔥 DIPANGKAS (2026-11-10, dead-code playback): appendTrack /
+    // insertTrack / removeTrack / clear() dihapus — 0 pemakai di seluruh
+    // cpp/ (hanya setTracks yang hidup). Menghapus removeTrack juga
+    // menghapus p-m1/p-m2 laten audit (remove di tengah playback tidak
+    // menyesuaikan mCurrentIndex / mShuffleOrder dengan benar).
     void setTracks(
         const std::vector<TrackInfo>& tracks
     );
-
-    void appendTrack(
-        const TrackInfo& track
-    );
-
-    void insertTrack(
-        size_t index,
-        const TrackInfo& track
-    );
-
-    void removeTrack(
-        size_t index
-    );
-
-    void clear();
 
     // =====================================
     // Navigation
@@ -55,18 +45,9 @@ public:
     std::optional<TrackInfo>
     current() const;
 
-    [[nodiscard]]
-    std::optional<TrackInfo>
-    next() const;
-
-    [[nodiscard]]
-    std::optional<TrackInfo>
-    previous() const;
-
-    [[nodiscard]]
-    std::optional<TrackInfo>
-    peek(size_t offset) const;
-
+    // 🔥 DIPANGKAS (2026-11-10, dead-code playback): peeker next() /
+    // previous() / peek() / hasNext() / hasPrevious() dihapus — 0 pemakai
+    // (navigasi hidup: advance/advanceManual/retreat/jumpTo/current).
     bool advance();
 
     // Manual next (tombol Next): SELALU maju satu langkah, apa pun repeat
@@ -107,12 +88,6 @@ public:
 
     [[nodiscard]]
     bool isEmpty() const;
-
-    [[nodiscard]]
-    bool hasNext() const;
-
-    [[nodiscard]]
-    bool hasPrevious() const;
 
     [[nodiscard]]
     size_t size() const;

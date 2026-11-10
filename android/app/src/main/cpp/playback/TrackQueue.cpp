@@ -56,69 +56,6 @@ void TrackQueue::setTracks(
     }
 }
 
-void TrackQueue::appendTrack(
-    const TrackInfo& track
-) {
-    std::lock_guard lock(mMutex);
-
-    mTracks.push_back(track);
-
-    rebuildShuffle();
-}
-
-void TrackQueue::insertTrack(
-    size_t index,
-    const TrackInfo& track
-) {
-    std::lock_guard lock(mMutex);
-
-    if (index > mTracks.size()) {
-        index = mTracks.size();
-    }
-
-    mTracks.insert(
-        mTracks.begin() + index,
-        track
-    );
-
-    rebuildShuffle();
-}
-
-void TrackQueue::removeTrack(
-    size_t index
-) {
-    std::lock_guard lock(mMutex);
-
-    if (index >= mTracks.size()) {
-        return;
-    }
-
-    mTracks.erase(
-        mTracks.begin() + index
-    );
-
-    if (
-        mCurrentIndex >= mTracks.size() &&
-        !mTracks.empty()
-    ) {
-        mCurrentIndex =
-            mTracks.size() - 1;
-    }
-
-    rebuildShuffle();
-}
-
-void TrackQueue::clear() {
-
-    std::lock_guard lock(mMutex);
-
-    mTracks.clear();
-
-    mShuffleOrder.clear();
-
-    mCurrentIndex = 0;
-}
-
 std::vector<TrackInfo> TrackQueue::tracks() const {
     std::lock_guard lock(mMutex);
 
@@ -155,60 +92,6 @@ TrackQueue::current() const {
         activeQueue();
 
     return queue[mCurrentIndex];
-}
-
-std::optional<TrackInfo>
-TrackQueue::next() const {
-
-    std::lock_guard lock(mMutex);
-
-    if (!hasNext()) {
-        return std::nullopt;
-    }
-
-    const auto& queue =
-        activeQueue();
-
-    return queue[mCurrentIndex + 1];
-}
-
-std::optional<TrackInfo>
-TrackQueue::previous() const {
-
-    std::lock_guard lock(mMutex);
-
-    if (!hasPrevious()) {
-        return std::nullopt;
-    }
-
-    const auto& queue =
-        activeQueue();
-
-    return queue[mCurrentIndex - 1];
-}
-
-std::optional<TrackInfo>
-TrackQueue::peek(
-    size_t offset
-) const {
-
-    std::lock_guard lock(mMutex);
-
-    if (mTracks.empty()) {
-        return std::nullopt;
-    }
-
-    const size_t target =
-        mCurrentIndex + offset;
-
-    const auto& queue =
-        activeQueue();
-
-    if (target >= queue.size()) {
-        return std::nullopt;
-    }
-
-    return queue[target];
 }
 
 bool TrackQueue::advance() {
@@ -456,23 +339,6 @@ bool TrackQueue::isEmpty() const {
     std::lock_guard lock(mMutex);
 
     return mTracks.empty();
-}
-
-bool TrackQueue::hasNext() const {
-
-    if (mTracks.empty()) {
-        return false;
-    }
-
-    return (
-        mCurrentIndex + 1 <
-        activeQueue().size()
-    );
-}
-
-bool TrackQueue::hasPrevious() const {
-
-    return mCurrentIndex > 0;
 }
 
 size_t

@@ -3,44 +3,23 @@
 #include "PlaybackTypes.h"
 
 #include <atomic>
-#include <mutex>
-#include <optional>
 
 namespace pristine::playback {
 
 // =====================================================
-// IMMUTABLE SNAPSHOT
-// =====================================================
-
-struct PlaybackSnapshot {
-
-    PlaybackStatus status =
-        PlaybackStatus::Stopped;
-
-    PlaybackPosition position;
-
-    RepeatMode repeat =
-        RepeatMode::Off;
-
-    ShuffleMode shuffle =
-        ShuffleMode::Off;
-
-    std::optional<TrackInfo>
-        currentTrack;
-
-    size_t queueIndex = 0;
-
-    size_t queueLength = 0;
-
-    bool isBuffering = false;
-
-    float playbackRate = 1.0f;
-};
-
-// =====================================================
 // THREAD SAFE PLAYBACK STATE
 // =====================================================
-
+//
+// 🔥 DIPANGKAS (2026-11-10, dead-code playback): yang tersisa hanya status
+// + posisi — dua hal yang benar-benar dibaca (JNI nativeGetPosition /
+// nativeGetStatus dan updatePlaybackState internal). Dihapus (0 pemakai):
+// PlaybackSnapshot + snapshot(), setQueueInfo, setBuffering/isBuffering,
+// set/getPlaybackRate, get/setRepeatMode, get/setShuffleMode,
+// get/set/clearCurrentTrack — beserta member-nya (repeat_, shuffle_,
+// buffering_, rate_, queueIndex_, queueLength_, currentTrack_, trackMutex_).
+// Mode repeat/shuffle hidup di TrackQueue (bukan di sini); laju hidup di
+// PlaybackController::playbackRate_ (P-M9); currentTrack_ hanya ditulis
+// updatePlaybackState tanpa satu pun pembaca (write-only).
 class PlaybackState {
 public:
 
@@ -130,198 +109,6 @@ public:
         );
     }
 
-    // =====================================
-    // REPEAT
-    // =====================================
-
-    [[nodiscard]]
-    RepeatMode
-    getRepeatMode() const noexcept {
-
-        return repeat_.load(
-            std::memory_order_acquire
-        );
-    }
-
-    void setRepeatMode(
-        RepeatMode mode
-    ) noexcept {
-
-        repeat_.store(
-            mode,
-            std::memory_order_release
-        );
-    }
-
-    // =====================================
-    // SHUFFLE
-    // =====================================
-
-    [[nodiscard]]
-    ShuffleMode
-    getShuffleMode() const noexcept {
-
-        return shuffle_.load(
-            std::memory_order_acquire
-        );
-    }
-
-    void setShuffleMode(
-        ShuffleMode mode
-    ) noexcept {
-
-        shuffle_.store(
-            mode,
-            std::memory_order_release
-        );
-    }
-
-    // =====================================
-    // BUFFERING
-    // =====================================
-
-    [[nodiscard]]
-    bool isBuffering() const noexcept {
-
-        return buffering_.load(
-            std::memory_order_acquire
-        );
-    }
-
-    void setBuffering(
-        bool buffering
-    ) noexcept {
-
-        buffering_.store(
-            buffering,
-            std::memory_order_release
-        );
-    }
-
-    // =====================================
-    // PLAYBACK RATE
-    // =====================================
-
-    [[nodiscard]]
-    float getPlaybackRate()
-    const noexcept {
-
-        return rate_.load(
-            std::memory_order_acquire
-        );
-    }
-
-    void setPlaybackRate(
-        float rate
-    ) noexcept {
-
-        rate_.store(
-            rate,
-            std::memory_order_release
-        );
-    }
-
-    // =====================================
-    // TRACK
-    // =====================================
-
-    void setCurrentTrack(
-        const TrackInfo& track
-    ) {
-
-        std::lock_guard<std::mutex>
-            lock(trackMutex_);
-
-        currentTrack_ = track;
-    }
-
-    void clearCurrentTrack() {
-
-        std::lock_guard<std::mutex>
-            lock(trackMutex_);
-
-        currentTrack_.reset();
-    }
-
-    [[nodiscard]]
-    std::optional<TrackInfo>
-    getCurrentTrack() const {
-
-        std::lock_guard<std::mutex>
-            lock(trackMutex_);
-
-        return currentTrack_;
-    }
-
-    // =====================================
-    // QUEUE
-    // =====================================
-
-    void setQueueInfo(
-        size_t index,
-        size_t length
-    ) noexcept {
-
-        queueIndex_.store(
-            index,
-            std::memory_order_release
-        );
-
-        queueLength_.store(
-            length,
-            std::memory_order_release
-        );
-    }
-
-    // =====================================
-    // SNAPSHOT
-    // =====================================
-
-    [[nodiscard]]
-    PlaybackSnapshot
-    snapshot() const {
-
-        PlaybackSnapshot snap;
-
-        snap.status =
-            getStatus();
-
-        snap.position =
-            getPosition();
-
-        snap.repeat =
-            getRepeatMode();
-
-        snap.shuffle =
-            getShuffleMode();
-
-        snap.isBuffering =
-            isBuffering();
-
-        snap.playbackRate =
-            getPlaybackRate();
-
-        snap.queueIndex =
-            queueIndex_.load(
-                std::memory_order_acquire
-            );
-
-        snap.queueLength =
-            queueLength_.load(
-                std::memory_order_acquire
-            );
-
-        {
-            std::lock_guard<std::mutex>
-                lock(trackMutex_);
-
-            snap.currentTrack =
-                currentTrack_;
-        }
-
-        return snap;
-    }
-
 private:
 
     // Playback status
@@ -338,42 +125,6 @@ private:
 
     std::atomic<uint64_t>
         durationMs_{0};
-
-    // Playback modes
-
-    std::atomic<RepeatMode>
-        repeat_{
-            RepeatMode::Off
-        };
-
-    std::atomic<ShuffleMode>
-        shuffle_{
-            ShuffleMode::Off
-        };
-
-    // Runtime state
-
-    std::atomic<bool>
-        buffering_{false};
-
-    std::atomic<float>
-        rate_{1.0f};
-
-    // Queue state
-
-    std::atomic<size_t>
-        queueIndex_{0};
-
-    std::atomic<size_t>
-        queueLength_{0};
-
-    // Track metadata
-
-    mutable std::mutex
-        trackMutex_;
-
-    std::optional<TrackInfo>
-        currentTrack_;
 };
 
-} // namespace pristine::playback 
+} // namespace pristine::playback

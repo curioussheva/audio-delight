@@ -81,54 +81,6 @@ size_t PCMQueue::read(float* output, size_t frames) {
 }
 
 // =====================================================
-// ZERO-COPY WRITE (FAST PATH)
-// =====================================================
-
-float* PCMQueue::beginWrite(size_t frames) {
-
-    const uint64_t w = writeCount_.load(std::memory_order_relaxed);
-    const uint64_t r = readCount_.load(std::memory_order_acquire);
-
-    const size_t used = safeDiff(w, r);
-    const size_t free = (used < capacity_) ? (capacity_ - used) : 0u;
-    if (frames > free) return nullptr;
-
-    writeReserve_ = frames;
-    writePtr_ = &buffer_[indexMask(static_cast<size_t>(w))];
-
-    return writePtr_;
-}
-
-void PCMQueue::commitWrite(size_t frames) {
-    writeCount_.fetch_add(frames, std::memory_order_release);
-    writeReserve_ = 0;
-    writePtr_ = nullptr;
-}
-
-// =====================================================
-// ZERO-COPY READ (OPTIONAL FUTURE USE)
-// =====================================================
-
-float* PCMQueue::beginRead(size_t frames) {
-
-    const uint64_t r = readCount_.load(std::memory_order_relaxed);
-    const uint64_t w = writeCount_.load(std::memory_order_acquire);
-
-    if (frames > safeDiff(w, r)) return nullptr;
-
-    readReserve_ = frames;
-    readPtr_ = &buffer_[indexMask(static_cast<size_t>(r))];
-
-    return readPtr_;
-}
-
-void PCMQueue::commitRead(size_t frames) {
-    readCount_.fetch_add(frames, std::memory_order_release);
-    readReserve_ = 0;
-    readPtr_ = nullptr;
-}
-
-// =====================================================
 // CLEAR
 // =====================================================
 //

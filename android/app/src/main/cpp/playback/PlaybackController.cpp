@@ -31,7 +31,7 @@ bool PlaybackController::initialize() {
 
     __android_log_print(ANDROID_LOG_INFO, "PlaybackController", "initialize called");
 
-    // 2^19 = 524288 float samples = ~5.5 sec stereo @ 48kHz
+    // 2^21 = 2097152 float samples = ~21.8 dtk stereo @ 48kHz.
     // WAJIB power of 2: PCMQueue pakai bitmask, bukan modulo!
     pcmQueue_ = std::make_shared<PCMQueue>(1 << 21);  // 🔥 21.8s buffer
     clock_ = std::make_shared<PlaybackClock>();
@@ -60,7 +60,6 @@ void PlaybackController::shutdown() {
     }
 
     playing_.store(false);
-    stopping_.store(true);
 
     pcmQueue_.reset();
     clock_.reset();
@@ -78,14 +77,6 @@ bool PlaybackController::isInitialized() const noexcept {
 
 std::shared_ptr<PlaybackState> PlaybackController::state() const noexcept {
     return state_;
-}
-
-std::shared_ptr<PlaybackClock> PlaybackController::clock() const noexcept {
-    return clock_;
-}
-
-std::shared_ptr<PCMQueue> PlaybackController::pcmQueue() const noexcept {
-    return pcmQueue_;
 }
 
 std::shared_ptr<TrackQueue> PlaybackController::queue() const noexcept {
@@ -901,24 +892,21 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
             cfg.targetSampleRate = rate;
         }
 
-        // 🔥 FIX (2026-10-06, "96kHz masih cacat"): chunkFrames skalakan dengan
-        // rasio downsample. decode(maxFrames) berhenti saat OUTPUT mencapai
-        // maxFrames, tapi FLAC 96kHz hanya menghasilkan ~1152 output per frame
-        // input — decoder harus baca 2x lebih banyak packet untuk jumlah output
-        // yang sama. Dengan chunk 4096, throughput loop turun di bawah realtime
-        // (11 loop/s x 2238 = 24.8k fps < 48k butuh) → PCMQueue underrun →
-        // NaN + garbage 1e32 di render (13.733 sample total, pola 26 tiap 170ms).
+        // 🔥 FIX (2026-10-06, "96kHz masih cacat"): chunkFrames dibesarkan
+        // untuk file hi-res. decode(maxFrames) berhenti saat OUTPUT mencapai
+        // maxFrames, tapi FLAC 96kHz hanya menghasilkan ~1152 output per
+        // frame input — decoder harus baca 2x lebih banyak packet untuk
+        // jumlah output yang sama. Dengan chunk 4096, throughput loop turun
+        // di bawah realtime (11 loop/s x 2238 = 24.8k fps < 48k butuh) →
+        // PCMQueue underrun → NaN + garbage 1e32 di render (13.733 sample
+        // total, pola 26 tiap 170ms).
         //
-        // chunkFrames = 4096 * max(1, round(inRate / outRate)) dibulatkan ke
-        // kelipatan 4096, supaya decode() tetap menghasilkan >= 4096 output
-        // frames per loop berapa pun rasio file.
+        // chunkFrames = 16384 (4x 4096) untuk SEMUA file dengan target rate
+        // — cukup untuk downsample sampai 4:1; decoder break sendiri saat
+        // output >= maxFrames. (Komentar lama mengklaim chunk diskalakan
+        // dengan rasio inRate/outRate dan ada lokal `ratio` — tidak benar:
+        // ratio selalu 1 dan tidak pernah dipakai; dihapus 2026-11-10.)
         if (cfg.targetSampleRate > 0) {
-            uint32_t ratio = 1;
-            // Rasio dari rate stream ke rate output — dibulatkan ke atas.
-            // Decoder akan baca rate file asli setelah open(), tapi kita tidak
-            // tahu rate file di sini. Pakai chunk besar untuk semua file
-            // hi-res aman: decoder break sendiri saat output >= maxFrames.
-            (void)ratio;
             cfg.chunkFrames = 4096 * 4;  // 16384 — cukup untuk 4:1 downsample
         }
         __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
@@ -1339,15 +1327,10 @@ void PlaybackController::updatePlaybackState() {
             ? PlaybackStatus::Playing
             : PlaybackStatus::Paused
     );
-
-    // 🔥 FIX (2026-11-10, P-M4): salin di bawah lock — currentTrack_ ditulis
-    // loadTrack() dari thread lain.
-    TrackInfo trackCopy;
-    {
-        std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
-        trackCopy = currentTrack_;
-    }
-    state_->setCurrentTrack(trackCopy);
+    // 🔥 DIPANGKAS (2026-11-10, dead-code playback): sinkronisasi current
+    // track ke state dihapus — setCurrentTrack hanya ditulis di sini tanpa
+    // satu pun pembaca (getCurrentTrack 0 caller); member + setter/getter
+    // dihapus dari PlaybackState.
 }
 
 } // namespace pristine::playback 

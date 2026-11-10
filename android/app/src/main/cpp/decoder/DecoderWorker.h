@@ -53,9 +53,6 @@ public:
     void resume();
 
     [[nodiscard]]
-    bool isRunning() const noexcept;
-
-    [[nodiscard]]
     bool isPaused() const noexcept;
 
     // =============================================
@@ -68,9 +65,8 @@ public:
     // Configuration
     // =============================================
 
-    void setChunkSize(
-        uint32_t frames);
-
+    // 🔥 DIPANGKAS (2026-11-10, dead-code playback): setChunkSize dihapus —
+    // 0 pemakai (chunkSize_ hanya dibaca workerLoop dengan default 4096).
     void setDecodeCallback(
         DecodeCallback callback);
 
@@ -93,17 +89,15 @@ public:
     // Queries
     // =============================================
 
-    [[nodiscard]]
-    DecoderState getState() const;
-
+    // 🔥 DIPANGKAS (2026-11-10, dead-code playback): getState/getFormat
+    // dihapus — 0 pemakai. getPosition/getDuration HIDUP (dipakai seek()
+    // dan P-M8). currentUri_ dihapus — hanya ditulis start(), tidak pernah
+    // dibaca (write-only).
     [[nodiscard]]
     double getPosition() const;
 
     [[nodiscard]]
     double getDuration() const;
-
-    [[nodiscard]]
-    AudioFormat getFormat() const;
 
 private:
     void workerLoop();
@@ -124,8 +118,6 @@ private:
         stopRequested_{false};
 
     uint32_t chunkSize_ = 4096;
-
-    std::string currentUri_;
 
     DecodeCallback decodeCallback_;
     ErrorCallback errorCallback_;
