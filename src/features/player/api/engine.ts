@@ -25,8 +25,14 @@ type RepeatModeType = "off" | "all" | "track";
 
 const REPEAT_MODE_MAP: Record<RepeatModeType, number> = {
   off: 0,
-  all: 1,
-  track: 2,
+  // 🔥 KOREKSI (2026-11-11, J-M1): peta ini TERBALIK sejak awal.
+  // Enum C++ (playback/PlaybackTypes.h:18-22) = Off 0, One 1, All 2
+  // (sama dengan konstanta Android REPEAT_MODE_ONE=1, ALL=2); peta lama
+  // (all:1, track:2) membuat UI "Repeat All" → native One dan sebaliknya,
+  // jadi auto-advance EOF terbalik. P-M5 (tombol Next) tidak kena — Next
+  // pakai advanceManual() yang mode-independent — tapi EOF kena.
+  all: 2,
+  track: 1,
 };
 
 export class AudioEngine {

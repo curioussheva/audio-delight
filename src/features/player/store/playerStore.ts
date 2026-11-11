@@ -860,8 +860,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     };
     const next = map[get().repeat];
     set({ repeat: next });
-    // 🔥 FIX: kirim ke native (0=off, 1=all, 2=track)
-    const nativeMode = next === "off" ? 0 : next === "all" ? 1 : 2;
+    // 🔥 FIX: kirim ke native (0=off, 1=track, 2=all — enum C++
+    // PlaybackTypes.h: Off 0, One 1, All 2; sama dengan konstanta Android).
+    // KOREKSI 2026-11-11 (J-M1): peta lama (1=all, 2=track) TERBALIK.
+    const nativeMode = next === "off" ? 0 : next === "all" ? 2 : 1;
     safeFireAndForget(
       () => NativePlaybackService.setRepeatMode(nativeMode),
       "setRepeatMode",

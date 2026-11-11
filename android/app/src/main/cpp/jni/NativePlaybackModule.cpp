@@ -192,6 +192,16 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeS
 }
 
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSetRepeatMode(JNIEnv*, jobject, jint mode) {
+    // 🔥 KOREKSI (2026-11-11, J-M1): enum C++ RepeatMode (PlaybackTypes.h)
+    // = Off 0, One 1, All 2 — sama dengan konstanta Android. Peta TS lama
+    // (all:1, track:2) TERBALIK; peta TS sudah dibetulkan, tapi JNI tetap
+    // guard nilai di luar 0-2 (static_cast enum tanpa range check = UB
+    // semantik: nilai 3+ masuk switch TrackQueue tanpa case → return false).
+    if (mode < 0 || mode > 2) {
+        __android_log_print(ANDROID_LOG_WARN, "NativePlaybackModule",
+                            "nativeSetRepeatMode: mode %d di luar 0-2, diabaikan", (int)mode);
+        return;
+    }
     auto* controller = getController();
     if (controller) controller->setRepeatMode(static_cast<pristine::playback::RepeatMode>(mode));
 }

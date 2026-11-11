@@ -201,7 +201,9 @@ class MediaSessionManager(private val service: PlaybackService) {
     }
 
     // 🔥 NEW: shuffle/repeat di MediaSession supaya lock screen ikut.
-    // repeat mode: 0=off, 1=all, 2=track (sesuai mapping JS di playerStore).
+    // repeat mode: 0=off, 1=track (One), 2=all (sesuai mapping JS di
+    // playerStore + enum C++ PlaybackTypes.h). KOREKSI 2026-11-11 (J-M1):
+    // peta lama (1=all, 2=track) TERBALIK terhadap native.
     //
     // CATATAN: setShuffleMode/setRepeatMode ada di MediaSessionCompat, BUKAN di
     // PlaybackStateCompat.Builder (Builder hanya punya setActions, setState,
@@ -218,8 +220,8 @@ class MediaSessionManager(private val service: PlaybackService) {
 
     fun updateRepeatMode(mode: Int) {
         val repeatMode = when (mode) {
-            1 -> PlaybackStateCompat.REPEAT_MODE_ALL
-            2 -> PlaybackStateCompat.REPEAT_MODE_ONE
+            1 -> PlaybackStateCompat.REPEAT_MODE_ONE
+            2 -> PlaybackStateCompat.REPEAT_MODE_ALL
             else -> PlaybackStateCompat.REPEAT_MODE_NONE
         }
         mediaSession.setRepeatMode(repeatMode)
