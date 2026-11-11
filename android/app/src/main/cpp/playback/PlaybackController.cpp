@@ -577,6 +577,17 @@ bool PlaybackController::seek(double seconds) {
     clock_->seekToSeconds(
         actualSeconds > 0.0 ? actualSeconds : seconds, seekRate);
 
+    // 🔥 FIX (2026-11-11, DV-M1): state ikut digeser SEKARANG, bukan nunggu
+    // render() berikutnya. reopenStreamPreservingPlayback() membaca posisi
+    // dari state, bukan clock; loadTrack me-reset state ke 0 dan seek hanya
+    // menggeser clock — reopen kedua yang datang sebelum satu callback
+    // render membaca 0 dan track mulai dari awal (logcat #12, 12:30:40).
+    // Store atomik, aman terhadap write render() (nilai yang sama sumbernya).
+    if (state_) {
+        const double posSeconds = actualSeconds > 0.0 ? actualSeconds : seconds;
+        state_->setPosition(static_cast<uint64_t>(posSeconds * 1000.0));
+    }
+
     // 🔥 FIX (2026-11-10, P-M7): seek = awal baru — fade-in singkat supaya
     // tidak klik di titik seek, dan decoder belum selesai (baru di-seek).
     framesSinceLoad_.store(0, std::memory_order_release);
