@@ -9,11 +9,13 @@ import {
   Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import type { MediaTrack } from "../store/libraryStore";
 import { formatTime } from "@/shared/utils/time";
+import { DURATION_FONT_FAMILY } from "@/shared/utils/typography";
 import QualityBadge from "@/shared/components/ui/QualityBadge";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -137,6 +139,15 @@ const GenreSongRow = memo(
       onPress();
     }, [onPress]);
 
+    const router = useRouter();
+
+    // U-P2-09: long-press → Song Detail, pola yang sama dengan
+    // ArtistSongRow — dulu hanya ArtistSongRow yang punya jalan ini.
+    const handleLongPress = useCallback(() => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.push({ pathname: "/song/[id]", params: { id: track.id } });
+    }, [router, track.id]);
+
     const handleFav = useCallback(() => {
       if (Platform.OS !== "web")
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -146,6 +157,7 @@ const GenreSongRow = memo(
     return (
       <TouchableOpacity
         onPress={handlePress}
+        onLongPress={handleLongPress}
         activeOpacity={0.6}
         style={[
           styles.songRow,
@@ -220,7 +232,8 @@ const GenreSongRow = memo(
               styles.duration,
               {
                 color: colors.text.disabled,
-                fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
+                // U-P2-09: satu font durasi bersama (dulu "Courier New").
+                fontFamily: DURATION_FONT_FAMILY,
               },
             ]}
           >

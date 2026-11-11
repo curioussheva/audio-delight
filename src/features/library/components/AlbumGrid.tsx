@@ -10,6 +10,7 @@ import {
   Platform,
 } from "react-native";
 import { Image } from "expo-image";
+import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
   ChevronLeft,
@@ -24,6 +25,7 @@ import { useTheme } from "@/shared/context/ThemeContext";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import type { MediaTrack } from "../store/libraryStore";
 import { formatTime } from "@/shared/utils/time";
+import { DURATION_FONT_FAMILY } from "@/shared/utils/typography";
 import QualityBadge from "@/shared/components/ui/QualityBadge";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -192,6 +194,14 @@ const AlbumSongRow = memo(
   }) => {
     // Optimistic update: langsung flip visual, rollback kalau gagal
     const [localFav, setLocalFav] = useState(isFavorite);
+    const router = useRouter();
+
+    // U-P2-09: long-press → Song Detail, pola yang sama dengan
+    // ArtistSongRow — dulu hanya ArtistSongRow yang punya jalan ini.
+    const handleLongPress = useCallback(() => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.push({ pathname: "/song/[id]", params: { id: track.id } });
+    }, [router, track.id]);
 
     // Sync kalau prop berubah dari luar (misal re-scan)
     React.useEffect(() => {
@@ -217,6 +227,7 @@ const AlbumSongRow = memo(
     return (
       <TouchableOpacity
         onPress={onPress}
+        onLongPress={handleLongPress}
         activeOpacity={0.7}
         style={[
           styles.songRow,
@@ -383,11 +394,16 @@ export const AlbumGrid: React.FC<AlbumGridProps> = ({
       <View
         style={[styles.navBar, { paddingTop: Platform.OS === "ios" ? 50 : 20 }]}
       >
+        {/* U-P2-09: back berlabel, sama seperti Folder/Format/Genre —
+            dulu ikon saja tanpa label. */}
         <TouchableOpacity
           onPress={() => setSelectedAlbum(null)}
           style={styles.backBtn}
         >
-          <ChevronLeft size={28} color={colors.text.primary} />
+          <ChevronLeft size={24} color={colors.primary[500]} />
+          <Text style={[styles.backLabel, { color: colors.primary[500] }]}>
+            Albums
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -529,7 +545,13 @@ const styles = StyleSheet.create({
   // Detail container
   detailContainer: { flex: 1 },
   navBar: { paddingHorizontal: 16, marginBottom: 10 },
-  backBtn: { width: 40, height: 40, justifyContent: "center" },
+  backBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    height: 44,
+    justifyContent: "flex-start",
+  },
+  backLabel: { fontSize: 16, fontWeight: "600", marginLeft: 4 },
 
   // Hero header
   headerHero: {
@@ -600,6 +622,7 @@ const styles = StyleSheet.create({
   duration: {
     fontSize: 10,
     opacity: 0.6,
-    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    // U-P2-09: satu font durasi bersama.
+    fontFamily: DURATION_FONT_FAMILY,
   },
 });

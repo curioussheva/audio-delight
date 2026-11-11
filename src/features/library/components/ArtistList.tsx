@@ -27,6 +27,7 @@ import { useTheme } from "@/shared/context/ThemeContext";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import type { MediaTrack } from "../store/libraryStore";
 import { formatTime } from "@/shared/utils/time";
+import { DURATION_FONT_FAMILY } from "@/shared/utils/typography";
 import QualityBadge from "@/shared/components/ui/QualityBadge";
 import OnlineMetadataService from "../services/OnlineMetadataService";
 import { useSettingsStore } from "@/features/settings/store/settingsStore"; // Import store
@@ -334,11 +335,16 @@ export const ArtistList: React.FC<ArtistListProps> = ({
             { paddingTop: Platform.OS === "ios" ? 50 : 20 },
           ]}
         >
+          {/* U-P2-09: back berlabel, sama seperti Folder/Format/Genre —
+              dulu ikon saja tanpa label. */}
           <TouchableOpacity
             onPress={() => setSelectedArtist(null)}
             style={styles.backBtn}
           >
-            <ChevronLeft size={30} color={colors.text.primary} />
+            <ChevronLeft size={24} color={colors.primary[500]} />
+            <Text style={[styles.backLabel, { color: colors.primary[500] }]}>
+              Artists
+            </Text>
           </TouchableOpacity>
         </View>
         <FlatList
@@ -376,7 +382,12 @@ export const ArtistList: React.FC<ArtistListProps> = ({
                     styles.playBtn,
                     { backgroundColor: colors.primary[500] },
                   ]}
-                  onPress={() => onSongPress(filteredSongs[0], filteredSongs)}
+                  // U-P2-09: guard antrean kosong — tanpa ini filteredSongs
+                  // yang sempat kosong memanggil playSong(undefined, []).
+                  onPress={() => {
+                    if (filteredSongs.length > 0)
+                      onSongPress(filteredSongs[0], filteredSongs);
+                  }}
                 >
                   <Play size={20} color={onPrimary} fill={onPrimary} />
                   <Text style={[styles.playBtnText, { color: onPrimary }]}>
@@ -514,11 +525,13 @@ const styles = StyleSheet.create({
   detailContainer: { flex: 1 },
   navBar: { paddingHorizontal: 8, zIndex: 10 },
   backBtn: {
-    width: 44,
-    height: 44,
-    justifyContent: "center",
+    flexDirection: "row",
     alignItems: "center",
+    height: 44,
+    justifyContent: "flex-start",
+    paddingHorizontal: 8,
   },
+  backLabel: { fontSize: 16, fontWeight: "600", marginLeft: 4 },
   headerHero: { alignItems: "center", padding: 20 },
   avatarLargeContainer: {
     width: 160,
@@ -567,7 +580,13 @@ const styles = StyleSheet.create({
   songAlbum: { fontSize: 12, marginTop: 4 },
   songTrailing: { alignItems: "flex-end" },
   favBtn: { padding: 5 },
-  duration: { fontSize: 11, marginTop: 4, opacity: 0.6 },
+  duration: {
+    fontSize: 11,
+    marginTop: 4,
+    opacity: 0.6,
+    // U-P2-09: satu font durasi bersama (baris ini dulu tanpa fontFamily).
+    fontFamily: DURATION_FONT_FAMILY,
+  },
   scanHeader: {
     flexDirection: "row",
     alignItems: "center",

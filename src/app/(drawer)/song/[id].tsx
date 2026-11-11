@@ -568,11 +568,18 @@ export default function SongDetailScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={[styles.hero, { paddingTop: Math.max(insets.top, 20) }]}>
           <View style={styles.navBar}>
+            {/* U-P2-09: back berlabel "Kembali" — pola yang sama dengan
+                detail Album/Artist/Folder/Format/Genre. */}
             <TouchableOpacity
               onPress={() => router.back()}
-              style={styles.iconBtn}
+              style={[styles.iconBtn, styles.backBtn]}
             >
               <ArrowLeft size={26} color={colors.text.primary} />
+              <Text
+                style={[styles.backLabel, { color: colors.text.primary }]}
+              >
+                Kembali
+              </Text>
             </TouchableOpacity>
 
             <View style={{ flexDirection: "row", gap: 8 }}>
@@ -808,6 +815,9 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   iconBtn: { padding: 10, borderRadius: 15 },
+  // U-P2-09: tombol back berlabel (dipakai navBar layar utama).
+  backBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
+  backLabel: { fontSize: 16, fontWeight: "600" },
   iconBtnSmall: { padding: 8, marginLeft: 4 },
   artworkWrapper: {
     width: 280,

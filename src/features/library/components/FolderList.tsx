@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Platform,
 } from "react-native";
+import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
   Folder,
@@ -23,6 +24,7 @@ import { useTheme } from "@/shared/context/ThemeContext";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import type { MediaTrack } from "../store/libraryStore";
 import { formatTime } from "@/shared/utils/time";
+import { DURATION_FONT_FAMILY } from "@/shared/utils/typography";
 import QualityBadge from "@/shared/components/ui/QualityBadge";
 
 // ── Path Formatter ──────────────────────────────────────────────────────────
@@ -98,9 +100,20 @@ const FolderSongRow = memo(
     onPress,
     onToggleFavorite,
     colors,
-  }: any) => (
+  }: any) => {
+    const router = useRouter();
+
+    // U-P2-09: long-press → Song Detail, pola yang sama dengan
+    // ArtistSongRow — dulu hanya ArtistSongRow yang punya jalan ini.
+    const handleLongPress = () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.push({ pathname: "/song/[id]", params: { id: track.id } });
+    };
+
+    return (
     <TouchableOpacity
       onPress={onPress}
+      onLongPress={handleLongPress}
       activeOpacity={0.7}
       style={[
         styles.songRow,
@@ -153,7 +166,8 @@ const FolderSongRow = memo(
         </Text>
       </View>
     </TouchableOpacity>
-  ),
+    );
+  },
 );
 
 // ── FolderList Main Component ────────────────────────────────────────────────
@@ -257,7 +271,12 @@ export const FolderList: React.FC<any> = ({
 
         <TouchableOpacity
           style={[styles.playAllBtn, { backgroundColor: colors.primary[500] }]}
-          onPress={() => onSongPress(filteredSongs[0], filteredSongs)}
+          // U-P2-09: guard antrean kosong — tanpa ini filteredSongs yang
+          // sempat kosong memanggil playSong(undefined, []).
+          onPress={() => {
+            if (filteredSongs.length > 0)
+              onSongPress(filteredSongs[0], filteredSongs);
+          }}
         >
           <Play size={18} color={onPrimary} fill={onPrimary} />
           <Text style={[styles.playAllText, { color: onPrimary }]}>
@@ -366,6 +385,7 @@ const styles = StyleSheet.create({
   duration: {
     fontSize: 10,
     opacity: 0.6,
-    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    // U-P2-09: satu font durasi bersama.
+    fontFamily: DURATION_FONT_FAMILY,
   },
 });

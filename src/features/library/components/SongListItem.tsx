@@ -8,9 +8,11 @@ import {
   Platform,
 } from "react-native";
 import { Image } from "expo-image";
+import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Song } from "@/shared/types/audio";
 import { formatTime } from "@/shared/utils/time";
+import { DURATION_FONT_FAMILY } from "@/shared/utils/typography";
 import QualityBadge from "@/shared/components/ui/QualityBadge";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import { Music2, AudioLines, Heart } from "lucide-react-native";
@@ -101,11 +103,20 @@ export const SongListItem = memo(
     onPress,
     onToggleFavorite,
   }: SongListItemProps) => {
+    const router = useRouter();
+
     const handlePress = () => {
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
       onPress(item);
+    };
+
+    // U-P2-09: long-press → Song Detail, pola yang sama dengan
+    // ArtistSongRow — dulu hanya ArtistSongRow yang punya jalan ini.
+    const handleLongPress = () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.push({ pathname: "/song/[id]", params: { id: item.id } });
     };
 
     return (
@@ -115,6 +126,7 @@ export const SongListItem = memo(
           isNowPlaying && { backgroundColor: `${colors.primary[500]}10` },
         ]}
         onPress={handlePress}
+        onLongPress={handleLongPress}
         activeOpacity={0.7}
       >
         {/* 1. Artwork / Now Playing Indicator */}
@@ -262,6 +274,7 @@ const styles = StyleSheet.create({
   duration: {
     fontSize: 11,
     fontVariant: ["tabular-nums"],
-    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    // U-P2-09: satu font durasi bersama.
+    fontFamily: DURATION_FONT_FAMILY,
   },
 });
