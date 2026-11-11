@@ -816,8 +816,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   seek: async (pos: number) => {
     try {
-      await timedCall("seek", () => NativePlaybackService.seek(pos * 1000));
+      // Posisi optimistis: tampilkan posisi target SEBELUM native seek
+      // selesai. Sebelumnya posisi baru di-set sesudah `await`, jadi
+      // slider snap-back ke posisi lama selama seek berjalan (seek pernah
+      // terukur ~3 detik di device) — itulah "slider terlambat".
+      // Kalau seek native gagal, watcher 500ms mengoreksi dari posisi
+      // native; kalau seek mendarat di keyframe, watcher juga mengoreksi.
       set({ position: pos });
+      await timedCall("seek", () => NativePlaybackService.seek(pos * 1000));
 
       // 🔥 FIX #2: setelah seek, MediaSession harus tahu posisi baru.
       // Sebelumnya slider lock screen masih nunjukkin posisi lama sampai
