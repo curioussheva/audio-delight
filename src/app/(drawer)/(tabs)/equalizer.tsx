@@ -6,7 +6,6 @@ import {
   Switch,
   TouchableOpacity,
   Dimensions,
-  FlatList,
   ScrollView,
   Alert,
   LayoutAnimation,
@@ -29,7 +28,8 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { useTheme } from "@/shared/context/ThemeContext";
-import { DrawerMenuButton } from "@/shared/components/ui/DrawerMenuButton";
+import { ScreenHeader } from "@/shared/components/ui/ScreenHeader";
+import { ScreenList } from "@/shared/components/ui/ScreenList";
 import { useEqualizer } from "@/features/equalizer/hooks/useEqualizer";
 import {
   accentOn,
@@ -381,37 +381,31 @@ export default function EqualizerScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: LIST_BOTTOM_PADDING }}
         >
-          {/* HEADER — U-P2-49: hamburger buka drawer (dulu layar ini
-              tidak punya affordance apa pun untuk membuka drawer). */}
-          <View style={[styles.header, { paddingHorizontal: spacing.md }]}>
-            <DrawerMenuButton />
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.title, { color: colors.text.primary }]}>
-                Precision DSP
-              </Text>
-              <Text style={[styles.subtitle, { color: colors.text.secondary }]}>
-                MODE {modeLabel} · {engineLabel}
-              </Text>
-            </View>
-            {/* U-P1-32: matikan saat mode beku (bit-perfect/Solfeggio) —
-                resetToDefault return dini di sana, jadi tanpa disabled tombol
-                ini membuka konfirmasi lalu diam-diam tidak terjadi apa-apa.
-                Pola sama dengan tombol simpan preset di bawah. */}
-            <TouchableOpacity
-              onPress={handleReset}
-              disabled={eq.isDSPDisabled}
-              style={[
-                styles.resetBtn,
-                { padding: spacing.sm, minWidth: 44, minHeight: 44 },
-                eq.isDSPDisabled && { opacity: 0.4 },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Reset DSP ke pengaturan netral"
-              accessibilityState={{ disabled: eq.isDSPDisabled }}
-            >
-              <RotateCcw size={18} color={colors.text.secondary} />
-            </TouchableOpacity>
-          </View>
+          {/* HEADER — U-P2-53: header bersama (ScreenHeader). Judul 24/900
+              + subjudul 10px lama jadi 20/700 + 13px — perubahan visual
+              kecil yang disengaja demi satu pola header. Tombol reset
+              pindah ke slot `actions`; perilakunya tidak berubah. */}
+          <ScreenHeader
+            title="Precision DSP"
+            subtitle={`MODE ${modeLabel} · ${engineLabel}`}
+            style={{ paddingHorizontal: spacing.md, paddingVertical: 16 }}
+            actions={
+              <TouchableOpacity
+                onPress={handleReset}
+                disabled={eq.isDSPDisabled}
+                style={[
+                  styles.resetBtn,
+                  { padding: spacing.sm, minWidth: 44, minHeight: 44 },
+                  eq.isDSPDisabled && { opacity: 0.4 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Reset DSP ke pengaturan netral"
+                accessibilityState={{ disabled: eq.isDSPDisabled }}
+              >
+                <RotateCcw size={18} color={colors.text.secondary} />
+              </TouchableOpacity>
+            }
+          />
 
           {/* 0. PEMILIH MODE - tiga mode, tiga mesin.
               Mode `bit-perfect` melewati DSP, mode `immersive` memakai rantai
@@ -822,8 +816,13 @@ export default function EqualizerScreen() {
                 },
               ]}
             >
-              <FlatList
+              {/* U-P2-53: daftar band lewat pola daftar bersama. Jalur yang
+                  dipilih tetap FlatList (horizontal + bersarang di
+                  ScrollView — lihat chooseListKind); `directionalLockEnabled`
+                  dipertahankan supaya tidak bentrok dengan scroll utama. */}
+              <ScreenList
                 horizontal
+                nestedInScrollView
                 showsHorizontalScrollIndicator={false}
                 data={eq.currentBands}
                 keyExtractor={(item) => item.frequency.toString()}
@@ -836,7 +835,6 @@ export default function EqualizerScreen() {
                   />
                 )}
                 contentContainerStyle={{ paddingHorizontal: spacing.sm }}
-                // Penting: agar tidak bentrok dengan scroll utama
                 directionalLockEnabled={true}
               />
             </View>
@@ -901,19 +899,6 @@ const styles = StyleSheet.create({
     minHeight: 36,
   },
   viewBtnText: { fontSize: 10, fontWeight: "900", letterSpacing: 1 },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 16,
-    alignItems: "center",
-  },
-  title: { fontSize: 24, fontWeight: "900" },
-  subtitle: {
-    fontSize: 10,
-    fontWeight: "bold",
-    letterSpacing: 1,
-    marginTop: 2,
-  },
   resetBtn: { alignItems: "center", justifyContent: "center" },
   card: {
     borderRadius: 16,

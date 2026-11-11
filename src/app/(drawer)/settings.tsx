@@ -35,7 +35,7 @@ import { BackgroundScanTask } from "@/features/library/services/BackgroundScanTa
 import * as Haptics from "expo-haptics";
 
 import { useTheme } from "@/shared/context/ThemeContext";
-import { DrawerMenuButton } from "@/shared/components/ui/DrawerMenuButton";
+import { ScreenHeader } from "@/shared/components/ui/ScreenHeader";
 import { pickReadable, accentOn, AA_NORMAL } from "@/shared/utils/contrast";
 import { useAudioOutput } from "@/features/hardware/hooks/useAudioOutput";
 import { useDSPProcessingGate } from "@/features/hardware/hooks/useDSPProcessingGate";
@@ -1608,18 +1608,14 @@ export default function SettingsScreen() {
       }}
       showsVerticalScrollIndicator={false}
     >
-      {/* U-P2-49: hamburger buka drawer di kiri judul — dulu judul teks
-          saja, tanpa affordance drawer. */}
-      <View
-        style={[styles.screenTitleRow, { marginBottom: spacing.md }]}
-      >
-        <DrawerMenuButton />
-        <Text
-          style={[styles.screenTitle, { color: colors.text.primary }]}
-        >
-          Settings
-        </Text>
-      </View>
+      {/* U-P2-53: header bersama, varian large (judul 32 seperti semula).
+          ScrollView sudah punya paddingHorizontal 16, jadi header ini
+          tanpa padding horizontal sendiri. */}
+      <ScreenHeader
+        title="Settings"
+        variant="large"
+        style={{ paddingHorizontal: 0, marginBottom: spacing.md }}
+      />
 
       {renderTampilan()}
       {renderAudioOutput()}
@@ -1660,9 +1656,6 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  screenTitle: { fontSize: 32, fontWeight: "700" },
-  // U-P2-49: baris judul + hamburger buka drawer.
-  screenTitleRow: { flexDirection: "row", alignItems: "center" },
   section: { borderRadius: 16, overflow: "hidden" },
   sectionHeader: {
     flexDirection: "row",

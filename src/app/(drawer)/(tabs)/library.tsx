@@ -54,6 +54,8 @@ import { EnrichMetadataModal } from "@/features/library/components/EnrichMetadat
 
 // Components
 import { DrawerMenuButton } from "@/shared/components/ui/DrawerMenuButton";
+import { ScreenLoading } from "@/shared/components/ui/ScreenLoading";
+import { EmptyState } from "@/shared/components/ui/EmptyState";
 import { SongListItem } from "@/features/library/components/SongListItem";
 import { EmptyLibrary } from "@/features/library/components/EmptyLibrary";
 import { LibraryScanner } from "@/features/library/api/scanner";
@@ -402,10 +404,8 @@ export default function LibraryScreen() {
     if (loading && tracks.length === 0) {
       return (
         <View style={s.center}>
-          <ActivityIndicator size="large" color={colors.primary[500]} />
-          <Text style={[s.loadingText, { color: colors.text.secondary }]}>
-            Loading library...
-          </Text>
+          {/* U-P2-53: pola loading bersama. */}
+          <ScreenLoading message="Loading library..." />
         </View>
       );
     }
@@ -440,13 +440,20 @@ export default function LibraryScreen() {
     if (filteredSource.length === 0 && searchQuery.length > 0) {
       return (
         <View style={s.emptySearch}>
-          <SearchX size={60} color={colors.text.disabled} strokeWidth={1.5} />
-          <Text style={[s.emptyTitle, { color: colors.text.primary }]}>
-            No results found
-          </Text>
-          <Text style={[s.emptySub, { color: colors.text.tertiary }]}>
-            Try different keywords or check your spelling
-          </Text>
+          {/* U-P2-53: empty state bersama. State error (di atas) dan
+              EmptyLibrary (di bawah) sengaja tidak dimigrasikan — lihat
+              EmptyState.tsx. */}
+          <EmptyState
+            title="No results found"
+            message="Try different keywords or check your spelling"
+            icon={
+              <SearchX
+                size={60}
+                color={colors.text.disabled}
+                strokeWidth={1.5}
+              />
+            }
+          />
         </View>
       );
     }
@@ -769,10 +776,6 @@ const createStyles = (colors: any) =>
       justifyContent: "center",
       alignItems: "center",
       gap: 12,
-    },
-    loadingText: {
-      fontSize: 14,
-      fontWeight: "500",
     },
     emptySearch: {
       flex: 1,

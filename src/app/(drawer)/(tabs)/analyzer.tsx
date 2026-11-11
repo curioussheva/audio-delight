@@ -26,7 +26,7 @@ import {
 
 // Hooks & Store
 import { useTheme } from "@/shared/context/ThemeContext";
-import { DrawerMenuButton } from "@/shared/components/ui/DrawerMenuButton";
+import { ScreenHeader } from "@/shared/components/ui/ScreenHeader";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useAudioSessionRetry } from "@/features/player/hooks/useAudioSessionRetry";
 import { FLOATING_PLAYER_CLEARANCE } from "@/features/player/layout";
@@ -311,16 +311,14 @@ export default function AnalyzerScreen() {
         paddingBottom: insets.bottom + FLOATING_PLAYER_CLEARANCE + 8,
       }}
     >
-      {/* U-P2-49: hamburger buka drawer — dulu judul teks saja, tanpa
-          affordance apa pun untuk membuka drawer. */}
-      <View style={styles.screenHeaderRow}>
-        <DrawerMenuButton />
-        <Text
-          style={[styles.title, { color: colors.text.primary, flex: 1 }]}
-        >
-          Audio Analyzer
-        </Text>
-      </View>
+      {/* U-P2-53: header bersama. Judul 28/900 lama jadi 20/700 —
+          perubahan visual kecil yang disengaja demi satu pola header.
+          ScrollView sudah punya paddingHorizontal 16, jadi header ini
+          tanpa padding horizontal sendiri; marginBottom 24 dipertahankan. */}
+      <ScreenHeader
+        title="Audio Analyzer"
+        style={{ paddingHorizontal: 0, paddingVertical: 0, marginBottom: 24 }}
+      />
 
       {/* 1. SPECTRUM VISUALIZER */}
       {audioSessionId && audioSessionId > 0 ? (
@@ -747,12 +745,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 40,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "900",
-    marginBottom: 24,
-    letterSpacing: -0.5,
-  },
   emptyText: {
     textAlign: "center",
     marginTop: 20,
@@ -775,14 +767,9 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 15,
   },
-  // U-P2-49: baris header layar (hamburger + judul). ScrollView sudah
-  // punya paddingHorizontal 16, jadi baris ini tanpa padding sendiri.
-  // (Bukan `headerRow` yang sudah ada — itu baris kartu dengan
-  // space-between.)
-  screenHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
+  // U-P2-53: `screenHeaderRow` dihapus — header layar sekarang
+  // ScreenHeader (lihat di atas). `headerRow` yang tersisa adalah baris
+  // kartu (space-between), bukan header layar.
   label: {
     fontSize: 11,
     fontWeight: "800",

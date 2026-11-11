@@ -13,20 +13,14 @@ import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useAudioSessionRetry } from "@/features/player/hooks/useAudioSessionRetry";
 import { SpectrumAnalyzer } from "@/features/visualizer/components/SpectrumAnalyzer";
 import { useTheme } from "@/shared/context/ThemeContext";
-import { DrawerMenuButton } from "@/shared/components/ui/DrawerMenuButton";
-import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+import { ScreenHeader } from "@/shared/components/ui/ScreenHeader";
+import { EmptyState } from "@/shared/components/ui/EmptyState";
 import { useSafePadding } from "@/shared/hooks/useSafePadding";
 import { RefreshCw, AlertCircle } from "lucide-react-native";
 
 export default function VisualizerScreen() {
   const { theme } = useTheme();
   const { colors } = theme;
-
-  // Teks di atas tombol primary[500] — dipilih dari luminansi primary
-  // (putih 2,24:1 di Noir, hitam 9,37:1), bukan hardcoded "#FFF".
-  const onPrimary =
-    pickReadable(["#FFFFFF", "#000000"], colors.primary[500], AA_NORMAL) ??
-    "#FFFFFF";
 
   const safePadding = useSafePadding();
   const router = useRouter();
@@ -61,29 +55,17 @@ export default function VisualizerScreen() {
           },
         ]}
       >
-        {/* U-P2-49: hamburger buka drawer — state kosong ini dulu juga
-            tanpa affordance drawer sama sekali. */}
-        <View style={styles.header}>
-          <DrawerMenuButton />
-          <Text style={[styles.headerTitle, { color: colors.text.primary }]}>
-            Visualizer
-          </Text>
-        </View>
+        {/* U-P2-53: header + empty state bersama. Tombol "Kembali" lama
+            diganti aksi EmptyState — tujuan sama (ke Library, U-P1-28),
+            labelnya sekarang jujur ("Kembali ke Library"). */}
+        <ScreenHeader title="Visualizer" />
         <View style={styles.emptyState}>
-          <AlertCircle size={48} color={colors.text.tertiary} />
-          <Text style={[styles.emptyText, { color: colors.text.secondary }]}>
-            Tidak ada lagu yang diputar
-          </Text>
-          {/* U-P1-28: visualizer adalah tab root — tidak ada history untuk
-              di-pop, router.back() no-op. Arahkan ke tab Library. */}
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: colors.primary[500] }]}
-            onPress={() => router.replace("/(drawer)/(tabs)/library")}
-          >
-            <Text style={[styles.buttonText, { color: onPrimary }]}>
-              Kembali
-            </Text>
-          </TouchableOpacity>
+          <EmptyState
+            title="Tidak ada lagu yang diputar"
+            icon={<AlertCircle size={48} color={colors.text.tertiary} />}
+            actionLabel="Kembali ke Library"
+            onActionPress={() => router.replace("/(drawer)/(tabs)/library")}
+          />
         </View>
       </View>
     );
@@ -102,26 +84,24 @@ export default function VisualizerScreen() {
         },
       ]}
     >
-      {/* Header — U-P2-49: hamburger buka drawer di kiri judul. */}
-      <View style={styles.header}>
-        <DrawerMenuButton />
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.headerTitle, { color: colors.text.primary }]}>
-            Visualizer
-          </Text>
-        </View>
-        {!hasValidSession && (
-          <TouchableOpacity
-            onPress={handleRetry}
-            style={[styles.retryButton, isRetrying && { opacity: 0.4 }]}
-            disabled={isRetrying}
-            accessibilityRole="button"
-            accessibilityLabel="Coba pulihkan audio session"
-          >
-            <RefreshCw size={20} color={colors.primary[500]} />
-          </TouchableOpacity>
-        )}
-      </View>
+      {/* Header — U-P2-53: header bersama; tombol retry pindah ke slot
+          `actions`, perilakunya tidak berubah. */}
+      <ScreenHeader
+        title="Visualizer"
+        actions={
+          !hasValidSession ? (
+            <TouchableOpacity
+              onPress={handleRetry}
+              style={[styles.retryButton, isRetrying && { opacity: 0.4 }]}
+              disabled={isRetrying}
+              accessibilityRole="button"
+              accessibilityLabel="Coba pulihkan audio session"
+            >
+              <RefreshCw size={20} color={colors.primary[500]} />
+            </TouchableOpacity>
+          ) : undefined
+        }
+      />
 
       {/* Info Lagu */}
       <View style={styles.songInfo}>
@@ -191,17 +171,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-  },
   retryButton: {
     padding: 8,
   },
@@ -252,19 +221,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    gap: 16,
-  },
-  emptyText: {
-    fontSize: 16,
-  },
-  button: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  buttonText: {
-    color: "#FFF",
-    fontWeight: "600",
   },
   debugInfo: {
     position: "absolute",

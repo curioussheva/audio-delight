@@ -5,14 +5,15 @@ import {
   Text,
   StyleSheet,
   Alert,
-  FlatList,
   TouchableOpacity,
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import { ChevronLeft, Trash2, Music2 } from "lucide-react-native";
 
 import { useTheme } from "@/shared/context/ThemeContext";
-import { DrawerMenuButton } from "@/shared/components/ui/DrawerMenuButton";
+import { ScreenHeader } from "@/shared/components/ui/ScreenHeader";
+import { EmptyState } from "@/shared/components/ui/EmptyState";
+import { ScreenList } from "@/shared/components/ui/ScreenList";
 import { usePlaylists } from "@/features/playlist/hooks/usePlaylists";
 import { PlaylistList, PlaylistItem } from "@/features/library/components/PlaylistList";
 import { SongListItem } from "@/features/library/components/SongListItem";
@@ -204,15 +205,18 @@ export default function PlaylistsScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* U-P2-53: isi playlist lewat pola daftar bersama — jalur
+            FlashList (daftar vertikal panjang, bukan bersarang). */}
         {selectedSongs.length === 0 ? (
           <View style={styles.emptyDetail}>
-            <Music2 size={40} color={colors.text.tertiary} />
-            <Text style={[styles.emptyText, { color: colors.text.secondary }]}>
-              Belum ada lagu di playlist ini.
-            </Text>
+            {/* U-P2-53: empty state bersama. */}
+            <EmptyState
+              title="Belum ada lagu di playlist ini."
+              icon={<Music2 size={40} color={colors.text.tertiary} />}
+            />
           </View>
         ) : (
-          <FlatList
+          <ScreenList
             data={selectedSongs}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
@@ -234,15 +238,9 @@ export default function PlaylistsScreen() {
   // ── Render Playlist List ──────────────────────────────────────────────────
   return (
     <View style={[styles.container, { backgroundColor: colors.background.primary }]}>
-      {/* U-P2-49: daftar playlist dulu tanpa judul layar yang terlihat dan
-          tanpa affordance buka drawer — hanya edge-swipe / hardware back.
-          Detail playlist tetap memakai header kembali-nya sendiri. */}
-      <View style={styles.listHeader}>
-        <DrawerMenuButton />
-        <Text style={[styles.listTitle, { color: colors.text.primary }]}>
-          Playlist
-        </Text>
-      </View>
+      {/* U-P2-53: header bersama. Detail playlist tetap memakai header
+          kembali-nya sendiri (bukan header layar). */}
+      <ScreenHeader title="Playlist" />
       <PlaylistList
         playlists={playlistItems}
         favoriteCount={favoriteCount || 0}
@@ -257,17 +255,6 @@ export default function PlaylistsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  // U-P2-49: header daftar playlist (hamburger + judul).
-  listHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  listTitle: {
-    fontSize: 20,
-    fontWeight: "700",
   },
   detailHeader: {
     flexDirection: "row",
@@ -295,10 +282,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 12,
-  },
-  emptyText: {
-    fontSize: 14,
   },
 });
  

@@ -4,15 +4,16 @@ import {
   View,
   Text,
   TextInput,
-  FlatList,
   TouchableOpacity,
-  ActivityIndicator,
   StyleSheet,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/shared/context/ThemeContext";
+import { ScreenList } from "@/shared/components/ui/ScreenList";
+import { ScreenLoading } from "@/shared/components/ui/ScreenLoading";
+import { EmptyState } from "@/shared/components/ui/EmptyState";
 import { useLibrary } from "@/features/library/hooks/useLibrary";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { formatTime } from "@/shared/utils/time";
@@ -202,8 +203,9 @@ export default function SearchScreen() {
         </View>
       </View>
 
-      {/* Results */}
-      <FlatList
+      {/* Results — U-P2-53: daftar hasil lewat pola daftar bersama
+          (jalur FlashList: daftar vertikal panjang, bukan bersarang). */}
+      <ScreenList
         data={results}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
@@ -252,12 +254,9 @@ export default function SearchScreen() {
                 },
               ]}
             >
-              <ActivityIndicator size="large" color={colors.primary[500]} />
-              <Text
-                style={[styles.emptyText, { color: colors.text.secondary }]}
-              >
-                Memuat library…
-              </Text>
+              {/* U-P2-53: pola loading bersama. Cabang error di bawah
+                  sengaja tidak dimigrasikan (state error + retry). */}
+              <ScreenLoading message="Memuat library…" />
             </View>
           ) : error ? (
             <View
@@ -310,16 +309,17 @@ export default function SearchScreen() {
                 },
               ]}
             >
-              <Ionicons
-                name="search-outline"
-                size={48}
-                color={colors.text.tertiary}
+              {/* U-P2-53: empty state bersama. */}
+              <EmptyState
+                title="Tidak ada hasil"
+                icon={
+                  <Ionicons
+                    name="search-outline"
+                    size={48}
+                    color={colors.text.tertiary}
+                  />
+                }
               />
-              <Text
-                style={[styles.emptyText, { color: colors.text.secondary }]}
-              >
-                Tidak ada hasil
-              </Text>
             </View>
           )
         }

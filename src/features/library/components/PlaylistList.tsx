@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  FlatList,
   StyleSheet,
   Platform,
   ListRenderItem,
@@ -20,6 +19,7 @@ import {
 } from "lucide-react-native";
 
 import { useTheme } from "@/shared/context/ThemeContext";
+import { ScreenList } from "@/shared/components/ui/ScreenList";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 
 // ── Types Definition ────────────────────────────────────────────────────────
@@ -209,8 +209,12 @@ export const PlaylistList: React.FC<PlaylistListProps> = ({
     );
   }
 
+  // U-P2-53: daftar playlist lewat pola daftar bersama. Jalur yang
+  // dipilih FlatList (`boundedSmall`: playlist pengguna jumlahnya kecil
+  // + ada section header) — perilaku scroll tidak berubah.
   return (
-    <FlatList
+    <ScreenList
+      boundedSmall
       data={playlists}
       keyExtractor={keyExtractor}
       extraData={colors} // Memastikan render ulang jika tema berubah
