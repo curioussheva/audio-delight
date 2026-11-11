@@ -1,5 +1,5 @@
 // src/app/(drawer)/song/[id].tsx
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -145,6 +145,15 @@ export default function SongDetailScreen() {
   const onPrimary =
     pickReadable(["#FFFFFF", "#000000"], colors.primary[500], AA_NORMAL) ??
     "#FFFFFF";
+
+  // U-P2-50: tombol "Kembali" harus selalu punya tujuan — masuk via
+  // deep link tidak ada history untuk router.back(), jadi fallback ke
+  // Library. Pola yang sama dengan search.tsx. (Pesan "id tidak ada"
+  // vs "id tidak diberikan" sudah dibedakan sejak U-P1-21.)
+  const handleBack = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace("/(drawer)/(tabs)/library");
+  }, [router]);
 
   const tracks = useLibraryStore((state) => state.tracks);
   const setTracks = useLibraryStore((state) => state.setTracks);
@@ -407,7 +416,7 @@ export default function SongDetailScreen() {
               styles.backButton,
               { backgroundColor: colors.background.secondary },
             ]}
-            onPress={() => router.back()}
+            onPress={handleBack}
           >
             <Text style={{ color: colors.primary[500], fontWeight: "600" }}>
               Kembali
@@ -445,7 +454,7 @@ export default function SongDetailScreen() {
             styles.backButton,
             { backgroundColor: colors.background.secondary },
           ]}
-          onPress={() => router.back()}
+          onPress={handleBack}
         >
           <Text style={{ color: colors.primary[500], fontWeight: "600" }}>
             Kembali
@@ -571,7 +580,7 @@ export default function SongDetailScreen() {
             {/* U-P2-09: back berlabel "Kembali" — pola yang sama dengan
                 detail Album/Artist/Folder/Format/Genre. */}
             <TouchableOpacity
-              onPress={() => router.back()}
+              onPress={handleBack}
               style={[styles.iconBtn, styles.backBtn]}
             >
               <ArrowLeft size={26} color={colors.text.primary} />
