@@ -369,3 +369,34 @@ for (const key of Object.keys(THEME_CATEGORIES)) {
     delete THEME_CATEGORIES[key];
   }
 }
+
+// Label picker per kategori. Kunci yang tidak dikenal (mis. kategori baru
+// yang ditambahkan belakangan) tetap dapat label generik supaya tidak
+// tampil tanpa judul.
+export const THEME_CATEGORY_LABELS: Record<string, string> = {
+  dark: "🌙 Dark",
+  light: "☀️ Light",
+  premium: "💎 Premium",
+  nature: "🌿 Nature",
+  lainnya: "📦 Lainnya",
+};
+
+export function themeCategoryLabel(key: string): string {
+  return (
+    THEME_CATEGORY_LABELS[key] ??
+    `📦 ${key.charAt(0).toUpperCase()}${key.slice(1)}`
+  );
+}
+
+// Urutan tampil kategori di picker. Kunci yang tidak ada di daftar ini
+// (mis. kategori baru) ditaruh paling akhir dengan urutan aslinya
+// dipertahankan.
+const THEME_CATEGORY_ORDER = ["dark", "light", "premium", "nature", "lainnya"];
+
+export function sortThemeCategoryKeys(keys: string[]): string[] {
+  const rank = (key: string): number => {
+    const i = THEME_CATEGORY_ORDER.indexOf(key);
+    return i === -1 ? THEME_CATEGORY_ORDER.length : i;
+  };
+  return [...keys].sort((a, b) => rank(a) - rank(b));
+}

@@ -14,7 +14,12 @@ import {
 import { X, Shuffle, Check } from "lucide-react-native";
 
 import { useTheme } from "@/shared/context/ThemeContext";
-import { ALL_THEMES, THEME_CATEGORIES } from "@/shared/constants/theme";
+import {
+  ALL_THEMES,
+  THEME_CATEGORIES,
+  sortThemeCategoryKeys,
+  themeCategoryLabel,
+} from "@/shared/constants/theme";
 import type { Theme } from "@/shared/constants/themes/types";
 import { accentOn, pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 
@@ -22,13 +27,16 @@ const { width } = Dimensions.get("window");
 const COLUMN_WIDTH = (width - 64) / 3;
 const CARD_WIDTH = COLUMN_WIDTH - 8;
 
-// Kategori yang tersedia
-const CATEGORIES: { label: string; key: keyof typeof THEME_CATEGORIES }[] = [
-  { label: "🌙 Dark", key: "dark" },
-  { label: "☀️ Light", key: "light" },
-  { label: "💎 Premium", key: "premium" },
-  { label: "🌿 Nature", key: "nature" },
-];
+// U-P2-36: kategori DULU hardcoded 4 butir — bucket "lainnya" dari theme.ts
+// tidak pernah sampai ke UI, jadi jaring pengaman tema tak terklaim mati di
+// picker. Sekarang kategori dirender dinamis dari THEME_CATEGORIES: kunci
+// apa pun yang ada di sana (termasuk "lainnya" bila terisi, atau kategori
+// baru) muncul dengan label + urutan yang ditentukan di theme.ts.
+const CATEGORIES: { label: string; key: string }[] =
+  sortThemeCategoryKeys(Object.keys(THEME_CATEGORIES)).map((key) => ({
+    label: themeCategoryLabel(key),
+    key,
+  }));
 
 export const ThemePicker: React.FC<{
   visible: boolean;
