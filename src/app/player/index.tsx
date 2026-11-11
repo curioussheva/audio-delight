@@ -203,7 +203,12 @@ export default function PlayerScreen() {
               NOW PLAYING
             </Text>
             <View style={styles.audioModeBadge}>
-              {audioMode === "bit-perfect" && bpStatus.exclusiveFailed ? (
+              {/* Verdict live (FALLBACK / laju) hanya saat status tidak
+                  basi: saat pause polling berhenti, jadi badge hanya
+                  menampilkan label mode (U-P1-04). */}
+              {audioMode === "bit-perfect" &&
+              !bpStatus.stale &&
+              bpStatus.exclusiveFailed ? (
                 // Bit-perfect diminta tapi AAudio menolak — jangan pamer
                 // label "BIT-PERFECT" yang tidak benar.
                 <TriangleAlert size={12} color={errorColor} />
@@ -215,16 +220,18 @@ export default function PlayerScreen() {
                   styles.audioModeText,
                   {
                     color:
-                      audioMode === "bit-perfect" && bpStatus.exclusiveFailed
+                      audioMode === "bit-perfect" &&
+                      !bpStatus.stale &&
+                      bpStatus.exclusiveFailed
                         ? errorColor
                         : goldColor,
                   },
                 ]}
               >
                 {audioMode === "bit-perfect"
-                  ? bpStatus.exclusiveFailed
+                  ? !bpStatus.stale && bpStatus.exclusiveFailed
                     ? "FALLBACK"
-                    : bpStatus.actualSampleRate > 0
+                    : !bpStatus.stale && bpStatus.actualSampleRate > 0
                       ? `BIT-PERFECT ${bpStatus.actualSampleRate / 1000}K`
                       : "BIT-PERFECT"
                   : audioMode === "immersive"

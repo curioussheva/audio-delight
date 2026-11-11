@@ -26,12 +26,21 @@ export interface BitPerfectStatus {
   streamExclusive: boolean;
   /** Bit-perfect sebenarnya aktif: dipilih DAN diterima. */
   isBitPerfect: boolean;
-  /** User minta bit-perfect tapi device/AAudio menolak → fallback shared. */
+  /** User minta bit-perfect tapi device/AAudio menolak → fallback shared.
+   *  Hanya true bila native benar-benar sudah terbaca (available) — saat
+   *  native belum siap, exclusive=false adalah "belum tahu", bukan
+   *  "ditolak" (U-P1-04: dulu langsung menuduh FALLBACK). */
   exclusiveFailed: boolean;
   /** Laju stream yang benar-benar dibuka Oboe (Hz). 0 = belum start. */
   actualSampleRate: number;
   /** Native module belum siap (library belum load / engine belum start). */
   unavailable: boolean;
+  /**
+   * Status tidak lagi dipolling live — polling hanya jalan saat playing,
+   * jadi saat pause verdict (FALLBACK / laju) bisa basi (U-P1-04).
+   * Pemakai jangan menampilkan verdict live bila stale.
+   */
+  stale: boolean;
 }
 
 const INITIAL: BitPerfectStatus = {
@@ -41,6 +50,7 @@ const INITIAL: BitPerfectStatus = {
   exclusiveFailed: false,
   actualSampleRate: 0,
   unavailable: true,
+  stale: true,
 };
 
 /**
@@ -88,9 +98,15 @@ export const useBitPerfectStatus = (
         requested,
         streamExclusive: exclusive,
         isBitPerfect: requested && exclusive,
-        exclusiveFailed: requested && !exclusive,
+        // Jangan tuduh FALLBACK saat native belum siap: exclusive=false
+        // di situ artinya "belum tahu", bukan "ditolak" (U-P1-04).
+        exclusiveFailed: requested && available && !exclusive,
         actualSampleRate: rate,
         unavailable: !available,
+        // Saat pause polling berhenti — verdict yang tersisa bisa basi
+        // (mis. DAC dicabut saat pause). Pemakai harus menyembunyikan
+        // verdict live bila stale (U-P1-04).
+        stale: !isPlaying,
       });
     };
 

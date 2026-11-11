@@ -810,8 +810,12 @@ export default function SettingsScreen() {
               const isActive = audioMode === m.id;
               // bit-perfect yang gagal exclusive: tetap berbunyi, tapi
               // kehilangan klaimnya. Ditandai berbeda, TIDAK dimatikan.
+              // Verdict live hanya bila tidak basi (saat pause polling
+              // berhenti — U-P1-04).
               const isFallback =
-                m.id === "bit-perfect" && bpStatus.exclusiveFailed;
+                m.id === "bit-perfect" &&
+                !bpStatus.stale &&
+                bpStatus.exclusiveFailed;
 
               return (
                 <TouchableOpacity
