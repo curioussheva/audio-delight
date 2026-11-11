@@ -201,6 +201,35 @@ bukan pola pause-silence (P-M2). Perlu verdict telinga csheva.
 logcat — integrasi TS tidak me-log nilai cutoff/verdict. Verdict yang
 tampil di layar untuk 01–05 + 7 track album harus dikonfirmasi csheva.
 
+## 7. Verifikasi logcat #16 + screenshot 05 (2026-11-11 19:49–19:53)
+
+Logcat #16 (sesi sama dengan #15, app tidak di-restart): user putar
+05, queue 5 file sample di Repeat All. 10× `analyzeFile selesai`,
+0 crash, 0 error Base64. Analisis 05 yang segar (19:49:56, 44,1 kHz
+s32) SELESAI — dan **verdict 05 TERKONFIRMASI BENAR di screenshot
+19:51**: PADDING, LSB **100%** sampel di grid 16-bit, cutoff
+**18,3 kHz**, Peak/RMS -6,1/-9,1 dBFS, 5×8192 frame; note "[FFT]
+8 bit bawah semuanya nol (rasio LSB-16 100%) — kemungkinan padding
+dari 16-bit". Deteksi padding terbukti end-to-end di device.
+(Screenshot 19:17 yang sebelumnya menampilkan UPSCALE/96 kHz + LSB
+0% adalah hasil file **03** — csheva konfirmasi itu screenshot file
+yang lain; tab menyimpan hasil analisis terakhir tanpa label file.)
+
+**Temuan UI (dicatat, belum diperbaiki):**
+- Banner status salah label — `getQualityStatus()` di `analyzer.tsx`
+  mengembalikan "UPSCALE DETECTED" untuk SEMUA `isFake` (padding dan
+  lossy-source ikut kebawa). Untuk 05 harusnya "PADDING DETECTED".
+- Tab tidak membersihkan hasil lama saat lagu berganti dan tidak
+  menampilkan nama file yang dianalisis — sumber kebingungan
+  screenshot 19:17.
+
+**Observasi playback selama tes ini (ditampung sebagai PR, bukan
+bagian analyzer):** sunyi 1–4 detik saat ganti file + slider/info
+lagu masih menampilkan file lama (UI tertinggal). csheva: kasus ini
+satu keluarga dengan play/pause yang kejeda dulu (P-M2) — transisi
+state tidak atomik; alasan audit global dulu sebelum kejar bug
+serius ("app belum stabil"). Lihat daftar PR.
+
 ## Commit
 
 - `978ea1a6` — patch pnpm lib audio-metadata + `patchedDependencies`.
