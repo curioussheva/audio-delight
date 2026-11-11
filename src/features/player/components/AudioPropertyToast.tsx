@@ -22,6 +22,19 @@ export const AudioPropertyToast = () => {
 
   if (!visible || !currentSong) return null;
 
+  // Judul melabeli FILE, bukan output (U-P1-03): isHiRes adalah properti
+  // file, sementara output bisa di-resample/di-DSP atau fallback ke
+  // shared — mengklaim "Output" dari properti file itu palsu.
+  // Detail teknis hanya menampilkan nilai yang benar-benar ada; yang
+  // tidak ada dihilangkan (dulu bitDepth kosong tampil "undefinedbit").
+  const detailsParts: string[] = [];
+  if (currentSong.codec) detailsParts.push(currentSong.codec.toUpperCase());
+  if (currentSong.bitDepth) detailsParts.push(`${currentSong.bitDepth}bit`);
+  if (currentSong.sampleRate)
+    detailsParts.push(`${currentSong.sampleRate / 1000}kHz`);
+  const detailsText =
+    detailsParts.length > 0 ? detailsParts.join(" • ") : "—";
+
   return (
     <Animated.View
       entering={FadeInUp.springify()}
@@ -42,12 +55,9 @@ export const AudioPropertyToast = () => {
         />
         <View style={styles.textContainer}>
           <Text style={styles.title}>
-            {currentSong.isHiRes ? "Hi-Res Audio Output" : "Pure Audio Output"}
+            {currentSong.isHiRes ? "Hi-Res Audio File" : "Audio File"}
           </Text>
-          <Text style={styles.details}>
-            {currentSong.codec?.toUpperCase()} • {currentSong.bitDepth}bit /{" "}
-            {(currentSong.sampleRate || 0) / 1000}kHz.
-          </Text>
+          <Text style={styles.details}>{detailsText}</Text>
         </View>
       </BlurView>
     </Animated.View>
