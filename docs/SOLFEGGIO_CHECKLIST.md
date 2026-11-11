@@ -28,6 +28,8 @@ Rencana lengkap (fase-fase): `docs/RENCANA_SOLFEGGIO_2026-11-11.md`.
 
 ## 4. HRTF vs stereo widener (catatan untuk kerja DSP nanti)
 
+- [x] KEPUTUSAN 2026-11-11: widening + HRTF urusan mode DSP, bukan Solfeggio — skip di Solfeggio kalau mahal. `SpatialFieldProcessor` yang sudah ada di rantai Solfeggio TETAP (murah, sudah jadi); yang tidak dibangun untuk Solfeggio = HRTF baru / widening baru. Kerja spasial lanjutan pindah ke mode DSP.
+
 - [ ] Stereo widener (DSPChain `StereoWidener`, `SpatialFieldProcessor`) = mid/side: side diperkuat/dilemahkan; jalan di speaker + headphone; mono-compatible bila width ≤ 1; BUKAN HRTF
 - [ ] HRTF = filter per-telinga (ITD/ILD + pinna): headphone-only; butuh input mono atau proses per-kanal; BUKAN widener
 - [ ] Jangan sebut widener sebagai "HRTF" / "binaural" di UI, doc, atau komentar
@@ -36,17 +38,18 @@ Rencana lengkap (fase-fase): `docs/RENCANA_SOLFEGGIO_2026-11-11.md`.
 ## 5. Preset solfeggio (frekuensi resonator)
 
 - [ ] Daftar: 174, 285, 396, 417, 432, 528, 639, 741, 852, 963 Hz
-- [ ] 432 Hz: OPEN — preset resonator (gampang) vs retune lagu ke A=432 (pitch shift, fitur lain, belum ada kodenya). Jangan bangun preset 432 sebelum arti ini diputuskan.
+- [x] 432 Hz: DIPUTUSKAN 2026-11-11 — RETUNE (bukan preset resonator). Yang diharapkan user = lagu di-retune ke A=432. Desain: lihat §9 (Retune). Preset resonator 432 TIDAK dibangun.
 - [ ] Preset gabungan (opsional): "Tidur" = 432 Hz + Theta 6 Hz; "Fokus" = 528 Hz + Beta 20 Hz — beat EKSPLISIT di preset, bukan implisit
 
 ## 6. Keputusan (status)
 
 - [x] Tetap native, bukan library luar (JamesDSP dsb) — diputuskan 2026-11-11
 - [x] Rename UI → Solfeggio — diputuskan 2026-11-11
-- [ ] Arah produk: psikoakustik / spasial / keduanya — BELUM
+- [x] Arah produk: PSIKOAKUSTIK — diputuskan 2026-11-11 (spasial tetap ada sebagai widening dasar; HRTF/widening lanjutan = urusan mode DSP)
+- [x] Widening/HRTF → mode DSP, skip di Solfeggio kalau mahal — diputuskan 2026-11-11
 - [ ] Filosofi kontrol: Intensitas master + frekuensi/width terpisah, atau semua dipisah — BELUM
 - [ ] Eksekusi: Fase 1 dulu vs lompat Fase 3 — BELUM
-- [ ] 432 Hz: resonator vs retune — BELUM
+- [x] 432 Hz: RETUNE — diputuskan 2026-11-11 (kejar retune, itu yang diharapkan user)
 
 ## 7. Verifikasi device (per tahap)
 
@@ -56,9 +59,19 @@ Rencana lengkap (fase-fase): `docs/RENCANA_SOLFEGGIO_2026-11-11.md`.
 - [ ] Preset: ganti preset saat lagu jalan → karakter berubah langsung, tanpa restart stream
 - [ ] Catatan: rename UI ini JS-only, tidak ikut build Dev run 42943243342 (head 633049d4) — dicek via Termux sync + Metro, bukan APK baru
 
+## 9. Retune A=432 (DIPUTUSKAN 2026-11-11 — dikejar)
+
+- [ ] Desain (menunggu pilihan pendekatan, lihat rencana): **A. Phase vocoder** (pitch tanpa tempo; STFT di atas `FFTPlan` yang sudah ada; frame-count preserving → clock/speed tidak terganggu; ~300–500 baris + wiring mirror `setPlaybackRate` + harness; latensi ~40–80 ms) vs **B. Tape-style resample** (lipat rasio ke swr decoder; pitch+tempo berubah bareng, durasi +1,9%; mengacaukan clock posisi + logika rate D-M1/D-M2 + berantem dengan kontrol speed — TIDAK sesuai ekspektasi user). Rekomendasi: A.
+- [ ] Rumah kontrol: level player (sibling kontrol speed di `PlaybackController::render`, bypass di rasio 1.0 = A=440); UI picker tuning di panel Solfeggio (di situlah user mengharapkannya); berlaku di mode DSP + Solfeggio, FORCED OFF di bit-perfect (retune = processing).
+- [ ] Preset tuning: Standar A=440 / Verdi A=432 (−31,8 sen) / custom sen (±100 sen); rasio = 2^(sen/1200).
+- [ ] Dependensi: harness standalone atas `FFTPlan` + `PitchShifter` baru (pola WSOLA 24/24); audit section fft boleh jalan paralel — pitch shifter tidak menunggu audit selesai, harness-nya yang membuktikan.
+- [ ] Interaksi: speed (WSOLA, tempo) × retune (pitch) = kontrol ortogonal, independen — urutan: pitch dulu, baru tempo.
+
 ## 8. Yang TIDAK dilakukan
 
 - [ ] Ganti mesin DSP dengan library luar
 - [ ] HRTF sebelum Fase 1
 - [ ] Konvolusi sebelum audit fft
 - [ ] Refactor nama internal Immersive → Solfeggio
+- [ ] Preset resonator 432 Hz (diganti retune — keputusan 2026-11-11)
+- [ ] HRTF untuk mode Solfeggio (urusan mode DSP)

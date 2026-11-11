@@ -25,6 +25,12 @@ ronde perbaikan dsp 2026-11-11 (DSP-M3 selesai, commit `1fd288b2`).
   (pitch shift seluruh lagu — fitur lain, rantai sekarang tidak punya pitch
   shifter). Jangan bangun preset 432 sebelum arti ini diputuskan.
 - **Checklist strategi:** `docs/SOLFEGGIO_CHECKLIST.md` (dibuat 2026-11-11).
+- **Arah produk: PSIKOAKUSTIK (2026-11-11).** Widening + HRTF urusan mode DSP,
+  bukan Solfeggio — skip di Solfeggio kalau mahal. `SpatialFieldProcessor` yang
+  sudah ada tetap; HRTF baru tidak dibangun untuk Solfeggio.
+- **432 Hz: RETUNE (2026-11-11).** Bukan preset resonator — yang diharapkan user
+  adalah lagu di-retune ke A=432. Desain di "Fase R" di bawah; pendekatan
+  menunggu pilihan csheva (phase vocoder vs tape-style).
 
 ## 1. Keadaan sekarang (grounded di kode)
 
@@ -110,8 +116,13 @@ Tujuan: binaural beat berfungsi sebagaimana mestinya, bukan sekadar hidup.
   frekuensi yang dipilih); konfirmasi tidak ada efek di speaker.
 - **Estimasi:** kecil — bisa digabung ke Fase 1 bila mau.
 
-### Fase 3 — Binaural / HRTF beneran (DSP-M15)
+### Fase 3 — Binaural / HRTF beneran (DSP-M15) — DIPINDAH KE MODE DSP (2026-11-11)
 Tujuan: ganti stub `BinauralRenderer` dengan rendering spasial nyata.
+
+**Keputusan 2026-11-11: fase ini BUKAN bagian rencana Solfeggio lagi.**
+Widening + HRTF urusan mode DSP; skip di Solfeggio kalau mahal. Isi fase di
+bawah dipertahankan sebagai catatan untuk kerja mode DSP nanti, bukan untuk
+dieksekusi di sini.
 
 - **Tiga opsi implementasi:** (a) ITD + ILD + EQ pinna sederhana (~100 baris,
   tanpa file data, tanpa konvolusi); (b) HRIR SOFA + konvolusi (butuh convolver
@@ -139,6 +150,37 @@ Tujuan: reverb ruang ala IRS-nya ViPER.
   sebelum fft diaudit.
 - **Estimasi:** sedang–besar.
 
+### Fase R — Retune A=432 (DIPUTUSKAN 2026-11-11 — dikejar)
+
+Tujuan: lagu di-retune ke A=432 (Verdi tuning, −31,8 sen) — pitch berubah,
+tempo tetap. Ini yang diharapkan user, bukan preset resonator.
+
+- **Pendekatan A (direkomendasikan): phase vocoder.** STFT di atas `FFTPlan`
+  yang sudah ada (`fft/FFTPlan.h`: `forward()`/`inverse()` — FFT beneran,
+  bukan kissfft; dipakai immersive). Pitch shift via propagasi fase; frame
+  masuk = frame keluar (frame-count preserving) → clock posisi (P-M8, hitung
+  frame input) + kontrol speed (WSOLA) tidak terganggu. Latensi ~1–2 jendela
+  (~40–80 ms). Kelas baru (`playback/PitchShifter` atau `dsp/`), pola
+  push/pull + reset di bawah `clearing_` seperti `PlaybackRateProcessor`
+  (WSOLA, P-M9); wiring TS → Kotlin → JNI mirror rantai `setPlaybackRate`;
+  harness standalone (pola WSOLA 24/24) atas `FFTPlan` + kelas baru.
+  Perkiraan: 1–2 ronde. Audit section fft boleh jalan paralel — harness yang
+  membuktikan, bukan audit.
+- **Pendekatan B (tidak direkomendasikan): tape-style resample.** Lipat rasio
+  440/432 ke swr decoder (`FFmpegDecoder::setupResampler`,
+  `swr_alloc_set_opts2` dengan `targetSampleRate`). Kode kecil, tapi: pitch +
+  tempo berubah bareng (durasi +1,9% — bukan yang diharapkan user); jumlah
+  frame berubah → clock posisi + logika rate D-M1/D-M2 (domain frame =
+  `targetSampleRate`) kacau; berantem dengan kontrol speed WSOLA. Dua kontrol
+  pitch/tempo yang saling tumpang tindih.
+- **Rumah kontrol:** level player, sibling kontrol speed di
+  `PlaybackController::render` (bypass di rasio 1,0 = A=440); UI picker tuning
+  di panel Solfeggio; berlaku di mode DSP + Solfeggio, FORCED OFF di
+  bit-perfect (retune = processing). Urutan rantai: pitch dulu, baru tempo
+  (WSOLA) — keduanya kontrol ortogonal yang independen.
+- **Preset tuning:** Standar A=440 / Verdi A=432 / custom sen (±100 sen);
+  rasio = 2^(sen/1200).
+
 ### Fase 5 — Polish & bersih-bersih
 - Hapus `FFTResonanceAnalyzer` (mati total, DSP-M15) dan `BinauralRenderer` lama
   bila diganti Fase 3.
@@ -158,7 +200,7 @@ Fase 1; konvolusi sebelum audit fft.
 
 ## 5. Keputusan yang dibutuhkan dari csheva
 
-1. Arah produk (§2.1): psikoakustik saja, spasial saja, atau dua-duanya?
+1. Arah produk (§2.1): ~~psikoakustik saja, spasial saja, atau dua-duanya?~~ → **PSIKOAKUSTIK** (diputuskan 2026-11-11).
 2. Filosofi kontrol (§2.2): Intensitas tetap master + frekuensi/width terpisah,
    atau semua kontrol dipisah?
-3. Eksekusi: Fase 1 dulu, atau lompat ke Fase 3?
+3. Eksekusi: Fase 1 dulu, atau lompat ke Fase 3? → Fase 3 (HRTF) PINDAH ke mode DSP; yang dikejar sekarang **retune (Fase R)** — pendekatan A vs B menunggu pilihan.
