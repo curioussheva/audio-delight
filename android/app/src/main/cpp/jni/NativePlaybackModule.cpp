@@ -321,7 +321,3 @@ JNIEXPORT jstring JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nati
 }
 
 } // extern "C"
-
-void initPlaybackModule(pristine::playback::PlaybackController* controller) {
-    gPlaybackController = controller;
-}

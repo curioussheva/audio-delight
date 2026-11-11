@@ -26,6 +26,3 @@ JNIEXPORT jboolean JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nat
 #ifdef __cplusplus
 }
 #endif
-
-// Call this from JNI_OnLoad to initialize playback controller
-void initPlaybackModule(pristine::playback::PlaybackController* controller);
