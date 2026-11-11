@@ -37,6 +37,10 @@ import {
 } from "@shopify/react-native-skia";
 
 import { visualizerService } from "@/features/visualizer/services/VisualizerService";
+import {
+  DEFAULT_SPECTROGRAM_SAMPLE_RATE,
+  frequencyAxisLabels,
+} from "@/features/visualizer/api/frequencyAxis";
 
 interface SpectogramViewProps {
   width?: number;
@@ -48,6 +52,12 @@ interface SpectogramViewProps {
   colorScheme?: "classic" | "thermal" | "grayscale";
   sensitivity?: number;
   showLabels?: boolean;
+  /**
+   * Laju sampel sesi FFT (Hz) — menentukan Nyquist sumbu-x. Default
+   * 48 kHz; native tidak mengekspos laju sesi ke JS, jadi pemanggil yang
+   * tahu laju output sebenarnya boleh mengopernya.
+   */
+  sampleRate?: number;
 }
 
 const DEFAULT_BINS = 64;
@@ -146,6 +156,7 @@ export const SpectogramView = React.memo(
     colorScheme = "classic",
     sensitivity = 2.0,
     showLabels = true,
+    sampleRate = DEFAULT_SPECTROGRAM_SAMPLE_RATE,
   }: SpectogramViewProps) => {
     const makeEmptyGrid = useCallback(
       (): number[][] =>
@@ -178,6 +189,14 @@ export const SpectogramView = React.memo(
     const colorCache = useMemo(
       () => generateColorCache(256, colorScheme),
       [colorScheme],
+    );
+
+    // U-P1-34: label sumbu-x LINEAR 0–Nyquist (bin di-resample linear,
+    // bukan log). 5 titik berjarak sama = 0 / 6 / 12 / 18 / 24 kHz pada
+    // 48 kHz; ikut sampleRate bila pemanggil mengopernya.
+    const freqLabels = useMemo(
+      () => frequencyAxisLabels(sampleRate),
+      [sampleRate],
     );
 
     // Grid (SharedValue) -> SkImage piksel, semuanya di UI thread.
@@ -340,9 +359,11 @@ export const SpectogramView = React.memo(
         {showLabels && (
           <View style={styles.footer}>
             <View style={styles.frequencyLabels}>
-              <Text style={styles.label}>20 Hz</Text>
-              <Text style={styles.label}>2 kHz</Text>
-              <Text style={styles.label}>20 kHz</Text>
+              {freqLabels.map((label) => (
+                <Text key={label} style={styles.label}>
+                  {label}
+                </Text>
+              ))}
             </View>
             <View style={styles.colorBar}>
               {[0, 64, 128, 192, 255].map((idx) => (
