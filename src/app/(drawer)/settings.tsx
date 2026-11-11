@@ -48,6 +48,7 @@ import OnlineMetadataService from "@/features/library/services/OnlineMetadataSer
 import { Zap, ShieldCheck, TriangleAlert } from "lucide-react-native";
 import { ALL_PRESETS } from "@/features/equalizer/constants/presets";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
+import { useHeadphoneStore } from "@/features/headphone/store/headphoneStore";
 
 // ─── Reusable Sub Components ────────────────────────────────────────────────
 
@@ -162,7 +163,7 @@ const SettingRow: React.FC<SettingRowProps> = ({
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 
 export default function SettingsScreen() {
-  const { theme, isDarkMode, toggleTheme } = useTheme();
+  const { theme, isDarkMode, toggleTheme, setTheme } = useTheme();
   const { colors, spacing } = theme;
 
   const {
@@ -209,7 +210,9 @@ export default function SettingsScreen() {
 
   const [showEQPicker, setShowEQPicker] = useState(false);
 
-  const { activePresetId, applyPreset } = useEqualizerStore();
+  const { activePresetId, applyPreset, setEQEnabled } = useEqualizerStore();
+
+  const { resetAll: resetHeadphoneAll } = useHeadphoneStore();
 
   const {
     playbackSpeed,
@@ -268,8 +271,38 @@ export default function SettingsScreen() {
         {
           text: "Reset",
           style: "destructive",
-          onPress: () =>
-            Alert.alert("Sukses", "Semua pengaturan telah direset"),
+          onPress: async () => {
+            // Dulu tombol ini palsu: langsung tampil "Sukses" tanpa
+            // mereset apa pun. Sekarang tiap pengaturan dikembalikan
+            // ke nilai default-nya (lihat store masing-masing).
+            try {
+              await setTheme("emerald-noir");
+              if (isAutoScanEnabled) {
+                toggleAutoScanEnabled();
+                await BackgroundScanTask.unregister().catch((err) =>
+                  console.warn(
+                    "[Settings] BackgroundTask unregister failed:",
+                    err,
+                  ),
+                );
+              }
+              setEnableOnlineArtistImage(false);
+              setDownloadOnlyOnWiFi(true);
+              applyPreset("flat");
+              await setEQEnabled(false);
+              await resetHeadphoneAll();
+              setPlaybackSpeed(1.0);
+              setTuningCents(0);
+              setAudioMode("dsp");
+              Alert.alert("Sukses", "Semua pengaturan telah direset");
+            } catch (e) {
+              console.warn("[Settings] Reset All gagal:", e);
+              Alert.alert(
+                "Gagal",
+                "Sebagian pengaturan gagal direset. Coba lagi.",
+              );
+            }
+          },
         },
       ],
     );
