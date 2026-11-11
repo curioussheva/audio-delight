@@ -13,8 +13,13 @@
 // (#include "manager/EngineManager.h" dihapus 2026-11-10: tidak dipakai —
 // file ini hanya menyimpan pointer JavaVM, EngineManager hanya disebut
 // di string log. Menghapus include ini TIDAK memutus DT_NEEDED
-// libappmodules.so -> libpristine-audio.so: dependensi itu berasal dari
-// 4 panggilan init JavaVM di file ini, bukan dari include.)
+// libappmodules.so -> libpristine-audio.so.
+// KOREKSI 2026-11-11 (J-m7/J-M2): DT_NEEDED berasal dari direktif link
+// eksplisit `target_link_libraries(appmodules ... pristine-audio)`
+// (CMakeLists.txt), BUKAN dari 4 panggilan init JavaVM di file ini —
+// menghapus call saja tidak memutusnya. 4 call itu hanya menyimpan
+// pointer JavaVM; memutus DT_NEEDED butuh JNI_OnLoad sendiri di
+// libpristine-audio + lepas link appmodules (lihat J-M2).)
 #include "decoder/ContentUriResolver.h"
 #include "core/DeviceRateDetector.h"
 #include "devices/AudioDeviceManager.h"

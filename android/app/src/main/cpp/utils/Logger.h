@@ -68,6 +68,9 @@ __android_log_print( \
     __VA_ARGS__ \
 )
 
+// LOGF hanya menulis log level FATAL — TIDAK abort (U-m6, 2026-11-11).
+// Jangan andalkan untuk menghentikan eksekusi; pakai
+// __android_log_assert bila butuh abort.
 #define LOGF(...) \
 __android_log_print( \
     ANDROID_LOG_FATAL, \

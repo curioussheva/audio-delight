@@ -40,7 +40,7 @@ inline void applyGain(
 
     int32_t i = 0;
 
-    for (; i <= count - 4; i += 4) {
+    for (; i + 4 <= count; i += 4) {
 
         float32x4_t x =
             vld1q_f32(buffer + i);
@@ -85,7 +85,7 @@ inline void applyStereoGain(
 
     int32_t i = 0;
 
-    for (; i <= count - 4; i += 4) {
+    for (; i + 4 <= count; i += 4) {
 
         float32x4_t l =
             vld1q_f32(left + i);

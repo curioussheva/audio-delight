@@ -17,8 +17,10 @@ namespace pristine::playback {
 //
 // DecoderWorker jalan di thread sendiri. Supaya bisa CallVoidMethod ke
 // Java, thread itu butuh JNIEnv — di-attach ke JVM via AttachCurrentThread.
-// Karena NativePlaybackModule::init() dipanggil dari thread JNI saat
-// constructor Java, kita simpan globalRef di situ dan JavaVM di JNI_OnLoad.
+// JavaVM disimpan lewat initJavaVm() yang dipanggil dari JNI_OnLoad
+// (OnLoad.cpp). KOREKSI 2026-11-11 (J-m7): registrasi modul TIDAK lagi
+// lewat constructor Java — native readiness dijamin lazy lewat
+// ensureNativeReady() di Kotlin (NativePlaybackModule.kt).
 
 // Simpan JavaVM untuk callback native→JS. Dipanggil dari JNI_OnLoad
 // (library appmodules) — harus terekspor lewat PRISTINE_EXPORT.
