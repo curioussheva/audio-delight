@@ -130,6 +130,17 @@ export default function PlayerScreen() {
     }
   };
 
+  // 🔥 Badge mode audio yang jujur. audioMode = pilihan user; AAudio bisa
+  // menolak exclusive → fallback shared. Tanpa ini badge "BIT-PERFECT"
+  // bohong kalau device menolak.
+  //
+  // Hook ini HARUS di atas `if (!currentSong) return null` (2026-11-11,
+  // perbaikan U-P0-4): hook setelah return kondisional melanggar Rules
+  // of Hooks — jumlah hook berubah saat currentSong null ↔ ada, React
+  // melempar "Rendered more hooks than during the previous render" dan
+  // layar crash. Dulu pemanggilannya ada di bawah return (baris ~156).
+  const bpStatus = useBitPerfectStatus();
+
   if (!currentSong) return null;
 
   // Helper warna dinamis
@@ -149,11 +160,6 @@ export default function PlayerScreen() {
   const backgroundSecondary = colors.background.secondary;
   const borderColor = colors.border?.light || colors.background.tertiary;
   const errorColor = colors.status.error;
-
-  // 🔥 Badge mode audio yang jujur. audioMode = pilihan user; AAudio bisa
-  // menolak exclusive → fallback shared. Tanpa ini badge "BIT-PERFECT"
-  // bohong kalau device menolak.
-  const bpStatus = useBitPerfectStatus();
 
   const gradientColors = colors.gradient?.primary || [
     backgroundColor,
