@@ -1,5 +1,5 @@
 // src/app/(drawer)/visualizer.tsx
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,10 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { usePlayerStore } from "@/features/player/store/playerStore";
+import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
+import { audioEngine } from "@/features/player/api/engine";
+import NativeDSPModule from "@/features/equalizer/api/nativeInterface";
+import { visualizerService } from "@/features/visualizer/services/VisualizerService";
 import { SpectrumAnalyzer } from "@/features/visualizer/components/SpectrumAnalyzer";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
@@ -29,20 +33,58 @@ export default function VisualizerScreen() {
   const safePadding = useSafePadding();
   const router = useRouter();
 
-  const { currentSong, isPlaying, audioSessionId } = usePlayerStore();
+  const { currentSong, isPlaying, audioSessionId, setAudioSessionId } =
+    usePlayerStore();
   const [hasValidSession, setHasValidSession] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
+  const [isRetrying, setIsRetrying] = useState(false);
 
   // Cek apakah session ID valid (> 0)
   useEffect(() => {
     setHasValidSession(!!audioSessionId && audioSessionId > 0);
   }, [audioSessionId]);
 
-  const handleRetry = () => {
-    setRetryCount((prev) => prev + 1);
-    // Bisa trigger reconnect di store jika ada
-    // usePlayerStore.getState().reconnectDSP?.();
-  };
+  // U-P1-27: retry benar-benar memulihkan session, bukan cuma menaikkan
+  // counter. Jalur pemulihan (sama dengan syncAudioSession di
+  // useAudioPlayer): (1) pakai ID yang sudah dibuat audioEngine saat
+  // startup — store bisa ketinggalan karena init race; (2) bila engine pun
+  // belum punya sesi, minta lewat createAudioSession (mengembalikan sesi
+  // yang sudah ada bila ada, bukan sesi baru tiap panggil). ID yang pulih
+  // ditulis ke kedua store supaya hasValidSession menyala dan
+  // SpectrumAnalyzer men-start visualizerService; start() dipanggil juga
+  // langsung supaya tidak menunggu re-render. Bila tidak ada sesi yang
+  // bisa dipulihkan, warning tetap tampil — tidak ada klaim sukses palsu.
+  const handleRetry = useCallback(async () => {
+    if (isRetrying) return;
+    setIsRetrying(true);
+    try {
+      let id = audioEngine.getSessionId();
+      if (!id || id <= 0) {
+        try {
+          const res = await NativeDSPModule?.createAudioSession?.();
+          id = res?.sessionId ?? null;
+        } catch (e) {
+          console.warn("[Visualizer] createAudioSession gagal:", e);
+        }
+      }
+      if (id && id > 0) {
+        setAudioSessionId(id);
+        useEqualizerStore.getState().setAudioSessionId(id);
+        const ok = await visualizerService.start(id);
+        if (!ok) {
+          console.warn(
+            "[Visualizer] visualizerService.start gagal untuk sesi",
+            id,
+          );
+        }
+      } else {
+        console.warn(
+          "[Visualizer] Retry: tidak ada audio session yang bisa dipulihkan",
+        );
+      }
+    } finally {
+      setIsRetrying(false);
+    }
+  }, [isRetrying, setAudioSessionId]);
 
   if (!currentSong) {
     return (
@@ -89,7 +131,13 @@ export default function VisualizerScreen() {
           Visualizer
         </Text>
         {!hasValidSession && (
-          <TouchableOpacity onPress={handleRetry} style={styles.retryButton}>
+          <TouchableOpacity
+            onPress={handleRetry}
+            style={[styles.retryButton, isRetrying && { opacity: 0.4 }]}
+            disabled={isRetrying}
+            accessibilityRole="button"
+            accessibilityLabel="Coba pulihkan audio session"
+          >
             <RefreshCw size={20} color={colors.primary[500]} />
           </TouchableOpacity>
         )}
