@@ -30,15 +30,19 @@ namespace pristine {
 //   - Oboe AudioStreamBuilder.setDeviceId() -> paling kuat, diterapkan saat
 //     stream dibuka
 //
-// ⚠️ setDeviceId() BELUM DIPAKAI. AudioStreamController tidak punya field
-// device id dan buildStream() tidak memanggil setDeviceId(), sehingga
-// activeDeviceIdNumeric() di bawah saat ini TIDAK ADA PEMANGGIL: pilihan
-// device tercatat tapi tidak mengubah stream, dan audio tetap keluar di
-// perangkat default sistem. Lihat docs/AUDIO_OUTPUT_PATHS.md §3.1.
+// Pemilihan device SUDAH tersambung end-to-end sejak fix 2026-10-07
+// (KOREKSI dv-m1, 2026-11-11: blok ⚠️ lama di sini mengklaim setDeviceId
+// belum dipakai dan activeDeviceIdNumeric() 0 caller — keduanya SALAH
+// sejak fix itu): UI -> JNI nativeSetActiveDevice -> setActiveDevice()
+// (di sini, validasi) + EngineManager::setRequestedDeviceId() -> reopen
+// -> AudioStreamController::open(deviceId) -> builder.setDeviceId() ->
+// verifikasi getDeviceId() setelah open. Terbukti di device (logcat #12:
+// unplug/replug reopen bekerja).
 //
-// Karena itu setActiveDevice() di sini hanya mencatat pilihan dan
-// memvalidasinya terhadap daftar device; penerapan sebenarnya BELUM terjadi
-// saat stream dibuka - itu yang perlu disambungkan.
+// Sisa gap: jalur fallback OpenSLES mengabaikan deviceId, dan Oboe boleh
+// mengabaikan preferensi (device hilang / tidak bisa dibuka) — karena itu
+// open() memverifikasi getDeviceId() dan EngineManager melaporkan
+// isDeviceHonored() untuk kejujuran UI.
 class AudioDeviceManager {
 public:
     static AudioDeviceManager& get();
