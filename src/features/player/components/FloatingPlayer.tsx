@@ -177,7 +177,12 @@ export default function FloatingPlayer() {
 
           {/* Controls */}
           <View style={s.controls}>
-            <Pressable onPress={toggleShuffle} hitSlop={8}>
+            <Pressable
+              onPress={toggleShuffle}
+              hitSlop={13}
+              accessibilityRole="button"
+              accessibilityLabel="Acak"
+            >
               <Shuffle
                 size={18}
                 color={shuffle ? colors.primary[400] : colors.text.tertiary}
@@ -185,7 +190,12 @@ export default function FloatingPlayer() {
               />
             </Pressable>
 
-            <Pressable onPress={playPrevious} hitSlop={8}>
+            <Pressable
+              onPress={playPrevious}
+              hitSlop={13}
+              accessibilityRole="button"
+              accessibilityLabel="Lagu sebelumnya"
+            >
               <SkipBack
                 size={20}
                 color={colors.text.secondary}
@@ -195,6 +205,9 @@ export default function FloatingPlayer() {
 
             <Pressable
               onPress={togglePlay}
+              hitSlop={3}
+              accessibilityRole="button"
+              accessibilityLabel={isPlaying ? "Jeda" : "Putar"}
               style={[s.playBtn, { backgroundColor: colors.primary[500] }]}
             >
               {isPlaying ? (
@@ -209,7 +222,12 @@ export default function FloatingPlayer() {
               )}
             </Pressable>
 
-            <Pressable onPress={playNext} hitSlop={8}>
+            <Pressable
+              onPress={playNext}
+              hitSlop={13}
+              accessibilityRole="button"
+              accessibilityLabel="Lagu berikutnya"
+            >
               <SkipForward
                 size={20}
                 color={colors.text.secondary}
@@ -219,7 +237,9 @@ export default function FloatingPlayer() {
 
             <Pressable
               onPress={toggleRepeat}
-              hitSlop={8}
+              hitSlop={13}
+              accessibilityRole="button"
+              accessibilityLabel="Ulangi"
               style={{ position: "relative" }}
             >
               <Repeat

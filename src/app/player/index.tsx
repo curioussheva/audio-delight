@@ -562,18 +562,33 @@ export default function PlayerScreen() {
             { backgroundColor: isDark ? backgroundSecondary : bottomBarColor },
           ]}
         >
-          <TouchableOpacity onPress={() => setIsTimerVisible(true)}>
+          <TouchableOpacity
+            onPress={() => setIsTimerVisible(true)}
+            style={styles.utilityBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Sleep timer"
+          >
             <Clock size={20} color={iconColorDefault} />
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => setShowLyrics(!showLyrics)}>
+          <TouchableOpacity
+            onPress={() => setShowLyrics(!showLyrics)}
+            style={styles.utilityBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Lirik"
+          >
             <Mic2
               size={20}
               color={showLyrics ? primaryColor : iconColorDefault}
             />
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => router.push("/(drawer)/analyzer")}>
+          <TouchableOpacity
+            onPress={() => router.push("/(drawer)/analyzer")}
+            style={styles.utilityBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Buka analyzer"
+          >
             <Sparkles size={20} color={iconColorDefault} />
           </TouchableOpacity>
         </View>
@@ -744,6 +759,10 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingVertical: 15,
     borderRadius: 20,
+  },
+  // Target sentuh >= 44dp (U-P1-38): ikon 20px + padding 12 di tiap sisi.
+  utilityBtn: {
+    padding: 12,
   },
   // U-P1-20: empty/error state — bukan layar hitam.
   emptyContainer: {
