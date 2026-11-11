@@ -1,5 +1,5 @@
 // src/features/visualizer/components/SpectrumAnalyzer.tsx
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { View, StyleSheet, Dimensions, Text } from "react-native";
 
 import {
@@ -16,8 +16,6 @@ import {
   useAnimatedReaction,
   runOnUI,
   runOnJS,
-  withTiming,
-  Easing,
 } from "react-native-reanimated";
 
 import { visualizerService } from "@/features/visualizer/services/VisualizerService";
@@ -60,11 +58,15 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
 
   const freqData = useSharedValue<number[]>(Array(MAX_BAR_COUNT).fill(0.1));
   const prevData = useSharedValue<number[]>(Array(barCount).fill(0.1));
-  const dummyPhase = useSharedValue(0);
 
   // FIX: hasRealData dan isPlayingSV sebagai SharedValue agar bisa dibaca worklet
   const hasRealData = useSharedValue(false);
   const isPlayingSV = useSharedValue(isPlaying);
+
+  // Cermin hasRealData di JS thread — dipakai render label "menunggu data"
+  // + opacity (baca .value SharedValue langsung di JSX itu basi, lihat
+  // U-P2-02: komponen tidak re-render saat SharedValue berubah).
+  const [hasRealDataState, setHasRealDataState] = useState(false);
 
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const isStarted = useRef(false);
@@ -76,17 +78,19 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
     isPlayingSV.value = isPlaying;
   }, [isPlaying]);
 
-  // Animasi dummy saat tidak ada data real
-  useEffect(() => {
-    if (!isPlaying) return;
-    const interval = setInterval(() => {
-      dummyPhase.value = withTiming(dummyPhase.value + 0.5, {
-        duration: 100,
-        easing: Easing.linear,
-      });
-    }, 100);
-    return () => clearInterval(interval);
-  }, [isPlaying]);
+  // U-P1-29: JANGAN tampilkan animasi sinus palsu seolah spektrum live
+  // saat FFT native tidak mengembalikan data. Bar diam di lantai (0.05)
+  // + label "Menunggu data audio…" di bawah. hasRealData dicerminkan ke
+  // state JS lewat reaction ini (hanya saat nilainya berubah) supaya label
+  // + opacity mengikuti data yang sebenarnya, bukan keadaan mount.
+  useAnimatedReaction(
+    () => hasRealData.value,
+    (real, prevReal) => {
+      if (real !== prevReal) {
+        runOnJS(setHasRealDataState)(real);
+      }
+    },
+  );
 
   // Callback data — stabil (hanya memakai ref/SharedValue), jadi bisa
   // dipakai ulang tiap kali effect start/stop subscribe ulang.
@@ -138,6 +142,7 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
           "worklet";
           hasRealData.value = false;
         })();
+        setHasRealDataState(false);
       }
     } else {
       if (isStarted.current) {
@@ -152,6 +157,7 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
           prevData.value = Array(barCount).fill(0.1);
           hasRealData.value = false;
         })();
+        setHasRealDataState(false);
       }
     }
   }, [isPlaying, audioSessionId, barCount, handleData]);
@@ -170,19 +176,10 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
     const useDummy = !hasRealData.value && isPlayingSV.value;
 
     if (useDummy) {
-      const dummy = new Array(barCount).fill(0);
-      const phase = dummyPhase.value;
-      for (let i = 0; i < barCount; i++) {
-        const t = i / (barCount - 1);
-        const val =
-          0.3 +
-          0.5 *
-            (Math.sin(phase * 2 + t * 10) * 0.5 +
-              Math.sin(phase * 0.5 + t * 20) * 0.3 +
-              Math.sin(phase * 3 + t * 5) * 0.2);
-        dummy[i] = Math.max(0.05, Math.min(0.8, val));
-      }
-      return dummy;
+      // U-P1-29: tidak ada data real → bar DIAM di lantai, bukan sinus
+      // sintetis. Label "Menunggu data audio…" dirender di JSX (state
+      // hasRealDataState) supaya user tidak mengira ini spektrum live.
+      return Array(barCount).fill(0.05);
     }
 
     if (!raw || raw.length === 0) return Array(barCount).fill(0.1);
@@ -253,12 +250,22 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
             path={visualizerPath}
             color={color}
             style="fill"
-            opacity={hasRealData.value ? 1 : 0.5}
+            opacity={hasRealDataState ? 1 : 0.5}
           >
             <BlurMask blur={2} style="solid" />
           </Path>
         </Group>
       </Canvas>
+
+      {/* U-P1-29: lagu diputar tapi FFT belum/tidak mengembalikan data —
+          katakan jujur, jangan animasikan bar palsu. */}
+      {isPlaying && !hasRealDataState && (
+        <View style={styles.waitingOverlay} pointerEvents="none">
+          <Text style={[styles.waitingText, { color }]}>
+            Menunggu data audio…
+          </Text>
+        </View>
+      )}
 
       {__DEV__ && (
         <View style={styles.debugOverlay}>
@@ -290,5 +297,23 @@ const styles = StyleSheet.create({
     color: "#0f0",
     fontSize: 8,
     fontFamily: "monospace",
+  },
+  waitingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  waitingText: {
+    fontSize: 13,
+    fontWeight: "500",
+    backgroundColor: "rgba(0,0,0,0.45)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    overflow: "hidden",
   },
 });
