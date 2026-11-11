@@ -120,12 +120,12 @@ adalah keputusan desain.
 
 ## Perbaikan
 
-### DIKERJAKAN 2026-11-11 (yang mudah; build menyusul)
+### DIKERJAKAN 2026-11-11 (yang mudah; build menyusul — fix ini TIDAK masuk build 42962732238 yang sedang jalan dari head c69ef41c; ikut build berikutnya)
 
-- **F-M1** — commit `TBD`: `feed()` early-return kalau buffer sudah penuh
+- **F-M1** — commit `84246cda`: `feed()` early-return kalau buffer sudah penuh
   (+ null check `samples`, f-m6). Bukti: harness ASan mode `oob` bersih
   (tidak abort).
-- **F-M2** — commit `TBD`: `process()` jendela ke buffer real `mRealIn`
+- **F-M2** — commit `f15336b4`: `process()` jendela ke buffer real `mRealIn`
   lalu `forward(mRealIn, mBuffer)`; komentar `(stub)` yang basi dibuang.
   Bukti: harness T1 — DC → `mag[0]≈1023.5`, Nyquist `≈0.0`.
 

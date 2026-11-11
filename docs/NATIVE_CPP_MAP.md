@@ -47,9 +47,7 @@ fokus; terkait langsung dengan M2. **Audit 2026-11-11 (`AUDIT_NATIVE_CPP_RESAMPL
 
 ### 6. fft — 11 file
 `FFTPlan`, `FFTProcessor`, `SpectrumAnalyzer`, `SpectrumVisualizer`,
-`WaveformVisualizer`. Diketahui: 3 FFT, hanya immersive yang memakai
-`FFTPlan`; `SpectrumAnalyzer`/`FFTProcessor` 0 caller; ada OOB write
-laten di `SpectrumAnalyzer.cpp:feed()`.
+`WaveformVisualizer`. **Audit 2026-11-11 (`AUDIT_NATIVE_CPP_FFT_2026-11-11.md`): 0 blocker + 3 major (semua dormant) + 11 minor. Hidup hanya `FFTPlan` (dipakai PitchShifter/retune); rantai spektrum + WaveformVisualizer 0 caller. F-M1 OOB write di `feed()` TERBUKTI ASan; F-M2 `reinterpret_cast` di `FFTProcessor::process()` TERBUKTI harness (puncak Nyquist palsu 511.8). Keduanya diperbaiki 2026-11-11 (84246cda, f15336b4) + harness. KOREKSI: klaim "3 FFT" SALAH — cuma ada 1 implementasi FFT C++ (FFTPlan); FFTConvolver tanpa kode FFT; FFT visualizer yang hidup itu bawaan Android (system Visualizer), bukan C++.**
 
 ### 7. devices — 5 file
 `AudioDeviceManager.cpp` (413), `AudioDeviceDescriptor`,
