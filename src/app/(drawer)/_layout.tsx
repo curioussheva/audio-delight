@@ -177,6 +177,10 @@ export default function DrawerLayout() {
           options={{ drawerLabel: "Library", title: "Library" }}
         />
         <Drawer.Screen
+          name="search"
+          options={{ drawerLabel: "Search", title: "Search" }}
+        />
+        <Drawer.Screen
           name="playlist"
           options={{ drawerLabel: "Playlist", title: "Playlist" }}
         />

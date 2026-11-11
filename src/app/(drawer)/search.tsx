@@ -10,6 +10,8 @@ import {
   StyleSheet,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/context/ThemeContext";
 import { useLibrary } from "@/features/library/hooks/useLibrary";
 import { usePlayerStore } from "@/features/player/store/playerStore";
@@ -19,6 +21,17 @@ import { formatTime } from "@/shared/utils/time";
 export default function SearchScreen() {
   const { theme } = useTheme();
   const { colors, spacing } = theme;
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+
+  // Tombol kembali (2026-11-11, perbaikan U-P0-8): layar ini dulu tidak
+  // punya affordance kembali sama sekali (headerShown: false global).
+  // Kalau dibuka dari drawer tidak ada history untuk back() — jatuh ke
+  // Library supaya tombolnya tidak pernah jadi no-op.
+  const handleBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace("/(drawer)/(tabs)/library");
+  };
 
   const { songs } = useLibrary();
   const { setQueue } = usePlayerStore();
@@ -65,12 +78,45 @@ export default function SearchScreen() {
         style={[
           styles.searchContainer,
           {
-            padding: spacing.md,
+            paddingHorizontal: spacing.md,
+            paddingBottom: spacing.md,
+            paddingTop: insets.top + spacing.md,
             borderBottomWidth: 1,
             borderBottomColor: colors.background.tertiary,
           },
         ]}
       >
+        {/* Header: tombol kembali + judul */}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            marginBottom: spacing.sm,
+          }}
+        >
+          <TouchableOpacity
+            onPress={handleBack}
+            hitSlop={8}
+            accessibilityLabel="Kembali"
+            accessibilityRole="button"
+          >
+            <Ionicons
+              name="chevron-back"
+              size={24}
+              color={colors.text.primary}
+            />
+          </TouchableOpacity>
+          <Text
+            style={{
+              fontSize: 18,
+              fontWeight: "700",
+              color: colors.text.primary,
+              marginLeft: spacing.xs,
+            }}
+          >
+            Cari
+          </Text>
+        </View>
         <View
           style={[
             styles.searchInput,
