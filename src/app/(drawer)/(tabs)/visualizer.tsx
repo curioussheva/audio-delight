@@ -13,6 +13,7 @@ import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useAudioSessionRetry } from "@/features/player/hooks/useAudioSessionRetry";
 import { SpectrumAnalyzer } from "@/features/visualizer/components/SpectrumAnalyzer";
 import { useTheme } from "@/shared/context/ThemeContext";
+import { DrawerMenuButton } from "@/shared/components/ui/DrawerMenuButton";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import { useSafePadding } from "@/shared/hooks/useSafePadding";
 import { RefreshCw, AlertCircle } from "lucide-react-native";
@@ -60,6 +61,14 @@ export default function VisualizerScreen() {
           },
         ]}
       >
+        {/* U-P2-49: hamburger buka drawer — state kosong ini dulu juga
+            tanpa affordance drawer sama sekali. */}
+        <View style={styles.header}>
+          <DrawerMenuButton />
+          <Text style={[styles.headerTitle, { color: colors.text.primary }]}>
+            Visualizer
+          </Text>
+        </View>
         <View style={styles.emptyState}>
           <AlertCircle size={48} color={colors.text.tertiary} />
           <Text style={[styles.emptyText, { color: colors.text.secondary }]}>
@@ -93,11 +102,14 @@ export default function VisualizerScreen() {
         },
       ]}
     >
-      {/* Header */}
+      {/* Header — U-P2-49: hamburger buka drawer di kiri judul. */}
       <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: colors.text.primary }]}>
-          Visualizer
-        </Text>
+        <DrawerMenuButton />
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.headerTitle, { color: colors.text.primary }]}>
+            Visualizer
+          </Text>
+        </View>
         {!hasValidSession && (
           <TouchableOpacity
             onPress={handleRetry}

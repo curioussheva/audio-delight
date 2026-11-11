@@ -19,13 +19,10 @@ import {
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "expo-router";
-import { DrawerActions } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 
 // Icons
 import {
-  Menu,
   ArrowLeft,
   X,
   Search,
@@ -56,6 +53,7 @@ import { ScanStatusBar } from "@/features/library/components/ScanStatusBar";
 import { EnrichMetadataModal } from "@/features/library/components/EnrichMetadataModal";
 
 // Components
+import { DrawerMenuButton } from "@/shared/components/ui/DrawerMenuButton";
 import { SongListItem } from "@/features/library/components/SongListItem";
 import { EmptyLibrary } from "@/features/library/components/EmptyLibrary";
 import { LibraryScanner } from "@/features/library/api/scanner";
@@ -81,7 +79,6 @@ const debounce = (func: Function, delay: number) => {
 };
 
 export default function LibraryScreen() {
-  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { colors } = theme;
@@ -331,12 +328,10 @@ export default function LibraryScreen() {
 
     return (
       <>
-        <TouchableOpacity
-          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
-          hitSlop={8}
-        >
-          <Menu size={26} color={colors.text.primary} strokeWidth={2} />
-        </TouchableOpacity>
+        {/* U-P2-49: tombol drawer sekarang komponen bersama
+            DrawerMenuButton — perilaku sama (Menu 26, buka drawer), hanya
+            target sentuh + label aksesibilitas yang diseragamkan. */}
+        <DrawerMenuButton />
 
         <View style={s.headerCenter}>
           <Text style={[s.headerTitle, { color: colors.text.primary }]}>

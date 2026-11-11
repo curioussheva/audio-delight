@@ -29,6 +29,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { useTheme } from "@/shared/context/ThemeContext";
+import { DrawerMenuButton } from "@/shared/components/ui/DrawerMenuButton";
 import { useEqualizer } from "@/features/equalizer/hooks/useEqualizer";
 import {
   accentOn,
@@ -380,8 +381,10 @@ export default function EqualizerScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: LIST_BOTTOM_PADDING }}
         >
-          {/* HEADER */}
+          {/* HEADER — U-P2-49: hamburger buka drawer (dulu layar ini
+              tidak punya affordance apa pun untuk membuka drawer). */}
           <View style={[styles.header, { paddingHorizontal: spacing.md }]}>
+            <DrawerMenuButton />
             <View style={{ flex: 1 }}>
               <Text style={[styles.title, { color: colors.text.primary }]}>
                 Precision DSP

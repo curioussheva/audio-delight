@@ -12,6 +12,7 @@ import * as DocumentPicker from "expo-document-picker";
 import { ChevronLeft, Trash2, Music2 } from "lucide-react-native";
 
 import { useTheme } from "@/shared/context/ThemeContext";
+import { DrawerMenuButton } from "@/shared/components/ui/DrawerMenuButton";
 import { usePlaylists } from "@/features/playlist/hooks/usePlaylists";
 import { PlaylistList, PlaylistItem } from "@/features/library/components/PlaylistList";
 import { SongListItem } from "@/features/library/components/SongListItem";
@@ -233,6 +234,15 @@ export default function PlaylistsScreen() {
   // ── Render Playlist List ──────────────────────────────────────────────────
   return (
     <View style={[styles.container, { backgroundColor: colors.background.primary }]}>
+      {/* U-P2-49: daftar playlist dulu tanpa judul layar yang terlihat dan
+          tanpa affordance buka drawer — hanya edge-swipe / hardware back.
+          Detail playlist tetap memakai header kembali-nya sendiri. */}
+      <View style={styles.listHeader}>
+        <DrawerMenuButton />
+        <Text style={[styles.listTitle, { color: colors.text.primary }]}>
+          Playlist
+        </Text>
+      </View>
       <PlaylistList
         playlists={playlistItems}
         favoriteCount={favoriteCount || 0}
@@ -247,6 +257,17 @@ export default function PlaylistsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  // U-P2-49: header daftar playlist (hamburger + judul).
+  listHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  listTitle: {
+    fontSize: 20,
+    fontWeight: "700",
   },
   detailHeader: {
     flexDirection: "row",

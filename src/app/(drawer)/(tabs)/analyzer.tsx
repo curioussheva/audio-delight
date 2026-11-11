@@ -26,6 +26,7 @@ import {
 
 // Hooks & Store
 import { useTheme } from "@/shared/context/ThemeContext";
+import { DrawerMenuButton } from "@/shared/components/ui/DrawerMenuButton";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useAudioSessionRetry } from "@/features/player/hooks/useAudioSessionRetry";
 import { FLOATING_PLAYER_CLEARANCE } from "@/features/player/layout";
@@ -310,9 +311,16 @@ export default function AnalyzerScreen() {
         paddingBottom: insets.bottom + FLOATING_PLAYER_CLEARANCE + 8,
       }}
     >
-      <Text style={[styles.title, { color: colors.text.primary }]}>
-        Audio Analyzer
-      </Text>
+      {/* U-P2-49: hamburger buka drawer — dulu judul teks saja, tanpa
+          affordance apa pun untuk membuka drawer. */}
+      <View style={styles.screenHeaderRow}>
+        <DrawerMenuButton />
+        <Text
+          style={[styles.title, { color: colors.text.primary, flex: 1 }]}
+        >
+          Audio Analyzer
+        </Text>
+      </View>
 
       {/* 1. SPECTRUM VISUALIZER */}
       {audioSessionId && audioSessionId > 0 ? (
@@ -766,6 +774,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginBottom: 15,
+  },
+  // U-P2-49: baris header layar (hamburger + judul). ScrollView sudah
+  // punya paddingHorizontal 16, jadi baris ini tanpa padding sendiri.
+  // (Bukan `headerRow` yang sudah ada — itu baris kartu dengan
+  // space-between.)
+  screenHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   label: {
     fontSize: 11,

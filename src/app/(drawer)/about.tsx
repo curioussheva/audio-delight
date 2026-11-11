@@ -12,6 +12,7 @@ import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import Constants from "expo-constants";
 import { useTheme } from "@/shared/context/ThemeContext";
+import { DrawerMenuButton } from "@/shared/components/ui/DrawerMenuButton";
 import { accentOn } from "@/shared/utils/contrast";
 
 // Versi dibaca dari app.json supaya tidak menyimpang dari APK yang terpasang.
@@ -80,6 +81,13 @@ export default function AboutScreen() {
       style={[styles.container, { backgroundColor: colors.background.primary }]}
       contentContainerStyle={{ paddingBottom: 100 }}
     >
+      {/* U-P2-49: hamburger buka drawer. Header branding (logo + nama +
+          versi) tetap di tengah seperti semula — tombol ini baris
+          tersendiri di atasnya, bukan pengganti header branding. */}
+      <View style={styles.menuRow}>
+        <DrawerMenuButton />
+      </View>
+
       {/* Header Section */}
       <View style={[styles.header, { marginTop: spacing.xxl }]}>
         <Image
@@ -195,6 +203,8 @@ export default function AboutScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { alignItems: "center", marginBottom: 30 },
+  // U-P2-49: baris hamburger buka drawer di atas header branding.
+  menuRow: { flexDirection: "row", paddingHorizontal: 16, paddingTop: 16 },
   logo: { width: 100, height: 100, marginBottom: 15 },
   banner: {
     width: "92%",
