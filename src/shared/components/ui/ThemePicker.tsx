@@ -37,6 +37,16 @@ export const ThemePicker: React.FC<{
   const { theme, themeId, setTheme, randomTheme } = useTheme();
   const { colors, spacing } = theme;
 
+  // Nama tema terpilih + "Acak Tema" sebagai TEKS/IKON di atas
+  // background.primary — pola Equalizer: aksen dipakai selama terbaca,
+  // jatuh ke warna teks bila tidak (primary[500] mentah gagal 4,5 di
+  // 9/22 tema, mis. charcoal-black 1,12).
+  const accentOnPrimary = accentOn(
+    [colors.primary[500]],
+    colors.background.primary,
+    [colors.text.primary, colors.text.secondary],
+  );
+
   // Helper untuk mendapatkan tema dari ID
   const getThemeFromId = (id: string): Theme | undefined => {
     return ALL_THEMES[id as keyof typeof ALL_THEMES];
@@ -138,7 +148,7 @@ export const ThemePicker: React.FC<{
           style={[
             styles.cardTitle,
             {
-              color: isSelected ? colors.primary[500] : colors.text.secondary,
+              color: isSelected ? accentOnPrimary : colors.text.secondary,
               marginTop: spacing.xs,
             },
           ]}
@@ -253,10 +263,10 @@ export const ThemePicker: React.FC<{
             >
               <Shuffle
                 size={20}
-                color={colors.primary[500]}
+                color={accentOnPrimary}
                 strokeWidth={2.5}
               />
-              <Text style={[styles.randomText, { color: colors.primary[500] }]}>
+              <Text style={[styles.randomText, { color: accentOnPrimary }]}>
                 Acak Tema
               </Text>
             </TouchableOpacity>

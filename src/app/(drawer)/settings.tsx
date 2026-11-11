@@ -35,7 +35,7 @@ import { Search } from "lucide-react-native"; // Icon tambahan jika ingin lebih 
 import * as Haptics from "expo-haptics";
 
 import { useTheme } from "@/context/ThemeContext";
-import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+import { pickReadable, accentOn, AA_NORMAL } from "@/shared/utils/contrast";
 import { useAudioOutput } from "@/features/hardware/hooks/useAudioOutput";
 import { useDSPProcessingGate } from "@/features/hardware/hooks/useDSPProcessingGate";
 import { usePlayerStore } from "@/features/player/store/playerStore";
@@ -172,6 +172,28 @@ export default function SettingsScreen() {
   const onPrimary =
     pickReadable(["#FFFFFF", "#000000"], colors.primary[500], AA_NORMAL) ??
     "#FFFFFF";
+
+  // Aksen sebagai TEKS/IKON — pola Equalizer: aksen dipakai selama terbaca di
+  // atas permukaan, jatuh ke warna teks bila tidak. primary[500] mentah
+  // gagal 4,5 di 9/22 tema (teks) dan gagal 3,0 di 8 tema (ikon).
+  const accentOnSecondary = accentOn(
+    [colors.primary[500]],
+    colors.background.secondary,
+    [colors.text.primary, colors.text.secondary],
+  );
+  const accentOnTertiary = accentOn(
+    [colors.primary[500]],
+    colors.background.tertiary,
+    [colors.text.primary, colors.text.secondary],
+  );
+  // Teks di atas tombol primary[500] — pola PresetChip Equalizer (token tema,
+  // bukan literal): inverse dulu, lalu background.primary.
+  const onAccent =
+    pickReadable(
+      [colors.text.inverse, colors.background.primary, colors.text.primary],
+      colors.primary[500],
+      AA_NORMAL,
+    ) ?? colors.background.primary;
 
   const {
     isAutoScanEnabled,
@@ -376,14 +398,18 @@ export default function SettingsScreen() {
       label: "DSP",
       hint: "EQ, bass boost, limiter, stereo width aktif.",
       Icon: Zap,
-      color: colors.primary[500],
+      color: accentOnSecondary,
     },
     {
       id: "immersive" as const,
       label: "Solfeggio",
       hint: "DSP + resonansi solfeggio, harmonic, spatial.",
       Icon: Sparkles,
-      color: colors.primary[400] ?? colors.primary[500],
+      color: accentOn(
+        [colors.primary[400] ?? colors.primary[500]],
+        colors.background.secondary,
+        [colors.text.primary, colors.text.secondary],
+      ),
     },
   ];
 
@@ -418,7 +444,7 @@ export default function SettingsScreen() {
     <Section colors={colors} spacing={spacing}>
       <SectionHeader
         icon={
-          <Palette size={24} color={colors.primary[500]} strokeWidth={2.2} />
+          <Palette size={24} color={accentOnSecondary} strokeWidth={2.2} />
         }
         title="Tampilan"
         colors={colors}
@@ -515,7 +541,7 @@ export default function SettingsScreen() {
       <Section colors={colors} spacing={spacing}>
         <SectionHeader
           icon={
-            <Cpu size={24} color={colors.primary[500]} strokeWidth={2.2} />
+            <Cpu size={24} color={accentOnSecondary} strokeWidth={2.2} />
           }
           title="Audio Output"
           colors={colors}
@@ -667,7 +693,7 @@ export default function SettingsScreen() {
                 },
               ]}
             >
-              <Text style={{ color: colors.background.primary, fontSize: 12 }}>
+              <Text style={{ color: onAccent, fontSize: 12 }}>
                 {outputLoading ? "Scanning..." : "Pindai Perangkat Output"}
               </Text>
             </TouchableOpacity>
@@ -717,7 +743,7 @@ export default function SettingsScreen() {
                       {isActive && (
                         <CheckCircle
                           size={22}
-                          color={colors.primary[500]}
+                          color={accentOnSecondary}
                           strokeWidth={2.5}
                         />
                       )}
@@ -790,7 +816,7 @@ export default function SettingsScreen() {
   const renderAudio = () => (
     <Section colors={colors} spacing={spacing}>
       <SectionHeader
-        icon={<Music size={24} color={colors.primary[500]} strokeWidth={2.2} />}
+        icon={<Music size={24} color={accentOnSecondary} strokeWidth={2.2} />}
         title="Audio"
         colors={colors}
         spacing={spacing}
@@ -864,7 +890,7 @@ export default function SettingsScreen() {
                     {isActive && (
                       <CheckCircle
                         size={20}
-                        color={colors.primary[500]}
+                        color={accentOnSecondary}
                         strokeWidth={2.5}
                       />
                     )}
@@ -966,7 +992,7 @@ export default function SettingsScreen() {
             >
               <Text
                 style={{
-                  color: colors.primary[500],
+                  color: accentOnTertiary,
                   fontWeight: "700",
                   fontSize: 13,
                 }}
@@ -976,7 +1002,7 @@ export default function SettingsScreen() {
               </Text>
               <ChevronRight
                 size={14}
-                color={colors.primary[500]}
+                color={accentOnTertiary}
                 strokeWidth={2.5}
               />
             </TouchableOpacity>
@@ -1034,7 +1060,7 @@ export default function SettingsScreen() {
               >
                 <Text
                   style={{
-                    color: colors.primary[500],
+                    color: accentOnSecondary,
                     fontWeight: "800",
                     fontSize: 15,
                   }}
@@ -1188,7 +1214,7 @@ export default function SettingsScreen() {
             >
               <Text
                 style={{
-                  color: colors.primary[500],
+                  color: accentOnSecondary,
                   fontWeight: "800",
                   fontSize: 13,
                 }}
@@ -1310,7 +1336,7 @@ export default function SettingsScreen() {
                       style={{
                         color:
                           activePresetId === item.id
-                            ? colors.primary[500]
+                            ? accentOnSecondary
                             : colors.text.primary,
                         fontWeight: activePresetId === item.id ? "700" : "500",
                         fontSize: 14,
@@ -1333,7 +1359,7 @@ export default function SettingsScreen() {
                   {activePresetId === item.id && (
                     <CheckCircle
                       size={18}
-                      color={colors.primary[500]}
+                      color={accentOnSecondary}
                       strokeWidth={2.5}
                     />
                   )}
@@ -1350,7 +1376,7 @@ export default function SettingsScreen() {
     <Section colors={colors} spacing={spacing}>
       <SectionHeader
         icon={
-          <Database size={24} color={colors.primary[500]} strokeWidth={2.2} />
+          <Database size={24} color={accentOnSecondary} strokeWidth={2.2} />
         }
         title="Library & Metadata"
         colors={colors}
@@ -1451,7 +1477,7 @@ export default function SettingsScreen() {
             disabled={isClearing}
           >
             {isClearing ? (
-              <ActivityIndicator size="small" color={colors.primary[500]} />
+              <ActivityIndicator size="small" color={accentOnSecondary} />
             ) : (
               <Text
                 style={{
@@ -1472,7 +1498,7 @@ export default function SettingsScreen() {
   const renderAbout = () => (
     <Section colors={colors} spacing={spacing}>
       <SectionHeader
-        icon={<Info size={24} color={colors.primary[500]} strokeWidth={2.2} />}
+        icon={<Info size={24} color={accentOnSecondary} strokeWidth={2.2} />}
         title="Tentang"
         colors={colors}
         spacing={spacing}
@@ -1484,7 +1510,7 @@ export default function SettingsScreen() {
       {showAbout && (
         <View style={{ padding: spacing.md }}>
           <View style={{ alignItems: "center", marginBottom: spacing.md }}>
-            <Text style={[styles.appName, { color: colors.primary[500] }]}>
+            <Text style={[styles.appName, { color: accentOnSecondary }]}>
               PristineAudio
             </Text>
             <Text style={{ color: colors.text.secondary, fontSize: 12 }}>

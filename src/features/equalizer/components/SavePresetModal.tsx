@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { useTheme } from "@/shared/context/ThemeContext";
+import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 
 interface Props {
   visible: boolean;
@@ -22,6 +23,24 @@ export const SavePresetModal: React.FC<Props> = ({
 }) => {
   const { theme } = useTheme();
   const [name, setName] = useState("");
+
+  // Teks di atas tombol Simpan — pola PresetChip Equalizer: dipilih dari
+  // luminansi latar tombol (background.primary mentah 1,12:1 di
+  // charcoal-black). Berlaku untuk kedua state tombol (aktif primary[500],
+  // nonaktif text.disabled).
+  const saveBg = name.trim()
+    ? theme.colors.primary[500]
+    : theme.colors.text.disabled;
+  const saveText =
+    pickReadable(
+      [
+        theme.colors.text.inverse,
+        theme.colors.background.primary,
+        theme.colors.text.primary,
+      ],
+      saveBg,
+      AA_NORMAL,
+    ) ?? theme.colors.background.primary;
 
   const handleSave = () => {
     if (name.trim()) {
@@ -87,16 +106,14 @@ export const SavePresetModal: React.FC<Props> = ({
               style={[
                 styles.saveBtn,
                 {
-                  backgroundColor: name.trim()
-                    ? theme.colors.primary[500]
-                    : theme.colors.text.disabled,
+                  backgroundColor: saveBg,
                 },
               ]}
             >
               <Text
                 style={[
                   styles.saveBtnText,
-                  { color: theme.colors.background.primary },
+                  { color: saveText },
                 ]}
               >
                 Simpan
