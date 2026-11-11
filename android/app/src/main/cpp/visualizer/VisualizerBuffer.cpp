@@ -8,6 +8,9 @@
 
 namespace pristine {
 
+// Mixdown stereo → mono: rata-rata L+R (V-m3 — dulu magic 0.5f).
+constexpr float kVisualizerMixdownScale = 0.5f;
+
 // =====================================================
 // CONSTRUCTOR
 // =====================================================
@@ -61,7 +64,7 @@ void VisualizerBuffer::write(
             (
                 left[i] +
                 right[i]
-            ) * 0.5f;
+            ) * kVisualizerMixdownScale;
         if (!std::isfinite(v) || std::fabs(v) > 2.0f) {
             v = 0.0f;
         }

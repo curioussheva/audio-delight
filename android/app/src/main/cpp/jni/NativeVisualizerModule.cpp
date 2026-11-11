@@ -5,6 +5,7 @@
 #include <jni.h>
 
 #include "../manager/EngineManager.h"
+#include "../visualizer/VisualizerBuffer.h"
 
 using namespace pristine;
 
@@ -28,6 +29,12 @@ Java_com_pristineaudio_visualizer_NativeVisualizerBridge_getVisualizerData(
     // Kotlin DAN dengan VisualizerBuffer::kSize (2048): read() mengembalikan
     // `size` sample terakhir dari ring.
     constexpr int kVisualizerSize = 2048;
+
+    // 🔥 FIX (2026-11-11, V-m3): ikat compile-time ke
+    // VisualizerBuffer::kSize. Drift seperti ini sudah pernah terjadi
+    // (B2: JNI 256 vs buffer 2048, diperbaiki 2026-11-10).
+    static_assert(kVisualizerSize == static_cast<int>(VisualizerBuffer::kSize),
+                  "kVisualizerSize harus sama dengan VisualizerBuffer::kSize");
 
     jfloatArray array =
         env->NewFloatArray(
