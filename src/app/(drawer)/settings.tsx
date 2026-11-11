@@ -50,6 +50,14 @@ import { Zap, ShieldCheck, TriangleAlert } from "lucide-react-native";
 import { ALL_PRESETS } from "@/features/equalizer/constants/presets";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
 import { useHeadphoneStore } from "@/features/headphone/store/headphoneStore";
+import Constants from "expo-constants";
+
+// Versi dibaca dari app.json seperti About — sebelumnya hardcoded
+// "1.0.0 (Build 2026)" sementara app.json sudah 1.0.37.
+const APP_VERSION =
+  Constants.expoConfig?.version ??
+  (Constants.manifest as { version?: string } | null)?.version ??
+  "-";
 
 // ─── Reusable Sub Components ────────────────────────────────────────────────
 
@@ -1535,7 +1543,7 @@ export default function SettingsScreen() {
               PristineAudio
             </Text>
             <Text style={{ color: colors.text.secondary, fontSize: 12 }}>
-              Version 1.0.0 (Build 2026)
+              Version {APP_VERSION}
             </Text>
           </View>
 
