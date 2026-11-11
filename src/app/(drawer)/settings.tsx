@@ -114,6 +114,17 @@ const SectionHeader: React.FC<SectionHeaderProps> = ({
         },
       ]}
       onPress={onPress}
+      // U-P2-33: header lipat dulu tanpa role/state — pembaca layar tidak
+      // tahu ini tombol, apalagi sedang terbuka atau tertutup. Props
+      // aksesibilitas hanya dipasang saat collapsible (View polos tidak
+      // perlu jadi tombol).
+      {...(collapsible
+        ? {
+            accessibilityRole: "button" as const,
+            accessibilityLabel: `${title}, bagian ${expanded ? "terbuka" : "tertutup"}`,
+            accessibilityState: { expanded: !!expanded },
+          }
+        : {})}
     >
       <View style={styles.row}>
         {icon}

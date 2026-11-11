@@ -46,6 +46,9 @@ const ModeCard = ({
 }: ModeCardProps) => (
   <TouchableOpacity
     activeOpacity={0.7}
+    accessibilityRole="button"
+    accessibilityLabel={`${title}. ${description}`}
+    accessibilityState={{ selected: isSelected }}
     style={[
       styles.modeCard,
       {

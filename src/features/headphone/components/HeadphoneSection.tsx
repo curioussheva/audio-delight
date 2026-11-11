@@ -152,6 +152,14 @@ export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
             return (
               <TouchableOpacity
                 key={p.id}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  `${p.name}, ${p.filterCount} filter` +
+                  (isActive ? ", aktif" : "") +
+                  (isBound ? ", terikat ke perangkat ini" : "") +
+                  ". Tekan lama untuk menghapus."
+                }
+                accessibilityState={{ selected: isActive }}
                 onPress={() => {
                   if (isActive) {
                     void deactivate();
@@ -194,6 +202,16 @@ export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
             );
           })}
         </ScrollView>
+      )}
+
+      {/* U-P2-33: petunjuk long-press = hapus. Dulu tidak ada petunjuk apa
+          pun di UI (maupun di accessibilityLabel) bahwa tekan lama menghapus
+          profil — bandingkan hapus preset EQ yang juga tidak berpetunjuk
+          (U-P2-45). */}
+      {profiles.length > 0 && (
+        <Text style={[styles.hint, { color: colors.text.tertiary }]}>
+          Tekan lama kartu untuk menghapus profil.
+        </Text>
       )}
 
       <View style={[styles.actions, { gap: spacing.sm }]}>
@@ -374,6 +392,7 @@ const styles = StyleSheet.create({
   device: { fontSize: 12, marginTop: 4 },
   bound: { fontSize: 12, marginTop: 2, fontWeight: "500" },
   empty: { fontSize: 13, marginTop: 10 },
+  hint: { fontSize: 11, marginTop: 8 },
   list: { marginTop: 10 },
   listContent: {},
 
