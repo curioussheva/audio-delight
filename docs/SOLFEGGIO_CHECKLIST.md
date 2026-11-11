@@ -61,8 +61,12 @@ Rencana lengkap (fase-fase): `docs/RENCANA_SOLFEGGIO_2026-11-11.md`.
 
 ## 9. Retune A=432 (DIPUTUSKAN 2026-11-11 — dikejar)
 
-- [ ] Desain (menunggu pilihan pendekatan, lihat rencana): **A. Phase vocoder** (pitch tanpa tempo; STFT di atas `FFTPlan` yang sudah ada; frame-count preserving → clock/speed tidak terganggu; ~300–500 baris + wiring mirror `setPlaybackRate` + harness; latensi ~40–80 ms) vs **B. Tape-style resample** (lipat rasio ke swr decoder; pitch+tempo berubah bareng, durasi +1,9%; mengacaukan clock posisi + logika rate D-M1/D-M2 + berantem dengan kontrol speed — TIDAK sesuai ekspektasi user). Rekomendasi: A.
-- [ ] Rumah kontrol: level player (sibling kontrol speed di `PlaybackController::render`, bypass di rasio 1.0 = A=440); UI picker tuning di panel Solfeggio (di situlah user mengharapkannya); berlaku di mode DSP + Solfeggio, FORCED OFF di bit-perfect (retune = processing).
+- [x] Desain: **A. Phase vocoder DIPILIH csheva 2026-11-11** (B tape-style ditolak). Koreksi dari harness: yang benar DUA tahap (time-stretch sebesar S + resampler kubik step S); satu tahap skala-fase salah. Lihat rencana Fase R.
+- [x] Implementasi PitchShifter + harness 12/12 + ASan bersih (commit 3396957a).
+- [x] Wiring lengkap controller→JNI→Kotlin→TS + UI tuning di Settings (commit a5f0c887, tsc 0).
+- [ ] Build Dev run 42949761208 — BERJALAN (hasil menyusul).
+- [ ] Verifikasi device: dengar 432 (pitch turun, tempo tetap); bit-perfect mematikan tuning.
+- [x] Rumah kontrol: level player (sibling kontrol speed di `PlaybackController::render`, bypass di rasio 1.0 = A=440); UI picker tuning di Settings (panel Solfeggio Fase 1 belum ada — picker ditaruh di Settings sebelah Playback Speed, sibling-nya); berlaku di mode DSP + Solfeggio, FORCED OFF di bit-perfect (gate native `setPitchAllowed`).
 - [ ] Preset tuning: Standar A=440 / Verdi A=432 (−31,8 sen) / custom sen (±100 sen); rasio = 2^(sen/1200).
 - [ ] Dependensi: harness standalone atas `FFTPlan` + `PitchShifter` baru (pola WSOLA 24/24); audit section fft boleh jalan paralel — pitch shifter tidak menunggu audit selesai, harness-nya yang membuktikan.
 - [ ] Interaksi: speed (WSOLA, tempo) × retune (pitch) = kontrol ortogonal, independen — urutan: pitch dulu, baru tempo.

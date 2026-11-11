@@ -181,6 +181,37 @@ tempo tetap. Ini yang diharapkan user, bukan preset resonator.
 - **Preset tuning:** Standar A=440 / Verdi A=432 / custom sen (±100 sen);
   rasio = 2^(sen/1200).
 
+- **Implementasi DIKERJAKAN 2026-11-11 (pendekatan A, dipilih csheva):**
+  - Kelas baru `playback/PitchShifter.{h,cpp}` + harness
+    `scripts/test_pitch_shifter.cpp` (commit `3396957a`).
+  - **KOREKSI desain (terbukti harness):** satu tahap "skala advance fase
+    dengan hop sama" TIDAK menggeser pitch — hanya mengacaukan koherensi
+    (rasio 1.0 keluar 447 Hz, rasio 2.0 keluar 423 Hz). Yang benar dua
+    tahap: time-stretch phase vocoder sebesar S + resampler kubik step S.
+    Arah sempat terbalik (1/S dua-duanya -> pitch 1/S: 440 -> 448 Hz,
+    oktaf malah turun); yang benar stretch R = S, resample step = S.
+    Normalisasi OLA skala tetap 8*Hs/(3*N), BUKAN bagi per-sampel oleh
+    norm (di tepi jendela norm ~0 -> noise maxAbs 114). Fase sintesis
+    per-channel (deviasi dibagi dari mono, kenaikan sama) — berbagi satu
+    fase justru MENGHAPUS delay stereo (T6 gagal).
+  - **Harness 12/12 PASS + ASan/UBSan bersih:** 440 -> 431,5 Hz (target
+    432), rasio 1.0 rekonstruksi eksak (440,00 Hz, RMS sama), oktaf 879,5
+    Hz, frame-count preserving (4 detik masuk = 4 detik keluar, lag
+    2434 frame ~51 ms), diam -> diam, noise finite, delay stereo 10
+    sampel dipertahankan, RMS 0,999, reset + validasi rasio.
+  - **Wiring (commit `a5f0c887`):** `PlaybackController::setPitchRatio`
+    (mirror `setPlaybackRate`, rasio 1.0 = bypass) + `setPitchAllowed`
+    (gate bit-perfect dari `EngineManager::setProcessingMode` — rasio
+    efektif 1.0 di bit-perfect, tuning tersimpan tidak hilang); reset
+    pitch shifter di loadTrack/seek/stop; JNI `nativeSetPitchRatio` +
+    Kotlin + spec TS + `engine.setPitchRatio` + store `tuningCents`
+    (persist AsyncStorage, preset A=440/A=432 + stepper ±5 sen, clamp
+    ±100) + UI di Settings (preset chips + stepper, disabled di
+    bit-perfect). tsc 0 error. Urutan rantai: pitch dulu, baru tempo.
+  - **Build Dev run 42949761208 (head `a5f0c887`) — BERJALAN, hasil
+    menyusul.** Verifikasi device ditunggu (dengar 432: pitch turun,
+    tempo tetap; mode bit-perfect mematikan tuning).
+
 ### Fase 5 — Polish & bersih-bersih
 - Hapus `FFTResonanceAnalyzer` (mati total, DSP-M15) dan `BinauralRenderer` lama
   bila diganti Fase 3.
