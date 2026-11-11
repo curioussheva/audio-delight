@@ -61,6 +61,11 @@ export default function PlayerScreen() {
   const [showLyrics, setShowLyrics] = useState(false);
   const [isTimerVisible, setIsTimerVisible] = useState(false);
 
+  // U-P2-11: posisi lokal selama jari menggeser slider. Nilai slider
+  // terikat ke store yang di-overwrite tiap 500ms oleh watcher posisi
+  // native — tanpa state lokal, nilai bisa ditarik balik sebelum dilepas.
+  const [dragPosition, setDragPosition] = useState<number | null>(null);
+
   const { position, duration } = useAudioProgress();
 
   const {
@@ -101,6 +106,12 @@ export default function PlayerScreen() {
     usePlayerStore.getState().setMainPlayerOpen(true);
     return () => usePlayerStore.getState().setMainPlayerOpen(false);
   }, []);
+
+  // U-P2-11: lagu berganti di tengah drag — batalkan drag supaya seek
+  // saat jari dilepas tidak jatuh ke lagu yang baru.
+  useEffect(() => {
+    setDragPosition(null);
+  }, [currentSong?.id]);
 
   const handlePlayPause = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -452,21 +463,46 @@ export default function PlayerScreen() {
           showLabels={false} // bisa dimatikan untuk tampilan minimal
         />
 
-        {/* Progress Section */}
+        {/* Progress Section — U-P2-11: selama drag, slider menampilkan
+            nilai lokal (onValueChange) dan baru commit seek saat dilepas
+            (onSlidingComplete); watcher posisi native tidak boleh menarik
+            balik nilai selama drag. Saat durasi 0, slider tidak dirender
+            sama sekali (max=0 tidak berguna) — diganti trek statis supaya
+            layout tidak lompat. */}
         <View style={styles.progressSection}>
-          <Slider
-            style={styles.slider}
-            minimumValue={0}
-            maximumValue={duration}
-            value={position}
-            onSlidingComplete={seek}
-            minimumTrackTintColor={primaryColor}
-            maximumTrackTintColor={borderColor}
-            thumbTintColor={primaryColor}
-          />
+          {duration > 0 ? (
+            <Slider
+              style={styles.slider}
+              minimumValue={0}
+              maximumValue={duration}
+              value={dragPosition ?? position}
+              onSlidingStart={(value) => setDragPosition(value)}
+              onValueChange={(value) => setDragPosition(value)}
+              onSlidingComplete={(value) => {
+                setDragPosition(null);
+                void seek(value);
+              }}
+              minimumTrackTintColor={primaryColor}
+              maximumTrackTintColor={borderColor}
+              thumbTintColor={primaryColor}
+            />
+          ) : (
+            <View
+              style={styles.slider}
+              accessibilityRole="progressbar"
+              accessibilityLabel="Posisi pemutaran belum tersedia"
+            >
+              <View
+                style={[
+                  styles.sliderDisabledTrack,
+                  { backgroundColor: borderColor },
+                ]}
+              />
+            </View>
+          )}
           <View style={styles.timeRow}>
             <Text style={[styles.timeText, { color: textTertiary }]}>
-              {formatTime(position)}
+              {formatTime(dragPosition ?? position)}
             </Text>
             <Text style={[styles.timeText, { color: textTertiary }]}>
               {formatTime(duration)}
@@ -714,6 +750,13 @@ const styles = StyleSheet.create({
   slider: {
     width: "100%",
     height: 40,
+  },
+  // U-P2-11: trek statis pengganti slider saat durasi 0 — tinggi sama
+  // dengan slider supaya layout tidak lompat.
+  sliderDisabledTrack: {
+    height: 4,
+    borderRadius: 2,
+    marginTop: 18,
   },
   timeRow: {
     flexDirection: "row",
