@@ -7,6 +7,7 @@ import {
   TextInput,
   FlatList,
   TouchableOpacity,
+  ActivityIndicator,
   StyleSheet,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -32,7 +33,9 @@ export default function SearchScreen() {
     else router.replace("/(drawer)/(tabs)/library");
   };
 
-  const { songs } = useLibrary();
+  // U-P1-40: loading/error dibaca — dulu "Tidak ada hasil" tampil padahal
+  // library masih memuat, dan gagal muat sunyi total.
+  const { songs, loading, error, reload } = useLibrary();
   // U-P1-16: putar lewat playerStore.playSong — sama seperti Library —
   // bukan setQueue + loadSong langsung. playSong memberi dedupe tap-cepat,
   // bookkeeping queue/index store, isPlaying store, dan play count;
@@ -244,7 +247,65 @@ export default function SearchScreen() {
           </TouchableOpacity>
         )}
         ListEmptyComponent={
-          query ? (
+          !query ? null : loading ? (
+            <View
+              style={[
+                styles.emptyContainer,
+                {
+                  padding: spacing.xl,
+                  alignItems: "center",
+                },
+              ]}
+            >
+              <ActivityIndicator size="large" color={colors.primary[500]} />
+              <Text
+                style={[styles.emptyText, { color: colors.text.secondary }]}
+              >
+                Memuat library…
+              </Text>
+            </View>
+          ) : error ? (
+            <View
+              style={[
+                styles.emptyContainer,
+                {
+                  padding: spacing.xl,
+                  alignItems: "center",
+                },
+              ]}
+            >
+              <Ionicons
+                name="alert-circle-outline"
+                size={48}
+                color={colors.status.error}
+              />
+              <Text
+                style={[styles.emptyText, { color: colors.text.secondary }]}
+              >
+                Gagal memuat library
+              </Text>
+              <Text
+                style={[styles.emptySub, { color: colors.text.tertiary }]}
+              >
+                {error}
+              </Text>
+              <TouchableOpacity
+                onPress={() => void reload()}
+                style={[
+                  styles.retryBtn,
+                  { borderColor: colors.primary[500] },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Coba lagi memuat library"
+              >
+                <Text
+                  style={[styles.retryBtnText, { color: colors.primary[500] }]}
+                >
+                  Coba lagi
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
             <View
               style={[
                 styles.emptyContainer,
@@ -265,7 +326,7 @@ export default function SearchScreen() {
                 Tidak ada hasil
               </Text>
             </View>
-          ) : null
+          )
         }
       />
     </View>
@@ -310,5 +371,21 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
+  },
+  emptySub: {
+    fontSize: 13,
+    textAlign: "center",
+    marginTop: 8,
+  },
+  retryBtn: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginTop: 16,
+  },
+  retryBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
   },
 });
