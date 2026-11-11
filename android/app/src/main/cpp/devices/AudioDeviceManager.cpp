@@ -69,26 +69,38 @@ std::string jstr(JNIEnv* env, jstring s) {
 
 // Pemetaan AudioDeviceInfo.getType() -> DeviceType.
 //
-// Nilai dari android.media.AudioDeviceInfo:
+// Nilai dari android.media.AudioDeviceInfo (developer.android.com):
 //   1 BUILTIN_EARPIECE, 2 BUILTIN_SPEAKER, 3 WIRED_HEADSET, 4 WIRED_HEADPHONES,
-//   5 BLUETOOTH_SCO, 6 BLUETOOTH_A2DP, 7 HDMI, 8 HDMI_ARC, 9 HDMI_EARC,
-//   11 USB_DEVICE, 12 USB_ACCESSORY, 13 DOCK, 22 USB_HEADSET
+//   5 BLUETOOTH_SCO, 6 BLUETOOTH_A2DP, 7 HDMI, 8 HDMI_ARC, 11 USB_DEVICE,
+//   12 USB_ACCESSORY, 13 DOCK, 18 TELEPHONY, 22 USB_HEADSET,
+//   24 BUILTIN_SPEAKER_SAFE, 26 BLE_HEADSET, 27 BLE_SPEAKER, 29 HDMI_EARC.
+//   (9 dan 10 tidak ada di tabel Android.)
+//
+// FIX (DV-M4, 2026-11-11): sebelumnya `case 9` dipetakan ke HDMI — SALAH,
+// HDMI_EARC itu 29, bukan 9; eARC asli jatuh ke UNKNOWN dan kehilangan
+// supportsExclusive. 24 (SPEAKER_SAFE) dan 26/27 (BLE) juga dulu UNKNOWN.
 DeviceType mapDeviceType(jint androidType, bool& outIsUsb) {
     outIsUsb = false;
     switch (androidType) {
         case 1:  return DeviceType::BUILTIN_EARPIECE;
-        case 2:  return DeviceType::BUILTIN_SPEAKER;
+        case 2:
+        case 24: return DeviceType::BUILTIN_SPEAKER;
         case 3:
         case 4:  return DeviceType::WIRED_HEADSET;
         case 5:
-        case 6:  return DeviceType::BLUETOOTH;
+        case 6:
+        case 26:
+        case 27: return DeviceType::BLUETOOTH;
         case 7:
         case 8:
-        case 9:  return DeviceType::HDMI;
+        case 29: return DeviceType::HDMI;
         case 11:
         case 12:
         case 22: outIsUsb = true; return DeviceType::USB_AUDIO;
         case 13: return DeviceType::UNKNOWN;      // DOCK: tidak selalu audio
+        case 18: return DeviceType::TELEPHONY;
+        // 19 AUX_LINE, 20 IP, 21 BUS, 23 HEARING_AID, 25 REMOTE_SUBMIX:
+        // bukan output musik — tetap UNKNOWN.
         default: return DeviceType::UNKNOWN;
     }
 }
