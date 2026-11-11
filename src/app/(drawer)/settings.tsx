@@ -355,7 +355,20 @@ export default function SettingsScreen() {
         console.warn("[Settings] BackgroundTask register failed:", err);
         return false;
       });
-      if (ok) console.log("[Settings] Background scan registered");
+      if (ok) {
+        console.log("[Settings] Background scan registered");
+      } else {
+        // U-P1-25: rollback optimistis — register mengembalikan false
+        // (izin media/notifikasi ditolak, atau exception) berarti tidak ada
+        // pemindaian background yang berjalan. Kembalikan toggle ke OFF
+        // dan beri tahu user; dulu toggle dibiarkan ON padahal tidak ada
+        // scan yang jalan.
+        toggleAutoScanEnabled();
+        Alert.alert(
+          "Auto Scan gagal diaktifkan",
+          "Pemindaian latar tidak bisa didaftarkan. Periksa izin media & notifikasi, lalu coba lagi.",
+        );
+      }
     } else {
       // Matikan → batalkan background task
       await BackgroundScanTask.unregister().catch((err) =>
