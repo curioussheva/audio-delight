@@ -132,7 +132,7 @@ export default function FloatingPlayer() {
         {/* Content */}
         <View style={s.content}>
           {/* Artwork */}
-          <Pressable onPress={() => router.push("/player" as any)}>
+          <Pressable onPress={() => router.push("/player")}>
             <Image
               source={artworkSource}
               style={[
@@ -147,7 +147,7 @@ export default function FloatingPlayer() {
           {/* Info */}
           <Pressable
             style={s.info}
-            onPress={() => router.push("/player" as any)}
+            onPress={() => router.push("/player")}
           >
             <Text
               style={[s.title, { color: colors.text.primary }]}
