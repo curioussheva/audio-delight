@@ -176,7 +176,7 @@ top-level `package.json`, padahal pnpm hanya membacanya di bawah key
 `"pnpm"` (atau `pnpm-workspace.yaml`). Top-level diabaikan diam-diam
 tanpa error. Fix `645035a8`: dibungkus ke `"pnpm":
 { "patchedDependencies": {...} }`. File patch + isinya sudah benar
-dari awal. Setelah pull + `pnpm install` ulang, grep harus 1.
+dari awal. Setelah pull + `pnpm install` ulang, grep harus 1. **TERKONFIRMASI 2026-11-11 18:04 WIB: grep = 1, patch AKTIF** (install 1m46s); lockfile di-commit csheva (`3af1f9ac9`).
 
 ## Commit
 
