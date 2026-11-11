@@ -21,6 +21,7 @@ import {
   Eye,
   EyeOff,
   Settings2,
+  ChevronLeft,
   ChevronRight,
 } from "lucide-react-native";
 
@@ -612,41 +613,81 @@ export default function EqualizerScreen() {
                   disabled={eq.isDSPDisabled}
                   color={reverbColor}
                 />
-                <TouchableOpacity
+                {/* U-P2-40: kontrol reverb DULU hanya bisa maju — satu tombol
+                    dengan ChevronRight menyiratkan membuka daftar, padahal
+                    ketukan hanya memajukan preset (sampai 6 ketukan untuk
+                    kembali). Sekarang ada tombol mundur eksplisit di kiri;
+                    ChevronRight di kanan jujur berarti "berikutnya". */}
+                <View
                   style={[
-                    styles.reverbBox,
-                    {
-                      backgroundColor: colors.background.tertiary,
-                      borderColor: colors.border.medium,
-                      marginHorizontal: spacing.md,
-                      marginTop: spacing.sm,
-                      padding: spacing.md,
-                      minHeight: 44,
-                    },
-                    (!eq.isReverbEnabled || eq.isDSPDisabled) && {
-                      opacity: 0.4,
-                    },
+                    styles.reverbRow,
+                    { marginHorizontal: spacing.md, marginTop: spacing.sm },
                   ]}
-                  disabled={!eq.isReverbEnabled || eq.isDSPDisabled}
-                  onPress={() => {
-                    const next = (eq.reverbPreset + 1) % REVERB_LABELS.length;
-                    eq.setReverb(next);
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Reverb: ${REVERB_LABELS[eq.reverbPreset]}. Tekan untuk pilihan berikutnya.`}
                 >
-                  <Text
-                    style={[styles.reverbLabel, { color: colors.text.secondary }]}
+                  <TouchableOpacity
+                    onPress={() => {
+                      const prev =
+                        (eq.reverbPreset - 1 + REVERB_LABELS.length) %
+                        REVERB_LABELS.length;
+                      eq.setReverb(prev);
+                    }}
+                    disabled={!eq.isReverbEnabled || eq.isDSPDisabled}
+                    style={[
+                      styles.reverbStepBtn,
+                      {
+                        backgroundColor: colors.background.tertiary,
+                        borderColor: colors.border.medium,
+                      },
+                      (!eq.isReverbEnabled || eq.isDSPDisabled) && {
+                        opacity: 0.4,
+                      },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Preset reverb sebelumnya: ${REVERB_LABELS[(eq.reverbPreset - 1 + REVERB_LABELS.length) % REVERB_LABELS.length]}`}
                   >
-                    LINGKUNGAN
-                  </Text>
-                  <View style={styles.reverbValueRow}>
-                    <Text style={[styles.reverbValue, { color: reverbColor }]}>
-                      {REVERB_LABELS[eq.reverbPreset]}
+                    <ChevronLeft size={16} color={colors.text.secondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.reverbBox,
+                      {
+                        backgroundColor: colors.background.tertiary,
+                        borderColor: colors.border.medium,
+                        padding: spacing.md,
+                        minHeight: 44,
+                        flex: 1,
+                      },
+                      (!eq.isReverbEnabled || eq.isDSPDisabled) && {
+                        opacity: 0.4,
+                      },
+                    ]}
+                    disabled={!eq.isReverbEnabled || eq.isDSPDisabled}
+                    onPress={() => {
+                      const next =
+                        (eq.reverbPreset + 1) % REVERB_LABELS.length;
+                      eq.setReverb(next);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Reverb: ${REVERB_LABELS[eq.reverbPreset]}. Ketuk untuk preset berikutnya, tombol kiri untuk sebelumnya.`}
+                  >
+                    <Text
+                      style={[
+                        styles.reverbLabel,
+                        { color: colors.text.secondary },
+                      ]}
+                    >
+                      LINGKUNGAN
                     </Text>
-                    <ChevronRight size={16} color={colors.text.secondary} />
-                  </View>
-                </TouchableOpacity>
+                    <View style={styles.reverbValueRow}>
+                      <Text
+                        style={[styles.reverbValue, { color: reverbColor }]}
+                      >
+                        {REVERB_LABELS[eq.reverbPreset]}
+                      </Text>
+                      <ChevronRight size={16} color={colors.text.secondary} />
+                    </View>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           )}
@@ -842,6 +883,19 @@ const styles = StyleSheet.create({
     minHeight: 32,
   },
   miniSwitchLabel: { fontSize: 10, fontWeight: "900", letterSpacing: 1.5 },
+  reverbRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  reverbStepBtn: {
+    minWidth: 44,
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   reverbBox: {
     borderRadius: 12,
     borderWidth: 1,
