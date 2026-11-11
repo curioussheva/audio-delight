@@ -422,11 +422,16 @@ export default function AnalyzerScreen() {
             value={`${(bitDepthAnalysis.spectral.measuredCutoffHz / 1000).toFixed(1)} kHz`}
             colors={colors}
           />
-          <InfoRow
-            label="LSB 16-bit"
-            value={`${(bitDepthAnalysis.spectral.lsbZeroRatio16 * 100).toFixed(0)}% sampel di grid 16-bit`}
-            colors={colors}
-          />
+          {/* U-P2-26: baris LSB hanya bermakna bila file mengaku 24-bit —
+              untuk file 16-bit asli nilainya selalu ~100% menurut definisi
+              (trivial, bukan temuan), jadi disembunyikan. */}
+          {bitDepthAnalysis.declaredDepth === 24 && (
+            <InfoRow
+              label="LSB 16-bit"
+              value={`${(bitDepthAnalysis.spectral.lsbZeroRatio16 * 100).toFixed(0)}% sampel di grid 16-bit`}
+              colors={colors}
+            />
+          )}
           <InfoRow
             label="Peak / RMS"
             value={`${bitDepthAnalysis.spectral.peakDbfs.toFixed(1)} / ${bitDepthAnalysis.spectral.rmsDbfs.toFixed(1)} dBFS`}
