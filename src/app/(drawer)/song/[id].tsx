@@ -285,10 +285,12 @@ export default function SongDetailScreen() {
       .replace(/\/[^/]+$/, "");
   };
 
+  // Bitrate sudah disimpan dalam kbps (MediaStoreModule.kt:26 membagi
+  // bps / 1000, metadataAdapter.ts juga) — jangan dibagi lagi (U-P1-07:
+  // dulu 1411 kbps tampil "1 kbps"). Bitrate 0 = tidak diketahui, bukan
+  // "VBR".
   const bitrateDisplay =
-    song?.bitrate && song.bitrate > 0
-      ? `${Math.round(song.bitrate / 1000)} kbps`
-      : "VBR";
+    song?.bitrate && song.bitrate > 0 ? `${Math.round(song.bitrate)} kbps` : "-";
   const channelsDisplay =
     song?.channels === 1
       ? "Mono"
