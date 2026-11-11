@@ -4,6 +4,8 @@
 
 #include "VisualizerBuffer.h"
 
+#include <cmath>
+
 namespace pristine {
 
 // =====================================================
@@ -43,13 +45,22 @@ void VisualizerBuffer::write(
         ++i
     ) {
 
-        dst[
-            (pos + i) & kMask
-        ] =
+        // 🔥 FIX (2026-11-11, V-M1): sanitasi di sini. AudioCallback
+        // men-sanitize SALINAN lokal (l/r) untuk output, tapi mLeft/mRight
+        // yang masuk ke write() tidak pernah di-update — NaN/Inf/|x|>2
+        // lolos ke FFT dan JS (Kotlin mapToLogBins tidak guard NaN).
+        float v =
             (
                 left[i] +
                 right[i]
             ) * 0.5f;
+        if (!std::isfinite(v) || std::fabs(v) > 2.0f) {
+            v = 0.0f;
+        }
+
+        dst[
+            (pos + i) & kMask
+        ] = v;
     }
 
     mWritePos.store(
