@@ -148,6 +148,20 @@ async function safeJsonParse<T>(response: Response): Promise<T | null> {
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 class OnlineMetadataService {
+  /**
+   * U-P2-06: dedup request enrichment yang sedang berjalan, per nama
+   * artis (normalisasi lowercase + trim). Tanpa ini setiap ArtistRow
+   * tanpa artwork menembak request MusicBrainz + Wikipedia sendiri —
+   * dua baris artis yang sama, atau remount saat scroll cepat, berarti
+   * dua rangkaian request identik. Cache SQLite 7 hari sudah ada
+   * (_getCachedArtist) untuk request yang SUDAH selesai; map ini untuk
+   * yang sedang BERJALAN. Entri dihapus saat promise settle.
+   */
+  private static _enrichmentInFlight = new Map<
+    string,
+    Promise<ArtistEnrichment>
+  >();
+
   // ── Public: Pencarian Lagu ─────────────────────────────────────────────────
 
   /**
@@ -215,6 +229,30 @@ class OnlineMetadataService {
       return { imageUrl: null, bio: null, source: "fallback", lastUpdated: 0 };
     }
 
+    // U-P2-06: gabung dengan request yang sedang berjalan untuk artis
+    // yang sama — pemanggil kedua mendapat promise yang sama, bukan
+    // request jaringan kedua.
+    const key = artistName.trim().toLowerCase();
+    const inFlight = this._enrichmentInFlight.get(key);
+    if (inFlight) return inFlight;
+
+    const promise = this._enrichArtist(artistName).finally(() => {
+      if (this._enrichmentInFlight.get(key) === promise) {
+        this._enrichmentInFlight.delete(key);
+      }
+    });
+    this._enrichmentInFlight.set(key, promise);
+    return promise;
+  }
+
+  /**
+   * Pekerja enrichment yang sebenarnya (cache SQLite → MusicBrainz +
+   * Wikipedia). Selalu resolve — gagal jaringan / tidak ditemukan
+   * mengembalikan fallback, bukan throw.
+   */
+  private static async _enrichArtist(
+    artistName: string,
+  ): Promise<ArtistEnrichment> {
     try {
       // 1. Cek cache SQLite
       const cached = this._getCachedArtist(artistName);

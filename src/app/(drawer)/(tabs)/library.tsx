@@ -201,16 +201,20 @@ export default function LibraryScreen() {
   // memakai filteredSource langsung.
 
   // ── Lifecycle & Sync ───────────────────────────────────────────────────────
+  // U-P2-06: kembalikan boolean supaya pemanggil tahu refresh berhasil
+  // atau gagal — LibraryTabBar menembak haptic sukses hanya bila true.
   const refreshLibrary = useCallback(
-    async (showRefreshIndicator = false) => {
+    async (showRefreshIndicator = false): Promise<boolean> => {
       if (showRefreshIndicator) setRefreshing(true);
 
       try {
         const freshSongs = (await LibraryScanner.getLibrarySongs()) ?? [];
         setTracks(freshSongs as any);
         await reload();
+        return true;
       } catch (err) {
         console.error("Refresh Error:", err);
+        return false;
       } finally {
         if (showRefreshIndicator) setRefreshing(false);
       }
@@ -283,7 +287,7 @@ export default function LibraryScreen() {
   };
 
   const onRefresh = useCallback(() => {
-    refreshLibrary(true);
+    return refreshLibrary(true);
   }, [refreshLibrary]);
 
   const isScanning = isManualScanning || isAutoScanning;

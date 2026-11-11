@@ -45,7 +45,9 @@ interface Props {
   enrichProgress?: number;
   enrichTotal?: number;
   trackCount: number;
-  onRefresh?: () => void;
+  // U-P2-06: boleh mengembalikan Promise<boolean> — false = refresh
+  // gagal, supaya LibraryTabBar tidak menembak haptic sukses palsu.
+  onRefresh?: () => void | Promise<boolean>;
 }
 
 export const LibraryTabBar = ({
@@ -79,10 +81,23 @@ export const LibraryTabBar = ({
     [onTabChange],
   );
 
-  const handleRefresh = useCallback(() => {
-    if (Platform.OS !== "web")
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    onRefresh();
+  // U-P2-06: haptic sukses ditembak SETELAH refresh selesai dan hanya
+  // bila berhasil — dulu ditembak sebelum onRefresh() dipanggil, jadi
+  // refresh yang gagal pun terasa "berhasil". Gagal = haptic error.
+  const handleRefresh = useCallback(async () => {
+    if (!onRefresh) return;
+    let ok: boolean | void = true;
+    try {
+      ok = await onRefresh();
+    } catch {
+      ok = false;
+    }
+    if (Platform.OS === "web") return;
+    Haptics.notificationAsync(
+      ok === false
+        ? Haptics.NotificationFeedbackType.Error
+        : Haptics.NotificationFeedbackType.Success,
+    );
   }, [onRefresh]);
 
   return (
