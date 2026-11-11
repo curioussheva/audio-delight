@@ -269,7 +269,7 @@ export default function OnboardingScreen() {
 
         <ModeCard
           mode="immersive"
-          title="Immersive Mode"
+          title="Solfeggio Mode"
           description="DSP + resonansi solfeggio, harmonic exciter, spatial field, & binaural beat."
           icon="planet"
           tags={["SPATIAL", "RESONANCE"]}

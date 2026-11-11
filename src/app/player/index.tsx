@@ -214,7 +214,7 @@ export default function PlayerScreen() {
                       ? `BIT-PERFECT ${bpStatus.actualSampleRate / 1000}K`
                       : "BIT-PERFECT"
                   : audioMode === "immersive"
-                    ? "IMMERSIVE"
+                    ? "SOLFEGGIO"
                     : audioMode === "dsp"
                       ? "DSP"
                       : "STANDARD"}

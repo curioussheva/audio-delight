@@ -325,7 +325,7 @@ export default function SettingsScreen() {
     },
     {
       id: "immersive" as const,
-      label: "Immersive",
+      label: "Solfeggio",
       hint: "DSP + resonansi solfeggio, harmonic, spatial, brainwave.",
       Icon: Sparkles,
       color: colors.primary[400] ?? colors.primary[500],
@@ -849,7 +849,7 @@ export default function SettingsScreen() {
                   }}
                 >
                   {dspGate.enabled
-                    ? "Aktif Ã¢ÂÂ mode DSP & Immersive benar-benar memproses PCM."
+                    ? "Aktif Ã¢ÂÂ mode DSP & Solfeggio benar-benar memproses PCM."
                     : "Mati Ã¢ÂÂ PCM lewat tanpa diproses. Pakai ini untuk membandingkan suara tanpa build ulang."}
                 </Text>
                 <Text

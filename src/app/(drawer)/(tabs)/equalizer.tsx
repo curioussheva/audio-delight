@@ -68,7 +68,7 @@ const MODE_LABELS: Record<string, string> = {
   bitperfect: "BIT-PERFECT",
   "bit-perfect": "BIT-PERFECT",
   dsp: "DSP",
-  immersive: "IMMERSIVE",
+  immersive: "SOLFEGGIO",
 };
 
 // ─── MINI COMPONENTS ─────────────────────────────────────────────────────
@@ -188,7 +188,7 @@ export default function EqualizerScreen() {
   const modes: Array<{ id: AudioMode; label: string; hint: string }> = [
     { id: "bit-perfect", label: "Bit-Perfect", hint: "tanpa pemrosesan" },
     { id: "dsp", label: "DSP", hint: "EQ & efek" },
-    { id: "immersive", label: "Immersive", hint: "resonansi" },
+    { id: "immersive", label: "Solfeggio", hint: "resonansi" },
   ];
 
   // Mode apa pun selain `dsp` membekukan kontrol di layar ini.
@@ -490,8 +490,8 @@ export default function EqualizerScreen() {
                   ? "Mode Bit-Perfect aktif — seluruh DSP dilewati supaya " +
                     "output murni. Pilih mode DSP di atas untuk memakai " +
                     "kontrol di layar ini."
-                  : "Mode Immersive aktif — layar ini mengendalikan mesin " +
-                    "DSP, sedangkan Immersive memakai rantai resonansinya " +
+                  : "Mode Solfeggio aktif — layar ini mengendalikan mesin " +
+                    "DSP, sedangkan Solfeggio memakai rantai resonansinya " +
                     "sendiri. Pilih mode DSP di atas kalau ingin menyetel EQ."}
               </Text>
             </View>
