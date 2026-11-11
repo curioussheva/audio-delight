@@ -140,6 +140,19 @@ export default function SongDetailScreen() {
     "#FFFFFF";
 
   const tracks = useLibraryStore((state) => state.tracks);
+  const setTracks = useLibraryStore((state) => state.setTracks);
+  // U-P1-21: sinyal "library belum termuat" — tracks ter-persist di
+  // AsyncStorage, tapi sebelum rehydrate / sebelum scan perdana selesai,
+  // tracks kosong BUKAN berarti lagunya tidak ada. hasCompletedInitialScan
+  // false = scan perdana belum pernah selesai; isAuto/ManualScanning =
+  // library masih dipindai saat ini.
+  const hasCompletedInitialScan = useLibraryStore(
+    (state) => state.hasCompletedInitialScan,
+  );
+  const isAutoScanning = useLibraryStore((state) => state.isAutoScanning);
+  const isManualScanning = useLibraryStore(
+    (state) => state.isManualScanning,
+  );
   const updateTrackInStore = useLibraryStore((state) => state.updateTrack);
   const toggleFavoriteStore = useLibraryStore((state) => state.toggleFavorite);
   const playSong = usePlayerStore((state) => state.playSong);
@@ -148,6 +161,9 @@ export default function SongDetailScreen() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  // U-P1-21: retry memuat ulang library dari SQLite saat lagu tidak
+  // ketemu / store belum termuat.
+  const [isRetrying, setIsRetrying] = useState(false);
 
   const song: Song | undefined = useMemo(
     () => tracks?.find((t) => t.id.toString() === id),
@@ -195,6 +211,21 @@ export default function SongDetailScreen() {
     if (!song) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     toggleFavoriteStore(song.id);
+  };
+
+  // U-P1-21: retry jujur — baca ulang library dari SQLite ke store. Kalau
+  // lagu memang ada, `song` terisi dan layar detail muncul sendiri; kalau
+  // tetap tidak ada, layar "tidak ditemukan" tetap tampil (bukan loading).
+  const handleRetryLoad = async () => {
+    setIsRetrying(true);
+    try {
+      const fresh = await LibraryScanner.getLibrarySongs();
+      if (fresh) setTracks(fresh as any);
+    } catch (e) {
+      console.warn("[SongDetail] Retry load failed:", e);
+    } finally {
+      setIsRetrying(false);
+    }
   };
 
   const handleApplyMetadata = async (newMeta: AppliedMeta) => {
@@ -311,7 +342,59 @@ export default function SongDetailScreen() {
         ? `${(song.sampleRate / 1000).toFixed(1)} kHz`
         : "-";
 
+  // U-P1-21: bedakan "belum termuat" dari "benar-benar tidak ada". Dulu
+  // layar ini langsung menuduh "Lagu tidak ditemukan" saat store belum
+  // terisi (cold start / deep link / library masih scan) — padahal lagunya
+  // ada. Cabang loading tampil selama scan perdana belum selesai atau
+  // library masih dipindai; "tidak ditemukan" hanya setelah termuat.
   if (!song) {
+    const isLoadingLibrary =
+      isRetrying || !hasCompletedInitialScan || isAutoScanning || isManualScanning;
+
+    if (isLoadingLibrary) {
+      return (
+        <View
+          style={[
+            styles.center,
+            { backgroundColor: colors.background.primary, padding: 40 },
+          ]}
+        >
+          <ActivityIndicator size="large" color={colors.primary[500]} />
+          <Text style={[styles.errorText, { color: colors.text.primary }]}>
+            Memuat lagu…
+          </Text>
+          <Text
+            style={[styles.loadingSubtext, { color: colors.text.secondary }]}
+          >
+            Menunggu library selesai dimuat.
+          </Text>
+          <TouchableOpacity
+            style={[
+              styles.backButton,
+              { backgroundColor: colors.primary[500] },
+            ]}
+            onPress={handleRetryLoad}
+            disabled={isRetrying}
+          >
+            <Text style={{ color: onPrimary, fontWeight: "600" }}>
+              {isRetrying ? "Memuat…" : "Muat ulang"}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.backButton,
+              { backgroundColor: colors.background.secondary },
+            ]}
+            onPress={() => router.back()}
+          >
+            <Text style={{ color: colors.primary[500], fontWeight: "600" }}>
+              Kembali
+            </Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
     return (
       <View
         style={[
@@ -321,8 +404,20 @@ export default function SongDetailScreen() {
       >
         <AlertCircle size={48} color={colors.status.error} />
         <Text style={[styles.errorText, { color: colors.text.primary }]}>
-          Lagu tidak ditemukan
+          {!id ? "ID lagu tidak diberikan" : "Lagu tidak ditemukan"}
         </Text>
+        <TouchableOpacity
+          style={[
+            styles.backButton,
+            { backgroundColor: colors.primary[500] },
+          ]}
+          onPress={handleRetryLoad}
+          disabled={isRetrying}
+        >
+          <Text style={{ color: onPrimary, fontWeight: "600" }}>
+            {isRetrying ? "Memuat…" : "Coba lagi"}
+          </Text>
+        </TouchableOpacity>
         <TouchableOpacity
           style={[
             styles.backButton,
@@ -738,6 +833,12 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   errorText: { fontSize: 18, fontWeight: "700", marginTop: 20 },
+  loadingSubtext: {
+    fontSize: 14,
+    fontWeight: "500",
+    marginTop: 8,
+    textAlign: "center",
+  },
   backButton: {
     marginTop: 20,
     paddingVertical: 12,
