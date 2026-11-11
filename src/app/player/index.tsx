@@ -20,12 +20,13 @@ import { useBitPerfectStatus } from "@/features/player/hooks/useBitPerfectStatus
 import { formatTime } from "@/shared/utils/time";
 import Slider from "@react-native-community/slider";
 import { SleepTimerModal } from "@/features/player/components/SleepTimerModal";
+import { FullLyricsView } from "@/features/player/components/FullLyricsView";
 import { useTheme } from "@/context/ThemeContext";
 import { useSafePadding } from "@/shared/hooks/useSafePadding";
 
 // ✅ Import SpectogramView (bukan SpectrumAnalyzer)
 import { SpectogramView } from "@/features/visualizer/components/SpectogramView";
-import { accentOn } from "@/shared/utils/contrast";
+import { accentOn, pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 
 // Lucide Icons
 import {
@@ -134,6 +135,13 @@ export default function PlayerScreen() {
   // Helper warna dinamis
   const goldColor = accentOn([colors.accent.primary], colors.background.primary, [colors.text.primary]);
   const primaryColor = colors.primary[500];
+  // Ikon Play/Pause di atas tombol primary — warnanya harus dibaca dari
+  // LUMINANSI primary, bukan dari gelap/terang tema. Dulu isDark ? "#000"
+  // : "#FFF": di 8/20 tema ikon tidak terbaca (tema gelap + primary gelap
+  // → hitam di atas gelap).
+  const playIconColor =
+    pickReadable(["#FFFFFF", "#000000"], primaryColor, AA_NORMAL) ??
+    "#FFFFFF";
   const textPrimary = colors.text.primary;
   const textSecondary = colors.text.secondary;
   const textTertiary = colors.text.tertiary;
@@ -227,29 +235,37 @@ export default function PlayerScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ARTWORK SECTION */}
-        <View style={styles.artworkSection}>
-          <Pressable onPress={() => setShowLyrics(!showLyrics)}>
-            <Animated.View
-              style={[
-                styles.artworkContainer,
-                { transform: [{ scale: artworkScale }] },
-                theme.shadows.xl,
-              ]}
-            >
-              <Image
-                source={
-                  currentSong.artwork
-                    ? { uri: currentSong.artwork }
-                    : require("../../../assets/images/icon.png")
-                }
-                style={styles.artwork}
-                contentFit="cover"
-                transition={300}
-              />
-            </Animated.View>
-          </Pressable>
-        </View>
+        {/* ARTWORK SECTION — ketuk artwork / tombol lirik untuk beralih
+            ke tampilan lirik (FullLyricsView). Sebelumnya showLyrics hanya
+            mengubah warna ikon Mic — lirik tidak pernah dirender. */}
+        {showLyrics ? (
+          <View style={[styles.artworkSection, styles.lyricsSection]}>
+            <FullLyricsView />
+          </View>
+        ) : (
+          <View style={styles.artworkSection}>
+            <Pressable onPress={() => setShowLyrics(!showLyrics)}>
+              <Animated.View
+                style={[
+                  styles.artworkContainer,
+                  { transform: [{ scale: artworkScale }] },
+                  theme.shadows.xl,
+                ]}
+              >
+                <Image
+                  source={
+                    currentSong.artwork
+                      ? { uri: currentSong.artwork }
+                      : require("../../../assets/images/icon.png")
+                  }
+                  style={styles.artwork}
+                  contentFit="cover"
+                  transition={300}
+                />
+              </Animated.View>
+            </Pressable>
+          </View>
+        )}
 
         {/* SONG INFO & LIKE BTN */}
         <View style={styles.songInfoContainer}>
@@ -335,13 +351,13 @@ export default function PlayerScreen() {
             {isPlaying ? (
               <Pause
                 size={32}
-                color={isDark ? "#000" : "#FFF"}
+                color={playIconColor}
                 strokeWidth={2.5}
               />
             ) : (
               <Play
                 size={32}
-                color={isDark ? "#000" : "#FFF"}
+                color={playIconColor}
                 strokeWidth={2.5}
                 style={{ marginLeft: 2 }}
               />
@@ -473,6 +489,12 @@ const styles = StyleSheet.create({
     height: width - 100,
     borderRadius: 16,
     overflow: "hidden",
+  },
+  // Tampilan lirik menempati kotak yang sama dengan artwork supaya layout
+  // tidak lompat saat beralih (FullLyricsView flex:1 mengisi kotak ini).
+  lyricsSection: {
+    width: width - 100,
+    height: width - 100,
   },
   artwork: {
     width: "100%",
