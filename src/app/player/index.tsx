@@ -61,7 +61,7 @@ export default function PlayerScreen() {
   const [showLyrics, setShowLyrics] = useState(false);
   const [isTimerVisible, setIsTimerVisible] = useState(false);
 
-  const { position, duration } = useAudioProgress(250);
+  const { position, duration } = useAudioProgress();
 
   const {
     currentSong,
