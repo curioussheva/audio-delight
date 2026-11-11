@@ -28,6 +28,7 @@ import { useSafePadding } from "@/shared/hooks/useSafePadding";
 // ✅ Import SpectogramView (bukan SpectrumAnalyzer)
 import { SpectogramView } from "@/features/visualizer/components/SpectogramView";
 import { accentOn, pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+import { safeGoBack } from "@/shared/utils/navigation";
 
 // Lucide Icons
 import {
@@ -198,7 +199,7 @@ export default function PlayerScreen() {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.headerBtn}
-            onPress={() => router.back()}
+            onPress={() => safeGoBack(router)}
             accessibilityLabel="Tutup player"
           >
             <ChevronDown size={28} color={colors.text.primary} />
@@ -242,7 +243,7 @@ export default function PlayerScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.emptySecondaryBtn}
-            onPress={() => router.back()}
+            onPress={() => safeGoBack(router)}
           >
             <Text
               style={[
@@ -307,7 +308,7 @@ export default function PlayerScreen() {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.headerBtn}
-            onPress={() => router.back()}
+            onPress={() => safeGoBack(router)}
           >
             <ChevronDown size={28} color={textPrimary} />
           </TouchableOpacity>

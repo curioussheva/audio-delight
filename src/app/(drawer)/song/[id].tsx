@@ -14,6 +14,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
+import { safeGoBack } from "@/shared/utils/navigation";
 import {
   ArrowLeft,
   Heart,
@@ -150,9 +151,10 @@ export default function SongDetailScreen() {
   // deep link tidak ada history untuk router.back(), jadi fallback ke
   // Library. Pola yang sama dengan search.tsx. (Pesan "id tidak ada"
   // vs "id tidak diberikan" sudah dibedakan sejak U-P1-21.)
+  // Sejak 2026-11-12 lewat safeGoBack: canGoBack + fallback + debounce
+  // 400ms supaya double-tap tidak mengirim GO_BACK kedua ke layar root.
   const handleBack = useCallback(() => {
-    if (router.canGoBack()) router.back();
-    else router.replace("/(drawer)/(tabs)/library");
+    safeGoBack(router);
   }, [router]);
 
   const tracks = useLibraryStore((state) => state.tracks);

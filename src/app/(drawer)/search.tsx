@@ -17,6 +17,7 @@ import { EmptyState } from "@/shared/components/ui/EmptyState";
 import { useLibrary } from "@/features/library/hooks/useLibrary";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { formatTime } from "@/shared/utils/time";
+import { safeGoBack } from "@/shared/utils/navigation";
 
 export default function SearchScreen() {
   const { theme } = useTheme();
@@ -27,10 +28,11 @@ export default function SearchScreen() {
   // Tombol kembali (2026-11-11, perbaikan U-P0-8): layar ini dulu tidak
   // punya affordance kembali sama sekali (headerShown: false global).
   // Kalau dibuka dari drawer tidak ada history untuk back() — jatuh ke
-  // Library supaya tombolnya tidak pernah jadi no-op.
+  // Library supaya tombolnya tidak pernah jadi no-op. Sejak 2026-11-12
+  // lewat safeGoBack: canGoBack + fallback + debounce 400ms supaya
+  // double-tap tidak mengirim GO_BACK kedua ke layar root.
   const handleBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace("/(drawer)/(tabs)/library");
+    safeGoBack(router);
   };
 
   // U-P1-40: loading/error dibaca — dulu "Tidak ada hasil" tampil padahal
