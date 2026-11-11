@@ -71,6 +71,12 @@ export const FrequencyGraph: React.FC<Props> = ({
     return { curve: skPath, fill: fillPath };
   });
 
+  // U-P2-43: derived value per path dibuat di ATAS komponen, bukan di
+  // dalam JSX sebagai prop — memanggil useDerivedValue di JSX membuat
+  // derived value baru tiap render (tidak idiomatik, berpotensi bocor).
+  const fillPath = useDerivedValue(() => paths.value.fill);
+  const curvePath = useDerivedValue(() => paths.value.curve);
+
   // 2. Config warna (useMemo agar tidak re-render kecuali tema berubah)
   const colors = useMemo(
     () => ({
@@ -101,7 +107,7 @@ export const FrequencyGraph: React.FC<Props> = ({
 
       <Canvas style={{ width, height }}>
         {/* Shaded Area */}
-        <Path path={useDerivedValue(() => paths.value.fill)}>
+        <Path path={fillPath}>
           <LinearGradient
             start={vec(0, 0)}
             end={vec(0, height)}
@@ -111,7 +117,7 @@ export const FrequencyGraph: React.FC<Props> = ({
 
         {/* Glowing Curve */}
         <Path
-          path={useDerivedValue(() => paths.value.curve)}
+          path={curvePath}
           style="stroke"
           strokeWidth={3}
           strokeJoin="round"
