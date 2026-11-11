@@ -293,6 +293,11 @@ export default function SettingsScreen() {
                 Haptics.NotificationFeedbackType.Success,
               );
               Alert.alert("Sukses", "Cache telah dibersihkan.");
+            } else {
+              // U-P2-47: dulu gagal diam-diam — tidak ada alert/error
+              // apa pun bila clearArtistCache() mengembalikan false.
+              // Samakan dengan handleResetAll yang punya alert "Gagal".
+              Alert.alert("Gagal", "Cache gagal dibersihkan. Coba lagi.");
             }
           },
         },
