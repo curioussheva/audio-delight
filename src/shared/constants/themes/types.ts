@@ -159,6 +159,9 @@ export type ThemeId =
   | "neon-cyber"
   | "sunset-orange"
   | "emerald-noir"
+  // pristine.ts themes
+  | "pristine-noir"
+  | "pristine-porcelain"
   // dark.ts themes
   | "cozy-metallic"
   | "blue-jeans"

@@ -30,7 +30,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const systemColorScheme = useColorScheme();
 
-  const [themeId, setThemeId] = useState<ThemeId>("emerald-noir");
+  const [themeId, setThemeId] = useState<ThemeId>("pristine-noir");
   const [theme, setThemeObj] = useState<Theme>(DEFAULT_THEME);
 
   useEffect(() => {
@@ -45,13 +45,15 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
           setThemeObj(getThemeById(saved));
         } else {
           const defaultId: ThemeId =
-            systemColorScheme === "light" ? "light-elegant" : "emerald-noir";
+            systemColorScheme === "light"
+              ? "pristine-porcelain"
+              : "pristine-noir";
           setThemeId(defaultId);
           setThemeObj(getThemeById(defaultId));
         }
       } catch (error) {
         console.error("Failed to load theme:", error);
-        setThemeId("emerald-noir");
+        setThemeId("pristine-noir");
         setThemeObj(DEFAULT_THEME);
       }
     };
@@ -59,7 +61,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [systemColorScheme]);
 
   const setTheme = async (newThemeId: ThemeId) => {
-    const safeId = newThemeId in ALL_THEMES ? newThemeId : "emerald-noir";
+    const safeId = newThemeId in ALL_THEMES ? newThemeId : "pristine-noir";
     setThemeId(safeId);
     setThemeObj(getThemeById(safeId));
 

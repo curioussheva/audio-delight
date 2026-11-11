@@ -276,7 +276,7 @@ export default function SettingsScreen() {
             // mereset apa pun. Sekarang tiap pengaturan dikembalikan
             // ke nilai default-nya (lihat store masing-masing).
             try {
-              await setTheme("emerald-noir");
+              await setTheme("pristine-noir");
               if (isAutoScanEnabled) {
                 toggleAutoScanEnabled();
                 await BackgroundScanTask.unregister().catch((err) =>

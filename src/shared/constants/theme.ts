@@ -23,6 +23,7 @@ import {
 import { FOREST_GREEN, OCEAN_WAVE } from "./themes/nature";
 import { GOLDEN_HOUR, ROSE_GOLD } from "./themes/premium";
 import { NEON_CYBER, SUNSET_ORANGE } from "./themes/cyber";
+import { PRISTINE_NOIR, PRISTINE_PORCELAIN } from "./themes/pristine";
 
 // Definisikan SPACING dan BASE_SHADOWS
 const SPACING: ThemeSpacing = {
@@ -278,6 +279,10 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
   "vinyl-noir": VINYL_NOIR,
   "aged-whiskey": AGED_WHISKEY,
   "graphite-slate": GRAPHITE_SLATE,
+
+  // ✨ TEMA PRISTINE (2026-11-11) — tema brand, jadi default
+  "pristine-noir": PRISTINE_NOIR,
+  "pristine-porcelain": PRISTINE_PORCELAIN,
 };
 
 export const getThemeById = (id: ThemeId): Theme =>
@@ -289,7 +294,7 @@ export const getRandomTheme = (): Theme => {
 };
 
 export const THEMES_LIST = Object.values(ALL_THEMES);
-export const DEFAULT_THEME = ALL_THEMES["emerald-noir"]; // Diperbarui ke emerald-noir
+export const DEFAULT_THEME = ALL_THEMES["pristine-noir"]; // 2026-11-11: ganti dari emerald-noir — tema brand (navy + silver + gold)
 
 // Kategori tema.
 //
@@ -301,7 +306,13 @@ export const DEFAULT_THEME = ALL_THEMES["emerald-noir"]; // Diperbarui ke emeral
 // nama di sini DIVERIFIKASI ada di ALL_THEMES, dan tema yang tidak disebut
 // tetap muncul lewat bucket "Lainnya" - tidak ada yang bisa hilang diam-diam.
 const CATEGORY_MEMBERS: Record<string, ThemeId[]> = {
-  light: ["light-gray", "pure-white", "light-elegant", "light-silver"],
+  light: [
+    "light-gray",
+    "pure-white",
+    "light-elegant",
+    "light-silver",
+    "pristine-porcelain",
+  ],
   dark: [
     "deep-navy",
     "obsidian",
@@ -315,6 +326,7 @@ const CATEGORY_MEMBERS: Record<string, ThemeId[]> = {
     "vinyl-noir",
     "aged-whiskey",
     "graphite-slate",
+    "pristine-noir",
   ],
   nature: ["forest-green", "ocean-wave"],
   premium: ["golden-hour", "rose-gold"],

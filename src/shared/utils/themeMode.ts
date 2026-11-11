@@ -66,4 +66,5 @@ export const findCounterpartTheme = (themeId: ThemeId): ThemeId | null => {
  * dikenal), ia jatuh ke perilaku lama supaya toggle tidak pernah "mati".
  */
 export const resolveToggleTarget = (themeId: ThemeId): ThemeId =>
-  findCounterpartTheme(themeId) ?? (ALL_THEMES[themeId]?.isDark ? "light-elegant" : "emerald-noir");
+  findCounterpartTheme(themeId) ??
+  (ALL_THEMES[themeId]?.isDark ? "pristine-porcelain" : "pristine-noir");
