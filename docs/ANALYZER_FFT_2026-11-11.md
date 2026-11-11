@@ -178,6 +178,29 @@ tanpa error. Fix `645035a8`: dibungkus ke `"pnpm":
 { "patchedDependencies": {...} }`. File patch + isinya sudah benar
 dari awal. Setelah pull + `pnpm install` ulang, grep harus 1. **TERKONFIRMASI 2026-11-11 18:04 WIB: grep = 1, patch AKTIF** (install 1m46s); lockfile di-commit csheva (`3af1f9ac9`).
 
+## 6. Verifikasi device logcat #15 (2026-11-11 18:50–18:57, APK `3a035aec`)
+
+**Fix crash TERBUKTI di device.** 12× `analyzeFile selesai`, 0 crash,
+0 FATAL/ANR, satu sesi tanpa relaunch. File 02 (44,1 kHz, s16,
+frame 4608 — konfigurasi persis yang crash di #14) selesai dianalisis
+18:52:47. Patch pnpm TERBUKTI AKTIF di device: 0× error Base64
+(dulu 6× di #14). 5 file sample 01–05 semua OK; anomali format 05
+di #14 (terbaca s16) TIDAK terulang — sekarang benar s32/44,1 kHz
+sesuai ffprobe. Tambahan: 7 track album "Bit Depths & Sample Rates"
+(16/44.1, 16/96, 24/176.4, 24/192, 24/44.1, 24/48, 24/88.2) semua
+selesai — analyzer jalan di 44,1k/48k/88,2k/96k/176,4k/192k, s16/s32,
+frame 4096/4608/8192.
+
+**Observasi baru (belum diputuskan):** 95 baris `[zero]` vs 36 `[fine]`
+selama pemutaran album — jeda sunyi 1–4 detik di sekitar pergantian
+lagu, sementara DIAG tetap PLAYING dan posisi maju. Diduga jeda
+antar-track (drain + load track berikutnya) pada lagu-lagu pendek;
+bukan pola pause-silence (P-M2). Perlu verdict telinga csheva.
+
+**Celah yang masih ada:** hasil spektral + verdict TIDAK tercatat di
+logcat — integrasi TS tidak me-log nilai cutoff/verdict. Verdict yang
+tampil di layar untuk 01–05 + 7 track album harus dikonfirmasi csheva.
+
 ## Commit
 
 - `978ea1a6` — patch pnpm lib audio-metadata + `patchedDependencies`.
