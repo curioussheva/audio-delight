@@ -127,6 +127,48 @@ Semua verdict "terduga", bukan vonis. UI menampilkan pengukuran
    + warning.
 7. Lagu diputar seperti biasa selama analisis — playback tidak terganggu.
 
+## 5. Crash logcat #14 (2026-11-11 17:09) — heap OOB di pengisian jendela
+
+**Hasil tes APK 77156899 (logcat #14, 17:03–17:14 WIB):** analisis
+berhasil untuk 01 (24/96), 03 (upsample), 04 (MP3→FLAC), 05 (padding)
+— `analyzeFile selesai (168 karakter)` — tapi aplikasi **crash
+(SIGSEGV) saat menganalisis 02-asli-1644-chirp** (44,1 kHz/16-bit),
+15 ms sesudah frame pertama di-decode. Tombstone: `signal 11
+(SIGSEGV), code 2 (SEGV_ACCERR)`, fault addr tag `0xb4` (MTE),
+PC di dalam `FFTPlan::forward()` — tepatnya di salinan bit-reversal
+(`ldr w8, [x1, x8, lsl #2]`, indeks dari tabel).
+
+**Root cause (bukan di FFTPlan):** loop pengisian jendela menulis
+melewati `windowed[8192]`:
+
+```cpp
+std::vector<float> windowed(kFftSize, 0.0f);      // 8192
+for (size_t i = 0; i < mono.size(); ++i)           // mono bisa 9216!
+    windowed[i] = mono[i] * hannWindow(i, kFftSize);
+```
+
+`decode()` mengembalikan frame UTUH: satu frame FLAC 44,1 kHz =
+4608 sampel, jadi dua panggilan memberi mono 4608 + 4608 = 9216 —
+1024 float (4 KB) melewati akhir vector. File 96 kHz lolos karena
+frame-nya 8192 sampel (mono tepat 8192). Tulis OOB itu menimpa
+alokasi heap di sebelahnya (tabel bit-reversal / buffer spektrum),
+lalu `forward()` membaca indeks sampah → alamat liar → MTE fault.
+File 05 (frame 4608 juga) selamat karena korupsi heap itu
+non-deterministik — bug-nya sama, hasilnya beda.
+
+**Fix:** clamp pengisian ke `kFftSize` (`framesToUse =
+min(mono.size(), kFftSize)`); kelebihan frame dibuang. Disertai
+disassembly tombstone (capstone, `.so` dari APK) + aritmetika frame
+sebagai bukti. Harness host tidak menangkap ini karena loop
+open/seek/decode memang tidak pernah dijalankan di host (butuh
+libav* — lihat catatan di `scripts/test_audio_file_analyzer.cpp`).
+
+**Sisa dari logcat #14:** error metadata Base64 MASIH muncul (6×) —
+patch pnpm belum aktif di Termux (kemungkinan `pnpm install` belum
+dijalankan); fallback-lah yang menyelamatkan analisis. Verdict yang
+tampil di layar untuk 01/03/04/05 tidak tercatat di log — perlu
+konfirmasi csheva.
+
 ## Commit
 
 - `978ea1a6` — patch pnpm lib audio-metadata + `patchedDependencies`.

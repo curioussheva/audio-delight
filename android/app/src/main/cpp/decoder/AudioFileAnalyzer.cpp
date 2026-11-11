@@ -190,8 +190,22 @@ SpectralAnalysis analyzeFile(const std::string& path) {
             leftSamples.end(), left.begin(), left.end());
 
         // Hann + FFT (zero-pad sisanya sampai kFftSize).
+        // KOREKSI (2026-11-11, logcat #14 — crash SIGSEGV di device):
+        // mono.size() BISA melebihi kFftSize. decode() mengembalikan frame
+        // UTUH (satu frame FLAC 44,1 kHz = 4608 sampel): dua panggilan
+        // decode() memberi mono 4608 + 4608 = 9216 > 8192, dan loop lama
+        // `i < mono.size()` menulis windowed[8192..9215] — heap OOB write
+        // 4 KB melewati vector 8192 float. File 96 kHz (frame 8192 sampel)
+        // lolos karena mono tepat 8192; file 44,1 kHz (frame 4608) crash
+        // di forward() — tabel bit-reversal FFTPlan yang bersebelahan di
+        // heap ikut tertimpa, lalu forward() membaca indeks sampah
+        // (tombstone: SIGSEGV SEGV_ACCERR, fault addr tag 0xb4, PC di
+        // bit-reversal copy forward()). Jadi CLAMP ke kFftSize di sini:
+        // kelebihan frame dibuang, bukan ditulis melewati buffer.
         std::vector<float> windowed(static_cast<size_t>(kFftSize), 0.0f);
-        for (size_t i = 0; i < mono.size(); ++i) {
+        const size_t framesToUse = std::min(
+            mono.size(), static_cast<size_t>(kFftSize));
+        for (size_t i = 0; i < framesToUse; ++i) {
             windowed[i] = mono[i] * hannWindow(static_cast<int>(i), kFftSize);
         }
         std::vector<pristine::Complex> spectrum(
