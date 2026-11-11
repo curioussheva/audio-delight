@@ -71,6 +71,13 @@ export default function AboutScreen() {
         <Text style={[styles.version, { color: colors.text.tertiary }]}>
           v{APP_VERSION}
         </Text>
+        {/* Banner "Curious Sheva" — aset branding (2026-11-11): kredit
+            developer di bawah header About. */}
+        <Image
+          source={require("../../../assets/images/curious-sheva-banner.png")}
+          style={styles.banner}
+          contentFit="cover"
+        />
       </View>
 
       {/* Features Grid */}
@@ -164,6 +171,12 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { alignItems: "center", marginBottom: 30 },
   logo: { width: 100, height: 100, marginBottom: 15 },
+  banner: {
+    width: "92%",
+    aspectRatio: 1600 / 427,
+    borderRadius: 12,
+    marginTop: 18,
+  },
   title: { fontSize: 28, fontWeight: "900", letterSpacing: 2 },
   version: { fontSize: 12, fontWeight: "700", marginTop: 4 },
   section: { paddingHorizontal: 20, marginBottom: 30 },
