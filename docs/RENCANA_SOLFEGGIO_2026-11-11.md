@@ -252,6 +252,23 @@ tempo tetap. Ini yang diharapkan user, bukan preset resonator.
     di APK. APK ini TIDAK berisi fix fft (84246cda, f15336b4 — ikut
     build berikutnya). Verifikasi device ditunggu (dengar 432: pitch
     turun, tempo tetap; bit-perfect mematikan tuning).
+  - **Logcat #12 (2026-11-11 12:26–12:31, UID 10536, PID 10879, APK
+    b766111e): retune BERFUNGSI di device** — `setPitchRatio(0.9818182)`
+    12:28:45 → `1.0` 12:29:03 → `0.9818182` 12:29:12 (mode immersive),
+    0× `setTuningCents failed`. Tempo via DIAG tak bisa diputuskan
+    (endpoint 0.974× vs baseline OFF 1.006× — noise sampler; harness
+    yang membuktikan frame-count preserving). Gate bit-perfect tak
+    ter-log (`setPitchAllowed` tanpa log line) — verdict telinga
+    ditunggu (pitch naik di bit-perfect 12:29:21, turun lagi di dsp
+    12:29:27?). Sisi positif: 5 mode toggle + unplug 407 → reopen
+    138.9s terjaga; 0 [zero] (sesi ke-3 bersih); 0 FATAL/ANR;
+    visualizer hidup (session 9441); cold start tetap (98+124 frame
+    skip). **TEMUAN BARU: double-reopen race saat unplug** — reopen
+    pertama 12:30:39 jaga posisi 138.9s, lalu reopen KEDUA 1 dtk
+    kemudian reset posisi ke 0.0s (dua jalur recovery jalan bersamaan:
+    `requestStreamRecovery` worker + `onDeviceRemoved` handler);
+    replug 427/428 → reopen jaga 6.7s. DSP-M1 tetap belum dites
+    (EQ tidak di-set — sesi ke-4 berturut-turut); analyzer tidak jalan.
   - **Logcat #11 (2026-11-11 11:49–11:54 WIB, UID 10535, PID 32316):
     retune MASIH gagal — sesi via Metro lagi (baris 'Android Bundled
     2185ms'), `setPitchRatio is not a function` 8x (11:51:50–11:52:25,
