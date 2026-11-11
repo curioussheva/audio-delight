@@ -215,6 +215,21 @@ tempo tetap. Ini yang diharapkan user, bukan preset resonator.
     sesuai kode baru), bundle 5.371.876 byte. Verifikasi device ditunggu
     (dengar 432: pitch turun, tempo tetap; mode bit-perfect mematikan
     tuning).
+  - **Logcat #10 (2026-11-11 10:58–11:03 WIB, UID 10534, PID 4364):
+    retune BELUM teruji — sesi ini jalan via Metro (JS baru) di atas APK
+    LAMA (native lama): `setTuningCents failed: TypeError:
+    NativePlaybackService.default.setPitchRatio is not a function` 2x
+    (11:00:49 + 11:00:51, mode immersive). Bukti: JS bundle baru (UI tuning
+    + store jalan) tapi modul native legacy (`ReactContextBaseJavaModule`,
+    BUKAN codegen TurboModule — method list dari @ReactMethod runtime)
+    tidak punya setPitchRatio, padahal di head a5f0c887 ada
+    (NativePlaybackModule.kt:178). Metro hanya mengganti JS, native tetap
+    dari APK terinstall — retune (C++) butuh install APK 747dda80 dulu.
+    Setting A=432 (−31,77 sen) SUDAH tersimpan (store + AsyncStorage,
+    sebelum native call gagal) — akan di-apply initStore pas APK baru
+    diinstall. Sisi positif log ini: 3 mode toggle (immersive→bit-perfect
+    →dsp) + unplug/replug headset semua reopen + posisi terjaga; 0 [zero];
+    0 FATAL/ANR; visualizer hidup; cold start tetap (182+225 frame skip).
 
 ### Fase 5 — Polish & bersih-bersih
 - Hapus `FFTResonanceAnalyzer` (mati total, DSP-M15) dan `BinauralRenderer` lama
