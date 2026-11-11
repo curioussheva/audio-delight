@@ -518,12 +518,38 @@ export default function PlayerScreen() {
             <SkipForward size={32} color={textPrimary} strokeWidth={2} />
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={toggleRepeat} style={styles.controlBtn}>
+          {/* U-P2-10: Repeat One harus bisa dibedakan dari Repeat All —
+              dulu hanya warna ikon berubah. Dot di bawah ikon, pola yang
+              sama dengan FloatingPlayer (repeatOneDot) dan Controls (mati).
+              Label aksesibilitas ikut membedakan modenya. */}
+          <TouchableOpacity
+            onPress={toggleRepeat}
+            style={[styles.controlBtn, styles.repeatBtn]}
+            accessibilityRole="button"
+            accessibilityLabel={
+              repeat === "track"
+                ? "Ulangi satu lagu"
+                : repeat === "all"
+                  ? "Ulangi semua lagu"
+                  : "Ulangi mati"
+            }
+            accessibilityState={{
+              selected: repeat !== "off",
+            }}
+          >
             <Repeat
               size={22}
               color={repeat !== "off" ? primaryColor : iconColorDefault}
               strokeWidth={2}
             />
+            {repeat === "track" && (
+              <View
+                style={[
+                  styles.repeatOneDot,
+                  { backgroundColor: primaryColor },
+                ]}
+              />
+            )}
           </TouchableOpacity>
         </View>
 
@@ -709,6 +735,19 @@ const styles = StyleSheet.create({
   },
   controlBtn: {
     padding: 8,
+  },
+  // U-P2-10: pembungkus relatif supaya dot Repeat One bisa diposisikan
+  // absolut di bawah ikon (pola yang sama dengan FloatingPlayer).
+  repeatBtn: {
+    position: "relative",
+  },
+  repeatOneDot: {
+    position: "absolute",
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    bottom: 2,
+    alignSelf: "center",
   },
   playBtn: {
     width: 64,
