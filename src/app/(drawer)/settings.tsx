@@ -12,6 +12,7 @@ import {
   FlatList,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 
 // Lucide Icons
 import {
@@ -183,6 +184,7 @@ const SettingRow: React.FC<SettingRowProps> = ({
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const { theme, isDarkMode, toggleTheme, setTheme } = useTheme();
   const { colors, spacing } = theme;
 
@@ -1563,18 +1565,28 @@ export default function SettingsScreen() {
             </Text>
           </View>
 
-          <View
-            style={[
-              styles.infoBox,
-              { backgroundColor: colors.background.tertiary },
-            ]}
+          {/* U-P2-37: isi "Tentang" DULU diduplikasi di sini (nama + versi +
+              tagline) sementara layar About punya versi lengkapnya sendiri
+              (fitur, kontak, banner). Satu sumber sekarang: layar About.
+              Di sini tinggal versi + tautan ke sana. */}
+          <TouchableOpacity
+            onPress={() => router.push("/(drawer)/about")}
+            accessibilityRole="button"
+            accessibilityLabel="Buka halaman Tentang untuk fitur dan kontak"
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              backgroundColor: colors.background.tertiary,
+              borderRadius: 12,
+              padding: spacing.md,
+            }}
           >
-            <Text
-              style={{ color: colors.text.primary, marginBottom: spacing.xs }}
-            >
-              High-Fidelity Audio Player for Audiophiles
+            <Text style={{ color: colors.text.primary }}>
+              Fitur, kontak & info aplikasi
             </Text>
-          </View>
+            <ChevronRight size={18} color={colors.text.secondary} />
+          </TouchableOpacity>
         </View>
       )}
     </Section>
@@ -1658,7 +1670,6 @@ const styles = StyleSheet.create({
   themeColorDot: { width: 20, height: 20, borderRadius: 4 },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   pill: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
-  infoBox: { padding: 12, borderRadius: 12 },
   resetButton: {
     padding: 16,
     borderRadius: 12,

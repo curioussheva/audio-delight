@@ -11,6 +11,7 @@ import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import Constants from "expo-constants";
 import { useTheme } from "@/shared/context/ThemeContext";
+import { accentOn } from "@/shared/utils/contrast";
 
 // Versi dibaca dari app.json supaya tidak menyimpang dari APK yang terpasang.
 // Sebelumnya label di sini hardcoded "v1.0.0-PRO" sementara app.json sudah di
@@ -23,6 +24,21 @@ const APP_VERSION =
 export default function AboutScreen() {
   const { theme } = useTheme();
   const { colors, spacing } = theme;
+
+  // U-P2-37: aksen sebagai TEKS/IKON diukur seperti Equalizer, bukan
+  // primary[500] mentah (gagal 4,5 di 9/22 tema sebagai teks, gagal 3,0 di
+  // 8 tema sebagai ikon — mis. charcoal-black 1,12). Judul di atas
+  // background.primary, ikon di atas kartu background.secondary.
+  const accentOnPrimary = accentOn(
+    [colors.primary[500]],
+    colors.background.primary,
+    [colors.text.primary, colors.text.secondary],
+  );
+  const accentOnSecondary = accentOn(
+    [colors.primary[500]],
+    colors.background.secondary,
+    [colors.text.primary, colors.text.secondary],
+  );
 
   const features = [
     {
@@ -64,7 +80,7 @@ export default function AboutScreen() {
           style={styles.logo}
           contentFit="contain"
         />
-        <Text style={[styles.title, { color: colors.primary[500] }]}>
+        <Text style={[styles.title, { color: accentOnPrimary }]}>
           PristineAudio
         </Text>
         <Text style={[styles.version, { color: colors.text.tertiary }]}>
@@ -96,7 +112,7 @@ export default function AboutScreen() {
               <Ionicons
                 name={f.icon as any}
                 size={24}
-                color={colors.primary[500]}
+                color={accentOnSecondary}
               />
               <Text
                 style={[styles.featureTitle, { color: colors.text.primary }]}
@@ -147,7 +163,7 @@ export default function AboutScreen() {
           ]}
           onPress={() => openLink("mailto:curioussheva@gmail.com")}
         >
-          <Ionicons name="mail-outline" size={20} color={colors.primary[500]} />
+          <Ionicons name="mail-outline" size={20} color={accentOnSecondary} />
           <Text style={[styles.linkText, { color: colors.text.primary }]}>
             curioussheva@gmail.com
           </Text>
