@@ -670,17 +670,37 @@ export default function AnalyzerScreen() {
           )}
         </View>
 
-        {enrichState === "error" ? (
+        {/* U-P2-25: error fetch TIDAK BOLEH menutupi bio yang sudah ada
+            dari DB. Bila bio tersedia, error tampil sebagai banner
+            kecil DI ATAS bio yang dipertahankan; tampilan error penuh
+            hanya bila memang belum ada bio sama sekali. */}
+        {artistBio ? (
+          <>
+            {enrichState === "error" && (
+              <View style={styles.errorBanner}>
+                <WifiOff size={14} color={colors.status.error} />
+                <Text
+                  style={[
+                    styles.errorBannerText,
+                    { color: colors.status.error },
+                  ]}
+                >
+                  Gagal memperbarui data online — menampilkan biografi
+                  tersimpan.
+                </Text>
+              </View>
+            )}
+            <Text style={[styles.bioText, { color: colors.text.secondary }]}>
+              {artistBio}
+            </Text>
+          </>
+        ) : enrichState === "error" ? (
           <View style={styles.errorState}>
             <WifiOff size={20} color={colors.status.error} />
             <Text style={[styles.errorText, { color: colors.status.error }]}>
               Gagal mengambil data. Cek koneksi internet.
             </Text>
           </View>
-        ) : artistBio ? (
-          <Text style={[styles.bioText, { color: colors.text.secondary }]}>
-            {artistBio}
-          </Text>
         ) : (
           <Text style={[styles.bioText, { color: colors.text.disabled }]}>
             Belum ada biografi. Tekan tombol refresh untuk mengambil data dari
@@ -802,5 +822,16 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 8,
   },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: "rgba(240,128,112,0.1)",
+    marginBottom: 12,
+  },
+  errorBannerText: { fontSize: 12, fontWeight: "600", flex: 1 },
   errorText: { fontSize: 13, fontWeight: "600", flex: 1 },
 });
