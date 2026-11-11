@@ -34,10 +34,12 @@ void ImmersiveStage::prepare(int32_t sampleRate) {
 
     mSampleRate = sampleRate;
 
-    // Hanya Solfeggio yang butuh laju: ia menghitung koefisien filter dari
-    // frekuensi target relatif terhadap sample rate. Yang lain tidak stateful
-    // terhadap laju (brainwave menerimanya per panggilan).
+    // Solfeggio menghitung koefisien filter dari frekuensi target relatif
+    // terhadap sample rate; exciter menghitung koefisien DC blocker-nya dari
+    // laju yang sama (DSP-M3). Yang lain tidak stateful terhadap laju
+    // (brainwave menerimanya per panggilan).
     mSolfeggio.prepare(sampleRate);
+    mHarmonic.prepare(sampleRate);
 
     mPrepared = true;
 }

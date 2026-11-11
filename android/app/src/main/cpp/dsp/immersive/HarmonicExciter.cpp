@@ -43,6 +43,49 @@ void HarmonicExciter::setDrive(float driveDb) {
 }
 
 // =====================================================
+// PREPARE
+// =====================================================
+//
+// Hitung koefisien DC blocker dari laju stream (cutoff ~10 Hz) dan bersihkan
+// state-nya: stream baru harus mulai dari state bersih, bukan ekor stream
+// lama. Bila prepare() tidak pernah dipanggil, mDcCoeff default (~10 Hz
+// @48 kHz) tetap dipakai - blocker tetap jalan, hanya cutoff-nya sedikit
+// meleset di laju lain.
+void HarmonicExciter::prepare(int32_t sampleRate) {
+
+    if (sampleRate > 0) {
+        mDcCoeff = std::exp(
+            -2.0f * static_cast<float>(M_PI) * 10.0f /
+            static_cast<float>(sampleRate)
+        );
+    }
+
+    mDcPrevInL = 0.0f;
+    mDcPrevOutL = 0.0f;
+    mDcPrevInR = 0.0f;
+    mDcPrevOutR = 0.0f;
+}
+
+// =====================================================
+// DC BLOCKER
+// =====================================================
+//
+// One-pole highpass: y = x - prevIn + R*prevOut. Di DC (x konstan) output
+// meluruh ke 0 dengan konstanta waktu ~1/(2*pi*10) detik; atenuasinya
+// ~0.26 dB di 40 Hz, ~0.17 dB di 50 Hz, < 0.05 dB di atas ~100 Hz - jadi
+// sinyal musik praktis tak tersentuh, hanya DC dan ayunan lambat (envelope)
+// yang dibuang.
+float HarmonicExciter::dcBlock(float x, float& prevIn, float& prevOut) const {
+
+    const float y = x - prevIn + mDcCoeff * prevOut;
+
+    prevIn = x;
+    prevOut = y;
+
+    return y;
+}
+
+// =====================================================
 // SHAPER
 // =====================================================
 //
@@ -67,10 +110,21 @@ void HarmonicExciter::setDrive(float driveDb) {
 //     jadi fungsi itu GANJIL - ia hanya menambah harmonisa ganjil, dan
 //     komponen orde 2 praktis nol (terukur ~3e-33, yaitu nol numerik).
 //     Untuk harmonisa genap dibutuhkan fungsi GENAP: x^2 tanpa sign.
-//     Konstanta -0.25 menggeser agar rerata nol, jadi tidak ada DC offset.
+//
+//     ⚠️ KOREKSI (2026-11-11, DSP-M3): komentar lama di sini mengklaim
+//     "Konstanta -0.25 menggeser agar rerata nol, jadi tidak ada DC offset"
+//     - klaim itu SALAH. E[x^2 - 0.25] = E[x^2] - 0.25, dan E[x^2] = 0.25
+//     hanya bila sinyal ber-RMS tepat 0.5. Di level lain suku genap
+//     menyuntik DC = 1.2*(E[x^2]-0.25)*mAmount (terbukti harness: diam,
+//     drive 6 dB -> DC -0.045; sine A=1.0 -> DC +0.135). DC itu DIBUANG oleh
+//     DC blocker di process(), bukan oleh konstanta -0.25. Jangan hapus
+//     blocker dengan alasan "-0.25 sudah menangani DC".
 //
 // Konstanta 1.2 dipilih dari pengukuran: memberi h2/f0 ~0.17 (jelas terdengar
 // sebagai kehangatan) dengan perubahan level hanya -0.35 dB pada drive 18.
+// (Catatan 2026-11-11: angka itu amplitudo-spesifik - terukur h2/f0 0.175
+// baru cocok pada A~=0.5 dan jadi 0.404 pada A=1.0; level -1.87 dB pada
+// A=0.5, -2.54 dB pada A=1.0. Jangan jadikan -0.35 dB sebagai sifat kelas.)
 float HarmonicExciter::shape(float x, float k) {
 
     if (k <= 0.0f) {
@@ -80,7 +134,8 @@ float HarmonicExciter::shape(float x, float k) {
     const float soft = std::tanh(k * x) / k;
 
     // x^2 adalah fungsi GENAP -> menghasilkan harmonisa orde 2.
-    // Pergeseran -0.25 membuat reratanya nol supaya tidak ada DC offset.
+    // (Pergeseran -0.25 TIDAK menghilangkan DC - lihat koreksi DSP-M3 di
+    // atas. DC dibuang dcBlock() di process().)
     const float even = (x * x - 0.25f) * 1.2f;
 
     return soft + even;
@@ -104,13 +159,26 @@ void HarmonicExciter::process(
     const float dry = 1.0f - mAmount;
 
     for (int32_t i = 0; i < numFrames; ++i) {
-        left[i] = dry * left[i] + mAmount * shape(left[i], mK);
-        right[i] = dry * right[i] + mAmount * shape(right[i], mK);
+        const float l =
+            dry * left[i] + mAmount * shape(left[i], mK);
+        const float r =
+            dry * right[i] + mAmount * shape(right[i], mK);
+
+        // DSP-M3: buang DC yang disuntik suku genap shape() (dan DC apa pun
+        // dari sumber) sebelum keluar. Tanpa ini, output diam di drive 6 dB
+        // adalah konstanta -0.045, bukan 0.
+        left[i] = dcBlock(l, mDcPrevInL, mDcPrevOutL);
+        right[i] = dcBlock(r, mDcPrevInR, mDcPrevOutR);
     }
 }
 
 void HarmonicExciter::reset() {
-    // Tidak ada state yang perlu direset - shaper-nya stateless.
+    // Shaper-nya stateless, tapi DC blocker ber-state - bersihkan supaya
+    // tidak ada transient dari ekor track/stream sebelumnya.
+    mDcPrevInL = 0.0f;
+    mDcPrevOutL = 0.0f;
+    mDcPrevInR = 0.0f;
+    mDcPrevOutR = 0.0f;
 }
 
 }} // namespace
