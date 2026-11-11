@@ -35,11 +35,10 @@ export default function AboutScreen() {
       title: "Visualizer Pro",
       desc: "Real-time spectral & peak analysis",
     },
-    {
-      icon: "color-palette",
-      title: "Adaptive UI",
-      desc: "Dynamic themes based on album art",
-    },
+    // Klaim "Adaptive UI — Dynamic themes based on album art" DIHAPUS
+    // (U-P1-08): tidak ada kode yang menurunkan tema dari sampul album —
+    // satu-satunya komponen itu (DynamicBackground) mati, tema hanya
+    // dipilih manual lewat ThemePicker.
     {
       icon: "options",
       title: "Bit-Perfect",
