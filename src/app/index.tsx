@@ -15,6 +15,9 @@ export default function Index() {
   const [isReady, setIsReady] = useState(false);
  
   const initializeApp = useCallback(async () => {
+    // U-P1-22: retry harus membersihkan error lama — kalau tidak, cabang
+    // error di bawah tetap menang walau init kedua berhasil.
+    setError(null);
     try {
       console.log("[BOOT] 1. Index mount started");
       
@@ -45,23 +48,27 @@ export default function Index() {
     initializeApp();
   }, [initializeApp]);
 
-  if (!isReady || hasOnboarded === null) {
-    return (
-      <View style={[styles.center, { backgroundColor: theme.colors.background.primary }]}>
-        <ActivityIndicator size="large" color={theme.colors.primary[500]} />
-        <Text style={[styles.loadingText, { color: theme.colors.text.secondary }]}>
-          Loading Pristine Audio...
-        </Text>
-      </View>
-    );
-  }
-
+  // U-P1-22: error HARUS dicek sebelum loading. Dulu cabang loading
+  // (`!isReady || hasOnboarded === null`) selalu menang: catch init
+  // men-set error + isReady(true) tapi hasOnboarded tetap null, jadi UI
+  // error + retry di bawah adalah dead code dan user terjebak di spinner.
   if (error) {
     return (
       <View style={[styles.center, { backgroundColor: theme.colors.background.primary }]}>
         <Text style={styles.errorText}>⚠️ {error}</Text>
         <Text style={[styles.retryText, { color: theme.colors.primary[500] }]} onPress={initializeApp}>
           Tap to Retry
+        </Text>
+      </View>
+    );
+  }
+
+  if (!isReady || hasOnboarded === null) {
+    return (
+      <View style={[styles.center, { backgroundColor: theme.colors.background.primary }]}>
+        <ActivityIndicator size="large" color={theme.colors.primary[500]} />
+        <Text style={[styles.loadingText, { color: theme.colors.text.secondary }]}>
+          Loading Pristine Audio...
         </Text>
       </View>
     );
