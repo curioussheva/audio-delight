@@ -133,5 +133,8 @@
       "javaPackageName": "com.pristineaudio.app"
     }
   },
-  "packageManager": "pnpm@9.0.0"
+  "packageManager": "pnpm@9.0.0",
+  "patchedDependencies": {
+    "@missingcore/audio-metadata@1.3.0": "patches/@missingcore__audio-metadata@1.3.0.patch"
+  }
 }
