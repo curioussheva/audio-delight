@@ -149,6 +149,11 @@ JNIEXPORT jboolean JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativ
     __android_log_print(ANDROID_LOG_INFO, "NativeDeviceModule",
                         "nativeSetActiveDevice('%s') -> %s", id, ok ? "OK" : "DITOLAK");
 
+    // 🔥 FIX (2026-11-11, J-m5): kembalikan ok && applied. Sebelumnya
+    // applied=false hanya di-log; JS promise resolve true sementara
+    // stream tak pindah (engine menolak id — mis. device dicabut di
+    // antara validasi manager dan engine).
+    bool applied = false;
     if (ok) {
         // 🔥 FIX (2026-10-07): teruskan pilihan device ke engine.
         //
@@ -163,7 +168,7 @@ JNIEXPORT jboolean JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativ
             ? 0
             : static_cast<int32_t>(std::strtol(id, nullptr, 10));
 
-        const bool applied =
+        applied =
             pristine::EngineManager::get().setRequestedDeviceId(numericId);
 
         __android_log_print(ANDROID_LOG_INFO, "NativeDeviceModule",
@@ -172,7 +177,7 @@ JNIEXPORT jboolean JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativ
     }
 
     env->ReleaseStringUTFChars(deviceId, id);
-    return ok ? JNI_TRUE : JNI_FALSE;
+    return (ok && applied) ? JNI_TRUE : JNI_FALSE;
 }
 
 // Status perangkat yang BENAR-BENAR dipakai stream, untuk kejujuran UI.
