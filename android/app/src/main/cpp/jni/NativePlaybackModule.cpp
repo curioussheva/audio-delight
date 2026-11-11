@@ -218,16 +218,44 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeS
 }
 
 JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetQueue(JNIEnv* env, jobject) {
+    // 🔥 FIX (2026-11-11, J-M5/J-m9): guard queue() + cek FindClass/
+    // NewStringUTF. FindClass yang gagal meninggalkan exception pending;
+    // NewObjectArray/NewStringUTF sesudahnya jadi no-op dan array
+    // teracuni null. Kotlin mengharapkan Array<String> non-null — semua
+    // jalur error kembalikan array KOSONG, bukan nullptr.
+    jclass stringClass = env->FindClass("java/lang/String");
+    if (!stringClass) {
+        env->ExceptionClear();
+        stringClass = env->FindClass("java/lang/Object");
+        if (!stringClass) {
+            env->ExceptionClear();
+            return nullptr; // APK rusak; tidak ada yang bisa dikembalikan
+        }
+    }
+
     auto* controller = getController();
-    if (!controller) return env->NewObjectArray(0, env->FindClass("java/lang/String"), nullptr);
+    if (!controller) return env->NewObjectArray(0, stringClass, nullptr);
+
+    auto* queuePtr = controller->queue();
+    if (!queuePtr) return env->NewObjectArray(0, stringClass, nullptr);
 
     // activeTracks(): JS memakai daftar ini untuk menampilkan urutan queue.
     // Kalau yang dikirim tracks() (urutan file asli), daftar di UI tidak
     // cocok dengan urutan yang benar-benar diputar saat shuffle menyala.
-    auto queue = controller->queue()->activeTracks();
-    jobjectArray result = env->NewObjectArray(queue.size(), env->FindClass("java/lang/String"), nullptr);
+    auto queue = queuePtr->activeTracks();
+    jobjectArray result = env->NewObjectArray(queue.size(), stringClass, nullptr);
+    if (!result) {
+        env->ExceptionClear();
+        return env->NewObjectArray(0, stringClass, nullptr);
+    }
     for (size_t i = 0; i < queue.size(); ++i) {
         jstring str = env->NewStringUTF(queue[i].uri.c_str());
+        if (!str) {
+            // URI invalid/OOM: bersihkan exception, lewati entri ini
+            // (tetap null di index itu) daripada meracuni seluruh array.
+            env->ExceptionClear();
+            continue;
+        }
         env->SetObjectArrayElement(result, i, str);
         env->DeleteLocalRef(str);
     }
@@ -254,6 +282,14 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeS
     if (!controller) {
         __android_log_print(ANDROID_LOG_ERROR, "NativePlaybackModule",
                             "nativeSetQueue: controller null!");
+        return;
+    }
+
+    // 🔥 FIX (2026-11-11, J-M5): uris wajib — GetArrayLength(nullptr)
+    // crash/UB. Kotlin tidak pernah kirim null, tapi guard murah.
+    if (!uris) {
+        __android_log_print(ANDROID_LOG_ERROR, "NativePlaybackModule",
+                            "nativeSetQueue: uris null!");
         return;
     }
 
@@ -313,7 +349,9 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeS
 JNIEXPORT jstring JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetCurrentTrack(JNIEnv* env, jobject) {
     auto* controller = getController();
     if (!controller) return env->NewStringUTF("");
-    auto track = controller->queue()->current();
+    auto* queuePtr = controller->queue(); // 🔥 J-m9: guard queue()
+    if (!queuePtr) return env->NewStringUTF("");
+    auto track = queuePtr->current();
     if (track) {
         return env->NewStringUTF(track->uri.c_str());
     }

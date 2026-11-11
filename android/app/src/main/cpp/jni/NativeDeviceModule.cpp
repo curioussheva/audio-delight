@@ -19,6 +19,11 @@ JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_n
     if (!deviceClass) {
         __android_log_print(ANDROID_LOG_ERROR, "NativeDeviceModule",
                             "nativeGetDevices: kelas AudioDeviceInfo tidak ditemukan");
+        // 🔥 FIX (2026-11-11, J-M5): FindClass yang gagal meninggalkan
+        // exception pending — FindClass berikutnya jadi no-op dan
+        // NewObjectArray(0, null) mengembalikan null ke Kotlin yang
+        // mengharapkan Array<Any> (NPE di devices.size). Bersihkan dulu.
+        env->ExceptionClear();
         return env->NewObjectArray(0, env->FindClass("java/lang/Object"), nullptr);
     }
 
@@ -28,6 +33,7 @@ JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_n
     if (!ctor) {
         __android_log_print(ANDROID_LOG_ERROR, "NativeDeviceModule",
                             "nativeGetDevices: konstruktor AudioDeviceInfo tidak cocok");
+        env->ExceptionClear(); // GetMethodID gagal = NoSuchMethodError pending
         return env->NewObjectArray(0, deviceClass, nullptr);
     }
 
@@ -44,6 +50,14 @@ JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_n
             jid, jname, jtype,
             static_cast<jint>(d.preferredSampleRate),
             d.supportsExclusive ? JNI_TRUE : JNI_FALSE);
+
+        // 🔥 FIX (2026-11-11, J-m11): satu NewStringUTF yang gagal
+        // meninggalkan exception pending → sisa loop jadi no-op dan array
+        // penuh null. Bersihkan + lewati entri yang gagal.
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            obj = nullptr;
+        }
 
         if (obj) env->SetObjectArrayElement(result, static_cast<jsize>(i), obj);
 
@@ -225,6 +239,14 @@ JNIEXPORT jobject JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_native
     jstring jid   = env->NewStringUTF(device.id.c_str());
     jstring jname = env->NewStringUTF(device.name.c_str());
     jstring jtype = env->NewStringUTF(pristine::deviceTypeName(device.type));
+
+    // 🔥 FIX (2026-11-11, J-m10): NewStringUTF yang gagal meninggalkan
+    // exception pending → NewObject jadi no-op. Kotlin sudah menangani
+    // null di jalur ini (return nullptr), jadi bersihkan + return null.
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        return nullptr;
+    }
 
     jobject obj = env->NewObject(deviceClass, ctor,
         jid, jname, jtype,
