@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -26,6 +26,7 @@ import {
 } from "lucide-react-native";
 
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { useTheme } from "@/shared/context/ThemeContext";
 import { useEqualizer } from "@/features/equalizer/hooks/useEqualizer";
@@ -44,6 +45,12 @@ import { HorizontalSlider } from "@/features/equalizer/components/HorizontalSlid
 import { PresetChip } from "@/features/equalizer/components/PresetChip";
 import { SavePresetModal } from "@/features/equalizer/components/SavePresetModal";
 import { HeadphoneSection } from "@/features/headphone/components/HeadphoneSection";
+import {
+  DEFAULT_VISIBLE_SECTIONS,
+  VISIBLE_SECTIONS_KEY,
+  parseVisibleSections,
+  type VisibleSections,
+} from "@/features/equalizer/utils/visibleSections";
 import { FLOATING_PLAYER_CLEARANCE } from "@/features/player/layout";
 
 if (
@@ -138,11 +145,36 @@ export default function EqualizerScreen() {
 
   const [isModalVisible, setModalVisible] = useState(false);
 
-  const [visibleSections, setVisibleSections] = useState({
-    graph: true,
-    effects: true,
-    mixer: true,
-  });
+  const [visibleSections, setVisibleSections] =
+    useState<VisibleSections>(DEFAULT_VISIBLE_SECTIONS);
+  const [sectionsLoaded, setSectionsLoaded] = useState(false);
+
+  // U-P2-44: pilihan tampil/sembunyi DULU reset tiap kali layar dibuka
+  // ulang. Sekarang dimuat dari AsyncStorage saat mount dan disimpan tiap
+  // berubah. Guard `sectionsLoaded` mencegah nilai default menimpa nilai
+  // tersimpan sebelum muat selesai.
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(VISIBLE_SECTIONS_KEY)
+      .then((raw) => {
+        if (!cancelled) setVisibleSections(parseVisibleSections(raw));
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setSectionsLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!sectionsLoaded) return;
+    AsyncStorage.setItem(
+      VISIBLE_SECTIONS_KEY,
+      JSON.stringify(visibleSections),
+    ).catch(() => {});
+  }, [visibleSections, sectionsLoaded]);
 
   const toggleSection = (section: keyof typeof visibleSections) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
