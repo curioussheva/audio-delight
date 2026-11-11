@@ -79,7 +79,6 @@ file(GLOB_RECURSE ALL_SRCS CONFIGURE_DEPENDS
   "dsp/*/*.cpp"
   "fft/*.cpp"
   "devices/*.cpp"
-  "realtime/*.cpp"
   "visualizer/*.cpp"
   "resampler/*.cpp"
 )
@@ -204,7 +203,7 @@ target_include_directories(pristine-audio PRIVATE
   core manager playback decoder
   dsp dsp/graph dsp/tone dsp/spatial dsp/dynamics
   dsp/filters dsp/convolution dsp/immersive dsp/headphone
-  fft devices realtime visualizer utils jni resampler
+  fft devices visualizer utils jni resampler
   ${_RN_INCLUDES}
   ${_JSI_INCLUDES}
   ${_FBJNI_INCLUDES}
