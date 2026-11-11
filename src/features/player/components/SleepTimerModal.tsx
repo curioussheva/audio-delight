@@ -86,7 +86,17 @@ export const SleepTimerModal = ({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
+      {/* U-P2-16: dulu SELURUH isi sheet ada di dalam Pressable
+          onPress={onClose} — ketuk judul/handle ikut menutup modal.
+          Sekarang yang menutup hanya backdrop (Pressable di belakang
+          sheet) + tombol tutup eksplisit di dalam sheet. */}
+      <View style={styles.overlay}>
+        <Pressable
+          style={styles.backdrop}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Tutup sleep timer"
+        />
         <BlurView
           intensity={40}
           tint={isDark ? "dark" : "light"}
@@ -98,6 +108,15 @@ export const SleepTimerModal = ({
             },
           ]}
         >
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.closeBtn}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Tutup sleep timer"
+          >
+            <Ionicons name="close" size={20} color={colors.text.tertiary} />
+          </TouchableOpacity>
           <View
             style={[styles.handle, { backgroundColor: colors.border.light }]}
           />
@@ -149,18 +168,28 @@ export const SleepTimerModal = ({
             );
           })}
         </BlurView>
-      </Pressable>
+      </View>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: "flex-end" },
+  // U-P2-16: backdrop penutup — mengisi layar DI BELAKANG sheet.
+  backdrop: { ...StyleSheet.absoluteFillObject },
   content: {
     padding: 25,
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     borderWidth: 1,
+  },
+  // U-P2-16: tombol tutup eksplisit di dalam sheet.
+  closeBtn: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    padding: 8,
+    zIndex: 1,
   },
   handle: {
     width: 40,
