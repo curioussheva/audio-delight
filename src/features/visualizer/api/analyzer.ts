@@ -9,6 +9,14 @@ import { Song } from "@/shared/types/audio";
 import * as FileSystem from "expo-file-system/legacy";
 import * as MediaLibrary from "expo-media-library";
 import { getAudioMetadata } from "@missingcore/audio-metadata";
+import {
+  analyzeFileSpectral,
+  type SpectralResult,
+} from "./spectralAnalysis";
+import {
+  deriveSpectralVerdict,
+  type SpectralVerdictKind,
+} from "./spectralVerdict";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -26,6 +34,13 @@ export interface AnalysisResult {
   analysisMethod: "heuristic" | "fft" | "metadata";
   /** true kalau getAudioMetadata gagal dan hasil ini memakai fallback. */
   metadataFailed?: boolean;
+  /**
+   * Hasil ukur spektral native (FFT) — null kalau native tidak tersedia /
+   * gagal. Kalau ada, estimatedSpectralCutoffHz di bawah ini adalah nilai
+   * TERUKUR, bukan tebakan tabel.
+   */
+  spectral?: SpectralResult | null;
+  spectralVerdict?: SpectralVerdictKind;
   format: {
     codec: string;
     sampleRate: number;
@@ -330,6 +345,13 @@ export class AudioAnalyzerService {
         );
       }
 
+      // 3b. Analisis spektral native (FFT, best-effort — 2026-11-11):
+      // decode + FFT file aslinya. Gagal (native tak tersedia / file tak
+      // bisa di-decode) -> null, dan analisis tetap jalan dengan heuristik
+      // seperti sebelumnya. JANGAN biarkan kegagalan FFT membatalkan
+      // analisis metadata.
+      const spectral = await analyzeFileSpectral(workingUri);
+
       // 4. Ekstrak fields
       const durationMs = Number(meta.duration ?? 0);
       const durationSec = durationMs > 5000 ? durationMs / 1000 : durationMs;
@@ -362,14 +384,31 @@ export class AudioAnalyzerService {
         uncompressedKbps,
       });
 
-      // 7. Spectral cutoff
-      const spectralCutoff = estimateSpectralCutoff(
-        codec,
-        bitrateKbps,
-        sampleRate,
-        isLikelyLossless,
-        this.config,
-      );
+      // 7. Spectral cutoff — TERUKUR kalau FFT native berhasil (2026-11-11).
+      // estimateSpectralCutoff di bawah ini hanya TABEL dari codec/bitrate
+      // (bukan hasil ukur); dipakai hanya sebagai fallback kalau FFT gagal.
+      const spectralCutoff = spectral?.ok
+        ? spectral.measuredCutoffHz
+        : estimateSpectralCutoff(
+            codec,
+            bitrateKbps,
+            sampleRate,
+            isLikelyLossless,
+            this.config,
+          );
+
+      // Verdict spektral: bandingkan hasil ukur dengan klaim file.
+      const spectralVerdict = deriveSpectralVerdict({
+        declaredSampleRate: sampleRate,
+        declaredBitDepth: bitDepth,
+        isLosslessContainer: LOSSLESS_CODECS.has(codec),
+        spectral: spectral?.ok
+          ? {
+              measuredCutoffHz: spectral.measuredCutoffHz,
+              lsbZeroRatio16: spectral.lsbZeroRatio16,
+            }
+          : null,
+      });
 
       // 8. Dynamic range (teoritis, PCM SNR formula)
       const dynamicRange = isLikelyLossless
@@ -390,6 +429,10 @@ export class AudioAnalyzerService {
           "Metadata tidak bisa dibaca — verdict ini estimasi dari nama file & ukuran, bukan hasil ukur",
         );
       }
+      // Temuan spektral (kalau ada) masuk warnings supaya tampil di UI.
+      for (const note of spectralVerdict.notes) {
+        warnings.push(`[FFT] ${note}`);
+      }
 
       return {
         songId: song.id,
@@ -400,8 +443,10 @@ export class AudioAnalyzerService {
         estimatedDynamicRangeDb: dynamicRange,
         peakFrequencyHz: Math.round(spectralCutoff * 0.95),
         warnings,
-        analysisMethod: "heuristic",
+        analysisMethod: spectral?.ok ? "fft" : "heuristic",
         metadataFailed,
+        spectral: spectral ?? null,
+        spectralVerdict: spectralVerdict.kind,
         format: { codec, sampleRate, bitDepth, channels },
       };
     } catch (error) {

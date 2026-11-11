@@ -332,6 +332,11 @@ export default function AnalyzerScreen() {
             {bitDepthAnalysis.realDepth}-bit.
           </Text>
         )}
+        {bitDepthAnalysis?.fakeReason && (
+          <Text style={[styles.warningText, { color: colors.status.error }]}>
+            {bitDepthAnalysis.fakeReason.replace(/^\[FFT\] /, "")}
+          </Text>
+        )}
         {(bitDepthAnalysis?.warnings ?? []).map((w, i) => (
           <Text
             key={i}
@@ -341,6 +346,48 @@ export default function AnalyzerScreen() {
           </Text>
         ))}
       </View>
+
+      {/* 2b. SPEKTRUM TERUKUR (FFT) — hanya kalau native berhasil */}
+      {bitDepthAnalysis?.spectral && (
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: colors.background.secondary },
+          ]}
+        >
+          <View style={styles.cardHeader}>
+            <BarChart3 size={16} color={colors.primary[500]} />
+            <Text style={[styles.label, { color: colors.primary[500] }]}>
+              SPEKTRUM TERUKUR (FFT)
+            </Text>
+          </View>
+          <InfoRow
+            label="Cutoff terukur"
+            value={`${(bitDepthAnalysis.spectral.measuredCutoffHz / 1000).toFixed(1)} kHz`}
+            colors={colors}
+          />
+          <InfoRow
+            label="LSB 16-bit"
+            value={`${(bitDepthAnalysis.spectral.lsbZeroRatio16 * 100).toFixed(0)}% sampel di grid 16-bit`}
+            colors={colors}
+          />
+          <InfoRow
+            label="Peak / RMS"
+            value={`${bitDepthAnalysis.spectral.peakDbfs.toFixed(1)} / ${bitDepthAnalysis.spectral.rmsDbfs.toFixed(1)} dBFS`}
+            colors={colors}
+          />
+          <InfoRow
+            label="Jendela FFT"
+            value={`${bitDepthAnalysis.spectral.windowsUsed} × 8192 frame`}
+            colors={colors}
+          />
+          {bitDepthAnalysis.spectralVerdict === "consistent" && (
+            <Text style={[styles.warningText, { color: colors.text.tertiary }]}>
+              Konten terukur konsisten dengan klaim file.
+            </Text>
+          )}
+        </View>
+      )}
 
       {/* 3. SONG INFORMATION */}
       <View

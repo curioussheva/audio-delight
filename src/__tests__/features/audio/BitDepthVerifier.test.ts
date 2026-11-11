@@ -192,6 +192,8 @@ describe("analyzeBitDepth - jalur lengkap", () => {
       confidence: 0,
       paddingRatio: 0,
       warnings: ["Analysis failed — unable to determine audio quality"],
+      spectral: null,
+      spectralVerdict: "unmeasured",
     });
   });
 

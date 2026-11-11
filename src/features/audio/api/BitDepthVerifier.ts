@@ -3,6 +3,7 @@
 import { Song } from "@/shared/types/audio";
 //import { MusicAnalysisResult } from "@/shared/types/audio";
 import { audioAnalyzer } from "@/features/visualizer/api/analyzer";
+import type { SpectralVerdictKind } from "@/features/visualizer/api/spectralVerdict";
 
 export interface BitDepthAnalysis {
   declaredDepth: number; // Dari metadata file
@@ -12,6 +13,17 @@ export interface BitDepthAnalysis {
   paddingRatio: number; // 0.0-1.0 (persentase zero LSBs)
   /** Peringatan dari analyzer (mis. metadata gagal dibaca). */
   warnings: string[];
+  /** Alasan fake kalau isFake (mis. temuan spektral FFT). */
+  fakeReason?: string;
+  /** Hasil ukur spektral native — null kalau FFT tidak jalan. */
+  spectral?: {
+    measuredCutoffHz: number;
+    lsbZeroRatio16: number;
+    windowsUsed: number;
+    peakDbfs: number;
+    rmsDbfs: number;
+  } | null;
+  spectralVerdict?: SpectralVerdictKind;
 }
 
 /**
@@ -67,16 +79,48 @@ export const analyzeBitDepth = async (
     );
 
     // Determine if fake
-    const isFake = estimatedDepth < declaredDepth - 4; // Tolerance 4 bits
-    const paddingRatio = isFake ? 1 - estimatedDepth / declaredDepth : 0;
+    let isFake = estimatedDepth < declaredDepth - 4; // Tolerance 4 bits
+    let paddingRatio = isFake ? 1 - estimatedDepth / declaredDepth : 0;
+    let fakeReason: string | undefined;
+    let realDepth = estimatedDepth;
+
+    // Temuan spektral FFT (2026-11-11) mengalahkan heuristik: verdict
+    // ukur lebih bisa dipercaya daripada skor label. Padding berarti
+    // isi sebenarnya 16-bit — realDepth dikoreksi ke 16.
+    const spectralVerdict = analysis.spectralVerdict ?? "unmeasured";
+    if (
+      spectralVerdict === "upsample" ||
+      spectralVerdict === "lossy-source" ||
+      spectralVerdict === "padding"
+    ) {
+      isFake = true;
+      fakeReason =
+        (analysis.warnings ?? []).find((w) => w.startsWith("[FFT]")) ??
+        `Spectral verdict: ${spectralVerdict}`;
+      if (spectralVerdict === "padding") {
+        realDepth = 16;
+        paddingRatio = 1 - 16 / declaredDepth;
+      }
+    }
 
     return {
       declaredDepth,
-      realDepth: estimatedDepth,
+      realDepth,
       isFake,
       confidence,
       paddingRatio,
       warnings: analysis.warnings ?? [],
+      fakeReason,
+      spectral: analysis.spectral
+        ? {
+            measuredCutoffHz: analysis.spectral.measuredCutoffHz,
+            lsbZeroRatio16: analysis.spectral.lsbZeroRatio16,
+            windowsUsed: analysis.spectral.windowsUsed,
+            peakDbfs: analysis.spectral.peakDbfs,
+            rmsDbfs: analysis.spectral.rmsDbfs,
+          }
+        : null,
+      spectralVerdict,
     };
   } catch (error) {
     console.error("[BitDepthVerifier] Analysis failed:", error);
@@ -181,6 +225,8 @@ function createUnknownAnalysis(declaredDepth?: number): BitDepthAnalysis {
     confidence: 0,
     paddingRatio: 0,
     warnings: ["Analysis failed — unable to determine audio quality"],
+    spectral: null,
+    spectralVerdict: "unmeasured",
   };
 }
 
@@ -203,6 +249,8 @@ export const analyzeBitDepthBatch = async (
         confidence: 100,
         paddingRatio: 0,
         warnings: [],
+        spectral: null,
+        spectralVerdict: "unmeasured",
       });
       continue;
     }
