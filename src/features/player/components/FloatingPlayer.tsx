@@ -26,6 +26,7 @@ import {
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { progressPercent } from "@/shared/utils/queueNavigation";
 import { isHiRes } from "@/shared/utils/audioQuality";
+import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import { useTheme } from "@/shared/context/ThemeContext";
 
 const PLACEHOLDER = require("../../../../assets/images/icon.png");
@@ -85,6 +86,15 @@ export default function FloatingPlayer() {
     transform: [{ translateX: withSpring(translateX.value, { damping: 20 }) }],
     opacity: withTiming(Math.abs(translateX.value) > 20 ? 0.75 : 1),
   }));
+
+  // U-P2-14: ikon Play/Pause di atas primary[500] dulu memakai
+  // colors.text.inverse — lolos di 2 tema brand (Noir 8,09, Porcelain
+  // 5,77) tapi 18 tema lain belum terukur. Standarkan ke pickReadable
+  // seperti player utama: warna dipilih dari luminansi primary[500]
+  // per tema, jadi ambang AA dijamin, bukan ditebak.
+  const playIconColor =
+    pickReadable(["#FFFFFF", "#000000"], colors.primary[500], AA_NORMAL) ??
+    "#FFFFFF";
 
   // ✅ Hanya sembunyikan kalau tidak ada lagu — isFocused DIHAPUS
   //    TabsLayout yang handle visibility per tab
@@ -215,11 +225,11 @@ export default function FloatingPlayer() {
               style={[s.playBtn, { backgroundColor: colors.primary[500] }]}
             >
               {isPlaying ? (
-                <Pause size={20} color={colors.text.inverse} strokeWidth={3} />
+                <Pause size={20} color={playIconColor} strokeWidth={3} />
               ) : (
                 <Play
                   size={20}
-                  color={colors.text.inverse}
+                  color={playIconColor}
                   strokeWidth={3}
                   style={{ marginLeft: 2 }}
                 />
