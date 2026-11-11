@@ -162,18 +162,18 @@ BUILTIN_SPEAKER, 26/27 → BLUETOOTH, 18 → TELEPHONY).
 
 ### DIKERJAKAN 2026-11-11 (yang mudah; build menyusul — fix ini TIDAK masuk build 42962732238; ikut build berikutnya bersama fix fft)
 
-- **DV-M2** — commit `TBD`: `refreshDevices()` salin `mDevices` di
+- **DV-M2** — commit `d90e914b`: `refreshDevices()` salin `mDevices` di
   bawah lock, log + return memakai salinan.
-- **DV-M3** — commit `TBD`: `nativeOnDeviceAdded` refresh + cari
+- **DV-M3** — commit `eb2369c0`: `nativeOnDeviceAdded` refresh + cari
   device berdasarkan id, oper descriptor asli ke `notifyDeviceAdded`.
-- **DV-M4** — commit `TBD`: betulkan `mapDeviceType` (29 → HDMI,
+- **DV-M4** — commit `5ed3e73c`: betulkan `mapDeviceType` (29 → HDMI,
   24 → BUILTIN_SPEAKER, 26/27 → BLUETOOTH, 18 → TELEPHONY; case 9
   dibuang) + komentar tabelnya.
-- **dv-m1** — commit `TBD`: tulis ulang blok ⚠️ di
+- **dv-m1** — commit `86255a9d`: tulis ulang blok ⚠️ di
   `AudioDeviceManager.h` sesuai keadaan sekarang (wiring hidup
   sejak 2026-10-07; sisa gap: jalur fallback OpenSLES mengabaikan
   deviceId, Oboe boleh mengabaikan preferensi).
-- **DV-M1 (b)** — commit `TBD`: `PlaybackController::seek()` ikut
+- **DV-M1 (b)** — commit `1617dc68`: `PlaybackController::seek()` ikut
   `state_->setPosition()` secara sinkron sesudah clock digeser —
   reopen kedua tidak lagi membaca 0. (Satu baris, di sebelah
   `clock_->seekToSeconds`; store atomik, aman terhadap write

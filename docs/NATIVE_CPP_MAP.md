@@ -53,6 +53,7 @@ fokus; terkait langsung dengan M2. **Audit 2026-11-11 (`AUDIT_NATIVE_CPP_RESAMPL
 `AudioDeviceManager.cpp` (413), `AudioDeviceDescriptor`,
 `DeviceCapabilities`, `DeviceTypes.h`. Enumerasi device + DAC USB;
 jalur ini sudah diverifikasi tersambung dan jujur (Track 2).
+**Audit 2026-11-11 (`AUDIT_NATIVE_CPP_DEVICES_2026-11-11.md`): 0 blocker + 4 major (1 HIDUP: DV-M1 double-reopen race saat unplug — TERBUKTI logcat #12, reopen #2 simpan 0.0s; DV-M2 data race log-loop refreshDevices; DV-M3 nativeOnDeviceAdded oper descriptor kosong; DV-M4 mapDeviceType salah — HDMI_EARC itu 29 bukan 9) + 9 minor. Semua yang mudah diperbaiki 2026-11-11 (d90e914b, eb2369c0, 5ed3e73c, 86255a9d, 1617dc68 — seek() ikut geser state). KOREKSI: komentar ⚠️ lama di header SALAH — wiring setDeviceId hidup sejak fix 2026-10-07. DITAMPUNG: DV-M1 (c) dedup dua jalur reopen + minor dv-m2…dv-m9; M8 tetap terbuka.**
 
 ### 8. manager — 2 file
 `EngineManager.cpp` (926 — file terbesar), `EngineManager.h`.
