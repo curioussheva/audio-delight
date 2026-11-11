@@ -55,11 +55,17 @@ jobs:
             "ndk;27.1.12297006" \
             "cmake;3.22.1"
 
-      # 7. Install nasm
+      # 7. Install nasm (retry tahan flake DNS runner, 2026-11-11:
+      # run 43057485541 gagal 2x di apt-get update karena DNS
+      # archive.ubuntu.com mati sementara — bukan salah kode)
       - name: Install nasm
         run: |
-          sudo apt-get update
-          sudo apt-get install -y nasm
+          for i in 1 2 3; do
+            sudo apt-get update && sudo apt-get install -y nasm && break
+            echo "apt attempt $i failed, retrying in 30s..."
+            sleep 30
+          done
+          command -v nasm || { echo "nasm install failed after 3 attempts"; exit 1; }
 
       # 8. Cache Gradle (tambahan - percepat rebuild)
       - name: Cache Gradle
