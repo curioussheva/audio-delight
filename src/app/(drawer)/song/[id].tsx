@@ -38,6 +38,7 @@ import OnlineMetadataService from "@/features/library/services/OnlineMetadataSer
 import { MetadataSyncModal } from "@/features/library/components/MetadataSyncModal";
 import QualityBadge from "@/shared/components/ui/QualityBadge";
 import { Song, formatDuration, formatFileSize } from "@/shared/types/audio";
+import { parseIntOrKeep } from "@/shared/utils/numbers";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -93,6 +94,10 @@ interface EditFieldProps {
   colors: any;
   keyboardType?: "default" | "numeric";
   style?: any;
+  // U-P2-05: placeholder wajib diisi pemanggil — dulu placeholderTextColor
+  // disetel tapi tidak pernah ada placeholder, jadi field kosong tidak
+  // memberi petunjuk format yang diharapkan.
+  placeholder: string;
 }
 
 const EditField = ({
@@ -102,6 +107,7 @@ const EditField = ({
   colors,
   keyboardType = "default",
   style,
+  placeholder,
 }: EditFieldProps) => (
   <View style={[styles.editFieldContainer, style]}>
     <Text style={[styles.editLabel, { color: colors.text.tertiary }]}>
@@ -119,6 +125,7 @@ const EditField = ({
       value={value}
       onChangeText={onChangeText}
       keyboardType={keyboardType}
+      placeholder={placeholder}
       placeholderTextColor={colors.text.disabled}
     />
   </View>
@@ -203,7 +210,17 @@ export default function SongDetailScreen() {
   const handlePlay = async () => {
     if (!song) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await playSong(song, tracks);
+    // U-P2-05: jangan navigasi ke Player bila playSong gagal — user
+    // dilempar ke layar Player padahal lagu tidak jalan. playSong
+    // mengembalikan false + mengisi playError saat native menolak.
+    const ok = await playSong(song, tracks);
+    if (!ok) {
+      Alert.alert(
+        "Gagal memutar",
+        "Lagu ini tidak bisa diputar. Coba lagu lain.",
+      );
+      return;
+    }
     router.push("/player");
   };
 
@@ -241,7 +258,9 @@ export default function SongDetailScreen() {
         title: newMeta.title?.trim() || song.title,
         artist: artistName,
         album: newMeta.album?.trim() || song.album,
-        year: newMeta.year ? parseInt(newMeta.year, 10) : song.year,
+        // U-P2-05: tahun non-numerik dari MusicBrainz jangan jadi NaN —
+        // pertahankan tahun lama bila parse gagal.
+        year: parseIntOrKeep(newMeta.year, song.year),
         label: newMeta.label?.trim() || song.label,
         artistImageUrl: enrichment.imageUrl || song.artistImageUrl,
         artistBio: enrichment.bio || song.artistBio,
@@ -270,6 +289,9 @@ export default function SongDetailScreen() {
 
   const handleSaveEdit = async () => {
     if (!song) return;
+    // U-P2-05: guard double-tap — tanpa ini dua ketukan Check mengirim
+    // dua updateMetadata bersamaan.
+    if (isSaving) return;
     setIsSaving(true);
 
     try {
@@ -462,24 +484,28 @@ export default function SongDetailScreen() {
         value={editForm.title}
         onChangeText={(text) => setEditForm({ ...editForm, title: text })}
         colors={colors}
+        placeholder="Judul lagu"
       />
       <EditField
         label="Artis"
         value={editForm.artist}
         onChangeText={(text) => setEditForm({ ...editForm, artist: text })}
         colors={colors}
+        placeholder="Nama artis"
       />
       <EditField
         label="Album"
         value={editForm.album}
         onChangeText={(text) => setEditForm({ ...editForm, album: text })}
         colors={colors}
+        placeholder="Nama album"
       />
       <EditField
         label="Genre"
         value={editForm.genre}
         onChangeText={(text) => setEditForm({ ...editForm, genre: text })}
         colors={colors}
+        placeholder="Genre"
       />
       <View style={styles.rowFields}>
         <EditField
@@ -489,6 +515,7 @@ export default function SongDetailScreen() {
           colors={colors}
           keyboardType="numeric"
           style={{ flex: 1, marginRight: 8 }}
+          placeholder="2024"
         />
         <EditField
           label="Track No."
@@ -499,25 +526,39 @@ export default function SongDetailScreen() {
           colors={colors}
           keyboardType="numeric"
           style={{ flex: 1 }}
+          placeholder="1"
         />
       </View>
+      {/* U-P2-05: discNumber ada di EditFormData dan ikut tersimpan, tapi
+          tidak pernah bisa diubah dari UI — tambahkan field-nya. */}
+      <EditField
+        label="Disc No."
+        value={editForm.discNumber}
+        onChangeText={(text) => setEditForm({ ...editForm, discNumber: text })}
+        colors={colors}
+        keyboardType="numeric"
+        placeholder="1"
+      />
       <EditField
         label="Label"
         value={editForm.label}
         onChangeText={(text) => setEditForm({ ...editForm, label: text })}
         colors={colors}
+        placeholder="Label rekaman"
       />
       <EditField
         label="Publisher"
         value={editForm.publisher}
         onChangeText={(text) => setEditForm({ ...editForm, publisher: text })}
         colors={colors}
+        placeholder="Publisher"
       />
       <EditField
         label="Komposer"
         value={editForm.composer}
         onChangeText={(text) => setEditForm({ ...editForm, composer: text })}
         colors={colors}
+        placeholder="Nama komposer"
       />
     </View>
   );
