@@ -17,6 +17,7 @@ import * as Haptics from "expo-haptics";
 import { useAudioProgress } from "@/features/player/hooks/useAudioProgress";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useBitPerfectStatus } from "@/features/player/hooks/useBitPerfectStatus";
+import { useFavorites } from "@/features/favorites/hooks/useFavorites";
 import { formatTime } from "@/shared/utils/time";
 import Slider from "@react-native-community/slider";
 import { SleepTimerModal } from "@/features/player/components/SleepTimerModal";
@@ -57,7 +58,6 @@ export default function PlayerScreen() {
 
   const [showLyrics, setShowLyrics] = useState(false);
   const [isTimerVisible, setIsTimerVisible] = useState(false);
-  const [isLiked, setIsLiked] = useState(false);
 
   const { position, duration } = useAudioProgress(250);
 
@@ -75,6 +75,11 @@ export default function PlayerScreen() {
     audioMode,
     audioSessionId, // ✅ Diperlukan untuk SpectogramView
   } = usePlayerStore();
+
+  // U-P1-19: hati memakai state favorit asli (libraryStore, dicerminkan
+  // dari kolom songs.isFavorite) — hook HARUS di atas return kondisional,
+  // jangan dipindah ke bawah (U-P0-4: Rules of Hooks).
+  const { isFavorite, toggleFavorite } = useFavorites();
 
   const artworkScale = useRef(new Animated.Value(1)).current;
 
@@ -116,8 +121,12 @@ export default function PlayerScreen() {
   };
 
   const handleLike = () => {
+    if (!currentSong) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setIsLiked(!isLiked);
+    // U-P1-19: tulis ke sumber kebenaran yang sama (kolom songs.isFavorite
+    // via libraryStore) — bukan state lokal. Dulu hati lagu A tetap menyala
+    // di lagu B dan hilang saat player ditutup.
+    toggleFavorite(currentSong.id);
   };
 
   const handleOpenDetail = () => {
@@ -142,6 +151,11 @@ export default function PlayerScreen() {
   const bpStatus = useBitPerfectStatus();
 
   if (!currentSong) return null;
+
+  // U-P1-19: hati menyala hanya bila lagu yang SEDANG diputar ini favorit —
+  // dihitung tiap render dari store, jadi ikut ganti lagu dengan benar
+  // (dulu state lokal false yang tidak pernah reset saat ganti lagu).
+  const isLiked = isFavorite(currentSong.id);
 
   // Helper warna dinamis
   const goldColor = accentOn([colors.accent.primary], colors.background.primary, [colors.text.primary]);
