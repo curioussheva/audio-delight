@@ -243,7 +243,7 @@ JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativePlaybackModule
     auto* controller = getController();
     if (!controller) return env->NewObjectArray(0, stringClass, nullptr);
 
-    auto* queuePtr = controller->queue();
+    auto queuePtr = controller->queue();
     if (!queuePtr) return env->NewObjectArray(0, stringClass, nullptr);
 
     // activeTracks(): JS memakai daftar ini untuk menampilkan urutan queue.
@@ -356,7 +356,7 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeS
 JNIEXPORT jstring JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetCurrentTrack(JNIEnv* env, jobject) {
     auto* controller = getController();
     if (!controller) return env->NewStringUTF("");
-    auto* queuePtr = controller->queue(); // 🔥 J-m9: guard queue()
+    auto queuePtr = controller->queue(); // 🔥 J-m9: guard queue()
     if (!queuePtr) return env->NewStringUTF("");
     auto track = queuePtr->current();
     if (track) {
