@@ -244,6 +244,19 @@ export default function AnalyzerScreen() {
         text: "TIDAK DAPAT DIVERIFIKASI",
         color: colors.text.tertiary,
       };
+    // AUTHENTIC hanya kalau BENAR-BENAR terukur dan konsisten (2026-11-11,
+    // perbaikan U-P0-2): FFT native harus jalan dan verdict-nya konsisten,
+    // dan metadata harus terbaca. Tanpa ukur — FFT gagal, atau metadata
+    // gagal dibaca sehingga verdict cuma estimasi dari nama file & ukuran
+    // — statusnya "TIDAK DAPAT DIVERIFIKASI", bukan AUTHENTIC.
+    if (
+      bitDepthAnalysis.spectralVerdict !== "consistent" ||
+      bitDepthAnalysis.metadataFailed
+    )
+      return {
+        text: "TIDAK DAPAT DIVERIFIKASI",
+        color: colors.text.tertiary,
+      };
     return { text: "STUDIO MASTER AUTHENTIC", color: colors.status.success };
   };
 

@@ -28,6 +28,14 @@ export interface AnalysisResult {
   confidence: number;
   detectedBitrateKbps: number;
   estimatedSpectralCutoffHz: number;
+  /**
+   * Dynamic range (dB). 0 = TIDAK DIUKUR. Jangan pernah mengisinya
+   * dengan rumus teoretis dari bitDepth (6.02N + 1.76) — itu sirkular:
+   * BitDepthVerifier membalik rumus yang sama, sehingga estimatedDepth
+   * selalu == declaredDepth dan isFake tidak pernah true (U-P0-2,
+   * 2026-11-11). DR yang jujur butuh pengukuran level PCM; sampai ada,
+   * verdict palsu hanya boleh datang dari ukur spektral FFT.
+   */
   estimatedDynamicRangeDb: number;
   peakFrequencyHz: number;
   warnings: string[];
@@ -410,10 +418,13 @@ export class AudioAnalyzerService {
           : null,
       });
 
-      // 8. Dynamic range (teoritis, PCM SNR formula)
-      const dynamicRange = isLikelyLossless
-        ? Math.round(6.02 * bitDepth + 1.76)
-        : Math.max(75, Math.round(6.02 * 16 - 12));
+      // 8. Dynamic range — TIDAK DIUKUR (2026-11-11, perbaikan U-P0-2).
+      // Dulu nilainya rumus teoretis dari bitDepth yang diklaim file
+      // (6.02N + 1.76), lalu BitDepthVerifier membalik rumus yang sama —
+      // estimatedDepth selalu == declaredDepth dan isFake tidak pernah
+      // true. 0 = tidak ada bukti; verdict palsu hanya boleh datang
+      // dari ukur spektral FFT (spectralVerdict di bawah).
+      const dynamicRange = 0;
 
       // 9. Warnings
       const warnings = collectWarnings({

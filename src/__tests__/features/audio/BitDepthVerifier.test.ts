@@ -79,6 +79,26 @@ describe("estimateRealBitDepth - skala ambang", () => {
   });
 });
 
+describe("estimateRealBitDepth - DR tidak diukur (U-P0-2)", () => {
+  // REGRESI: analyzer dulu mengisi DR dari rumus teoretis bitDepth yang
+  // diklaim (6.02N + 1.76) — dibalik rumusnya = declared lagi, jadi
+  // isFake tidak pernah true. Sekarang analyzer mengirim 0 = tidak ada
+  // bukti, dan estimasi mulai dari declared; hanya penalti spektral /
+  // kompresi yang bisa menurunkannya.
+  it("DR 0 = tidak ada bukti: declared bertahan kalau spektrum tidak membatasi", () => {
+    expect(estimateRealBitDepth(24, 0, 40000, 0, 2000, 96000)).toBe(24);
+  });
+
+  it("DR 0: penalti spektral tetap jalan tanpa DR", () => {
+    // cutoff 22 kHz di file 96 kHz = isi CD, walau DR tidak diketahui
+    expect(estimateRealBitDepth(24, 0, 22000, 0, 1411, 96000)).toBe(16);
+  });
+
+  it("DR 0 pada file 16-bit tetap 16", () => {
+    expect(estimateRealBitDepth(16, 0, 20000, 0, 1411, 44100)).toBe(16);
+  });
+});
+
 describe("estimateRealBitDepth - detektor upsample", () => {
   // REGRESI: parameter sampleRate dulu di-hardcode 44100 di pemanggil,
   // sehingga `sampleRate > 48000` selalu false dan upsample 44.1k -> 96k
@@ -180,6 +200,16 @@ describe("analyzeBitDepth - jalur lengkap", () => {
     );
     const hasil = await analyzeBitDepth(makeSong({ bitDepth: 24 }));
     expect(hasil.realDepth).toBe(16);
+  });
+
+  it("metadataFailed diteruskan ke hasil (U-P0-2)", async () => {
+    mockedAnalyze.mockResolvedValue(
+      makeAnalysis({ metadataFailed: true, spectralVerdict: "consistent" }),
+    );
+    const hasil = await analyzeBitDepth(
+      makeSong({ bitDepth: 24, sampleRate: 96000 }),
+    );
+    expect(hasil.metadataFailed).toBe(true);
   });
 
   it("analysis null -> confidence 0, tidak fake", async () => {

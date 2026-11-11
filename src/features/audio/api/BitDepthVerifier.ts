@@ -24,6 +24,12 @@ export interface BitDepthAnalysis {
     rmsDbfs: number;
   } | null;
   spectralVerdict?: SpectralVerdictKind;
+  /**
+   * true kalau metadata file tidak bisa dibaca dan analisis ini memakai
+   * fallback (estimasi dari nama file & ukuran). Status AUTHENTIC tidak
+   * boleh tampil dalam keadaan ini (U-P0-2).
+   */
+  metadataFailed?: boolean;
 }
 
 /**
@@ -121,6 +127,7 @@ export const analyzeBitDepth = async (
           }
         : null,
       spectralVerdict,
+      metadataFailed: analysis.metadataFailed ?? false,
     };
   } catch (error) {
     console.error("[BitDepthVerifier] Analysis failed:", error);
@@ -153,9 +160,17 @@ export function estimateRealBitDepth(
   sampleRate: number,
 ): number {
   // --- Heuristic 1: Dynamic Range Validation ---
-  // File 24-bit asli harusnya punya DR > 96dB.
-  // Jika DR hanya ~90dB, itu kemungkinan besar 16-bit yang di-padding.
-  const theoreticalFromDR = Math.max(1, (dynamicRange - 1.76) / 6.02);
+  // HANYA dipakai kalau DR benar-benar diukur (dynamicRange > 0).
+  // analyzer.ts tidak mengukur DR — nilai teoretis dari bitDepth yang
+  // diklaim adalah sirkular (dibalik rumusnya = declared lagi), jadi
+  // tanpa bukti DR estimasi mulai dari declared (tidak ada bukti yang
+  // membantah), dan hanya penalti spektral/kompresi yang bisa
+  // menurunkannya. File 24-bit asli harusnya punya DR > 96dB; jika DR
+  // terukur hanya ~90dB, itu kemungkinan besar 16-bit yang di-padding.
+  const theoreticalFromDR =
+    dynamicRange > 0
+      ? Math.max(1, (dynamicRange - 1.76) / 6.02)
+      : declared;
 
   // --- Heuristic 2: Spectral Analysis (The "Upsample" Detector) ---
   // Jika sample rate 96kHz tapi cutoff di ~22kHz, maka bit depth tinggi pun
