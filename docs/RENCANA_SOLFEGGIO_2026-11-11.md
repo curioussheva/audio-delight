@@ -215,6 +215,22 @@ tempo tetap. Ini yang diharapkan user, bukan preset resonator.
     sesuai kode baru), bundle 5.371.876 byte. Verifikasi device ditunggu
     (dengar 432: pitch turun, tempo tetap; mode bit-perfect mematikan
     tuning).
+  - **Verifikasi biner APK 747dda80 (2026-11-11 11:56 WIB, SEBELUM
+    logcat #11 dianalisa): APK-nya BAGUS — `nm -D` libpristine-audio.so:
+    `Java_com_pristineaudio_audio_NativePlaybackModule_nativeSetPitchRatio`
+    (defined) + string log `setPitchRatio: %.4f (sebelumnya %.4f)`;
+    classes.dex: `setPitchRatio`, `setPitchRatioFromService`,
+    `nativeSetPitchRatio` ada (kontrol: setPlaybackRate juga ada). Jadi
+    kegagalan di device BUKAN cacat build — APK baru memang belum
+    terinstall di HP.
+  - **Logcat #11 (2026-11-11 11:49–11:54 WIB, UID 10535, PID 32316):
+    retune MASIH gagal — sesi via Metro lagi (baris 'Android Bundled
+    2185ms'), `setPitchRatio is not a function` 8x (11:51:50–11:52:25,
+    mode immersive; user pencet tuning 8x). APK baru BELUM diinstall.
+    Sisi positif: 5 mode toggle + unplug 381→speaker + replug 407, semua
+    reopen + posisi terjaga; 0 [zero] (sesi ke-2 bersih); 0 FATAL/ANR;
+    cold start tetap (201+236 frame skip). DSP-M1 tetap belum dites
+    (EQ tidak di-set). Analyzer tidak jalan di sesi ini.
   - **Logcat #10 (2026-11-11 10:58–11:03 WIB, UID 10534, PID 4364):
     retune BELUM teruji — sesi ini jalan via Metro (JS baru) di atas APK
     LAMA (native lama): `setTuningCents failed: TypeError:
