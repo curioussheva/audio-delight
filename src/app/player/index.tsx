@@ -46,6 +46,8 @@ import {
   Sparkles,
   Info,
   TriangleAlert,
+  Music,
+  X,
 } from "lucide-react-native";
 
 const { width } = Dimensions.get("window");
@@ -64,6 +66,9 @@ export default function PlayerScreen() {
   const {
     currentSong,
     isPlaying,
+    playError,
+    clearPlayError,
+    playSong,
     togglePlay,
     seek,
     playNext,
@@ -150,7 +155,97 @@ export default function PlayerScreen() {
   // layar crash. Dulu pemanggilannya ada di bawah return (baris ~156).
   const bpStatus = useBitPerfectStatus();
 
-  if (!currentSong) return null;
+  // Warna tombol Play dihitung di sini (sebelum early return U-P1-20)
+  // karena empty/error state juga memakai tombol primary.
+  const primaryColor = colors.primary[500];
+  // Ikon/teks di atas tombol primary — warnanya harus dibaca dari
+  // LUMINANSI primary, bukan dari gelap/terang tema. Dulu isDark ? "#000"
+  // : "#FFF": di 8/20 tema ikon tidak terbaca (tema gelap + primary gelap
+  // → hitam di atas gelap).
+  const playIconColor =
+    pickReadable(["#FFFFFF", "#000000"], primaryColor, AA_NORMAL) ??
+    "#FFFFFF";
+
+  // U-P1-20: jangan `return null` — layar hitam tanpa penjelasan saat
+  // player dibuka tanpa lagu (deep link / antrean habis). Cabang ini tetap
+  // SETELAH semua hook di atas (U-P0-4), hanya mengganti layar kosong
+  // dengan empty/error state yang jujur: playError store akhirnya dibaca.
+  if (!currentSong) {
+    const isError = !!playError;
+    return (
+      <View
+        style={[
+          styles.container,
+          styles.emptyContainer,
+          {
+            backgroundColor: colors.background.primary,
+            paddingTop: safePadding.paddingTop,
+            paddingBottom: safePadding.paddingBottom,
+          },
+        ]}
+      >
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={() => router.back()}
+            accessibilityLabel="Tutup player"
+          >
+            <ChevronDown size={28} color={colors.text.primary} />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.emptyContent}>
+          {isError ? (
+            <TriangleAlert size={48} color={colors.status.error} />
+          ) : (
+            <Music size={48} color={colors.text.tertiary} />
+          )}
+          <Text
+            style={[styles.emptyTitle, { color: colors.text.primary }]}
+          >
+            {isError
+              ? "Lagu gagal diputar"
+              : "Tidak ada lagu yang diputar"}
+          </Text>
+          <Text
+            style={[styles.emptySubtitle, { color: colors.text.secondary }]}
+          >
+            {isError
+              ? playError
+              : "Buka library dan pilih lagu untuk mulai memutar."}
+          </Text>
+          <TouchableOpacity
+            style={[
+              styles.emptyPrimaryBtn,
+              { backgroundColor: colors.primary[500] },
+            ]}
+            onPress={() => router.push("/(drawer)/(tabs)/library")}
+          >
+            <Text
+              style={[
+                styles.emptyPrimaryBtnText,
+                { color: playIconColor },
+              ]}
+            >
+              Buka Library
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.emptySecondaryBtn}
+            onPress={() => router.back()}
+          >
+            <Text
+              style={[
+                styles.emptySecondaryBtnText,
+                { color: colors.text.secondary },
+              ]}
+            >
+              Tutup
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   // U-P1-19: hati menyala hanya bila lagu yang SEDANG diputar ini favorit —
   // dihitung tiap render dari store, jadi ikut ganti lagu dengan benar
@@ -159,14 +254,6 @@ export default function PlayerScreen() {
 
   // Helper warna dinamis
   const goldColor = accentOn([colors.accent.primary], colors.background.primary, [colors.text.primary]);
-  const primaryColor = colors.primary[500];
-  // Ikon Play/Pause di atas tombol primary — warnanya harus dibaca dari
-  // LUMINANSI primary, bukan dari gelap/terang tema. Dulu isDark ? "#000"
-  // : "#FFF": di 8/20 tema ikon tidak terbaca (tema gelap + primary gelap
-  // → hitam di atas gelap).
-  const playIconColor =
-    pickReadable(["#FFFFFF", "#000000"], primaryColor, AA_NORMAL) ??
-    "#FFFFFF";
   const textPrimary = colors.text.primary;
   const textSecondary = colors.text.secondary;
   const textTertiary = colors.text.tertiary;
@@ -261,6 +348,39 @@ export default function PlayerScreen() {
             <Info size={24} color={textPrimary} strokeWidth={2} />
           </TouchableOpacity>
         </View>
+
+        {/* U-P1-20: playError akhirnya dibaca. Store mengisi playError
+            BERSAMA currentSong saat native play() gagal — tanpa banner ini
+            kegagalan itu tetap tak terlihat meski lagunya tampil. */}
+        {playError ? (
+          <View
+            style={[
+              styles.errorBanner,
+              { backgroundColor: colors.background.secondary },
+            ]}
+          >
+            <TriangleAlert size={18} color={errorColor} />
+            <Text
+              style={[styles.errorBannerText, { color: colors.text.primary }]}
+              numberOfLines={2}
+            >
+              {playError}
+            </Text>
+            <TouchableOpacity
+              onPress={() => void playSong(currentSong)}
+              hitSlop={8}
+            >
+              <Text
+                style={[styles.errorBannerRetry, { color: primaryColor }]}
+              >
+                Coba lagi
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={clearPlayError} hitSlop={8}>
+              <X size={18} color={textTertiary} />
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {/* ARTWORK SECTION — ketuk artwork / tombol lirik untuk beralih
             ke tampilan lirik (FullLyricsView). Sebelumnya showLyrics hanya
@@ -624,5 +744,66 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingVertical: 15,
     borderRadius: 20,
+  },
+  // U-P1-20: empty/error state — bukan layar hitam.
+  emptyContainer: {
+    paddingHorizontal: 24,
+  },
+  emptyContent: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    textAlign: "center",
+    marginTop: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    fontWeight: "500",
+    textAlign: "center",
+    lineHeight: 20,
+    paddingHorizontal: 16,
+  },
+  emptyPrimaryBtn: {
+    marginTop: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 28,
+  },
+  emptyPrimaryBtnText: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  emptySecondaryBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  emptySecondaryBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  // U-P1-20: banner saat lagu tampil tapi pemutaran gagal.
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "500",
+    lineHeight: 18,
+  },
+  errorBannerRetry: {
+    fontSize: 13,
+    fontWeight: "700",
   },
 });
