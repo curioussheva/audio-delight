@@ -56,8 +56,16 @@ export const SavePresetModal: React.FC<Props> = ({
     onClose();
   };
 
+  // U-P2-31: onRequestClose supaya tombol back Android menutup modal
+  // (dulu hanya tombol "Batal"). handleClose dipakai supaya input nama
+  // ikut di-reset, sama seperti Batal.
   return (
-    <Modal visible={visible} transparent animationType="fade">
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={handleClose}
+    >
       <View style={styles.overlay}>
         <View
           style={[
