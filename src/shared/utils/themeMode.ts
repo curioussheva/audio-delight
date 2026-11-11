@@ -20,17 +20,38 @@ import { contrastRatio } from "@/shared/utils/contrast";
 /**
  * Kandidat tema dengan mode berlawanan yang paling dekat warnanya.
  *
+ * U-P1-26: keluarga brand dipasangkan DULU — pristine-noir ↔
+ * pristine-porcelain — supaya toggle "Mode Gelap" simetris (Noir →
+ * Porcelain → Noir). Dulu pasangan dipilih semata dari kontras latar
+ * terdekat dan Porcelain jatuh ke ocean-wave (15,61), bukan Noir
+ * (~16,93): sakelar berlabel "Mode Gelap" diam-diam mengganti keluarga
+ * tema. Untuk tema di luar keluarga brand, perilaku lama dipertahankan
+ * (lawan-mode dengan kontras latar paling rendah).
+ *
  * "Terdekat" diukur dari jarak kontras `background.primary`: memilih kandidat
  * dengan rasio paling rendah berarti latarnya paling mirip, jadi perpindahan
  * terasa seperti membalik mode - bukan pindah ke tema lain.
  *
  * Mengembalikan `null` kalau tidak ada kandidat (mis. semua tema bergelap).
  */
+const BRAND_COUNTERPARTS: Partial<Record<ThemeId, ThemeId>> = {
+  "pristine-noir": "pristine-porcelain",
+  "pristine-porcelain": "pristine-noir",
+};
+
 export const findCounterpartTheme = (themeId: ThemeId): ThemeId | null => {
   const current: Theme | undefined = ALL_THEMES[themeId];
 
   if (!current) {
     return null;
+  }
+
+  const brandCounterpart = BRAND_COUNTERPARTS[themeId];
+  if (
+    brandCounterpart &&
+    ALL_THEMES[brandCounterpart]?.isDark !== current.isDark
+  ) {
+    return brandCounterpart;
   }
 
   const candidates = Object.values(ALL_THEMES).filter(
