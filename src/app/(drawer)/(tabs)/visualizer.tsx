@@ -94,6 +94,10 @@ export default function VisualizerScreen() {
           {
             backgroundColor: colors.background.primary,
             paddingTop: safePadding.paddingTop,
+            // U-P2-23: paddingBottom dari useSafePadding (110 saat
+            // floating player ada) — sebelumnya area bawah duduk di
+            // belakang floating player/tab bar.
+            paddingBottom: safePadding.paddingBottom,
           },
         ]}
       >
@@ -124,6 +128,9 @@ export default function VisualizerScreen() {
         {
           backgroundColor: colors.background.primary,
           paddingTop: safePadding.paddingTop,
+          // U-P2-23: lihat komentar di atas — paddingBottom dipakai
+          // supaya area bawah tidak tertutup floating player/tab bar.
+          paddingBottom: safePadding.paddingBottom,
         },
       ]}
     >
@@ -191,7 +198,14 @@ export default function VisualizerScreen() {
 
       {/* Debug Info (opsional, bisa dihapus nanti) */}
       {__DEV__ && (
-        <View style={styles.debugInfo}>
+        <View
+          style={[
+            styles.debugInfo,
+            // U-P2-23: bottom: 20 lama menaruh debug tepat di zona
+            // floating player — duduk di atas clearance yang sama.
+            { bottom: safePadding.paddingBottom },
+          ]}
+        >
           <Text style={{ color: colors.text.tertiary, fontSize: 10 }}>
             Session ID: {audioSessionId || "null"} | Playing:{" "}
             {isPlaying ? "Yes" : "No"}
@@ -283,7 +297,6 @@ const styles = StyleSheet.create({
   },
   debugInfo: {
     position: "absolute",
-    bottom: 20,
     left: 16,
     backgroundColor: "rgba(0,0,0,0.5)",
     padding: 4,
