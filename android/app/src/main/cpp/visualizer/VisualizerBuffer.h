@@ -34,9 +34,6 @@ public:
 private:
 
     alignas(16) float mBufferA[kSize];
-    alignas(16) float mBufferB[kSize];
-
-    std::atomic<int> mWriteBuffer{0};
 
     std::atomic<uint32_t> mWritePos{0};
 };
