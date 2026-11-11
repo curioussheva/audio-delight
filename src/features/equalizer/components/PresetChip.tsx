@@ -100,7 +100,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 12,
     marginRight: 10,
-    minHeight: 40,
+    // U-P2-01: minHeight 40 lama, di bawah 44dp.
+    minHeight: 44,
     justifyContent: "center",
     alignItems: "center",
   },

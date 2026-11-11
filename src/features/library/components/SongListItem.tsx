@@ -189,7 +189,13 @@ export const SongListItem = memo(
           <TouchableOpacity
             onPress={() => onToggleFavorite(item.id)}
             style={styles.iconButton}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            // U-P2-01: ikon 17 + padding 2 + hitSlop 8 lama = ±37dp.
+            // hitSlop 12 → 17 + 4 + 24 = 45dp.
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel={
+              isFavorite ? "Hapus dari favorit" : "Tambah ke favorit"
+            }
           >
             <Heart
               size={17}

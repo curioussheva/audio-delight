@@ -639,6 +639,8 @@ export default function AnalyzerScreen() {
           <TouchableOpacity
             onPress={handleFetchOnlineMetadata}
             disabled={enrichState === "loading"}
+            accessibilityRole="button"
+            accessibilityLabel="Muat ulang biografi artis"
             style={[
               styles.miniBtn,
               { backgroundColor: colors.background.tertiary },
@@ -809,7 +811,15 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   sourceTag: { fontSize: 10, marginTop: 2, fontStyle: "italic" },
-  miniBtn: { padding: 8, borderRadius: 10, minWidth: 32, alignItems: "center" },
+  // U-P2-01: padding 8 + ikon 14 lama = ±30×32px, di bawah 44dp.
+  miniBtn: {
+    padding: 8,
+    borderRadius: 10,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   artistImageWrapper: {
     width: "100%",
     height: 220,

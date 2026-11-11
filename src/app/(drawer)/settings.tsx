@@ -1081,9 +1081,12 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 onPress={() => handleSpeedChange(-0.25)}
                 disabled={(playbackSpeed ?? 1.0) <= 0.5}
+                accessibilityRole="button"
+                accessibilityLabel="Kurangi kecepatan putar"
                 style={{
-                  width: 32,
-                  height: 32,
+                  // U-P2-01: 32×32 lama, di bawah 44dp.
+                  width: 44,
+                  height: 44,
                   borderRadius: 8,
                   backgroundColor: colors.background.tertiary,
                   justifyContent: "center",
@@ -1123,9 +1126,12 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 onPress={() => handleSpeedChange(0.25)}
                 disabled={(playbackSpeed ?? 1.0) >= 2.0}
+                accessibilityRole="button"
+                accessibilityLabel="Tambah kecepatan putar"
                 style={{
-                  width: 32,
-                  height: 32,
+                  // U-P2-01: 32×32 lama, di bawah 44dp.
+                  width: 44,
+                  height: 44,
                   borderRadius: 8,
                   backgroundColor: colors.background.tertiary,
                   justifyContent: "center",
@@ -1236,9 +1242,12 @@ export default function SettingsScreen() {
               disabled={
                 audioMode === "bit-perfect" || (tuningCents ?? 0) <= -100
               }
+              accessibilityRole="button"
+              accessibilityLabel="Turunkan tuning 5 sen"
               style={{
-                width: 32,
-                height: 32,
+                // U-P2-01: 32×32 lama, di bawah 44dp.
+                width: 44,
+                height: 44,
                 borderRadius: 8,
                 backgroundColor: colors.background.tertiary,
                 justifyContent: "center",
@@ -1286,9 +1295,12 @@ export default function SettingsScreen() {
               disabled={
                 audioMode === "bit-perfect" || (tuningCents ?? 0) >= 100
               }
+              accessibilityRole="button"
+              accessibilityLabel="Naikkan tuning 5 sen"
               style={{
-                width: 32,
-                height: 32,
+                // U-P2-01: 32×32 lama, di bawah 44dp.
+                width: 44,
+                height: 44,
                 borderRadius: 8,
                 backgroundColor: colors.background.tertiary,
                 justifyContent: "center",

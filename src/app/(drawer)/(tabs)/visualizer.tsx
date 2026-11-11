@@ -171,8 +171,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  // U-P2-01: padding 8 + ikon 20 lama = ±36×36px, di bawah 44dp.
   retryButton: {
     padding: 8,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
   },
   songInfo: {
     alignItems: "center",

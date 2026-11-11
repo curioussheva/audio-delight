@@ -282,7 +282,13 @@ const AlbumSongRow = memo(
           <TouchableOpacity
             onPress={handleFavPress}
             style={styles.favBtn}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            // U-P2-01: ikon 16 + padding 4 + hitSlop 8 lama = ±40dp.
+            // hitSlop 12 → 16 + 8 + 24 = 48dp.
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel={
+              localFav ? "Hapus dari favorit" : "Tambah ke favorit"
+            }
           >
             <Heart
               size={16}

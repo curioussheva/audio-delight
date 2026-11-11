@@ -298,7 +298,13 @@ export default function LibraryScreen() {
     if (showSearch) {
       return (
         <View style={s.searchRow}>
-          <TouchableOpacity onPress={toggleSearch} hitSlop={8}>
+          <TouchableOpacity
+            onPress={toggleSearch}
+            hitSlop={12}
+            style={s.headerIconBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Tutup pencarian"
+          >
             <ArrowLeft size={24} color={colors.text.primary} />
           </TouchableOpacity>
           <View
@@ -319,7 +325,13 @@ export default function LibraryScreen() {
               autoCapitalize="none"
             />
             {searchQuery !== "" && (
-              <TouchableOpacity onPress={clearSearch} hitSlop={8}>
+              <TouchableOpacity
+                onPress={clearSearch}
+                hitSlop={12}
+                style={s.headerIconBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Hapus pencarian"
+              >
                 <X size={18} color={colors.text.tertiary} />
               </TouchableOpacity>
             )}
@@ -346,12 +358,24 @@ export default function LibraryScreen() {
         </View>
 
         <View style={s.headerActions}>
-          <TouchableOpacity onPress={toggleSearch} hitSlop={8}>
+          <TouchableOpacity
+            onPress={toggleSearch}
+            hitSlop={12}
+            style={s.headerIconBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Cari"
+          >
             <Search size={22} color={colors.text.primary} strokeWidth={2} />
           </TouchableOpacity>
 
           {!isScanning && hasPendingEnrichment && unenrichedCount > 0 && (
-            <TouchableOpacity onPress={handleEnhanceMetadata} hitSlop={8}>
+            <TouchableOpacity
+              onPress={handleEnhanceMetadata}
+              hitSlop={12}
+              style={s.headerIconBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Enhance metadata"
+            >
               <View style={s.enhanceBadge}>
                 <Sparkles size={18} color={colors.status.success} />
                 <Text style={s.enhanceBadgeText}>{unenrichedCount}</Text>
@@ -365,7 +389,10 @@ export default function LibraryScreen() {
                 f === "all" ? "lossless" : f === "lossless" ? "hi-res" : "all",
               )
             }
-            hitSlop={8}
+            hitSlop={12}
+            style={s.headerIconBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Filter lagu"
             disabled={isScanning}
           >
             <Filter
@@ -381,8 +408,16 @@ export default function LibraryScreen() {
 
           <TouchableOpacity
             onPress={isScanning ? cancelScan : handleManualRescan}
-            hitSlop={8}
-            style={[s.scanButton, isScanning && s.scanButtonActive]}
+            hitSlop={12}
+            style={[
+              s.headerIconBtn,
+              s.scanButton,
+              isScanning && s.scanButtonActive,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={
+              isScanning ? "Batalkan pemindaian" : "Pindai ulang library"
+            }
           >
             {isScanning ? (
               <View style={s.scanningIndicator}>
@@ -700,6 +735,15 @@ const createStyles = (colors: any) =>
     headerActions: {
       flexDirection: "row",
       gap: 16,
+      alignItems: "center",
+    },
+    // U-P2-01: tombol ikon header ≥44dp — ikon 18–26 + hitSlop 8 lama
+    // cuma ~34–42dp. Pola yang sama dengan DrawerMenuButton (min 44×44
+    // + hitSlop 12 → efektif ~50dp).
+    headerIconBtn: {
+      minWidth: 44,
+      minHeight: 44,
+      justifyContent: "center",
       alignItems: "center",
     },
     scanButton: {

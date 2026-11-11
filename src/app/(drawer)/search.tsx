@@ -98,7 +98,8 @@ export default function SearchScreen() {
         >
           <TouchableOpacity
             onPress={handleBack}
-            hitSlop={8}
+            // U-P2-01: ikon 24 + hitSlop 8 lama = 40dp. hitSlop 12 → 48dp.
+            hitSlop={12}
             accessibilityLabel="Kembali"
             accessibilityRole="button"
           >
@@ -149,7 +150,13 @@ export default function SearchScreen() {
             autoFocus
           />
           {query ? (
-            <TouchableOpacity onPress={() => setQuery("")}>
+            <TouchableOpacity
+              onPress={() => setQuery("")}
+              // U-P2-01: ikon 20 tanpa hitSlop lama = 20dp. hitSlop 12 → 44dp.
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Hapus pencarian"
+            >
               <Ionicons
                 name="close-circle"
                 size={20}
@@ -179,6 +186,12 @@ export default function SearchScreen() {
                   paddingHorizontal: spacing.md,
                   paddingVertical: spacing.xs,
                   borderRadius: 16,
+                  // U-P2-01: chip ±28px lama, di bawah 44dp. minHeight 44
+                  // (hitSlop saja tidak cukup: 28 + 2×8 = 44 pas-pasan dan
+                  // rapuh terhadap perubahan font) + konten di tengah.
+                  minHeight: 44,
+                  justifyContent: "center",
+                  alignItems: "center",
                   backgroundColor:
                     filterBy === filter
                       ? colors.primary[500]
@@ -186,6 +199,9 @@ export default function SearchScreen() {
                 },
               ]}
               onPress={() => setFilterBy(filter)}
+              accessibilityRole="button"
+              accessibilityLabel={`Filter ${filter === "all" ? "semua" : filter}`}
+              accessibilityState={{ selected: filterBy === filter }}
             >
               <Text
                 style={{

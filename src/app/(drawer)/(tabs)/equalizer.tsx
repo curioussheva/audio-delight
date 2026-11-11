@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Switch,
   TouchableOpacity,
+  Pressable,
   Dimensions,
   ScrollView,
   Alert,
@@ -111,22 +112,37 @@ const MiniSwitch = ({
       >
         {label}
       </Text>
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        disabled={disabled}
-        // Track OFF dulu `#222` di atas kartu `#0A0A0A` - rasio 1.24, praktis
-        // tak terlihat. Sekarang dari token supaya terbaca di semua tema.
-        trackColor={{
-          false: colors.background.tertiary,
-          true: color + "55",
+      {/* U-P2-01: Switch di-scale 0,8 lama → area sentuh ~41×25, di bawah
+          44dp. Switch sendiri tidak menerima hitSlop yang andal, jadi
+          dibungkus Pressable 44×44 yang jadi penangkap sentuh (Switch di
+          dalam pointerEvents="none", hanya visual; peran switch + label
+          pindah ke pembungkus supaya screen reader tetap membaca satu
+          kontrol). */}
+      <Pressable
+        onPress={() => {
+          if (!disabled) onValueChange(!value);
         }}
-        thumbColor={on ? color : colors.text.tertiary}
-        style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
+        disabled={disabled}
+        style={styles.miniSwitchHit}
         accessibilityRole="switch"
         accessibilityLabel={label}
         accessibilityState={{ checked: value, disabled: !!disabled }}
-      />
+      >
+        <Switch
+          value={value}
+          onValueChange={onValueChange}
+          disabled={disabled}
+          // Track OFF dulu `#222` di atas kartu `#0A0A0A` - rasio 1.24, praktis
+          // tak terlihat. Sekarang dari token supaya terbaca di semua tema.
+          trackColor={{
+            false: colors.background.tertiary,
+            true: color + "55",
+          }}
+          thumbColor={on ? color : colors.text.tertiary}
+          style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
+          pointerEvents="none"
+        />
+      </Pressable>
     </View>
   );
 };
@@ -889,6 +905,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
   },
+  // U-P2-01: minHeight 36 lama, di bawah 44dp.
   viewBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -896,7 +913,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 20,
-    minHeight: 36,
+    minHeight: 44,
   },
   viewBtnText: { fontSize: 10, fontWeight: "900", letterSpacing: 1 },
   resetBtn: { alignItems: "center", justifyContent: "center" },
@@ -935,7 +952,15 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 16,
-    minHeight: 32,
+    // U-P2-01: 32 lama; baris mengikuti tinggi target sentuh 44.
+    minHeight: 44,
+  },
+  // U-P2-01: penangkap sentuh MiniSwitch (lihat komentar di komponen).
+  miniSwitchHit: {
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
   },
   miniSwitchLabel: { fontSize: 10, fontWeight: "900", letterSpacing: 1.5 },
   reverbRow: {

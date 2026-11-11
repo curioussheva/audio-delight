@@ -480,10 +480,17 @@ export default function SongDetailScreen() {
         <TouchableOpacity
           onPress={handleCancelEdit}
           style={styles.iconBtnSmall}
+          accessibilityRole="button"
+          accessibilityLabel="Batalkan edit"
         >
           <X size={20} color={colors.text.tertiary} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={handleSaveEdit} style={styles.iconBtnSmall}>
+        <TouchableOpacity
+          onPress={handleSaveEdit}
+          style={styles.iconBtnSmall}
+          accessibilityRole="button"
+          accessibilityLabel="Simpan metadata"
+        >
           <Check size={20} color={colors.status.success} />
         </TouchableOpacity>
       </View>
@@ -582,6 +589,8 @@ export default function SongDetailScreen() {
             <TouchableOpacity
               onPress={handleBack}
               style={[styles.iconBtn, styles.backBtn]}
+              accessibilityRole="button"
+              accessibilityLabel="Kembali"
             >
               <ArrowLeft size={26} color={colors.text.primary} />
               <Text
@@ -595,6 +604,8 @@ export default function SongDetailScreen() {
               {!isEditMode && (
                 <TouchableOpacity
                   onPress={() => setIsEditMode(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit metadata"
                   style={[
                     styles.iconBtn,
                     { backgroundColor: `${colors.primary[500]}15` },
@@ -605,6 +616,8 @@ export default function SongDetailScreen() {
               )}
               <TouchableOpacity
                 onPress={() => setSyncModalVisible(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Sinkronkan metadata"
                 style={[
                   styles.iconBtn,
                   { backgroundColor: `${colors.primary[500]}15` },
@@ -615,6 +628,10 @@ export default function SongDetailScreen() {
               <TouchableOpacity
                 onPress={handleToggleFavorite}
                 style={styles.iconBtn}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  song.isFavorite ? "Hapus dari favorit" : "Tambah ke favorit"
+                }
               >
                 <Heart
                   size={26}
@@ -823,11 +840,15 @@ const styles = StyleSheet.create({
     width: "100%",
     marginBottom: 10,
   },
-  iconBtn: { padding: 10, borderRadius: 15 },
+  // U-P2-01: padding 10 + ikon 22 lama = 42dp, di bawah 44dp.
+  // padding 12 → 46dp (ikon 22) / 50dp (ikon 26).
+  iconBtn: { padding: 12, borderRadius: 15 },
   // U-P2-09: tombol back berlabel (dipakai navBar layar utama).
   backBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
   backLabel: { fontSize: 16, fontWeight: "600" },
-  iconBtnSmall: { padding: 8, marginLeft: 4 },
+  // U-P2-01: padding 8 + ikon 20 lama = 36dp, di bawah 44dp.
+  // padding 12 → 44dp.
+  iconBtnSmall: { padding: 12, marginLeft: 4 },
   artworkWrapper: {
     width: 280,
     height: 280,

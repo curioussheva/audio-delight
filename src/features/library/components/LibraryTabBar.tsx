@@ -217,6 +217,9 @@ export const LibraryTabBar = ({
               key={tab.id}
               onPress={() => handleTabPress(tab.id)}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={tab.label}
+              accessibilityState={{ selected: isActive }}
               style={[
                 styles.tabPill,
                 {
@@ -252,6 +255,8 @@ export const LibraryTabBar = ({
         <TouchableOpacity
           onPress={handleRefresh}
           disabled={isScanning}
+          accessibilityRole="button"
+          accessibilityLabel="Segarkan library"
           style={[
             styles.refreshBtn,
             { backgroundColor: `${colors.background.tertiary}80` },
@@ -320,10 +325,13 @@ const styles = StyleSheet.create({
   },
   progressFill: { height: "100%", borderRadius: 2 },
 
-  // Tab Pills
+  // Tab Pills — U-P2-01: tinggi ±37px lama (paddingVertical 10 + font
+  // 13) di bawah 44dp. minHeight 44 + konten di tengah.
   tabPill: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 20,
@@ -335,10 +343,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: -0.2,
   },
+  // U-P2-01: 42×42 lama, di bawah 44dp.
   refreshBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
     marginLeft: 4,
