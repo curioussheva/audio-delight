@@ -208,9 +208,13 @@ tempo tetap. Ini yang diharapkan user, bukan preset resonator.
     (persist AsyncStorage, preset A=440/A=432 + stepper ±5 sen, clamp
     ±100) + UI di Settings (preset chips + stepper, disabled di
     bit-perfect). tsc 0 error. Urutan rantai: pitch dulu, baru tempo.
-  - **Build Dev run 42949761208 (head `a5f0c887`) — BERJALAN, hasil
-    menyusul.** Verifikasi device ditunggu (dengar 432: pitch turun,
-    tempo tetap; mode bit-perfect mematikan tuning).
+  - **Build Dev run 42949761208 (head `a5f0c887`) SUCCEEDED**
+    2026-11-11 ~10:19 WIB (~19 mnt) — APK 224.073.730 byte (~214 MB),
+    SHA256 `747dda80...`, `unzip -t` bersih,
+    `lib/arm64-v8a/libpristine-audio.so` 407.784 byte (naik dari 396.632,
+    sesuai kode baru), bundle 5.371.876 byte. Verifikasi device ditunggu
+    (dengar 432: pitch turun, tempo tetap; mode bit-perfect mematikan
+    tuning).
 
 ### Fase 5 — Polish & bersih-bersih
 - Hapus `FFTResonanceAnalyzer` (mati total, DSP-M15) dan `BinauralRenderer` lama
