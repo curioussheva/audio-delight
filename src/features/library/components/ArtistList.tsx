@@ -550,7 +550,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
-  playBtnText: { color: "#FFF", fontWeight: "800", letterSpacing: 1 },
+  // U-P2-04: tanpa `color` — warna teks selalu di-overide inline dengan
+  // onPrimary (pickReadable atas primary[500]) di pemakaian style ini.
+  playBtnText: { fontWeight: "800", letterSpacing: 1 },
 
   songRow: {
     flexDirection: "row",

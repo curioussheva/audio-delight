@@ -38,8 +38,10 @@ const CODEC_CONFIG: Record<string, { color: string; label: string }> = {
   DSD: { color: "#f59e0b", label: "DSD" },
   DSF: { color: "#f59e0b", label: "DSF" },
   ALAC: { color: "#14b8a6", label: "ALAC" },
-  MP3: { color: "#94a3b8", label: "MP3" },
-  AAC: { color: "#94a3b8", label: "AAC" },
+  // U-P2-04: abu #94a3b8 gagal kontras di Porcelain (2,35:1) — slate
+  // #64748b terukur 3,96:1 di atas tinted-bg Porcelain dan 3,52:1 di Noir.
+  MP3: { color: "#64748b", label: "MP3" },
+  AAC: { color: "#64748b", label: "AAC" },
 };
 
 const getMeta = (codec: string) => {
@@ -343,7 +345,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     gap: 8,
   },
-  playAllText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  // U-P2-04: tanpa `color` — warna teks selalu di-overide inline dengan
+  // onPrimary (pickReadable atas primary[500]) di pemakaian style ini.
+  playAllText: { fontWeight: "700", fontSize: 15 },
 
   songRow: {
     flexDirection: "row",

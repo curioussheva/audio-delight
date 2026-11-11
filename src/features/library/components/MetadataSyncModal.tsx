@@ -269,7 +269,9 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 20,
   },
-  btnText: { color: "#FFF", fontWeight: "700" },
+  // U-P2-04: tanpa `color` — warna teks selalu di-overide inline dengan
+  // onPrimary (pickReadable atas primary[500]) di pemakaian style ini.
+  btnText: { fontWeight: "700" },
   resultCard: {
     flexDirection: "row",
     alignItems: "center",

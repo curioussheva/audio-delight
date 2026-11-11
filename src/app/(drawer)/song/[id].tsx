@@ -803,7 +803,8 @@ const styles = StyleSheet.create({
   playButtonText: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#FFF",
+    // U-P2-04: tanpa `color` — warna teks di-overide inline dengan
+    // onPrimary (pickReadable atas primary[500]) di pemakaian style ini.
     letterSpacing: 1,
   },
   sectionCard: {

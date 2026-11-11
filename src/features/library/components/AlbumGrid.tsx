@@ -571,7 +571,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-  mainBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  // U-P2-04: tanpa `color` — warna teks selalu di-overide inline dengan
+  // onPrimary (pickReadable atas primary[500]) di pemakaian style ini.
+  mainBtnText: { fontWeight: "700", fontSize: 16 },
   secondaryBtn: {
     width: 48,
     height: 48,

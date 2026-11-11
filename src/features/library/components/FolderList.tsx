@@ -347,7 +347,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     gap: 8,
   },
-  playAllText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  // U-P2-04: tanpa `color` — warna teks selalu di-overide inline dengan
+  // onPrimary (pickReadable atas primary[500]) di pemakaian style ini.
+  playAllText: { fontWeight: "700", fontSize: 15 },
 
   songRow: {
     flexDirection: "row",

@@ -400,7 +400,8 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   createBtnText: {
-    color: "#fff",
+    // U-P2-04: tanpa `color` — warna teks di-overide inline dengan
+    // onPrimary (pickReadable atas primary[500]) di pemakaian style ini.
     fontWeight: "800",
     fontSize: 15,
     letterSpacing: 0.5,

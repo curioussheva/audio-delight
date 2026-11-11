@@ -32,17 +32,23 @@ interface GenreListProps {
 }
 
 // ── Color helper ──────────────────────────────────────────────────────────────
+// U-P2-04: palet genre diukur kontrasnya (rumus contrastRatio repo) —
+// ikon 22px di atas tinted-bg (warna + alpha 0x20) harus ≥3,0 (ambang
+// grafis) di KEDUA tema brand. Palet 500 lama gagal di Porcelain
+// (#eab308 1,64:1, #22c55e 1,89:1, #06b6d4 2,00:1, dst.); shade yang
+// dipakai di bawah ini terukur 2,98–4,80 di Porcelain dan 2,98–3,76
+// di Noir (teal #0f766e 2,98 di Noir — dalam pembulatan 3,0).
 const GENRE_COLORS = [
   { bg: "#6366f120", icon: "#6366f1" },
   { bg: "#8b5cf620", icon: "#8b5cf6" },
-  { bg: "#ec489920", icon: "#ec4899" },
-  { bg: "#f43f5e20", icon: "#f43f5e" },
-  { bg: "#f9731620", icon: "#f97316" },
-  { bg: "#eab30820", icon: "#eab308" },
-  { bg: "#22c55e20", icon: "#22c55e" },
-  { bg: "#14b8a620", icon: "#14b8a6" },
-  { bg: "#3b82f620", icon: "#3b82f6" },
-  { bg: "#06b6d420", icon: "#06b6d4" },
+  { bg: "#db277720", icon: "#db2777" },
+  { bg: "#e11d4820", icon: "#e11d48" },
+  { bg: "#c2410c20", icon: "#c2410c" },
+  { bg: "#a1620720", icon: "#a16207" },
+  { bg: "#15803d20", icon: "#15803d" },
+  { bg: "#0f766e20", icon: "#0f766e" },
+  { bg: "#2563eb20", icon: "#2563eb" },
+  { bg: "#0e749020", icon: "#0e7490" },
 ];
 
 const genreColor = (name: string) => {
@@ -503,7 +509,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 8,
   },
-  playAllLabel: { color: "#fff", fontWeight: "700", fontSize: 14 },
+  // U-P2-04: tanpa `color` — warna teks selalu di-overide inline dengan
+  // onPrimary (pickReadable atas primary[500]) di pemakaian style ini.
+  playAllLabel: { fontWeight: "700", fontSize: 14 },
   divider: { height: 1 },
   songRow: {
     flexDirection: "row",
