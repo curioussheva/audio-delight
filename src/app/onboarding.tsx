@@ -8,12 +8,17 @@ import {
   Alert,
   BackHandler,
   PermissionsAndroid,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+import {
+  resolveOnboardingBack,
+  shouldRedirectFromOnboarding,
+} from "@/shared/utils/onboardingGuard";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import * as MediaLibrary from "expo-media-library";
@@ -101,6 +106,40 @@ export default function OnboardingScreen() {
   const [selectedMode, setSelectedMode] = useState<AudioMode | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // U-P2-48: guard re-entry. `index.tsx` memang me-Redirect berdasarkan
+  // `has_onboarded`, tapi deep link `pristineaudio://onboarding` melewati
+  // index dan membuka layar ini lagi walau user sudah selesai — dan
+  // menyelesaikannya menimpa `audio_mode_preference`. Satu-satunya
+  // pengecualian: dibuka sengaja dengan param `reopen=true`.
+  // Selama status belum terbaca, tampilkan loading (bukan kartu mode)
+  // supaya user yang sudah onboarded tidak sempat melihat/menekan kartu.
+  const { reopen } = useLocalSearchParams<{ reopen?: string }>();
+  const reopenedIntentionally = reopen === "true";
+  const [alreadyOnboarded, setAlreadyOnboarded] = useState<boolean | null>(
+    null,
+  );
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem("has_onboarded")
+      .then((value) => {
+        if (cancelled) return;
+        const done = value === "true";
+        setAlreadyOnboarded(done);
+        if (shouldRedirectFromOnboarding(done, reopenedIntentionally)) {
+          router.replace("/(drawer)/(tabs)/library");
+        }
+      })
+      .catch(() => {
+        // Gagal baca storage: jangan blokir onboarding baru. User yang
+        // sudah onboarded tapi storagenya gagal dibaca akan melihat layar
+        // ini lagi — itu lebih baik daripada layar loading selamanya.
+        if (!cancelled) setAlreadyOnboarded(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reopenedIntentionally, router]);
+
   // U-P2-32: navigasi setTimeout dulu tanpa cleanup — bila layar unmount
   // sebelum 100ms, router.replace tetap jalan di layar yang sudah tidak ada.
   const navTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -112,20 +151,32 @@ export default function OnboardingScreen() {
     };
   }, []);
 
-  // Prevent back button during submission
+  // U-P2-48: hardware back dulu berputar — di luar `isSubmitting` back
+  // kembali ke `index`, yang langsung me-Redirect ke onboarding lagi bila
+  // belum onboarded, jadi tombol back tampak tidak berfungsi. Sekarang
+  // arah back diputuskan `resolveOnboardingBack` (lihat onboardingGuard):
+  // submit -> tahan; sudah onboarded (dibuka sengaja) -> Library; belum
+  // onboarded -> keluar aplikasi (tidak ada layar sebelumnya).
   useEffect(() => {
     const backHandler = BackHandler.addEventListener(
       "hardwareBackPress",
       () => {
-        if (isSubmitting) {
-          return true; // Prevent back button during submission
+        const action = resolveOnboardingBack({
+          isSubmitting,
+          alreadyOnboarded: alreadyOnboarded === true,
+        });
+        if (action === "block") return true;
+        if (action === "go-library") {
+          router.replace("/(drawer)/(tabs)/library");
+          return true;
         }
-        return false;
+        BackHandler.exitApp();
+        return true;
       },
     );
 
     return () => backHandler.remove();
-  }, [isSubmitting]);
+  }, [isSubmitting, alreadyOnboarded, router]);
 
   const handleSelectMode = (mode: AudioMode) => {
     console.log(`🔘 [Onboarding] Mode dipilih: ${mode}`);
@@ -245,6 +296,26 @@ export default function OnboardingScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   };
+
+  // U-P2-48: selama guard membaca `has_onboarded`, jangan tampilkan
+  // kartu mode — deep link dari user yang sudah onboarded dialihkan ke
+  // Library sebelum sempat berinteraksi.
+  if (alreadyOnboarded === null) {
+    return (
+      <View
+        style={[
+          styles.container,
+          styles.guardLoading,
+          { backgroundColor: colors.background.primary },
+        ]}
+      >
+        <ActivityIndicator size="large" color={colors.primary[500]} />
+        <Text style={[styles.hintText, { color: colors.text.secondary }]}>
+          Memuat...
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View
@@ -435,5 +506,6 @@ const styles = StyleSheet.create({
   nextButtonText: { fontSize: 16, fontWeight: "700" },
   permHint: { fontSize: 12, marginBottom: 8, textAlign: "center" },
   hintText: { fontSize: 12, marginTop: 12, textAlign: "center" },
+  guardLoading: { justifyContent: "center", alignItems: "center", gap: 12 },
 });
  
