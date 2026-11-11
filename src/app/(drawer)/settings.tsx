@@ -374,7 +374,7 @@ export default function SettingsScreen() {
     {
       id: "immersive" as const,
       label: "Solfeggio",
-      hint: "DSP + resonansi solfeggio, harmonic, spatial, brainwave.",
+      hint: "DSP + resonansi solfeggio, harmonic, spatial.",
       Icon: Sparkles,
       color: colors.primary[400] ?? colors.primary[500],
     },
