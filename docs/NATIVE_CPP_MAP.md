@@ -38,8 +38,7 @@ interpolasi linear; `SincResampler` ada tapi tidak dipakai).
 `PresetParser` (435); subdir: `immersive/` (12 — Solfeggio,
 Harmonic, Spatial, Brainwave), `convolution/` (12), `headphone/` (6 —
 koreksi AutoEQ), `filters/` (5), `tone/` (4), `graph/` (3),
-`spatial/` (2), `dynamics/` (2). Jalur mode (bit-perfect/DSP/
-immersive) sudah disampel di Track 2 audit — belum diaudit per file.
+`spatial/` (2), `dynamics/` (2). **Audit 2026-11-11 (`AUDIT_NATIVE_CPP_DSP_2026-11-11.md`): 0 blocker + 15 major — 3 HIDUP (reopen stream hapus setting DSP; limiter 2× di mode DSP; HarmonicExciter suntik DC offset di default immersive) + 45 minor + dead code ~28/62 file. M6 dikoreksi: rantai DSP HIDUP (gerbangnya ProcessingMode, bukan dspEnabled). M7 diperhalus: solfeggio+harmonic+spatial-depth hidup dengan default; yang mati brainwave + spatial-width. Konvolusi mati end-to-end; `SincResampler`-style stub berulang (BinauralRenderer, FFTResonanceAnalyzer, CrossfeedProcessor, HeadphoneCorrection lama).**
 
 ### 5. resampler — 8 file
 `AudioResampler`, `SincResampler` (SINC_FAST/MEDIUM/BEST),
