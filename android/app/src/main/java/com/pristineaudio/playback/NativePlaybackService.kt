@@ -166,6 +166,25 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
         }
     }
 
+    // 🔥 FASE R (2026-11-11): retune — rasio pitch (phase vocoder).
+    // KOREKSI 2026-11-11: method ini TERTINGGAL di commit a5f0c887 —
+    // setPitchRatio cuma ditambah di NativePlaybackModule (@ReactMethod,
+    // modul yang JS tidak panggil) + bridge (0 caller), sementara modul
+    // yang JS panggil (NativePlaybackService, NAME="NativePlaybackService")
+    // tidak punya method ini → JS proxy "is not a function". Rantai
+    // lengkap: spec → NativePlaybackService (@ReactMethod, Promise) →
+    // PlaybackNativeBridge → NativePlaybackModule.setPitchRatioFromService
+    // → JNI nativeSetPitchRatio → controller->setPitchRatio.
+    @ReactMethod
+    fun setPitchRatio(ratio: Double, promise: Promise) {
+        try {
+            PlaybackNativeBridge.setPitchRatio(ratio.toFloat())
+            promise.resolve(null)
+        } catch (e: Exception) {
+            promise.reject("SET_PITCH_RATIO_FAILED", e)
+        }
+    }
+
     // ============================================================
     // 🔥 SET QUEUE — LAZY RESOLVE + PROMISE
     // ============================================================
