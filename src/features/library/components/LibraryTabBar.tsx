@@ -281,15 +281,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   // Scan UI
+  // U-P2-07: dulu row + space-between tanpa flexWrap menampung sampai 4
+  // anak (2 baris progres + 2 bar progres) — di layar sempit terpotong /
+  // meluber. Sekarang kolom: baris progres dan bar-nya menumpuk vertikal,
+  // bar progres selebar overlay, teks boleh menyusut/membungkus.
   scanOverlay: {
     marginHorizontal: 20,
     marginBottom: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 8,
     ...Platform.select({
       ios: {
         shadowColor: "#000",
@@ -301,8 +305,19 @@ const styles = StyleSheet.create({
     }),
   },
   scanInfo: { flexDirection: "row", alignItems: "center", gap: 8 },
-  scanText: { fontSize: 11, fontWeight: "700", letterSpacing: 0.2 },
-  progressTrack: { height: 4, width: 80, borderRadius: 2, overflow: "hidden" },
+  scanText: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+    flexShrink: 1,
+  },
+  progressTrack: {
+    height: 4,
+    width: "100%",
+    borderRadius: 2,
+    overflow: "hidden",
+    flexShrink: 1,
+  },
   progressFill: { height: "100%", borderRadius: 2 },
 
   // Tab Pills
@@ -332,6 +347,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    flexShrink: 1,
+    flexWrap: "wrap",
   },
   pctText: {
     fontSize: 11,
