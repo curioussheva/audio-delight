@@ -386,6 +386,14 @@ export const SpectogramView = React.memo(
 const styles = StyleSheet.create({
   container: {
     borderRadius: 12,
+    // U-P2-22 — KEPUTUSAN DISENGAJA: spektrogram adalah permukaan
+    // "layar" gelap (seperti osiloskop) di KEDUA tema, termasuk
+    // Porcelain. Token tema terang (teks gelap di atas latar terang)
+    // justru gagal di atas blok gelap ini, jadi warna di sini
+    // sengaja tetap — tapi DIPILIH dengan ukur, bukan asal:
+    // label #94A3B8 = 7,70:1 di atas #0A0A0F (lolos 4,5:1);
+    // label lama #475569 = 2,61:1 (gagal). Diukur dengan rumus
+    // contrastRatio repo (src/shared/utils/contrast.ts).
     backgroundColor: "#0A0A0F",
     padding: 8,
     borderWidth: 1,
@@ -407,7 +415,9 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#475569",
+    // U-P2-22: dot "mati" lama #475569 = 2,61:1 di atas #0A0A0F
+    // (gagal bahkan ambang grafis 3,0). #64748B = 4,15:1 — lolos.
+    backgroundColor: "#64748B",
   },
   active: {
     backgroundColor: "#EF4444",
@@ -454,7 +464,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   label: {
-    color: "#475569",
+    // U-P2-22: #475569 lama = 2,61:1 di atas #0A0A0F (teks 9px,
+    // praktis tak terbaca). #94A3B8 = 7,70:1 (lolos 4,5:1).
+    color: "#94A3B8",
     fontSize: 9,
     fontWeight: "500",
   },
