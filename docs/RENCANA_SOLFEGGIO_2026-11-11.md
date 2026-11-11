@@ -240,6 +240,18 @@ tempo tetap. Ini yang diharapkan user, bukan preset resonator.
     run 42962732238 (head c69ef41c) di-trigger 2026-11-11 ~11:59 WIB,
     dimonitor — hasil menyusul. Metro reset TIDAK ada hubungannya
     (JS sudah benar; yang hilang method native di modul service).
+  - **Build Dev run 42962732238 (head `c69ef41c`) SUCCEEDED**
+    2026-11-11 ~12:20 WIB (~21 mnt) — APK 224.073.730 byte (~214 MB),
+    SHA256 `b766111e...`, `unzip -t` bersih, `.so` 407.784 byte (sama —
+    C++ tidak berubah), bundle 5.371.876 byte. **Verifikasi biner KALI INI
+    sampai ke kelasnya** (parser method_ids dex, bukan sekadar strings):
+    `Lcom/pristineaudio/playback/NativePlaybackService;.setPitchRatio`
+    ADA di classes20.dex, bersama `NativePlaybackModule.setPitchRatio`,
+    `PlaybackNativeBridge.setPitchRatio`, dan codegen
+    `NativePlaybackServiceSpec.setPitchRatio`. Rantai lengkap terbukti
+    di APK. APK ini TIDAK berisi fix fft (84246cda, f15336b4 — ikut
+    build berikutnya). Verifikasi device ditunggu (dengar 432: pitch
+    turun, tempo tetap; bit-perfect mematikan tuning).
   - **Logcat #11 (2026-11-11 11:49–11:54 WIB, UID 10535, PID 32316):
     retune MASIH gagal — sesi via Metro lagi (baris 'Android Bundled
     2185ms'), `setPitchRatio is not a function` 8x (11:51:50–11:52:25,

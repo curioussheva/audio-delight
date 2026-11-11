@@ -65,6 +65,7 @@ Rencana lengkap (fase-fase): `docs/RENCANA_SOLFEGGIO_2026-11-11.md`.
 - [x] Implementasi PitchShifter + harness 12/12 + ASan bersih (commit 3396957a).
 - [x] Wiring lengkap controller→JNI→Kotlin→TS + UI tuning di Settings (commit a5f0c887, tsc 0).
 - [x] Build Dev run 42949761208 SUCCEEDED 2026-11-11 ~10:19 WIB (APK 224.073.730 byte, SHA256 747dda80..., .so 407.784 byte).
+- [x] Fix wiring retune c69ef41c + build Dev run 42962732238 SUCCEEDED 2026-11-11 ~12:20 WIB (APK 224.073.730 byte, SHA256 b766111e..., .so 407.784 byte; dex: NativePlaybackService.setPitchRatio ADA).
 - [ ] Verifikasi device: dengar 432 (pitch turun, tempo tetap); bit-perfect mematikan tuning.
 - [x] Rumah kontrol: level player (sibling kontrol speed di `PlaybackController::render`, bypass di rasio 1.0 = A=440); UI picker tuning di Settings (panel Solfeggio Fase 1 belum ada — picker ditaruh di Settings sebelah Playback Speed, sibling-nya); berlaku di mode DSP + Solfeggio, FORCED OFF di bit-perfect (gate native `setPitchAllowed`).
 - [ ] Preset tuning: Standar A=440 / Verdi A=432 (−31,8 sen) / custom sen (±100 sen); rasio = 2^(sen/1200).
