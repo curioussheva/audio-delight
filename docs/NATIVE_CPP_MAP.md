@@ -44,7 +44,7 @@ immersive) sudah disampel di Track 2 audit — belum diaudit per file.
 ### 5. resampler — 8 file
 `AudioResampler`, `SincResampler` (SINC_FAST/MEDIUM/BEST),
 `LinearResampler`, `ResamplerTypes.h`, `SRCQuality.h`. Kecil dan
-fokus; terkait langsung dengan M2.
+fokus; terkait langsung dengan M2. **Audit 2026-11-11 (`AUDIT_NATIVE_CPP_RESAMPLER_2026-11-11.md`): 0 blocker + 6 major (semua laten) — `SincResampler` ternyata stub linear (bukan solusi M2), satu-satunya resample produksi adalah swr FFmpeg; `LinearResampler` punya bug carry fase +1 frame/batas.**
 
 ### 6. fft — 11 file
 `FFTPlan`, `FFTProcessor`, `SpectrumAnalyzer`, `SpectrumVisualizer`,
