@@ -27,6 +27,14 @@ void VisualizerBuffer::write(
     int32_t frames
 ) {
 
+    // 🔥 FIX (2026-11-11, V-M2): frames <= 0 menggerakkan mWritePos
+    // MUNDUR (store(pos + frames) tanpa syarat) — write(-3) menimpa 3
+    // sample yang sudah dipublikasi. Guard di sini, bukan andalkan
+    // guard di AudioCallback (file lain).
+    if (frames <= 0 || !left || !right) {
+        return;
+    }
+
     // 🔥 KOREKSI (2026-11-11, V-m4): satu buffer saja. Dulu ada mBufferB +
     // mWriteBuffer (desain double-buffer), tapi mWriteBuffer tidak pernah
     // di-flip (0 store di repo) — penulis selalu ke mBufferA sementara
@@ -77,6 +85,16 @@ void VisualizerBuffer::read(
     float* dst,
     int32_t size
 ) const {
+
+    // 🔥 FIX (2026-11-11, V-M2/V-m1): clamp jendela ke kSize. read(4096)
+    // mengembalikan data yang sama dua kali (index & kMask selalu
+    // in-bounds, bukan OOB — tapi jendela berulang). size <= 0 no-op.
+    if (size <= 0 || !dst) {
+        return;
+    }
+    if (size > static_cast<int32_t>(kSize)) {
+        size = static_cast<int32_t>(kSize);
+    }
 
     // Baca dari buffer yang SAMA dengan yang ditulis (mBufferA).
     //
