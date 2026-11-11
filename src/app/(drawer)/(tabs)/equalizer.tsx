@@ -761,6 +761,22 @@ export default function EqualizerScreen() {
               <Save size={18} color={colors.text.primary} />
             </TouchableOpacity>
           </View>
+          {/* U-P2-45: hapus preset custom lewat long-press DULU tanpa
+              petunjuk apa pun — user tidak bisa tahu aksinya ada.
+              (Penghapusannya sendiri sudah benar: Alert konfirmasi +
+              hanya untuk preset custom.) */}
+          <Text
+            style={[
+              styles.presetHint,
+              {
+                color: colors.text.tertiary,
+                paddingHorizontal: spacing.md,
+                marginBottom: spacing.sm,
+              },
+            ]}
+          >
+            Tekan lama preset buatanmu untuk menghapusnya.
+          </Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -778,6 +794,11 @@ export default function EqualizerScreen() {
                 onPress={() => eq.applyPreset(p.id)}
                 onLongPress={() =>
                   handlePresetLongPress(p.id, p.name, p.isCustom)
+                }
+                accessibilityHint={
+                  p.isCustom
+                    ? "Tekan lama untuk menghapus preset ini"
+                    : undefined
                 }
                 disabled={eq.isDSPDisabled}
               />
@@ -959,6 +980,7 @@ const styles = StyleSheet.create({
     minHeight: 32,
   },
   sectionTitle: { fontSize: 10, fontWeight: "900", letterSpacing: 1.5 },
+  presetHint: { fontSize: 11 },
   iconBtn: {
     minWidth: 44,
     minHeight: 44,

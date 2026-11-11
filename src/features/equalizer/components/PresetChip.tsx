@@ -8,6 +8,7 @@ interface PresetChipProps {
   isActive: boolean;
   onPress: () => void;
   onLongPress?: () => void;
+  accessibilityHint?: string;
   disabled?: boolean;
 }
 
@@ -16,6 +17,7 @@ export const PresetChip: React.FC<PresetChipProps> = ({
   isActive,
   onPress,
   onLongPress,
+  accessibilityHint,
   disabled,
 }) => {
   const { theme } = useTheme();
@@ -58,6 +60,7 @@ export const PresetChip: React.FC<PresetChipProps> = ({
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityHint={accessibilityHint}
       accessibilityState={{ selected: isActive, disabled: !!disabled }}
       style={[
         styles.chip,
