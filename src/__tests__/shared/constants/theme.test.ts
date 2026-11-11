@@ -1,8 +1,14 @@
 /**
- * getRandomTheme mengecualikan tema aktif (U-P2-35).
+ * getRandomTheme mengecualikan tema aktif (U-P2-35) dan getThemeById jatuh
+ * ke tema default brand (U-P2-39) — bukan midnight-blue lagi.
  */
 
-import { ALL_THEMES, getRandomTheme } from "@/shared/constants/theme";
+import {
+  ALL_THEMES,
+  DEFAULT_THEME,
+  getRandomTheme,
+  getThemeById,
+} from "@/shared/constants/theme";
 
 describe("getRandomTheme (U-P2-35)", () => {
   it("tidak pernah mengembalikan tema yang dikecualikan", () => {
@@ -24,5 +30,16 @@ describe("getRandomTheme (U-P2-35)", () => {
     );
     expect(ids.has("emerald-noir")).toBe(false);
     expect(ids.size).toBeGreaterThan(1);
+  });
+});
+
+describe("getThemeById (U-P2-39)", () => {
+  it("id tidak dikenal jatuh ke DEFAULT_THEME (pristine-noir)", () => {
+    expect(getThemeById("tidak-ada" as any)).toBe(DEFAULT_THEME);
+    expect(DEFAULT_THEME.id).toBe("pristine-noir");
+  });
+
+  it("id dikenal mengembalikan tema itu", () => {
+    expect(getThemeById("pristine-porcelain").id).toBe("pristine-porcelain");
   });
 });

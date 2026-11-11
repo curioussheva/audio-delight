@@ -286,7 +286,11 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
 };
 
 export const getThemeById = (id: ThemeId): Theme =>
-  ALL_THEMES[id] || ALL_THEMES["midnight-blue"];
+  // U-P2-39: dulu jatuh ke midnight-blue bila id tak dikenal, sementara
+  // DEFAULT_THEME dan semua fallback ThemeContext/themeMode memakai
+  // pristine-noir/pristine-porcelain. Samakan ke DEFAULT_THEME
+  // (pristine-noir) supaya hanya ada satu "default".
+  ALL_THEMES[id] || DEFAULT_THEME;
 
 export const getRandomTheme = (excludeId?: ThemeId): Theme => {
   // U-P2-35: tema yang sedang aktif dikecualikan — dulu ketukan "Acak
