@@ -134,12 +134,22 @@ AudioCallback::onAudioReady(
     const bool fallbackShaped =
         (mParams.processingMode != ProcessingMode::BitPerfect);
 
+    // DSP-M2 (2026-11-11): sama seperti jalur utama - di mode DSP, LimiterNode
+    // di graph sudah membatasi bila limiterEnabled DAN pipeline jalan. Jalur
+    // fallback menggerbang pipeline di isDSPEnabled(), jadi bila flag itu
+    // false, pipeline tidak jalan dan limiter callback tetap jadi
+    // satu-satunya limiter.
+    const bool fallbackNodeLimiterRan =
+        (mParams.processingMode == ProcessingMode::DSP) &&
+        mParams.limiterEnabled &&
+        mState.isDSPEnabled();
+
     for (int32_t i = 0; i < numFrames; ++i) {
 
         float l = mLeft[i];
         float r = mRight[i];
 
-        if (fallbackShaped) {
+        if (fallbackShaped && !fallbackNodeLimiterRan) {
             l = Limiter::apply(l);
             r = Limiter::apply(r);
         }
@@ -310,7 +320,9 @@ void AudioCallback::applyPipeline(
     // Sekarang mode BitPerfect TIDAK melewati limiter sama sekali — hanya
     // sanitasi:
     //   jalur BitPerfect : sanitize saja        (bit-exact, nol distorsi)
-    //   jalur DSP/Immersive : limiter + sanitize (identity di bawah 0.98)
+    //   jalur DSP       : limiter (node) + sanitize - limiter callback
+    //                     dilewati, lihat DSP-M2 di bawah
+    //   jalur Immersive : limiter (callback) + sanitize
     //
     // Limiter tetap ada di DSP/Immersive karena rantai itu (EQ, harmonic
     // exciter, brainwave) bisa menaikkan level melewati full scale. Di bawah
@@ -318,12 +330,24 @@ void AudioCallback::applyPipeline(
     const bool shaped =
         (mParams.processingMode != ProcessingMode::BitPerfect);
 
+    // 🔥 FIX (2026-11-11, DSP-M2): di mode DSP, LimiterNode di graph SUDAH
+    // membatasi (bila limiterEnabled) - limiter callback di sini akan jadi
+    // yang kedua (puncak 1,5 -> 0,9993 sekali vs 0,9898 dua kali, + CPU 2x).
+    // Lewati limiter callback bila node sudah menjalankannya. Bila user
+    // mematikan limiter (limiterEnabled=false), node di-skip graph dan
+    // callback ini tetap jadi satu-satunya limiter - jadi kondisi ini harus
+    // memeriksa limiterEnabled, bukan sekadar mode. Mode Immersive tetap
+    // lewat callback (processImmersive tidak menyentuh DSPChain).
+    const bool nodeLimiterRan =
+        (mParams.processingMode == ProcessingMode::DSP) &&
+        mParams.limiterEnabled;
+
     for (int32_t i = 0; i < numFrames; ++i) {
 
         float l = mLeft[i];
         float r = mRight[i];
 
-        if (shaped) {
+        if (shaped && !nodeLimiterRan) {
             l = Limiter::apply(l);
             r = Limiter::apply(r);
         }
