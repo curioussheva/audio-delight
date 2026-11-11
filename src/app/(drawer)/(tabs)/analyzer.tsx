@@ -36,6 +36,7 @@ import {
   BitDepthAnalysis,
 } from "@/features/audio/api/BitDepthVerifier";
 import { SpectrumAnalyzer } from "@/features/visualizer/components/SpectrumAnalyzer";
+import { cleanAnalyzerWarnings } from "@/features/visualizer/api/analyzerWarnings";
 import { formatFileSize } from "@/shared/types/audio";
 import SQLiteService from "@/shared/lib/sqlite";
 import OnlineMetadataService from "@/features/library/services/OnlineMetadataService";
@@ -392,7 +393,13 @@ export default function AnalyzerScreen() {
             {bitDepthAnalysis.fakeReason.replace(/^\[FFT\] /, "")}
           </Text>
         )}
-        {(bitDepthAnalysis?.warnings ?? []).map((w, i) => (
+        {/* U-P2-21: warnings dibersihkan dari prefix "[FFT] " dan
+            didedup terhadap fakeReason — temuan spektral yang sama
+            jangan tampil dua kali (sekali bersih, sekali ber-tag). */}
+        {cleanAnalyzerWarnings(
+          bitDepthAnalysis?.warnings,
+          bitDepthAnalysis?.fakeReason,
+        ).map((w, i) => (
           <Text
             key={i}
             style={[styles.warningText, { color: colors.text.tertiary }]}
