@@ -104,6 +104,9 @@ export default function LibraryScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // U-P1-30: state pengendali EnrichMetadataModal (dulu tidak ada — tombol
+  // Enhance + render modal sama-sama dikomentari).
+  const [showEnrichModal, setShowEnrichModal] = useState(false);
   const [filterType, setFilterType] = useState<"all" | "lossless" | "hi-res">(
     "all",
   );
@@ -266,7 +269,7 @@ export default function LibraryScreen() {
 
   const handleEnhanceMetadata = () => {
     if (unenrichedCount === 0) return;
-    // setShowEnrichModal(true);  // Uncomment when you add the state
+    setShowEnrichModal(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
@@ -356,10 +359,10 @@ export default function LibraryScreen() {
 
           {!isScanning && hasPendingEnrichment && unenrichedCount > 0 && (
             <TouchableOpacity onPress={handleEnhanceMetadata} hitSlop={8}>
-           {/*}   <View style={s.enhanceBadge}>
+              <View style={s.enhanceBadge}>
                 <Sparkles size={18} color={colors.status.success} />
                 <Text style={s.enhanceBadgeText}>{unenrichedCount}</Text>
-              </View> */}
+              </View>
             </TouchableOpacity>
           )}
 
@@ -596,8 +599,12 @@ export default function LibraryScreen() {
       {/* Main Content */}
       <View style={s.content}>{renderContent()}</View>
 
-      {/* Enrich Metadata Modal */}
-      {/* <EnrichMetadataModal visible={showEnrichModal} onClose={() => setShowEnrichModal(false)} /> */}
+      {/* Enrich Metadata Modal — U-P1-30: hanya wiring (tombol → modal
+          buka/tutup). Isi/klaim modal adalah U-P1-10, sengaja tidak diubah. */}
+      <EnrichMetadataModal
+        visible={showEnrichModal}
+        onClose={() => setShowEnrichModal(false)}
+      />
     </View>
   );
 }
