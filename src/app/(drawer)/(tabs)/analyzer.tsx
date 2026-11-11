@@ -27,6 +27,7 @@ import {
 // Hooks & Store
 import { useTheme } from "@/shared/context/ThemeContext";
 import { usePlayerStore } from "@/features/player/store/playerStore";
+import { useAudioSessionRetry } from "@/features/player/hooks/useAudioSessionRetry";
 import { FLOATING_PLAYER_CLEARANCE } from "@/features/player/layout";
 import { useAudioOutput } from "@/features/hardware/hooks/useAudioOutput";
 
@@ -79,6 +80,12 @@ export default function AnalyzerScreen() {
     null,
   );
   const [waitingForSession, setWaitingForSession] = useState(false);
+
+  // U-P2-24: pola "tidak ada audio session" disamakan dengan tab
+  // Visualizer — pesan yang sama + tombol retry yang benar-benar
+  // memulihkan sesi (hook yang sama). Sebelumnya Analyzer cuma
+  // menunggu tanpa tombol aksi.
+  const { isRetrying, retryAudioSession } = useAudioSessionRetry();
 
   // ─── Effects ──────────────────────────────────────────────────────────────
 
@@ -343,20 +350,42 @@ export default function AnalyzerScreen() {
             {isPlaying ? (
               <>
                 <ActivityIndicator color={colors.primary[500]} />
-                <Text style={{ color: colors.text.tertiary, marginTop: 12 }}>
-                  {waitingForSession
-                    ? "Menunggu audio session..."
-                    : "Mempersiapkan visualizer..."}
-                </Text>
-                <Text
-                  style={{
-                    color: colors.text.disabled,
-                    fontSize: 12,
-                    marginTop: 4,
-                  }}
-                >
-                  Session ID: {audioSessionId || "none"}
-                </Text>
+                {waitingForSession ? (
+                  <>
+                    <Text
+                      style={{ color: colors.text.tertiary, marginTop: 12 }}
+                    >
+                      Audio session tidak tersedia. Coba restart lagu.
+                    </Text>
+                    <TouchableOpacity
+                      onPress={retryAudioSession}
+                      disabled={isRetrying}
+                      style={[
+                        styles.retryBtn,
+                        {
+                          backgroundColor: colors.background.tertiary,
+                          opacity: isRetrying ? 0.4 : 1,
+                        },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Coba pulihkan audio session"
+                    >
+                      <RefreshCw size={16} color={colors.primary[500]} />
+                      <Text
+                        style={[
+                          styles.retryBtnText,
+                          { color: colors.primary[500] },
+                        ]}
+                      >
+                        Coba lagi
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <Text style={{ color: colors.text.tertiary, marginTop: 12 }}>
+                    Mempersiapkan visualizer...
+                  </Text>
+                )}
               </>
             ) : (
               <Text style={{ color: colors.text.disabled, fontSize: 13 }}>
@@ -740,6 +769,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  retryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginTop: 12,
+  },
+  retryBtnText: { fontSize: 14, fontWeight: "600" },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
