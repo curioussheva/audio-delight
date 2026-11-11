@@ -64,6 +64,12 @@ export default function AnalyzerScreen() {
   // Local state
   const [bitDepthAnalysis, setBitDepthAnalysis] =
     useState<BitDepthAnalysis | null>(null);
+  // Lagu yang dimiliki hasil analisis di atas — ditampilkan di kartu
+  // verdict supaya tidak tertukar dengan lagu yang sedang diputar.
+  const [analyzedSong, setAnalyzedSong] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [artistImageUrl, setArtistImageUrl] = useState<string | null>(null);
   const [artistBio, setArtistBio] = useState<string | null>(null);
@@ -125,22 +131,36 @@ export default function AnalyzerScreen() {
   useEffect(() => {
     if (!currentSong) {
       setBitDepthAnalysis(null);
+      setAnalyzedSong(null);
       return;
     }
 
+    // Hasil lama dibersihkan saat lagu berganti — sebelumnya verdict lagu
+    // lama tetap tampil sampai analisis baru selesai (atau selamanya kalau
+    // analisis baru gagal), tanpa label file yang dianalisis.
+    setBitDepthAnalysis(null);
+    setAnalyzedSong(null);
+
+    let cancelled = false;
+    const song = currentSong;
     const runAnalysis = async () => {
       setIsAnalyzing(true);
       try {
-        const result = await analyzeBitDepth(currentSong);
+        const result = await analyzeBitDepth(song);
+        if (cancelled) return;
         setBitDepthAnalysis(result);
+        setAnalyzedSong({ id: song.id, title: song.title });
       } catch (err) {
         console.warn("[Analyzer] Bit depth analysis failed:", err);
       } finally {
-        setIsAnalyzing(false);
+        if (!cancelled) setIsAnalyzing(false);
       }
     };
 
     runAnalysis();
+    return () => {
+      cancelled = true;
+    };
   }, [currentSong?.id]);
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
@@ -207,8 +227,18 @@ export default function AnalyzerScreen() {
   const getQualityStatus = () => {
     if (isAnalyzing)
       return { text: "ANALYZING...", color: colors.text.tertiary };
-    if (bitDepthAnalysis?.isFake)
-      return { text: "UPSCALE DETECTED ⚠️", color: colors.status.error };
+    if (bitDepthAnalysis?.isFake) {
+      // Label mengikuti JENIS temuan spektral — sebelumnya semua fake
+      // tampil "UPSCALE DETECTED", termasuk padding (file 05).
+      const v = bitDepthAnalysis.spectralVerdict;
+      if (v === "padding")
+        return { text: "PADDING DETECTED ⚠️", color: colors.status.error };
+      if (v === "lossy-source")
+        return { text: "LOSSY SOURCE ⚠️", color: colors.status.error };
+      if (v === "upsample")
+        return { text: "UPSCALE DETECTED ⚠️", color: colors.status.error };
+      return { text: "TIDAK AUTENTIK ⚠️", color: colors.status.error };
+    }
     if (!bitDepthAnalysis || bitDepthAnalysis.confidence === 0)
       return {
         text: "TIDAK DAPAT DIVERIFIKASI",
@@ -326,6 +356,11 @@ export default function AnalyzerScreen() {
         <Text style={[styles.statusValue, { color: status.color }]}>
           {status.text}
         </Text>
+        {bitDepthAnalysis && analyzedSong && (
+          <Text style={[styles.warningText, { color: colors.text.tertiary }]}>
+            Hasil untuk: {analyzedSong.title}
+          </Text>
+        )}
         {bitDepthAnalysis?.isFake && (
           <Text style={[styles.warningText, { color: colors.status.error }]}>
             File declares {bitDepthAnalysis.declaredDepth}-bit, but real data is{" "}
