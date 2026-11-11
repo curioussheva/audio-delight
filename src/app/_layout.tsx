@@ -9,6 +9,7 @@ import { Stack } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SplashScreen from "expo-splash-screen";
+import * as Linking from "expo-linking";
 import { Animated, StyleSheet, View, Text, TouchableOpacity } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -19,6 +20,12 @@ import { AudioPropertyToast } from "@/features/player/components/AudioPropertyTo
 
 import { audioEngine } from "@/features/player/api/engine";
 import { usePlayerStore } from "@/features/player/store/playerStore";
+import { useLibraryStore } from "@/features/library/store/libraryStore";
+import {
+  isExternalAudioUrl,
+  songFromExternalAudioUrl,
+} from "@/features/player/api/externalAudioUrl";
+import type { Song } from "@/shared/types/audio";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
 import { requestAudioPermissions } from "@/shared/utils/permissions";
 
@@ -140,6 +147,65 @@ export default function RootLayout() {
 
   const initStore = usePlayerStore((s) => s.initStore);
   const setAudioMode = usePlayerStore((s) => s.setAudioMode);
+
+  // U-P1-33: URL file audio eksternal terakhir yang ditangani + waktunya —
+  // cold start lewat intent bisa sampai lewat getInitialURL DAN listener
+  // 'url', jadi yang sama dalam 2 detik hanya ditangani sekali.
+  const lastExternalUrlRef = useRef({ url: "", ts: 0 });
+
+  // U-P1-33: rutekan file audio yang dibuka dari luar (Files / file
+  // manager) ke antrean/pemutaran lewat playSong. Bukan audio / tidak
+  // bisa di-resolve → abaikan diam-diam (log saja), jangan klaim sukses,
+  // jangan crash. Kegagalan native (content:// tak ter-resolve) dilaporkan
+  // playSong lewat return false — dicatat di log, UI tidak berbohong.
+  const handleExternalAudioUrl = useCallback(
+    (rawUrl: string | null | undefined) => {
+      if (!isExternalAudioUrl(rawUrl)) return;
+      const url = rawUrl as string;
+      const now = Date.now();
+      const last = lastExternalUrlRef.current;
+      if (last.url === url && now - last.ts < 2000) return;
+      lastExternalUrlRef.current = { url, ts: now };
+
+      // File yang sudah ada di library diputar sebagai track-nya (metadata
+      // lengkap); kalau belum discan, bangun Song minimal dari nama file.
+      const existing = useLibraryStore
+        .getState()
+        .tracks.find((t) => t.uri === url);
+      const song: Song = existing ?? songFromExternalAudioUrl(url);
+      void usePlayerStore
+        .getState()
+        .playSong(song, [song])
+        .then((ok) => {
+          if (ok) {
+            console.log(
+              `[ExternalAudio] Memutar file dari luar: ${song.title}`,
+            );
+          } else {
+            console.warn(`[ExternalAudio] playSong menolak file: ${url}`);
+          }
+        })
+        .catch((e) => {
+          console.warn("[ExternalAudio] playSong gagal:", e);
+        });
+    },
+    [],
+  );
+
+  // U-P1-33: handler intent audio — didaftarkan sekali saat app ready
+  // (playSong butuh engine/store yang sudah init). getInitialURL menangani
+  // cold start lewat intent, listener 'url' menangani intent saat app sudah
+  // jalan. Cleanup melepas listener saat unmount.
+  useEffect(() => {
+    if (appState !== "ready") return;
+    void Linking.getInitialURL()
+      .then(handleExternalAudioUrl)
+      .catch(() => {});
+    const sub = Linking.addEventListener("url", (event) => {
+      handleExternalAudioUrl(event.url);
+    });
+    return () => sub.remove();
+  }, [appState, handleExternalAudioUrl]);
 
   // DSP Guard
   useEffect(() => {
