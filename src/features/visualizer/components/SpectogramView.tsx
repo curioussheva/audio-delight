@@ -182,6 +182,15 @@ export const SpectogramView = React.memo(
       hasData: false,
     });
 
+    // U-P2-27: kegagalan polling FFT native (VisualizerService.setOnError)
+    // — placeholder menampilkan pesan gagal, bukan "Waiting…" selamanya.
+    // Di-reset tiap sesi baru dimulai.
+    const [fftError, setFftError] = useState(false);
+
+    useEffect(() => {
+      return visualizerService.setOnError(() => setFftError(true));
+    }, []);
+
     const palette = useMemo(
       () => generatePalette(colorScheme),
       [colorScheme],
@@ -290,6 +299,7 @@ export const SpectogramView = React.memo(
         prevRowRef.current = new Array(bins).fill(0);
         frameCountRef.current = 0;
         setDebug({ max: 0, samples: "", hasData: false });
+        setFftError(false);
         // MULTI-SUBSCRIBER (2026-11-10): lepas subscription sendiri saja —
         // jangan stop() service, itu kill-switch global yang mematikan
         // polling untuk tab Analyzer/Visualizer juga.
@@ -305,6 +315,7 @@ export const SpectogramView = React.memo(
 
       visualizerService.start(audioSessionId);
       isServiceStarted.current = true;
+      setFftError(false);
 
       return () => {
         unsubscribeRef.current?.();
@@ -351,7 +362,11 @@ export const SpectogramView = React.memo(
           {!debug.hasData && isPlaying && (
             <View style={styles.placeholder}>
               <ActivityIndicator size="small" color="#38BDF8" />
-              <Text style={styles.placeholderText}>Waiting for audio...</Text>
+              <Text style={styles.placeholderText}>
+                {fftError
+                  ? "Gagal membaca data audio."
+                  : "Waiting for audio..."}
+              </Text>
             </View>
           )}
         </View>

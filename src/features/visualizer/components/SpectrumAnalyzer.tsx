@@ -62,6 +62,15 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
   // U-P2-02: komponen tidak re-render saat SharedValue berubah).
   const [hasRealDataState, setHasRealDataState] = useState(false);
 
+  // U-P2-27: kegagalan polling FFT native (VisualizerService.setOnError)
+  // — ditampilkan sebagai pesan di overlay, bukan sunyi. Di-reset tiap
+  // sesi baru dimulai supaya kegagalan lama tidak menempel.
+  const [fftError, setFftError] = useState(false);
+
+  useEffect(() => {
+    return visualizerService.setOnError(() => setFftError(true));
+  }, []);
+
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const isStarted = useRef(false);
   const lastSessionId = useRef<number | null>(null);
@@ -137,6 +146,7 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
           hasRealData.value = false;
         })();
         setHasRealDataState(false);
+        setFftError(false);
       }
     } else {
       if (isStarted.current) {
@@ -256,7 +266,9 @@ export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
       {isPlaying && !hasRealDataState && (
         <View style={styles.waitingOverlay} pointerEvents="none">
           <Text style={[styles.waitingText, { color }]}>
-            Menunggu data audio…
+            {fftError
+              ? "Gagal membaca data visualizer — coba restart lagu."
+              : "Menunggu data audio…"}
           </Text>
         </View>
       )}

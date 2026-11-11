@@ -152,4 +152,39 @@ describe("VisualizerService (multi-subscriber)", () => {
     expect(sv.value).toHaveLength(128);
     expect(visualizerService.getStatus().subscriberCount).toBe(1);
   });
+
+  // U-P2-27: kanal error — dulu private onError tanpa setter, tidak ada
+  // yang pernah membaca kegagalan polling. Sekarang setOnError aditif.
+  test("setOnError: kegagalan polling pertama dilaporkan sekali saja", async () => {
+    mockGetFFTData.mockImplementation(async () => {
+      throw new Error("native gagal");
+    });
+    const errors: unknown[] = [];
+    const errors2: unknown[] = [];
+    visualizerService.setOnError((e) => errors.push(e));
+    visualizerService.setOnError((e) => errors2.push(e));
+    visualizerService.setDataCallback(() => {}, { pollingIntervalMs: 10 });
+
+    await visualizerService.start(123);
+    await frames(100); // ~10 kegagalan berturut-turut
+
+    expect(errors).toHaveLength(1);
+    expect(errors2).toHaveLength(1);
+    expect(errors[0]).toBeInstanceOf(Error);
+  });
+
+  test("setOnError: unsubscribe menghentikan pemberitahuan", async () => {
+    mockGetFFTData.mockImplementation(async () => {
+      throw new Error("native gagal");
+    });
+    const errors: unknown[] = [];
+    const unsub = visualizerService.setOnError((e) => errors.push(e));
+    unsub();
+    visualizerService.setDataCallback(() => {}, { pollingIntervalMs: 10 });
+
+    await visualizerService.start(123);
+    await frames(100);
+
+    expect(errors).toHaveLength(0);
+  });
 });

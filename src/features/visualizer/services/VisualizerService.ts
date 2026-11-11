@@ -78,8 +78,31 @@ class VisualizerService {
    */
   private consecutiveFailures: number = 0;
 
-  /** Dipanggil sekali saat kegagalan pertama terjadi. Dilihat layar analyzer. */
-  private onError: ((error: unknown) => void) | null = null;
+  /**
+   * Handler kegagalan polling FFT native — ADITIF (Set), sama seperti
+   * data callback multi-subscriber.
+   *
+   * U-P2-27: kanal ini dulu SATU slot `private onError` tanpa setter
+   * dan tanpa satu pun penugasan di seluruh `src` — komentarnya
+   * mengklaim "Dilihat layar analyzer" padahal tidak ada layar yang
+   * melihatnya, jadi kegagalan polling FFT native sunyi total di UI.
+   * Sekarang ada setter publik dan dua konsumen: SpectrumAnalyzer
+   * (tab Analyzer + Visualizer) dan SpectogramView (player).
+   * Dipanggil sekali saat kegagalan pertama dalam satu rentetan
+   * (consecutiveFailures === 1), bukan tiap frame polling.
+   */
+  private errorHandlers = new Set<(error: unknown) => void>();
+
+  /**
+   * Daftarkan handler kegagalan polling. Mengembalikan unsubscribe;
+   * panggil saat komponen tidak butuh lagi (unmount).
+   */
+  setOnError(handler: (error: unknown) => void): () => void {
+    this.errorHandlers.add(handler);
+    return () => {
+      this.errorHandlers.delete(handler);
+    };
+  }
 
   // Config
   private config: VisualizerConfig = {
@@ -379,6 +402,7 @@ class VisualizerService {
     this.cleanupAppStateListener();
     this.dataCallbacks.clear();
     this.sharedValues.clear();
+    this.errorHandlers.clear();
   }
 
   // ============================================================================
@@ -409,7 +433,11 @@ class VisualizerService {
             "[VisualizerService] Gagal membaca data visualizer:",
             error,
           );
-          this.onError?.(error);
+          for (const handler of this.errorHandlers) {
+            try {
+              handler(error);
+            } catch (_) {}
+          }
         }
       }
     }, intervalMs);
