@@ -6,6 +6,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ScanStoreState, ScanStoreActions, LibraryTab } from "../types/scan";
+import { LibraryScanner } from "../api/scanner";
 
 // Definisi MediaTrack tetap sama seperti kode Anda...
 export interface MediaTrack {
@@ -140,12 +141,23 @@ export const useLibraryStore = create<LibraryState>()(
           };
         }),
 
-      toggleFavorite: (trackId) =>
+      // U-P1-17: SATU-SATUNYA jalur toggle favorit di UI. Dulu hanya flip
+      // flag di memori (tanpa tulis DB — hilang saat restart), sementara
+      // hati tab Songs menulis tabel `favorites` terpisah. Sekarang tulis
+      // ke kolom songs.isFavorite lewat LibraryScanner.toggleFavorite
+      // (penulis tunggal) lalu cerminkan status barunya ke tracks, supaya
+      // Song Detail, tab Songs, detail view, dan player membaca nilai yang
+      // sama. Gagal tulis = tracks tidak berubah.
+      toggleFavorite: (trackId) => {
+        const next = LibraryScanner.toggleFavorite(trackId);
+        const track = get().tracks.find((t) => t.id === trackId);
+        if (!track || track.isFavorite === next) return;
         set((state) => ({
           tracks: state.tracks.map((t) =>
-            t.id === trackId ? { ...t, isFavorite: !t.isFavorite } : t,
+            t.id === trackId ? { ...t, isFavorite: next } : t,
           ),
-        })),
+        }));
+      },
 
       startAutoScan: () =>
         set({

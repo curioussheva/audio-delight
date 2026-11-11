@@ -1,60 +1,47 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import FavoritesService from "@/features/favorites/api/service";
+import { useCallback, useMemo } from "react";
+import { useLibraryStore } from "@/features/library/store/libraryStore";
+import { selectFavorites } from "@/features/library/store/selectors";
 import { Song } from "@/shared/types/audio";
 
-export const useFavorites = (allSongs: Song[] = []) => {
-  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
-  const [favoriteSongs, setFavoriteSongs] = useState<Song[]>([]);
-  const [loading, setLoading] = useState(false);
-  const allSongsRef = useRef(allSongs);
+/**
+ * useFavorites — binding React untuk favorit.
+ *
+ * U-P1-17: dulu hook ini memelihara state lokal `favoriteIds` dari tabel
+ * `favorites` terpisah (via FavoritesService), sementara Song Detail
+ * menulis flag memori `libraryStore.toggleFavorite` — dua sumber
+ * kebenaran yang tidak pernah sinkron. Sekarang hook ini TIDAK punya
+ * state favorit sendiri: ia membaca cermin store (`libraryStore.tracks`,
+ * yang dimuat dari kolom songs.isFavorite di DB) dan toggle-nya
+ * mendelegasikan ke `libraryStore.toggleFavorite` (yang menulis DB lewat
+ * LibraryScanner.toggleFavorite, penulis tunggal). Semua pembaca —
+ * tab Songs, Song Detail, detail view, player — melihat nilai yang sama.
+ */
+export const useFavorites = () => {
+  const tracks = useLibraryStore((state) => state.tracks);
+  const toggleFavoriteStore = useLibraryStore(
+    (state) => state.toggleFavorite,
+  );
 
-  // Update ref tanpa trigger re-render
-  useEffect(() => {
-    allSongsRef.current = allSongs;
-  }, [allSongs]);
+  // Daftar ID favorit — identitas stabil selama tracks tidak berubah.
+  const favoriteIds = useMemo(
+    () => tracks.filter((t) => t.isFavorite).map((t) => t.id),
+    [tracks],
+  );
 
-  // Load IDs sekali saja — tidak depend on allSongs
-  const loadFavorites = useCallback(async () => {
-    setLoading(true);
-    try {
-      await FavoritesService.initialize();
-      const ids = await FavoritesService.getAllFavorites();
-      setFavoriteIds(ids);
-
-      const songs = allSongsRef.current.filter((song) => ids.includes(song.id));
-      setFavoriteSongs(songs);
-    } catch (error) {
-      console.error("Failed to load favorites:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, []); // ← kosong, tidak recreate setiap render
-
-  // Sync favoriteSongs jika allSongs berubah (lagu baru di-scan)
-  useEffect(() => {
-    if (favoriteIds.length > 0 && allSongs.length > 0) {
-      setFavoriteSongs(
-        allSongs.filter((song) => favoriteIds.includes(song.id)),
-      );
-    }
-  }, [allSongs, favoriteIds]);
+  const favoriteSongs: Song[] = useMemo(
+    () => selectFavorites(tracks) as Song[],
+    [tracks],
+  );
 
   const toggleFavorite = useCallback(
-    async (songId: string) => {
-      const isFav = favoriteIds.includes(songId);
-      if (isFav) {
-        await FavoritesService.removeFavorite(songId);
-        setFavoriteIds((prev) => prev.filter((id) => id !== songId));
-        setFavoriteSongs((prev) => prev.filter((s) => s.id !== songId));
-      } else {
-        await FavoritesService.addFavorite(songId);
-        setFavoriteIds((prev) => [...prev, songId]);
-        const song = allSongsRef.current.find((s) => s.id === songId);
-        if (song) setFavoriteSongs((prev) => [...prev, song]);
-      }
-      return !isFav;
+    async (songId: string): Promise<boolean> => {
+      toggleFavoriteStore(songId);
+      return (
+        useLibraryStore.getState().tracks.find((t) => t.id === songId)
+          ?.isFavorite ?? false
+      );
     },
-    [favoriteIds],
+    [toggleFavoriteStore],
   );
 
   const isFavorite = useCallback(
@@ -62,16 +49,15 @@ export const useFavorites = (allSongs: Song[] = []) => {
     [favoriteIds],
   );
 
-  useEffect(() => {
-    loadFavorites();
-  }, [loadFavorites]);
-
   return {
     favoriteIds,
     favoriteSongs,
-    loading,
+    loading: false,
     toggleFavorite,
     isFavorite,
-    refresh: loadFavorites,
+    // Tidak ada lagi yang perlu di-refresh: store adalah cermin DB dan
+    // setiap toggle menulis DB + store sekaligus. Disediakan supaya
+    // pemanggil lama (refresh setelah scan) tidak pecah.
+    refresh: async () => {},
   };
 };

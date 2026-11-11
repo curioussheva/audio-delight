@@ -16,7 +16,8 @@ export const useOptimizedLibrary = ({
   sortBy = "title-asc",
 }: UseOptimizedLibraryOptions) => {
   const { songs, loading, reload } = useLibrary();
-  const { isFavorite, toggleFavorite, favoriteSongs } = useFavorites();
+  const { isFavorite, toggleFavorite, favoriteIds, favoriteSongs } =
+    useFavorites();
 
   const processedSongs = useMemo(() => {
     // 1. Inisialisasi dengan menyalin array
@@ -86,5 +87,6 @@ export const useOptimizedLibrary = ({
     reload,
     isFavorite,
     toggleFavorite,
+    favoriteIds,
   };
 };

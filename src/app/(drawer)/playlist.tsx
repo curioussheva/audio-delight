@@ -27,7 +27,6 @@ export default function PlaylistsScreen() {
 
   const { playlists, createPlaylist, deletePlaylist, importM3UPaths } =
     usePlaylists();
-  const favoriteCount = 0;  // 🔥 placeholder
   const [selectedPlaylist, setSelectedPlaylist] = useState<PlaylistItem | null>(null);
 
   const { playSong, currentSong } = usePlayerStore();
@@ -42,7 +41,10 @@ export default function PlaylistsScreen() {
     [playlists, selectedPlaylist],
   );
   const selectedSongs: Song[] = selectedFull?.songs ?? [];
-  const { isFavorite, toggleFavorite } = useFavorites(selectedSongs);
+  // U-P1-17: favorit dibaca dari sumber kebenaran tunggal (kolom
+  // songs.isFavorite via libraryStore). favoriteCount dulu placeholder 0.
+  const { isFavorite, toggleFavorite, favoriteSongs } = useFavorites();
+  const favoriteCount = favoriteSongs.length;
 
   const handleSongPress = useCallback(
     (song: Song) => {

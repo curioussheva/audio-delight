@@ -647,24 +647,44 @@ export class LibraryScanner {
   }
 
   /**
-   * Toggle favorite status
+   * SATU-SATUNYA penulis kolom songs.isFavorite — semua jalur favorit
+   * (libraryStore, FavoritesService) harus lewat setFavorite /
+   * toggleFavorite di bawah, yang keduanya memanggil ini. Satu executor
+   * UPDATE supaya tidak ada lagi dua sumber kebenaran (U-P1-17).
+   * Mengembalikan true bila tulis berhasil. Re-scan TIDAK menimpa kolom
+   * ini (updateExistingSong sengaja tidak menyentuh isFavorite), jadi
+   * favorit persist.
    */
-  static toggleFavorite(songId: string): boolean {
+  private static writeFavorite(songId: string, favorite: boolean): boolean {
     try {
-      const song = this.getSongById(songId);
-      if (!song) return false;
-
-      const newStatus = !song.isFavorite;
       db.execute("UPDATE songs SET isFavorite = ? WHERE id = ?", [
-        newStatus ? 1 : 0,
+        favorite ? 1 : 0,
         songId,
       ]);
-
-      return newStatus;
+      return true;
     } catch (error) {
-      console.error("[LibraryScanner] Toggle favorite failed:", error);
+      console.error("[LibraryScanner] Set favorite failed:", error);
       return false;
     }
+  }
+
+  /** Set status favorit. False bila lagu tidak ditemukan / tulis gagal. */
+  static setFavorite(songId: string, favorite: boolean): boolean {
+    if (!this.getSongById(songId)) return false;
+    return this.writeFavorite(songId, favorite);
+  }
+
+  /**
+   * Toggle favorite status — membalik lewat writeFavorite (penulis tunggal).
+   * Mengembalikan status BARU bila tulis berhasil, status lama bila gagal
+   * (supaya cermin di store tidak membalik saat DB gagal ditulis).
+   */
+  static toggleFavorite(songId: string): boolean {
+    const song = this.getSongById(songId);
+    if (!song) return false;
+
+    const next = !song.isFavorite;
+    return this.writeFavorite(songId, next) ? next : song.isFavorite;
   }
 
   /**
