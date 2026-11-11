@@ -96,12 +96,22 @@ export const FullLyricsView = () => {
       <FlatList
         ref={flatListRef}
         data={lyrics}
-        keyExtractor={(item) => item.time.toString()}
+        // U-P2-18: dulu key = time saja — duplikat bila dua baris berbagi
+        // timestamp. Index ditambahkan supaya key selalu unik.
+        keyExtractor={(item, index) => `${item.time}-${index}`}
         renderItem={renderItem}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        // Mencegah error jika scroll cepat
-        onScrollToIndexFailed={() => {}}
+        // U-P2-18: dulu kegagalan scroll dibungkam (() => {}) — lirik
+        // aktif bisa tidak pernah digulir ke tengah. Fallback ke
+        // scrollToOffset memakai rata-rata tinggi item yang dilaporkan
+        // FlatList, pola standar React Native.
+        onScrollToIndexFailed={(info) => {
+          flatListRef.current?.scrollToOffset({
+            offset: info.averageItemLength * info.index,
+            animated: true,
+          });
+        }}
       />
     </View>
   );
