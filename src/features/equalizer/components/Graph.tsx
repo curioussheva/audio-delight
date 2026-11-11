@@ -127,8 +127,10 @@ export const FrequencyGraph: React.FC<Props> = ({
       </Canvas>
 
       <View style={styles.debugInfo}>
-        <Text style={styles.debugText}>+12dB</Text>
-        <Text style={styles.debugText}>-12dB</Text>
+        {/* U-P2-30: dulu label debug "#888" hardcoded — 2,96:1 di
+            Porcelain (gagal 4,5). Pakai token text.tertiary. */}
+        <Text style={[styles.debugText, { color: theme.colors.text.tertiary }]}>+12dB</Text>
+        <Text style={[styles.debugText, { color: theme.colors.text.tertiary }]}>-12dB</Text>
       </View>
     </View>
   );
@@ -159,7 +161,6 @@ const styles = StyleSheet.create({
   },
   debugText: {
     fontSize: 9,
-    color: "#888",
     fontFamily: "monospace",
   },
 });
