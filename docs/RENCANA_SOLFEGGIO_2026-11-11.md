@@ -1,12 +1,34 @@
-# Rencana Mode Immersive — 2026-11-11
+# Rencana Mode Solfeggio — 2026-11-11
 
 **Status: RENCANA — belum dieksekusi.** Dokumen ini rencana, bukan laporan hasil.
 Sumber: `docs/AUDIT_NATIVE_CPP_DSP_2026-11-11.md` (DSP-M4, DSP-M5, DSP-M6, DSP-M15),
 ronde perbaikan dsp 2026-11-11 (DSP-M3 selesai, commit `1fd288b2`).
 
+## Keputusan 2026-11-11 (diputuskan csheva)
+
+- **Nama UI: Solfeggio.** Label tampil diganti di 4 file TS (`equalizer.tsx`,
+  `settings.tsx`, `onboarding.tsx`, `player/index.tsx`), commit `25462f88`,
+  tsc 0 error, JS-only (tidak butuh rebuild — sync Termux + Metro).
+  Nama INTERNAL tetap `immersive` (`ProcessingMode::Immersive = 2`, JNI
+  `setNativeImmersiveEnabled`, spec `setImmersiveEnabled`, string mode
+  `"immersive"`) — jangan di-refactor. Di dokumen ini, "Solfeggio" = nama
+  produk/UI, "Immersive" yang tersisa = identifier kode.
+- **DSP nanti: pastikan HRTF vs stereo widener.** Catatan untuk kerja DSP
+  berikutnya (bukan sekarang): StereoWidener (DSPChain) dan SpatialFieldProcessor
+  adalah pelebar mid/side — jalan di speaker + headphone, mono-compatible bila
+  width ≤ 1, BUKAN HRTF. HRTF adalah filter per-telinga (ITD/ILD + pinna),
+  headphone-only, butuh input mono atau proses per-kanal. Jangan sebut widener
+  sebagai "HRTF"/"binaural" di UI, doc, atau komentar. HRTF butuh keputusan
+  arsitektur dulu (mono dari mana?) sebelum implementasi — lihat Fase 3.
+- **432 Hz: OPEN.** Dua arti, belum diputuskan: (a) preset frekuensi resonator
+  432 Hz (tinggal tambah ke daftar preset — gampang); (b) retune lagu ke A=432
+  (pitch shift seluruh lagu — fitur lain, rantai sekarang tidak punya pitch
+  shifter). Jangan bangun preset 432 sebelum arti ini diputuskan.
+- **Checklist strategi:** `docs/SOLFEGGIO_CHECKLIST.md` (dibuat 2026-11-11).
+
 ## 1. Keadaan sekarang (grounded di kode)
 
-Rantai mode Immersive (`core/ImmersiveStage.cpp`, `process()`):
+Rantai mode Solfeggio (`core/ImmersiveStage.cpp`, `process()`):
 `Solfeggio → Harmonic → Spatial → Brainwave`. `BinauralRenderer` TIDAK aktif
 (member + `reset()` saja, `ImmersiveStage.h`). Mode ini hari ini adalah **preset beku**:
 user hanya bisa memilih modenya, tidak bisa mengubah apa pun di dalamnya.
@@ -21,7 +43,7 @@ user hanya bisa memilih modenya, tidak bisa mengubah apa pun di dalamnya.
 | FFTResonanceAnalyzer | MATI total | — | `getDominantFrequency()` selalu 0,0; 0 referensi (DSP-M15) |
 
 **Sisi TS/UI:** UI hanya memilih mode (`settings.tsx`, `equalizer.tsx`, `onboarding.tsx`).
-Layar Equalizer secara eksplisit bilang kontrolnya tidak berlaku di Immersive
+Layar Equalizer secara eksplisit bilang kontrolnya tidak berlaku di Solfeggio
 (`equalizer.tsx:186-191, 493-494`). Spec TS mendeklarasikan `setSolfeggioFreq` /
 `setBrainwaveFreq` / `setResonanceIntensity` (`src/specs/NativeDSPModule.ts:57-59`)
 dan wrapper Kotlin-nya ada (`NativeDSPModule.kt:351-361`) — **0 pemanggil TS**
@@ -52,7 +74,7 @@ mengubahnya.
 ## 3. Fase-fase
 
 ### Fase 1 — Buka parameter yang sudah ada (DSP-M4, DSP-M5 + guard DSP-M6)
-Tujuan: mode Immersive berhenti jadi preset beku. Semua yang dikerjakan di sini
+Tujuan: mode Solfeggio berhenti jadi preset beku. Semua yang dikerjakan di sini
 sudah ada kodenya — yang hilang hanya wiring + UI + satu guard.
 
 - **Guard dulu (DSP-M6):** clamp frekuensi solfeggio ke `min(freq, 0,45 × sampleRate)`
@@ -63,8 +85,8 @@ sudah ada kodenya — yang hilang hanya wiring + UI + satu guard.
   `setBrainwaveFreq`, `setResonanceIntensity`. Untuk width: tambah deklarasi
   `setStereoWidth` di spec TS + periksa wrapper Kotlin (`NativeDSPModule.kt:133-166`
   membagi 1000 sebelum `setNativeStereoWide` — samakan skalanya dulu).
-- **UI:** panel Immersive di layar Equalizer, di bawah switcher mode, hanya tampil
-  saat mode Immersive aktif: Solfeggio (preset 396/417/528/639/741/852 Hz + slider
+- **UI:** panel Solfeggio di layar Equalizer, di bawah switcher mode, hanya tampil
+  saat mode Solfeggio aktif: Solfeggio (preset 396/417/528/639/741/852 Hz + slider
   20–2000 Hz), Intensitas 0–1, Brainwave (mati / Delta 2 / Theta 6 / Alpha 10 /
   Beta 20 / Gamma 40 Hz), Width 0–2.
 - **Persist:** kunci AsyncStorage baru mengikuti pola `audio_mode_preference`;
@@ -120,7 +142,7 @@ Tujuan: reverb ruang ala IRS-nya ViPER.
 ### Fase 5 — Polish & bersih-bersih
 - Hapus `FFTResonanceAnalyzer` (mati total, DSP-M15) dan `BinauralRenderer` lama
   bila diganti Fase 3.
-- Limiter jalur Immersive: sudah 1× via callback (fix DSP-M2, `412b0968`) —
+- Limiter jalur Solfeggio: sudah 1× via callback (fix DSP-M2, `412b0968`) —
   tidak ada kerjaan, dicatat saja. Exciter bisa mendorong output > 0 dBFS
   (dsp-m18, maxabs 1,0497) — limiter callback menangkapnya.
 - DC: selesai (DSP-M3). Tidak ada kerjaan.
