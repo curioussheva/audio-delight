@@ -41,7 +41,7 @@ sekali**, jadi error sintaks di dalamnya akan lolos CI diam-diam.
   `scripts/test_*.cpp` menyentuh utils. Fix: putuskan per file —
   hapus, atau hidupkan dengan pemakai + test. DIKERJAKAN 2026-11-11
   untuk yang sudah jelas digantikan (`DenormalFix.h`, `AlignedBuffer.h`,
-  `ScopedTrace.h` — commit `TBD`). DITAMPUNG: keputusan
+  `ScopedTrace.h` — commit `ddf49d25`). DITAMPUNG: keputusan
   hapus-vs-hidupkan untuk `Logger.h`/`SIMD.h`/`AudioMath.h` butuh
   pilihan csheva.
 - **U-M2 — `Logger.h` mati, 6 file menduplikasi makro LOG* lokal
@@ -86,7 +86,7 @@ sekali**, jadi error sintaks di dalamnya akan lolos CI diam-diam.
   `log_calls = 2` di build release — terbukti tak ada gate. Dua
   `__android_log_print` di real-time audio callback = risiko
   blokir/xrun. Fix: hapus file ini (0 caller) — DIKERJAKAN
-  2026-11-11 (commit `TBD`, gabung U-M1).
+  2026-11-11 (commit `ddf49d25`, gabung U-M1).
 - **U-M5 — `AlignedBuffer.h` melanggar prakondisi
   `std::aligned_alloc` + overflow ukuran tak dicek (laten).**
   `AlignedBuffer.h:8-9`: `std::aligned_alloc(alignment, size *
@@ -102,7 +102,7 @@ sekali**, jadi error sintaks di dalamnya akan lolos CI diam-diam.
   `size` besar → alokasi mengecil → heap overflow saat dipakai; tak
   ada `size()`/pelacakan ukuran; `operator->` (`:11`) kembalikan
   `T*` — semantik aneh untuk kelas buffer. Fix: hapus file ini
-  (0 caller) — DIKERJAKAN 2026-11-11 (commit `TBD`, gabung U-M1).
+  (0 caller) — DIKERJAKAN 2026-11-11 (commit `ddf49d25`, gabung U-M1).
 - **U-M6 — `DenormalFix.h:7` threshold `1e-15f` salah dan
   bertentangan dengan keputusan codebase sendiri.**
   `return std::fabs(x) < 1e-15f ? 0.0f : x;`. Harness:
@@ -119,7 +119,7 @@ sekali**, jadi error sintaks di dalamnya akan lolos CI diam-diam.
   tak ada dampak runtime hari ini, tapi siapa pun yang "menghidupkan
   kembali" util ini akan mengembalikan bug tail-hilang yang sudah
   diperbaiki 2026-10-10. Fix: hapus file — DIKERJAKAN 2026-11-11
-  (commit `TBD`, gabung U-M1).
+  (commit `ddf49d25`, gabung U-M1).
 
 ## Minor (U-m1…U-m9)
 
@@ -227,13 +227,13 @@ sekali**, jadi error sintaks di dalamnya akan lolos CI diam-diam.
 
 ### DIKERJAKAN 2026-11-11 (yang mudah; build menyusul)
 
-- **U-M1/U-M4/U-M5/U-M6** — commit `TBD`: hapus `DenormalFix.h` +
+- **U-M1/U-M4/U-M5/U-M6** — commit `ddf49d25`: hapus `DenormalFix.h` +
   `AlignedBuffer.h` + `ScopedTrace.h` (0 caller; DenormalFix
   threshold-nya salah).
-- **U-m2** — commit `TBD`: tambah trailing newline di `Logger.h`.
-- **U-m4** — commit `TBD`: bound loop SIMD jadi `i + 4 <= count`
+- **U-m2** — commit `ccec8d39`: tambah trailing newline di `Logger.h`.
+- **U-m4** — commit `ccec8d39`: bound loop SIMD jadi `i + 4 <= count`
   (2 tempat).
-- **U-m6** — commit `TBD`: dokumentasikan `LOGF` tidak abort
+- **U-m6** — commit `ccec8d39`: dokumentasikan `LOGF` tidak abort
   (atau ganti `__android_log_assert` — dipilih dokumentasi,
   perilaku dipertahankan).
 

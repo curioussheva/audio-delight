@@ -205,27 +205,27 @@ Fix (MUDAH): guard null + `ExceptionClear` di 3 situs di atas dulu.
 
 ### DIKERJAKAN 2026-11-11 (yang mudah; build menyusul)
 
-- **J-M1** — commit `TBD`: betulkan peta TS (`engine.ts`,
+- **J-M1** — commit `c0a5f823`: betulkan peta TS (`engine.ts`,
   `playerStore.ts`: `all:2, track:1`) + `when` Kotlin
   (1→ONE, 2→ALL) + guard range di JNI `nativeSetRepeatMode`.
   Tes ulang device: EOF Repeat One = ulang lagu sama, Repeat All =
   maju/wrap.
-- **J-M3** — commit `TBD`: hapus `jni/NativeAudioFeed.cpp` +
+- **J-M3** — commit `bbd0724b`: hapus `jni/NativeAudioFeed.cpp` +
   baris CMake.
-- **J-M4** — commit `TBD`: hapus `jni/NativePristineAudio.h` +
+- **J-M4** — commit `69e755be`: hapus `jni/NativePristineAudio.h` +
   `.cpp` + baris CMake. (Kotlin module + registrasi DITAMPUNG.)
-- **J-M5** — commit `TBD`: guard null/exception di `nativeGetQueue`,
+- **J-M5** — commit `c549a06f`: guard null/exception di `nativeGetQueue`,
   `nativeGetDevices`, `nativeSetQueue` (+ J-m9, J-m10, J-m11 —
   satu tema: hygiene null/exception di getter JNI).
-- **J-m1** — commit `TBD`: `nativeOnDeviceAdded` return dini bila
+- **J-m1** — commit `c0b04567`: `nativeOnDeviceAdded` return dini bila
   id tak ditemukan.
-- **J-m2** — commit `TBD`: `getController()` pakai
+- **J-m2** — commit `c0b04567`: `getController()` pakai
   `std::once_flag`/`call_once`.
-- **J-m5** — commit `TBD`: `nativeSetActiveDevice` kembalikan
+- **J-m5** — commit `c9c3d2a5`: `nativeSetActiveDevice` kembalikan
   `ok && applied`.
-- **J-m7** — commit `TBD`: betulkan 3 komentar basi (OnLoad,
+- **J-m7** — commit `ccec8d39`: betulkan 3 komentar basi (OnLoad,
   NativePlaybackModule.h, NativeEventEmitter.h).
-- **J-m12** — commit `TBD`: hapus `JSIInstaller.h/.cpp` +
+- **J-m12** — commit `ada9fdf5`: hapus `JSIInstaller.h/.cpp` +
   `initPlaybackModule` (decl + def) + baris CMake.
 
 ### DITAMPUNG buat sesi berikut

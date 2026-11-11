@@ -136,7 +136,7 @@ audio" — menyesatkan.
 
 ### DIKERJAKAN 2026-11-11 (yang mudah; build menyusul)
 
-- **RT-M1/RT-M5** — commit `TBD`: hapus `RealtimeThread.h` +
+- **RT-M1/RT-M5** — commit `a74410f6`: hapus `RealtimeThread.h` +
   `ThreadPriority.h` + glob `realtime/*.cpp` + include dir
   `realtime` di CMakeLists + koreksi peta §11. (Minor RT-m1…RT-m6
   ikut hilang bersama file-nya.)

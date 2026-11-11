@@ -163,13 +163,13 @@ return;` + clamp `read(size)`.
 
 ### DIKERJAKAN 2026-11-11 (yang mudah; build menyusul)
 
-- **V-M1** — commit `TBD`: sanitasi di `VisualizerBuffer::write()`
+- **V-M1** — commit `f9e42a27` (tes ikut disesuaikan + ditambah [5]/[6], commit `0c0a93bf`, 9/9 PASS): sanitasi di `VisualizerBuffer::write()`
   (NaN/Inf/`|x|>2` → `0.0f`).
-- **V-M2** — commit `TBD`: `if (frames <= 0 || !left || !right)
+- **V-M2** — commit `79e15e35`: `if (frames <= 0 || !left || !right)
   return;` di awal `write()` + clamp `read(size)` ke `kSize`.
-- **V-m4** — commit `TBD`: hapus `mBufferB` + `mWriteBuffer`
+- **V-m4** — commit `c4c7ac99`: hapus `mBufferB` + `mWriteBuffer`
   (header + ctor + kedua `load()`), `mBufferA` satu-satunya buffer.
-- **V-m3** — commit `TBD`: `static_assert(kVisualizerSize ==
+- **V-m3** — commit `bb2c1e12`: `static_assert(kVisualizerSize ==
   VisualizerBuffer::kSize)` di JNI + beri nama konstanta mixdown
   `0.5f`.
 

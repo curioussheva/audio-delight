@@ -60,26 +60,55 @@ jalur ini sudah diverifikasi tersambung dan jujur (Track 2).
 Singleton yang memegang semuanya; `start()` memegang `mMutex`
 sepanjang start.
 
-### 9. jni — 12 file
+### 9. jni — 12 file (9 sesudah bersih-bersih 2026-11-11)
 `OnLoad.cpp`, `NativePlaybackModule.cpp`, `NativeDSPModule.cpp`,
-`NativeDeviceModule.cpp`, `NativeVisualizerModule.cpp`,
-`NativePristineAudio.cpp`, `NativeAudioFeed.cpp`, `JSIInstaller.cpp`.
-Relevan dengan DT_NEEDED: `OnLoad.cpp` memanggil 4 fungsi
-(`setAudioDeviceManagerVm`, `setDeviceRateDetectorVm`,
-`ContentUriResolver::init`, `initJavaVm`) yang membuat
-`libappmodules.so` menarik `libpristine-audio.so` di startup —
-penyebab lazy load gagal (logcat 2026-11-10 17:43).
+`NativeDeviceModule.cpp`, `NativeVisualizerModule.cpp`.
+DIHAPUS 2026-11-11: `NativePristineAudio.{h,cpp}` (kelas TurboModule
+C++ mati, J-M4), `NativeAudioFeed.cpp` (global-buffer-overflow, 0
+caller, J-M3), `JSIInstaller.{h,cpp}` (body kosong, J-m12).
+Audit 2026-11-11 (docs/AUDIT_NATIVE_CPP_JNI_2026-11-11.md): 0
+BLOCKER + 5 MAJOR — J-M1 repeat All↔One tertukar di boundary JNI
+(HIDUP; peta TS terbalik, C++ Off 0/One 1/All 2 benar), J-M2
+lazy-load dikalahkan DT_NEEDED (mekanisme cold-start TERJAWAB),
+J-M3 (lihat hapus), J-M4 (lihat hapus), J-M5 0 cek exception JNI.
+KOREKSI mekanisme DT_NEEDED: berasal dari direktif link eksplisit
+`target_link_libraries(appmodules ... pristine-audio)`, BUKAN dari
+4 call init di `OnLoad.cpp` (4 call itu hanya simpan pointer
+JavaVM). J-M2 ditampung: JNI_OnLoad sendiri di libpristine-audio +
+lepas link appmodules.
 
 ### 10. visualizer — 2 file
-`VisualizerBuffer.{h,cpp}`. Sudah diperbaiki (B3) + dites 6/6 +
-terbukti hidup di device. Paling kecil; audit di sini hanya
-verifikasi ulang.
+`VisualizerBuffer.{h,cpp}`. Sudah diperbaiki (B3) + terbukti hidup
+di device. Audit 2026-11-11
+(docs/AUDIT_NATIVE_CPP_VISUALIZER_2026-11-11.md): 0 BLOCKER + 2
+MAJOR laten — V-M1 visualizer terima data pra-sanitasi (NaN/Inf
+lolos ke FFT/JS), V-M2 write(frames<0) mundurkan mWritePos; + 4
+minor (tearing lap-around terbukti 0,004% tapi minor; 2048 di 3
+tempat tanpa static_assert; mBufferB/mWriteBuffer mati). Yang mudah
+diperbaiki 2026-11-11 (V-M1 f9e42a27, V-M2 79e15e35, V-m4 c4c7ac99,
+V-m3 bb2c1e12); tes repo jadi 9/9 PASS (0c0a93bf).
 
-### 11. realtime — 2 file
-`RealtimeThread.h`, `ThreadPriority.h`. Prioritas thread audio.
+### 11. realtime — 0 file (DIHAPUS 2026-11-11)
+`RealtimeThread.h`, `ThreadPriority.h` DIHAPUS — section 100% kode
+mati (docs/AUDIT_NATIVE_CPP_REALTIME_2026-11-11.md): 0 pemakai, 0
+#include; `RealtimeThread.cpp` tidak pernah ada di git (deklarasi
+tanpa definisi sejak commit awal); SCHED_FIFO 90 butuh CAP_SYS_NICE
+dan gagal diam-diam. Prioritas yang hidup: setpriority -16 di
+DecoderWorker + Oboe. KOREKSI klaim lama "Prioritas thread audio"
+di peta ini.
 
-### 12. utils — 6 file
-Utilitas umum (dienumerasi saat audit section ini).
+### 12. utils — 3 file (6 → 3, 2026-11-11)
+`AudioMath.h`, `Logger.h`, `SIMD.h`. DIHAPUS 2026-11-11:
+`DenormalFix.h` (threshold 1e-15f salah — live code pakai 1e-30f),
+`AlignedBuffer.h` (langgar prakondisi aligned_alloc),
+`ScopedTrace.h` (tidak RT-safe, tanpa gate NDEBUG). Audit
+2026-11-11 (docs/AUDIT_NATIVE_CPP_UTILS_2026-11-11.md): 0 BLOCKER
++ 6 MAJOR — 5 dari 6 header mati & tak pernah dikompilasi
+(bahaya: error sintaks lolos CI diam-diam), Logger.h mati sementara
+6 file duplikasi makro LOG* lokal dengan semantik berbeda, SIMD vs
+DecoderUtils::applyGain duplikat (keduanya 0 caller). Keputusan
+hapus-vs-hidupkan Logger/SIMD/AudioMath DITAMPUNG (butuh pilihan
+csheva).
 
 ## Urutan audit yang diusulkan
 1. **manager + core — DIPILIH csheva 2026-11-10 ("inti app disini")**
