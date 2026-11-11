@@ -21,25 +21,30 @@ import {
 import { useTheme } from "@/context/ThemeContext";
 import type { MediaTrack } from "../store/libraryStore";
 import { formatTime } from "@/shared/utils/time";
+import { isLosslessCodec } from "@/shared/utils/audioQuality";
 import QualityBadge from "@/shared/components/ui/QualityBadge";
 
 // ── Codec Metadata (Pristine Mapping) ─────────────────────────────────────────
-const CODEC_CONFIG: Record<
-  string,
-  { color: string; label: string; isHiRes: boolean }
-> = {
-  FLAC: { color: "#3b82f6", label: "FLAC", isHiRes: true },
-  WAV: { color: "#8b5cf6", label: "WAV", isHiRes: true },
-  DSD: { color: "#f59e0b", label: "DSD", isHiRes: true },
-  DSF: { color: "#f59e0b", label: "DSF", isHiRes: true },
-  ALAC: { color: "#14b8a6", label: "ALAC", isHiRes: true },
-  MP3: { color: "#94a3b8", label: "MP3", isHiRes: false },
-  AAC: { color: "#94a3b8", label: "AAC", isHiRes: false },
+// CODEC_CONFIG hanya menyimpan presentasi per codec (warna + label).
+// Apakah codec itu lossless TIDAK disimpan di sini — dihitung dari
+// isLosslessCodec (U-P1-01), supaya tidak ada definisi kedua yang bisa
+// melenceng. Per codec saja tidak cukup untuk menentukan HI-RES
+// (butuh rate/depth per track) — jadi baris format memakai "Lossless",
+// dan HI-RES per track ditentukan QualityBadge di baris lagu.
+const CODEC_CONFIG: Record<string, { color: string; label: string }> = {
+  FLAC: { color: "#3b82f6", label: "FLAC" },
+  WAV: { color: "#8b5cf6", label: "WAV" },
+  DSD: { color: "#f59e0b", label: "DSD" },
+  DSF: { color: "#f59e0b", label: "DSF" },
+  ALAC: { color: "#14b8a6", label: "ALAC" },
+  MP3: { color: "#94a3b8", label: "MP3" },
+  AAC: { color: "#94a3b8", label: "AAC" },
 };
 
 const getMeta = (codec: string) => {
   const key = codec?.toUpperCase().replace(/\./g, "") || "???";
-  return CODEC_CONFIG[key] ?? { color: "#64748b", label: key, isHiRes: false };
+  const config = CODEC_CONFIG[key] ?? { color: "#64748b", label: key };
+  return { ...config, isLossless: isLosslessCodec(key) };
 };
 
 // ── FileTypeRow (Main List) ───────────────────────────────────────────────────
@@ -70,14 +75,14 @@ const FileTypeRow = memo(({ item, onPress, colors }: any) => {
         <Text style={[styles.codecLabel, { color: meta.color }]}>
           {meta.label}
         </Text>
-        {meta.isHiRes && (
+        {meta.isLossless && (
           <Activity size={10} color={meta.color} strokeWidth={3} />
         )}
       </View>
 
       <View style={styles.formatInfo}>
         <Text style={[styles.formatTitle, { color: colors.text.primary }]}>
-          {meta.label} Audio {meta.isHiRes ? "• Lossless" : ""}
+          {meta.label} Audio {meta.isLossless ? "• Lossless" : ""}
         </Text>
         <Text style={[styles.formatMeta, { color: colors.text.tertiary }]}>
           {item.count} Tracks Collected
@@ -127,7 +132,11 @@ const FileTypeSongRow = memo(
           >
             {track.title}
           </Text>
-          <QualityBadge sampleRate={track.sampleRate} codec={track.codec} />
+          <QualityBadge
+            sampleRate={track.sampleRate}
+            bitDepth={track.bitDepth}
+            codec={track.codec}
+          />
         </View>
         <Text style={[styles.songSub, { color: colors.text.tertiary }]}>
           {track.artist} •{" "}
@@ -225,7 +234,10 @@ export const FileTypeList: React.FC<any> = ({
               {meta.label} Archive
             </Text>
             <Text style={[styles.heroSub, { color: colors.text.tertiary }]}>
-              {filteredSongs.length} high-fidelity tracks found in this format.
+              {filteredSongs.length}{" "}
+              {meta.isLossless
+                ? "high-fidelity tracks found in this format."
+                : "tracks found in this format."}
             </Text>
           </View>
         </View>

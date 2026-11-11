@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useLibrary } from "./useLibrary";
 import { useFavorites } from "@/features/favorites/hooks/useFavorites";
 import { Song } from "@/shared/types/audio";
+import { isHiRes } from "@/shared/utils/audioQuality";
 
 interface UseOptimizedLibraryOptions {
   searchQuery: string;
@@ -42,10 +43,8 @@ export const useOptimizedLibrary = ({
         result = result.filter((s) => s.codec?.toUpperCase() === "FLAC");
         break;
       case "sample-rate-hi-res":
-        // Hi-Res biasanya di atas 48kHz atau bit depth > 16
-        result = result.filter(
-          (s) => (s.sampleRate || 0) > 48000 || (s.bitDepth || 0) > 16,
-        );
+        // Standar U-P1-01: lossless DAN (rate > 48 kHz ATAU depth > 16).
+        result = result.filter((s) => isHiRes(s));
         break;
       case "recently-added":
         const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;

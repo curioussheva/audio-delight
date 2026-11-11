@@ -15,6 +15,7 @@ import {
   uriMatches,
   validateQueueIndex,
 } from "@/shared/utils/queueNavigation";
+import { isHiRes } from "@/shared/utils/audioQuality";
 
 export interface LyricLine {
   time: number;
@@ -1015,10 +1016,11 @@ const getSongsByIds = (ids: string[]): Song[] => {
           genre: row.genre,
           folder: row.folder,
           filename: row.filename,
+          codec: row.codec || undefined,
           sampleRate: Number(row.sampleRate) || undefined,
           bitDepth: Number(row.bitDepth) || undefined,
           bitrate: Number(row.bitrate) || undefined,
-          isHiRes: Number(row.sampleRate) > 48000 || Number(row.bitDepth) > 16,
+          isHiRes: isHiRes(row),
         }) as Song,
     );
   } catch (e) {

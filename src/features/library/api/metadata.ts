@@ -7,6 +7,7 @@ import {
   NativeSong,
 } from "@/features/library/native/MediaStoreModule";
 import { Song } from "@/shared/types/audio";
+import { isHiRes } from "@/shared/utils/audioQuality";
 
 class MetadataExtractor {
   /**
@@ -71,6 +72,10 @@ class MetadataExtractor {
     // === Artwork Priority (Ini yang paling penting) ===
     const artwork = this.extractBestArtwork(native);
 
+    // Codec dipakai dua kali: field codec + penentu isHiRes (U-P1-01).
+    const codec =
+      native.codec || this.extractCodecFromFilename(native.filename || "");
+
     return {
       id: native.id?.toString() || this.uriToId(safeUri),
       uri: safeUri,
@@ -89,8 +94,7 @@ class MetadataExtractor {
       artwork: artwork || undefined,
 
       duration: Math.floor(native.duration || 0),
-      codec:
-        native.codec || this.extractCodecFromFilename(native.filename || ""),
+      codec,
       sampleRate: native.sampleRate || 0,
       bitDepth: native.bitDepth || 0,
       bitrate: native.bitrate || 0,
@@ -101,7 +105,11 @@ class MetadataExtractor {
 
       isEnriched: false,
       dateAdded: native.dateAdded || Date.now(),
-      isHiRes: (native.sampleRate || 0) > 48000 || (native.bitDepth || 0) > 16,
+      isHiRes: isHiRes({
+        codec,
+        sampleRate: native.sampleRate,
+        bitDepth: native.bitDepth,
+      }),
     };
   }
 

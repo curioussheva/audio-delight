@@ -11,6 +11,7 @@ import { analyzeBitDepth } from "../../audio/api/BitDepthVerifier";
 import OnlineMetadataService from "./OnlineMetadataService";
 import type { QueueItem, EnrichmentLevel } from "../types/scan";
 import { Song } from "@/shared/types/audio";
+import { isHiRes } from "@/shared/utils/audioQuality";
 
 export class MetadataEnricher {
   private static isRunning = false;
@@ -96,8 +97,10 @@ export class MetadataEnricher {
       if (metadata) {
         // === LEVEL 3: Deep Verification (Pristine Engine) ===
         // Hanya verifikasi jika file mengklaim kualitas Hi-Res
-        const isHighResClaimed =
-          (metadata.bitDepth || 0) > 16 || (metadata.sampleRate || 0) > 48000;
+        // (standar U-P1-01: lossless DAN melebihi CD — AAC 96 kHz
+        // tidak lagi memicu verifikasi sia-sia, dan tidak lagi bisa
+        // lolos sebagai Hi-Res bila analisis bilang "bukan palsu").
+        const isHighResClaimed = isHiRes(metadata);
 
         if (isHighResClaimed) {
           const analysis = await analyzeBitDepth(metadata as Song);

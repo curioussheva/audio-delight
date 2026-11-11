@@ -4,6 +4,10 @@ import { db } from "@/shared/lib/sqlite";
 import { Song } from "@/shared/types/audio";
 import MetadataExtractor from "@/features/library/api/metadata";
 import {
+  isHiRes,
+  LOSSLESS_CODECS_SQL_LIST,
+} from "@/shared/utils/audioQuality";
+import {
   MediaStore,
   NativeSong,
 } from "@/features/library/native/MediaStoreModule";
@@ -293,11 +297,17 @@ export class LibraryScanner {
       }
 
       if (filterBy === "lossless") {
-        conditions.push("codec IN ('FLAC', 'ALAC', 'WAV', 'AIFF', 'APE')");
+        // Daftar codec = LOSSLESS_CODECS_SQL_LIST (U-P1-01): cermin daftar
+        // di audioQuality.ts, karena SQLite tidak bisa memanggil helper.
+        conditions.push(`codec IN (${LOSSLESS_CODECS_SQL_LIST})`);
       } else if (filterBy === "lossy") {
         conditions.push("codec IN ('MP3', 'AAC', 'OGG', 'MP4', 'M4A')");
       } else if (filterBy === "hi-res") {
-        conditions.push("(sampleRate > 48000 OR bitDepth > 16)");
+        // HI-RES = lossless DAN (rate > 48 kHz ATAU depth > 16).
+        // Dulu tanpa gate codec: AAC 96 kHz ikut terfilter sebagai Hi-Res.
+        conditions.push(
+          `(codec IN (${LOSSLESS_CODECS_SQL_LIST}) AND (sampleRate > 48000 OR bitDepth > 16))`,
+        );
       }
 
       if (conditions.length > 0) {
@@ -357,8 +367,8 @@ export class LibraryScanner {
           COUNT(*) as totalSongs,
           SUM(duration) as totalDuration,
           SUM(fileSize) as totalSize,
-          SUM(CASE WHEN codec IN ('FLAC', 'ALAC', 'WAV', 'AIFF', 'APE') THEN 1 ELSE 0 END) as losslessCount,
-          SUM(CASE WHEN (sampleRate > 48000 OR bitDepth > 16) THEN 1 ELSE 0 END) as hiResCount,
+          SUM(CASE WHEN codec IN (${LOSSLESS_CODECS_SQL_LIST}) THEN 1 ELSE 0 END) as losslessCount,
+          SUM(CASE WHEN codec IN (${LOSSLESS_CODECS_SQL_LIST}) AND (sampleRate > 48000 OR bitDepth > 16) THEN 1 ELSE 0 END) as hiResCount,
           AVG(bitrate) as avgBitrate,
           COUNT(DISTINCT artist) as artistsCount,
           COUNT(DISTINCT album) as albumsCount,
@@ -737,7 +747,7 @@ export class LibraryScanner {
       // Boolean fields
       isEnriched: Boolean(row.isEnriched),
       isFavorite: Boolean(row.isFavorite),
-      isHiRes: Number(row.sampleRate) > 48000 || Number(row.bitDepth) > 16,
+      isHiRes: isHiRes(row),
 
       // Additional fields
       albumId: Number(row.albumId) || undefined,

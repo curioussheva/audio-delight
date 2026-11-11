@@ -249,7 +249,11 @@ const AlbumSongRow = memo(
             >
               {track.title}
             </Text>
-            <QualityBadge sampleRate={track.sampleRate} codec={track.codec} />
+            <QualityBadge
+              sampleRate={track.sampleRate}
+              bitDepth={track.bitDepth}
+              codec={track.codec}
+            />
           </View>
           <Text style={[styles.songSub, { color: colors.text.tertiary }]}>
             {track.bitDepth > 0 ? track.bitDepth : 16}bit •{" "}

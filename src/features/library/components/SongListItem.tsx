@@ -137,8 +137,8 @@ export const SongListItem = memo(
             </Text>
             <QualityBadge
               sampleRate={item.sampleRate}
+              bitDepth={item.bitDepth}
               codec={item.codec}
-              isHiRes={item.isHiRes}
             />
           </View>
 

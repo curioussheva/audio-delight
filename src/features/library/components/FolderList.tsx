@@ -127,7 +127,11 @@ const FolderSongRow = memo(
           >
             {track.title || track.filename}
           </Text>
-          <QualityBadge sampleRate={track.sampleRate} codec={track.codec} />
+          <QualityBadge
+            sampleRate={track.sampleRate}
+            bitDepth={track.bitDepth}
+            codec={track.codec}
+          />
         </View>
         <Text style={[styles.songSub, { color: colors.text.tertiary }]}>
           {track.artist} • {track.codec?.toUpperCase()}{" "}

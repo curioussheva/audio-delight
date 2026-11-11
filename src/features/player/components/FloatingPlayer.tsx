@@ -25,6 +25,7 @@ import {
 
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { progressPercent } from "@/shared/utils/queueNavigation";
+import { isHiRes } from "@/shared/utils/audioQuality";
 import { useTheme } from "@/shared/context/ThemeContext";
 
 const PLACEHOLDER = require("../../../../assets/images/icon.png");
@@ -156,7 +157,7 @@ export default function FloatingPlayer() {
             </Text>
 
             <View style={s.metaRow}>
-              {currentSong.bitDepth > 16 && (
+              {isHiRes(currentSong) && (
                 <View
                   style={[s.hiResBadge, { borderColor: colors.status.warning }]}
                 >

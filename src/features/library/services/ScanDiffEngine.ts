@@ -9,7 +9,8 @@ import {
 } from "@/features/library/native/MediaStoreModule";
 import MetadataExtractor from "@/features/library/api/metadata";
 import { useLibraryStore } from "../store/libraryStore";
-import { db } from "@/shared/lib/sqlite"; 
+import { db } from "@/shared/lib/sqlite";
+import { isHiRes } from "@/shared/utils/audioQuality";
 
 /* =============================================
    TYPE DEFINITIONS
@@ -162,7 +163,13 @@ async function saveBasicSongInfo(song: NativeSong): Promise<void> {
   if (!song?.id) return;
   const finalUri =
     song.uri || `content://media/external/audio/media/${song.id}`;
-  const isHiRes = (song.sampleRate || 0) > 48000 || (song.bitDepth || 0) > 16;
+  // Codec dipakai dua kali: field codec + penentu isHiRes (U-P1-01).
+  const codec = song.codec || _getCodecFromFilename(song.filename || "");
+  const isHiResFlag = isHiRes({
+    codec,
+    sampleRate: song.sampleRate,
+    bitDepth: song.bitDepth,
+  });
 
   // ✅ SOLUSI: Bangun URI artwork secara mandiri jika native.artworkUri kosong
   const artworkUri =
@@ -182,10 +189,10 @@ async function saveBasicSongInfo(song: NativeSong): Promise<void> {
     folder: song.folder || _extractFolder(finalUri),
     artwork: artworkUri, // ✅ TAMBAHKAN INI
     duration: Math.floor(song.duration || 0),
-    codec: song.codec || _getCodecFromFilename(song.filename || ""),
+    codec,
     sampleRate: song.sampleRate || 0,
     bitDepth: song.bitDepth || 0,
-    isHiRes,
+    isHiRes: isHiResFlag,
     isEnriched: false,
     dateAdded: song.dateAdded || Date.now(),
   };

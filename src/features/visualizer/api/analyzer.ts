@@ -17,6 +17,10 @@ import {
   deriveSpectralVerdict,
   type SpectralVerdictKind,
 } from "./spectralVerdict";
+import { isLosslessCodec } from "@/shared/utils/audioQuality";
+
+// (Dulu ada daftar LOSSLESS_CODECS lokal di sini — hanya 8 codec, tanpa
+//  DSF/DFF. U-P1-01: daftar codec lossless tinggal di audioQuality.ts.)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -76,17 +80,6 @@ const DEFAULT_CONFIG: Required<AnalyzerConfig> = {
   highBitrateThresholdKbps: 650,
   veryHighBitrateThresholdKbps: 1400,
 };
-
-const LOSSLESS_CODECS = new Set([
-  "FLAC",
-  "ALAC",
-  "WAV",
-  "AIFF",
-  "APE",
-  "WAVPACK",
-  "TTA",
-  "DSD",
-]);
 
 const LOSSY_CODECS = new Set([
   "MP3",
@@ -207,7 +200,7 @@ function scoreLossless(params: {
   };
 
   if (extLossless) add(30, 30);
-  if (LOSSLESS_CODECS.has(codec)) add(35, 35);
+  if (isLosslessCodec(codec)) add(35, 35);
   else if (LOSSY_CODECS.has(codec)) add(-20, 20);
   if (bitDepth > 16) add(25, 25);
   if (sampleRate > 48000) add(10, 10);
@@ -280,7 +273,7 @@ function collectWarnings(params: {
       `High quality indicators but codec is ${codec} (typically lossy)`,
     );
 
-  if (!isLossless && LOSSLESS_CODECS.has(codec))
+  if (!isLossless && isLosslessCodec(codec))
     warnings.push(
       `${codec} file but bitrate (${bitrateKbps} kbps) unusually low`,
     );
@@ -409,7 +402,7 @@ export class AudioAnalyzerService {
       const spectralVerdict = deriveSpectralVerdict({
         declaredSampleRate: sampleRate,
         declaredBitDepth: bitDepth,
-        isLosslessContainer: LOSSLESS_CODECS.has(codec),
+        isLosslessContainer: isLosslessCodec(codec),
         spectral: spectral?.ok
           ? {
               measuredCutoffHz: spectral.measuredCutoffHz,

@@ -5,10 +5,12 @@
  */
 
 import { MediaTrack } from "./libraryStore";
+import { isLosslessCodec } from "@/shared/utils/audioQuality";
 
 // ─── KONSTANTA GLOBAL ───────────────────────────────────────────────────────
 
-const LOSSLESS_CODECS = new Set(["FLAC", "ALAC", "WAV", "AIFF", "APE", "DSD"]);
+// (Dulu ada daftar LOSSLESS_CODECS lokal di sini — hanya 6 codec.
+//  U-P1-01: daftar codec lossless tinggal di audioQuality.ts saja.)
 
 /**
  * Helper untuk menangani metadata yang kosong atau null
@@ -213,7 +215,7 @@ export const selectFileTypes = (tracks: MediaTrack[]) => {
         count: 1,
         duration: t.duration || 0,
         size: t.fileSize || 0,
-        isLossless: LOSSLESS_CODECS.has(codec),
+        isLossless: isLosslessCodec(codec),
       });
     } else {
       existing.count++;
@@ -266,8 +268,7 @@ export const selectLibraryStats = (tracks: MediaTrack[]) => {
 
     if (t.isHiRes) stats.hiResCount++;
     if (t.isEnriched) stats.enrichedCount++;
-    if (t.codec && LOSSLESS_CODECS.has(t.codec.toUpperCase()))
-      stats.losslessCount++;
+    if (t.codec && isLosslessCodec(t.codec)) stats.losslessCount++;
 
     if (t.artist) stats.artistsSet.add(t.artist);
     if (t.album) stats.albumsSet.add(t.album);

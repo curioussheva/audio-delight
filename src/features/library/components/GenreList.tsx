@@ -179,7 +179,11 @@ const GenreSongRow = memo(
               {track.title}
             </Text>
             {(track.sampleRate || track.codec) && (
-              <QualityBadge sampleRate={track.sampleRate} codec={track.codec} />
+              <QualityBadge
+                sampleRate={track.sampleRate}
+                bitDepth={track.bitDepth}
+                codec={track.codec}
+              />
             )}
           </View>
           <Text
