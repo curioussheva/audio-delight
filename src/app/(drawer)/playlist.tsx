@@ -1,11 +1,24 @@
 // src/app/playlist.tsx
 import React, { useState, useCallback, useMemo } from "react";
-import { View, StyleSheet, Alert } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Alert,
+  FlatList,
+  TouchableOpacity,
+} from "react-native";
 import * as DocumentPicker from "expo-document-picker";
+import { ChevronLeft, Trash2, Music2 } from "lucide-react-native";
 
 import { useTheme } from "@/shared/context/ThemeContext";
 import { usePlaylists } from "@/features/playlist/hooks/usePlaylists";
 import { PlaylistList, PlaylistItem } from "@/features/library/components/PlaylistList";
+import { SongListItem } from "@/features/library/components/SongListItem";
+import { usePlayerStore } from "@/features/player/store/playerStore";
+import { useFavorites } from "@/features/favorites/hooks/useFavorites";
+import { formatTime } from "@/shared/utils/time";
+import type { Song } from "@/shared/types/audio";
 import { parseM3U } from "@/features/library/api/m3u";
 
 export default function PlaylistsScreen() {
@@ -16,6 +29,46 @@ export default function PlaylistsScreen() {
     usePlaylists();
   const favoriteCount = 0;  // 🔥 placeholder
   const [selectedPlaylist, setSelectedPlaylist] = useState<PlaylistItem | null>(null);
+
+  const { playSong, currentSong } = usePlayerStore();
+
+  // Playlist lengkap (dengan `songs`) untuk detail view — dicari di sini
+  // (top-level) supaya hook di bawah tidak dipanggil kondisional.
+  const selectedFull = useMemo(
+    () =>
+      selectedPlaylist
+        ? playlists.find((p) => p.id === selectedPlaylist.id)
+        : undefined,
+    [playlists, selectedPlaylist],
+  );
+  const selectedSongs: Song[] = selectedFull?.songs ?? [];
+  const { isFavorite, toggleFavorite } = useFavorites(selectedSongs);
+
+  const handleSongPress = useCallback(
+    (song: Song) => {
+      playSong(song, selectedSongs);
+    },
+    [playSong, selectedSongs],
+  );
+
+  const handleDeletePlaylist = useCallback(() => {
+    if (!selectedPlaylist) return;
+    Alert.alert(
+      "Hapus Playlist",
+      `Hapus playlist "${selectedPlaylist.name}"?`,
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Hapus",
+          style: "destructive",
+          onPress: async () => {
+            await deletePlaylist(selectedPlaylist.id);
+            setSelectedPlaylist(null);
+          },
+        },
+      ],
+    );
+  }, [selectedPlaylist, deletePlaylist]);
 
   // Playlist (dari usePlaylists) pakai field `songCount`, sementara
   // PlaylistList/PlaylistRow mengharapkan `count` — mapping di sini
@@ -108,13 +161,69 @@ export default function PlaylistsScreen() {
   // ── Render Detail View ────────────────────────────────────────────────────
   if (selectedPlaylist) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background.primary }]}>
-        {/* Implementasi Detail View Lagu di sini.
-            Catatan: selectedPlaylist saat ini cuma { id, name, count }
-            (bentuk PlaylistItem). Kalau detail view butuh daftar lagu
-            lengkap, ambil ulang lewat playlists.find(p => p.id === selectedPlaylist.id)
-            dari usePlaylists() — objek Playlist aslinya punya field
-            `songs`/`songIds` lengkap yang tidak ada di PlaylistItem. */}
+      <View
+        style={[
+          styles.container,
+          { backgroundColor: colors.background.primary },
+        ]}
+      >
+        {/* Header: kembali + nama + info + hapus */}
+        <View style={styles.detailHeader}>
+          <TouchableOpacity
+            onPress={() => setSelectedPlaylist(null)}
+            style={styles.backBtn}
+            hitSlop={8}
+          >
+            <ChevronLeft size={28} color={colors.text.primary} />
+          </TouchableOpacity>
+          <View style={styles.detailTitleWrap}>
+            <Text
+              style={[styles.detailTitle, { color: colors.text.primary }]}
+              numberOfLines={1}
+            >
+              {selectedPlaylist.name}
+            </Text>
+            <Text
+              style={[styles.detailSubtitle, { color: colors.text.secondary }]}
+            >
+              {selectedSongs.length} track
+              {selectedFull?.duration
+                ? ` • ${formatTime(selectedFull.duration)}`
+                : ""}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={handleDeletePlaylist}
+            style={styles.backBtn}
+            hitSlop={8}
+          >
+            <Trash2 size={20} color={colors.status.error} />
+          </TouchableOpacity>
+        </View>
+
+        {selectedSongs.length === 0 ? (
+          <View style={styles.emptyDetail}>
+            <Music2 size={40} color={colors.text.tertiary} />
+            <Text style={[styles.emptyText, { color: colors.text.secondary }]}>
+              Belum ada lagu di playlist ini.
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={selectedSongs}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <SongListItem
+                item={item}
+                isNowPlaying={currentSong?.id === item.id}
+                isFavorite={isFavorite(item.id)}
+                colors={colors}
+                onPress={handleSongPress}
+                onToggleFavorite={toggleFavorite}
+              />
+            )}
+          />
+        )}
       </View>
     );
   }
@@ -136,6 +245,37 @@ export default function PlaylistsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  detailHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  backBtn: {
+    padding: 8,
+  },
+  detailTitleWrap: {
+    flex: 1,
+    marginLeft: 4,
+  },
+  detailTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+  },
+  detailSubtitle: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  emptyDetail: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+  },
+  emptyText: {
+    fontSize: 14,
   },
 });
  
