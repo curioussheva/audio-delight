@@ -140,9 +140,11 @@ const FileTypeSongRow = memo(
         </View>
         <Text style={[styles.songSub, { color: colors.text.tertiary }]}>
           {track.artist} •{" "}
+          {/* Tanpa data jangan klaim terukur (U-P1-05): dulu sampleRate
+              kosong tampil "44.1kHz". */}
           {track.sampleRate
             ? `${Math.round(track.sampleRate / 1000)}kHz`
-            : "44.1kHz"}
+            : "-"}
         </Text>
       </View>
 

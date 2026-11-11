@@ -156,10 +156,13 @@ export const SongListItem = memo(
           <Text style={[styles.techInfo, { color: colors.text.tertiary }]}>
             {item.codec?.toUpperCase()}
             {" | "}
-            {item.bitDepth > 0 ? item.bitDepth : 16}bit
+            {/* Tanpa data jangan klaim terukur (U-P1-05): dulu bitDepth
+                kosong tampil "16bit" dan sampleRate kosong "44.1 kHz". */}
+            {item.bitDepth > 0 ? `${item.bitDepth}bit` : "-"}
             {" | "}
-            {item.sampleRate > 0 ? (item.sampleRate / 1000).toFixed(1) : "44.1"}
-            kHz
+            {item.sampleRate > 0
+              ? `${(item.sampleRate / 1000).toFixed(1)} kHz`
+              : "-"}
           </Text>
         </View>
 
