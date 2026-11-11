@@ -102,9 +102,11 @@ export default function VisualizerScreen() {
           <Text style={[styles.emptyText, { color: colors.text.secondary }]}>
             Tidak ada lagu yang diputar
           </Text>
+          {/* U-P1-28: visualizer adalah tab root — tidak ada history untuk
+              di-pop, router.back() no-op. Arahkan ke tab Library. */}
           <TouchableOpacity
             style={[styles.button, { backgroundColor: colors.primary[500] }]}
-            onPress={() => router.back()}
+            onPress={() => router.replace("/(drawer)/(tabs)/library")}
           >
             <Text style={[styles.buttonText, { color: onPrimary }]}>
               Kembali
