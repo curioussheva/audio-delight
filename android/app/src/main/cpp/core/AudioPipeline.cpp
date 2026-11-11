@@ -25,6 +25,18 @@ void AudioPipeline::prepare(
 
     // (mSampleRate/mMaxFrames dihapus 2026-11-10: hanya ditulis, tidak
     // pernah dibaca. Parameter langsung diteruskan ke bawah.)
+
+    // 🔥 FIX (2026-11-11, DSP-M1): prepare() membangun ulang graph DSP
+    // (DSPChain::prepare -> buildGraph: 5 node BARU dengan state default),
+    // jadi config yang sudah diterapkan ke node lama HILANG. Guard dedup
+    // applyDSPConfig() membandingkan config baru dengan mAppliedConfig yang
+    // masih sama -> return dini, config tidak pernah dikirim ulang ke node
+    // baru. Akibatnya tiap reopen stream (mode toggle, cabut/colok device,
+    // ganti laju) diam-diam mematikan EQ/koreksi headphone sampai user
+    // mengubah sesuatu. Reset guard di sini supaya applyDSPConfig berikutnya
+    // (buffer pertama sesudah reopen) menerapkan ulang config ke node baru.
+    mConfigApplied = false;
+
     mDSP.prepare(
         sampleRate,
         maxFrames
