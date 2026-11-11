@@ -28,20 +28,16 @@ import Reanimated, {
 
 const { width } = Dimensions.get("window");
 
-// Warna splash dari tema aktif — sebelumnya hardcoded hitam (#000→#1a1a1a)
-// + emerald (#00D4AA), jadi user tema terang melihat splash hitam ~4,2 dtk
-// lalu UI terang (flash tema tiap cold start).
-//
-// Tema belum termuat saat cold start: useTheme() di sini mengembalikan
-// DEFAULT_THEME (pristine-noir) secara sinkron sampai AsyncStorage selesai
-// dibaca ThemeContext — jadi fallback-nya Noir, bukan hitam mentah, dan
-// tidak ada tema lain yang di-hardcode di file ini.
-const BOOT_SEQUENCE = [
-  "Mounting High-Res Audio Engine...",
-  "Optimizing Bit-Perfect Path...",
-  "Loading Pristine Soundstage...",
-  "System Ready.",
-];
+// U-P1-23: TIDAK ADA lagi urutan teks boot palsu. Dulu BOOT_SEQUENCE
+// ("Mounting High-Res Audio Engine…", "Optimizing Bit-Perfect Path…",
+// …) jalan pakai timer 1 dtk/langkah dan memanggil onLoadingComplete
+// sendiri setelah ~4,2 dtk — tidak terikat ke langkah init nyata (teks
+// "Bit-Perfect" tampil bahkan di mode DSP), dan memaksa ready sebelum
+// engine selesai init bila init lambat. Sekarang layar ini indeterminate
+// yang jujur: satu label "Menyiapkan audio…" + waveform beranimasi, dan
+// exit HANYA jalan saat parent memberi sinyal `finishing` — sinyal itu
+// dikirim _layout setelah performInitialization() sukses, jadi ready
+// tidak pernah mendahului engine.
 
 // Waveform Bar Component
 const WaveformBar = ({
@@ -95,10 +91,15 @@ const WaveformBar = ({
 
 interface LoadingScreenProps {
   onLoadingComplete?: () => void;
+  // U-P1-23: true = init nyata sudah selesai, jalankan animasi keluar lalu
+  // panggil onLoadingComplete. Selama false layar ini menunggu tanpa batas
+  // waktu dan tanpa berpura-pura tahu sudah sejauh mana init berjalan.
+  finishing?: boolean;
 }
 
 export default function LoadingScreen({
   onLoadingComplete,
+  finishing = false,
 }: LoadingScreenProps) {
   const { theme } = useTheme();
   const { colors } = theme;
@@ -117,45 +118,41 @@ export default function LoadingScreen({
   // (Porcelain) menjaga logo menyatu dengan latar seperti splash native.
   const bgGradient = [colors.background.secondary, colors.background.primary];
 
-  const [loadingText, setLoadingText] = useState(BOOT_SEQUENCE[0]);
+  // U-P1-23: label tunggal yang jujur — bukan klaim langkah init.
+  const loadingText = "Menyiapkan audio…";
   const [isExiting, setIsExiting] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideUpAnim = useRef(new Animated.Value(0)).current;
+  // Penjaga supaya onLoadingComplete hanya dipanggil sekali (StrictMode
+  // bisa menjalankan effect dua kali; animasi yang dibatalkan tidak boleh
+  // memicu completion — cek `finished` di callback).
+  const exitStartedRef = useRef(false);
 
+  // U-P1-23: exit dikendalikan parent lewat `finishing`, bukan timer
+  // internal. Sebelumnya interval 1 dtk di sini yang memutuskan kapan
+  // loading "selesai", lepas dari keadaan engine yang sebenarnya.
   useEffect(() => {
-    // Boot text sequence - faster timing
-    let step = 0;
-    const interval = setInterval(() => {
-      step += 1;
-      if (step < BOOT_SEQUENCE.length) {
-        setLoadingText(BOOT_SEQUENCE[step]);
-
-        // Trigger exit animation on last step
-        if (step === BOOT_SEQUENCE.length - 1) {
-          setTimeout(() => {
-            setIsExiting(true);
-            Animated.parallel([
-              Animated.timing(fadeAnim, {
-                toValue: 0,
-                duration: 500,
-                useNativeDriver: true,
-              }),
-              Animated.timing(slideUpAnim, {
-                toValue: -50,
-                duration: 500,
-                useNativeDriver: true,
-              }),
-            ]).start(() => {
-              onLoadingComplete?.();
-            });
-          }, 700);
-        }
+    if (!finishing || exitStartedRef.current) return;
+    exitStartedRef.current = true;
+    setIsExiting(true);
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideUpAnim, {
+        toValue: -50,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
+      if (finished) {
+        onLoadingComplete?.();
       }
-    }, 1000); // Reduced from 2400ms
-
-    return () => clearInterval(interval);
-  }, [onLoadingComplete]);
+    });
+  }, [finishing, fadeAnim, slideUpAnim, onLoadingComplete]);
 
   const containerStyle = {
     opacity: fadeAnim,

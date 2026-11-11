@@ -396,11 +396,21 @@ const performInitialization = useCallback(async () => {
   }
 
   // ── UI STATE: INITIALIZING / LOADING ─────────────
+  // U-P1-23: LoadingScreen TIDAK LAGI memutuskan sendiri kapan selesai.
+  // `finishing` baru true saat appState === "loading" — dan state itu
+  // hanya di-set performInitialization() SETELAH engine + store selesai
+  // init. Selama "initializing" layar menunggu indeterminate (tanpa teks
+  // langkah palsu, tanpa memaksa ready). Dulu timer internal LoadingScreen
+  // (~4,2 dtk) memanggil handleLoadingComplete lepas dari keadaan engine:
+  // init cepat tetap menunggu 4,2 dtk, init lambat dipaksa ready duluan.
   if (appState === "initializing" || appState === "loading") {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
         <ThemeProvider>
-          <LoadingScreen onLoadingComplete={handleLoadingComplete} />
+          <LoadingScreen
+            onLoadingComplete={handleLoadingComplete}
+            finishing={appState === "loading"}
+          />
         </ThemeProvider>
       </GestureHandlerRootView>
     );
