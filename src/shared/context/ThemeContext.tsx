@@ -84,7 +84,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const randomTheme = async () => {
-    const random = getRandomTheme();
+    // U-P2-35: tema aktif dikecualikan supaya acak selalu terasa berganti.
+    const random = getRandomTheme(themeId);
     await setTheme(random.id as ThemeId);
   };
 

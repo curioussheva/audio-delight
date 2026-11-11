@@ -288,9 +288,16 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
 export const getThemeById = (id: ThemeId): Theme =>
   ALL_THEMES[id] || ALL_THEMES["midnight-blue"];
 
-export const getRandomTheme = (): Theme => {
-  const keys = Object.keys(ALL_THEMES) as ThemeId[];
-  return ALL_THEMES[keys[Math.floor(Math.random() * keys.length)]];
+export const getRandomTheme = (excludeId?: ThemeId): Theme => {
+  // U-P2-35: tema yang sedang aktif dikecualikan — dulu ketukan "Acak
+  // Tema" bisa memilih tema yang sama sehingga tampak tidak berbuat
+  // apa-apa. Bila pool kosong (tidak mungkin dengan 22 tema), jatuh ke
+  // semua tema supaya selalu ada hasil.
+  const keys = (Object.keys(ALL_THEMES) as ThemeId[]).filter(
+    (k) => k !== excludeId,
+  );
+  const pool = keys.length > 0 ? keys : (Object.keys(ALL_THEMES) as ThemeId[]);
+  return ALL_THEMES[pool[Math.floor(Math.random() * pool.length)]];
 };
 
 export const THEMES_LIST = Object.values(ALL_THEMES);
