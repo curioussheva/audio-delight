@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -19,6 +19,15 @@ export const SleepTimerModal = ({
   onClose: () => void;
 }) => {
   const { setSleepTimer, sleepTimerEnd } = usePlayerStore();
+  const [now, setNow] = useState(() => Date.now());
+
+  // Tick tiap detik selama modal terbuka dan timer berjalan, supaya sisa
+  // waktu yang ditampilkan tidak basi.
+  useEffect(() => {
+    if (!visible || sleepTimerEnd === null) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [visible, sleepTimerEnd]);
 
   const options = [
     { label: "Off", value: null },
@@ -28,41 +37,83 @@ export const SleepTimerModal = ({
     { label: "60 Minutes", value: 60 },
   ];
 
+  const remainingMs =
+    sleepTimerEnd !== null ? Math.max(0, sleepTimerEnd - now) : null;
+  // Menit tersisa dibulatkan ke atas: timer 15 menit yang baru dipilih
+  // (sisa 14,9 menit) tetap cocok dengan opsi 15, bukan tanpa opsi.
+  const remainingMin =
+    remainingMs !== null ? Math.ceil(remainingMs / 60000) : null;
+
+  const isActive = (value: number | null) =>
+    value === null
+      ? sleepTimerEnd === null
+      : remainingMin !== null &&
+        remainingMin > value - 15 &&
+        remainingMin <= value;
+
+  const formatRemaining = (ms: number) => {
+    const totalSeconds = Math.ceil(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  };
+
   const handleSelect = (val: number | null) => {
     setSleepTimer(val);
     onClose();
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide">
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
       <Pressable style={styles.overlay} onPress={onClose}>
         <BlurView intensity={40} tint="dark" style={styles.content}>
           <View style={styles.handle} />
           <Text style={styles.title}>Sleep Timer</Text>
+          {remainingMs !== null && (
+            <Text style={styles.remaining}>
+              {remainingMs > 0
+                ? `Time remaining: ${formatRemaining(remainingMs)}`
+                : "Timer finished"}
+            </Text>
+          )}
 
-          {options.map((opt) => (
-            <TouchableOpacity
-              key={opt.label}
-              style={styles.option}
-              onPress={() => handleSelect(opt.value)}
-            >
-              <Text
-                style={[
-                  styles.optionText,
-                  sleepTimerEnd ? styles.activeText : null,
-                ]}
+          {options.map((opt) => {
+            const active = isActive(opt.value);
+            return (
+              <TouchableOpacity
+                key={opt.label}
+                style={styles.option}
+                onPress={() => handleSelect(opt.value)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
               >
-                {opt.label}
-              </Text>
-              {opt.value !== null && (
-                <Ionicons
-                  name="time-outline"
-                  size={20}
-                  color="rgba(255,255,255,0.3)"
-                />
-              )}
-            </TouchableOpacity>
-          ))}
+                <Text
+                  style={[
+                    styles.optionText,
+                    active ? styles.activeText : null,
+                  ]}
+                >
+                  {opt.label}
+                </Text>
+                {active ? (
+                  <Ionicons name="checkmark" size={20} color="#00D4AA" />
+                ) : (
+                  opt.value !== null && (
+                    <Ionicons
+                      name="time-outline"
+                      size={20}
+                      color="rgba(255,255,255,0.3)"
+                    />
+                  )
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </BlurView>
       </Pressable>
     </Modal>
@@ -93,6 +144,13 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginBottom: 20,
     textAlign: "center",
+  },
+  remaining: {
+    color: "#00D4AA",
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 12,
   },
   option: {
     flexDirection: "row",
