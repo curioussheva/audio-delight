@@ -68,7 +68,12 @@ export const MetadataSyncModal = ({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}
+    >
       <View
         style={[styles.modalOverlay, { backgroundColor: "rgba(0,0,0,0.8)" }]}
       >
