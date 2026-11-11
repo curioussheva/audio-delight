@@ -89,6 +89,7 @@ list(APPEND ALL_SRCS
   jni/NativeDeviceModule.cpp
   jni/NativePlaybackModule.cpp
   jni/NativeVisualizerModule.cpp
+  jni/NativeAnalyzerModule.cpp
 )
 
 set(EXCLUDED_SRCS "")

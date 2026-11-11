@@ -11,6 +11,7 @@ import com.pristineaudio.MediaStoreModule
 import com.pristineaudio.audio.NativePristineAudio
 import com.pristineaudio.audio.NativePlaybackModule
 import com.pristineaudio.audio.NativeDeviceModule
+import com.pristineaudio.audio.NativeAnalyzerModule
 import com.pristineaudio.playback.NativePlaybackService
 
 class PristineAudioPackage : ReactPackage {
@@ -22,6 +23,7 @@ class PristineAudioPackage : ReactPackage {
             NativePristineAudio(reactContext),
             NativePlaybackModule(reactContext),
             NativeDeviceModule(reactContext),
+            NativeAnalyzerModule(reactContext),
             NativePlaybackService(reactContext)
         )
     }
