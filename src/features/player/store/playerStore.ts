@@ -44,7 +44,6 @@ export type AudioMode = "bit-perfect" | "dsp" | "immersive";
 const KEYS = {
   SPEED: "playback_speed",
   TUNING_CENTS: "tuning_cents",
-  EQ: "default_eq",
   MODE: "audio_mode_preference",
   LAST_SONG_ID: "last_song_id",
   LAST_QUEUE_IDS: "last_queue_ids",
@@ -121,7 +120,6 @@ export interface PlayerState {
   repeat: RepeatMode;
   playbackSpeed: number;
   tuningCents: number;
-  defaultEQ: string;
   audioMode: AudioMode;
   lyrics: LyricLine[];
   sleepTimerEnd: number | null;
@@ -147,7 +145,6 @@ export interface PlayerState {
   toggleRepeat: () => void;
   setPlaybackSpeed: (speed: number) => Promise<void>;
   setTuningCents: (cents: number) => Promise<void>;
-  setDefaultEQ: (eq: string) => Promise<void>;
   setAudioMode: (mode: AudioMode) => Promise<void>;
   setSleepTimer: (minutes: number | null) => void;
   setCurrentSong: (song: Song | null) => void;
@@ -175,7 +172,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   repeat: "off",
   playbackSpeed: 1.0,
   tuningCents: 0,
-  defaultEQ: "flat",
   audioMode: "dsp",
   lyrics: [],
   sleepTimerEnd: null,
@@ -188,11 +184,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   // ── Initialization ───────────────────────────────────────────────────────
   initStore: async () => {
     try {
-      const [speed, tuningCents, eq, mode, lastSongId, lastQueueIdsRaw, lastPositionRaw] =
+      const [speed, tuningCents, mode, lastSongId, lastQueueIdsRaw, lastPositionRaw] =
         await Promise.all([
           AsyncStorage.getItem(KEYS.SPEED),
           AsyncStorage.getItem(KEYS.TUNING_CENTS),
-          AsyncStorage.getItem(KEYS.EQ),
           AsyncStorage.getItem(KEYS.MODE),
           AsyncStorage.getItem(KEYS.LAST_SONG_ID),
           AsyncStorage.getItem(KEYS.LAST_QUEUE_IDS),
@@ -202,7 +197,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       set({
         ...(speed ? { playbackSpeed: parseFloat(speed) } : {}),
         ...(tuningCents ? { tuningCents: parseFloat(tuningCents) } : {}),
-        ...(eq ? { defaultEQ: eq } : {}),
         ...(mode ? { audioMode: mode as AudioMode } : {}),
       });
 
@@ -902,11 +896,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     } catch (error) {
       console.error("[Player] setTuningCents failed:", error);
     }
-  },
-
-  setDefaultEQ: async (eq: string) => {
-    set({ defaultEQ: eq });
-    await AsyncStorage.setItem(KEYS.EQ, eq);
   },
 
   /**

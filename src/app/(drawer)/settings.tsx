@@ -31,7 +31,6 @@ import {
 } from "lucide-react-native";
 import { useLibraryStore } from "@/features/library/store/libraryStore"; // Pastikan path benar
 import { BackgroundScanTask } from "@/features/library/services/BackgroundScanTask";
-import { Search } from "lucide-react-native"; // Icon tambahan jika ingin lebih visual
 
 import * as Haptics from "expo-haptics";
 
@@ -43,7 +42,6 @@ import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useBitPerfectStatus } from "@/features/player/hooks/useBitPerfectStatus";
 import { ThemePicker } from "@/shared/components/ui/ThemePicker";
 import type { Theme } from "@/constants/themes/types";
-import { selectArtists } from "@/features/library/store/selectors";
 import { useSettingsStore } from "@/features/settings/store/settingsStore";
 import OnlineMetadataService from "@/features/library/services/OnlineMetadataService";
 
@@ -270,7 +268,6 @@ export default function SettingsScreen() {
     setPlaybackSpeed,
     tuningCents,
     setTuningCents,
-    defaultEQ,
     audioMode, // <--- Add this
     setAudioMode, // <--- Add this
   } = usePlayerStore();
@@ -1009,11 +1006,11 @@ export default function SettingsScreen() {
           )}
 
 
-          {/* ── 2. Default EQ Preset ─────────────────────────────────────── */}
+          {/* ── 2. Preset EQ Aktif ─────────────────────────────────────── */}
           <SettingRow colors={colors} spacing={spacing}>
             <View style={{ flex: 1 }}>
               <Text style={{ color: colors.text.primary, fontWeight: "600" }}>
-                Default EQ
+                Preset EQ Aktif
               </Text>
               <Text
                 style={{
@@ -1022,7 +1019,13 @@ export default function SettingsScreen() {
                   marginTop: 2,
                 }}
               >
-                Preset yang diterapkan saat app dibuka.
+                {/* U-P2-38: label DULU "Default EQ — Preset yang diterapkan
+                    saat app dibuka", padahal picker ini memanggil
+                    equalizerStore.applyPreset: preset diterapkan LANGSUNG
+                    saat dipilih ke native, bukan disimpan untuk dibuka
+                    nanti. Label sekarang jujur soal perilakunya. */}
+                Preset diterapkan langsung saat dipilih — sama seperti chip
+                preset di layar Equalizer.
               </Text>
             </View>
             <TouchableOpacity
@@ -1351,7 +1354,7 @@ export default function SettingsScreen() {
                 marginBottom: 8,
               }}
             >
-              Pilih Default EQ
+              Pilih Preset EQ
             </Text>
 
             <FlatList
