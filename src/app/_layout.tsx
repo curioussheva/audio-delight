@@ -12,7 +12,8 @@ import * as SplashScreen from "expo-splash-screen";
 import { Animated, StyleSheet, View, Text, TouchableOpacity } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { ThemeProvider } from "@/context/ThemeContext";
+import { ThemeProvider, useTheme } from "@/context/ThemeContext";
+import { accentOn } from "@/shared/utils/contrast";
 import LoadingScreen from "@/shared/components/ui/LoadingScreen";
 import { AudioPropertyToast } from "@/features/player/components/AudioPropertyToast";
 
@@ -44,6 +45,92 @@ const DIAGNOSTIC_INTERVAL_MS = 5000;
 // Proses baru me-reload modul ini, jadi guard reset tepat saat re-init yang
 // sesungguhnya dibutuhkan. Tombol Retry tetap bisa reset guard ini.
 let hasInitializedModule = false;
+
+// ── Komponen dalam yang butuh tema ──────────────────────────────────────────
+//
+// RootLayout sendiri berada DI ATAS ThemeProvider, jadi tidak bisa memanggil
+// useTheme(). Error screen + Stack dibungkus komponen dalam yang dirender di
+// dalam <ThemeProvider> — warnanya mengikuti tema aktif (saat cold start
+// ThemeContext mengembalikan DEFAULT_THEME = pristine-noir secara sinkron
+// sampai tema tersimpan selesai dibaca, jadi tidak ada tema lain yang
+// di-hardcode di sini).
+function ErrorScreen({
+  errorMessage,
+  onRetry,
+}: {
+  errorMessage: string | null;
+  onRetry: () => void;
+}) {
+  const { colors } = useTheme().theme;
+
+  // Aksen tombol Retry: emas tema selama terbaca di atas latar, jatuh ke
+  // warna teks bila tidak (pola Equalizer).
+  const accent = accentOn(
+    [colors.primary[500]],
+    colors.background.primary,
+    [colors.text.primary, colors.text.secondary],
+  );
+
+  return (
+    <View
+      style={[
+        styles.errorContainer,
+        { backgroundColor: colors.background.primary },
+      ]}
+    >
+      <Text style={[styles.errorTitle, { color: colors.status.error }]}>
+        System Engine Failure
+      </Text>
+      <Text style={[styles.errorMessage, { color: colors.text.secondary }]}>
+        {errorMessage}
+      </Text>
+      <TouchableOpacity
+        style={[styles.retryButton, { borderColor: accent }]}
+        onPress={onRetry}
+      >
+        <Text style={[styles.retryText, { color: accent }]}>
+          Retry Initialize
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function ThemedStack({ contentOpacity }: { contentOpacity: Animated.Value }) {
+  const { colors } = useTheme().theme;
+
+  return (
+    <SafeAreaProvider>
+      <Animated.View
+        style={[
+          { flex: 1, backgroundColor: colors.background.primary },
+          { opacity: contentOpacity },
+        ]}
+      >
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: colors.background.primary },
+          }}
+        >
+          <Stack.Screen name="index" />
+          <Stack.Screen name="onboarding" />
+          <Stack.Screen name="(drawer)" />
+          <Stack.Screen
+            name="player/index"
+            options={{
+              presentation: "modal",
+              animation: "slide_from_bottom",
+              gestureEnabled: true,
+              gestureDirection: "vertical",
+            }}
+          />
+        </Stack>
+        <AudioPropertyToast />
+      </Animated.View>
+    </SafeAreaProvider>
+  );
+}
 
 export default function RootLayout() {
   const [appState, setAppState] = useState<AppInitState>("initializing");
@@ -295,20 +382,14 @@ const performInitialization = useCallback(async () => {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
         <ThemeProvider>
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorTitle}>System Engine Failure</Text>
-            <Text style={styles.errorMessage}>{errorMessage}</Text>
-            <TouchableOpacity
-              style={styles.retryButton}
-              onPress={() => {
-                setAppState("initializing");
-                hasInitializedModule = false;
-                performInitialization();
-              }}
-            >
-              <Text style={styles.retryText}>Retry Initialize</Text>
-            </TouchableOpacity>
-          </View>
+          <ErrorScreen
+            errorMessage={errorMessage}
+            onRetry={() => {
+              setAppState("initializing");
+              hasInitializedModule = false;
+              performInitialization();
+            }}
+          />
         </ThemeProvider>
       </GestureHandlerRootView>
     );
@@ -329,53 +410,26 @@ const performInitialization = useCallback(async () => {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
-        <SafeAreaProvider>
-          <Animated.View style={[styles.container, { opacity: contentOpacity }]}>
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: "#000" },
-              }}
-            >
-              <Stack.Screen name="index" />
-              <Stack.Screen name="onboarding" />
-              <Stack.Screen name="(drawer)" />
-              <Stack.Screen
-                name="player/index"
-                options={{
-                  presentation: "modal",
-                  animation: "slide_from_bottom",
-                  gestureEnabled: true,
-                  gestureDirection: "vertical",
-                }}
-              />
-            </Stack>
-            <AudioPropertyToast />
-          </Animated.View>
-        </SafeAreaProvider>
+        <ThemedStack contentOpacity={contentOpacity} />
       </ThemeProvider>
     </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#000" },
   errorContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#000",
     padding: 20,
   },
   errorTitle: {
-    color: "#FF4444",
     fontSize: 20,
     fontWeight: "bold",
     marginBottom: 10,
     textAlign: "center",
   },
   errorMessage: {
-    color: "#888",
     textAlign: "center",
     marginBottom: 30,
     lineHeight: 20,
@@ -383,9 +437,8 @@ const styles = StyleSheet.create({
   retryButton: {
     paddingVertical: 14,
     paddingHorizontal: 30,
-    borderColor: "#00D4AA",
     borderWidth: 1.5,
     borderRadius: 12,
   },
-  retryText: { color: "#00D4AA", fontWeight: "bold", fontSize: 16 },
+  retryText: { fontWeight: "bold", fontSize: 16 },
 }); 

@@ -13,6 +13,9 @@ import { Image } from "expo-image";
 
 import { LinearGradient } from "expo-linear-gradient";
 
+import { useTheme } from "@/shared/context/ThemeContext";
+import { accentOn } from "@/shared/utils/contrast";
+
 import Reanimated, {
   useSharedValue,
   useAnimatedStyle,
@@ -25,12 +28,14 @@ import Reanimated, {
 
 const { width } = Dimensions.get("window");
 
-const COLORS = {
-  bgGradient: ["#000000", "#1a1a1a"] as const,
-  accent: "#00D4AA",
-  textSecondary: "#A0B0C0",
-};
-
+// Warna splash dari tema aktif — sebelumnya hardcoded hitam (#000→#1a1a1a)
+// + emerald (#00D4AA), jadi user tema terang melihat splash hitam ~4,2 dtk
+// lalu UI terang (flash tema tiap cold start).
+//
+// Tema belum termuat saat cold start: useTheme() di sini mengembalikan
+// DEFAULT_THEME (pristine-noir) secara sinkron sampai AsyncStorage selesai
+// dibaca ThemeContext — jadi fallback-nya Noir, bukan hitam mentah, dan
+// tidak ada tema lain yang di-hardcode di file ini.
 const BOOT_SEQUENCE = [
   "Mounting High-Res Audio Engine...",
   "Optimizing Bit-Perfect Path...",
@@ -42,9 +47,11 @@ const BOOT_SEQUENCE = [
 const WaveformBar = ({
   index,
   isExiting,
+  color,
 }: {
   index: number;
   isExiting: boolean;
+  color: string;
 }) => {
   const heightValue = useSharedValue(10);
 
@@ -79,7 +86,7 @@ const WaveformBar = ({
     <Reanimated.View
       style={[
         styles.waveformBar,
-        { backgroundColor: COLORS.accent },
+        { backgroundColor: color },
         animatedStyle,
       ]}
     />
@@ -93,6 +100,23 @@ interface LoadingScreenProps {
 export default function LoadingScreen({
   onLoadingComplete,
 }: LoadingScreenProps) {
+  const { theme } = useTheme();
+  const { colors } = theme;
+
+  // Aksen splash (waveform, badge, garis footer): emas tema selama terbaca
+  // di atas latar, jatuh ke warna teks bila tidak (pola Equalizer).
+  const accent = accentOn(
+    [colors.primary[500]],
+    colors.background.primary,
+    [colors.text.primary, colors.text.secondary],
+  );
+
+  // Gradien latar: secondary -> primary. BUKAN gradient.primary tema
+  // (emas->navy di Noir): logo icon.png berlatar navy akan jadi kotak navy
+  // di atas emas. Gradien navy-ke-navy (Noir) / porcelain-ke-porcelain
+  // (Porcelain) menjaga logo menyatu dengan latar seperti splash native.
+  const bgGradient = [colors.background.secondary, colors.background.primary];
+
   const [loadingText, setLoadingText] = useState(BOOT_SEQUENCE[0]);
   const [isExiting, setIsExiting] = useState(false);
 
@@ -139,15 +163,21 @@ export default function LoadingScreen({
   };
 
   return (
-    <Animated.View style={[styles.container, containerStyle]}>
+    <Animated.View
+      style={[
+        styles.container,
+        containerStyle,
+        { backgroundColor: colors.background.primary },
+      ]}
+    >
       <StatusBar
-        barStyle="light-content"
+        barStyle={theme.isDark ? "light-content" : "dark-content"}
         translucent
         backgroundColor="transparent"
       />
 
       <LinearGradient
-        colors={COLORS.bgGradient}
+        colors={bgGradient as [string, string, ...string[]]}
         style={StyleSheet.absoluteFill}
       />
 
@@ -166,24 +196,32 @@ export default function LoadingScreen({
         <View style={styles.loaderArea}>
           <View style={styles.waveformContainer}>
             {[0, 1, 2, 3, 4].map((i) => (
-              <WaveformBar key={i} index={i} isExiting={isExiting} />
+              <WaveformBar key={i} index={i} isExiting={isExiting} color={accent} />
             ))}
           </View>
-          <Text style={styles.loadingText}>{loadingText}</Text>
+          <Text style={[styles.loadingText, { color: colors.text.secondary }]}>
+            {loadingText}
+          </Text>
         </View>
 
         {/* Branding */}
         <View style={styles.brandContainer}>
-          <Text style={styles.pristineText}>PRISTINE</Text>
-          <View style={styles.audioBadge}>
-            <Text style={styles.audioText}>ULTRA HD AUDIO</Text>
+          <Text style={[styles.pristineText, { color: colors.text.primary }]}>
+            PRISTINE
+          </Text>
+          <View style={[styles.audioBadge, { borderColor: accent }]}>
+            <Text style={[styles.audioText, { color: accent }]}>
+              ULTRA HD AUDIO
+            </Text>
           </View>
         </View>
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.creditText}>HANDCRAFTED BY CURIOUSSHEVA</Text>
-          <View style={[styles.line, { backgroundColor: COLORS.accent }]} />
+          <Text style={[styles.creditText, { color: colors.text.tertiary }]}>
+            HANDCRAFTED BY CURIOUSSHEVA
+          </Text>
+          <View style={[styles.line, { backgroundColor: accent }]} />
         </View>
       </View>
     </Animated.View>
@@ -193,7 +231,6 @@ export default function LoadingScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000",
   },
   content: {
     flex: 1,
@@ -223,7 +260,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 2,
   },
   loadingText: {
-    color: COLORS.textSecondary,
     fontSize: 12,
     letterSpacing: 2,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
@@ -233,7 +269,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   pristineText: {
-    color: "#FFFFFF",
     fontSize: 42,
     fontWeight: "900",
     letterSpacing: 10,
@@ -243,11 +278,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: COLORS.accent,
     borderRadius: 4,
   },
   audioText: {
-    color: COLORS.accent,
     fontSize: 10,
     fontWeight: "800",
     letterSpacing: 4,
@@ -258,7 +291,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   creditText: {
-    color: "#3A4B5E",
     fontSize: 16,
     letterSpacing: 3,
     fontWeight: "700",
