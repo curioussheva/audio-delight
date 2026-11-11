@@ -1,7 +1,7 @@
 // Di src/components/audio/SongMetadata.tsx
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { useTheme } from "@/context/ThemeContext";
+import { useTheme } from "@/shared/context/ThemeContext";
 import { Song } from "@/shared/types/audio";
 
 interface SongMetadataProps {

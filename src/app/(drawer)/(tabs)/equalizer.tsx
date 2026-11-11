@@ -26,7 +26,7 @@ import {
 
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
-import { useTheme } from "@/context/ThemeContext";
+import { useTheme } from "@/shared/context/ThemeContext";
 import { useEqualizer } from "@/features/equalizer/hooks/useEqualizer";
 import {
   accentOn,

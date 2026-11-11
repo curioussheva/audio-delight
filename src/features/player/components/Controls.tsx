@@ -7,7 +7,7 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 import { usePlayerStore } from "@/features/player/store/playerStore";
-import { useTheme } from "@/context/ThemeContext";
+import { useTheme } from "@/shared/context/ThemeContext";
 
 export const PlayerControls: React.FC = () => {
   const { theme } = useTheme();

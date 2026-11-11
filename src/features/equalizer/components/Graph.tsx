@@ -13,7 +13,7 @@ import {
 import { useDerivedValue, SharedValue } from "react-native-reanimated";
 
 import { EqualizerBand } from "@/features/equalizer/types";
-import { useTheme } from "@/context/ThemeContext";
+import { useTheme } from "@/shared/context/ThemeContext";
 import { accentOn } from "@/shared/utils/contrast";
 
 interface Props {

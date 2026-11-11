@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import DraggableFlatList from "react-native-draggable-flatlist";
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "@/context/ThemeContext";
+import { useTheme } from "@/shared/context/ThemeContext";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { Song } from "@/shared/types/audio";
 import { formatTime } from "@/shared/utils/time";

@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { View, Image, TouchableOpacity, StyleSheet, Text } from "react-native";
 import { BlurView } from "expo-blur";
-import { useTheme } from "@/context/ThemeContext";
+import { useTheme } from "@/shared/context/ThemeContext";
 import { SpectrumAnalyzer } from "@/features/visualizer/components/SpectrumAnalyzer";
 import Animated, {
   useAnimatedStyle,

@@ -13,7 +13,7 @@ import * as Linking from "expo-linking";
 import { Animated, StyleSheet, View, Text, TouchableOpacity } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { ThemeProvider, useTheme } from "@/context/ThemeContext";
+import { ThemeProvider, useTheme } from "@/shared/context/ThemeContext";
 import { accentOn } from "@/shared/utils/contrast";
 import LoadingScreen from "@/shared/components/ui/LoadingScreen";
 import { AudioPropertyToast } from "@/features/player/components/AudioPropertyToast";

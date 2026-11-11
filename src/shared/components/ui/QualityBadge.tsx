@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { useTheme } from "@/context/ThemeContext";
+import { useTheme } from "@/shared/context/ThemeContext";
 import { isLosslessCodec, isHiRes } from "@/shared/utils/audioQuality";
 
 export interface QualityBadgeProps {

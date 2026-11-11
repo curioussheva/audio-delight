@@ -1,6 +1,6 @@
 import React from "react";
 import { ScrollView, TouchableOpacity, Text, StyleSheet } from "react-native";
-import { useTheme } from "@/context/ThemeContext";
+import { useTheme } from "@/shared/context/ThemeContext";
 
 interface FileFilterBarProps {
   selectedType: string;

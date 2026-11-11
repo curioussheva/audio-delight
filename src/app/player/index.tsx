@@ -22,7 +22,7 @@ import { formatTime } from "@/shared/utils/time";
 import Slider from "@react-native-community/slider";
 import { SleepTimerModal } from "@/features/player/components/SleepTimerModal";
 import { FullLyricsView } from "@/features/player/components/FullLyricsView";
-import { useTheme } from "@/context/ThemeContext";
+import { useTheme } from "@/shared/context/ThemeContext";
 import { useSafePadding } from "@/shared/hooks/useSafePadding";
 
 // ✅ Import SpectogramView (bukan SpectrumAnalyzer)

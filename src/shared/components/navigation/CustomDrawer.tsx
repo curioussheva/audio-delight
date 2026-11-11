@@ -14,7 +14,7 @@ import {
 
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "@/context/ThemeContext";
+import { useTheme } from "@/shared/context/ThemeContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DevDBManager from "@/features/library/components/DevDBManager"; // tambah import
 

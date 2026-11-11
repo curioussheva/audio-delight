@@ -34,7 +34,7 @@ import { Search } from "lucide-react-native"; // Icon tambahan jika ingin lebih 
 
 import * as Haptics from "expo-haptics";
 
-import { useTheme } from "@/context/ThemeContext";
+import { useTheme } from "@/shared/context/ThemeContext";
 import { pickReadable, accentOn, AA_NORMAL } from "@/shared/utils/contrast";
 import { useAudioOutput } from "@/features/hardware/hooks/useAudioOutput";
 import { useDSPProcessingGate } from "@/features/hardware/hooks/useDSPProcessingGate";

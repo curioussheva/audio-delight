@@ -23,7 +23,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import { db } from "@/shared/lib/sqlite";
-import { useTheme } from "@/context/ThemeContext";
+import { useTheme } from "@/shared/context/ThemeContext";
 import { LibraryScanner } from "@/features/library/api/scanner";
 
 const DB_NAME = "pristine_audio.db";

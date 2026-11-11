@@ -20,7 +20,7 @@ import {
   RotateCw,
 } from "lucide-react-native";
 
-import { useTheme } from "@/context/ThemeContext";
+import { useTheme } from "@/shared/context/ThemeContext";
 import type { LibraryTab } from "../types/scan";
 import { accentOn, pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 

@@ -10,7 +10,7 @@ import {
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import Constants from "expo-constants";
-import { useTheme } from "@/context/ThemeContext";
+import { useTheme } from "@/shared/context/ThemeContext";
 
 // Versi dibaca dari app.json supaya tidak menyimpang dari APK yang terpasang.
 // Sebelumnya label di sini hardcoded "v1.0.0-PRO" sementara app.json sudah di

@@ -10,7 +10,7 @@ import {
   FlatList,
 } from "react-native";
 import { BlurView } from "expo-blur"; // Jika kamu pakai expo, jika tidak ganti dengan View biasa + backgroundColor transparan
-import { useTheme } from "@/context/ThemeContext";
+import { useTheme } from "@/shared/context/ThemeContext";
 
 // Definisi preset standar Android PresetReverb
 export const REVERB_PRESETS = [

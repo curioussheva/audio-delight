@@ -19,7 +19,7 @@ import {
   View,
 } from "react-native";
 
-import { useTheme } from "@/context/ThemeContext";
+import { useTheme } from "@/shared/context/ThemeContext";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import { useHeadphoneCorrection } from "../hooks/useHeadphoneCorrection";
 

@@ -29,7 +29,7 @@ import {
   type DrawerContentComponentProps,
 } from "@react-navigation/drawer";
 
-import { useTheme } from "@/context/ThemeContext";
+import { useTheme } from "@/shared/context/ThemeContext";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 
 // Pengembang. Satu tempat saja supaya tidak tersebar di beberapa file.

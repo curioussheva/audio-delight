@@ -18,7 +18,7 @@ import {
   Heart,
   Music2,
 } from "lucide-react-native";
-import { useTheme } from "@/context/ThemeContext";
+import { useTheme } from "@/shared/context/ThemeContext";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import type { MediaTrack } from "../store/libraryStore";
 import { formatTime } from "@/shared/utils/time";
