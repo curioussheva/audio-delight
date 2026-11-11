@@ -183,6 +183,20 @@ export default function EqualizerScreen() {
     MODE_LABELS[String(audioMode ?? "")] ??
     String(audioMode ?? "-").toUpperCase();
 
+  // U-P2-42: subtitle DULU "MESIN {isEQEnabled ? "AKTIF" : "BYPASS"}" —
+  // di mode Solfeggio "BYPASS" terbaca sebagai "tidak ada pemrosesan",
+  // padahal rantai resonansi Solfeggio tetap memproses (ImmersiveStage:
+  // solfeggio 528 Hz + harmonic exciter + spatial, intensitas default 0,5;
+  // yang mati hanya brainwave, freq 0). Label sekarang menyebut apa yang
+  // benar-benar berjalan per mode. Bonus: di bit-perfect, isEQEnabled yang
+  // true dulu salah menampilkan "AKTIF" padahal DSP dilewati.
+  const engineLabel =
+    audioMode === "immersive"
+      ? "MESIN DSP BYPASS · RESONANSI AKTIF"
+      : audioMode === "dsp" && eq.isEQEnabled
+        ? "MESIN AKTIF"
+        : "MESIN BYPASS";
+
   // Tiga mode, masing-masing punya mesinnya sendiri. Pemrosesan DSP (EQ, bass,
   // pelebar, koreksi headphone) HANYA hidup di mode `dsp`; Immersive memakai
   // rantai resonansinya sendiri dan tidak memakai seksi di bawah.
@@ -341,7 +355,7 @@ export default function EqualizerScreen() {
                 Precision DSP
               </Text>
               <Text style={[styles.subtitle, { color: colors.text.secondary }]}>
-                MODE {modeLabel} · MESIN {eq.isEQEnabled ? "AKTIF" : "BYPASS"}
+                MODE {modeLabel} · {engineLabel}
               </Text>
             </View>
             {/* U-P1-32: matikan saat mode beku (bit-perfect/Solfeggio) —
