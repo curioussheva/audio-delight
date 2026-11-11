@@ -191,6 +191,7 @@ describe("analyzeBitDepth - jalur lengkap", () => {
       isFake: false,
       confidence: 0,
       paddingRatio: 0,
+      warnings: ["Analysis failed — unable to determine audio quality"],
     });
   });
 

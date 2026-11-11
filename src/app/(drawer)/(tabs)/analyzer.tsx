@@ -200,11 +200,20 @@ export default function AnalyzerScreen() {
       .replace(/\/$/, "");
   };
 
+  // JANGAN pernah default ke AUTHENTIC (2026-11-11): kalau analisis
+  // gagal / belum ada hasilnya, statusnya "TIDAK DAPAT DIVERIFIKASI" —
+  // sebelumnya kegagalan tampil sebagai "STUDIO MASTER AUTHENTIC"
+  // karena isFake=false adalah nilai default.
   const getQualityStatus = () => {
     if (isAnalyzing)
       return { text: "ANALYZING...", color: colors.text.tertiary };
     if (bitDepthAnalysis?.isFake)
       return { text: "UPSCALE DETECTED ⚠️", color: colors.status.error };
+    if (!bitDepthAnalysis || bitDepthAnalysis.confidence === 0)
+      return {
+        text: "TIDAK DAPAT DIVERIFIKASI",
+        color: colors.text.tertiary,
+      };
     return { text: "STUDIO MASTER AUTHENTIC", color: colors.status.success };
   };
 
@@ -323,6 +332,14 @@ export default function AnalyzerScreen() {
             {bitDepthAnalysis.realDepth}-bit.
           </Text>
         )}
+        {(bitDepthAnalysis?.warnings ?? []).map((w, i) => (
+          <Text
+            key={i}
+            style={[styles.warningText, { color: colors.text.tertiary }]}
+          >
+            {w}
+          </Text>
+        ))}
       </View>
 
       {/* 3. SONG INFORMATION */}

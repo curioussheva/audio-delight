@@ -24,6 +24,8 @@ export interface AnalysisResult {
   peakFrequencyHz: number;
   warnings: string[];
   analysisMethod: "heuristic" | "fft" | "metadata";
+  /** true kalau getAudioMetadata gagal dan hasil ini memakai fallback. */
+  metadataFailed?: boolean;
   format: {
     codec: string;
     sampleRate: number;
@@ -305,14 +307,28 @@ export class AudioAnalyzerService {
         throw new Error(`File not found: ${workingUri}`);
       }
 
-      // 3. Baca metadata
-      const meta: any = await getAudioMetadata(workingUri, [
-        "name",
-        "artist",
-        "album",
-        "duration",
-        "bitrate",
-      ] as any);
+      // 3. Baca metadata — dengan FALLBACK (2026-11-11): kalau
+      // getAudioMetadata throw (mis. lib belum ter-patch / file aneh),
+      // analisis TETAP jalan dengan estimasi dari ekstensi + ukuran file,
+      // bukan gagal total. Sebelumnya satu throw di sini membatalkan
+      // seluruh analisis (toast "Audio analysis failed" untuk tiap track).
+      let meta: any = {};
+      let metadataFailed = false;
+      try {
+        meta = await getAudioMetadata(workingUri, [
+          "name",
+          "artist",
+          "album",
+          "duration",
+          "bitrate",
+        ] as any);
+      } catch (e) {
+        metadataFailed = true;
+        console.warn(
+          `Audio metadata unreadable for "${song.title ?? song.id}", memakai fallback:`,
+          e,
+        );
+      }
 
       // 4. Ekstrak fields
       const durationMs = Number(meta.duration ?? 0);
@@ -369,6 +385,11 @@ export class AudioAnalyzerService {
         bitrateKbps,
         isLossless: isLikelyLossless,
       });
+      if (metadataFailed) {
+        warnings.unshift(
+          "Metadata tidak bisa dibaca — verdict ini estimasi dari nama file & ukuran, bukan hasil ukur",
+        );
+      }
 
       return {
         songId: song.id,
@@ -380,6 +401,7 @@ export class AudioAnalyzerService {
         peakFrequencyHz: Math.round(spectralCutoff * 0.95),
         warnings,
         analysisMethod: "heuristic",
+        metadataFailed,
         format: { codec, sampleRate, bitDepth, channels },
       };
     } catch (error) {

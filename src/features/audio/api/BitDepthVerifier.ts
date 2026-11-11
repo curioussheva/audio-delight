@@ -10,6 +10,8 @@ export interface BitDepthAnalysis {
   isFake: boolean; // realDepth < declaredDepth
   confidence: number; // 0-100
   paddingRatio: number; // 0.0-1.0 (persentase zero LSBs)
+  /** Peringatan dari analyzer (mis. metadata gagal dibaca). */
+  warnings: string[];
 }
 
 /**
@@ -74,6 +76,7 @@ export const analyzeBitDepth = async (
       isFake,
       confidence,
       paddingRatio,
+      warnings: analysis.warnings ?? [],
     };
   } catch (error) {
     console.error("[BitDepthVerifier] Analysis failed:", error);
@@ -177,6 +180,7 @@ function createUnknownAnalysis(declaredDepth?: number): BitDepthAnalysis {
     isFake: false,
     confidence: 0,
     paddingRatio: 0,
+    warnings: ["Analysis failed — unable to determine audio quality"],
   };
 }
 
@@ -198,6 +202,7 @@ export const analyzeBitDepthBatch = async (
         isFake: false,
         confidence: 100,
         paddingRatio: 0,
+        warnings: [],
       });
       continue;
     }
