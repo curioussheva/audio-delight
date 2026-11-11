@@ -166,10 +166,18 @@ class OnlineMetadataService {
         `${MUSICBRAINZ_BASE}/recording/?query=${query}&fmt=json`,
       );
 
-      if (!response || !response.ok) return [];
+      // U-P1-41: gagal jaringan / jawaban tak valid DILEMPAR, bukan [] —
+      // dulu ketiganya kembali sebagai [] sehingga UI tidak bisa membedakan
+      // "tidak ditemukan" dari "error". [] hanya untuk hasil yang memang
+      // kosong (recordings kosong).
+      if (!response || !response.ok) {
+        throw new Error(
+          `MusicBrainz menjawab ${response?.status ?? "tanpa respons"}`,
+        );
+      }
 
       const data = await safeJsonParse<any>(response);
-      if (!data) return [];
+      if (!data) throw new Error("Gagal membaca jawaban MusicBrainz");
 
       return (data.recordings ?? []).map(
         (rec: any): MBSearchResult => ({
@@ -187,7 +195,7 @@ class OnlineMetadataService {
       );
     } catch (e) {
       console.warn("[OnlineMetadata] searchRecording error:", e);
-      return [];
+      throw e;
     }
   }
 

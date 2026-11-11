@@ -1,5 +1,5 @@
 // src/features/library/components/MetadataSyncModal.tsx
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -24,6 +24,21 @@ export const MetadataSyncModal = ({
 }: any) => {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
+  // U-P1-41: tiga keadaan dibedakan — belum dicari / tidak ditemukan /
+  // error. Dulu ketiganya jatuh ke layar awal yang sama karena
+  // searchRecording mengembalikan [] untuk error juga.
+  const [searched, setSearched] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  // Buka ulang untuk lagu lain mulai dari keadaan "belum dicari" — hasil
+  // lagu sebelumnya tidak boleh tampil seolah milik lagu ini.
+  useEffect(() => {
+    if (visible) {
+      setResults([]);
+      setSearched(false);
+      setSearchError(null);
+    }
+  }, [visible]);
 
   // Teks/ikon di atas tombol primary[500] — dipilih dari luminansi primary
   // (putih 2,24:1 di Noir, hitam 9,37:1), bukan hardcoded "#FFF".
@@ -33,12 +48,23 @@ export const MetadataSyncModal = ({
 
   const handleSearch = async () => {
     setLoading(true);
-    const data = await OnlineMetadataService.searchRecording(
-      initialTitle,
-      initialArtist,
-    );
-    setResults(data);
-    setLoading(false);
+    setSearchError(null);
+    try {
+      const data = await OnlineMetadataService.searchRecording(
+        initialTitle,
+        initialArtist,
+      );
+      setResults(data);
+      setSearched(true);
+    } catch (e: any) {
+      // searchRecording melempar saat gagal jaringan / jawaban tak valid —
+      // [] di sini hanya berarti "tidak ditemukan".
+      setResults([]);
+      setSearched(true);
+      setSearchError(e?.message || "Gagal mencari metadata");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -61,7 +87,7 @@ export const MetadataSyncModal = ({
             </TouchableOpacity>
           </View>
 
-          {!results.length && !loading ? (
+          {!searched && !loading ? (
             <View style={styles.emptyState}>
               <Database size={48} color={colors.text.disabled} />
               <Text
@@ -92,6 +118,81 @@ export const MetadataSyncModal = ({
               color={colors.primary[500]}
               style={{ margin: 40 }}
             />
+          ) : searchError ? (
+            <View style={styles.emptyState}>
+              <Text
+                style={{
+                  color: colors.text.primary,
+                  fontSize: 16,
+                  fontWeight: "700",
+                  textAlign: "center",
+                }}
+              >
+                Gagal mencari metadata
+              </Text>
+              <Text
+                style={{
+                  color: colors.text.secondary,
+                  marginTop: 8,
+                  textAlign: "center",
+                }}
+              >
+                {searchError}
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.searchBtn,
+                  { backgroundColor: colors.primary[500] },
+                ]}
+                onPress={handleSearch}
+                accessibilityRole="button"
+                accessibilityLabel="Coba lagi mencari metadata"
+              >
+                <Globe size={18} color={onPrimary} />
+                <Text style={[styles.btnText, { color: onPrimary }]}>
+                  Coba lagi
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : !results.length ? (
+            <View style={styles.emptyState}>
+              <Database size={48} color={colors.text.disabled} />
+              <Text
+                style={{
+                  color: colors.text.primary,
+                  fontSize: 16,
+                  fontWeight: "700",
+                  marginTop: 12,
+                  textAlign: "center",
+                }}
+              >
+                Tidak ditemukan
+              </Text>
+              <Text
+                style={{
+                  color: colors.text.secondary,
+                  marginTop: 8,
+                  textAlign: "center",
+                }}
+              >
+                MusicBrainz tidak punya hasil untuk "{initialTitle}"
+                {initialArtist ? ` — ${initialArtist}` : ""}
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.searchBtn,
+                  { backgroundColor: colors.primary[500] },
+                ]}
+                onPress={handleSearch}
+                accessibilityRole="button"
+                accessibilityLabel="Cari lagi metadata"
+              >
+                <Globe size={18} color={onPrimary} />
+                <Text style={[styles.btnText, { color: onPrimary }]}>
+                  Cari lagi
+                </Text>
+              </TouchableOpacity>
+            </View>
           ) : (
             <FlatList
               data={results}
