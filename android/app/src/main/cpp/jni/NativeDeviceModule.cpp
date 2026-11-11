@@ -66,14 +66,25 @@ JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_n
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativeOnDeviceAdded(JNIEnv* env, jobject, jstring deviceId) {
     if (!deviceId) return;
     const char* id = env->GetStringUTFChars(deviceId, nullptr);
-    if (id) {
-        __android_log_print(ANDROID_LOG_INFO, "NativeDeviceModule",
-                            "nativeOnDeviceAdded('%s') dari AudioDeviceCallback", id);
-        env->ReleaseStringUTFChars(deviceId, id);
-    }
-    // Manager melakukan refresh + memanggil callback terdaftar sendiri.
+    if (!id) return;
+    __android_log_print(ANDROID_LOG_INFO, "NativeDeviceModule",
+                        "nativeOnDeviceAdded('%s') dari AudioDeviceCallback", id);
+
+    // FIX (DV-M3, 2026-11-11): sebelumnya descriptor KOSONG (id "",
+    // type BUILTIN_SPEAKER, 48000) yang dioper ke notifyDeviceAdded —
+    // log + payload callback mOnPlugged berisi sampah. Sekarang: refresh
+    // daftar, cari device berdasarkan id, oper descriptor aslinya.
+    auto& mgr = pristine::AudioDeviceManager::get();
+    mgr.refreshDevices();
     pristine::AudioDeviceDescriptor d;
-    pristine::AudioDeviceManager::get().notifyDeviceAdded(d);
+    for (const auto& cand : mgr.getAvailableDevices()) {
+        if (cand.id == id) { d = cand; break; }
+    }
+    env->ReleaseStringUTFChars(deviceId, id);
+
+    // Manager melakukan refresh lagi (idempotent) + memanggil callback
+    // terdaftar sendiri.
+    mgr.notifyDeviceAdded(d);
 }
 
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativeOnDeviceRemoved(JNIEnv* env, jobject, jstring deviceId) {
