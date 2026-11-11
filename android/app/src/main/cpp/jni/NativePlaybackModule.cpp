@@ -201,6 +201,12 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeS
     if (controller) controller->setPlaybackRate(rate);
 }
 
+// 🔥 FASE R (2026-11-11): retune — rasio pitch (1.0 = A=440, 432/440 = A=432).
+JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSetPitchRatio(JNIEnv*, jobject, jfloat ratio) {
+    auto* controller = getController();
+    if (controller) controller->setPitchRatio(ratio);
+}
+
 JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetQueue(JNIEnv* env, jobject) {
     auto* controller = getController();
     if (!controller) return env->NewObjectArray(0, env->FindClass("java/lang/String"), nullptr);

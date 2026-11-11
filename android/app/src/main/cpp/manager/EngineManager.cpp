@@ -922,6 +922,12 @@ void EngineManager::setProcessingMode(
     mEngine.setProcessingMode(
         mode
     );
+
+    // 🔥 FASE R (2026-11-11): retune = processing — FORCED OFF di mode
+    // bit-perfect. PlaybackController memakai rasio efektif 1.0 (bypass)
+    // saat tidak diizinkan; rasio yang disimpan tidak hilang, jadi keluar
+    // dari bit-perfect langsung mengembalikan tuning tanpa set ulang.
+    mPlayback.setPitchAllowed(mode != ProcessingMode::BitPerfect);
 }
 
 // =====================================================

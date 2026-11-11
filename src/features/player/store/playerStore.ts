@@ -42,6 +42,7 @@ export type AudioMode = "bit-perfect" | "dsp" | "immersive";
 // AsyncStorage keys
 const KEYS = {
   SPEED: "playback_speed",
+  TUNING_CENTS: "tuning_cents",
   EQ: "default_eq",
   MODE: "audio_mode_preference",
   LAST_SONG_ID: "last_song_id",
@@ -118,6 +119,7 @@ export interface PlayerState {
   shuffle: boolean;
   repeat: RepeatMode;
   playbackSpeed: number;
+  tuningCents: number;
   defaultEQ: string;
   audioMode: AudioMode;
   lyrics: LyricLine[];
@@ -143,6 +145,7 @@ export interface PlayerState {
   toggleShuffle: () => void;
   toggleRepeat: () => void;
   setPlaybackSpeed: (speed: number) => Promise<void>;
+  setTuningCents: (cents: number) => Promise<void>;
   setDefaultEQ: (eq: string) => Promise<void>;
   setAudioMode: (mode: AudioMode) => Promise<void>;
   setSleepTimer: (minutes: number | null) => void;
@@ -170,6 +173,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   shuffle: false,
   repeat: "off",
   playbackSpeed: 1.0,
+  tuningCents: 0,
   defaultEQ: "flat",
   audioMode: "dsp",
   lyrics: [],
@@ -183,9 +187,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   // ── Initialization ───────────────────────────────────────────────────────
   initStore: async () => {
     try {
-      const [speed, eq, mode, lastSongId, lastQueueIdsRaw, lastPositionRaw] =
+      const [speed, tuningCents, eq, mode, lastSongId, lastQueueIdsRaw, lastPositionRaw] =
         await Promise.all([
           AsyncStorage.getItem(KEYS.SPEED),
+          AsyncStorage.getItem(KEYS.TUNING_CENTS),
           AsyncStorage.getItem(KEYS.EQ),
           AsyncStorage.getItem(KEYS.MODE),
           AsyncStorage.getItem(KEYS.LAST_SONG_ID),
@@ -195,6 +200,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
       set({
         ...(speed ? { playbackSpeed: parseFloat(speed) } : {}),
+        ...(tuningCents ? { tuningCents: parseFloat(tuningCents) } : {}),
         ...(eq ? { defaultEQ: eq } : {}),
         ...(mode ? { audioMode: mode as AudioMode } : {}),
       });
@@ -776,6 +782,17 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           console.warn("[Player] terapkan playbackSpeed gagal:", rateErr);
         }
 
+        // 🔥 FASE R (2026-11-11): terapkan tuning tersimpan ke native
+        // sebelum play (pola yang sama dengan speed di atas).
+        try {
+          const cents = get().tuningCents;
+          if (cents && cents !== 0) {
+            await audioEngine.setPitchRatio(Math.pow(2, cents / 1200));
+          }
+        } catch (tuneErr) {
+          console.warn("[Player] terapkan tuningCents gagal:", tuneErr);
+        }
+
         // Kalau native menolak (dekoder gagal), jangan tandai playing.
         try {
           await timedCall("play", () => NativePlaybackService.play());
@@ -866,6 +883,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       await audioEngine.setPlaybackRate(speed);
     } catch (error) {
       console.error("[Player] setPlaybackSpeed failed:", error);
+    }
+  },
+
+  setTuningCents: async (cents: number) => {
+    try {
+      // ±100 sen = rasio 0.944–1.059 (jauh di dalam rentang native 0.5–2.0).
+      const clamped = Math.max(-100, Math.min(100, cents));
+      set({ tuningCents: clamped });
+      await AsyncStorage.setItem(KEYS.TUNING_CENTS, clamped.toString());
+      // 🔥 FASE R (2026-11-11): retune — sen diubah ke rasio (2^(sen/1200))
+      // dan diteruskan ke native (phase vocoder). 0 sen = A=440 standar;
+      // -31.77 sen = A=432 (Verdi).
+      await audioEngine.setPitchRatio(Math.pow(2, clamped / 1200));
+    } catch (error) {
+      console.error("[Player] setTuningCents failed:", error);
     }
   },
 

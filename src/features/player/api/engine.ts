@@ -306,6 +306,12 @@ export class AudioEngine {
     await NativePlaybackService.setPlaybackRate(rate);
   }
 
+  async setPitchRatio(ratio: number): Promise<void> {
+    // 🔥 FASE R (2026-11-11): retune — rasio pitch diteruskan ke native
+    // (phase vocoder di PlaybackController). 1.0 = A=440 standar.
+    await NativePlaybackService.setPitchRatio(ratio);
+  }
+
   async getPlaybackState() {
     return {
       state: NativePlaybackService.getStatus(),

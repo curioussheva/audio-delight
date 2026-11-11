@@ -214,6 +214,8 @@ export default function SettingsScreen() {
   const {
     playbackSpeed,
     setPlaybackSpeed,
+    tuningCents,
+    setTuningCents,
     defaultEQ,
     audioMode, // <--- Add this
     setAudioMode, // <--- Add this
@@ -301,6 +303,19 @@ export default function SettingsScreen() {
     const clamped = Math.min(2.0, Math.max(0.5, next));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setPlaybackSpeed(clamped);
+  };
+
+  // 🔥 FASE R (2026-11-11): retune — preset tuning + geser halus ±5 sen.
+  // -31.77 sen = A=432 (Verdi): 1200*log2(432/440). Store men-clamp ±100 sen.
+  const handleTuningPreset = (cents: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setTuningCents(cents);
+  };
+
+  const handleTuningChange = (delta: number) => {
+    const current = tuningCents ?? 0;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setTuningCents(current + delta);
   };
 
   // Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Mode selector Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
@@ -1011,6 +1026,168 @@ export default function SettingsScreen() {
           </SettingRow>
         </View>
       )}
+
+      {/* ── 3b. Tuning (Retune) — FASE R ─────────────────────────────────── */}
+      <SettingRow colors={colors} spacing={spacing}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: colors.text.primary, fontWeight: "600" }}>
+            Tuning (Nada Dasar)
+          </Text>
+          <Text
+            style={{
+              color: colors.text.tertiary,
+              fontSize: 11,
+              marginTop: 2,
+            }}
+          >
+            Tinggi nada lagu tanpa mengubah tempo (A=440 standar, A=432
+            Verdi). Tidak berlaku di mode Bit-Perfect.
+          </Text>
+        </View>
+        <View
+          style={{
+            alignItems: "flex-end",
+            gap: 6,
+            opacity: audioMode === "bit-perfect" ? 0.4 : 1,
+          }}
+        >
+          <View style={{ flexDirection: "row", gap: 6 }}>
+            <TouchableOpacity
+              onPress={() => handleTuningPreset(0)}
+              disabled={audioMode === "bit-perfect"}
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderRadius: 8,
+                backgroundColor:
+                  Math.abs(tuningCents ?? 0) < 0.5
+                    ? colors.primary[500]
+                    : colors.background.tertiary,
+              }}
+            >
+              <Text
+                style={{
+                  color:
+                    Math.abs(tuningCents ?? 0) < 0.5
+                      ? "#fff"
+                      : colors.text.primary,
+                  fontSize: 13,
+                  fontWeight: "700",
+                }}
+              >
+                A=440
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() =>
+                handleTuningPreset(1200 * Math.log2(432 / 440))
+              }
+              disabled={audioMode === "bit-perfect"}
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderRadius: 8,
+                backgroundColor:
+                  Math.abs((tuningCents ?? 0) + 31.77) < 0.5
+                    ? colors.primary[500]
+                    : colors.background.tertiary,
+              }}
+            >
+              <Text
+                style={{
+                  color:
+                    Math.abs((tuningCents ?? 0) + 31.77) < 0.5
+                      ? "#fff"
+                      : colors.text.primary,
+                  fontSize: 13,
+                  fontWeight: "700",
+                }}
+              >
+                A=432
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <View
+            style={{ flexDirection: "row", alignItems: "center", gap: 2 }}
+          >
+            <TouchableOpacity
+              onPress={() => handleTuningChange(-5)}
+              disabled={
+                audioMode === "bit-perfect" || (tuningCents ?? 0) <= -100
+              }
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                backgroundColor: colors.background.tertiary,
+                justifyContent: "center",
+                alignItems: "center",
+                opacity: (tuningCents ?? 0) <= -100 ? 0.3 : 1,
+              }}
+            >
+              <Text
+                style={{
+                  color: colors.text.primary,
+                  fontSize: 18,
+                  lineHeight: 20,
+                }}
+              >
+                −
+              </Text>
+            </TouchableOpacity>
+            <View
+              style={{
+                minWidth: 92,
+                alignItems: "center",
+                paddingHorizontal: 4,
+              }}
+            >
+              <Text
+                style={{
+                  color: colors.primary[500],
+                  fontWeight: "800",
+                  fontSize: 13,
+                }}
+              >
+                A=
+                {(440 * Math.pow(2, (tuningCents ?? 0) / 1200)).toFixed(1)}{" "}
+                Hz
+              </Text>
+              <Text
+                style={{ color: colors.text.tertiary, fontSize: 11 }}
+              >
+                {(tuningCents ?? 0) > 0 ? "+" : ""}
+                {(tuningCents ?? 0).toFixed(1)} sen
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => handleTuningChange(5)}
+              disabled={
+                audioMode === "bit-perfect" || (tuningCents ?? 0) >= 100
+              }
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                backgroundColor: colors.background.tertiary,
+                justifyContent: "center",
+                alignItems: "center",
+                opacity: (tuningCents ?? 0) >= 100 ? 0.3 : 1,
+              }}
+            >
+              <Text
+                style={{
+                  color: colors.text.primary,
+                  fontSize: 18,
+                  lineHeight: 20,
+                }}
+              >
+                +
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </SettingRow>
 
       {/* ── EQ Picker Modal ──────────────────────────────────────────────── */}
       <Modal

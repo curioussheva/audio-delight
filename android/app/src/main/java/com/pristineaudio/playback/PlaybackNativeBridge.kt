@@ -80,6 +80,12 @@ object PlaybackNativeBridge {
         NativePlaybackModule.instance?.setPlaybackRateFromService(rate)
     }
 
+    // 🔥 FASE R (2026-11-11): retune — rasio pitch (phase vocoder).
+    fun setPitchRatio(ratio: Float) {
+        android.util.Log.d("PlaybackNativeBridge", "setPitchRatio($ratio) called")
+        NativePlaybackModule.instance?.setPitchRatioFromService(ratio)
+    }
+
     fun getQueue(): Array<String>? {
         android.util.Log.d("PlaybackNativeBridge", "getQueue() called")
         return NativePlaybackModule.instance?.getQueueFromService()

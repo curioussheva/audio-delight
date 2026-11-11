@@ -14,6 +14,7 @@
 #include "TrackQueue.h"
 #include "FadeEngine.h"
 #include "PlaybackRateProcessor.h"
+#include "PitchShifter.h"
 #include "../decoder/DecoderWorker.h"
 #include "../core/AudioMetrics.h"
 
@@ -54,6 +55,21 @@ public:
     // ada race dengan audio thread. Rate 1.0 = bypass (nol overhead).
     void setPlaybackRate(float rate) noexcept;
     [[nodiscard]] float playbackRate() const noexcept;
+
+    // 🔥 FASE R (2026-11-11): retune — phase vocoder pitch shift (PitchShifter).
+    // Pola yang SAMA dengan setPlaybackRate (P-M9): rasio disimpan atomic dan
+    // DITERAPKAN render() di audio thread (reset buffer di sana supaya tidak
+    // race dengan push/pull). Rasio 1.0 = bypass (nol overhead, jalur
+    // bit-perfect tidak tersentuh). Rentang 0.5–2.0 (±1 oktaf); A=432 =
+    // 432/440 = 0.98182.
+    //
+    // Gate bit-perfect: retune adalah processing, jadi FORCED OFF di mode
+    // bit-perfect. EngineManager::setProcessingMode() memanggil
+    // setPitchAllowed(mode != BitPerfect); render() memakai rasio efektif
+    // 1.0 saat tidak diizinkan (buffer prosesor di-reset di sana).
+    void setPitchRatio(float ratio) noexcept;
+    [[nodiscard]] float pitchRatio() const noexcept;
+    void setPitchAllowed(bool allowed) noexcept;
 
     // Audio thread. Mengembalikan jumlah SAMPLE OUTPUT yang benar-benar
     // dihasilkan (bisa kurang dari frames*channels kalau queue lapar =
@@ -200,6 +216,17 @@ private:
     std::atomic<float> playbackRate_{1.0f};
     float rateApplied_ = 1.0f;
     std::vector<float> rateScratch_;
+
+    // 🔥 FASE R (2026-11-11): retune (PitchShifter, phase vocoder).
+    // pitchRatio_ = target dari JS (atomic, ditulis thread JS, dibaca audio
+    // thread). pitchApplied_ = rasio efektif yang sedang dipakai prosesor
+    // (HANYA audio thread yang menulis). pitchAllowed_ = false di mode
+    // bit-perfect (diset EngineManager::setProcessingMode) — rasio efektif
+    // jadi 1.0 (bypass) walau pitchRatio_ bukan 1.0.
+    PitchShifter pitchShifter_;
+    std::atomic<float> pitchRatio_{1.0f};
+    float pitchApplied_ = 1.0f;
+    std::atomic<bool> pitchAllowed_{true};
 
     // Laju stream aktual (dari device/DAC). 0 = belum diketahui.
     std::atomic<uint32_t> streamSampleRate_{0};

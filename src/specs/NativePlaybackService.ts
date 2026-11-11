@@ -17,6 +17,9 @@ export interface Spec extends TurboModule {
   setRepeatMode(mode: number): Promise<void>;
   // 🔥 FIX (2026-11-10, P-M9): laju playback 0.5–2.0 (WSOLA time-stretch).
   setPlaybackRate(rate: number): Promise<void>;
+  // 🔥 FASE R (2026-11-11): retune — rasio pitch 0.5–2.0 (phase vocoder).
+  // 1.0 = A=440, 432/440 = A=432.
+  setPitchRatio(ratio: number): Promise<void>;
   setQueue(uris: string[], sampleRates: number[] | null): Promise<void>;
 
   // Query

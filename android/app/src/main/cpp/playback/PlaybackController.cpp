@@ -186,6 +186,40 @@ float PlaybackController::playbackRate() const noexcept {
     return playbackRate_.load(std::memory_order_acquire);
 }
 
+// 🔥 FASE R (2026-11-11): retune (phase vocoder pitch shift).
+//
+// Hanya menyimpan target ke atomic — penerapan (reset buffer pitch
+// shifter) dilakukan render() di audio thread, karena vector prosesor
+// tidak boleh di-clear dari thread JS sementara render() sedang push/pull.
+// Perubahan rasio efektif paling lambat satu callback (~10–20 ms) setelah
+// panggilan. Rentang 0.5–2.0 = ±1 oktaf; A=432 = 432/440 = 0.98182.
+void PlaybackController::setPitchRatio(float ratio) noexcept {
+    if (!std::isfinite(ratio) || ratio < 0.5f || ratio > 2.0f) {
+        __android_log_print(ANDROID_LOG_WARN, "PlaybackController",
+                            "setPitchRatio: rasio %.4f di luar 0.5-2.0, "
+                            "diabaikan",
+                            ratio);
+        return;
+    }
+    const float old = pitchRatio_.exchange(ratio, std::memory_order_acq_rel);
+    if (old != ratio) {
+        __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                            "setPitchRatio: %.4f (sebelumnya %.4f)", ratio,
+                            old);
+    }
+}
+
+float PlaybackController::pitchRatio() const noexcept {
+    return pitchRatio_.load(std::memory_order_acquire);
+}
+
+// Gate bit-perfect (Fase R): retune = processing, jadi tidak boleh jalan
+// di mode bit-perfect. Dipanggil EngineManager::setProcessingMode().
+// Hanya atomic store — render() yang menerapkan (reset buffer di sana).
+void PlaybackController::setPitchAllowed(bool allowed) noexcept {
+    pitchAllowed_.store(allowed, std::memory_order_release);
+}
+
 // =====================================================
 // TRANSPORT
 // =====================================================
@@ -270,6 +304,7 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
     // tidak boleh keluar di track baru). Aman di sini: clearing_ +
     // waitForRenderIdle sudah memastikan render() tidak sedang push/pull.
     rateProcessor_.reset();
+    pitchShifter_.reset();  // Fase R: buang sisa pitch shifter juga
 
     // 🔥 FIX: set duration dari metadata track
     if (state_ && track.durationMs > 0) {
@@ -446,6 +481,7 @@ bool PlaybackController::stop() {
     // 🔥 FIX (2026-11-10, P-M9): buang sisa WSOLA. Di dalam jendela
     // clearing_ (pola yang sama dengan loadTrack/seek).
     rateProcessor_.reset();
+    pitchShifter_.reset();  // Fase R: buang sisa pitch shifter juga
     clearing_.store(false, std::memory_order_release);
 
     // 🔥 FIX (2026-11-10, p-m23): reset laju file/stream supaya tidak basi
@@ -504,6 +540,7 @@ bool PlaybackController::seek(double seconds) {
     // dalam jendela clearing_ (sebelum store false di bawah) — render()
     // tidak sedang push/pull di sini.
     rateProcessor_.reset();
+    pitchShifter_.reset();  // Fase R: buang sisa pitch shifter juga
     clearing_.store(false, std::memory_order_release);
 
     // 🔥 FIX (2026-11-10, p-m10): seek decoder DULU, clock HANYA kalau
@@ -657,6 +694,35 @@ size_t PlaybackController::render(float* output,
     } else {
         readSamples = pcmQueue_->read(output, requestedSamples);
         outputSamples = readSamples;
+    }
+
+    // 🔥 FASE R (2026-11-11): retune (phase vocoder pitch shift).
+    //
+    // Pitch dulu, baru tempo (WSOLA di atas sudah jalan duluan — urutan
+    // rantai: pitch -> tempo; keduanya kontrol ortogonal yang independen).
+    // Rasio 1.0 = bypass (nol overhead, jalur bit-perfect tidak tersentuh).
+    // Frame masuk = frame keluar (frame-count preserving) — clock maju
+    // mengikuti frame INPUT (readSamples, di bawah), jadi tidak ada yang
+    // perlu diubah di clock. Gate bit-perfect: rasio efektif 1.0 saat
+    // pitchAllowed_ false (diset EngineManager::setProcessingMode).
+    // Perubahan rasio diterapkan DI SINI (audio thread), bukan di
+    // setPitchRatio (thread JS): reset buffer pitch shifter harus terjadi
+    // di thread yang sama dengan push/pull.
+    const float pitchTarget = pitchRatio_.load(std::memory_order_acquire);
+    const float pitchRatio =
+        pitchAllowed_.load(std::memory_order_acquire) ? pitchTarget : 1.0f;
+    if (pitchRatio != pitchApplied_) {
+        pitchShifter_.setRatio(pitchRatio);  // reset buffer bila berubah
+        pitchApplied_ = pitchRatio;
+    }
+    if (pitchRatio != 1.0f) {
+        // push() menyalin dulu ke buffer internal, jadi pull() ke buffer
+        // `output` yang sama aman. Shortfall (latensi awal ~1,5 jendela)
+        // diisi senyap oleh blok zero-fill di bawah (outputSamples =
+        // hasil pull, bukan requested).
+        pitchShifter_.push(output, outputSamples / channels, channels);
+        outputSamples =
+            pitchShifter_.pull(output, frames, channels) * channels;
     }
 
     // 🔥 FIX 2: resume decoder kalau queue 60% (naik dari 30%)

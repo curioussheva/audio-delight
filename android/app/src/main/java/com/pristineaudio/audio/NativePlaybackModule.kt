@@ -94,6 +94,8 @@ class NativePlaybackModule(
     private external fun nativeSetShuffle(enabled: Boolean)
     private external fun nativeSetRepeatMode(mode: Int)
     private external fun nativeSetPlaybackRate(rate: Float)
+    // 🔥 FASE R (2026-11-11): retune — rasio pitch (1.0 = A=440).
+    private external fun nativeSetPitchRatio(ratio: Float)
     private external fun nativeGetQueue(): Array<String>
     private external fun nativeSetQueue(uris: Array<String>, sampleRates: IntArray)
     private external fun nativeGetCurrentTrack(): String
@@ -169,6 +171,13 @@ class NativePlaybackModule(
     fun setPlaybackRate(rate: Double) {
         if (!ensureNativeReady()) return
         nativeSetPlaybackRate(rate.toFloat())
+    }
+
+    // 🔥 FASE R (2026-11-11): retune — rasio pitch (phase vocoder).
+    @ReactMethod
+    fun setPitchRatio(ratio: Double) {
+        if (!ensureNativeReady()) return
+        nativeSetPitchRatio(ratio.toFloat())
     }
 
     // `sampleRates` = laju file (Hz) per entry di `uris`, boleh null.
@@ -328,6 +337,7 @@ class NativePlaybackModule(
     fun setShuffleFromService(enabled: Boolean) { if (ensureNativeReady()) nativeSetShuffle(enabled) }
     fun setRepeatModeFromService(mode: Int) { if (ensureNativeReady()) nativeSetRepeatMode(mode) }
     fun setPlaybackRateFromService(rate: Float) { if (ensureNativeReady()) nativeSetPlaybackRate(rate) }
+    fun setPitchRatioFromService(ratio: Float) { if (ensureNativeReady()) nativeSetPitchRatio(ratio) }
     fun getQueueFromService(): Array<String> = if (ensureNativeReady()) nativeGetQueue() else emptyArray()
     fun setQueueFromService(uris: Array<String>, sampleRates: IntArray = IntArray(uris.size)) {
         if (ensureNativeReady()) nativeSetQueue(uris, sampleRates)
