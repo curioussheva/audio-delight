@@ -4,6 +4,7 @@
 #include "playback/TrackQueue.h"
 #include "playback/NativeEventEmitter.h"
 #include <android/log.h>
+#include <mutex>
 #include <vector>
 #include <string>
 
@@ -20,15 +21,21 @@ static pristine::playback::PlaybackController* gPlaybackController = nullptr;
 // Sekarang hanya transport (play) yang menyalakan engine, dan itu terjadi
 // setelah queue terisi dan track dimuat - jadi stream dibuka di laju file.
 static pristine::playback::PlaybackController* getController() {
-    if (!gPlaybackController) {
+    // 🔥 FIX (2026-11-11, J-m2): init sekali saja. Tanpa lock, dua thread
+    // di panggilan JNI pertama bisa sama-sama melihat pointer null +
+    // initialize() cek initialized_ tanpa CAS — double init menimpa member
+    // (queue/clock/state) → split-brain. Aman pakai call_once:
+    // initialize() selalu return true (tidak ada jalur gagal).
+    static std::once_flag initFlag;
+    std::call_once(initFlag, [] {
         gPlaybackController = &pristine::EngineManager::get().playback();
-    }
-    __android_log_print(ANDROID_LOG_DEBUG, "NativePlaybackModule", "getController: controller=%p", (void*)gPlaybackController);
+        if (!gPlaybackController->isInitialized()) {
+            gPlaybackController->initialize();
+            __android_log_print(ANDROID_LOG_DEBUG, "NativePlaybackModule", "controller initialized");
+        }
+    });
 
-    if (!gPlaybackController->isInitialized()) {
-        gPlaybackController->initialize();
-        __android_log_print(ANDROID_LOG_DEBUG, "NativePlaybackModule", "controller initialized");
-    }
+    __android_log_print(ANDROID_LOG_DEBUG, "NativePlaybackModule", "getController: controller=%p", (void*)gPlaybackController);
 
     return gPlaybackController;
 }

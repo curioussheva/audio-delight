@@ -91,10 +91,21 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativeOnD
     auto& mgr = pristine::AudioDeviceManager::get();
     mgr.refreshDevices();
     pristine::AudioDeviceDescriptor d;
+    bool found = false;
     for (const auto& cand : mgr.getAvailableDevices()) {
-        if (cand.id == id) { d = cand; break; }
+        if (cand.id == id) { d = cand; found = true; break; }
     }
     env->ReleaseStringUTFChars(deviceId, id);
+
+    // 🔥 FIX (2026-11-11, J-m1 — sisa DV-M3): bila id tak ditemukan,
+    // JANGAN panggil notifyDeviceAdded dengan descriptor default
+    // (id "", BUILTIN_SPEAKER, 48000) — log + payload callback berisi
+    // sampah. Return dini; refresh di atas sudah cukup.
+    if (!found) {
+        __android_log_print(ANDROID_LOG_WARN, "NativeDeviceModule",
+                            "nativeOnDeviceAdded: id tidak ada di daftar sesudah refresh, abaikan");
+        return;
+    }
 
     // Manager melakukan refresh lagi (idempotent) + memanggil callback
     // terdaftar sendiri.
