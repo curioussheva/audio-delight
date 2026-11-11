@@ -223,6 +223,23 @@ tempo tetap. Ini yang diharapkan user, bukan preset resonator.
     `nativeSetPitchRatio` ada (kontrol: setPlaybackRate juga ada). Jadi
     kegagalan di device BUKAN cacat build — APK baru memang belum
     terinstall di HP.
+  - **KOREKSI 2026-11-11 (root cause sebenarnya, setelah csheva bilang
+    sudah install a5f0): BUKAN soal install/Metro. `setPitchRatio`
+    TERTINGGAL di commit a5f0c887 — cuma ditambah di NativePlaybackModule
+    (@ReactMethod, modul JNI yang JS tidak panggil langsung) +
+    PlaybackNativeBridge (0 caller). Modul yang JS panggil lewat spec
+    (NativePlaybackService, NAME="NativePlaybackService") TIDAK punya
+    method ini → proxy JS "is not a function" meski APK a5f0c887
+    terinstall. Klaim sebelumnya "APK 747dda80 terverifikasi binernya,
+    tinggal install" SALAH — cek `nm`/dex strings hanya membuktikan
+    method ADA di APK, bukan TERJANGKAU dari modul yang JS panggil.
+    Pelajaran: verifikasi biner harus sampai ke modul yang JS panggil
+    (grep caller di NativePlaybackService.kt), bukan sekadar strings.
+    Fix commit c69ef41c (mirror setPlaybackRate di NativePlaybackService
+    — try/catch + Promise); rantai lengkap terverifikasi grep. Build Dev
+    run 42962732238 (head c69ef41c) di-trigger 2026-11-11 ~11:59 WIB,
+    dimonitor — hasil menyusul. Metro reset TIDAK ada hubungannya
+    (JS sudah benar; yang hilang method native di modul service).
   - **Logcat #11 (2026-11-11 11:49–11:54 WIB, UID 10535, PID 32316):
     retune MASIH gagal — sesi via Metro lagi (baris 'Android Bundled
     2185ms'), `setPitchRatio is not a function` 8x (11:51:50–11:52:25,
