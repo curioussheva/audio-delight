@@ -7,9 +7,13 @@ import Animated, { FadeInUp, FadeOutUp } from "react-native-reanimated";
 import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
 import { usePlayerStore } from "@/features/player/store/playerStore";
+import { useTheme } from "@/shared/context/ThemeContext";
+import { accentOn } from "@/shared/utils/contrast";
 
 export const AudioPropertyToast = () => {
   const { currentSong } = usePlayerStore();
+  const { theme } = useTheme();
+  const { colors, isDark } = theme;
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -35,29 +39,52 @@ export const AudioPropertyToast = () => {
   const detailsText =
     detailsParts.length > 0 ? detailsParts.join(" • ") : "—";
 
+  // U-P2-13: dulu emas #D4AF37 / teal #00D4AA hardcoded — emasnya bukan
+  // emas brand (#C9A96A) dan keduanya mengabaikan tema. Sekarang dari
+  // token tema: Hi-Res = primary[500] (emas champagne brand di Noir,
+  // bronze di Porcelain), non-Hi-Res = accentOn di atas elevated.
+  // Blur ikut tema (gelap di Noir, terang di Porcelain) supaya pasangan
+  // warnanya tetap lolos (diukur rumus contrast.ts, vs elevated):
+  // primary[500] Noir 5,77 / Porcelain 6,29; aksen perak Noir 8,30 /
+  // bronze Porcelain 6,29; teks text.primary/secondary 11,82–18,13.
+  const hiResColor = colors.primary[500];
+  const standardColor = accentOn(
+    [colors.accent.primary],
+    colors.background.elevated,
+    [colors.text.primary],
+  );
+  const accentColor = currentSong.isHiRes ? hiResColor : standardColor;
+
   return (
     <Animated.View
       entering={FadeInUp.springify()}
       exiting={FadeOutUp}
       style={styles.container}
     >
-      <BlurView intensity={60} tint="dark" style={styles.blur}>
-        <View
-          style={[
-            styles.indicator,
-            { backgroundColor: currentSong.isHiRes ? "#D4AF37" : "#00D4AA" },
-          ]}
-        />
+      <BlurView
+        intensity={60}
+        tint={isDark ? "dark" : "light"}
+        style={[
+          styles.blur,
+          {
+            backgroundColor: colors.background.elevated,
+            borderColor: colors.border.light,
+          },
+        ]}
+      >
+        <View style={[styles.indicator, { backgroundColor: accentColor }]} />
         <Ionicons
           name={currentSong.isHiRes ? "ribbon" : "checkmark-circle"}
           size={18}
-          color={currentSong.isHiRes ? "#D4AF37" : "#00D4AA"}
+          color={accentColor}
         />
         <View style={styles.textContainer}>
-          <Text style={styles.title}>
+          <Text style={[styles.title, { color: colors.text.primary }]}>
             {currentSong.isHiRes ? "Hi-Res Audio File" : "Audio File"}
           </Text>
-          <Text style={styles.details}>{detailsText}</Text>
+          <Text style={[styles.details, { color: colors.text.secondary }]}>
+            {detailsText}
+          </Text>
         </View>
       </BlurView>
     </Animated.View>
@@ -79,7 +106,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
   },
   indicator: {
     width: 4,
@@ -91,13 +117,11 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   title: {
-    color: "#FFF",
     fontSize: 12,
     fontWeight: "800",
     letterSpacing: 0.5,
   },
   details: {
-    color: "rgba(255,255,255,0.6)",
     fontSize: 10,
     marginTop: 2,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",

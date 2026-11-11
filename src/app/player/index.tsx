@@ -273,9 +273,11 @@ export default function PlayerScreen() {
   const borderColor = colors.border?.light || colors.background.tertiary;
   const errorColor = colors.status.error;
 
+  // U-P2-13: dulu fallback gradien memakai "#000000" hardcoded saat tema
+  // tidak mendefinisikan gradient. Sekarang kedua stop dari token tema.
   const gradientColors = colors.gradient?.primary || [
     backgroundColor,
-    isDark ? "#000000" : colors.background.secondary,
+    colors.background.secondary,
   ];
 
   const bottomBarColor = isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)";

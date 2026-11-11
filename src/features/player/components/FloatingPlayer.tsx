@@ -102,7 +102,11 @@ export default function FloatingPlayer() {
           s.wrapper,
           {
             backgroundColor: colors.background.elevated,
-            borderColor: colors.border?.light || "#ffffff20",
+            // U-P2-13: dulu fallback border "#ffffff20" hardcoded — di
+            // tema terang garisnya nyaris tak terlihat di atas elevated
+            // putih. Fallback sekarang token tema (background.tertiary).
+            borderColor:
+              colors.border?.light ?? colors.background.tertiary,
             ...shadows?.xl,
           },
           animatedContainer,

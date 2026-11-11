@@ -10,6 +10,8 @@ import {
 import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
 import { usePlayerStore } from "@/features/player/store/playerStore";
+import { useTheme } from "@/shared/context/ThemeContext";
+import { accentOn } from "@/shared/utils/contrast";
 
 export const SleepTimerModal = ({
   visible,
@@ -19,7 +21,21 @@ export const SleepTimerModal = ({
   onClose: () => void;
 }) => {
   const { setSleepTimer, sleepTimerEnd } = usePlayerStore();
+  const { theme } = useTheme();
+  const { colors, isDark } = theme;
   const [now, setNow] = useState(() => Date.now());
+
+  // U-P2-13: sheet dulu selalu gelap (rgba(10,22,40,0.9) + teks #FFF +
+  // aksen #00D4AA) di semua tema — pengguna tema terang mendapat sheet
+  // gelap yang tidak mengikuti tema. Sekarang semua warna dari token
+  // tema: latar elevated, teks text.primary, aksen lewat accentOn di atas
+  // elevated (diukur rumus contrast.ts: Noir perak 8,30, Porcelain
+  // bronze 6,29 — lolos AA 4,5).
+  const accentColor = accentOn(
+    [colors.accent.primary],
+    colors.background.elevated,
+    [colors.text.primary],
+  );
 
   // Tick tiap detik selama modal terbuka dan timer berjalan, supaya sisa
   // waktu yang ditampilkan tidak basi.
@@ -71,11 +87,25 @@ export const SleepTimerModal = ({
       onRequestClose={onClose}
     >
       <Pressable style={styles.overlay} onPress={onClose}>
-        <BlurView intensity={40} tint="dark" style={styles.content}>
-          <View style={styles.handle} />
-          <Text style={styles.title}>Sleep Timer</Text>
+        <BlurView
+          intensity={40}
+          tint={isDark ? "dark" : "light"}
+          style={[
+            styles.content,
+            {
+              backgroundColor: colors.background.elevated,
+              borderColor: colors.border.light,
+            },
+          ]}
+        >
+          <View
+            style={[styles.handle, { backgroundColor: colors.border.light }]}
+          />
+          <Text style={[styles.title, { color: colors.text.primary }]}>
+            Sleep Timer
+          </Text>
           {remainingMs !== null && (
-            <Text style={styles.remaining}>
+            <Text style={[styles.remaining, { color: accentColor }]}>
               {remainingMs > 0
                 ? `Time remaining: ${formatRemaining(remainingMs)}`
                 : "Timer finished"}
@@ -87,7 +117,10 @@ export const SleepTimerModal = ({
             return (
               <TouchableOpacity
                 key={opt.label}
-                style={styles.option}
+                style={[
+                  styles.option,
+                  { borderBottomColor: colors.border.light },
+                ]}
                 onPress={() => handleSelect(opt.value)}
                 accessibilityRole="button"
                 accessibilityState={{ selected: active }}
@@ -95,19 +128,20 @@ export const SleepTimerModal = ({
                 <Text
                   style={[
                     styles.optionText,
-                    active ? styles.activeText : null,
+                    { color: colors.text.primary },
+                    active ? { color: accentColor } : null,
                   ]}
                 >
                   {opt.label}
                 </Text>
                 {active ? (
-                  <Ionicons name="checkmark" size={20} color="#00D4AA" />
+                  <Ionicons name="checkmark" size={20} color={accentColor} />
                 ) : (
                   opt.value !== null && (
                     <Ionicons
                       name="time-outline"
                       size={20}
-                      color="rgba(255,255,255,0.3)"
+                      color={colors.text.tertiary}
                     />
                   )
                 )}
@@ -126,27 +160,22 @@ const styles = StyleSheet.create({
     padding: 25,
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
-    backgroundColor: "rgba(10, 22, 40, 0.9)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
   },
   handle: {
     width: 40,
     height: 4,
-    backgroundColor: "rgba(255,255,255,0.2)",
     alignSelf: "center",
     borderRadius: 2,
     marginBottom: 20,
   },
   title: {
-    color: "#FFF",
     fontSize: 18,
     fontWeight: "800",
     marginBottom: 20,
     textAlign: "center",
   },
   remaining: {
-    color: "#00D4AA",
     fontSize: 14,
     fontWeight: "600",
     textAlign: "center",
@@ -157,8 +186,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 18,
     borderBottomWidth: 0.5,
-    borderBottomColor: "rgba(255,255,255,0.1)",
   },
-  optionText: { color: "#FFF", fontSize: 16, fontWeight: "500" },
-  activeText: { color: "#00D4AA" },
+  optionText: { fontSize: 16, fontWeight: "500" },
 });
