@@ -9,6 +9,7 @@
 import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   ScrollView,
   StyleSheet,
@@ -53,6 +54,19 @@ export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
   const [importText, setImportText] = useState("");
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+
+  // Hapus profil lewat long-press — seperti hapus preset EQ, minta
+  // konfirmasi dulu supaya profil tidak hilang karena sentuhan tak sengaja.
+  const handleRemoveProfile = (id: string, name: string) => {
+    Alert.alert("Hapus profil", `Hapus profil "${name}"?`, [
+      { text: "Batal", style: "cancel" },
+      {
+        text: "Hapus",
+        style: "destructive",
+        onPress: () => remove(id),
+      },
+    ]);
+  };
 
   const handleImport = async () => {
     setImporting(true);
@@ -145,7 +159,7 @@ export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
                     void activate(p.id);
                   }
                 }}
-                onLongPress={() => remove(p.id)}
+                onLongPress={() => handleRemoveProfile(p.id, p.name)}
                 style={[
                   styles.card,
                   {
