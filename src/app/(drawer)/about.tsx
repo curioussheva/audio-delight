@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  Alert,
   View,
   Text,
   StyleSheet,
@@ -62,9 +63,15 @@ export default function AboutScreen() {
     },
   ];
 
+  // U-P2-46: kegagalan buka link DULU ditelan diam-diam (`catch (() => {})`)
+  // — user mengetuk, tidak terjadi apa-apa, tanpa penjelasan. Sekarang
+  // gagal dibuka disampaikan lewat Alert.
   const openLink = (url: string) => {
     Linking.openURL(url).catch(() => {
-      // Fallback jika gagal membuka link
+      Alert.alert(
+        "Tidak bisa membuka tautan",
+        "Periksa aplikasi email/browser di perangkat ini, lalu coba lagi.",
+      );
     });
   };
 
@@ -167,8 +174,11 @@ export default function AboutScreen() {
           <Text style={[styles.linkText, { color: colors.text.primary }]}>
             curioussheva@gmail.com
           </Text>
+          {/* U-P2-46: ikon ekor DULU `copy-outline` padahal aksinya membuka
+              aplikasi mail (bukan menyalin). Sekarang chevron seperti baris
+              Facebook — aksi yang sama, ikon yang sama. */}
           <Ionicons
-            name="copy-outline"
+            name="chevron-forward"
             size={16}
             color={colors.text.tertiary}
           />
