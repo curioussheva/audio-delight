@@ -261,13 +261,21 @@ int AudioDeviceManager::refreshDevices() {
 
     env->PopLocalFrame(nullptr);
 
+    // FIX (DV-M2, 2026-11-11): salin di bawah lock, log salinannya.
+    // Sebelumnya loop log di bawah membaca mDevices TANPA lock — dua
+    // refreshDevices() bersamaan (thread JS via nativeGetDevices +
+    // thread AudioDeviceCallback via notifyDeviceAdded/Removed) berarti
+    // satu thread move-assign mDevices sementara yang lain membacanya
+    // (data race, UB).
+    std::vector<AudioDeviceDescriptor> snapshot;
     {
         std::lock_guard<std::mutex> lock(mMutex);
         mDevices = std::move(found);
+        snapshot = mDevices;
     }
 
-    LOGI("refreshDevices: %zu device output terdeteksi", mDevices.size());
-    for (const auto& d : mDevices) {
+    LOGI("refreshDevices: %zu device output terdeteksi", snapshot.size());
+    for (const auto& d : snapshot) {
         std::string rates;
         char buf[24];
         for (size_t i = 0; i < d.supportedSampleRates.size(); ++i) {
@@ -279,7 +287,7 @@ int AudioDeviceManager::refreshDevices() {
              d.supportsExclusive ? "ya" : "tidak");
     }
 
-    return static_cast<int>(mDevices.size());
+    return static_cast<int>(snapshot.size());
 }
 
 // =====================================================
