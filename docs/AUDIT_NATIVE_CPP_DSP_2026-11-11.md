@@ -440,3 +440,21 @@ g++ -std=c++17 /tmp/test_shelf.cpp $CPP/dsp/BiquadFilter.cpp -o /tmp/test_shelf 
 ```
 
 Hasil ringkas (semua terkonfirmasi di atas): Track A T1 HSC Q=3 ±20 dB → semua koefisien NaN (kontrol Q=0,707 finite); T2 LSC/HSC |H(Fc)| = 1,4125 keduanya, cerminan meleset ~0,44 dB; T3 DF-II-T vs DF-I maxErr 0,0000058; T4 PK 16 kHz @44,1 kHz → 3,9811 (ideal 3,981), pole stabil; T5 EQ 16 kHz +12 dB → 3,984 @16 kHz, 1,004 @1 kHz; T6 ganti +12 → −12 dB tanpa reset → max|out| 1,955 (steady-state ~0,25). Track B H1 DC diam −0.045/−0.135/−0.180 (drive 6/18/24); H3 sine A=1.0 drive 18 → DC +0.135, −2.54 dB, h2/f0 0.404, maxabs 1.0497; H4 A=0.1 → DC −0.132; H5a 528 Hz noise maxabs 0.29; H5b 30000 Hz → **inf/NaN**; H5c 528 Hz sine outRMS 0.3531 ≈ in; H6 carrier 194.5/204.5 Hz, amp 0.04, kontinuitas maxDiff 0.0; H7a bypass bit-exact YA; H7b mono max|L−R| 0.0; H7c cross-feed R[576]=0.16, R[1200]=0.24; A=0.5 drive 18 → h2/f0 0.1752, −1.87 dB; drive 0 bypass bit-exact YA. Track C: HPF/LPF gagal kompilasi (error persis di atas); SVF resonance=0 → dering abadi 0,131087; resonance=−0,5 → −5,4×10¹²; sr=0 → NaN; `createHanningWindow(1)` → NaN; `createHanningWindow(-5)` → throw. Track D: HSC Q=6 +12 dB → semua koefisien −nan; Q=2 +24 dB → b0 −nan; Q=0,707 +6 dB → b0=1.483452 aman.
+
+---
+
+## Perbaikan 2026-11-11 — DIKERJAKAN (3 MAJOR hidup)
+
+Ronde perbaikan atas 3 MAJOR hidup (pilihan csheva 2026-11-11: "lanjut rekomendasi dan perbaikannya"). Pola ronde sebelumnya: commit terpisah per temuan + SATU build Dev gabungan di akhir. Item fitur (database AutoEQ, convolver, UI immersive, HRTF) TIDAK masuk ronde ini.
+
+| Temuan | Commit | Isi |
+|---|---|---|
+| DSP-M1 | `4860aef5` | `mConfigApplied = false` di `AudioPipeline::prepare()` — guard dedup di-reset saat graph di-rebuild, jadi `applyDSPConfig` berikutnya menerapkan ulang config ke node baru. Satu baris + komentar. |
+| DSP-M3 | `1fd288b2` | DC blocker satu-pole (highpass ~10 Hz, koefisien dari laju stream) di `HarmonicExciter::process()` + `prepare(sampleRate)` baru (di-wire dari `ImmersiveStage::prepare`) + `reset()` bersihkan state. Komentar palsu "-0.25 membuat rerata nol" dikoreksi di tempat (DSP-M3), angka 1.2 yang amplitudo-spesifik diluruskan (dsp-m19). |
+| DSP-M2 | `412b0968` | `AudioCallback::applyPipeline` + jalur fallback lewati `Limiter::apply` bila `LimiterNode` sudah jalan (mode DSP + `limiterEnabled`, dan di fallback + pipeline jalan via `isDSPEnabled()`). Immersive tetap 1× lewat callback; BitPerfect tetap 0×; limiterEnabled=false tetap punya backstop callback. |
+
+**Verifikasi:**
+- DSP-M3: harness standalone `/tmp/test_exciter_fix.cpp` (file produksi asli) **12/12 PASS** — DC 0.000000 di semua kasus (diam drive 6/18/24; sine A=1.0 dan A=0.1 drive 18; @44100 dan @96000); bypass drive 0 tetap bit-exact; `reset()` bersihkan state; blocker transparan di 50 Hz (ratio 0.9781 vs ekspektasi ~0.98). Satu temuan harness yang sempat salah: threshold T8 awal (ratio > 0.97 vs input) gagal (0.9484) — bukan karena blocker, tapi karena perubahan level exciter sendiri; tes diperbaiki untuk mengisolasi blocker (baru vs lama, ekspektasi ~0.98) dan komentar atenuasi blocker diluruskan (0.26 dB @40 Hz, 0.17 dB @50 Hz, < 0.05 dB di atas ~100 Hz).
+- DSP-M1/DSP-M2: verifikasi kode (tidak ada harness standalone — keduanya soal wiring antar-komponen). Verifikasi device ditunggu: DSP-M1 via DSg-1 (set EQ +6 dB, toggle mode/cabut headset, dengarkan), DSP-M2 via DSg-2 (master keras DSP vs Immersive), DSP-M3 via DSg-6 (bagian pelan/diam mode Immersive).
+
+**Build:** BELUM — Dev build gabungan dipicu setelah ronde ini; hasil diisi di sini setelah terverifikasi (jangan tulis hasil build sebelum ada, lihat pelajaran 2026-11-11).
