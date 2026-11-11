@@ -169,6 +169,15 @@ dijalankan); fallback-lah yang menyelamatkan analisis. Verdict yang
 tampil di layar untuk 01/03/04/05 tidak tercatat di log — perlu
 konfirmasi csheva.
 
+**KOREKSI (2026-11-11 17:46, setelah pull + `pnpm install` + grep = 0
+di Termux):** patch TIDAK diterapkan bukan karena install belum jalan,
+melainkan karena **salah gue** — `patchedDependencies` gue taruh di
+top-level `package.json`, padahal pnpm hanya membacanya di bawah key
+`"pnpm"` (atau `pnpm-workspace.yaml`). Top-level diabaikan diam-diam
+tanpa error. Fix `645035a8`: dibungkus ke `"pnpm":
+{ "patchedDependencies": {...} }`. File patch + isinya sudah benar
+dari awal. Setelah pull + `pnpm install` ulang, grep harus 1.
+
 ## Commit
 
 - `978ea1a6` — patch pnpm lib audio-metadata + `patchedDependencies`.
