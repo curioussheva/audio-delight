@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -98,6 +98,17 @@ export default function OnboardingScreen() {
   const [selectedMode, setSelectedMode] = useState<AudioMode | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // U-P2-32: navigasi setTimeout dulu tanpa cleanup — bila layar unmount
+  // sebelum 100ms, router.replace tetap jalan di layar yang sudah tidak ada.
+  const navTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (navTimeout.current !== null) {
+        clearTimeout(navTimeout.current);
+      }
+    };
+  }, []);
+
   // Prevent back button during submission
   useEffect(() => {
     const backHandler = BackHandler.addEventListener(
@@ -149,9 +160,27 @@ export default function OnboardingScreen() {
 
           if (!hasNotifPermission) {
             console.log("[Onboarding] Requesting POST_NOTIFICATIONS...");
-            await PermissionsAndroid.request(
-              PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+            const notifResult = await PermissionsAndroid.request(
+              PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
             );
+            // U-P2-32: hasil request DULU diabaikan — ditolak pun aplikasi
+            // lanjut diam-diam seolah notifikasi diizinkan. Sekarang
+            // penolakan dicatat dan disampaikan jujur: lanjut TANPA
+            // notifikasi, bukan pura-pura diizinkan. Notifikasi di sini
+            // opsional (pemutaran tetap jalan), jadi penolakan tidak
+            // menghentikan onboarding — user cukup mengetuk "Lanjutkan".
+            if (notifResult !== PermissionsAndroid.RESULTS.GRANTED) {
+              console.log(
+                "[Onboarding] POST_NOTIFICATIONS ditolak — lanjut tanpa notifikasi.",
+              );
+              await new Promise<void>((resolve) => {
+                Alert.alert(
+                  "Notifikasi dimatikan",
+                  "Izin notifikasi ditolak, jadi PristineAudio tidak akan menampilkan notifikasi pemutaran. Bisa diaktifkan lagi di Pengaturan sistem.",
+                  [{ text: "Lanjutkan", onPress: () => resolve() }],
+                );
+              });
+            }
           }
         }
       } else if (Platform.OS === "ios") {
@@ -200,7 +229,7 @@ export default function OnboardingScreen() {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
       // 🟢 4. Navigasi ke Library
-      setTimeout(() => {
+      navTimeout.current = setTimeout(() => {
         router.replace("/(drawer)/(tabs)/library");
       }, 100);
     } catch (error) {
