@@ -22,7 +22,6 @@ interface SongListItemProps {
   colors: any;
   onPress: (song: Song) => void;
   onToggleFavorite: (id: string) => void;
-  onMorePress?: (song: Song) => void;
 }
 
 // ─── Artwork Thumbnail ────────────────────────────────────────────────────────
@@ -101,7 +100,6 @@ export const SongListItem = memo(
     colors,
     onPress,
     onToggleFavorite,
-    onMorePress,
   }: SongListItemProps) => {
     const handlePress = () => {
       if (Platform.OS !== "web") {

@@ -85,9 +85,6 @@ export const LibraryTabBar = ({
     onRefresh();
   }, [onRefresh]);
 
-  const progressPercent =
-    scanTotal > 0 ? Math.floor((scanProgress / scanTotal) * 100) : 0;
-
   return (
     <View
       style={[styles.container, { backgroundColor: colors.background.primary }]}

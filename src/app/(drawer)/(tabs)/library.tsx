@@ -38,7 +38,8 @@ import {
 // Context & Stores
 import { useTheme } from "@/shared/context/ThemeContext";
 import { usePlayerStore } from "@/features/player/store/playerStore";
-import { useOptimizedLibrary } from "@/features/library/hooks/useOptimizedLibrary";
+import { useLibrary } from "@/features/library/hooks/useLibrary";
+import { useFavorites } from "@/features/favorites/hooks/useFavorites";
 import { useLibraryStore } from "@/features/library/store/libraryStore";
 import {
   selectAlbums,
@@ -126,24 +127,17 @@ export default function LibraryScreen() {
   const s = useMemo(() => createStyles(colors), [colors]);
 
   // ── Library Hooks ──────────────────────────────────────────────────────────
-  // U-P1-39: error dari useLibrary diteruskan useOptimizedLibrary —
-  // dulu dibuang, jadi gagal muat hanya masuk console.
-  const {
-    loading,
-    error: libraryError,
-    reload,
-    isFavorite,
-    toggleFavorite,
-    favoriteIds,
-  } = useOptimizedLibrary({
-      searchQuery: "",
-      filterBy:
-        filterType === "all"
-          ? "all"
-          : filterType === "lossless"
-            ? "lossless"
-            : "hi-res",
-    });
+  // U-P1-39: error dari useLibrary dibaca langsung — dulu dibuang, jadi
+  // gagal muat hanya masuk console.
+  // U-P2-03: dulu lewat useOptimizedLibrary, tapi nilai yang dipakai dari
+  // hook itu hanya loading/error/reload + favorit — processedSongs-nya
+  // (return `songs`) tidak pernah dipakai, dan filterBy yang dikirim
+  // ("all"/"lossless"/"hi-res") tidak cocok dengan nilai yang dipahami
+  // hook itu ("favorites"/"format-flac"/"sample-rate-hi-res"/...).
+  // Panggil useLibrary + useFavorites langsung supaya tidak ada komputasi
+  // filter/sort yang hasilnya dibuang.
+  const { loading, error: libraryError, reload } = useLibrary();
+  const { isFavorite, toggleFavorite, favoriteIds } = useFavorites();
 
   // U-P1-18: detail view (Album/Artist/Genre/Folder/Format) menerima
   // favoriteIds sebagai Set — dulu tidak pernah dioper, jadi semua hati
@@ -201,20 +195,10 @@ export default function LibraryScreen() {
   );
 
   // ── CORE LOGIC: Reactive Filtering + URI Safety ───────────────────────────
-  const validSongs = useMemo(() => {
-    return filteredSource.filter((song) => {
-      if (!song.uri) {
-        // Throttle warning supaya tidak banjir log
-        if (Math.random() < 0.05) {
-          console.warn(
-            `[Library] Song without URI: "${song.title || "Unknown"}" (ID: ${song.id})`,
-          );
-        }
-        return true; // TETAP TAMPILKAN lagu (jangan sembunyikan)
-      }
-      return true;
-    });
-  }, [filteredSource]);
+  // U-P2-03: dulu ada memo `validSongs` yang mem-filter filteredSource
+  // tapi kedua cabangnya `return true` — no-op. Lagu tanpa URI tetap
+  // ditampilkan (keputusan lama), jadi filter-nya dihapus dan pemakai
+  // memakai filteredSource langsung.
 
   // ── Lifecycle & Sync ───────────────────────────────────────────────────────
   const refreshLibrary = useCallback(
@@ -484,7 +468,7 @@ export default function LibraryScreen() {
       case "song":
         return (
           <FlashList
-            data={validSongs}
+            data={filteredSource}
             keyExtractor={(item) => item.id}
             contentContainerStyle={{
               paddingBottom: FLOATING_BOTTOM,
@@ -499,10 +483,10 @@ export default function LibraryScreen() {
                 // Gunakan handleSongPress agar konsisten
                 onPress={() => {
                   // 🔥 FIX: kirim slice sekitar lagu, bukan 1195 lagu semua
-                  const idx = validSongs.findIndex((s: any) => s.id === item.id);
+                  const idx = filteredSource.findIndex((s: any) => s.id === item.id);
                   const start = Math.max(0, idx - 10);
-                  const end = Math.min(validSongs.length, idx + 40);
-                  handleSongPress(item, validSongs.slice(start, end));
+                  const end = Math.min(filteredSource.length, idx + 40);
+                  handleSongPress(item, filteredSource.slice(start, end));
                 }}
                 onToggleFavorite={toggleFavorite}
               />

@@ -1,6 +1,5 @@
 // src/app/search.tsx
 import React, { useState, useMemo } from "react";
-import { Song } from "@/shared/types/audio";
 import {
   View,
   Text,
@@ -44,10 +43,6 @@ export default function SearchScreen() {
   const { playSong } = usePlayerStore();
 
   const [query, setQuery] = useState("");
-  const _filteredSongs = songs.filter((song: Song) => {
-    // Tambahkan tipe Song
-    return song.title.toLowerCase().includes(query.toLowerCase());
-  });
 
   const [filterBy, setFilterBy] = useState<
     "all" | "title" | "artist" | "album"
