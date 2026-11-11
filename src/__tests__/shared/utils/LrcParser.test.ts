@@ -1,4 +1,4 @@
-import { parseLRC } from "../../../shared/utils/LrcParser";
+import { parseLRC, findActiveLyricIndex } from "../../../shared/utils/LrcParser";
 
 describe("parseLRC", () => {
   it("parse satu timestamp per baris", () => {
@@ -63,5 +63,43 @@ describe("parseLRC", () => {
     const b = parseLRC("[00:03.00]c\n[00:04.00]d");
     expect(a.map((l) => l.time)).toEqual([1000, 2000]);
     expect(b.map((l) => l.time)).toEqual([3000, 4000]);
+  });
+});
+
+describe("findActiveLyricIndex", () => {
+  const lines = [
+    { time: 0, text: "a" },
+    { time: 5000, text: "b" },
+    { time: 10000, text: "c" },
+  ];
+
+  it("posisi detik mengaktifkan baris yang waktunya dalam milidetik", () => {
+    // 7,5 detik = 7500ms → baris kedua (5000–10000ms).
+    expect(findActiveLyricIndex(lines, 7.5)).toBe(1);
+  });
+
+  it("baris pertama aktif dari awal lagu", () => {
+    expect(findActiveLyricIndex(lines, 0)).toBe(0);
+    expect(findActiveLyricIndex(lines, 4.999)).toBe(0);
+  });
+
+  it("baris terakhir tetap aktif sampai lagu selesai", () => {
+    expect(findActiveLyricIndex(lines, 10)).toBe(2);
+    expect(findActiveLyricIndex(lines, 999)).toBe(2);
+  });
+
+  it("REGRESI U-P2-12: posisi 12 detik TIDAK menunggu 12000 detik — baris 10 detik aktif", () => {
+    // Dulu `progress >= line.time` dibandingkan mentah-mentah (detik vs
+    // milidetik): 12 >= 10000 salah, jadi tidak ada baris yang aktif.
+    expect(findActiveLyricIndex(lines, 12)).toBe(2);
+  });
+
+  it("belum ada baris yang mulai → -1", () => {
+    const late = [{ time: 5000, text: "b" }];
+    expect(findActiveLyricIndex(late, 1)).toBe(-1);
+  });
+
+  it("list kosong → -1", () => {
+    expect(findActiveLyricIndex([], 30)).toBe(-1);
   });
 });

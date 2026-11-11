@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, Dimensions } from "react-native";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { accentOn } from "@/shared/utils/contrast";
+import { findActiveLyricIndex } from "@/shared/utils/LrcParser";
 
 const { height } = Dimensions.get("window");
 
@@ -32,11 +33,10 @@ export const FullLyricsView = () => {
 
   const flatListRef = useRef<FlatList>(null);
 
-  // Temukan index lirik yang sedang aktif
-  const activeIndex = lyrics.findIndex((line, index) => {
-    const nextLine = lyrics[index + 1];
-    return progress >= line.time && (!nextLine || progress < nextLine.time);
-  });
+  // Temukan index lirik yang sedang aktif. U-P2-12: posisi store dalam
+  // DETIK, line.time dalam MILIDETIK — konversi satuan ada di dalam
+  // findActiveLyricIndex (dulu dibandingkan mentah-mentah, salah 1000×).
+  const activeIndex = findActiveLyricIndex(lyrics, progress);
 
   // Auto-scroll lirik ke tengah layar saat berganti baris
   useEffect(() => {
