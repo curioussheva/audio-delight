@@ -343,14 +343,21 @@ export default function EqualizerScreen() {
                 MODE {modeLabel} · MESIN {eq.isEQEnabled ? "AKTIF" : "BYPASS"}
               </Text>
             </View>
+            {/* U-P1-32: matikan saat mode beku (bit-perfect/Solfeggio) —
+                resetToDefault return dini di sana, jadi tanpa disabled tombol
+                ini membuka konfirmasi lalu diam-diam tidak terjadi apa-apa.
+                Pola sama dengan tombol simpan preset di bawah. */}
             <TouchableOpacity
               onPress={handleReset}
+              disabled={eq.isDSPDisabled}
               style={[
                 styles.resetBtn,
                 { padding: spacing.sm, minWidth: 44, minHeight: 44 },
+                eq.isDSPDisabled && { opacity: 0.4 },
               ]}
               accessibilityRole="button"
               accessibilityLabel="Reset DSP ke pengaturan netral"
+              accessibilityState={{ disabled: eq.isDSPDisabled }}
             >
               <RotateCcw size={18} color={colors.text.secondary} />
             </TouchableOpacity>
