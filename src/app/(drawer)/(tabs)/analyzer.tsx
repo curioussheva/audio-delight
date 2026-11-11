@@ -257,7 +257,15 @@ export default function AnalyzerScreen() {
         text: "TIDAK DAPAT DIVERIFIKASI",
         color: colors.text.tertiary,
       };
-    return { text: "STUDIO MASTER AUTHENTIC", color: colors.status.success };
+    // "STUDIO MASTER" hanya untuk yang di atas CD-quality (U-P1-02):
+    // file 16-bit/44,1 kHz yang terukur konsisten adalah CD quality,
+    // bukan studio master. Nilai diambil mentah dari currentSong —
+    // tanpa fallback 16/44100 (fallback itu yang membuat label palsu).
+    const declaredDepth = currentSong?.bitDepth ?? 0;
+    const declaredRate = currentSong?.sampleRate ?? 0;
+    if (declaredDepth > 16 || declaredRate > 48000)
+      return { text: "STUDIO MASTER AUTHENTIC", color: colors.status.success };
+    return { text: "CD QUALITY AUTHENTIC", color: colors.status.success };
   };
 
   const bitrateDisplay = currentSong?.bitrate
