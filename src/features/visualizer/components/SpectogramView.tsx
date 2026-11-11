@@ -380,6 +380,11 @@ export const SpectogramView = React.memo(
                 </Text>
               ))}
             </View>
+            {/* U-P2-28: color bar tanpa label skala tidak menjelaskan
+                apa-apa. Warna memetakan AMPLITUDO TERNORMALISASI 0–1:
+                nilai tiap sel = min(1, rata-rata FFT × sensitivity),
+                0 = hening (di bawah ambang), 1 = maks. 5 segmen =
+                0 / 0,25 / 0,5 / 0,75 / 1. */}
             <View style={styles.colorBar}>
               {[0, 64, 128, 192, 255].map((idx) => (
                 <View
@@ -390,6 +395,13 @@ export const SpectogramView = React.memo(
                   ]}
                 />
               ))}
+            </View>
+            <View style={styles.scaleLabels}>
+              <Text style={styles.scaleLabel}>0 · hening</Text>
+              <Text style={styles.scaleLabel}>
+                Amplitudo ternormalisasi
+              </Text>
+              <Text style={styles.scaleLabel}>1 · maks</Text>
             </View>
           </View>
         )}
@@ -494,5 +506,17 @@ const styles = StyleSheet.create({
   colorSegment: {
     flex: 1,
     height: "100%",
+  },
+  scaleLabels: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 4,
+  },
+  scaleLabel: {
+    // Sama seperti label sumbu (U-P2-22): #94A3B8 = 7,70:1 di atas
+    // #0A0A0F, lolos 4,5:1.
+    color: "#94A3B8",
+    fontSize: 9,
+    fontWeight: "500",
   },
 });
