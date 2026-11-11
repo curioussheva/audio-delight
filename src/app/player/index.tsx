@@ -393,26 +393,30 @@ export default function PlayerScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Audio Info */}
+        {/* Audio Info — tanpa metadata jangan klaim angka mustahil
+            (U-P1-06): dulu tampil "0 kHz", "0 bit", dan codec kosong
+            diklaim "MP3". */}
         <View style={styles.audioInfo}>
           <View style={styles.audioBadge}>
             <Mic2 size={14} color={textTertiary} strokeWidth={2} />
             <Text style={[styles.audioText, { color: textTertiary }]}>
-              {((currentSong.sampleRate || 0) / 1000).toFixed(0)} kHz
+              {currentSong.sampleRate
+                ? `${(currentSong.sampleRate / 1000).toFixed(0)} kHz`
+                : "-"}
             </Text>
           </View>
           <View style={[styles.audioDot, { backgroundColor: borderColor }]} />
           <View style={styles.audioBadge}>
             <Volume2 size={14} color={textTertiary} strokeWidth={2} />
             <Text style={[styles.audioText, { color: textTertiary }]}>
-              {currentSong.bitDepth || 0} bit
+              {currentSong.bitDepth ? `${currentSong.bitDepth} bit` : "-"}
             </Text>
           </View>
           <View style={[styles.audioDot, { backgroundColor: borderColor }]} />
           <View style={styles.audioBadge}>
             <ListMusic size={14} color={textTertiary} strokeWidth={2} />
             <Text style={[styles.audioText, { color: textTertiary }]}>
-              {currentSong.codec?.toUpperCase() || "MP3"}
+              {currentSong.codec?.toUpperCase() || "-"}
             </Text>
           </View>
         </View>
