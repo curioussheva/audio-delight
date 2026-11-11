@@ -90,7 +90,6 @@ list(APPEND ALL_SRCS
   jni/NativeDSPModule.cpp
   jni/NativeDeviceModule.cpp
   jni/NativePlaybackModule.cpp
-  jni/NativePristineAudio.cpp
   jni/NativeVisualizerModule.cpp
 )
 
