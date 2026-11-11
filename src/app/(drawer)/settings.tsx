@@ -35,6 +35,7 @@ import { Search } from "lucide-react-native"; // Icon tambahan jika ingin lebih 
 import * as Haptics from "expo-haptics";
 
 import { useTheme } from "@/context/ThemeContext";
+import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import { useAudioOutput } from "@/features/hardware/hooks/useAudioOutput";
 import { useDSPProcessingGate } from "@/features/hardware/hooks/useDSPProcessingGate";
 import { usePlayerStore } from "@/features/player/store/playerStore";
@@ -165,6 +166,12 @@ const SettingRow: React.FC<SettingRowProps> = ({
 export default function SettingsScreen() {
   const { theme, isDarkMode, toggleTheme, setTheme } = useTheme();
   const { colors, spacing } = theme;
+
+  // Teks di atas permukaan primary[500] — dipilih dari luminansi primary
+  // (putih 2,24:1 di Noir, hitam 9,37:1), bukan hardcoded "#fff".
+  const onPrimary =
+    pickReadable(["#FFFFFF", "#000000"], colors.primary[500], AA_NORMAL) ??
+    "#FFFFFF";
 
   const {
     isAutoScanEnabled,
@@ -1106,7 +1113,7 @@ export default function SettingsScreen() {
                 style={{
                   color:
                     Math.abs(tuningCents ?? 0) < 0.5
-                      ? "#fff"
+                      ? onPrimary
                       : colors.text.primary,
                   fontSize: 13,
                   fontWeight: "700",
@@ -1134,7 +1141,7 @@ export default function SettingsScreen() {
                 style={{
                   color:
                     Math.abs((tuningCents ?? 0) + 31.77) < 0.5
-                      ? "#fff"
+                      ? onPrimary
                       : colors.text.primary,
                   fontSize: 13,
                   fontWeight: "700",

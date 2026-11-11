@@ -21,6 +21,7 @@ import {
 } from "lucide-react-native";
 
 import { useTheme } from "@/shared/context/ThemeContext";
+import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import type { MediaTrack } from "../store/libraryStore";
 import { formatTime } from "@/shared/utils/time";
 import QualityBadge from "@/shared/components/ui/QualityBadge";
@@ -299,6 +300,12 @@ export const AlbumGrid: React.FC<AlbumGridProps> = ({
   const { theme } = useTheme();
   const { colors } = theme;
 
+  // Teks/ikon di atas tombol primary[500] — dipilih dari luminansi primary
+  // (putih 2,24:1 di Noir, hitam 9,37:1), bukan hardcoded "#fff".
+  const onPrimary =
+    pickReadable(["#FFFFFF", "#000000"], colors.primary[500], AA_NORMAL) ??
+    "#FFFFFF";
+
   const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
   const [heroImgError, setHeroImgError] = useState(false);
 
@@ -441,8 +448,10 @@ export const AlbumGrid: React.FC<AlbumGridProps> = ({
                 ]}
                 onPress={handlePlayAlbum}
               >
-                <Play size={18} color="#fff" fill="#fff" />
-                <Text style={styles.mainBtnText}>Play</Text>
+                <Play size={18} color={onPrimary} fill={onPrimary} />
+                <Text style={[styles.mainBtnText, { color: onPrimary }]}>
+                  Play
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity

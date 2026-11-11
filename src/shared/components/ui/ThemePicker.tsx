@@ -16,7 +16,7 @@ import { X, Shuffle, Check } from "lucide-react-native";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { ALL_THEMES, THEME_CATEGORIES } from "@/shared/constants/theme";
 import type { Theme } from "@/shared/constants/themes/types";
-import { accentOn } from "@/shared/utils/contrast";
+import { accentOn, pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 
 const { width } = Dimensions.get("window");
 const COLUMN_WIDTH = (width - 64) / 3;
@@ -45,6 +45,13 @@ export const ThemePicker: React.FC<{
   // Render satu kartu tema
   const renderThemeCard = (t: Theme) => {
     const isSelected = t.id === themeId;
+
+    // Centang di atas badge primary[500] tema kartu ini — dipilih dari
+    // luminansi primary kartu itu (putih 2,24:1 di Noir, hitam 9,37:1),
+    // bukan hardcoded "#FFF".
+    const onCardPrimary =
+      pickReadable(["#FFFFFF", "#000000"], t.colors.primary[500], AA_NORMAL) ??
+      "#FFFFFF";
 
     return (
       <TouchableOpacity
@@ -122,7 +129,7 @@ export const ThemePicker: React.FC<{
                 { backgroundColor: t.colors.primary[500] },
               ]}
             >
-              <Check size={10} color="#FFF" strokeWidth={3} />
+              <Check size={10} color={onCardPrimary} strokeWidth={3} />
             </View>
           )}
         </View>

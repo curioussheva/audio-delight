@@ -12,12 +12,20 @@ import { useRouter } from "expo-router";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { SpectrumAnalyzer } from "@/features/visualizer/components/SpectrumAnalyzer";
 import { useTheme } from "@/shared/context/ThemeContext";
+import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import { useSafePadding } from "@/shared/hooks/useSafePadding";
 import { RefreshCw, AlertCircle } from "lucide-react-native";
 
 export default function VisualizerScreen() {
   const { theme } = useTheme();
   const { colors } = theme;
+
+  // Teks di atas tombol primary[500] — dipilih dari luminansi primary
+  // (putih 2,24:1 di Noir, hitam 9,37:1), bukan hardcoded "#FFF".
+  const onPrimary =
+    pickReadable(["#FFFFFF", "#000000"], colors.primary[500], AA_NORMAL) ??
+    "#FFFFFF";
+
   const safePadding = useSafePadding();
   const router = useRouter();
 
@@ -56,7 +64,9 @@ export default function VisualizerScreen() {
             style={[styles.button, { backgroundColor: colors.primary[500] }]}
             onPress={() => router.back()}
           >
-            <Text style={styles.buttonText}>Kembali</Text>
+            <Text style={[styles.buttonText, { color: onPrimary }]}>
+              Kembali
+            </Text>
           </TouchableOpacity>
         </View>
       </View>

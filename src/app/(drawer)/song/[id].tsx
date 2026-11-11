@@ -30,6 +30,7 @@ import {
 } from "lucide-react-native";
 
 import { useTheme } from "@/shared/context/ThemeContext";
+import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import { useLibraryStore } from "@/features/library/store/libraryStore";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { LibraryScanner } from "@/features/library/api/scanner";
@@ -131,6 +132,12 @@ export default function SongDetailScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { colors } = theme;
+
+  // Teks/ikon di atas tombol primary[500] — dipilih dari luminansi primary
+  // (putih 2,24:1 di Noir, hitam 9,37:1), bukan hardcoded "#FFF".
+  const onPrimary =
+    pickReadable(["#FFFFFF", "#000000"], colors.primary[500], AA_NORMAL) ??
+    "#FFFFFF";
 
   const tracks = useLibraryStore((state) => state.tracks);
   const updateTrackInStore = useLibraryStore((state) => state.updateTrack);
@@ -512,8 +519,10 @@ export default function SongDetailScreen() {
           style={[styles.playButton, { backgroundColor: colors.primary[500] }]}
           onPress={handlePlay}
         >
-          <Play size={22} color="#FFF" fill="#FFF" />
-          <Text style={styles.playButtonText}>PUTAR SEKARANG</Text>
+          <Play size={22} color={onPrimary} fill={onPrimary} />
+          <Text style={[styles.playButtonText, { color: onPrimary }]}>
+            PUTAR SEKARANG
+          </Text>
         </TouchableOpacity>
 
         {isEditMode ? (

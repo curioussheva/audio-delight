@@ -22,7 +22,7 @@ import {
 
 import { useTheme } from "@/context/ThemeContext";
 import type { LibraryTab } from "../types/scan";
-import { accentOn } from "@/shared/utils/contrast";
+import { accentOn, pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 
 // ── Tab Configuration ────────────────────────────────────────────────────────
 export const TABS: { id: LibraryTab; label: string; icon: any }[] = [
@@ -63,6 +63,12 @@ export const LibraryTabBar = ({
   const { theme } = useTheme();
   const { colors } = theme;
   const scrollRef = useRef<ScrollView>(null);
+
+  // Teks/ikon pill tab aktif di atas primary[500] — dipilih dari luminansi
+  // primary (putih 2,24:1 di Noir, hitam 9,37:1), bukan hardcoded "#fff".
+  const onPrimary =
+    pickReadable(["#FFFFFF", "#000000"], colors.primary[500], AA_NORMAL) ??
+    "#FFFFFF";
 
   const handleTabPress = useCallback(
     (tabId: LibraryTab) => {
@@ -213,13 +219,15 @@ export const LibraryTabBar = ({
             >
               <Icon
                 size={16}
-                color={isActive ? "#fff" : colors.text.tertiary}
+                color={isActive ? onPrimary : colors.text.tertiary}
                 strokeWidth={isActive ? 2.5 : 2}
               />
               <Text
                 style={[
                   styles.tabLabel,
-                  { color: isActive ? "#fff" : colors.text.secondary },
+                  {
+                    color: isActive ? onPrimary : colors.text.secondary,
+                  },
                 ]}
               >
                 {tab.label}

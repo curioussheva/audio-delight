@@ -11,6 +11,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "@/context/ThemeContext";
+import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import type { MediaTrack } from "../store/libraryStore";
 import { formatTime } from "@/shared/utils/time";
 import QualityBadge from "@/shared/components/ui/QualityBadge";
@@ -250,7 +251,14 @@ const GenreDetailHeader = memo(
     onPlayAll: () => void;
     colors: any;
     spacing: any;
-  }) => (
+  }) => {
+    // Teks/ikon di atas tombol primary[500] — dipilih dari luminansi primary
+    // (putih 2,24:1 di Noir, hitam 9,37:1), bukan hardcoded "#fff".
+    const onPrimary =
+      pickReadable(["#FFFFFF", "#000000"], colors.primary[500], AA_NORMAL) ??
+      "#FFFFFF";
+
+    return (
     <View style={{ backgroundColor: colors.background.secondary }}>
       <TouchableOpacity
         onPress={onBack}
@@ -298,8 +306,10 @@ const GenreDetailHeader = memo(
           },
         ]}
       >
-        <Ionicons name="play" size={16} color="#fff" />
-        <Text style={styles.playAllLabel}>Putar Semua</Text>
+        <Ionicons name="play" size={16} color={onPrimary} />
+        <Text style={[styles.playAllLabel, { color: onPrimary }]}>
+          Putar Semua
+        </Text>
       </TouchableOpacity>
 
       <View
@@ -309,7 +319,8 @@ const GenreDetailHeader = memo(
         ]}
       />
     </View>
-  ),
+    );
+  },
 );
 
 // ── GenreList ─────────────────────────────────────────────────────────────────

@@ -19,6 +19,7 @@ import {
   Music2,
 } from "lucide-react-native";
 import { useTheme } from "@/context/ThemeContext";
+import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import type { MediaTrack } from "../store/libraryStore";
 import { formatTime } from "@/shared/utils/time";
 import { isLosslessCodec } from "@/shared/utils/audioQuality";
@@ -175,6 +176,13 @@ export const FileTypeList: React.FC<any> = ({
 }) => {
   const { theme } = useTheme();
   const { colors } = theme;
+
+  // Teks/ikon di atas tombol primary[500] — dipilih dari luminansi primary
+  // (putih 2,24:1 di Noir, hitam 9,37:1), bukan hardcoded "#fff".
+  const onPrimary =
+    pickReadable(["#FFFFFF", "#000000"], colors.primary[500], AA_NORMAL) ??
+    "#FFFFFF";
+
   const [selectedType, setSelectedType] = useState<any | null>(null);
 
   const filteredSongs = useMemo(() => {
@@ -248,8 +256,10 @@ export const FileTypeList: React.FC<any> = ({
           style={[styles.playAllBtn, { backgroundColor: colors.primary[500] }]}
           onPress={() => onSongPress(filteredSongs[0], filteredSongs)}
         >
-          <Play size={18} color="#fff" fill="#fff" />
-          <Text style={styles.playAllText}>Play All {meta.label}</Text>
+          <Play size={18} color={onPrimary} fill={onPrimary} />
+          <Text style={[styles.playAllText, { color: onPrimary }]}>
+            Play All {meta.label}
+          </Text>
         </TouchableOpacity>
       </View>
 

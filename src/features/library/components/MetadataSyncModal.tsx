@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Globe, X, Check, Database } from "lucide-react-native";
 import { Image } from "expo-image";
+import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import OnlineMetadataService from "../services/OnlineMetadataService";
 
 export const MetadataSyncModal = ({
@@ -23,6 +24,12 @@ export const MetadataSyncModal = ({
 }: any) => {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  // Teks/ikon di atas tombol primary[500] — dipilih dari luminansi primary
+  // (putih 2,24:1 di Noir, hitam 9,37:1), bukan hardcoded "#FFF".
+  const onPrimary =
+    pickReadable(["#FFFFFF", "#000000"], colors.primary[500], AA_NORMAL) ??
+    "#FFFFFF";
 
   const handleSearch = async () => {
     setLoading(true);
@@ -73,8 +80,10 @@ export const MetadataSyncModal = ({
                 ]}
                 onPress={handleSearch}
               >
-                <Globe size={18} color="#FFF" />
-                <Text style={styles.btnText}>Cari Online</Text>
+                <Globe size={18} color={onPrimary} />
+                <Text style={[styles.btnText, { color: onPrimary }]}>
+                  Cari Online
+                </Text>
               </TouchableOpacity>
             </View>
           ) : loading ? (

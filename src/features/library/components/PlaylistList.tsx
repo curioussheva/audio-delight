@@ -20,6 +20,7 @@ import {
 } from "lucide-react-native";
 
 import { useTheme } from "@/shared/context/ThemeContext";
+import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 
 // ── Types Definition ────────────────────────────────────────────────────────
 export interface PlaylistItem {
@@ -112,6 +113,12 @@ export const PlaylistList: React.FC<PlaylistListProps> = ({
   const { theme } = useTheme();
   const { colors } = theme;
 
+  // Teks/ikon di atas tombol primary[500] — dipilih dari luminansi primary
+  // (putih 2,24:1 di Noir, hitam 9,37:1), bukan hardcoded "#fff".
+  const onPrimary =
+    pickReadable(["#FFFFFF", "#000000"], colors.primary[500], AA_NORMAL) ??
+    "#FFFFFF";
+
   const handleCreate = useCallback(() => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -168,8 +175,10 @@ export const PlaylistList: React.FC<PlaylistListProps> = ({
             style={[styles.createBtn, { backgroundColor: colors.primary[500] }]}
             onPress={handleCreate}
           >
-            <Plus size={20} color="#fff" strokeWidth={3} />
-            <Text style={styles.createBtnText}>Buat Playlist Baru</Text>
+            <Plus size={20} color={onPrimary} strokeWidth={3} />
+            <Text style={[styles.createBtnText, { color: onPrimary }]}>
+              Buat Playlist Baru
+            </Text>
           </TouchableOpacity>
 
           {onImportM3U && (

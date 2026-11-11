@@ -12,6 +12,7 @@ import * as Haptics from "expo-haptics";
 import { Song } from "@/shared/types/audio";
 import { formatTime } from "@/shared/utils/time";
 import QualityBadge from "@/shared/components/ui/QualityBadge";
+import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import { Music2, AudioLines, Heart } from "lucide-react-native";
 
 interface SongListItemProps {
@@ -39,6 +40,13 @@ const ArtworkThumb = memo(
     const [imgError, setImgError] = useState(false);
     const showImage = !!uri && !imgError && !isNowPlaying;
 
+    // Ikon di atas thumb primary[500] (lagu sedang diputar) — dipilih dari
+    // luminansi primary (background.primary 1,12:1 di charcoal-black),
+    // bukan warna latar mentah.
+    const onPrimary =
+      pickReadable(["#FFFFFF", "#000000"], colors.primary[500], AA_NORMAL) ??
+      "#FFFFFF";
+
     if (isNowPlaying) {
       return (
         <View
@@ -49,7 +57,7 @@ const ArtworkThumb = memo(
         >
           <AudioLines
             size={20}
-            color={colors.background.primary}
+            color={onPrimary}
             strokeWidth={2.5}
           />
         </View>

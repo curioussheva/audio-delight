@@ -12,9 +12,20 @@ import { useScanManager } from "../hooks/useScanManager";
 import { useRouter } from "expo-router";
 import { Sparkles, Loader2 } from "lucide-react-native"; // ➕ Gunakan icon yang berputar
 import { useTheme } from "@/shared/context/ThemeContext";
+import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 
 export function ScanStatusBar() {
   const { colors } = useTheme().theme;
+
+  // Teks/ikon di atas bar primary[500] dan status.success — dipilih dari
+  // luminansi latar (putih 2,24:1 / 2,48:1 di Noir, hitam 9,37:1 / 8,45:1),
+  // bukan hardcoded "#fff".
+  const onPrimary =
+    pickReadable(["#FFFFFF", "#000000"], colors.primary[500], AA_NORMAL) ??
+    "#FFFFFF";
+  const onSuccess =
+    pickReadable(["#FFFFFF", "#000000"], colors.status.success, AA_NORMAL) ??
+    "#FFFFFF";
   const {
     isAutoScanning,
     autoScanProgress,
@@ -33,8 +44,8 @@ export function ScanStatusBar() {
       <View
         style={[styles.container, { backgroundColor: colors.primary[500] }]}
       >
-        <ActivityIndicator size="small" color="#fff" />
-        <Text style={[styles.text, { color: "#fff" }]} numberOfLines={1}>
+        <ActivityIndicator size="small" color={onPrimary} />
+        <Text style={[styles.text, { color: onPrimary }]} numberOfLines={1}>
           {autoScanProgress
             ? `Scanning library... ${autoScanProgress.current}/${autoScanProgress.total}`
             : "Scanning library..."}
@@ -50,14 +61,17 @@ export function ScanStatusBar() {
       <View
         style={[styles.container, { backgroundColor: colors.status.success }]}
       >
-        <ActivityIndicator size="small" color="#fff" />
+        <ActivityIndicator size="small" color={onSuccess} />
         <View style={styles.textContainer}>
-          <Text style={[styles.text, { color: "#fff" }]} numberOfLines={1}>
+          <Text style={[styles.text, { color: onSuccess }]} numberOfLines={1}>
             Enhancing {current}/{total} songs...
           </Text>
           {currentSong && (
             <Text
-              style={[styles.subtext, { color: "rgba(255,255,255,0.8)" }]}
+              style={[
+                styles.subtext,
+                { color: onSuccess, opacity: 0.8 },
+              ]}
               numberOfLines={1}
             >
               {currentSong}
@@ -77,8 +91,8 @@ export function ScanStatusBar() {
           { backgroundColor: colors.status.success + "dd" },
         ]}
       >
-        <Sparkles size={16} color="#fff" />
-        <Text style={[styles.text, { color: "#fff" }]}>
+        <Sparkles size={16} color={onSuccess} />
+        <Text style={[styles.text, { color: onSuccess }]}>
           Enhancing {enrichmentQueueSize} songs in background...
         </Text>
       </View>
