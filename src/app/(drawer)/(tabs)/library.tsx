@@ -126,8 +126,16 @@ export default function LibraryScreen() {
   const s = useMemo(() => createStyles(colors), [colors]);
 
   // ── Library Hooks ──────────────────────────────────────────────────────────
-  const { loading, reload, isFavorite, toggleFavorite, favoriteIds } =
-    useOptimizedLibrary({
+  // U-P1-39: error dari useLibrary diteruskan useOptimizedLibrary —
+  // dulu dibuang, jadi gagal muat hanya masuk console.
+  const {
+    loading,
+    error: libraryError,
+    reload,
+    isFavorite,
+    toggleFavorite,
+    favoriteIds,
+  } = useOptimizedLibrary({
       searchQuery: "",
       filterBy:
         filterType === "all"
@@ -419,6 +427,33 @@ export default function LibraryScreen() {
       );
     }
 
+    // U-P1-39: gagal muat tampil jujur + bisa coba lagi — dulu hanya
+    // console.error dan layar jatuh ke EmptyLibrary seolah tidak ada lagu.
+    if (libraryError && tracks.length === 0) {
+      return (
+        <View style={s.center}>
+          <Text style={[s.emptyTitle, { color: colors.text.primary }]}>
+            Gagal memuat library
+          </Text>
+          <Text style={[s.emptySub, { color: colors.text.tertiary }]}>
+            {libraryError}
+          </Text>
+          <TouchableOpacity
+            onPress={onRefresh}
+            style={[s.retryBtn, { borderColor: colors.primary[500] }]}
+            accessibilityRole="button"
+            accessibilityLabel="Coba lagi memuat library"
+          >
+            <Text
+              style={[s.retryBtnText, { color: colors.primary[500] }]}
+            >
+              Coba lagi
+            </Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
     if (filteredSource.length === 0 && searchQuery.length > 0) {
       return (
         <View style={s.emptySearch}>
@@ -472,7 +507,16 @@ export default function LibraryScreen() {
                 onToggleFavorite={toggleFavorite}
               />
             )}
-            // ... (refresh control tetap sama)
+            // U-P1-39: pull-to-refresh — RefreshControl diimpor tapi dulu
+            // tidak pernah dipakai.
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={colors.primary[500]}
+                colors={[colors.primary[500]]}
+              />
+            }
           />
         );
       case "album":
@@ -595,6 +639,36 @@ export default function LibraryScreen() {
         trackCount={filteredSource.length}
         onRefresh={onRefresh}
       />
+
+      {/* U-P1-39: daftar lama tetap tampil, tapi error refresh tidak lagi
+          sunyi — banner jujur + tombol coba lagi. */}
+      {libraryError && tracks.length > 0 && (
+        <View
+          style={[
+            s.errorBanner,
+            { backgroundColor: colors.status.error + "1A" },
+          ]}
+        >
+          <Text
+            style={[s.errorBannerText, { color: colors.status.error }]}
+            numberOfLines={2}
+          >
+            Gagal memperbarui library: {libraryError}
+          </Text>
+          <TouchableOpacity
+            onPress={onRefresh}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Coba lagi memuat library"
+          >
+            <Text
+              style={[s.retryBtnText, { color: colors.status.error }]}
+            >
+              Coba lagi
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Main Content */}
       <View style={s.content}>{renderContent()}</View>
@@ -733,5 +807,32 @@ const createStyles = (colors: any) =>
       textAlign: "center",
       marginTop: 8,
       opacity: 0.6,
+    },
+    errorBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+      marginHorizontal: 20,
+      marginBottom: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 10,
+    },
+    errorBannerText: {
+      flex: 1,
+      fontSize: 13,
+      fontWeight: "500",
+    },
+    retryBtn: {
+      borderWidth: 1,
+      borderRadius: 8,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      marginTop: 8,
+    },
+    retryBtnText: {
+      fontSize: 14,
+      fontWeight: "700",
     },
   }); 

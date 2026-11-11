@@ -15,7 +15,7 @@ export const useOptimizedLibrary = ({
   filterBy,
   sortBy = "title-asc",
 }: UseOptimizedLibraryOptions) => {
-  const { songs, loading, reload } = useLibrary();
+  const { songs, loading, error, reload } = useLibrary();
   const { isFavorite, toggleFavorite, favoriteIds, favoriteSongs } =
     useFavorites();
 
@@ -84,6 +84,7 @@ export const useOptimizedLibrary = ({
   return {
     songs: processedSongs,
     loading,
+    error,
     reload,
     isFavorite,
     toggleFavorite,
