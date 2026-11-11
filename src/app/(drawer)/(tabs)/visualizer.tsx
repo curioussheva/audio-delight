@@ -161,7 +161,6 @@ export default function VisualizerScreen() {
           <SpectrumAnalyzer
             width={Dimensions.get("window").width - 32}
             height={280}
-            mode="bars"
             barCount={64}
             color={colors.primary[500]}
             backgroundColor={colors.background.secondary}

@@ -323,7 +323,6 @@ export default function AnalyzerScreen() {
           <SpectrumAnalyzer
             width={screenWidth - 64}
             height={160}
-            mode="bars"
             barCount={48}
             color={colors.primary[500]}
             backgroundColor="transparent"

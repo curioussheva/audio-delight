@@ -20,20 +20,15 @@ import {
 
 import { visualizerService } from "@/features/visualizer/services/VisualizerService";
 
-export type VisualizerMode = "bars" | "wave" | "circle";
-
 export interface SpectrumAnalyzerProps {
   width?: number;
   height?: number;
-  mode?: VisualizerMode;
   barCount?: number;
   color?: string;
   backgroundColor?: string;
   sensitivity?: number;
   isPlaying: boolean;
   audioSessionId?: number;
-  centerArt?: string;
-  showCenterArt?: boolean;
 }
 
 const DEFAULT_BAR_COUNT = 48;
@@ -43,7 +38,6 @@ const MIN_BAR_COUNT = 16;
 export const SpectrumAnalyzer: React.FC<SpectrumAnalyzerProps> = ({
   width = Dimensions.get("window").width - 40,
   height = 250,
-  mode = "bars",
   barCount: rawBarCount = DEFAULT_BAR_COUNT,
   color = "#00D4AA",
   backgroundColor = "transparent",
