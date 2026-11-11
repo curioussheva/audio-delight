@@ -239,7 +239,8 @@ export default function SettingsScreen() {
 
   const [showEQPicker, setShowEQPicker] = useState(false);
 
-  const { activePresetId, applyPreset, setEQEnabled } = useEqualizerStore();
+  const { activePresetId, applyPreset, setEQEnabled, resetToDefault } =
+    useEqualizerStore();
 
   const { resetAll: resetHeadphoneAll } = useHeadphoneStore();
 
@@ -318,6 +319,13 @@ export default function SettingsScreen() {
               setEnableOnlineArtistImage(false);
               setDownloadOnlyOnWiFi(true);
               applyPreset("flat");
+              // U-P1-24: lubang fix 90181498 — applyPreset("flat") hanya
+              // mereset band EQ. bassStrength/virtualizerLevel/reverbPreset
+              // tetap tersimpan dan kembali saat EQ dinyalakan. resetToDefault
+              // (equalizerStore) mengembalikan ketiganya ke 0 (netral).
+              // Dipanggil SEBELUM setEQEnabled(false) supaya nilai netral
+              // sempat didorong ke native selagi EQ masih aktif.
+              await resetToDefault();
               await setEQEnabled(false);
               await resetHeadphoneAll();
               setPlaybackSpeed(1.0);
