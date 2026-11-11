@@ -15,7 +15,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/context/ThemeContext";
 import { useLibrary } from "@/features/library/hooks/useLibrary";
 import { usePlayerStore } from "@/features/player/store/playerStore";
-import { useAudioPlayer } from "@/features/player/hooks/useAudioPlayer";
 import { formatTime } from "@/shared/utils/time";
 
 export default function SearchScreen() {
@@ -34,8 +33,12 @@ export default function SearchScreen() {
   };
 
   const { songs } = useLibrary();
-  const { setQueue } = usePlayerStore();
-  const { loadSong } = useAudioPlayer();
+  // U-P1-16: putar lewat playerStore.playSong — sama seperti Library —
+  // bukan setQueue + loadSong langsung. playSong memberi dedupe tap-cepat,
+  // bookkeeping queue/index store, isPlaying store, dan play count;
+  // loadSong (useAudioPlayer) melewati semuanya dan hanya menyetel
+  // currentSong + isPlaying lokal hook.
+  const { playSong } = usePlayerStore();
 
   const [query, setQuery] = useState("");
   const _filteredSongs = songs.filter((song: Song) => {
@@ -216,8 +219,9 @@ export default function SearchScreen() {
               },
             ]}
             onPress={() => {
-              setQueue([item]);
-              loadSong(item);
+              // Antrean = hasil pencarian saat ini; playSong menaruh lagu
+              // yang di-tap di index 0 (reorder internal) seperti di Library.
+              playSong(item, results);
             }}
           >
             <View style={{ flex: 1 }}>
