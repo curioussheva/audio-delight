@@ -160,11 +160,21 @@ export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
                   ". Tekan lama untuk menghapus."
                 }
                 accessibilityState={{ selected: isActive }}
-                onPress={() => {
+                onPress={async () => {
                   if (isActive) {
                     void deactivate();
                   } else {
-                    void activate(p.id);
+                    // U-P2-34: nilai `ok` dari activate() DULU diabaikan
+                    // (`void activate(p.id)`) — native menolak preset
+                    // (mis. preset tidak lolos parse ulang) tanpa pesan
+                    // apa pun. Sekarang penolakan disampaikan ke user.
+                    const ok = await activate(p.id);
+                    if (!ok) {
+                      Alert.alert(
+                        "Profil gagal dipasang",
+                        `Profil "${p.name}" ditolak. Coba profil lain atau impor ulang presetnya.`,
+                      );
+                    }
                   }
                 }}
                 onLongPress={() => handleRemoveProfile(p.id, p.name)}
