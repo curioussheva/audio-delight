@@ -199,12 +199,37 @@ const ArtistSongRow = memo(
 );
 
 // ── Main ArtistList ──────────────────────────────────────────────────────────
-export const ArtistList: React.FC<any> = ({
+// U-P1-18 (bonus): prop `artists` dan `enableOnlineArtistImage` yang dikirim
+// library.tsx dulu diabaikan — komponen ini `React.FC<any>` dan menurunkan
+// artis dari tracks + membaca settings store sendiri. Sekarang kedua prop
+// dipakai bila diberikan (artists = hasil selectArtists, bentuknya sama
+// dengan turunan internal; enableOnlineArtistImage prop meng-override
+// store), dengan fallback ke perilaku lama bila tidak diberikan.
+interface ArtistListProps {
+  tracks: MediaTrack[];
+  artists?: Array<{
+    id: string;
+    name: string;
+    trackCount: number;
+    albumCount: number;
+    artwork?: string;
+    duration: number;
+  }>;
+  currentTrackId?: string;
+  favoriteIds?: Set<string>;
+  onSongPress: (track: MediaTrack, queue: MediaTrack[]) => void;
+  onToggleFavorite?: (songId: string) => void | Promise<boolean>;
+  enableOnlineArtistImage?: boolean;
+}
+
+export const ArtistList: React.FC<ArtistListProps> = ({
   tracks,
+  artists,
   currentTrackId,
   favoriteIds = new Set(),
   onSongPress,
   onToggleFavorite,
+  enableOnlineArtistImage: enableOnlineArtistImageProp,
 }) => {
   const { theme } = useTheme();
   const { colors, spacing } = theme;
@@ -217,8 +242,12 @@ export const ArtistList: React.FC<any> = ({
 
   const [selectedArtist, setSelectedArtist] = useState<any>(null);
 
-  // Ambil state dari Settings Store
-  const { enableOnlineArtistImage } = useSettingsStore();
+  // Ambil state dari Settings Store — dipakai hanya bila pemanggil tidak
+  // mengirim prop enableOnlineArtistImage (U-P1-18 bonus).
+  const { enableOnlineArtistImage: enableOnlineArtistImageFromStore } =
+    useSettingsStore();
+  const enableOnlineArtistImage =
+    enableOnlineArtistImageProp ?? enableOnlineArtistImageFromStore;
 
   const handleScanMetadata = () => {
     if (!enableOnlineArtistImage) {
@@ -245,6 +274,17 @@ export const ArtistList: React.FC<any> = ({
   };
 
   const enrichedArtists = useMemo(() => {
+    const unknownLast = (a: { name: string }, b: { name: string }) => {
+      if (a.name === "Unknown Artist") return 1;
+      if (b.name === "Unknown Artist") return -1;
+      return a.name.localeCompare(b.name);
+    };
+
+    // U-P1-18 (bonus): pakai `artists` dari pemanggil bila ada — bentuknya
+    // sama dengan turunan internal (sudah ada albumCount). Urutan
+    // dipertahankan sama (Unknown Artist terakhir).
+    if (artists) return [...artists].sort(unknownLast);
+
     const map = new Map<string, any>();
     tracks.forEach((track: MediaTrack) => {
       const name = track.artist || "Unknown Artist";
@@ -263,12 +303,8 @@ export const ArtistList: React.FC<any> = ({
 
     return Array.from(map.values())
       .map((a) => ({ ...a, albumCount: a.albums.size }))
-      .sort((a, b) => {
-        if (a.name === "Unknown Artist") return 1;
-        if (b.name === "Unknown Artist") return -1;
-        return a.name.localeCompare(b.name);
-      });
-  }, [tracks]);
+      .sort(unknownLast);
+  }, [artists, tracks]);
 
   // Render detail view (jika artis dipilih)
   if (selectedArtist) {

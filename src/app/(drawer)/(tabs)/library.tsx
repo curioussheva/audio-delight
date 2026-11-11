@@ -123,15 +123,24 @@ export default function LibraryScreen() {
   const s = useMemo(() => createStyles(colors), [colors]);
 
   // ── Library Hooks ──────────────────────────────────────────────────────────
-  const { loading, reload, isFavorite, toggleFavorite } = useOptimizedLibrary({
-    searchQuery: "",
-    filterBy:
-      filterType === "all"
-        ? "all"
-        : filterType === "lossless"
-          ? "lossless"
-          : "hi-res",
-  });
+  const { loading, reload, isFavorite, toggleFavorite, favoriteIds } =
+    useOptimizedLibrary({
+      searchQuery: "",
+      filterBy:
+        filterType === "all"
+          ? "all"
+          : filterType === "lossless"
+            ? "lossless"
+            : "hi-res",
+    });
+
+  // U-P1-18: detail view (Album/Artist/Genre/Folder/Format) menerima
+  // favoriteIds sebagai Set — dulu tidak pernah dioper, jadi semua hati
+  // jatuh ke default kosong. Set dibuat ulang hanya saat daftar berubah.
+  const favoriteIdSet = useMemo(
+    () => new Set(favoriteIds),
+    [favoriteIds],
+  );
 
   // ── Library Stats ──────────────────────────────────────────────────────────
   const stats = useMemo(() => selectLibraryStats(tracks), [tracks]);
@@ -470,6 +479,7 @@ export default function LibraryScreen() {
             currentTrackId={currentSong?.id}
             onSongPress={handleSongPress} // Pakai bridge
             onToggleFavorite={toggleFavorite}
+            isFavorite={isFavorite}
           />
         );
       case "artist":
@@ -478,6 +488,7 @@ export default function LibraryScreen() {
       artists={artists}           // <--- ADD THIS (Fixes TS2741)
       tracks={filteredSource}
       currentTrackId={currentSong?.id}
+      favoriteIds={favoriteIdSet}
       onSongPress={handleSongPress}
       onToggleFavorite={toggleFavorite}
       enableOnlineArtistImage={true}
@@ -489,6 +500,7 @@ export default function LibraryScreen() {
             genres={genres}
             tracks={filteredSource}
             currentTrackId={currentSong?.id}
+            favoriteIds={favoriteIdSet}
             onSongPress={handleSongPress} // Pakai bridge
             onToggleFavorite={toggleFavorite}
           />
@@ -499,6 +511,7 @@ export default function LibraryScreen() {
             folders={folders}
             tracks={filteredSource}
             currentTrackId={currentSong?.id}
+            favoriteIds={favoriteIdSet}
             onSongPress={handleSongPress} // Pakai bridge
             onToggleFavorite={toggleFavorite}
           />
@@ -509,6 +522,7 @@ export default function LibraryScreen() {
             fileTypes={fileTypes}
             tracks={filteredSource}
             currentTrackId={currentSong?.id}
+            favoriteIds={favoriteIdSet}
             onSongPress={handleSongPress} // Pakai bridge
             onToggleFavorite={toggleFavorite}
           />
