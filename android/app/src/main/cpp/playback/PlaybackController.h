@@ -179,7 +179,7 @@ private:
     // Dipanggil stop()/loadTrack()/shutdown() sebelum pekerjaan mereka.
     // PB6-W3: mengambil loadTrackMutex_ sebentar saat menaikkan flag —
     // lihat (b) pada komentar advanceWorker_ di bawah.
-    void cancelPendingAdvance() noexcept;
+    void cancelPendingAdvance();
     // PB6-W3: loop worker advance permanen + satu permintaan advance.
     void advanceWorkerLoop();
     // gen = generasi yang dibawa permintaan saat di-post (B8-P2): dicek

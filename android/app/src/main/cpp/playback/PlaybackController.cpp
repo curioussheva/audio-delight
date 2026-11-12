@@ -2190,7 +2190,7 @@ void PlaybackController::waitForAdvanceIdle() {
     advanceCv_.wait(lock, [this] { return !advanceBusy_; });
 }
 
-void PlaybackController::cancelPendingAdvance() noexcept {
+void PlaybackController::cancelPendingAdvance() {
     // PB6-W3: ambil loadTrackMutex_ sebentar saat menaikkan flag — lihat
     // (b) pada komentar advanceWorker_ di header. Tanpa ini, flag yang
     // dibaca worker di dalam seksi kritisnya bisa ketinggalan cancel yang
