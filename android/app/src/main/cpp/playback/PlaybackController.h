@@ -211,6 +211,41 @@ private:
     // render selesai sebelum kurva dibuat ulang).
     FadeEngine fadeIn_;
     FadeEngine fadeOut_;
+    // PB6-W4 (2026-11-12): fade-out saat pause — 15 ms, S-curve.
+    //
+    // pause() dulu memotong langsung: playing_=false lalu render
+    // mengisi senyap — diskontinuitas amplitudo = klik. Sekarang pause()
+    // mempersenjatai fade (kurva dibuat di sana, thread JS) dan render()
+    // yang meramp-down-kan output selama 15 ms sebelum benar-benar
+    // senyap. playing_ SENGAJA tetap true selama fade; render yang
+    // men-store false + updatePlaybackState saat fade habis.
+    //
+    // Durasi 15 ms = titik tengah rentang 10–20 ms tugas: 720 frame
+    // @48 kHz = ~1,5 callback (480 frame), jadi ramp benar-benar
+    // tersampel lintas callback, bukan satu lompatan; tetap di bawah
+    // dipakai PB6-W1 — telinga tidak mendengarnya sebagai fade, hanya
+    // hilangnya klik. Ramp anti-klik, bukan fade musikal: berlaku di
+    // kedua mode (bit-perfect pun memakai fade anti-klik 10 ms di
+    // loadTrack, PB6-W1).
+    //
+    // State fade = dua atomic (bukan satu): total_ = panjang kurva,
+    // remaining_ = sisa frame yang belum di-fade. Render mengklaim
+    // kemajuan dengan CAS atas remaining_ (lihat blok fade di render()):
+    // play()/stop()/seek()/loadTrack() membatalkan fade dengan store(0),
+    // dan load-lalu-store render bisa menimpa 0 itu dengan sisa basi —
+    // resume lalu dibungkam lagi setelah satu callback.
+    //
+    // Kurva (pauseFade_) HANYA ditulis pause() saat remaining_ == 0
+    // (tidak ada render yang membacanya) dan HANYA dibaca render()
+    // saat remaining_ > 0 — plus waitForRenderIdle() di pause()
+    // sebelum regenerate, untuk menutup jendela callback terakhir yang
+    // sudah mengklaim sisa 0 tapi masih di dalam applyFadeOut.
+    // play()/stop()/seek()/loadTrack() hanya me-store 0 ke remaining_,
+    // tidak pernah menyentuh kurva.
+    static constexpr uint32_t kPauseFadeMs = 15;
+    FadeEngine pauseFade_;
+    std::atomic<uint32_t> pauseFadeTotalFrames_{0};
+    std::atomic<uint32_t> pauseFadeRemainingFrames_{0};
     // Frame yang sudah di-render sejak loadTrack/seek/play terakhir.
     // Di-increment render() (audio thread), di-reset loadTrack/seek/play.
     // Dihitung dalam frame OUTPUT (bukan input — di 2x, 300 ms output =

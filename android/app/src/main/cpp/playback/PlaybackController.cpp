@@ -96,6 +96,8 @@ void PlaybackController::shutdown() {
     stopDecoder();
 
     playing_.store(false);
+    // PB6-W4: batalkan fade-out pause yang sedang berjalan.
+    pauseFadeRemainingFrames_.store(0, std::memory_order_release);
 
     pcmQueue_.reset();
     clock_.reset();
@@ -301,6 +303,22 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
     // fungsi — termasuk FFmpeg open — supaya dua decoder tidak pernah hidup
     // bersamaan menulis ke PCMQueue SPSC.
     std::lock_guard<std::recursive_mutex> loadLock(loadTrackMutex_);
+
+    // PB6-W4: batalkan fade-out pause yang sedang berjalan. Kalau fade
+    // sedang berjalan, user sudah menekan pause — playing_ masih true
+    // selama fade, dan kalau dibiarkan true melewati ganti track, track
+    // baru langsung berbunyi padahal user minta pause. Jadi niat pause
+    // dipertahankan: matikan playing_ di sini (play() yang memanggil
+    // loadTrack karena needsLoad akan menyalakannya lagi sesudah ini).
+    // Render yang sedang di tengah callback fade melihat 0 lewat CAS
+    // dan berhenti tanpa menulis sisa basi (lihat blok fade di render()).
+    const bool wasPausing =
+        pauseFadeRemainingFrames_.load(std::memory_order_acquire) > 0;
+    pauseFadeRemainingFrames_.store(0, std::memory_order_release);
+    if (wasPausing) {
+        playing_.store(false, std::memory_order_release);
+        updatePlaybackState();
+    }
 
     if (!initialized_.load(std::memory_order_acquire)) {
         __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
@@ -512,6 +530,11 @@ bool PlaybackController::play() {
     }
 
     playing_.store(true, std::memory_order_release);
+    // PB6-W4: resume membatalkan fade-out pause yang sedang berjalan
+    // (mis. play ditekan <15 ms sesudah pause). Render yang sudah
+    // mengklaim sebagian fade lewat CAS melihat 0 dan berhenti; fade-in
+    // resume di bawah (framesSinceLoad_ = 0) yang mengambil alih.
+    pauseFadeRemainingFrames_.store(0, std::memory_order_release);
     updatePlaybackState();  // 🔥 FIX
 
     // 🔥 FIX (2026-11-10, P-M7): resume dimulai dengan fade-in singkat
@@ -531,12 +554,73 @@ bool PlaybackController::play() {
 }
 
 bool PlaybackController::pause() {
-    playing_.store(false, std::memory_order_release);
-    updatePlaybackState();  // 🔥 FIX
+    // PB6-W4: serialisasi terhadap loadTrack() (PB2-M1) — pause() kini
+    // menulis state fade (pauseFade_/pauseFadeTotalFrames_/
+    // pauseFadeRemainingFrames_) yang dibersihkan loadTrack()/stop()/
+    // seek(); tanpa lock, pause untuk track A bisa mempersenjatai fade
+    // SESUDAH loadTrack(B) membersihkannya, lalu render mem-fade-out
+    // awal track B. Recursive, jadi aman dari thread yang sudah
+    // memegang mutex. Edge loadTrackMutex_ -> decodeMutex_ (worker->
+    // pause() di bawah) sudah ada di seek()/play() — bukan urutan baru.
+    std::lock_guard<std::recursive_mutex> lock(loadTrackMutex_);
+
+    // Fade sudah berjalan: jangan regenerate kurva (render sedang
+    // membacanya) — cukup kembalikan true. worker sudah di-pause oleh
+    // panggilan pertama.
+    if (pauseFadeRemainingFrames_.load(std::memory_order_acquire) > 0) {
+        return true;
+    }
+
+    if (!playing_.load(std::memory_order_acquire)) {
+        // Sudah paused/stopped — idempotent seperti sebelumnya.
+        // 🔥 FIX (2026-11-10, P-M4): pakai snapshot, bukan baca member mentah.
+        if (auto worker = snapshotWorker()) {
+            worker->pause();
+        }
+        updatePlaybackState();  // 🔥 FIX
+        return true;
+    }
+
+    // PB6-W4 (2026-11-12): fade-out saat pause, BUKAN potong langsung.
+    //
+    // Dulu pause() memotong di sini juga (playing_=false) dan render
+    // langsung mengisi senyap — diskontinuitas dari amplitudo sesaat ke
+    // 0 = klik. Sekarang: kurva S-curve 15 ms (kPauseFadeMs, lihat
+    // header) dibuat DI SINI (thread JS — generateCurve mengalokasi
+    // vector, tidak boleh di render yang noexcept) dan dipersenjatai
+    // lewat store remaining_ (release): render yang memuat remaining_
+    // > 0 (acquire) melihat kurva yang sudah jadi, meramp-down-kan
+    // output, lalu men-store playing_=false + updatePlaybackState saat
+    // fade habis. playing_ SENGAJA tetap true sampai di sana — kalau
+    // dimatikan di sini, render masuk cabang senyap dan fade tidak
+    // pernah berbunyi. Status JS ikut tertunda ≤ ~2 callback (~15–30 ms),
+    // tidak terlihat.
+    //
+    // waitForRenderIdle() sebelum regenerate: callback terakhir fade
+    // SEBELUMNYA bisa saja sudah mengklaim sisa 0 lewat CAS (jadi
+    // remaining_ terbaca 0 di atas) tapi masih di dalam applyFadeOut
+    // membaca kurva lama — regenerate tanpa menunggu adalah race atas
+    // vector kurva. Tunggu itu selesai dulu (maks 100 ms, tipikal
+    // <1 callback).
+    waitForRenderIdle();
+    {
+        uint32_t fadeRate = streamSampleRate();
+        if (fadeRate == 0) fadeRate = currentFileSampleRate();
+        if (fadeRate == 0) fadeRate = 48000;
+        const uint32_t fadeFrames = fadeRate * kPauseFadeMs / 1000;
+        pauseFade_.generateCurve(FadeCurve::SCurve, fadeFrames);
+        pauseFadeTotalFrames_.store(fadeFrames, std::memory_order_release);
+        pauseFadeRemainingFrames_.store(fadeFrames,
+                                        std::memory_order_release);
+    }
 
     // 🔥 FIX (2026-11-10, P-M4): pakai snapshot, bukan baca member mentah.
     // pause() boleh block di decodeMutex_ sampai chunk selesai (p-m22), jadi
     // dipanggil DI LUAR decoderMutex_ supaya render() tidak ikut ter-block.
+    // Decoder di-pause SEKARANG (bukan sesudah fade): queue menahan audio
+    // ter-buffer untuk resume, dan tidak ada audio baru yang masuk selama
+    // 15 ms fade — yang di-fade hanya sisa queue yang memang akan
+    // terdengar.
     if (auto worker = snapshotWorker()) {
         worker->pause();
     }
@@ -546,6 +630,9 @@ bool PlaybackController::pause() {
 
 bool PlaybackController::stop() {
     playing_.store(false, std::memory_order_release);
+    // PB6-W4: stop membatalkan fade-out pause yang sedang berjalan
+    // (render melihat 0 lewat CAS dan berhenti; queue di-clear di bawah).
+    pauseFadeRemainingFrames_.store(0, std::memory_order_release);
 
     // 🔥 FIX (2026-11-10, P-M3): batalkan + tunggu advance selesai.
     // Sebelumnya stop() tidak menyentuh advanceThread_ sama sekali: EOF
@@ -638,6 +725,23 @@ bool PlaybackController::seek(double seconds) {
         __android_log_print(ANDROID_LOG_WARN, "PlaybackController",
                             "seek(): FAILED - no decoder");
         return false;
+    }
+
+    // PB6-W4: batalkan fade-out pause yang sedang berjalan. Kalau fade
+    // sedang berjalan, user sudah menekan pause — playing_ masih true
+    // selama fade, dan kalau dibiarkan true melewati seek, audio
+    // langsung berbunyi lagi dari titik baru padahal user minta pause.
+    // Jadi niat pause dipertahankan (playing_ dimatikan di sini; seek
+    // yang gagal di bawah memanggil worker->resume() tapi render tetap
+    // senyap karena playing_ false). Ditempatkan SETELAH cek worker
+    // null di atas: seek yang gagal total (tanpa decoder) tidak boleh
+    // membatalkan fade — fade itu yang mematikan playing_.
+    const bool wasPausing =
+        pauseFadeRemainingFrames_.load(std::memory_order_acquire) > 0;
+    pauseFadeRemainingFrames_.store(0, std::memory_order_release);
+    if (wasPausing) {
+        playing_.store(false, std::memory_order_release);
+        updatePlaybackState();
     }
 
     // 🩹 FIX (Prioritas 2): PCMQueue adalah SPSC lock-free ring buffer
@@ -790,7 +894,15 @@ size_t PlaybackController::render(float* output,
     // memang terisi, jadi bukan underrun). Clock sudah di-gate playing_
     // sejak 2026-10-10, jadi posisi berhenti; decoder juga tidak di-resume
     // saat paused (cek di bawah).
-    if (!playing_.load(std::memory_order_acquire)) {
+    // PB6-W4: fade-out pause yang sedang berjalan (remaining_ > 0) harus
+    // tetap melewati jalur audio normal — kalau cabang senyap di bawah
+    // diambil, fade tidak pernah berbunyi. playing_ sengaja masih true
+    // selama fade (pause() tidak mematikannya), jadi kondisi ini hanya
+    // menutup celah kalau playing_ sempat dimatikan thread lain
+    // (mis. processAdvance kehabisan queue) di tengah fade.
+    const bool pausing =
+        pauseFadeRemainingFrames_.load(std::memory_order_acquire) > 0;
+    if (!playing_.load(std::memory_order_acquire) && !pausing) {
         std::fill(output, output + requestedSamples, 0.0f);
         return requestedSamples;
     }
@@ -924,7 +1036,13 @@ size_t PlaybackController::render(float* output,
             // Bukti dari log 2026-10-10_02-06-52: 2x "pause() called",
             // tapi system MediaSession 657x state=PLAYING(3), 0x state=PAUSED.
             // Audio terus jalan, posisi terus merangkak naik (4136→5160→6168).
-            if (avail < cap * 60 / 100 && playing_.load(std::memory_order_acquire)) {
+            //
+            // PB6-W4: jangan resume juga selama fade-out pause — decoder
+            // sudah di-pause pause() dan fade hanya menghabiskan sisa
+            // queue; resume di sini akan mengisi lagi queue yang baru
+            // saja dijeda.
+            if (avail < cap * 60 / 100 &&
+                playing_.load(std::memory_order_acquire) && !pausing) {
                 worker->resume();
             }
         }
@@ -986,6 +1104,52 @@ size_t PlaybackController::render(float* output,
     // Dipanggil SEBELUM clock maju, supaya offset fade-in memakai
     // framesSinceLoad_ SEBELUM callback ini.
     applyTrackFades(output, frames, channels, readSamples, rate);
+
+    // PB6-W4: fade-out pause (15 ms, S-curve — lihat pause()).
+    //
+    // Dijalankan di SINI, setelah applyTrackFades + zero-fill: gain
+    // diterapkan ke seluruh buffer callback ini (termasuk ekor yang
+    // di-zero-fill — gain atas 0 tetap 0). Kemajuan dihitung dalam
+    // frame OUTPUT callback (bukan sampel terbaca): fade selesai tepat
+    // waktu walau queue kosong/underrun saat pause ditekan. Kalau
+    // frames callback melebihi sisa fade, applyFadeOut meng-clamp gain
+    // di frame terakhir kurva (0.0) untuk ekor buffer — senyap bersih.
+    //
+    // Klaim kemajuan pakai CAS, BUKAN load-lalu-store: play()/stop()/
+    // seek()/loadTrack() membatalkan fade dengan store(0); load-lalu-
+    // store render bisa menimpa 0 itu dengan sisa basi dan mempersenjatai
+    // ulang fade SESUDAH resume — resume lalu dibungkam lagi setelah
+    // satu callback. CAS yang gagal memuat ulang nilai baru: kalau 0,
+    // fade sudah dibatalkan dan blok ini dilewati tanpa menulis apa pun.
+    // Kurva dibaca SETELAH CAS berhasil — pause() tidak pernah menulis
+    // ulang kurva selama remaining_ > 0, jadi total_ stabil di sini.
+    {
+        uint32_t remaining =
+            pauseFadeRemainingFrames_.load(std::memory_order_acquire);
+        while (remaining > 0) {
+            const uint32_t step = std::min(frames, remaining);
+            const uint32_t next = remaining - step;
+            if (pauseFadeRemainingFrames_.compare_exchange_weak(
+                    remaining, next, std::memory_order_acq_rel,
+                    std::memory_order_acquire)) {
+                const uint32_t total =
+                    pauseFadeTotalFrames_.load(std::memory_order_acquire);
+                const uint32_t offset =
+                    (total > remaining) ? total - remaining : 0;
+                pauseFade_.applyFadeOut(output, frames, channels, offset);
+                if (next == 0) {
+                    // Fade habis: baru sekarang benar-benar pause.
+                    // Satu-satunya penulis playing_=false di jalur ini —
+                    // pause() sengaja tidak mematikannya.
+                    playing_.store(false, std::memory_order_release);
+                    updatePlaybackState();
+                }
+                break;
+            }
+            // CAS gagal: remaining dimuat ulang (0 = dibatalkan) —
+            // loop mengulang atau keluar.
+        }
+    }
 
     // 🔥 FIX (2026-10-10): clock hanya boleh maju untuk audio nyata.
     //
@@ -1668,6 +1832,10 @@ void PlaybackController::processAdvance(const std::string& finishedUri) {
         // 🔥 FIX (2026-11-10, p-m4): antrean habis = status Completed,
         // bukan Playing yang membeku di akhir trek. JS polling
         // status === 1 (Playing) jadi tahu playback benar-benar selesai.
+        // PB6-W4: batalkan juga fade-out pause yang kebetulan sedang
+        // berjalan — kalau tidak, render menyelesaikan fade sesudah ini
+        // dan menimpa Completed dengan Paused lewat updatePlaybackState.
+        pauseFadeRemainingFrames_.store(0, std::memory_order_release);
         playing_.store(false, std::memory_order_release);
         if (state_) state_->setStatus(PlaybackStatus::Completed);
         pristine::playback::emitTrackEnded(finishedUri);
