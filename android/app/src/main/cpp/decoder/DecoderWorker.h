@@ -193,6 +193,16 @@ private:
     // me-resume di tengah seek (queue habis di-clear = avail 0).
     std::atomic<bool> backpressurePaused_{false};
 
+    // B8-P1 (2026-11-12): EOF-idle — worker tetap hidup sesudah
+    // EndOfStream, bukan keluar loop. Tanpa ini, seek()/play() sesudah
+    // EOF tidak bisa revive worker (thread mati; resume() no-op).
+    // Di-set workerLoop saat EndOfStream (SEBELUM eofCallback_, supaya
+    // seek() yang mendarat selama callback bisa clear flag ini),
+    // di-clear DecoderWorker::seek() (sesudah decoder_->seek() berhasil)
+    // dan start() (track baru). workerLoop tidur di pauseCv_ selama
+    // flag ini true; resume() saja TIDAK melepasnya.
+    std::atomic<bool> eof_{false};
+
     // PB6-W2A: predikat auto-resume (lihat setAutoResumeCheck).
     // Ditulis sekali sebelum start(), hanya dibaca workerLoop saat
     // backpressure-paused.

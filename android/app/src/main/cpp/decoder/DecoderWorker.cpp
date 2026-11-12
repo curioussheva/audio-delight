@@ -57,6 +57,9 @@ bool DecoderWorker::start(const std::string& uri, double startPosition) {
     // PB6-W2A: jeda backpressure ikut di-reset — worker baru tidak
     // boleh mewarisi flag dari siklus sebelumnya.
     backpressurePaused_.store(false);
+    // B8-P1: reset EOF-idle — track baru mulai dari awal, bukan dari
+    // keadaan "sudah habis" siklus sebelumnya.
+    eof_.store(false);
 
     if (!decoder_) {
         if (errorCallback_) errorCallback_("Decoder not set");
@@ -185,6 +188,17 @@ bool DecoderWorker::seek(double positionSeconds) {
         if (errorCallback_) errorCallback_("Seek failed");
         return false;
     }
+
+    // B8-P1: revive worker yang sedang EOF-idle. eof_ di-clear DI SINI
+    // (sesudah decoder_->seek() berhasil, di bawah decodeMutex_)
+    // supaya workerLoop tidak sempat decode dari posisi lama: worker
+    // yang bangun dari tunggu-EOF melihat eof_ false dan decode dari
+    // posisi baru. notify_all membangunkan tunggu di loop top; predikat
+    // wait dicek di bawah mutex_ sebelum tidur, jadi tidak ada lost
+    // wakeup. Seek normal (bukan EOF-idle) tidak berubah: store ini
+    // no-op dan notify hanya membangunkan cek-ulang predikat pause.
+    eof_.store(false);
+    pauseCv_.notify_all();
 
     return true;
 }
@@ -324,6 +338,28 @@ void DecoderWorker::workerLoop() {
 
         if (stopRequested_.load()) break;
 
+        // B8-P1 (2026-11-12): tunggu EOF-idle.
+        //
+        // Sesudah EndOfStream worker TIDAK keluar loop — ia tidur di CV
+        // ini sampai seek() (clear eof_ + notify) atau stop()
+        // (stopRequested_ + notify). Predikat dicek di bawah mutex_
+        // sebelum tidur, jadi tidak ada lost wakeup: seek()/stop() yang
+        // store SEBELUM cek terlihat langsung, yang store SESUDAH cek
+        // membangunkan lewat notify_all. resume() saja TIDAK melepas
+        // idle ini (eof_ tetap true → kembali tidur): revive hanya lewat
+        // seek() atau track baru (loadTrack → worker baru). pause()
+        // eksplisit yang mendarat selama idle tidak hilang: sesudah
+        // eof_ clear, loop top masuk pause handling seperti biasa.
+        while (eof_.load()) {
+            if (stopRequested_.load()) break;
+            std::unique_lock<std::mutex> lock(mutex_);
+            pauseCv_.wait(lock, [&] {
+                return !eof_.load() || stopRequested_.load();
+            });
+        }
+
+        if (stopRequested_.load()) break;
+
         // DECODE
         // 🩹 FIX (Prioritas 4): lock diperluas mencakup decodeCallback_()
         // (yang memanggil pcmQueue_->write()). Sebelumnya callback ini
@@ -412,8 +448,17 @@ void DecoderWorker::workerLoop() {
         // disalin ke terminalError di atas, jadi tidak ada akses ke
         // result sesudah lock dilepas.
         if (terminal == TerminalAction::Eof) {
+            // B8-P1: JANGAN break — thread decoder yang MATI di sini
+            // berarti seek()/play() sesudah EOF tidak bisa revive worker
+            // (lompat lagu / senyap selamanya, Batch 8 P1). eof_ di-set
+            // DULU (sebelum callback) supaya seek() yang mendarat selama
+            // callback bisa clear flag ini dan worker lanjut decode dari
+            // posisi baru; lalu CONTINUE ke loop top dan tidur di
+            // tunggu-EOF sampai seek/resume/stop. Callback tetap menyala
+            // sekali per EOF — decode() tidak dipanggil lagi selama idle.
+            eof_.store(true);
             if (eofCallback_) eofCallback_();
-            break;
+            continue;
         }
         if (terminal == TerminalAction::Error) {
             if (errorCallback_) errorCallback_(terminalError);

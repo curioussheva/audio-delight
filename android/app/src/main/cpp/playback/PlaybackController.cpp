@@ -505,7 +505,20 @@ bool PlaybackController::play() {
         std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
         currentUri = currentTrack_.uri;
     }
-    bool needsLoad = !worker || track->uri != currentUri;
+    // B8-P1+B9-play (2026-11-12): guard play() sesudah Completed.
+    // Sesudah antrean habis (Repeat Off), worker masih ada + URI sama
+    // → needsLoad=false → resume() no-op (worker EOF-idle; eof_ hanya
+    // dilepas seek() / track baru) → UI "playing" tapi senyap.
+    // finishedAndDrained = decoder sudah EOF DAN ekor queue sudah habis
+    // terdengar → muat ulang track dari awal. Syarat
+    // availableSamples()==0 penting: pause di tengah ekor (decoder
+    // sudah EOF tapi ekor masih ter-buffer) harus resume dari ekor,
+    // bukan restart. Memory order sama seperti pembaca
+    // decoderFinished_ lain (acquire).
+    const bool finishedAndDrained =
+        decoderFinished_.load(std::memory_order_acquire) &&
+        (!pcmQueue_ || pcmQueue_->availableSamples() == 0);
+    bool needsLoad = !worker || track->uri != currentUri || finishedAndDrained;
 
     __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                         "play(): decoderWorker_=%s, needsLoad=%s, uri=%s",
@@ -725,6 +738,16 @@ bool PlaybackController::stop() {
 }
 
 bool PlaybackController::seek(double seconds) {
+    // B8-P1 (2026-11-12): batalkan advance DULU (sebelum lock) — pola
+    // yang sama dengan next()/previous(): EOF yang datang sesaat sebelum
+    // seek bisa menjadwalkan advance (drain-wait lalu loadTrack track
+    // berikutnya) sementara user minta tetap di track ini dari posisi
+    // baru. cancelPendingAdvance() mengambil loadTrackMutex_ sebentar
+    // (PB6-W3); dipanggil sebelum lock_guard di bawah supaya tidak
+    // menahan mutex sambil menunggu load yang sedang berjalan —
+    // redundan-namun-aman, bukan lubang (ia block di belakang load yang
+    // sama seperti seek sendiri).
+    cancelPendingAdvance();
     // 🔥 FIX (2026-11-12, PB2-M1): serialisasi terhadap loadTrack().
     // seek() menyentuh decoder/PCMQueue/clock yang sama dengan loadTrack()
     // — tanpa lock, seek dari thread JS bisa jalan bersamaan dengan
@@ -742,6 +765,16 @@ bool PlaybackController::seek(double seconds) {
     // tidak terlihat di logcat, padahal play/pause/stop/loadTrack semua log.
     __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                         "seek(): target=%.3fs", seconds);
+
+    // B8-P1: bersihkan guard flood EOF — seek ke detik-detik akhir lagu
+    // lalu EOF kedua <500 ms sesudah seek bisa tertelan guard
+    // (lastEofUri_ masih URI yang sama + lastEofTime_ masih segar),
+    // padahal EOF kedua itu sah (posisi baru memang dekat akhir).
+    // Di bawah eofMutex_, sama seperti callback EOF.
+    {
+        std::lock_guard<std::mutex> eofLock(eofMutex_);
+        lastEofUri_.clear();
+    }
 
     // 🔥 FIX (2026-11-10, P-M4): pakai snapshot. Dulu cek-lalu-pakai
     // decoderWorker_ tanpa lock; kalau stopDecoder() memindahkan pointer di
@@ -1511,9 +1544,10 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
         // scheduleAdvance) lalu scheduleAdvance. Kalau decoder error di
         // awal (0 frame ter-decode), queue kosong dan advance langsung.
         //
-        // Callback ini HANYA menyala dari cabang Error/FatalError
-        // workerLoop (lihat DecoderWorker::setDecodeErrorCallback) — error
-        // start/seek tidak lewat sini, jadi seek gagal TIDAK men-skip track.
+        // Callback ini HANYA menyala dari cabang Error/FatalError/
+        // NotSupported workerLoop (lihat DecoderWorker::
+        // setDecodeErrorCallback) — error start/seek tidak lewat sini,
+        // jadi seek gagal TIDAK men-skip track.
         worker->setDecodeErrorCallback([this](const std::string& message) {
             const std::string uri = [&]() {
                 std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
