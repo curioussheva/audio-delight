@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 // JavaVM dipakai oleh setDeviceRateDetectorVm() di bawah.
@@ -38,10 +39,18 @@ public:
     static int refresh();
 
     // Laju-laju yang didukung, urut menaik. Kosong = tidak diketahui.
-    static const std::vector<int32_t>& supportedRates();
+    // Mengembalikan SALINAN (snapshot) — referensi ke global tidak bisa
+    // dilindungi mutex sesudah return, jadi by-value adalah satu-satunya
+    // cara yang aman lintas thread (MC2-M3: refresh() bisa move-assign
+    // gRates sementara thread lain membaca). Satu-satunya pemakai adalah
+    // AudioEngine::start(), yang memakainya langsung dan singkat.
+    static std::vector<int32_t> supportedRates();
 
     // Nama perangkat output aktif (untuk log/diagnosa). Kosong kalau gagal.
-    static const char* activeDeviceName();
+    // Salinan by-value dengan alasan yang sama seperti supportedRates():
+    // const char* ke gDeviceName akan menggantung begitu refresh() menulis
+    // ulang string itu dari thread lain.
+    static std::string activeDeviceName();
 
     // true kalau perangkat output aktif adalah USB (DAC eksternal).
     static bool isUsbActive();

@@ -234,37 +234,53 @@ int DeviceRateDetector::refresh() {
     return static_cast<int>(gRates.size());
 }
 
-const std::vector<int32_t>& DeviceRateDetector::supportedRates() {
+std::vector<int32_t> DeviceRateDetector::supportedRates() {
+    std::lock_guard<std::mutex> lock(gMutex);
     return gRates;
 }
 
-const char* DeviceRateDetector::activeDeviceName() {
-    return gDeviceName.c_str();
+std::string DeviceRateDetector::activeDeviceName() {
+    std::lock_guard<std::mutex> lock(gMutex);
+    return gDeviceName;
 }
 
 bool DeviceRateDetector::isUsbActive() {
+    std::lock_guard<std::mutex> lock(gMutex);
     return gIsUsb;
 }
 
 bool DeviceRateDetector::supportsRate(int32_t rate) {
+    std::lock_guard<std::mutex> lock(gMutex);
     return std::find(gRates.begin(), gRates.end(), rate) != gRates.end();
 }
 
 int32_t DeviceRateDetector::pickBestRate(int32_t fileRate) {
     if (fileRate <= 0) return 48000;
 
+    // Snapshot di bawah lock, lalu hitung di atas salinan lokal TANPA lock.
+    // Alasan: pickBestRate() dulu memanggil supportsRate() (yang kini
+    // mengunci gMutex) sambil mengiterasi gRates langsung — mengunci lagi
+    // dari dalam dengan std::mutex non-rekursif = deadlock. Snapshot
+    // sekaligus membuat seluruh pemilihan konsisten terhadap satu versi
+    // daftar, bukan campuran dua refresh.
+    std::vector<int32_t> rates;
+    {
+        std::lock_guard<std::mutex> lock(gMutex);
+        rates = gRates;
+    }
+
     // Belum pernah deteksi: kembalikan laju file apa adanya. Lebih baik
     // mencoba laju asli daripada langsung menurunkan ke 48 kHz.
-    if (gRates.empty()) return fileRate;
+    if (rates.empty()) return fileRate;
 
     // 1. Persis didukung -> tanpa konversi sama sekali.
-    if (supportsRate(fileRate)) return fileRate;
+    if (std::find(rates.begin(), rates.end(), fileRate) != rates.end()) return fileRate;
 
     // 2. Kelipatan bulat terkecil (upsample integer). Rate conversion
     //    fraksional (mis. 44.1k->48k) butuh interpolasi yang mengubah sampel;
     //    kelipatan bulat tidak.
     int32_t bestMultiple = 0;
-    for (int32_t r : gRates) {
+    for (int32_t r : rates) {
         if (r > fileRate && r % fileRate == 0) {
             if (bestMultiple == 0 || r < bestMultiple) bestMultiple = r;
         }
@@ -279,20 +295,21 @@ int32_t DeviceRateDetector::pickBestRate(int32_t fileRate) {
     //    didukung selalu berhasil dan hanya kehilangan bandwidth, bukan
     //    gagal sama sekali.
     int32_t bestLower = 0;
-    for (int32_t r : gRates) {
+    for (int32_t r : rates) {
         if (r <= fileRate && r > bestLower) bestLower = r;
     }
     if (bestLower > 0) return bestLower;
 
     // 4. Semua laju device lebih tinggi dari laju file (jarang): pakai yang
     //    terendah supaya kenaikan sesedikit mungkin.
-    return gRates.front();
+    return rates.front();
 }
 
 bool DeviceRateDetector::isBitPerfectFor(int32_t fileRate) {
     if (fileRate <= 0) return false;
+    std::lock_guard<std::mutex> lock(gMutex);
     if (gRates.empty()) return false;   // belum tahu: tidak boleh diklaim
-    return supportsRate(fileRate);
+    return std::find(gRates.begin(), gRates.end(), fileRate) != gRates.end();
 }
 
 } // namespace pristine::audio

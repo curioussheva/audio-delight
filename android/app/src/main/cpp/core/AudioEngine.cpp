@@ -78,7 +78,9 @@ bool AudioEngine::start(
             // Pakai laju tertinggi yang didukung sebagai default saat tidak
             // ada file spesifik yang diminta - memberi ruang terbanyak untuk
             // laju file asli tanpa konversi.
-            const auto& rates = audio::DeviceRateDetector::supportedRates();
+            // supportedRates() mengembalikan salinan (MC2-M3), bukan
+            // referensi ke global.
+            const auto rates = audio::DeviceRateDetector::supportedRates();
             requestedSampleRate = rates.empty() ? 48000 : rates.back();
             __android_log_print(ANDROID_LOG_INFO, "AudioEngine",
                 "start: laju dideteksi sendiri = %d (dari %d laju didukung)",
