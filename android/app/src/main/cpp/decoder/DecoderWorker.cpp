@@ -309,51 +309,106 @@ void DecoderWorker::workerLoop() {
         // pcmQueue_->clear() di tengah write() sedang berjalan, walau
         // decode() sendiri sudah selesai & lock sudah dilepas duluan.
         // Sekarang decode() + callback jadi SATU critical section utuh.
+        //
+        // B7-D2 (2026-11-12): cek ulang paused_/backpressurePaused_/
+        // stopRequested_ DI BAWAH decodeMutex_ SEBELUM decode().
+        // pause() hanya menahan lock sesaat; worker yang sudah lolos
+        // cek paused_ di loop top tapi belum mengambil lock bisa
+        // decode 1 chunk basi (chunkFrames 16384 = 0,34 dtk @48k /
+        // 0,17 dtk @96k) sesudah clear() di seek(). Cek di bawah lock
+        // menutup jendela itu: pause()/seek() yang memegang lock lebih
+        // dulu membuat cek ini melihat flag yang baru.
+        //
+        // Callback terminal (EOF/error) dipanggil DI LUAR lock:
+        // callback controller (scheduleAdvance) mengambil lock lain
+        // (decoderMutex_/loadTrackMutex_) — memanggilnya di bawah
+        // decodeMutex_ berisiko inversi urutan lock. decodeCallback_
+        // (Success) TETAP di bawah lock (Prioritas 4): decode()+write
+        // harus satu critical section supaya clear() tidak menyela.
+        enum class TerminalAction { None, Eof, Error };
+        TerminalAction terminal = TerminalAction::None;
+        std::string terminalError;
+        bool decodeSkipped = false;
         {
             // FIX (Prioritas 6): decodeMutex_ (rekursif), bukan mutex_ lagi
             std::lock_guard<std::recursive_mutex> lock(decodeMutex_);
 
-            auto result = decoder_->decode(chunkSize_);
+            // B7-D2: cek ulang di bawah lock — jangan decode chunk basi.
+            if (stopRequested_.load() || paused_.load() ||
+                backpressurePaused_.load()) {
+                decodeSkipped = true;
+            } else {
+                auto result = decoder_->decode(chunkSize_);
 
-            // 🔥 DEBUG: log tiap 100 loop untuk trace
-            static int loopCount = 0;
-            loopCount++;
-            if (loopCount % 100 == 0) {
-                __android_log_print(ANDROID_LOG_INFO, "DecoderWorker",
-                    "loop #%d: status=%d, frames=%u",
-                    loopCount, (int)result.status, result.framesDecoded);
-            }
-
-            if (result.status == DecodeStatus::Success) {
-
-                if (decodeCallback_) {
-                    decodeCallback_(std::move(result));
+                // 🔥 DEBUG: log tiap 100 loop untuk trace
+                static int loopCount = 0;
+                loopCount++;
+                if (loopCount % 100 == 0) {
+                    __android_log_print(ANDROID_LOG_INFO, "DecoderWorker",
+                        "loop #%d: status=%d, frames=%u",
+                        loopCount, (int)result.status, result.framesDecoded);
                 }
 
-            } else if (result.status == DecodeStatus::EndOfStream) {
-                __android_log_print(ANDROID_LOG_WARN, "DecoderWorker",
-                    "EOF reached, exiting loop");
-                if (eofCallback_) eofCallback_();
-                break;
+                if (result.status == DecodeStatus::Success) {
 
-            } else if (result.status == DecodeStatus::Error ||
-                       result.status == DecodeStatus::FatalError) {
-                __android_log_print(ANDROID_LOG_ERROR, "DecoderWorker",
-                    "Error: %s", result.errorMessage.c_str());
-                if (errorCallback_) errorCallback_(result.errorMessage);
-                // 🔥 FIX (2026-11-10, P-M10): kanal khusus error decode —
-                // controller memakai ini untuk men-skip ke track berikutnya.
-                // errorCallback_ umum TIDAK dipakai untuk skip (juga menyala
-                // untuk error start/seek).
-                if (decodeErrorCallback_) {
-                    decodeErrorCallback_(result.errorMessage);
+                    if (decodeCallback_) {
+                        decodeCallback_(std::move(result));
+                    }
+
+                } else if (result.status == DecodeStatus::EndOfStream) {
+                    __android_log_print(ANDROID_LOG_WARN, "DecoderWorker",
+                        "EOF reached, exiting loop");
+                    terminal = TerminalAction::Eof;
+
+                } else if (result.status == DecodeStatus::Error ||
+                           result.status == DecodeStatus::FatalError) {
+                    __android_log_print(ANDROID_LOG_ERROR, "DecoderWorker",
+                        "Error: %s", result.errorMessage.c_str());
+                    terminal = TerminalAction::Error;
+                    terminalError = result.errorMessage;
+
+                } else if (result.status == DecodeStatus::NeedMoreData) {
+                    // streaming case → small sleep to avoid busy loop
+                    std::this_thread::sleep_for(milliseconds(2));
+
+                } else if (result.status == DecodeStatus::NotSupported) {
+                    // B7-D2: sebelumnya tanpa cabang — status ini jatuh
+                    // ke spin sleep 50us tanpa pernah keluar loop.
+                    // Format tak didukung = error terminal: keluar loop
+                    // lewat kanal error yang sama seperti Error.
+                    __android_log_print(ANDROID_LOG_ERROR, "DecoderWorker",
+                        "NotSupported: %s", result.errorMessage.c_str());
+                    terminal = TerminalAction::Error;
+                    terminalError = result.errorMessage.empty()
+                        ? "Format not supported"
+                        : result.errorMessage;
                 }
-                break;
-
-            } else if (result.status == DecodeStatus::NeedMoreData) {
-                // streaming case → small sleep to avoid busy loop
-                std::this_thread::sleep_for(milliseconds(2));
             }
+        }
+
+        // B7-D2: callback terminal DI LUAR decodeMutex_ — data sudah
+        // disalin ke terminalError di atas, jadi tidak ada akses ke
+        // result sesudah lock dilepas.
+        if (terminal == TerminalAction::Eof) {
+            if (eofCallback_) eofCallback_();
+            break;
+        }
+        if (terminal == TerminalAction::Error) {
+            if (errorCallback_) errorCallback_(terminalError);
+            // 🔥 FIX (2026-11-10, P-M10): kanal khusus error decode —
+            // controller memakai ini untuk men-skip ke track berikutnya.
+            // errorCallback_ umum TIDAK dipakai untuk skip (juga menyala
+            // untuk error start/seek).
+            if (decodeErrorCallback_) {
+                decodeErrorCallback_(terminalError);
+            }
+            break;
+        }
+        if (decodeSkipped) {
+            // B7-D2: kembali ke loop top tanpa decode — pause handling
+            // (CV wait) atau keluar bila stopRequested_. Chunk basi
+            // sesudah clear() di seek() dicegah di sini.
+            continue;
         }
 
         // 🔥 FIX: micro-sleep 100us, jangan full yield
