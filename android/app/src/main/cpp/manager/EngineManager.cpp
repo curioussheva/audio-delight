@@ -614,7 +614,15 @@ void EngineManager::reopenStreamPreservingPlayback() {
         }
     }
 
-    const bool exclusiveMode = mEngine.isExclusive();
+    // (C1-mgr, 2026-11-12): PAKAI PREFERENSI, bukan status stream lama.
+    // mEngine.isExclusive() = APA YANG DIPAKAI stream lama — AAudio bisa
+    // menolak exclusive (fallback shared), dan sesudah DAC dicabut stream
+    // lama sudah mati. Membaca status lama di sini membuat preferensi
+    // exclusive hilang permanen tiap reopen (cabut-colok DAC). Sama
+    // seperti start() di atas, baca mState.exclusiveMode() (APA YANG
+    // DIMINTA); kalau perangkat baru menolak, isExclusive() tetap jujur
+    // melaporkan penolakan itu sesudah start.
+    const bool exclusiveMode = mState.exclusiveMode();
 
     const int32_t requestedDevice = resolveRequestedDeviceId();
     const auto deviceRates = supportedRatesFor(requestedDevice);
