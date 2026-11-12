@@ -70,7 +70,8 @@ public:
     // bit-perfect. EngineManager::setProcessingMode() memanggil
     // setProcessingAllowed(mode != BitPerfect); render() memakai rasio
     // efektif 1.0 saat tidak diizinkan (buffer prosesor di-reset di sana),
-    // dan loadTrack() memakai fade anti-klik 10 ms, bukan 300/500 ms.
+    // dan applyTrackFades() memakai set kurva fade anti-klik 10 ms,
+    // bukan 300/500 ms (B8-M1: kedua set dibangun loadTrack()).
     void setPitchRatio(float ratio) noexcept;
     [[nodiscard]] float pitchRatio() const noexcept;
     void setProcessingAllowed(bool allowed) noexcept;
@@ -228,12 +229,21 @@ private:
     std::atomic<int> renderActive_{0};
 
     // 🔥 FIX (2026-11-10, P-M7): fade-in di awal track + fade-out di ekor.
-    // Kurva dibuat loadTrack() (bukan audio thread — generateCurve
-    // mengalokasi vector) dan HANYA dibaca render() saat clearing_ false,
-    // jadi tidak ada race dengan loadTrack (waitForRenderIdle menunggu
-    // render selesai sebelum kurva dibuat ulang).
-    FadeEngine fadeIn_;
-    FadeEngine fadeOut_;
+    // B8-M1 (2026-11-12): DUA set kurva, satu per mode — processing
+    // (300 ms in / 500 ms out) dan bit-perfect (10 ms in/out anti-klik,
+    // PB6-W1). KEDUA set dibuat loadTrack() (bukan audio thread —
+    // generateCurve mengalokasi vector) dan applyTrackFades() memilih
+    // salah satu PER CALLBACK dari processingAllowed_ saat itu, jadi
+    // ganti mode di tengah track langsung mengubah durasi fade tanpa
+    // regenerate kurva. Per callback hanya ada atomic load + pilih
+    // referensi — tanpa alokasi. Kedua set HANYA ditulis loadTrack()
+    // dan HANYA dibaca render() saat clearing_ false, jadi tidak ada
+    // race dengan loadTrack (waitForRenderIdle menunggu render selesai
+    // sebelum kurva dibuat ulang).
+    FadeEngine fadeInProcessing_;
+    FadeEngine fadeOutProcessing_;
+    FadeEngine fadeInBitPerfect_;
+    FadeEngine fadeOutBitPerfect_;
     // PB6-W4 (2026-11-12): fade-out saat pause — 15 ms, S-curve.
     //
     // pause() dulu memotong langsung: playing_=false lalu render

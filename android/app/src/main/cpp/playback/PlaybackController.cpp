@@ -287,8 +287,8 @@ float PlaybackController::pitchRatio() const noexcept {
 // Gate bit-perfect (Fase R + PB6-W1): processing (retune, laju playback,
 // fade track) tidak boleh jalan penuh di mode bit-perfect. Dipanggil
 // EngineManager::setProcessingMode(). Hanya atomic store — render() yang
-// menerapkan rate/pitch (reset buffer di sana), loadTrack() yang
-// menerapkan durasi fade.
+// menerapkan rate/pitch (reset buffer di sana) dan memilih set kurva
+// fade per callback (B8-M1); loadTrack() yang membangun kedua set kurva.
 void PlaybackController::setProcessingAllowed(bool allowed) noexcept {
     processingAllowed_.store(allowed, std::memory_order_release);
 }
@@ -408,19 +408,24 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
     // sampel cukup landai untuk transient keras, sementara 5 ms (240
     // sampel) curamnya 2x tanpa manfaat — di bawah ~20 ms telinga tidak
     // lagi mendengar ramp sebagai fade, hanya hilangnya klik.
-    // Durasi diputuskan di sini dari processingAllowed_ SAAT load — ganti
-    // mode di tengah track tidak me-regenerate kurva; fade-out memakai
-    // kurva yang dibuat saat load.
+    // B8-M1 (2026-11-12): KEDUA set kurva dibangun di sini (bukan satu
+    // dari processingAllowed_ saat load) — applyTrackFades() memilih
+    // per callback dari processingAllowed_ saat itu, jadi track yang
+    // di-load di DSP lalu di-seek/di-play di BitPerfect memakai fade
+    // 10 ms, dan sebaliknya. Durasi tiap mode TIDAK berubah, hanya
+    // mekanisme pemilihannya.
     {
         uint32_t fadeRate = streamSampleRate();
         if (fadeRate == 0) fadeRate = track.sampleRate;
         if (fadeRate == 0) fadeRate = 48000;
-        const bool processingAllowed =
-            processingAllowed_.load(std::memory_order_acquire);
-        const uint32_t fadeInMs = processingAllowed ? 300 : 10;
-        const uint32_t fadeOutMs = processingAllowed ? 500 : 10;
-        fadeIn_.generateCurve(FadeCurve::SCurve, fadeRate * fadeInMs / 1000);
-        fadeOut_.generateCurve(FadeCurve::SCurve, fadeRate * fadeOutMs / 1000);
+        fadeInProcessing_.generateCurve(FadeCurve::SCurve,
+                                        fadeRate * 300 / 1000);
+        fadeOutProcessing_.generateCurve(FadeCurve::SCurve,
+                                         fadeRate * 500 / 1000);
+        fadeInBitPerfect_.generateCurve(FadeCurve::SCurve,
+                                        fadeRate * 10 / 1000);
+        fadeOutBitPerfect_.generateCurve(FadeCurve::SCurve,
+                                         fadeRate * 10 / 1000);
     }
     framesSinceLoad_.store(0, std::memory_order_release);
     // B8-P4: reset throttle self-heal durasi — callback pertama track
@@ -591,8 +596,9 @@ bool PlaybackController::play() {
     updatePlaybackState();  // 🔥 FIX
 
     // 🔥 FIX (2026-11-10, P-M7): resume dimulai dengan fade-in singkat
-    // (300 ms di mode processing, 10 ms anti-klik di bit-perfect — durasi
-    // kurva diputuskan loadTrack(), PB6-W1) supaya tidak ada klik saat
+    // (300 ms di mode processing, 10 ms anti-klik di bit-perfect — set
+    // kurva dipilih per callback dari processingAllowed_ saat itu, B8-M1;
+    // kedua set dibangun loadTrack()) supaya tidak ada klik saat
     // audio jalan lagi setelah pause. loadTrack() sudah me-reset untuk
     // track baru; reset di sini hanya saat transisi paused->playing
     // (PB6-MINOR(a) di atas) — play() berulang saat sudah playing tidak
@@ -2192,26 +2198,36 @@ void PlaybackController::applyTrackFades(float* output, uint32_t frames,
     if (!output || frames == 0 || channels == 0) return;
 
     // ---- fade-in: awal track sejak loadTrack/seek/play ----
-    // (durasi kurva: 300 ms di mode processing, 10 ms anti-klik di
-    // bit-perfect — diputuskan loadTrack(), PB6-W1.)
+    // B8-M1: pilih set kurva PER CALLBACK dari processingAllowed_
+    // saat ini (300 ms di mode processing, 10 ms anti-klik di
+    // bit-perfect, PB6-W1) — bukan dari mode saat load. Hanya atomic
+    // load + pilih referensi ke kurva yang sudah dibangun loadTrack();
+    // tanpa alokasi di audio thread.
     // (framesSinceLoad_ di sini = nilai SEBELUM callback ini, karena
     // increment-nya terjadi di blok clock advance setelah pemanggilan ini.)
+    const bool processingAllowed =
+        processingAllowed_.load(std::memory_order_acquire);
+    const FadeEngine& fadeIn = processingAllowed
+        ? fadeInProcessing_ : fadeInBitPerfect_;
+    const FadeEngine& fadeOut = processingAllowed
+        ? fadeOutProcessing_ : fadeOutBitPerfect_;
     const uint32_t sinceLoad =
         framesSinceLoad_.load(std::memory_order_acquire);
-    const uint32_t fadeInFrames = fadeIn_.durationFrames();
-    if (!fadeIn_.empty() && sinceLoad < fadeInFrames) {
-        fadeIn_.applyFadeIn(output, frames, channels, sinceLoad);
+    const uint32_t fadeInFrames = fadeIn.durationFrames();
+    if (!fadeIn.empty() && sinceLoad < fadeInFrames) {
+        fadeIn.applyFadeIn(output, frames, channels, sinceLoad);
     }
 
     // ---- fade-out: ekor track (500 ms di mode processing, 10 ms
-    // anti-klik di bit-perfect), hanya kalau decoder sudah selesai ----
+    // anti-klik di bit-perfect — set yang sama dipilih di atas),
+    // hanya kalau decoder sudah selesai ----
     // Decoder selesai = tidak ada lagi audio yang akan masuk queue, jadi
     // sisa queue saat ini adalah EKOR track yang sebenarnya. (Tanpa flag
     // ini, fade-out akan salah memotong tengah track setiap kali queue
     // kebetulan tinggal sedikit.)
-    if (!fadeOut_.empty() &&
+    if (!fadeOut.empty() &&
         decoderFinished_.load(std::memory_order_acquire)) {
-        const uint32_t fadeOutFrames = fadeOut_.durationFrames();
+        const uint32_t fadeOutFrames = fadeOut.durationFrames();
         // Sisa dalam frame OUTPUT (yang didengar): queue + yang baru dibaca
         // adalah frame INPUT — bagi rate (di 2x, 1000 frame input tinggal
         // 500 frame output).
@@ -2223,7 +2239,7 @@ void PlaybackController::applyTrackFades(float* output, uint32_t frames,
         if (remainingFrames <= fadeOutFrames) {
             // Frame pertama buffer ini berada di posisi
             // (fadeOutFrames - remainingFrames) dalam kurva fade-out.
-            fadeOut_.applyFadeOut(output, frames, channels,
+            fadeOut.applyFadeOut(output, frames, channels,
                                   fadeOutFrames - remainingFrames);
         }
     }
