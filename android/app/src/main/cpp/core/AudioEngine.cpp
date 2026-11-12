@@ -3,9 +3,10 @@
 // =====================================================
 
 #include "AudioEngine.h"
-#include "DeviceRateDetector.h"
+#include <algorithm>
 #include <android/log.h>
 #include "../playback/PlaybackController.h"
+#include "../devices/AudioDeviceManager.h"
 #include "../dsp/PresetParser.h"
 
 namespace pristine {
@@ -61,25 +62,35 @@ bool AudioEngine::start(
         return true;
     }
 
-    // Laju 0 = pemanggil tidak menentukan: deteksi sendiri dari device/DAC.
+    // Laju 0 = pemanggil tidak menentukan: deteksi sendiri dari perangkat
+    // yang DIPILIH (atau aktif), bukan gabungan semua perangkat output.
+    // (C-R1, 2026-11-12: dulu DeviceRateDetector::refresh() menggabung laju
+    // SEMUA device — DAC 384 kHz ikut menghitung walau audio keluar di
+    // speaker — lalu rates.back() memilih 384000. Kini AudioDeviceManager
+    // satu-satunya sumber data perangkat.)
     // Ini yang membuat laju tidak lagi hardcoded 48000.
     if (requestedSampleRate <= 0) {
-        const int detected = audio::DeviceRateDetector::refresh();
-        if (detected > 0) {
-            // Pakai laju tertinggi yang didukung sebagai default saat tidak
-            // ada file spesifik yang diminta - memberi ruang terbanyak untuk
-            // laju file asli tanpa konversi.
-            // supportedRates() mengembalikan salinan (MC2-M3), bukan
-            // referensi ke global.
-            const auto rates = audio::DeviceRateDetector::supportedRates();
-            requestedSampleRate = rates.empty() ? 48000 : rates.back();
+        AudioDeviceManager::get().refreshDevices();
+        const int32_t targetDevice = requestedDeviceId > 0
+            ? requestedDeviceId
+            : AudioDeviceManager::get().activeDeviceIdNumeric();
+        const auto rates = targetDevice > 0
+            ? AudioDeviceManager::get().supportedRatesForDevice(targetDevice)
+            : std::vector<int32_t>{};
+        if (!rates.empty()) {
+            // Pakai laju tertinggi yang didukung perangkat yang DIPILIH
+            // sebagai default saat tidak ada file spesifik yang diminta -
+            // memberi ruang terbanyak untuk laju file asli tanpa konversi.
+            requestedSampleRate =
+                *std::max_element(rates.begin(), rates.end());
             __android_log_print(ANDROID_LOG_INFO, "AudioEngine",
-                "start: laju dideteksi sendiri = %d (dari %d laju didukung)",
-                requestedSampleRate, detected);
+                "start: laju dideteksi sendiri = %d (perangkat %d, %zu laju didukung)",
+                requestedSampleRate, targetDevice, rates.size());
         } else {
             requestedSampleRate = 48000;
             __android_log_print(ANDROID_LOG_WARN, "AudioEngine",
-                "start: deteksi laju gagal, pakai default %d", requestedSampleRate);
+                "start: laju perangkat %d tidak diketahui (atau sembarang), pakai default %d",
+                targetDevice, requestedSampleRate);
         }
     }
 

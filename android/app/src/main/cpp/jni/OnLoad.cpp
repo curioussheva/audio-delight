@@ -21,7 +21,6 @@
 // pointer JavaVM; memutus DT_NEEDED butuh JNI_OnLoad sendiri di
 // libpristine-audio + lepas link appmodules (lihat J-M2).)
 #include "decoder/ContentUriResolver.h"
-#include "core/DeviceRateDetector.h"
 #include "devices/AudioDeviceManager.h"
 #include "playback/NativeEventEmitter.h"
  
@@ -73,12 +72,10 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
   // gagal pada trek pertama yang belum di-resolve sisi Kotlin.
   ::pristine::decoder::ContentUriResolver::init(vm);
 
-  // Detector laju juga butuh JavaVM untuk membaca kapabilitas device/DAC
-  // lewat AudioManager. Tanpa ini, laju stream terpaksa dipatok 48000.
-  ::pristine::audio::setDeviceRateDetectorVm(vm);
-
   // AudioDeviceManager juga butuh JavaVM untuk membaca daftar device output
-  // nyata (termasuk DAC USB) lewat AudioManager.
+  // nyata (termasuk DAC USB) lewat AudioManager. Satu-satunya sumber data
+  // perangkat (C-R1): laju stream dipilih dari deskriptor perangkat di
+  // sini, bukan dari detector terpisah.
   ::pristine::setAudioDeviceManagerVm(vm);
 
   // Simpan JavaVM untuk emit event native→JS (track ended).

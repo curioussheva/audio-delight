@@ -107,7 +107,7 @@ public:
     //
     // Diisi otomatis oleh loadTrack(track.sampleRate), lalu dibaca
     // EngineManager untuk memilih laju stream lewat
-    // DeviceRateDetector::pickBestRate(). Tanpa ini tidak ada jalur yang
+    // audio::pickBestRate() (core/RateSelection.h). Tanpa ini tidak ada jalur yang
     // membawa laju file ke pembukaan stream: stream selalu dibuka di laju
     // tertinggi perangkat, bukan laju file.
     //

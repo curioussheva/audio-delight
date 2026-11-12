@@ -54,6 +54,20 @@ public:
     // Salinan daftar device terakhir yang berhasil dibaca.
     std::vector<AudioDeviceDescriptor> getAvailableDevices() const;
 
+    // Laju yang didukung SATU perangkat (salinan, urut menaik).
+    // Kosong = tidak diketahui ATAU perangkat mendukung laju sembarang
+    // (lihat AudioDeviceDescriptor::supportsArbitraryRates) — dalam kedua
+    // arti itu audio::pickBestRate() memakai laju file apa adanya.
+    // 0 / id tidak dikenal -> kosong.
+    std::vector<int32_t> supportedRatesForDevice(int32_t deviceId) const;
+
+    // true kalau perangkat ini mendukung laju tersebut: ada di daftarnya,
+    // atau perangkat mendukung laju sembarang (getSampleRates() kosong,
+    // AOSP). false kalau perangkat tidak dikenal atau tidak ada info.
+    // Dipakai untuk menjawab "bit-perfect?" sebelum stream dibuka, tanpa
+    // menebak dari daftar kosong.
+    bool deviceSupportsRate(int32_t deviceId, int32_t rate) const;
+
     // Pilih perangkat. Mengembalikan FALSE kalau id tidak ada di daftar -
     // bukan true-but-blind seperti sebelumnya.
     bool setActiveDevice(const std::string& deviceId);

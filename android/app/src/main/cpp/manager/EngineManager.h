@@ -9,7 +9,6 @@
 
 #include "../core/AudioEngine.h"
 #include "../core/AudioState.h"
-#include "../core/DeviceRateDetector.h"
 #include "../devices/AudioDeviceManager.h"
 #include "../playback/PlaybackController.h"
 
@@ -68,7 +67,7 @@ public:
     // true kalau laju stream yang berjalan SAMA dengan laju file - tidak ada
     // konversi sama sekali di jalur ini.
     //
-    // Beda dari DeviceRateDetector::isBitPerfectFor(fileRate) yang menjawab
+    // Beda dari AudioDeviceManager::deviceSupportsRate() yang menjawab
     // "apakah perangkat mendukung laju ini" sebelum stream dibuka; yang ini
     // menjawab dari stream yang BENAR-BENAR terbuka, jadi ia tidak bisa
     // berbohong saat perangkat menolak laju yang diminta.
@@ -239,24 +238,26 @@ private:
     // dipanggil tanpa mMutex.
     int32_t resolveRequestedDeviceId() const;
 
-    // Laju yang didukung satu perangkat tertentu.
+    // Laju yang didukung satu perangkat tertentu (dari AudioDeviceManager,
+    // satu-satunya sumber data perangkat — C-R1).
     //
-    // Dipakai alih-alih DeviceRateDetector::supportedRates() karena detector
-    // itu membaca perangkat output AKTIF menurut Android - dan itu belum
-    // tentu perangkat yang kita minta (AudioFlinger memindahkan rute setelah
-    // stream dibuka). Memakai daftar perangkat yang dipilih membuat
-    // pemilihan laju tidak bergantung pada perangkat lain.
+    // Dipakai alih-alih membaca perangkat output AKTIF menurut Android -
+    // itu belum tentu perangkat yang kita minta (AudioFlinger memindahkan
+    // rute setelah stream dibuka). Memakai daftar perangkat yang dipilih
+    // membuat pemilihan laju tidak bergantung pada perangkat lain.
     //
-    // Kosong = tidak diketahui; pemanggil harus jatuh kembali ke detector.
+    // Kosong = tidak diketahui ATAU perangkat mendukung laju sembarang;
+    // audio::pickBestRate() memakai laju file apa adanya dalam kedua arti.
     std::vector<int32_t> supportedRatesFor(int32_t deviceId) const;
 
-    // pickBestRate() terhadap daftar laju SATU perangkat.
+    // pickBestRate() terhadap daftar laju SATU perangkat — delegasi ke
+    // pristine::audio::pickBestRate() (core/RateSelection.h), satu-satunya
+    // implementasi aturan pemilihan laju. Aturannya: laju persis, lalu
+    // pembagi bulat terbesar dari laju file, lalu laju tertinggi yang
+    // tidak melebihi laju file, terakhir laju terendah perangkat.
     //
-    // Aturannya sama dengan DeviceRateDetector::pickBestRate(): laju persis,
-    // lalu kelipatan bulat terkecil, lalu laju tertinggi yang tidak melebihi
-    // laju file, terakhir laju terendah perangkat.
-    //
-    // `deviceRates` kosong -> jatuh ke pickBestRate() global.
+    // `deviceRates` kosong -> laju file apa adanya (tidak ada lagi fallback
+    // ke daftar gabungan semua perangkat).
     int32_t pickBestRateFor(int32_t fileRate, const std::vector<int32_t>& deviceRates) const;
 
 private:

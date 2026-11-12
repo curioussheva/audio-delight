@@ -17,7 +17,6 @@
 // memanggil beberapa fungsi dari `pristine-audio`. Fungsi-fungsi itu wajib
 // dianotasi, kalau tidak link gagal:
 //
-//   ld.lld: error: undefined symbol: pristine::audio::setDeviceRateDetectorVm(_JavaVM*)
 //   ld.lld: error: undefined symbol: pristine::setAudioDeviceManagerVm(_JavaVM*)
 //
 // Gejalanya adalah kegagalan LINK, bukan kompilasi - jadi mudah tertukar

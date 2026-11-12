@@ -258,6 +258,14 @@ int AudioDeviceManager::refreshDevices() {
             auto rates = getRates ? reinterpret_cast<jintArray>(env->CallObjectMethod(dev, getRates)) : nullptr;
             if (describeAndClear(env).empty() && rates) {
                 const jsize rn = env->GetArrayLength(rates);
+                if (rn == 0) {
+                    // Javadoc AOSP (AudioDeviceInfo.getSampleRates): array
+                    // kosong berarti perangkat mendukung laju SEMBARANG,
+                    // bukan "tidak ada laju". (C-R1, 2026-11-12: sebelumnya
+                    // kasus ini dilewati begitu saja dan perangkatnya
+                    // dilaporkan "deteksi gagal".)
+                    d.supportsArbitraryRates = true;
+                }
                 std::vector<jint> buf(static_cast<size_t>(rn));
                 env->GetIntArrayRegion(rates, 0, rn, buf.data());
                 for (jint r : buf) {
@@ -313,8 +321,9 @@ int AudioDeviceManager::refreshDevices() {
             std::snprintf(buf, sizeof(buf), "%s%d", i ? "," : "", d.supportedSampleRates[i]);
             rates += buf;
         }
-        LOGI("  id=%s type=%s name=\"%s\" rates=[%s] exclusive=%s",
+        LOGI("  id=%s type=%s name=\"%s\" rates=[%s]%s exclusive=%s",
              d.id.c_str(), deviceTypeName(d.type), d.name.c_str(), rates.c_str(),
+             d.supportsArbitraryRates ? " (laju sembarang)" : "",
              d.supportsExclusive ? "ya" : "tidak");
     }
 
@@ -381,6 +390,28 @@ AudioDeviceDescriptor AudioDeviceManager::getActiveDevice() const {
         [&](const AudioDeviceDescriptor& d) { return d.id == mActiveId; });
     if (it != mDevices.end()) return *it;
     return AudioDeviceDescriptor{};   // id kosong = tidak ada preferensi
+}
+
+std::vector<int32_t> AudioDeviceManager::supportedRatesForDevice(int32_t deviceId) const {
+    std::lock_guard<std::mutex> lock(mMutex);
+    const std::string wanted = std::to_string(deviceId);
+    const auto it = std::find_if(mDevices.begin(), mDevices.end(),
+        [&](const AudioDeviceDescriptor& d) { return d.id == wanted; });
+    if (it != mDevices.end()) return it->supportedSampleRates;
+    return {};
+}
+
+bool AudioDeviceManager::deviceSupportsRate(int32_t deviceId, int32_t rate) const {
+    std::lock_guard<std::mutex> lock(mMutex);
+    const std::string wanted = std::to_string(deviceId);
+    const auto it = std::find_if(mDevices.begin(), mDevices.end(),
+        [&](const AudioDeviceDescriptor& d) { return d.id == wanted; });
+    if (it == mDevices.end()) return false;
+    // Laju sembarang (AOSP: getSampleRates() kosong) mendukung laju apa pun.
+    if (it->supportsArbitraryRates) return true;
+    return std::find(it->supportedSampleRates.begin(),
+                     it->supportedSampleRates.end(), rate) !=
+           it->supportedSampleRates.end();
 }
 
 DeviceCapabilities AudioDeviceManager::getDeviceCapabilities(const std::string& deviceId) const {

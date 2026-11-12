@@ -6,6 +6,8 @@
 
 #include <android/log.h>
 
+#include "../core/RateSelection.h"
+
 #include <chrono>
 
 namespace pristine {
@@ -127,25 +129,17 @@ void EngineManager::start() {
     const int32_t requestedDevice =
         resolveRequestedDeviceId();
 
-    if (requestedDevice > 0) {
-        // Pastikan kapabilitas perangkat ini benar-benar baru dibaca dari
-        // Android sebelum dipakai memilih laju.
-        AudioDeviceManager::get().refreshDevices();
-    }
-
-    // Detector laju membaca perangkat output AKTIF dari Android, dan itu
-    // bukan selalu perangkat yang kita minta - kalau AudioFlinger belum
-    // memindahkan rutenya, yang terbaca masih perangkat lama. Jadi laju
-    // diambil dari deskriptor perangkat yang DIPILIH saat ada, dan detector
-    // dipakai sebagai cadangan.
-    //
-    // DeviceRateDetector tetap di-refresh karena dipakai pickBestRate() dan
-    // isBitPerfectFor() sebagai daftar laju yang tersedia.
-    const int detected = audio::DeviceRateDetector::refresh();
-    if (detected <= 0) {
-        __android_log_print(ANDROID_LOG_WARN, "EngineManager",
-            "start: deteksi laju gagal, pickBestRate akan memakai laju file apa adanya");
-    }
+    // Kapabilitas perangkat dibaca ulang dari Android SEBELUM dipakai
+    // memilih laju — DAC 384 kHz yang baru dicolok tidak boleh tetap dibuka
+    // di 48 kHz karena daftar laju yang dipakai masih daftar speaker
+    // internal. (C-R1, 2026-11-12: dulu di sini DeviceRateDetector::refresh()
+    // yang membaca perangkat output AKTIF menurut Android — dan itu belum
+    // tentu perangkat yang kita minta, kalau AudioFlinger belum memindahkan
+    // rutenya. Kini AudioDeviceManager satu-satunya sumber data perangkat:
+    // laju diambil dari deskriptor perangkat yang DIPILIH lewat
+    // supportedRatesFor() di bawah, dan tidak ada lagi daftar gabungan
+    // semua perangkat.)
+    AudioDeviceManager::get().refreshDevices();
 
     const auto deviceRates = supportedRatesFor(requestedDevice);
 
@@ -158,6 +152,22 @@ void EngineManager::start() {
     // laju TERTINGGI perangkat (file 44.1 kHz di DAC 384 kHz = upsampling 8.7x).
     const int32_t fileRate = resolveRequestedRate();
 
+    // Bit-perfect (pra-stream): laju file didukung perangkat yang dipilih?
+    // deviceRates kosong ada dua arti — tidak diketahui, atau perangkat
+    // mendukung laju sembarang — jadi jangan tebak dari daftar kosong;
+    // tanya manager yang tahu bedanya. Tanpa perangkat yang dipilih, tidak
+    // ada yang bisa diklaim (bukan "tidak" — "tidak diketahui").
+    // (C-R1: dulu isBitPerfectFor() menjawab "ya" dari daftar GABUNGAN
+    // semua perangkat — DAC lain yang mendukung tidak berarti perangkat
+    // yang dipakai mendukung.)
+    const char* bitPerfectStr = "tidak diketahui";
+    if (requestedDevice > 0 && fileRate > 0) {
+        bitPerfectStr =
+            AudioDeviceManager::get().deviceSupportsRate(requestedDevice, fileRate)
+                ? "ya"
+                : "tidak";
+    }
+
     int32_t requestedRate = fileRate;
     if (requestedRate > 0) {
         // Kalau laju file tidak didukung perangkat yang dipilih, turun ke
@@ -168,10 +178,7 @@ void EngineManager::start() {
             "start: laju file=%d -> laju stream=%d (bit-perfect=%s, perangkat=%d)",
             fileRate,
             requestedRate,
-            (deviceRates.empty()
-                ? audio::DeviceRateDetector::isBitPerfectFor(fileRate)
-                : std::find(deviceRates.begin(), deviceRates.end(), fileRate) != deviceRates.end())
-                ? "ya" : "tidak",
+            bitPerfectStr,
             requestedDevice);
     } else {
         __android_log_print(ANDROID_LOG_INFO, "EngineManager",
@@ -297,15 +304,8 @@ std::vector<int32_t> EngineManager::supportedRatesFor(int32_t deviceId) const {
         return {};
     }
 
-    const std::string wanted = std::to_string(deviceId);
-
-    for (const auto& d : AudioDeviceManager::get().getAvailableDevices()) {
-        if (d.id == wanted) {
-            return d.supportedSampleRates;
-        }
-    }
-
-    return {};
+    // (C-R1) AudioDeviceManager satu-satunya sumber data perangkat.
+    return AudioDeviceManager::get().supportedRatesForDevice(deviceId);
 }
 
 int32_t EngineManager::pickBestRateFor(
@@ -313,43 +313,10 @@ int32_t EngineManager::pickBestRateFor(
     const std::vector<int32_t>& deviceRates
 ) const {
 
-    if (fileRate <= 0) {
-        return 48000;
-    }
-
-    // Tidak ada info perangkat: pakai jalur lama lewat detector, yang membaca
-    // perangkat output aktif.
-    if (deviceRates.empty()) {
-        return audio::DeviceRateDetector::pickBestRate(fileRate);
-    }
-
-    // 1. Persis didukung -> tanpa konversi sama sekali.
-    if (std::binary_search(deviceRates.begin(), deviceRates.end(), fileRate)) {
-        return fileRate;
-    }
-
-    // 2. Kelipatan bulat terkecil (upsample integer). Rate conversion
-    //    fraksional (44.1k -> 48k) butuh interpolasi yang mengubah sampel;
-    //    kelipatan bulat tidak.
-    int32_t bestMultiple = 0;
-    for (int32_t r : deviceRates) {
-        if (r > fileRate && r % fileRate == 0) {
-            if (bestMultiple == 0 || r < bestMultiple) bestMultiple = r;
-        }
-    }
-    if (bestMultiple > 0) return bestMultiple;
-
-    // 3. Laju tertinggi perangkat yang TIDAK melebihi laju file - turun
-    //    sesedikit mungkin, tetap dalam rentang yang benar-benar didukung.
-    int32_t bestLower = 0;
-    for (int32_t r : deviceRates) {
-        if (r <= fileRate && r > bestLower) bestLower = r;
-    }
-    if (bestLower > 0) return bestLower;
-
-    // 4. Semua laju perangkat lebih tinggi dari laju file (jarang): pakai
-    //    yang terendah supaya kenaikan sesedikit mungkin.
-    return deviceRates.front();
+    // (C-R1) Satu-satunya implementasi aturan pemilihan laju ada di
+    // core/RateSelection.h; fungsi ini hanya delegasi supaya call site
+    // (start/reopen/onTrackLoaded/setRequestedDeviceId) tidak berubah.
+    return audio::pickBestRate(fileRate, deviceRates);
 }
 
 bool EngineManager::setRequestedDeviceId(int32_t deviceId) {

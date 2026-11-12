@@ -28,12 +28,23 @@ struct AudioDeviceDescriptor {
     bool supportsExclusive = false;
 
     // Semua laju yang didukung perangkat, urut menaik. Kosong = tidak
-    // diketahui (API < 23 atau pembacaan gagal).
+    // diketahui (API < 23 atau pembacaan gagal) ATAU perangkat mendukung
+    // laju sembarang — bedakan lewat supportsArbitraryRates di bawah.
     //
     // Disimpan supaya pemilihan laju per-file bisa dilakukan tanpa JNI lagi:
-    // DeviceRateDetector::pickBestRate() butuh daftar ini, dan memanggil JNI
-    // berkali-kali saat ganti track itu boros.
+    // audio::pickBestRate() (core/RateSelection.h) butuh daftar ini, dan
+    // memanggil JNI berkali-kali saat ganti track itu boros.
     std::vector<int32_t> supportedSampleRates;
+
+    // true kalau AudioDeviceInfo.getSampleRates() perangkat ini
+    // mengembalikan array KOSONG. Menurut javadoc AOSP, array kosong berarti
+    // perangkat mendukung laju SEMBARANG ("an empty array indicates that
+    // the device supports arbitrary rates"), BUKAN "tidak ada laju" —
+    // jadi daftar kosong di sini bukan deteksi gagal, dan pickBestRate()
+    // boleh memakai laju file apa adanya. (C-R1, 2026-11-12: sebelumnya
+    // array kosong dilewati begitu saja oleh DeviceRateDetector, dan
+    // perangkat semacam itu dilaporkan "deteksi gagal".)
+    bool supportsArbitraryRates = false;
 
     // true kalau perangkat ini USB (DAC eksternal).
     bool isUsb = false;
