@@ -2040,7 +2040,12 @@ void PlaybackController::processAdvance(const std::string& finishedUri,
     // PB6-W3: seksi kritis — advance() + loadTrack() atomik terhadap
     // advanceManual()/retreat() + loadTrack() di next()/previous()
     // (keduanya memegang loadTrackMutex_ yang sama — lihat (a) di header).
-    std::lock_guard<std::recursive_mutex> loadLock(loadTrackMutex_);
+    // B8-P3: unique_lock (bukan lock_guard) supaya lock bisa dilepas
+    // eksplisit sebelum emitTrackEnded di akhir fungsi — panggilan JNI
+    // tidak boleh jalan di dalam critical section (hygiene; premis
+    // deadlock opinion salah karena emit fire-and-forget dan tidak
+    // menunggu JS, tapi hold lock tetap dipersingkat).
+    std::unique_lock<std::recursive_mutex> loadLock(loadTrackMutex_);
 
     // Cek-batal DI DALAM lock (lihat (b) di header): cancel yang terjadi
     // sebelum akuisisi ini terlihat di sini; cancel sesudahnya ter-block
@@ -2104,8 +2109,7 @@ void PlaybackController::processAdvance(const std::string& finishedUri,
 
     if (loaded) {
         // Ekor track lama SUDAH habis terdengar — sekarang waktunya JS
-        // tahu track itu berakhir.
-        pristine::playback::emitTrackEnded(finishedUri);
+        // tahu track itu berakhir (emit di bawah, sesudah lock dilepas).
     } else {
         __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                             "advance: queue exhausted (repeat off atau "
@@ -2119,8 +2123,21 @@ void PlaybackController::processAdvance(const std::string& finishedUri,
         pauseFadeRemainingFrames_.store(0, std::memory_order_release);
         playing_.store(false, std::memory_order_release);
         if (state_) state_->setStatus(PlaybackStatus::Completed);
-        pristine::playback::emitTrackEnded(finishedUri);
+        // Emit di bawah, sesudah lock dilepas.
     }
+
+    // B8-P3: emitTrackEnded keluar dari loadLock scope. Kedua cabang di
+    // atas meng-emit URI yang sama (finishedUri), jadi satu emit di sini
+    // cukup. Satu-satunya data yang dibutuhkan emit adalah URI track
+    // yang selesai — disalin ke lokal DI DALAM lock; emit memakai
+    // salinan itu sesudah lock dilepas, jadi tidak ada bacaan state
+    // bersama sesudah unlock. Urutan observabel tidak berubah: emit
+    // tetap terjadi sesudah advance + loadTrack sukses (atau sesudah
+    // exhausted + status Completed diputuskan), sebelum processAdvance
+    // kembali ke worker loop.
+    const std::string endedUri = finishedUri;
+    loadLock.unlock();
+    pristine::playback::emitTrackEnded(endedUri);
 }
 
 void PlaybackController::waitForAdvanceIdle() {
