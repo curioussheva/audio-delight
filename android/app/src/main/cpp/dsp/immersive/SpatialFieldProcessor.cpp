@@ -1,5 +1,7 @@
 #include "SpatialFieldProcessor.h"
 
+#include "../../core/AudioTypes.h"
+
 #include <cmath>
 
 namespace pristine { namespace dsp {
@@ -7,13 +9,21 @@ namespace pristine { namespace dsp {
 SpatialFieldProcessor::SpatialFieldProcessor() = default;
 
 void SpatialFieldProcessor::setWidth(float width) {
-    mWidth = width;
+    // C-IMMVAL: dulu disimpan mentah — NaN membuat mCurrentWidth NaN
+    // permanen (smoothing NaN - NaN = NaN, widening mati selamanya sampai
+    // reset) dan +Inf mengalikan side sampai output Inf.
+    // clampFinite: non-finite -> fallback 1.0 = netral (default AudioState),
+    // finite di luar [0,2] -> batas terdekat.
+    mWidth = clampFinite(width, 0.0f, 2.0f, 1.0f);
 
     // Prime cache pada pemasangan pertama supaya render pertama tidak menyapu
     // nilai dari default ke nilai sebenarnya. Tanpa ini, width 1 / depth 0
     // tidak bit-exact pada buffer pertama (terukur pada test).
+    // (C-IMMVAL): prime pakai mWidth yang SUDAH di-clamp — pakai `width`
+    // mentah di sini mengembalikan NaN/Inf ke mCurrentWidth dan membatalkan
+    // clamp di atas (smoothing Inf + -Inf = NaN, widening mati).
     if (!mPrimed) {
-        mCurrentWidth = width;
+        mCurrentWidth = mWidth;
     }
 }
 

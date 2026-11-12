@@ -1,5 +1,7 @@
 #include "SolfeggioResonator.h"
 
+#include "../../core/AudioTypes.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -28,7 +30,13 @@ void SolfeggioResonator::setFrequency(float hz) {
 }
 
 void SolfeggioResonator::setIntensity(float intensity) {
-    mIntensity.store(std::clamp(intensity, 0.0f, 1.0f), std::memory_order_relaxed);
+    // C-IMMVAL: std::clamp TIDAK menahan NaN — perbandingannya false
+    // dua-duanya, jadi NaN lolos mentah, lalu Q = 0.7 + NaN*7.3 = NaN dan
+    // seluruh koefisien RBJ jadi NaN (updateCoefficientsIfNeeded).
+    // clampFinite: non-finite -> fallback 0.5 = default AudioState,
+    // finite di luar [0,1] -> batas terdekat.
+    mIntensity.store(clampFinite(intensity, 0.0f, 1.0f, 0.5f),
+                     std::memory_order_relaxed);
 }
 
 // Recompute hanya saat freq/intensity berubah — real-time safe, tidak ada
