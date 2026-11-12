@@ -640,7 +640,20 @@ bool PlaybackController::pause() {
         if (auto worker = snapshotWorker()) {
             worker->pause();
         }
-        updatePlaybackState();  // 🔥 FIX
+        // 🔥 FIX (2026-11-12, B8-M5): jangan timpa Stopped/Completed jadi
+        // Paused. updatePlaybackState() hanya tahu Playing/Paused (dari
+        // playing_), jadi pause() sesudah stop()/completed mengubah status
+        // jadi Paused. Sama seperti stop() (:767-770) yang sengaja TIDAK
+        // memanggil updatePlaybackState — status Stopped / Completed
+        // dipertahankan. Pause ganda saat Paused tetap memanggil
+        // updatePlaybackState() seperti sebelumnya.
+        if (state_) {
+            const auto status = state_->getStatus();
+            if (status != PlaybackStatus::Stopped &&
+                status != PlaybackStatus::Completed) {
+                updatePlaybackState();  // 🔥 FIX
+            }
+        }
         return true;
     }
 
