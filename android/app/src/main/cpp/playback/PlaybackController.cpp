@@ -43,6 +43,20 @@ bool PlaybackController::initialize() {
     // aman; render() (noexcept) tidak boleh resize.
     rateScratch_.assign(kRateScratchSamples, 0.0f);
 
+    // PB6-W3 (2026-11-12): nyalakan SATU worker advance permanen (lihat
+    // komentar advanceWorker_ di header). Di-start di AKHIR initialize() —
+    // sesudah pcmQueue_/queue_ ada — supaya worker tidak pernah melihat
+    // resource null. Pembuatan thread adalah titik sinkronisasi: semua
+    // tulis di atas terlihat oleh worker.
+    {
+        std::lock_guard<std::mutex> lock(advanceMutex_);
+        advanceStopRequested_ = false;
+        advancePending_ = false;
+        advanceBusy_ = false;
+        advanceFinishedUri_.clear();
+    }
+    advanceWorker_ = std::thread(&PlaybackController::advanceWorkerLoop, this);
+
     initialized_.store(true, std::memory_order_release);
     return true;
 }
@@ -56,13 +70,30 @@ void PlaybackController::shutdown() {
     // render() lagi yang menguras queue).
     cancelPendingAdvance();
 
-    stopDecoder();
-
-    // 🔥 Join advance thread: kalau lagi loadTrack untuk track berikutnya,
-    // harus selesai sebelum resource di-reset di bawah.
-    if (advanceThread_.joinable()) {
-        advanceThread_.join();
+    // PB6-W3: hentikan worker permanen — minta berhenti + notify + join
+    // SEKALI. Join di sini (destruktor, thread pemilik EngineManager),
+    // BUKAN dari thread decoder: satu-satunya pemanggil shutdown() adalah
+    // ~PlaybackController() (EngineManager singleton dihancurkan saat
+    // process exit, sesudah mEngine.stop() di body destruktor — PB6-W6),
+    // dan tidak ada jalur dari thread decoder / worker advance itu sendiri
+    // ke shutdown(). Worker menyelesaikan permintaan in-flight yang
+    // terbatas (drain sudah dibatalkan di atas; seksi kritis
+    // advance+loadTrack terbatas) lalu keluar.
+    //
+    // Urutan: join worker DULU, baru stopDecoder. Worker yang sedang
+    // loadTrack() bisa mempublikasikan decoder baru SESUDAH stopDecoder
+    // kalau urutannya dibalik (dulu: stopDecoder dulu, join sesudahnya) —
+    // decoder itu lalu hidup melewati shutdown tanpa pernah di-stop.
+    {
+        std::lock_guard<std::mutex> lock(advanceMutex_);
+        advanceStopRequested_ = true;
     }
+    advanceCv_.notify_all();
+    if (advanceWorker_.joinable()) {
+        advanceWorker_.join();
+    }
+
+    stopDecoder();
 
     playing_.store(false);
 
@@ -107,6 +138,24 @@ std::shared_ptr<decoder::DecoderWorker> PlaybackController::snapshotWorker() con
 bool PlaybackController::next() {
     if (!queue_) return false;
 
+    // PB6-W3: batalkan advance DULU (sebelum lock) supaya flag terlihat
+    // worker sebelum thread ini ter-block di mutex (pola D-M3), lalu
+    // pegang loadTrackMutex_ sepanjang advanceManual()+loadTrack().
+    // Worker advance memegang mutex yang sama sepanjang advance()+
+    // loadTrack() (lihat processAdvance), jadi navigasi manual dan
+    // auto-advance atomik satu sama lain dan skip dobel tertutup:
+    // worker yang kalah perebutan mutex melihat flag-batal di dalam
+    // seksi kritisnya dan urung; yang menang menyelesaikan advance-nya
+    // dulu, baru thread ini advanceManual dari indeks BARU (satu
+    // auto-advance + satu manual = dua langkah yang memang diminta,
+    // bukan satu Next yang melompat dua).
+    //
+    // Aman memegang mutex di sini: listener loadTrack() tidak lagi reopen
+    // sinkron sejak PB6-B1 (onTrackLoaded hanya meminta recovery async
+    // lewat requestStreamRecovery, tanpa lock).
+    cancelPendingAdvance();
+    std::lock_guard<std::recursive_mutex> lock(loadTrackMutex_);
+
     // 🔥 FIX (2026-10-10): pakai advance(), BUKAN next() (peek const).
     //
     // BUG: next() sebelumnya memanggil queue_->next() yang adalah peeker
@@ -142,6 +191,12 @@ bool PlaybackController::next() {
 
 bool PlaybackController::previous() {
     if (!queue_) return false;
+
+    // PB6-W3: sama dengan next() — batalkan advance dulu, lalu pegang
+    // loadTrackMutex_ sepanjang retreat()+loadTrack() supaya atomik
+    // terhadap advance()+loadTrack() worker (lihat komentar di next()).
+    cancelPendingAdvance();
+    std::lock_guard<std::recursive_mutex> lock(loadTrackMutex_);
 
     // 🔥 FIX (2026-10-10): pakai retreat(), BUKAN previous() (peek const).
     // Alasan sama dengan next(): previous() const hanya peek queue[idx-1]
@@ -492,23 +547,32 @@ bool PlaybackController::pause() {
 bool PlaybackController::stop() {
     playing_.store(false, std::memory_order_release);
 
-    // 🔥 FIX (2026-11-10, P-M3): batalkan + join advance thread. Sebelumnya
-    // stop() tidak menyentuh advanceThread_ sama sekali: EOF yang datang
-    // sesaat sebelum stop membuat loadTrack tetap jalan di thread itu dan
-    // menghidupkan lagi audio setelah stop (render tanpa gate playing, P-M2).
-    // Cancel dulu supaya join tidak menggantung sampai drain selesai (bisa
+    // 🔥 FIX (2026-11-10, P-M3): batalkan + tunggu advance selesai.
+    // Sebelumnya stop() tidak menyentuh advanceThread_ sama sekali: EOF
+    // yang datang sesaat sebelum stop membuat loadTrack tetap jalan di
+    // thread itu dan menghidupkan lagi audio setelah stop (render tanpa
+    // gate playing, P-M2). Cancel dulu supaya drain-wait bubar (bisa
     // ~20 dtk kalau user pause di tengah ekor).
+    //
+    // PB6-W3: TIDAK ADA lagi join di sini — worker advance permanen, dan
+    // stop() hanya menunggu worker idle (waitForAdvanceIdle), bukan
+    // me-join thread-nya. Satu-satunya join worker ada di shutdown().
+    // stop() hanya dipanggil JNI nativeStop (thread JS) — tidak pernah
+    // dari thread decoder — jadi menunggu worker di sini tidak bisa
+    // deadlock dengan stopDecoder worker (yang men-join thread decoder):
+    // thread decoder tidak pernah menunggu stop().
     cancelPendingAdvance();
-    if (advanceThread_.joinable()) {
-        advanceThread_.join();
-    }
+    waitForAdvanceIdle();
 
-    // 🔥 FIX (2026-11-12, PB2-M1): lock loadTrackMutex_ HANYA SETELAH join.
-    // JANGAN pindahkan lock ini ke awal fungsi: stop() yang memegang mutex
-    // lalu join advance thread akan deadlock — advance thread yang sedang
-    // loadTrack() tidak bisa selesai karena menunggu mutex yang sama,
-    // sementara join menunggu advance thread selesai. Urutan
-    // join-dulu-baru-lock adalah bagian dari fix, bukan gaya penulisan.
+    // 🔥 FIX (2026-11-12, PB2-M1): lock loadTrackMutex_ HANYA SETELAH
+    // advance selesai (waitForAdvanceIdle di atas). JANGAN pindahkan lock
+    // ini ke awal fungsi: stop() yang memegang mutex lalu menunggu worker
+    // advance akan deadlock — worker yang sedang loadTrack() tidak bisa
+    // selesai karena menunggu mutex yang sama, sementara stop() menunggu
+    // worker selesai. Urutan tunggu-dulu-baru-lock adalah bagian dari
+    // fix, bukan gaya penulisan. (PB6-W3: "join" lama diganti
+    // waitForAdvanceIdle — worker permanen, bukan thread sekali pakai —
+    // tapi aturan urutannya sama.)
     std::lock_guard<std::recursive_mutex> lock(loadTrackMutex_);
 
     stopDecoder();
@@ -1413,104 +1477,225 @@ void PlaybackController::stopDecoder() {
     }
 }
 
-// 🔥 Advance queue + loadTrack setelah EOF, di thread terpisah.
+// PB6-W3: advance queue + loadTrack setelah EOF, di worker permanen.
 //
-// EOF callback jalan di thread decoder. Kalau loadTrack() dipanggil di sana,
-// stopDecoder() akan join thread yang sedang berjalan → deadlock, dan
-// decoderWorker_.reset() menghancurkan object dari dalam dirinya sendiri
-// → use-after-free. Thread baru memutus dependensi ini.
+// EOF callback jalan di thread decoder (di bawah decodeMutex_ workerLoop).
+// Kalau loadTrack() dipanggil di sana, stopDecoder() akan join thread
+// yang sedang berjalan → deadlock, dan decoderWorker_.reset()
+// menghancurkan object dari dalam dirinya sendiri → use-after-free.
+// Dulu ini dipecah dengan spawn thread baru per advance — tapi
+// scheduleAdvance() lama me-join thread lama tanpa mutex (data race +
+// system_error tak tertangkap → terminate) dan join dari thread decoder
+// bisa menggantung ~20 dtk saat advance lama drain-wait.
 //
-// advanceThread_ di-join di shutdown() (destructor) — dan di stop() (P-M3)
-// supaya tidak bocor dan tidak menghidupkan lagi audio setelah stop.
+// Sekarang: scheduleAdvance() HANYA mem-post permintaan ke worker
+// permanen (advanceWorkerLoop) — tanpa join. Worker yang menjalankan
+// drain-wait + advance + loadTrack.
 void PlaybackController::scheduleAdvance(const std::string& finishedUri) {
-    if (advanceThread_.joinable()) {
-        advanceThread_.join();
+    // PB6-W3 (c): tolak post basi — URI sudah bukan track aktif. Post
+    // dari callback decoder lama bisa mendarat SESUDAH cancel next()/
+    // previous() (callback tertunda di thread decoder sementara loadTrack
+    // manual sudah pindah track): post seperti itu membersihkan flag
+    // lewat jalurnya sendiri, jadi flag saja tidak menutupnya. Cek di
+    // bawah decoderMutex_ — pola yang sama dengan pembacaan
+    // currentTrack_.uri di callback EOF / decode-error; aman dari thread
+    // decoder (tidak ada jalur balik decoderMutex_ -> decodeMutex_).
+    {
+        std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+        if (finishedUri != currentTrack_.uri) {
+            __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                "scheduleAdvance: abaikan post basi untuk %s (track aktif %s)",
+                finishedUri.c_str(), currentTrack_.uri.c_str());
+            return;
+        }
     }
 
+    // Post permintaan (leaf lock saja — lihat urutan lock di header).
     // Advance baru = pembatalan sebelumnya tidak berlaku lagi.
-    advanceCancelled_.store(false, std::memory_order_release);
+    {
+        std::lock_guard<std::mutex> lock(advanceMutex_);
+        advanceFinishedUri_ = finishedUri;
+        advancePending_ = true;
+        advanceCancelled_.store(false, std::memory_order_release);
+    }
+    advanceCv_.notify_one();
+}
 
-    advanceThread_ = std::thread([this, finishedUri]() {
-        if (!queue_) return;
-
-        // 🔥 FIX (2026-11-10, P-M1): TUNGGU ekor track habis dimainkan dulu.
-        //
-        // Sebelumnya scheduleAdvance langsung loadTrack → pcmQueue_->clear()
-        // membuang audio yang sudah di-decode tapi belum dimainkan. Decoder
-        // jalan 13–20 dtk di depan playback (queue 21,8 dtk, pause 90% /
-        // resume 60%), jadi tiap auto-advance memotong ekor sepanjang itu.
-        //
-        // Sekarang: decoder sudah selesai (EOF), tidak ada lagi yang mengisi
-        // queue — available hanya berkurang lewat render(). Tunggu sampai
-        // queue kosong, atau sampai dibatalkan (stop/loadTrack/shutdown).
-        // Kalau user pause di tengah ekor, drain berhenti (render tidak
-        // menarik saat paused, P-M2) dan thread ini menunggu sampai resume
-        // atau batal — ekor tidak hilang.
-        while (true) {
-            if (advanceCancelled_.load(std::memory_order_acquire)) {
-                __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
-                    "scheduleAdvance: dibatalkan saat menunggu drain");
-                return;
-            }
-            if (!pcmQueue_) return;
-            if (pcmQueue_->availableSamples() == 0) break;
-            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+// PB6-W3: loop worker advance permanen. Hidup sejak initialize() sampai
+// shutdown(); di antara permintaan, tidur di condition_variable.
+void PlaybackController::advanceWorkerLoop() {
+    while (true) {
+        std::string finishedUri;
+        {
+            std::unique_lock<std::mutex> lock(advanceMutex_);
+            advanceCv_.wait(lock, [this] {
+                return advanceStopRequested_ || advancePending_;
+            });
+            if (advanceStopRequested_) return;
+            finishedUri = std::move(advanceFinishedUri_);
+            advanceFinishedUri_.clear();
+            advancePending_ = false;
+            advanceBusy_ = true;
         }
 
-        if (advanceCancelled_.load(std::memory_order_acquire)) return;
-
-        // 🔥 FIX (2026-11-10, P-M10): lewati track yang tidak bisa dimuat.
-        //
-        // loadTrack() gagal kalau startDecoder gagal (file korup / tidak
-        // bisa dibuka) — sebelumnya advance berhenti diam-diam di situ:
-        // tidak ada emit, tidak ada advance lagi, UI "playing" tanpa suara.
-        // Sekarang: coba track berikutnya sampai ada yang berhasil dimuat.
-        //
-        // Batas percobaan = ukuran queue — melindungi Repeat One: advance()
-        // mengembalikan true TANPA pindah di bawah One, jadi tanpa batas,
-        // satu-satunya track yang korup membuat loop ini tidak pernah
-        // berakhir. (Satu track korup di bawah One = queue habis setelah
-        // N percobaan, masuk cabang exhausted di bawah.)
-        const size_t maxAttempts = std::max<size_t>(queue_->size(), 1);
-        bool loaded = false;
-        for (size_t attempt = 0; attempt < maxAttempts; ++attempt) {
-            if (!queue_->advance()) break;
-            auto nextTrack = queue_->current();
-            if (!nextTrack) break;
-            __android_log_print(
-                ANDROID_LOG_INFO, "PlaybackController",
-                "advance: next track uri=%s (attempt %zu/%zu)",
-                nextTrack->uri.c_str(), attempt + 1, maxAttempts);
-            if (loadTrack(*nextTrack)) {
-                loaded = true;
-                break;
-            }
-            __android_log_print(
-                ANDROID_LOG_WARN, "PlaybackController",
-                "advance: loadTrack gagal untuk %s, coba berikutnya",
-                nextTrack->uri.c_str());
+        // processAdvance tidak boleh membunuh worker permanen: exception
+        // yang lolos (bukan dari loadTrack — ia menangkap sendiri) dicatat
+        // dan worker kembali menunggu permintaan berikutnya. Dulu exception
+        // di thread advance sekali pakai = std::terminate.
+        try {
+            processAdvance(finishedUri);
+        } catch (const std::exception& e) {
+            __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
+                "advanceWorkerLoop: exception saat memproses advance (%s) - "
+                "worker tetap hidup", e.what());
+        } catch (...) {
+            __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
+                "advanceWorkerLoop: unknown exception saat memproses advance "
+                "- worker tetap hidup");
         }
 
-        if (loaded) {
-            // Ekor track lama SUDAH habis terdengar — sekarang waktunya JS
-            // tahu track itu berakhir.
-            pristine::playback::emitTrackEnded(finishedUri);
-        } else {
+        {
+            std::lock_guard<std::mutex> lock(advanceMutex_);
+            advanceBusy_ = false;
+        }
+        advanceCv_.notify_all();
+    }
+}
+
+void PlaybackController::processAdvance(const std::string& finishedUri) {
+    if (!queue_) return;
+
+    // 🔥 FIX (2026-11-10, P-M1): TUNGGU ekor track habis dimainkan dulu.
+    //
+    // Sebelumnya scheduleAdvance langsung loadTrack → pcmQueue_->clear()
+    // membuang audio yang sudah di-decode tapi belum dimainkan. Decoder
+    // jalan 13–20 dtk di depan playback (queue 21,8 dtk, pause 90% /
+    // resume 60%), jadi tiap auto-advance memotong ekor sepanjang itu.
+    //
+    // Sekarang: decoder sudah selesai (EOF), tidak ada lagi yang mengisi
+    // queue — available hanya berkurang lewat render(). Tunggu sampai
+    // queue kosong, atau sampai dibatalkan (stop/loadTrack/shutdown).
+    // Kalau user pause di tengah ekor, drain berhenti (render tidak
+    // menarik saat paused, P-M2) dan thread ini menunggu sampai resume
+    // atau batal — ekor tidak hilang.
+    //
+    // PB6-W3: tidur diganti wait_for 20 ms di CV supaya batal/berhenti
+    // membangunkan segera (semantik sama: cek ulang tiap ≤20 ms).
+    while (true) {
+        if (advanceCancelled_.load(std::memory_order_acquire)) {
             __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
-                                "advance: queue exhausted (repeat off atau "
-                                "semua track gagal dimuat)");
-            // 🔥 FIX (2026-11-10, p-m4): antrean habis = status Completed,
-            // bukan Playing yang membeku di akhir trek. JS polling
-            // status === 1 (Playing) jadi tahu playback benar-benar selesai.
-            playing_.store(false, std::memory_order_release);
-            if (state_) state_->setStatus(PlaybackStatus::Completed);
-            pristine::playback::emitTrackEnded(finishedUri);
+                "scheduleAdvance: dibatalkan saat menunggu drain");
+            return;
         }
-    });
+        {
+            std::lock_guard<std::mutex> lock(advanceMutex_);
+            if (advanceStopRequested_) return;
+        }
+        if (!pcmQueue_) return;
+        if (pcmQueue_->availableSamples() == 0) break;
+        std::unique_lock<std::mutex> lock(advanceMutex_);
+        advanceCv_.wait_for(lock, std::chrono::milliseconds(20), [this] {
+            return advanceCancelled_.load(std::memory_order_acquire) ||
+                   advanceStopRequested_;
+        });
+    }
+
+    if (advanceCancelled_.load(std::memory_order_acquire)) return;
+    {
+        std::lock_guard<std::mutex> lock(advanceMutex_);
+        if (advanceStopRequested_) return;
+    }
+
+    // PB6-W3: seksi kritis — advance() + loadTrack() atomik terhadap
+    // advanceManual()/retreat() + loadTrack() di next()/previous()
+    // (keduanya memegang loadTrackMutex_ yang sama — lihat (a) di header).
+    std::lock_guard<std::recursive_mutex> loadLock(loadTrackMutex_);
+
+    // Cek-batal DI DALAM lock (lihat (b) di header): cancel yang terjadi
+    // sebelum akuisisi ini terlihat di sini; cancel sesudahnya ter-block
+    // sampai seksi kritis selesai. Tanpa cek ini, worker yang lolos cek
+    // drain terakhir tetap menggeser indeks sesudah navigasi manual.
+    if (advanceCancelled_.load(std::memory_order_acquire)) return;
+    if (!queue_) return;
+
+    // 🔥 FIX (2026-11-10, P-M10): lewati track yang tidak bisa dimuat.
+    //
+    // loadTrack() gagal kalau startDecoder gagal (file korup / tidak
+    // bisa dibuka) — sebelumnya advance berhenti diam-diam di situ:
+    // tidak ada emit, tidak ada advance lagi, UI "playing" tanpa suara.
+    // Sekarang: coba track berikutnya sampai ada yang berhasil dimuat.
+    //
+    // Batas percobaan = ukuran queue — melindungi Repeat One: advance()
+    // mengembalikan true TANPA pindah di bawah One, jadi tanpa batas,
+    // satu-satunya track yang korup membuat loop ini tidak pernah
+    // berakhir. (Satu track korup di bawah One = queue habis setelah
+    // N percobaan, masuk cabang exhausted di bawah.)
+    //
+    // CATATAN PB6-W3: TIDAK ada cek-batal di dalam loop retry — loadTrack()
+    // sendiri memanggil cancelPendingAdvance() di awal, jadi flag sudah
+    // true sesudah percobaan pertama; cek di sini akan membunuh retry
+    // P-M10. Pembatalan dari luar tidak mungkin masuk ke sini: next()/
+    // previous()/play()/seek() butuh loadTrackMutex_ yang sedang dipegang
+    // worker, dan stop() menunggu worker idle dulu.
+    const size_t maxAttempts = std::max<size_t>(queue_->size(), 1);
+    bool loaded = false;
+    for (size_t attempt = 0; attempt < maxAttempts; ++attempt) {
+        if (!queue_->advance()) break;
+        auto nextTrack = queue_->current();
+        if (!nextTrack) break;
+        __android_log_print(
+            ANDROID_LOG_INFO, "PlaybackController",
+            "advance: next track uri=%s (attempt %zu/%zu)",
+            nextTrack->uri.c_str(), attempt + 1, maxAttempts);
+        if (loadTrack(*nextTrack)) {
+            loaded = true;
+            break;
+        }
+        __android_log_print(
+            ANDROID_LOG_WARN, "PlaybackController",
+            "advance: loadTrack gagal untuk %s, coba berikutnya",
+            nextTrack->uri.c_str());
+    }
+
+    if (loaded) {
+        // Ekor track lama SUDAH habis terdengar — sekarang waktunya JS
+        // tahu track itu berakhir.
+        pristine::playback::emitTrackEnded(finishedUri);
+    } else {
+        __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                            "advance: queue exhausted (repeat off atau "
+                            "semua track gagal dimuat)");
+        // 🔥 FIX (2026-11-10, p-m4): antrean habis = status Completed,
+        // bukan Playing yang membeku di akhir trek. JS polling
+        // status === 1 (Playing) jadi tahu playback benar-benar selesai.
+        playing_.store(false, std::memory_order_release);
+        if (state_) state_->setStatus(PlaybackStatus::Completed);
+        pristine::playback::emitTrackEnded(finishedUri);
+    }
+}
+
+void PlaybackController::waitForAdvanceIdle() {
+    std::unique_lock<std::mutex> lock(advanceMutex_);
+    advanceCv_.wait(lock, [this] { return !advanceBusy_; });
 }
 
 void PlaybackController::cancelPendingAdvance() noexcept {
+    // PB6-W3: ambil loadTrackMutex_ sebentar saat menaikkan flag — lihat
+    // (b) pada komentar advanceWorker_ di header. Tanpa ini, flag yang
+    // dibaca worker di dalam seksi kritisnya bisa ketinggalan cancel yang
+    // mendarat di antara cek-batal drain terakhir dan advance().
+    //
+    // Aman: recursive — loadTrack()/play() yang sudah memegang mutex
+    // (thread yang sama) tidak deadlock; stop()/shutdown()/next()/
+    // previous() belum memegangnya di titik ini. Lock dilepas sebelum
+    // kembali: stop() tetap menunggu worker idle TANPA lock (PB2-M1),
+    // dan worker tidak pernah menunggu cancel sambil memegang mutex
+    // (drain-wait jalan di luar loadTrackMutex_).
+    std::lock_guard<std::recursive_mutex> loadLock(loadTrackMutex_);
     advanceCancelled_.store(true, std::memory_order_release);
+    // Bangunkan worker kalau sedang drain-wait di CV (atau menunggu
+    // permintaan — predikatnya tidak berubah, jadi kembali tidur).
+    advanceCv_.notify_all();
 }
 
 void PlaybackController::waitForRenderIdle() noexcept {

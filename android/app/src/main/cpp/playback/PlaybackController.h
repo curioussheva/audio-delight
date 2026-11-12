@@ -3,6 +3,7 @@
 #include <memory>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <functional>
 #include <mutex>
 #include <string>
@@ -147,13 +148,22 @@ private:
     void stopDecoder();
 
     // 🔥 Advance queue + loadTrack setelah EOF (dipanggil dari thread decoder).
-    // Lihat implementasi: harus di thread terpisah supaya tidak self-join.
+    // PB6-W3: HANYA mem-post permintaan ke advance worker permanen (lihat
+    // advanceWorkerLoop) — tanpa join, tanpa lock selain advanceMutex_.
     // finishedUri = URI trek yang baru berakhir (untuk event ke JS — di-emit
     // SETELAH ekor habis dimainkan, bukan saat EOF, P-M1).
     void scheduleAdvance(const std::string& finishedUri);
     // 🔥 FIX (2026-11-10, P-M1): batalkan advance yang sedang menunggu drain.
     // Dipanggil stop()/loadTrack()/shutdown() sebelum pekerjaan mereka.
+    // PB6-W3: mengambil loadTrackMutex_ sebentar saat menaikkan flag —
+    // lihat (b) pada komentar advanceWorker_ di bawah.
     void cancelPendingAdvance() noexcept;
+    // PB6-W3: loop worker advance permanen + satu permintaan advance.
+    void advanceWorkerLoop();
+    void processAdvance(const std::string& finishedUri);
+    // PB6-W3: tunggu worker advance selesai memproses permintaan yang
+    // sedang berjalan (dipakai stop() sebelum mengambil loadTrackMutex_).
+    void waitForAdvanceIdle();
     // 🔥 FIX (2026-11-10, p-m12): tunggu in-flight render() selesai (maks
     // 100 ms) setelah clearing_ dikibarkan, sebelum pcmQueue_->clear().
     void waitForRenderIdle() noexcept;
@@ -307,8 +317,71 @@ private:
     // (dulu) / member mentah tanpa lock (P-M4).
     [[nodiscard]] std::shared_ptr<decoder::DecoderWorker> snapshotWorker() const;
 
-    // 🔥 Thread untuk advance queue setelah EOF (lihat scheduleAdvance).
-    std::thread advanceThread_;
+    // PB6-W3 (2026-11-12): SATU worker thread permanen untuk advance queue
+    // setelah EOF — menggantikan advanceThread_ yang di-spawn/join per advance.
+    //
+    // Masalah advanceThread_ lama:
+    //  1. scheduleAdvance() (thread decoder) me-join thread lama TANPA mutex
+    //     — assign + join tanpa sinkronisasi = data race, dan join ganda
+    //     (stop()/shutdown() ikut me-join) melempar std::system_error yang
+    //     tak tertangkap → terminate. Join dari thread decoder juga bisa
+    //     menggantung ~20 dtk kalau advance lama sedang drain-wait
+    //     (stopDecoder ikut menggantung).
+    //  2. Jendela skip dobel: advance thread yang sudah lolos cek-batal
+    //     terakhir tetap advance()+loadTrack() SESUDAH next()/previous()
+    //     (advanceManual() dulu, loadTrack() baru membatalkan) — indeks
+    //     geser dua kali untuk satu tekanan Next.
+    //
+    // Desain baru: scheduleAdvance() HANYA mem-post permintaan (URI trek
+    // yang berakhir) ke slot yang dijaga advanceMutex_ + advanceCv_ —
+    // tanpa join, tanpa lock lain, jadi aman dipanggil dari callback EOF /
+    // decode-error di thread decoder. Worker menunggu di CV, lalu
+    // menjalankan drain-wait + advance + loadTrack sendiri.
+    //
+    // Penutup skip dobel ada tiga lapis:
+    //  (a) next()/previous() memanggil cancelPendingAdvance() DULU lalu
+    //      memegang loadTrackMutex_ sepanjang advanceManual()/retreat() +
+    //      loadTrack(); worker memegang mutex yang sama sepanjang
+    //      advance() + loadTrack() (termasuk retry P-M10). Keduanya atomik
+    //      satu sama lain — tidak ada interleaving indeks-vs-muatan.
+    //  (b) cancelPendingAdvance() mengambil loadTrackMutex_ sebentar saat
+    //      menaikkan flag. Jadi flag yang dibaca worker SETELAH mengambil
+    //      mutex (di dalam seksi kritis) melihat SEMUA cancel yang terjadi
+    //      sebelum akuisisi itu (sinkronisasi mutex unlock→lock), dan
+    //      cancel yang datang sesudahnya ter-block sampai seksi kritis
+    //      selesai. Tanpa (b), cancel yang mendarat di antara cek-batal
+    //      worker dan advance() tetap lolos — itulah jendela yang ditutup.
+    //  (c) scheduleAdvance() menolak permintaan yang URInya sudah bukan
+    //      track aktif: callback decoder lama yang tertunda (post-nya
+    //      mendarat SESUDAH cancel next()/previous()) tidak boleh
+    //      menghidupkan advance — post seperti itu membersihkan flag
+    //      lewat jalurnya sendiri, jadi flag saja tidak menutupnya.
+    //
+    // Urutan lock: advanceMutex_ adalah leaf — hanya diambil sebentar
+    // untuk post/ambil permintaan dan untuk menunggu di CV; TIDAK PERNAH
+    // ditahan saat mengambil loadTrackMutex_ (worker melepasnya dulu),
+    // dan tidak ada mutex lain yang diambil saat memegangnya. Jadi tidak
+    // ada urutan lock baru terhadap loadTrackMutex_/decoderMutex_/
+    // decodeMutex_. scheduleAdvance() dari thread decoder (yang sedang
+    // memegang decodeMutex_ di workerLoop) hanya mengambil advanceMutex_
+    // + decoderMutex_ (cek URI, pola yang sama dengan pembacaan
+    // currentTrack_.uri di callback EOF) — tidak ada jalur balik
+    // decoderMutex_ -> decodeMutex_ (stopDecoder melepas decoderMutex_
+    // sebelum worker->stop()).
+    std::thread advanceWorker_;
+    std::mutex advanceMutex_;
+    std::condition_variable advanceCv_;
+    // Dijaga advanceMutex_: permintaan advance yang menunggu diproses.
+    bool advancePending_{false};
+    std::string advanceFinishedUri_;
+    // Dijaga advanceMutex_: worker diminta berhenti (shutdown).
+    bool advanceStopRequested_{false};
+    // Dijaga advanceMutex_: worker sedang memproses satu permintaan.
+    // Dipakai stop() (waitForAdvanceIdle) untuk menunggu advance in-flight
+    // selesai SEBELUM mengambil loadTrackMutex_ — PB2-M1: lock HANYA
+    // sesudah advance selesai, jadi stop() tidak pernah memegang mutex
+    // sambil menunggu worker.
+    bool advanceBusy_{false};
 
     // 🔥 FIX (2026-11-10, P-M1): decoder sudah selesai membaca file (EOF),
     // tapi audio di queue belum habis dimainkan. Di-set EOF callback,
