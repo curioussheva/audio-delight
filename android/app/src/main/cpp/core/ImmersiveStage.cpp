@@ -28,7 +28,17 @@ dsp::BrainwaveType ImmersiveStage::mapFrequencyToBrainwaveType(float hz) {
 
 void ImmersiveStage::prepare(int32_t sampleRate) {
 
+    // (C-PREP, 2026-11-12): laju tidak valid = stage TIDAK prepared.
+    // Return dini saja tidak cukup: bila prepare() valid sudah pernah
+    // dipanggil, mPrepared tetap true dengan mSampleRate lama dan
+    // process() terus memproses dengan koefisien laju lama (resonator
+    // Solfeggio, DC blocker exciter, brainwave pakai mSampleRate) —
+    // sementara pemanggil (AudioPipeline::prepare) sudah menganggap
+    // laju baru yang berlaku. Bersihkan flag supaya process() passthrough
+    // aman sampai prepare() valid berikutnya; mSampleRate lama tidak
+    // dibaca selama mPrepared false (gate di process()).
     if (sampleRate <= 0) {
+        mPrepared = false;
         return;
     }
 
