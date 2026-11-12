@@ -4,6 +4,8 @@
 
 #include "AudioPipeline.h"
 
+#include "PanLaw.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -442,19 +444,28 @@ void AudioPipeline::processImmersive(
     // di mode immersive akan diam saja.
 
     // ---- Master gain & balance -------------------------------------------
-
+    //
+    // (C-PAN, 2026-11-12): hukum pan LINEAR lewat helper bersama
+    // panLawLinear() (core/PanLaw.h) — sama dengan GainNode (mode DSP).
+    // Dulu di sini constant-power cos/sin: tengah 0,7071 (-3,01 dB),
+    // jadi pindah mode DSP -> Immersive di balance 0 terdengar sebagai
+    // lompatan volume -3 dB. Alasan pemilihan hukum ada di PanLaw.h.
     const float gain = params.masterGain;
     const float bal = params.balance;
+    const PanGains pan = panLawLinear(bal);
+    const float gainL = gain * pan.left;
+    const float gainR = gain * pan.right;
 
-    // Constant-power pan: jumlah kuadrat kiri+kanan tetap 1, jadi
-    // memindahkan balance tidak mengubah persepsi kekerasan.
-    const float balClamped = bal < -1.0f ? -1.0f : (bal > 1.0f ? 1.0f : bal);
-    const float angle = (balClamped + 1.0f) * 0.25f * 3.14159265f;
-    const float gainL = gain * std::cos(angle);
-    const float gainR = gain * std::sin(angle);
-
-    // Lewati kalau benar-benar netral supaya tidak ada pembulatan tak perlu.
-    if (gainL != 1.0f || gainR != 1.0f) {
+    // Lewati kalau benar-benar netral (gain 1,0 DAN balance 0) supaya
+    // tidak ada pembulatan tak perlu.
+    //
+    // (C-PAN): kondisi lama `gainL != 1.0f || gainR != 1.0f` praktis
+    // mati di hukum cosinus — gainL == gainR == 1,0 hanya bila
+    // gain = √2 dan balance = 0 — jadi loop selalu jalan walau netral.
+    // Cek input langsung ini ekuivalen di hukum linear (gainL/gainR
+    // == 1,0 tepat saat gain == 1,0 dan balance == 0) dan jujur soal
+    // kapan skip terjadi.
+    if (gain != 1.0f || bal != 0.0f) {
         for (int32_t i = 0; i < frames; ++i) {
             left[i] *= gainL;
             right[i] *= gainR;

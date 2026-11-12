@@ -4,6 +4,8 @@
 
 #include "OutputStage.h"
 
+#include "../core/PanLaw.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -119,23 +121,16 @@ void OutputStage::setBalance(
     float balance
 ) {
 
-    const float leftGain =
-        1.0f -
-        std::max(
-            0.0f,
-            balance
-        );
-
-    const float rightGain =
-        1.0f -
-        std::max(
-            0.0f,
-            -balance
-        );
+    // (C-PAN, 2026-11-12): hukum pan linear lewat helper bersama
+    // (core/PanLaw.h) — rumus sama seperti sebelumnya, hanya dipindah.
+    // Perilaku tidak berubah. Catatan: kelas ini saat ini tidak
+    // diinstansiasi di mana pun (0 pemakai) — dikonversi supaya
+    // "satu hukum" tetap benar bila dipakai lagi.
+    const PanGains pan = panLawLinear(balance);
 
     mGain.setChannelGain(
-        leftGain,
-        rightGain
+        pan.left,
+        pan.right
     );
 }
 

@@ -1,5 +1,6 @@
 #include "GainNode.h"
 
+#include "../../core/PanLaw.h"
 #include "../GainProcessor.h"
 
 namespace pristine {
@@ -45,19 +46,15 @@ void GainNode::applyConfig(
     const DSPConfig& config
 ) {
 
-    float left =
-        config.masterGain *
-        (config.balance <= 0.0f
-            ? 1.0f
-            : 1.0f - config.balance);
+    // (C-PAN, 2026-11-12): hukum pan linear lewat helper bersama
+    // (core/PanLaw.h) — rumus sama seperti sebelumnya, hanya dipindah
+    // supaya satu hukum dengan processImmersive(). Perilaku tidak berubah.
+    const PanGains pan = panLawLinear(config.balance);
 
-    float right =
-        config.masterGain *
-        (config.balance >= 0.0f
-            ? 1.0f
-            : 1.0f + config.balance);
-
-    setGain(left, right);
+    setGain(
+        config.masterGain * pan.left,
+        config.masterGain * pan.right
+    );
 }
 
 } // namespace pristine
