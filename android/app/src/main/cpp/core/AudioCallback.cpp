@@ -104,6 +104,16 @@ AudioCallback::onAudioReady(
         // lama sampai diuji di perangkat.
         if (DSPProcessingGate::enabled()) {
             applyPipeline(output, numFrames);
+        } else {
+            // (C-VIZ, 2026-11-12): gate off mematikan DSP, bukan
+            // visualizer — tapi mVisualizer.write() sebelumnya hanya
+            // dipanggil dari applyPipeline() (jalur live) dan jalur
+            // fallback. Jadi saat user mematikan DSP gate di Settings,
+            // spectrogram/visualizer gelap walau musik tetap jalan.
+            // Feed visualizer dari output final (buffer interleaved hasil
+            // render(), yang langsung ke speaker bila gate off) lewat tap
+            // deinterleave yang sama — tanpa menyentuh pipeline/gate.
+            feedVisualizer(output, numFrames);
         }
 
         updateCallbackMetrics(stream, numFrames, callbackStart);
@@ -429,6 +439,57 @@ void AudioCallback::applyPipeline(
 
             chunk[i * 2]     = l;
             chunk[i * 2 + 1] = r;
+        }
+
+        // Visualizer: write per-sample ke ring buffer — menulis N frame
+        // dalam chunk menghasilkan isi ring yang sama dengan satu write.
+        mVisualizer.write(mLeft, mRight, chunkFrames);
+    }
+}
+
+// =====================================================
+// VISUALIZER FEED (C-VIZ, 2026-11-12)
+// =====================================================
+//
+// Memberi makan visualizer dari output final interleaved, dipakai saat
+// DSP gate off (onAudioReady tidak memanggil applyPipeline()).
+//
+// Pilihan tap: deinterleave ke mLeft/mRight yang sudah ada, BUKAN API
+// sadar-stride baru di VisualizerBuffer — write(left, right, frames)
+// sudah men-sanitize per sample (V-M1), dan pola chunk ≤ kMax ini sama
+// persis dengan yang dipakai applyPipeline/jalur fallback, jadi tidak ada
+// jalur mixdown kedua yang harus dijaga tetap sinkron. Tanpa alokasi,
+// tanpa lock, di audio thread.
+//
+// Catatan: di branch gate-on, applyPipeline memberi makan visualizer dari
+// mLeft/mRight pasca-pipeline tapi pra-limiter/sanitize callback (limiter
+// identity di bawah 0.98, dan write() sendiri men-sanitize) — jadi kedua
+// branch memberi makan visualizer dari sinyal yang didengar user.
+void AudioCallback::feedVisualizer(
+    const float* interleaved,
+    int32_t numFrames
+) noexcept {
+
+    if (!interleaved || numFrames <= 0) {
+        return;
+    }
+
+    // (C-C2): buffer lebih besar dari kMax diproses dalam chunk
+    // ≤ kMaxFramesPerCallback — mLeft/mRight hanya sebesar itu.
+    for (int32_t offset = 0;
+         offset < numFrames;
+         offset += kMaxFramesPerCallback) {
+
+        const int32_t chunkFrames = std::min(
+            kMaxFramesPerCallback,
+            numFrames - offset
+        );
+
+        const float* chunk = interleaved + offset * 2;
+
+        for (int32_t i = 0; i < chunkFrames; ++i) {
+            mLeft[i]  = chunk[i * 2];
+            mRight[i] = chunk[i * 2 + 1];
         }
 
         // Visualizer: write per-sample ke ring buffer — menulis N frame

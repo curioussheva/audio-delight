@@ -142,6 +142,15 @@ private:
         int32_t numFrames
     ) noexcept;
 
+    // Beri makan visualizer dari output final interleaved saat DSP gate
+    // off (C-VIZ, 2026-11-12): deinterleave ke mLeft/mRight yang sudah ada
+    // lalu VisualizerBuffer::write per chunk ≤ kMaxFramesPerCallback.
+    // Tanpa alokasi, tanpa lock; tidak menyentuh pipeline maupun gate.
+    void feedVisualizer(
+        const float* interleaved,
+        int32_t numFrames
+    ) noexcept;
+
     // =============================================
     // HELPERS
     // =============================================
