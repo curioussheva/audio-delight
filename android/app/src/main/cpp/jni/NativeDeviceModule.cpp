@@ -1,4 +1,5 @@
 #include "NativeDeviceModule.h"
+#include "core/JniContext.h"
 #include "devices/AudioDeviceManager.h"
 #include "manager/EngineManager.h"
 #include <vector>
@@ -6,6 +7,31 @@
 #include <cstdlib>
 
 extern "C" {
+
+// (C-HIDDEN, 2026-11-12): satu-satunya init Context native. Dipanggil sekali
+// dari NativeDeviceModule.initialize() dengan applicationContext —
+// JNI_OnLoad TIDAK BISA menyediakan Context (hanya menerima JavaVM), jadi
+// global ref harus datang dari panggilan Kotlin ini. Native menyimpan
+// global ref-nya (first-wins, idempotent) dan AudioDeviceManager +
+// ContentUriResolver memakainya sebagai pengganti
+// ActivityThread.currentApplication() (@hide / non-SDK).
+//
+// Urutan boot: modul-modul legacy dibuat dari PristineAudioPackage saat
+// bridge dibuat, dan initialize() dipanggil sebelum method apa pun di modul
+// itu bisa didispatch — jadi dalam urutan normal init ini berjalan sebelum
+// refreshDevices() pertama (nativeGetDevices, AudioDeviceCallback,
+// EngineManager::start) maupun ContentUriResolver::resolve() pertama.
+// Kalau toh ada jalur yang mendahului init (mis. pembuatan modul malas di
+// masa depan), kedua pemakai gagal aman (return 0 / "") dengan log, bukan
+// crash.
+JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativeInitAppContext(JNIEnv* env, jobject, jobject context) {
+    if (!context) {
+        __android_log_print(ANDROID_LOG_ERROR, "NativeDeviceModule",
+                            "nativeInitAppContext: context null, diabaikan");
+        return;
+    }
+    pristine::jni::setAppContext(env, context);
+}
 
 JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativeGetDevices(JNIEnv* env, jobject) {
     auto& mgr = pristine::AudioDeviceManager::get();

@@ -29,6 +29,12 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
     private external fun nativeOnDeviceAdded(deviceId: String)
     private external fun nativeOnDeviceRemoved(deviceId: String)
     private external fun nativeGetActiveDeviceStatus(): IntArray
+    // (C-HIDDEN, 2026-11-12): satu-satunya init Context native — meneruskan
+    // applicationContext ke native sekali saat app start; native menyimpan
+    // global ref-nya untuk AudioDeviceManager + ContentUriResolver sebagai
+    // pengganti ActivityThread.currentApplication() (@hide / non-SDK).
+    // JNI_OnLoad tidak bisa menyediakan Context (hanya menerima JavaVM).
+    private external fun nativeInitAppContext(context: Context)
 
     /**
      * Perangkat yang SEDANG mengeluarkan suara (hasil stream, bukan yang
@@ -128,6 +134,19 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
 
     override fun initialize() {
         super.initialize()
+        // (C-HIDDEN, 2026-11-12): init Context native DULU, sebelum
+        // registerDeviceCallback() — callback itu memanggil refreshDevices()
+        // (butuh Context) saat device berubah, dan JS belum bisa memanggil
+        // getDevices() sebelum initialize() selesai. Kalau library gagal
+        // dimuat, refreshDevices/resolve gagal aman di sisi native (return
+        // 0 / "") dengan log, bukan crash.
+        if (NativeLibrary.ensureLoaded()) {
+            try {
+                nativeInitAppContext(reactApplicationContext.applicationContext)
+            } catch (e: Throwable) {
+                android.util.Log.e("NativeDeviceModule", "nativeInitAppContext gagal", e)
+            }
+        }
         registerDeviceCallback()
     }
 

@@ -1,4 +1,5 @@
 #include "AudioDeviceManager.h"
+#include "core/JniContext.h"
 
 #include <jni.h>
 #include <android/log.h>
@@ -13,30 +14,10 @@ namespace pristine {
 
 namespace {
 
-JavaVM* gVm = nullptr;
-
-// Attach/detach thread sesuai kebutuhan, sama seperti ContentUriResolver.
-struct ScopedEnv {
-    JNIEnv* env = nullptr;
-    bool attached = false;
-
-    ScopedEnv() {
-        if (!gVm) return;
-        void* e = nullptr;
-        const jint rc = gVm->GetEnv(&e, JNI_VERSION_1_6);
-        if (rc == JNI_OK) {
-            env = static_cast<JNIEnv*>(e);
-            return;
-        }
-        if (rc == JNI_EDETACHED && gVm->AttachCurrentThread(&env, nullptr) == JNI_OK) {
-            attached = true;
-        }
-    }
-    ~ScopedEnv() {
-        if (attached && gVm) gVm->DetachCurrentThread();
-    }
-    bool ok() const { return env != nullptr; }
-};
+// (C-HIDDEN, 2026-11-12): JavaVM + application Context dan ScopedEnv kini
+// tinggal satu di core/JniContext.h — struct ScopedEnv lokal dan gVm di sini
+// dihapus (yang tersisa di ContentUriResolver.cpp juga dihapus di commit
+// yang sama; DeviceRateDetector yang ketiga sudah dihapus item 8).
 
 std::string describeAndClear(JNIEnv* env) {
     if (!env->ExceptionCheck()) return {};
@@ -136,8 +117,11 @@ DeviceType mapDeviceType(jint androidType, bool& outIsUsb) {
 } // namespace
 
 // Dipanggil sekali dari JNI_OnLoad supaya manager bisa memakai JNI.
+// (C-HIDDEN, 2026-11-12): kini hanya meneruskan ke holder bersama di
+// core/JniContext.h — pointer JavaVM-nya memang SATU dan sama untuk semua
+// pemakai, dan itu benar.
 PRISTINE_EXPORT void setAudioDeviceManagerVm(JavaVM* vm) {
-    gVm = vm;
+    jni::setJavaVm(vm);
 }
 
 // =====================================================
@@ -155,17 +139,17 @@ AudioDeviceManager& AudioDeviceManager::get() {
 
 int AudioDeviceManager::refreshDevices() {
 
-    if (!gVm) {
+    if (!jni::javaVm()) {
         LOGW("refreshDevices: JavaVM belum di-set");
         return 0;
     }
 
-    ScopedEnv scope;
+    jni::ScopedEnv scope;
     if (!scope.ok()) {
         LOGE("refreshDevices: JNIEnv tidak tersedia");
         return 0;
     }
-    JNIEnv* env = scope.env;
+    JNIEnv* env = scope.get();
     // (C-JNIHARD, 2026-11-12): PushLocalFrame bisa gagal (OOM) dan
     // mengembalikan nilai negatif + exception pending. Tanpa cek return,
     // PopLocalFrame di bawah dipanggil atas frame yang tidak pernah
@@ -178,28 +162,34 @@ int AudioDeviceManager::refreshDevices() {
         return 0;
     }
 
-    // Application context
-    jclass at = env->FindClass("android/app/ActivityThread");
-    jmethodID curApp = at ? env->GetStaticMethodID(at, "currentApplication",
-                          "()Landroid/app/Application;") : nullptr;
-    jobject app = curApp ? env->CallStaticObjectMethod(at, curApp) : nullptr;
-    if (!describeAndClear(env).empty() || !app) {
-        LOGE("refreshDevices: application context tidak tersedia");
+    // Application context — (C-HIDDEN, 2026-11-12): global ref dari Kotlin
+    // (nativeInitAppContext, dipanggil NativeDeviceModule.initialize()),
+    // BUKAN lagi ActivityThread.currentApplication() (@hide / non-SDK).
+    // Kalau init Kotlin belum jalan (urutan boot tak terduga), JANGAN crash:
+    // kembalikan 0 — pemanggil memakai daftar kosong / laju file apa adanya.
+    jobject app = jni::appContext();
+    if (!app) {
+        LOGW("refreshDevices: application context belum di-init "
+             "(nativeInitAppContext belum dipanggil)");
         env->PopLocalFrame(nullptr);
         return 0;
     }
 
-    jclass ctx = env->FindClass("android/content/Context");
+    // GetObjectClass(app), bukan FindClass("android/content/Context"):
+    // FindClass dari thread yang di-attach memakai class loader sistem —
+    // kelas framework memang ada di boot classpath, tapi mengambil kelas
+    // dari objeknya langsung tidak bergantung pada itu sama sekali.
+    jclass ctx = env->GetObjectClass(app);
     jmethodID getSystemService = ctx
         ? env->GetMethodID(ctx, "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;")
         : nullptr;
     if (!getSystemService) {
-        // (C-JNIHARD, 2026-11-12): kalau ctx null (FindClass gagal) atau
-        // GetMethodID gagal, ada exception pending (NoClassDefFoundError /
-        // NoSuchMethodError). PopLocalFrame saja tidak membersihkannya —
-        // refreshDevices dipanggil dari C++ (notifyDeviceAdded/Removed),
-        // jadi exception itu tertinggal di thread dan meracuni panggilan
-        // JNI berikutnya. Clear dulu, baru pop + return.
+        // (C-JNIHARD, 2026-11-12): kalau GetMethodID gagal, ada exception
+        // pending (NoSuchMethodError). PopLocalFrame saja tidak
+        // membersihkannya — refreshDevices dipanggil dari C++
+        // (notifyDeviceAdded/Removed), jadi exception itu tertinggal di
+        // thread dan meracuni panggilan JNI berikutnya. Clear dulu, baru
+        // pop + return.
         const std::string why = describeAndClear(env);
         LOGE("refreshDevices: getSystemService tidak tersedia (%s)", why.c_str());
         env->PopLocalFrame(nullptr);

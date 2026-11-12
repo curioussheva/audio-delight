@@ -1,4 +1,5 @@
 #include "ContentUriResolver.h"
+#include "core/JniContext.h"
 
 #include <android/log.h>
 #include <atomic>
@@ -18,54 +19,10 @@ namespace pristine::decoder {
 
 namespace {
 
-JavaVM* g_vm = nullptr;
-
-// ---------------------------------------------------------------
-// RAII: attach thread ke JVM kalau belum, detach hanya kalau kita
-// yang attach. Dekoder berjalan di thread AUDIO (prioritas -16) yang
-// belum tentu ter-attach ke JVM.
-// ---------------------------------------------------------------
-class ScopedEnv {
-public:
-    ScopedEnv() {
-        if (!g_vm) return;
-
-        // GetEnv mengambil void**, AttachCurrentThread mengambil JNIEnv**.
-        // Keduanya tidak sama tipe; memakai satu variabel void* untuk
-        // keduanya adalah undefined behavior.
-        void* envVoid = nullptr;
-        jint rc = g_vm->GetEnv(&envVoid, JNI_VERSION_1_6);
-
-        if (rc == JNI_OK) {
-            env_ = static_cast<JNIEnv*>(envVoid);
-            return;                       // sudah ter-attach, jangan detach
-        }
-        if (rc == JNI_EDETACHED) {
-            if (g_vm->AttachCurrentThread(&env_, nullptr) == JNI_OK) {
-                attached_ = true;         // kita attach -> kita detach
-                return;
-            }
-            LOGE("ScopedEnv: AttachCurrentThread gagal");
-            env_ = nullptr;
-            return;
-        }
-        LOGE("ScopedEnv: GetEnv rc=%d", (int)rc);
-    }
-
-    ~ScopedEnv() {
-        if (attached_ && g_vm) g_vm->DetachCurrentThread();
-    }
-
-    ScopedEnv(const ScopedEnv&) = delete;
-    ScopedEnv& operator=(const ScopedEnv&) = delete;
-
-    JNIEnv* get() const { return env_; }
-    bool ok() const { return env_ != nullptr; }
-
-private:
-    JNIEnv* env_ = nullptr;
-    bool attached_ = false;
-};
+// (C-HIDDEN, 2026-11-12): JavaVM + application Context dan ScopedEnv kini
+// tinggal satu di core/JniContext.h — g_vm dan class ScopedEnv lokal di sini
+// dihapus (yang tersisa di AudioDeviceManager.cpp juga dihapus di commit
+// yang sama; DeviceRateDetector yang ketiga sudah dihapus item 8).
 
 // ---------------------------------------------------------------
 // RAII: bersihkan local ref walau ada early-return.
@@ -131,7 +88,10 @@ std::string describeAndClear(JNIEnv* env) {
 // =====================================================
 
 PRISTINE_EXPORT void ContentUriResolver::init(JavaVM* vm) {
-    g_vm = vm;
+    // (C-HIDDEN, 2026-11-12): kini hanya meneruskan ke holder bersama di
+    // core/JniContext.h — pointer JavaVM-nya memang SATU dan sama untuk
+    // semua pemakai, dan itu benar.
+    jni::setJavaVm(vm);
     if (vm) {
         LOGI("init: JavaVM tersimpan, resolver siap");
     } else {
@@ -140,7 +100,7 @@ PRISTINE_EXPORT void ContentUriResolver::init(JavaVM* vm) {
 }
 
 PRISTINE_EXPORT bool ContentUriResolver::isReady() {
-    return g_vm != nullptr;
+    return jni::javaVm() != nullptr;
 }
 
 // =====================================================
@@ -159,12 +119,12 @@ PRISTINE_EXPORT std::string ContentUriResolver::resolve(const std::string& uri) 
         return uri;
     }
 
-    if (!g_vm) {
+    if (!jni::javaVm()) {
         LOGE("resolve: JavaVM belum di-init, tidak bisa resolve %s", uri.c_str());
         return "";
     }
 
-    ScopedEnv scope;
+    jni::ScopedEnv scope;
     if (!scope.ok()) {
         LOGE("resolve: JNIEnv tidak tersedia");
         return "";
@@ -174,28 +134,26 @@ PRISTINE_EXPORT std::string ContentUriResolver::resolve(const std::string& uri) 
 
     // ---- Context / Application ------------------------------------------
     //
+    // (C-HIDDEN, 2026-11-12): global ref dari Kotlin (nativeInitAppContext),
+    // BUKAN lagi ActivityThread.currentApplication() (@hide / non-SDK).
+    // Kalau init Kotlin belum jalan, gagal aman (return "") — JANGAN crash;
+    // pemanggil memperlakukan "" sebagai kegagalan resolve.
+    //
     // PENTING: FindClass dari thread yang di-attach lewat AttachCurrentThread
     // memakai class loader SISTEM, bukan class loader aplikasi. Kelas framework
-    // (ActivityThread, Context, ContentResolver) ada di boot classpath jadi
-    // tetap ketemu. Kalau nanti butuh kelas aplikasi sendiri, ambil class
-    // loader lewat jobject context, bukan FindClass langsung.
-    jclass activityThread = env->FindClass("android/app/ActivityThread");
-    if (!activityThread) {
-        LOGE("resolve: ActivityThread tidak ada: %s", describeAndClear(env).c_str());
+    // (Uri, ContentResolver, File, InputStream) ada di boot classpath jadi
+    // tetap ketemu. Kelas Context sendiri tidak lagi dicari lewat FindClass —
+    // diambil dari objeknya lewat GetObjectClass. Kalau nanti butuh kelas
+    // aplikasi sendiri, ambil class loader lewat jobject context, bukan
+    // FindClass langsung.
+    jobject app = jni::appContext();
+    if (!app) {
+        LOGE("resolve: application context belum di-init "
+             "(nativeInitAppContext belum dipanggil)");
         return "";
     }
 
-    jmethodID currentApplication = env->GetStaticMethodID(
-        activityThread, "currentApplication", "()Landroid/app/Application;");
-    if (!currentApplication) { LOGE("resolve: currentApplication tidak ada"); return ""; }
-
-    jobject app = env->CallStaticObjectMethod(activityThread, currentApplication);
-    if (describeAndClear(env).size() || !app) {
-        LOGE("resolve: currentApplication() null");
-        return "";
-    }
-
-    jclass ctxClass = env->FindClass("android/content/Context");
+    jclass ctxClass = env->GetObjectClass(app);
     if (!ctxClass) { LOGE("resolve: Context tidak ada"); return ""; }
 
     jmethodID getCacheDir = env->GetMethodID(ctxClass, "getCacheDir", "()Ljava/io/File;");
