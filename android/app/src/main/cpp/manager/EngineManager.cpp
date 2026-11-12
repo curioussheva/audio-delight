@@ -576,12 +576,64 @@ void EngineManager::runStreamRecovery() {
     // Batas percobaan mencegah loop tak berujung kalau device benar-benar
     // rusak (mis. headset dicabut-colok terus-menerus) - setelah itu menyerah
     // dan biarkan jalur device biasa yang menangani.
+    //
+    // (W3-mgr, 2026-11-12): kMaxAttempts di bawah hanya membatasi SATU
+    // worker. Worker lanjutan di ekor fungsi mendapat jatah baru, jadi
+    // rantai worker tetap bisa jalan tanpa henti selagi event putus
+    // terus datang. Karena itu hitung juga budget GLOBAL percobaan
+    // berurutan (lintas worker, member mRecoveryConsecutiveAttempts):
+    // tiap percobaan rapat menaikkan hitungan; jeda tenang 5 detik tanpa
+    // percobaan me-resetnya (proksi recovery sukses / flapping reda).
+    // Melewati budget bukan membuang permintaan — percobaan itu tetap
+    // jalan sesudah jeda cooldown 2 detik — supaya stream yang mati
+    // tidak terdampar tanpa pemicu berikutnya. Hasilnya rantai tidak
+    // lagi menghantam stop/start tanpa jeda: paling ~10 percobaan per
+    // ~3,5 detik (10x >=150 ms + cooldown 2 detik), bukan secepat
+    // reopen selesai. Perilaku sukses/normal tidak berubah: satu putus
+    // = 1 percobaan, colok-cabut beberapa kali = hitungan kecil, tidak
+    // pernah kena cooldown.
     constexpr int kMaxAttempts = 5;
+    constexpr int kMaxConsecutiveAttempts = 10;
+    constexpr int64_t kQuietResetMs = 5000;
+    constexpr int64_t kCooldownMs = 2000;
 
     for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
 
         if (!mRecoveryPending.exchange(false, std::memory_order_acq_rel)) {
             break;
+        }
+
+        // (W3-mgr): hitung percobaan ini ke budget global. steady_clock
+        // (monotonik — kebal perubahan jam sistem) supaya jeda tenang
+        // diukur benar.
+        const int64_t nowMs =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now().time_since_epoch())
+                .count();
+        const int64_t lastMs =
+            mRecoveryLastAttemptMs.load(std::memory_order_acquire);
+        const int consecutive =
+            (lastMs == 0 || nowMs - lastMs > kQuietResetMs)
+                ? 1
+                : mRecoveryConsecutiveAttempts.load(
+                      std::memory_order_acquire) +
+                      1;
+        mRecoveryConsecutiveAttempts.store(consecutive,
+                                          std::memory_order_release);
+        mRecoveryLastAttemptMs.store(nowMs, std::memory_order_release);
+
+        if (consecutive > kMaxConsecutiveAttempts) {
+            __android_log_print(ANDROID_LOG_WARN, "EngineManager",
+                "runStreamRecovery: %d percobaan berurutan dalam %lld ms "
+                "(device flapping?) - jeda cooldown %lld ms sebelum "
+                "percobaan berikutnya",
+                consecutive, (long long)kQuietResetMs,
+                (long long)kCooldownMs);
+            std::this_thread::sleep_for(
+                std::chrono::milliseconds(kCooldownMs));
+            // Reset supaya percobaan sesudah cooldown dihitung sebagai
+            // awal rantai baru, bukan langsung kena cooldown lagi.
+            mRecoveryConsecutiveAttempts.store(0, std::memory_order_release);
         }
 
         // Satu kesempatan bagi sistem untuk menyelesaikan perpindahan rute.
@@ -618,6 +670,9 @@ void EngineManager::runStreamRecovery() {
 
     // Kalau ada permintaan yang datang setelah loop keluar lewat batas
     // percobaan, coba sekali lagi agar tidak ada yang tertinggal.
+    // (W3-mgr: worker lanjutan ini tetap terikat budget global di atas —
+    // hitungan percobaan berurutan tidak di-reset saat spawn, jadi rantai
+    // worker tidak bisa mengakali batas dengan ganti worker.)
     if (mRecoveryPending.load(std::memory_order_acquire) &&
         !mRecoveryRunning.exchange(true, std::memory_order_acq_rel)) {
 

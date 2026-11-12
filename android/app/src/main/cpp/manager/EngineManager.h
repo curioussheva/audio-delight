@@ -301,6 +301,27 @@ private:
     // ada satu worker hidup pada satu waktu.
     std::atomic<bool> mRecoveryRunning{false};
 
+    // (W3-mgr, 2026-11-12): budget GLOBAL percobaan recovery berurutan,
+    // lintas worker. kMaxAttempts di runStreamRecovery() hanya membatasi
+    // SATU worker (5x); worker lanjutan yang di-spawn di ekor loop
+    // mendapat jatah baru, jadi kabel goyang / perangkat yang langsung
+    // putus lagi sesudah reopen bisa merantai worker tanpa henti —
+    // masing-masing stop/start + muat ulang + seek.
+    //
+    // "Selalu" di sini tidak mutlak: rantai berhenti sendiri kalau
+    // perangkat berhenti memutus (tidak ada pending baru) atau reopen
+    // melempar. Yang dibatasi adalah hantaman beruntunnya: percobaan
+    // yang datang rapat dihitung; jeda tenang (= tidak ada percobaan
+    // selama kQuietResetMs, proksi "recovery sukses / flapping reda")
+    // me-reset hitungan ke 0. Melewati budget TIDAK membuang permintaan
+    // — percobaan itu tetap jalan sesudah jeda cooldown — supaya stream
+    // yang benar-benar mati tidak pernah terdampar tanpa pemicu
+    // berikutnya. Hanya worker yang menyentuh keduanya (satu worker
+    // hidup pada satu waktu, dijamin mRecoveryRunning), jadi load/store
+    // atomic biasa cukup.
+    std::atomic<int> mRecoveryConsecutiveAttempts{0};
+    std::atomic<int64_t> mRecoveryLastAttemptMs{0};
+
     // true selagi reopenStreamPreservingPlayback() berjalan (M1, 2026-11-10).
     // onTrackLoaded() (yang dipanggil dari loadTrack, termasuk loadTrack DI
     // DALAM reopen) mengembalikan awal kalau flag ini true — mencegah
