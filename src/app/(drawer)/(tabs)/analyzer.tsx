@@ -31,6 +31,8 @@ import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useAudioSessionRetry } from "@/features/player/hooks/useAudioSessionRetry";
 import { FLOATING_PLAYER_CLEARANCE } from "@/features/player/layout";
 import { useAudioOutput } from "@/features/hardware/hooks/useAudioOutput";
+import { useBitPerfectStatus } from "@/features/player/hooks/useBitPerfectStatus";
+import { getOutputModeLabel } from "@/features/visualizer/api/outputModeLabel";
 
 // Logic & Services
 import {
@@ -63,6 +65,14 @@ export default function AnalyzerScreen() {
     pathLossy,
     canBeBitPerfect,
   } = useAudioOutput();
+
+  // C-LABEL (2026-11-12): label "Mode" di bawah butuh status exclusive
+  // NYATA, bukan yang diminta. isExclusiveModeActive() sync, tapi false
+  // mentah tidak membedakan "AAudio menolak" dari "native belum siap /
+  // bacaan basi saat pause" — hook ini yang membedakannya (unavailable /
+  // stale), dan INITIAL-nya "belum tahu", bukan exclusive. Dipanggil di
+  // atas early return `if (!currentSong)` (Rules of Hooks, U-P0-4).
+  const bpStatus = useBitPerfectStatus();
 
   // Local state
   const [bitDepthAnalysis, setBitDepthAnalysis] =
@@ -592,17 +602,17 @@ export default function AnalyzerScreen() {
           />
           <InfoRow
             label="Mode"
-            value={
-              canBeBitPerfect === null
-                ? "Tidak dapat disimpulkan"
-                : outputStatus?.rateHonored &&
-                    !outputStatus?.pathLossy &&
-                    outputStatus?.honored
-                  ? "Bit-Perfect"
-                  : pathLossy
-                    ? "Jalur mustahil bit-perfect"
-                    : "Bukan bit-perfect"
-            }
+            value={getOutputModeLabel({
+              canBeBitPerfect,
+              rateHonored: outputStatus?.rateHonored ?? false,
+              pathLossy,
+              honored: outputStatus?.honored ?? false,
+              streamExclusive: bpStatus.streamExclusive,
+              // Belum terkonfirmasi = native belum siap ATAU bacaan bisa
+              // basi (pause) — label jatuh ke "Tidak dapat diverifikasi",
+              // bukan mengklaim Bit-Perfect (C-LABEL).
+              exclusiveUnknown: bpStatus.unavailable || bpStatus.stale,
+            })}
             colors={colors}
           />
           <InfoRow
