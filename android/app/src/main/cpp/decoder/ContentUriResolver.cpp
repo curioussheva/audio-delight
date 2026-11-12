@@ -92,6 +92,126 @@ std::string describeAndClear(JNIEnv* env) {
     return msg;
 }
 
+// ---------------------------------------------------------------
+// B9-cacheval (2026-11-12): metadata sumber untuk validasi cache.
+//
+// Keputusan (sama dengan sisi Kotlin, ContentCacheValidator.kt —
+// logika di kedua sisi HARUS konsisten karena ketiganya berbagi satu
+// namespace file cache):
+//  * Metadata dibaca LANGSUNG dari provider lewat ContentResolver.query
+//    pada tiap hit-check — TANPA sidecar, TANPA ubah nama cache (nama
+//    tetap audio_<fnv1a64-hex>.<ext>, B9-cache64). Satu query tanpa baca
+//    isi file itu murah dibanding salin ulang, dan karena metadata
+//    selalu fresh dari provider, CACHE LAMA (dibuat sebelum item ini,
+//    tanpa metadata tersimpan) tetap tervalidasi — tanpa migrasi.
+//  * "_size" (OpenableColumns.SIZE) — MediaStore, DocumentsProvider,
+//    kebanyakan provider lain. Dibandingkan PERSIS dengan panjang file
+//    cache: beda -> MISS, salin ulang.
+//  * "date_modified" (MediaStore.DATE_MODIFIED, detik) — HANYA MediaStore.
+//    Provider lain tidak punya kolom ini: query melempar
+//    IllegalArgumentException (dicoba ulang hanya dengan _size), atau
+//    getColumnIndex mengembalikan -1. Tanggal dibandingkan dengan mtime
+//    file cache (mtime ≈ waktu salin: temp ditulis lalu rename, mtime
+//    dipertahankan): sumber basi bila date_modified > mtime cache.
+//    Sisa blind spot: file diganti dalam DETIK YANG SAMA dengan ukuran
+//    yang SAMA tidak terdeteksi tanpa hash isi (di luar lingkup ini).
+//  * Bila metadata TIDAK BISA DIBACA (available == false) -> fallback ke
+//    perilaku lama (hit bila exists + length > 0). Validasi ini tidak
+//    pernah menggagalkan pemutaran.
+// ---------------------------------------------------------------
+struct SourceMetadata {
+    int64_t size = -1;            // -1 = tidak diketahui
+    int64_t dateModifiedSec = -1; // -1 = tidak diketahui (detik epoch)
+    bool available = false;       // true bila minimal satu kolom terbaca
+};
+
+jobjectArray makeStringArray(JNIEnv* env, const char* const* items, jsize n) {
+    jclass stringClass = env->FindClass("java/lang/String");
+    if (!stringClass) { describeAndClear(env); return nullptr; }
+    jobjectArray arr = env->NewObjectArray(n, stringClass, nullptr);
+    if (!arr) { describeAndClear(env); return nullptr; }
+    for (jsize i = 0; i < n; ++i) {
+        jstring js = env->NewStringUTF(items[i]);
+        if (!js) { describeAndClear(env); return nullptr; }
+        env->SetObjectArrayElement(arr, i, js);
+        env->DeleteLocalRef(js);
+    }
+    return arr;
+}
+
+// Query ContentResolver untuk (_size, date_modified) sumber.
+// available == false = metadata tak tersedia -> pemanggil fallback ke
+// perilaku lama (hit). Cursor selalu ditutup di semua jalur keluar.
+SourceMetadata querySourceMetadata(JNIEnv* env, jobject cr, jobject parsedUri) {
+    SourceMetadata out;
+
+    jclass resolverClass = env->FindClass("android/content/ContentResolver");
+    if (!resolverClass) { describeAndClear(env); return out; }
+    jmethodID query = env->GetMethodID(resolverClass, "query",
+        "(Landroid/net/Uri;[Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;Ljava/lang/String;)Landroid/database/Cursor;");
+    if (!query) { describeAndClear(env); return out; }
+
+    // Method Cursor dicari SEBELUM query supaya cursor yang sudah didapat
+    // selalu bisa ditutup di semua jalur keluar.
+    jclass cursorClass = env->FindClass("android/database/Cursor");
+    if (!cursorClass) { describeAndClear(env); return out; }
+    jmethodID moveToFirst = env->GetMethodID(cursorClass, "moveToFirst", "()Z");
+    jmethodID getColumnIndex = env->GetMethodID(cursorClass, "getColumnIndex",
+                                                "(Ljava/lang/String;)I");
+    jmethodID getLong = env->GetMethodID(cursorClass, "getLong", "(I)J");
+    jmethodID isNull = env->GetMethodID(cursorClass, "isNull", "(I)Z");
+    jmethodID close = env->GetMethodID(cursorClass, "close", "()V");
+    if (!moveToFirst || !getColumnIndex || !getLong || !isNull || !close) {
+        describeAndClear(env);
+        return out;
+    }
+
+    // Percobaan 1: [_size, date_modified]; bila provider menolak kolom
+    // date_modified (IllegalArgumentException) -> percobaan 2: [_size].
+    jobject cursor = nullptr;
+    static const char* kFull[] = {"_size", "date_modified"};
+    static const char* kSizeOnly[] = {"_size"};
+    for (int attempt = 0; attempt < 2 && !cursor; ++attempt) {
+        const char* const* cols = attempt == 0 ? kFull : kSizeOnly;
+        jsize ncols = attempt == 0 ? 2 : 1;
+        jobjectArray proj = makeStringArray(env, cols, ncols);
+        if (!proj) continue;
+        cursor = env->CallObjectMethod(cr, query, parsedUri, proj,
+                                       nullptr, nullptr, nullptr);
+        if (!describeAndClear(env).empty()) {
+            LOGW("querySourceMetadata: query gagal (percobaan %d) - metadata tak tersedia",
+                 attempt);
+            cursor = nullptr;
+        }
+    }
+    if (!cursor) return out;
+
+    auto readColumn = [&](const char* name, int64_t& dst) {
+        jstring jname = env->NewStringUTF(name);
+        if (!jname) { describeAndClear(env); return; }
+        jint idx = env->CallIntMethod(cursor, getColumnIndex, jname);
+        env->DeleteLocalRef(jname);
+        if (!describeAndClear(env).empty() || idx < 0) return;
+        jboolean nullVal = env->CallBooleanMethod(cursor, isNull, idx);
+        if (!describeAndClear(env).empty() || nullVal == JNI_TRUE) return;
+        jlong v = env->CallLongMethod(cursor, getLong, idx);
+        if (describeAndClear(env).empty() && v >= 0) {
+            dst = static_cast<int64_t>(v);
+        }
+    };
+
+    jboolean hasRow = env->CallBooleanMethod(cursor, moveToFirst);
+    if (describeAndClear(env).empty() && hasRow == JNI_TRUE) {
+        readColumn("_size", out.size);
+        readColumn("date_modified", out.dateModifiedSec);
+        out.available = (out.size >= 0 || out.dateModifiedSec >= 0);
+    }
+
+    env->CallVoidMethod(cursor, close);
+    describeAndClear(env);
+    return out;
+}
+
 } // namespace
 
 // =====================================================
@@ -238,6 +358,15 @@ PRISTINE_EXPORT std::string ContentUriResolver::resolve(const std::string& uri) 
     // ---- Cache sudah ada? ------------------------------------------------
     // Cek lewat Java supaya semantiknya sama dengan sisi Kotlin
     // (exists() && length() > 0), bukan stat().
+    // (B9-cacheval): exists+length saja TIDAK cukup — file yang diganti /
+    // di-retag dengan URI sama tetap lolos sebagai hit basi. Sebelum
+    // menerima hit, bandingkan metadata sumber (querySourceMetadata):
+    // _size harus sama persis dengan panjang cache, dan bila provider
+    // menyediakan date_modified, sumber tidak boleh lebih baru dari mtime
+    // cache. Metadata tak tersedia -> fallback ke perilaku lama (hit).
+    // MISS -> jatuh ke bawah: salin ulang seperti biasa (temp+rename
+    // menimpa target). Nama cache, temp+rename, dan tanpa batas/LRU
+    // tidak berubah (lihat ContentCacheValidator.kt untuk sisi Kotlin).
     jmethodID fileCtor = fileClass
         ? env->GetMethodID(fileClass, "<init>", "(Ljava/lang/String;)V")
         : nullptr;
@@ -251,8 +380,31 @@ PRISTINE_EXPORT std::string ContentUriResolver::resolve(const std::string& uri) 
         jboolean ex = env->CallBooleanMethod(targetFile, exists);
         jlong len = env->CallLongMethod(targetFile, length);
         if (describeAndClear(env).empty() && ex == JNI_TRUE && len > 0) {
-            LOGI("resolve: cache hit %s (%lld bytes)", nameBuf, (long long)len);
-            return target;
+            bool stale = false;
+            SourceMetadata meta = querySourceMetadata(env, cr, parsedUri);
+            if (meta.available) {
+                if (meta.size >= 0 && meta.size != static_cast<int64_t>(len)) {
+                    LOGW("resolve: cache STALE %s: ukuran sumber %lld != cache %lld - salin ulang",
+                         nameBuf, (long long)meta.size, (long long)len);
+                    stale = true;
+                } else if (meta.dateModifiedSec >= 0) {
+                    struct stat st;
+                    if (::stat(target.c_str(), &st) == 0 &&
+                        meta.dateModifiedSec > static_cast<int64_t>(st.st_mtime)) {
+                        LOGW("resolve: cache STALE %s: sumber diubah %lld > mtime cache %lld - salin ulang",
+                             nameBuf, (long long)meta.dateModifiedSec,
+                             (long long)st.st_mtime);
+                        stale = true;
+                    }
+                }
+            } else {
+                LOGI("resolve: metadata sumber tak tersedia untuk %s - hit cara lama", nameBuf);
+            }
+            if (!stale) {
+                LOGI("resolve: cache hit %s (%lld bytes)", nameBuf, (long long)len);
+                return target;
+            }
+            // stale -> jatuh ke salin ulang di bawah.
         }
     }
 

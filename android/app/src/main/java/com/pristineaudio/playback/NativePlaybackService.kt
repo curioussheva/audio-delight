@@ -471,8 +471,12 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
                 "audio_${fnv1a64Hex(uriString)}.$ext"
             )
 
-            // Kalau sudah ada dan valid, pakai yang ada
-            if (file.exists() && file.length() > 0L) {
+            // Kalau sudah ada dan valid, pakai yang ada.
+            // (B9-cacheval): hit harus lolos validasi _size/date_modified
+            // sumber — file yang diganti/di-retag dengan URI sama tidak
+            // lagi dianggap hit basi. Metadata tak tersedia -> hit cara
+            // lama (lihat ContentCacheValidator).
+            if (ContentCacheValidator.isCacheHit(resolver, uri, file)) {
                 android.util.Log.d(
                     LOG_TAG,
                     "resolveContentUriToPath: cache hit ${file.name} (${file.length()} bytes)"

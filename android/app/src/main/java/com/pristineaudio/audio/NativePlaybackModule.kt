@@ -3,6 +3,7 @@ package com.pristineaudio.audio
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
 import com.pristineaudio.NativeLibrary
+import com.pristineaudio.playback.ContentCacheValidator
 import com.pristineaudio.playback.PlaybackNativeBridge
 
 @ReactModule(name = NativePlaybackModule.NAME)
@@ -307,7 +308,9 @@ class NativePlaybackModule(
             // file target hanya muncul kalau isinya lengkap; kill di tengah
             // copy meninggalkan .tmp, bukan hit palsu (lihat
             // NativePlaybackService.resolveContentUriToPath).
-            if (!cacheFile.exists() || cacheFile.length() == 0L) {
+            // (B9-cacheval): hit harus lolos validasi _size/date_modified
+            // sumber (ContentCacheValidator) — kalau tidak, salin ulang.
+            if (!ContentCacheValidator.isCacheHit(resolver, uri, cacheFile)) {
                 val tmpFile = java.io.File(cacheDir, "${cacheFile.name}.${System.nanoTime()}.tmp")
                 try {
                     resolver.openInputStream(uri)?.use { input ->
