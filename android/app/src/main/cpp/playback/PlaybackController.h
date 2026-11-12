@@ -86,6 +86,13 @@ public:
     // Dipanggil dari audio thread — hanya atomic load, tanpa lock.
     size_t bufferedSamples() const noexcept;
 
+    // PB6-MINOR(b) (2026-11-12): decoder sudah selesai membaca file
+    // (EOF/error) — dipakai AudioCallback untuk membedakan ekor track
+    // (queue kosong karena tidak ada lagi audio yang akan datang, bukan
+    // underrun) dari kelaparan queue di tengah track. Hanya atomic load,
+    // tanpa lock.
+    [[nodiscard]] bool isDecoderFinished() const noexcept;
+
     // PB6-W2C (2026-11-12): total sampel NaN/Inf/|x|>2 yang dibersihkan
     // safety net render(). Dihitung di audio thread (atomic, tanpa log)
     // — DILOG dari thread polling JNI (nativeGetPosition, tiap 500 ms,

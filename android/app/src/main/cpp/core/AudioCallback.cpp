@@ -151,12 +151,20 @@ AudioCallback::onAudioReady(
 
         // Underrun: queue tidak cukup mengisi buffer (M5). Dulu short read
         // diam-diam — counter underrun selalu 0.
-        if (readSamples < static_cast<size_t>(numFrames) * 2) {
+        // PB6-MINOR(b) (2026-11-12): ekor track BUKAN underrun — decoder
+        // sudah selesai (EOF/error) dan queue kosong berarti tidak ada lagi
+        // audio yang BISA datang, bukan decoder yang tertinggal. Tanpa
+        // pengecualian ini, setiap pergantian track menambah counter
+        // (short read di callback-callback ekor sampai advance memuat
+        // track berikutnya). Paused/clearing sudah tertutup p-m14
+        // (render() mengembalikan requestedSamples) dan tidak sampai ke
+        // sini sebagai short read.
+        const size_t buffered = mPlaybackController->bufferedSamples();
+        if (readSamples < static_cast<size_t>(numFrames) * 2 &&
+            !(mPlaybackController->isDecoderFinished() && buffered == 0)) {
             mMetrics.recordUnderrun();
         }
-        mMetrics.updateBufferedSamples(
-            mPlaybackController->bufferedSamples()
-        );
+        mMetrics.updateBufferedSamples(buffered);
 
         // =============================================
         // PIPELINE (tiga mode)

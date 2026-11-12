@@ -1233,6 +1233,11 @@ size_t PlaybackController::bufferedSamples() const noexcept {
     return pcmQueue_->availableSamples();
 }
 
+// PB6-MINOR(b) (2026-11-12): lihat deklarasi di header.
+bool PlaybackController::isDecoderFinished() const noexcept {
+    return decoderFinished_.load(std::memory_order_acquire);
+}
+
 // PB6-W2C (2026-11-12): dibaca thread polling JNI (nativeGetPosition)
 // untuk log throttle; hanya atomic load, tanpa lock.
 uint32_t PlaybackController::nanCleanedTotal() const noexcept {
