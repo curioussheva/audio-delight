@@ -9,6 +9,7 @@
 #include "../core/RateSelection.h"
 
 #include <chrono>
+#include <system_error>
 
 namespace pristine {
 
@@ -518,9 +519,42 @@ void EngineManager::requestStreamRecovery() {
     __android_log_print(ANDROID_LOG_WARN, "EngineManager",
         "requestStreamRecovery: worker recovery dimulai");
 
-    std::thread([this] {
-        runStreamRecovery();
-    }).detach();
+    // C-W4-mgr (2026-11-12): konstruktor std::thread bisa melempar
+    // std::system_error (mis. sistem kehabisan resource / tidak bisa
+    // membuat thread). Tanpa try/catch, exception itu lolos ke pemanggil
+    // — callback error Oboe / onTrackLoaded — dan terminate() karena
+    // tidak ada yang menangkapnya di sana. Lebih buruk lagi,
+    // mRecoveryRunning SUDAH true saat spawn gagal, jadi recovery mati
+    // permanen: setiap panggilan berikutnya kembali lebih awal di guard
+    // "worker masih berjalan".
+    //
+    // Karena itu, saat spawn gagal: kembalikan KEDUA flag ke false.
+    // Hanya membersihkan mRecoveryRunning TIDAK cukup — mRecoveryPending
+    // masih true, jadi panggilan berikutnya kembali lebih awal di dedup
+    // "sudah ada permintaan tertunda" dan tidak ada worker yang pernah
+    // jalan. Urutan pembersihan: running dulu, baru pending — supaya
+    // panggilan yang menyelinap di antaranya paling buruk hanya
+    // menggabungkan permintaan yang terbuang, bukan meninggalkan state
+    // pending-true tanpa worker. Permintaan yang gagal ini terbuang
+    // (dicatat di log ERROR), tapi state kembali idle sehingga kejadian
+    // putus berikutnya bisa memulai worker baru seperti biasa.
+    try {
+        std::thread([this] {
+            runStreamRecovery();
+        }).detach();
+    } catch (const std::exception& e) {
+        mRecoveryRunning.store(false, std::memory_order_release);
+        mRecoveryPending.store(false, std::memory_order_release);
+        __android_log_print(ANDROID_LOG_ERROR, "EngineManager",
+            "requestStreamRecovery: gagal membuat worker thread (%s) - "
+            "recovery dibatalkan, flag dibersihkan", e.what());
+    } catch (...) {
+        mRecoveryRunning.store(false, std::memory_order_release);
+        mRecoveryPending.store(false, std::memory_order_release);
+        __android_log_print(ANDROID_LOG_ERROR, "EngineManager",
+            "requestStreamRecovery: gagal membuat worker thread "
+            "(exception tak dikenal) - recovery dibatalkan, flag dibersihkan");
+    }
 }
 
 void EngineManager::runStreamRecovery() {
@@ -548,7 +582,26 @@ void EngineManager::runStreamRecovery() {
         // reopenStreamPreservingPlayback() mengambil mMutex dan membuka ulang
         // stream + memuat ulang track. Ini aman di sini karena kita TIDAK
         // berada di thread Oboe - Oboe sudah selesai menutup stream lama.
-        reopenStreamPreservingPlayback();
+        //
+        // C-W4-mgr (2026-11-12): kalau reopen melempar, exception itu
+        // lolos dari worker thread yang detached -> terminate(), DAN
+        // mRecoveryRunning tidak pernah dibersihkan (store(false) di
+        // bawah loop tidak tercapai) -> recovery mati permanen. Tangkap,
+        // catat, dan keluar dari loop supaya flag tetap dibersihkan di
+        // bawah seperti jalur normal.
+        try {
+            reopenStreamPreservingPlayback();
+        } catch (const std::exception& e) {
+            __android_log_print(ANDROID_LOG_ERROR, "EngineManager",
+                "runStreamRecovery: reopenStreamPreservingPlayback "
+                "melempar (%s) - menghentikan percobaan", e.what());
+            break;
+        } catch (...) {
+            __android_log_print(ANDROID_LOG_ERROR, "EngineManager",
+                "runStreamRecovery: reopenStreamPreservingPlayback "
+                "melempar exception tak dikenal - menghentikan percobaan");
+            break;
+        }
     }
 
     mRecoveryRunning.store(false, std::memory_order_release);
@@ -558,9 +611,31 @@ void EngineManager::runStreamRecovery() {
     if (mRecoveryPending.load(std::memory_order_acquire) &&
         !mRecoveryRunning.exchange(true, std::memory_order_acq_rel)) {
 
-        std::thread([this] {
-            runStreamRecovery();
-        }).detach();
+        // C-W4-mgr (2026-11-12): sama seperti spawn di
+        // requestStreamRecovery() — konstruktor std::thread bisa melempar,
+        // dan di sini mRecoveryRunning SUDAH true (exchange di atas).
+        // Tanpa try/catch: terminate() + flag stuck true -> recovery mati
+        // permanen. Saat gagal, bersihkan kedua flag (running dulu, baru
+        // pending — lihat komentar di requestStreamRecovery) supaya
+        // kejadian putus berikutnya bisa memulai worker baru; permintaan
+        // yang tertinggal ini terbuang dan dicatat di log ERROR.
+        try {
+            std::thread([this] {
+                runStreamRecovery();
+            }).detach();
+        } catch (const std::exception& e) {
+            mRecoveryRunning.store(false, std::memory_order_release);
+            mRecoveryPending.store(false, std::memory_order_release);
+            __android_log_print(ANDROID_LOG_ERROR, "EngineManager",
+                "runStreamRecovery: gagal membuat worker lanjutan (%s) - "
+                "flag dibersihkan", e.what());
+        } catch (...) {
+            mRecoveryRunning.store(false, std::memory_order_release);
+            mRecoveryPending.store(false, std::memory_order_release);
+            __android_log_print(ANDROID_LOG_ERROR, "EngineManager",
+                "runStreamRecovery: gagal membuat worker lanjutan "
+                "(exception tak dikenal) - flag dibersihkan");
+        }
     }
 }
 
