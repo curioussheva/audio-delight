@@ -24,6 +24,27 @@ VisualizerBuffer::VisualizerBuffer() {
 // WRITE (audio thread)
 // =====================================================
 
+// Mixdown stereo -> mono + sanitasi (V-M1), SATU implementasi untuk
+// write() dan writeInterleaved() (C-CLEAN(e)): NaN/Inf/|x|>2 -> 0,
+// supaya nilai liar tidak lolos ke FFT dan JS. Denormal TIDAK di-nol-kan
+// di sini (hanya visualizer, bukan output) — sanitizeOutput di
+// AudioCallback yang menanganinya untuk jalur ke speaker.
+static float mixdownSanitized(
+    float left,
+    float right
+) noexcept {
+
+    float v =
+        (
+            left +
+            right
+        ) * kVisualizerMixdownScale;
+    if (!std::isfinite(v) || std::fabs(v) > 2.0f) {
+        v = 0.0f;
+    }
+    return v;
+}
+
 void VisualizerBuffer::write(
     const float* left,
     const float* right,
@@ -60,18 +81,51 @@ void VisualizerBuffer::write(
         // men-sanitize SALINAN lokal (l/r) untuk output, tapi mLeft/mRight
         // yang masuk ke write() tidak pernah di-update — NaN/Inf/|x|>2
         // lolos ke FFT dan JS (Kotlin mapToLogBins tidak guard NaN).
-        float v =
-            (
-                left[i] +
-                right[i]
-            ) * kVisualizerMixdownScale;
-        if (!std::isfinite(v) || std::fabs(v) > 2.0f) {
-            v = 0.0f;
-        }
+        dst[
+            (pos + i) & kMask
+        ] = mixdownSanitized(left[i], right[i]);
+    }
+
+    mWritePos.store(
+        pos + frames,
+        std::memory_order_release
+    );
+}
+
+// =====================================================
+// WRITE INTERLEAVED (audio thread, C-CLEAN(e))
+// =====================================================
+
+void VisualizerBuffer::writeInterleaved(
+    const float* interleaved,
+    int32_t frames
+) {
+
+    // Guard yang sama dengan write() (V-M2): frames <= 0 / null tidak
+    // boleh menggerakkan mWritePos.
+    if (frames <= 0 || !interleaved) {
+        return;
+    }
+
+    float* dst = mBufferA;
+
+    uint32_t pos =
+        mWritePos.load(
+            std::memory_order_relaxed
+        );
+
+    for (
+        int32_t i = 0;
+        i < frames;
+        ++i
+    ) {
 
         dst[
             (pos + i) & kMask
-        ] = v;
+        ] = mixdownSanitized(
+            interleaved[i * 2],
+            interleaved[i * 2 + 1]
+        );
     }
 
     mWritePos.store(

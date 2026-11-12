@@ -36,6 +36,17 @@ public:
 
     void process(float* left, float* right, int32_t frames, const DSPParameters& params) noexcept;
 
+    // (C-CLEAN(e), 2026-11-12): catat mode yang sedang berjalan TANPA
+    // memproses buffer — dipakai jalur shortcut BitPerfect di
+    // AudioCallback::applyPipeline, yang melewati process() sepenuhnya.
+    // Menjalankan deteksi ganti mode yang sama persis dengan process()
+    // (banding mLastMode + onModeChanged): tanpa ini, mLastMode membeku
+    // di mode sebelum BitPerfect, dan saat user kembali ke DSP/Immersive
+    // rantai tujuan TIDAK di-reset + TIDAK di-fade-in (klik/pop yang
+    // justru dicegah C-MODESW). process() sendiri memanggil ini juga —
+    // satu implementasi, dua pemanggil.
+    void noteMode(ProcessingMode mode) noexcept;
+
 private:
 
     // =============================================

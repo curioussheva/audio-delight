@@ -25,6 +25,16 @@ public:
         int32_t frames
     );
 
+    // audio thread — varian sadar-stride untuk buffer interleaved
+    // (L,R,L,R,...). Dipakai jalur shortcut BitPerfect di
+    // AudioCallback::applyPipeline, yang tidak lagi men-deinterleave
+    // ke mLeft/mRight. Mixdown + sanitasi SAMA PERSIS dengan write()
+    // (lihat mixdownSanitized di .cpp) — bukan jalur kedua yang bisa drift.
+    void writeInterleaved(
+        const float* interleaved,
+        int32_t frames
+    );
+
     // ui thread
     void read(
         float* dst,

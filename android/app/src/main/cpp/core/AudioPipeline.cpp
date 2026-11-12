@@ -97,29 +97,30 @@ void AudioPipeline::reset() {
 // PROCESS
 // =====================================================
 
-void AudioPipeline::process(
-    float* left,
-    float* right,
-    int32_t frames,
-    const DSPParameters& params
+// =====================================================
+// CATAT MODE (C-MODESW + C-CLEAN(e))
+// =====================================================
+//
+// Deteksi ganti mode live: dulu inline di process(), sekarang fungsi
+// sendiri supaya jalur shortcut BitPerfect (applyPipeline, yang melewati
+// process() sepenuhnya) tetap menjalankan logika yang sama persis.
+//
+// Dulu tidak ada jejak mode sebelumnya: config mode lain baru dikirim
+// di buffer pertama sesudah switch (applyDSPConfig + dedup
+// dspConfigEquals), sementara rantai tujuan berjalan dengan state
+// biquad/resonator STALE dari terakhir kali mode itu aktif — bisa di
+// laju/config berbeda — dan transien step-response-nya terdengar
+// sebagai klik/pop. Sekarang mode dibandingkan di sini (satu-satunya
+// choke point: satu-satunya pemanggil process() di AudioCallback —
+// jalur live (applyPipeline) — lewat sini dengan params yang sama
+// per buffer; jalur shortcut memanggil noteMode() langsung).
+//
+// Hanya saat BENAR-BENAR berubah: onModeChanged() mereset rantai
+// tujuan + mempersenjatai fade-in. Mode sama -> tidak ada reset,
+// tidak ada fade, biaya nol kecuali satu banding enum.
+void AudioPipeline::noteMode(
+    ProcessingMode mode
 ) noexcept {
-
-    // (C-MODESW, 2026-11-12): deteksi ganti mode live.
-    //
-    // Dulu tidak ada jejak mode sebelumnya: config mode lain baru dikirim
-    // di buffer pertama sesudah switch (applyDSPConfig + dedup
-    // dspConfigEquals), sementara rantai tujuan berjalan dengan state
-    // biquad/resonator STALE dari terakhir kali mode itu aktif — bisa di
-    // laju/config berbeda — dan transien step-response-nya terdengar
-    // sebagai klik/pop. Sekarang mode dibandingkan sekali per chunk di
-    // sini (satu-satunya choke point: satu-satunya pemanggil process() di
-    // AudioCallback — jalur live (applyPipeline) — lewat sini dengan params
-    // yang sama per buffer).
-    //
-    // Hanya saat BENAR-BENAR berubah: onModeChanged() mereset rantai
-    // tujuan + mempersenjatai fade-in. Mode sama -> tidak ada reset,
-    // tidak ada fade, biaya nol kecuali satu banding enum.
-    const ProcessingMode mode = params.processingMode;
 
     if (!mModeSeen) {
         // Buffer pertama sejak prepare()/reset(): node masih segar,
@@ -130,6 +131,17 @@ void AudioPipeline::process(
         onModeChanged(mode);
         mLastMode = mode;
     }
+}
+
+void AudioPipeline::process(
+    float* left,
+    float* right,
+    int32_t frames,
+    const DSPParameters& params
+) noexcept {
+
+    // (C-MODESW, 2026-11-12): deteksi ganti mode live — lihat noteMode().
+    noteMode(params.processingMode);
 
     switch (
         params.processingMode

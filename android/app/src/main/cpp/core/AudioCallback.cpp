@@ -402,6 +402,61 @@ void AudioCallback::applyPipeline(
     // numFrames <= kMax tetap satu chunk, perilaku identik; yang berubah
     // hanya numFrames > kMax yang dulu senyap kini diproses.
 
+    // (C-CLEAN(e), 2026-11-12): SHORTCUT BitPerfect.
+    //
+    // processBitPerfect() adalah no-op, jadi jalur normal di mode ini
+    // hanya: updateParameters() (baca ~10 atomic + seqlock EQ + preset
+    // 264 byte per buffer) -> deinterleave -> no-op -> interleave +
+    // sanitize -> visualizer.write(). Tiga pass penuh per sample untuk
+    // output yang identik dengan input — kecuali sanitize.
+    //
+    // Jalur cepat ini melewati ketiganya:
+    //   - Mode dibaca LANGSUNG dari AudioState (satu atomic load) —
+    //     updateParameters() tidak dipanggil, jadi mParams (termasuk
+    //     DSPParameters::version dari C-CLEAN(d)) membeku selama
+    //     BitPerfect; tidak ada yang membacanya di mode ini, dan jalur
+    //     normal menulis snapshot segar begitu mode pindah.
+    //   - Sanitasi TETAP jalan, in-place pada buffer interleaved:
+    //     NaN/Inf/|x|>2 -> 0, denormal < 1e-30 -> 0 (kDenormalThreshold).
+    //     Desain yang sudah ada, BUKAN baru di sini: output BitPerfect
+    //     tidak strictly bit-exact untuk sampel denormal — itu harga
+    //     sanitasi, dan FZ di onAudioReady sudah mem-flush denormal
+    //     hasil komputasi. Tanpa sanitize, NaN dari decoder akan lolos
+    //     ke DAC.
+    //   - Visualizer diberi makan lewat writeInterleaved() (API
+    //     sadar-stride baru, mixdown + sanitasi yang sama persis
+    //     dengan write()) — bukan deinterleave ke mLeft/mRight.
+    //   - noteMode(BitPerfect) menjaga pelacakan ganti mode
+    //     (C-MODESW): saat user kembali ke DSP/Immersive, rantai
+    //     tujuan tetap di-reset + di-fade-in 8 ms. Melewati
+    //     mPipeline.process() begitu saja AKAN menghilangkan itu.
+    //
+    // Tidak ada dependensi lain pada updateParameters() per buffer:
+    // mParams hanya dibaca applyPipeline + pipeline (keduanya
+    // dilewati di sini), metrik (AudioMetrics) memakai atomic-nya
+    // sendiri dan di-update di onAudioReady, bukan di sini.
+    if (
+        mState.processingMode() ==
+        ProcessingMode::BitPerfect
+    ) {
+
+        mPipeline.noteMode(
+            ProcessingMode::BitPerfect
+        );
+
+        for (int32_t i = 0; i < numFrames; ++i) {
+            sanitizeOutput(interleaved[i * 2]);
+            sanitizeOutput(interleaved[i * 2 + 1]);
+        }
+
+        mVisualizer.writeInterleaved(
+            interleaved,
+            numFrames
+        );
+
+        return;
+    }
+
     // Parameter dibaca SEKALI per buffer, di luar loop chunk. Mode dan nilai
     // DSP dibaca dari AudioState (atomic), jadi perpindahan mode berlaku pada
     // buffer berikutnya tanpa restart stream - itu syarat live switch.
