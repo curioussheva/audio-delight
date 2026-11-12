@@ -22,7 +22,9 @@ namespace pristine {
 // yang bisa dimatikan TANPA revert kode: matikan di satu tempat, perilaku
 // kembali seperti sebelum perubahan.
 //
-// DEFAULT: false (perilaku lama). Dinyalakan setelah diuji di perangkat.
+// DEFAULT: true (sejak 2026-10-07, lihat DSPProcessingGate.cpp:
+// PRISTINE_DSP_IN_PRODUCTION bawaan 1). Sakelar tetap ada sebagai jalur
+// keluar cepat / perbandingan A-B, bukan sebagai gerbang yang belum dibuka.
 //
 // Cara menyalakan:
 //   - `setDSPProcessingEnabled(true)` dari native, atau
