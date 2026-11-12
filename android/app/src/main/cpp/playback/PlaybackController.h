@@ -4,6 +4,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstdint>
 #include <functional>
 #include <mutex>
 #include <string>
@@ -168,7 +169,11 @@ private:
     // advanceWorkerLoop) — tanpa join, tanpa lock selain advanceMutex_.
     // finishedUri = URI trek yang baru berakhir (untuk event ke JS — di-emit
     // SETELAH ekor habis dimainkan, bukan saat EOF, P-M1).
-    void scheduleAdvance(const std::string& finishedUri);
+    // gen = generasi decoder yang mem-post (B8-P2): diikat di lambda EOF /
+    // decode-error saat startDecoder, BUKAN dibaca fresh dari currentTrack_
+    // saat callback menyala — jadi post dari decoder lama tidak bisa
+    // menyamar sebagai EOF track aktif (lihat loadGen_ di bawah).
+    void scheduleAdvance(const std::string& finishedUri, uint64_t gen);
     // 🔥 FIX (2026-11-10, P-M1): batalkan advance yang sedang menunggu drain.
     // Dipanggil stop()/loadTrack()/shutdown() sebelum pekerjaan mereka.
     // PB6-W3: mengambil loadTrackMutex_ sebentar saat menaikkan flag —
@@ -176,7 +181,9 @@ private:
     void cancelPendingAdvance() noexcept;
     // PB6-W3: loop worker advance permanen + satu permintaan advance.
     void advanceWorkerLoop();
-    void processAdvance(const std::string& finishedUri);
+    // gen = generasi yang dibawa permintaan saat di-post (B8-P2): dicek
+    // di drain loop DAN sesudah loadLock didapat — post basi dibuang.
+    void processAdvance(const std::string& finishedUri, uint64_t gen);
     // PB6-W3: tunggu worker advance selesai memproses permintaan yang
     // sedang berjalan (dipakai stop() sebelum mengambil loadTrackMutex_).
     void waitForAdvanceIdle();
@@ -415,6 +422,44 @@ private:
     //      menghidupkan advance — post seperti itu membersihkan flag
     //      lewat jalurnya sendiri, jadi flag saja tidak menutupnya.
     //
+    //  (d) B8-P2 (2026-11-12): generation counter loadGen_/advanceGen_.
+    //      Cek URI (c) nyaris vakum by construction: lambda EOF membaca
+    //      URI fresh dari currentTrack_, jadi post dari decoder A yang
+    //      menyala TELAT (sesudah loadTrack(B) selesai) membawa URI B
+    //      dan lolos (c) — menyamar sebagai EOF B. Di sinilah gen
+    //      bekerja: tiap decoder mengikat gen-nya sendiri di lambda
+    //      saat startDecoder (bukan saat callback menyala), dan
+    //      loadTrack()/stop() menaikkan loadGen_. Post dicek di tiga
+    //      tempat — saat post (scheduleAdvance), di drain loop, dan
+    //      sesudah loadLock didapat (processAdvance): cek post dan bump
+    //      bisa balapan (post membaca loadGen_ sesaat sebelum bump),
+    //      dan post yang sah saat dibuat bisa menjadi basi selama
+    //      drain-wait 26–39 dtk — cek drain/loadLock adalah jaring
+    //      untuk keduanya. Flag batal saja tidak cukup: post telat
+    //      membersihkan flag lewat jalurnya sendiri
+    //      (scheduleAdvance me-reset advanceCancelled_), tapi gen tidak
+    //      bisa dibersihkan post — hanya load/stop baru yang
+    //      menaikkannya.
+    //
+    //      SATU counter atomik (loadGen_) + SATU field slot (advanceGen_)
+    //      sudah cukup, bukan dua atomik: loadGen_ adalah epoch global
+    //      (dibaca lock-free dari thread decoder, dinaikkan hanya di
+    //      bawah loadTrackMutex_); advanceGen_ adalah snapshot per
+    //      permintaan yang hanya berjalan bersama permintaan itu di
+    //      dalam slot yang dijaga advanceMutex_ — pola yang sama dengan
+    //      advanceFinishedUri_. Tidak ada urutan lock baru: cek gen
+    //      hanya atomic load (tanpa lock), bump hanya atomic RMW di
+    //      bawah loadTrackMutex_ yang sudah dipegang di kedua situs.
+    //
+    //      seek() SENGAJA tidak menaikkan gen: decoder yang sama harus
+    //      bisa post EOF legit sesudah seek (B8-P1 revive) — lambda-nya
+    //      memegang gen yang sama, dan pembatalan post pra-seek lewat
+    //      cancelPendingAdvance() di seek(), bukan lewat gen.
+    //      shutdown() juga tidak menaikkan gen: worker advance di-join
+    //      DULU baru stopDecoder, dan worker membuang permintaan yang
+    //      masih tertunda saat advanceStopRequested_ naik — tidak ada
+    //      post yang bisa dihasilkan sesudah join.
+    //
     // Urutan lock: advanceMutex_ adalah leaf — hanya diambil sebentar
     // untuk post/ambil permintaan dan untuk menunggu di CV; TIDAK PERNAH
     // ditahan saat mengambil loadTrackMutex_ (worker melepasnya dulu),
@@ -432,6 +477,10 @@ private:
     // Dijaga advanceMutex_: permintaan advance yang menunggu diproses.
     bool advancePending_{false};
     std::string advanceFinishedUri_;
+    // Dijaga advanceMutex_: generasi decoder yang mem-post permintaan
+    // ini (B8-P2) — dibawa ke processAdvance untuk dicek terhadap
+    // loadGen_ selama drain-wait dan sesudah loadLock didapat.
+    uint64_t advanceGen_{0};
     // Dijaga advanceMutex_: worker diminta berhenti (shutdown).
     bool advanceStopRequested_{false};
     // Dijaga advanceMutex_: worker sedang memproses satu permintaan.
@@ -453,6 +502,21 @@ private:
     // menghidupkan lagi audio setelah user menekan stop atau pindah track
     // manual di tengah ekor track.
     std::atomic<bool> advanceCancelled_{false};
+
+    // 🔥 FIX (2026-11-12, B8-P2): generation counter — epoch pemuatan
+    // track aktif. Dinaikkan loadTrack() (di awal, di bawah
+    // loadTrackMutex_) dan stop() (sesudah stopDecoder()); TIDAK
+    // dinaikkan seek() (decoder sama, lihat (d) di atas) atau
+    // shutdown() (worker sudah di-join). Callback EOF / decode-error
+    // mengikat nilai ini saat startDecoder (decoderGen) dan
+    // scheduleAdvance/processAdvance menolak post yang gen-nya sudah
+    // tertinggal — menutup jendela post EOF basi yang lolos cek URI
+    // (Batch 8 P2): lambda membaca URI fresh dari currentTrack_,
+    // jadi post telat menyamar sebagai EOF track aktif, dan post
+    // telat itu juga membersihkan advanceCancelled_ lewat jalurnya
+    // sendiri. Gen tidak bisa dibersihkan post basi — hanya load/stop
+    // baru yang menaikkannya.
+    std::atomic<uint64_t> loadGen_{0};
 
     // 🔥 FIX (2026-10-06): anti-flood EOF. Lihat setEofCallback di
     // PlaybackController.cpp — trek korup/0-byte bikin decoder EOF berulang

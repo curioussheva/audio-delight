@@ -313,6 +313,18 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
     // bersamaan menulis ke PCMQueue SPSC.
     std::lock_guard<std::recursive_mutex> loadLock(loadTrackMutex_);
 
+    // 🔥 FIX (2026-11-12, B8-P2): naikkan epoch generasi SEBELUM
+    // stopDecoder() — mulai titik ini post EOF dari decoder lama adalah
+    // basi, termasuk callback yang sedang in-flight selama stopDecoder
+    // (join menunggu callback selesai, jadi post-nya bisa mendarat
+    // sesudah cancel di atas tapi sebelum publikasi track baru — cek
+    // gen di scheduleAdvance menolaknya di sini, bukan baru di drain).
+    // Decoder baru mengikat gen ini di lambda-nya saat startDecoder
+    // di bawah, jadi post-nya sah. loadLock sudah dipegang: tidak ada
+    // loadTrack()/stop() lain yang bisa menaikkan gen di antara bump
+    // ini dan pembacaan startDecoder.
+    loadGen_.fetch_add(1, std::memory_order_release);
+
     // PB6-W4: batalkan fade-out pause yang sedang berjalan. Kalau fade
     // sedang berjalan, user sudah menekan pause — playing_ masih true
     // selama fade, dan kalau dibiarkan true melewati ganti track, track
@@ -699,6 +711,15 @@ bool PlaybackController::stop() {
     std::lock_guard<std::recursive_mutex> lock(loadTrackMutex_);
 
     stopDecoder();
+
+    // 🔥 FIX (2026-11-12, B8-P2): naikkan epoch generasi — decoder lama
+    // sudah mati (stopDecoder men-join thread-nya), jadi post EOF yang
+    // telat darinya harus ditolak scheduleAdvance; tanpa bump, post
+    // telat itu lolos cek URI (currentTrack_ tidak berubah di stop)
+    // dan membersihkan advanceCancelled_ yang baru dinaikkan di atas.
+    // play() berikutnya memuat track baru lewat loadTrack() (bump
+    // lagi), jadi tidak ada post sah yang kehilangan generasinya.
+    loadGen_.fetch_add(1, std::memory_order_release);
 
     // 🔥 FIX (2026-11-10, p-m12): kibarkan clearing_ + tunggu in-flight
     // render selesai sebelum clear — stop() sebelumnya tidak memakai
@@ -1474,7 +1495,20 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
         // currentSong.uri JS (Kotlin me-resolve content:// ke path cache).
         // Lihat emitTrackEnded di NativeEventEmitter: JS harus menangani
         // kedua bentuk.
-        worker->setEofCallback([this]() {
+        // 🔥 FIX (2026-11-12, B8-P2): ikat kedua callback ke generasi
+        // decoder INI (nilai loadGen_ saat startDecoder — sudah
+        // dinaikkan loadTrack() di atas). Dibaca di sini, BUKAN saat
+        // callback menyala: lambda membaca URI fresh dari
+        // currentTrack_, jadi kalau callback menyala telat (sesudah
+        // loadTrack track berikutnya selesai), URI-nya sudah milik
+        // track baru — tapi gen-nya tetap milik decoder lama, dan
+        // scheduleAdvance menolaknya. Decoder yang sama (seek +
+        // revive B8-P1) memegang gen yang sama, jadi EOF legit sesudah
+        // seek tetap sah; seek sendiri sengaja tidak menaikkan gen.
+        const uint64_t decoderGen =
+            loadGen_.load(std::memory_order_acquire);
+
+        worker->setEofCallback([this, decoderGen]() {
             __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                                 "EOF callback: track ended, advancing queue");
 
@@ -1530,7 +1564,7 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
             // Kalau di-emit di sini, JS syncFromNative saat ekor masih
             // dimainkan dan (setelah drain-wait P-M1) tidak pernah tahu
             // kapan track berikutnya mulai.
-            scheduleAdvance(uri);
+            scheduleAdvance(uri, decoderGen);
         });
 
         // 🔥 FIX (2026-11-10, P-M10): error decode (file korup / format
@@ -1548,7 +1582,7 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
         // NotSupported workerLoop (lihat DecoderWorker::
         // setDecodeErrorCallback) — error start/seek tidak lewat sini,
         // jadi seek gagal TIDAK men-skip track.
-        worker->setDecodeErrorCallback([this](const std::string& message) {
+        worker->setDecodeErrorCallback([this, decoderGen](const std::string& message) {
             const std::string uri = [&]() {
                 std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
                 return currentTrack_.uri;
@@ -1557,7 +1591,7 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
                 "decode error pada %s: %s — skip ke track berikutnya",
                 uri.c_str(), message.c_str());
             decoderFinished_.store(true, std::memory_order_release);
-            scheduleAdvance(uri);
+            scheduleAdvance(uri, decoderGen);
         });
 
         // 🔥 FIX (2026-11-10, P-M4): callback menangkap weak_ptr ke worker
@@ -1820,7 +1854,8 @@ void PlaybackController::stopDecoder() {
 // Sekarang: scheduleAdvance() HANYA mem-post permintaan ke worker
 // permanen (advanceWorkerLoop) — tanpa join. Worker yang menjalankan
 // drain-wait + advance + loadTrack.
-void PlaybackController::scheduleAdvance(const std::string& finishedUri) {
+void PlaybackController::scheduleAdvance(const std::string& finishedUri,
+                                         uint64_t gen) {
     // PB6-W3 (c): tolak post basi — URI sudah bukan track aktif. Post
     // dari callback decoder lama bisa mendarat SESUDAH cancel next()/
     // previous() (callback tertunda di thread decoder sementara loadTrack
@@ -1839,11 +1874,31 @@ void PlaybackController::scheduleAdvance(const std::string& finishedUri) {
         }
     }
 
+    // B8-P2: tolak post dari generasi lama — decoder yang mem-post sudah
+    // diganti loadTrack()/stop() sesudah callback-nya dibuat. Cek ini
+    // menutup yang tidak ditutup cek URI: lambda membaca URI fresh dari
+    // currentTrack_, jadi callback telat membawa URI track aktif (B)
+    // padahal asalnya dari decoder lama (A) — gen yang diikat di lambda
+    // saat startDecoder membongkar penyamaran itu. Atomic load, tanpa
+    // lock; bump loadGen_ hanya di bawah loadTrackMutex_ (loadTrack/
+    // stop), jadi tidak ada race dengan cek ini.
+    if (gen != loadGen_.load(std::memory_order_acquire)) {
+        __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+            "scheduleAdvance: abaikan post generasi basi %llu "
+            "(aktif %llu) untuk %s",
+            static_cast<unsigned long long>(gen),
+            static_cast<unsigned long long>(
+                loadGen_.load(std::memory_order_acquire)),
+            finishedUri.c_str());
+        return;
+    }
+
     // Post permintaan (leaf lock saja — lihat urutan lock di header).
     // Advance baru = pembatalan sebelumnya tidak berlaku lagi.
     {
         std::lock_guard<std::mutex> lock(advanceMutex_);
         advanceFinishedUri_ = finishedUri;
+        advanceGen_ = gen;
         advancePending_ = true;
         advanceCancelled_.store(false, std::memory_order_release);
     }
@@ -1855,6 +1910,7 @@ void PlaybackController::scheduleAdvance(const std::string& finishedUri) {
 void PlaybackController::advanceWorkerLoop() {
     while (true) {
         std::string finishedUri;
+        uint64_t gen = 0;
         {
             std::unique_lock<std::mutex> lock(advanceMutex_);
             advanceCv_.wait(lock, [this] {
@@ -1863,6 +1919,8 @@ void PlaybackController::advanceWorkerLoop() {
             if (advanceStopRequested_) return;
             finishedUri = std::move(advanceFinishedUri_);
             advanceFinishedUri_.clear();
+            gen = advanceGen_;
+            advanceGen_ = 0;
             advancePending_ = false;
             advanceBusy_ = true;
         }
@@ -1872,7 +1930,7 @@ void PlaybackController::advanceWorkerLoop() {
         // dan worker kembali menunggu permintaan berikutnya. Dulu exception
         // di thread advance sekali pakai = std::terminate.
         try {
-            processAdvance(finishedUri);
+            processAdvance(finishedUri, gen);
         } catch (const std::exception& e) {
             __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
                 "advanceWorkerLoop: exception saat memproses advance (%s) - "
@@ -1891,7 +1949,8 @@ void PlaybackController::advanceWorkerLoop() {
     }
 }
 
-void PlaybackController::processAdvance(const std::string& finishedUri) {
+void PlaybackController::processAdvance(const std::string& finishedUri,
+                                        uint64_t gen) {
     if (!queue_) return;
 
     // 🔥 FIX (2026-11-10, P-M1): TUNGGU ekor track habis dimainkan dulu.
@@ -1914,6 +1973,25 @@ void PlaybackController::processAdvance(const std::string& finishedUri) {
         if (advanceCancelled_.load(std::memory_order_acquire)) {
             __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                 "scheduleAdvance: dibatalkan saat menunggu drain");
+            return;
+        }
+        // B8-P2: buang post generasi basi — loadTrack()/stop() menaikkan
+        // loadGen_ selama drain-wait (jendela sampai 26–39 dtk). Cek
+        // ini yang menutup post yang lolos cek saat post: cek post dan
+        // bump bisa balapan (post membaca loadGen_ sesaat sebelum bump),
+        // dan post yang dibuat sebelum load dimulai memang sah saat
+        // dibuat. Flag batal saja tidak cukup di sini: post telat
+        // membersihkan flag lewat jalurnya sendiri, gen tidak.
+        // Bangunannya dijamin: tiap bump gen didahului cancel +
+        // notify (loadTrack/stop/shutdown), jadi worker tidak tidur
+        // melewati perubahan gen lebih dari satu siklus wait 20 ms.
+        if (gen != loadGen_.load(std::memory_order_acquire)) {
+            __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                "scheduleAdvance: abaikan post generasi basi %llu "
+                "(aktif %llu) saat menunggu drain",
+                static_cast<unsigned long long>(gen),
+                static_cast<unsigned long long>(
+                    loadGen_.load(std::memory_order_acquire)));
             return;
         }
         {
@@ -1945,6 +2023,20 @@ void PlaybackController::processAdvance(const std::string& finishedUri) {
     // sampai seksi kritis selesai. Tanpa cek ini, worker yang lolos cek
     // drain terakhir tetap menggeser indeks sesudah navigasi manual.
     if (advanceCancelled_.load(std::memory_order_acquire)) return;
+    // B8-P2: cek gen DI DALAM lock, pasangan cek drain di atas — load
+    // manual yang mendarat di antara cek drain terakhir dan akuisisi
+    // lock ini sudah menaikkan loadGen_, dan cancel-nya bisa sudah
+    // dibersihkan post telat; gen adalah satu-satunya penanda yang
+    // tidak bisa dibersihkan post.
+    if (gen != loadGen_.load(std::memory_order_acquire)) {
+        __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+            "scheduleAdvance: abaikan post generasi basi %llu "
+            "(aktif %llu) sesudah loadLock",
+            static_cast<unsigned long long>(gen),
+            static_cast<unsigned long long>(
+                loadGen_.load(std::memory_order_acquire)));
+        return;
+    }
     if (!queue_) return;
 
     // 🔥 FIX (2026-11-10, P-M10): lewati track yang tidak bisa dimuat.
