@@ -435,6 +435,20 @@ bool AudioDeviceManager::deviceSupportsRate(int32_t deviceId, int32_t rate) cons
            it->supportedSampleRates.end();
 }
 
+// (C-CLEAN(g), 2026-11-12): pola yang sama dengan deviceSupportsRate —
+// lookup satu perangkat di bawah lock, tanpa menyalin vector. false
+// juga untuk perangkat yang tidak ada di daftar (daftar kosong /
+// perangkat dicabut): pemanggil memperlakukannya sebagai "tidak bisa
+// disimpulkan", bukan sebagai "mendukung exclusive".
+bool AudioDeviceManager::deviceLacksExclusive(int32_t deviceId) const {
+    std::lock_guard<std::mutex> lock(mMutex);
+    const std::string wanted = std::to_string(deviceId);
+    const auto it = std::find_if(mDevices.begin(), mDevices.end(),
+        [&](const AudioDeviceDescriptor& d) { return d.id == wanted; });
+    if (it == mDevices.end()) return false;
+    return !it->supportsExclusive;
+}
+
 DeviceCapabilities AudioDeviceManager::getDeviceCapabilities(const std::string& deviceId) const {
     std::lock_guard<std::mutex> lock(mMutex);
 

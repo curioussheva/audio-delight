@@ -69,6 +69,14 @@ public:
     // menebak dari daftar kosong.
     bool deviceSupportsRate(int32_t deviceId, int32_t rate) const;
 
+    // true kalau perangkat ADA di daftar dan TIDAK mendukung exclusive —
+    // jalurnya memang tidak bisa bit-perfect. false kalau perangkat
+    // mendukung exclusive ATAU tidak ada di daftar (tidak bisa
+    // disimpulkan). (C-CLEAN(g), 2026-11-12): lookup di bawah lock,
+    // tanpa menyalin seluruh vector seperti getAvailableDevices() —
+    // dipakai isPathInherentlyLossy() yang hanya butuh satu perangkat.
+    bool deviceLacksExclusive(int32_t deviceId) const;
+
     // Pilih perangkat. Mengembalikan FALSE kalau id tidak ada di daftar -
     // bukan true-but-blind seperti sebelumnya.
     bool setActiveDevice(const std::string& deviceId);

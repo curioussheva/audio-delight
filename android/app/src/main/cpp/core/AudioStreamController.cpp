@@ -475,27 +475,14 @@ bool AudioStreamController::isPathInherentlyLossy() const noexcept {
         return false;
     }
 
-    // Id numerik perangkat hanya berarti di daftar yang dimuat
-    // AudioDeviceManager. Kalau daftarnya kosong (belum di-refresh), jangan
-    // mengarang jawaban.
-    const auto devices =
-        AudioDeviceManager::get().getAvailableDevices();
-
-    if (devices.empty()) {
-        return false;
-    }
-
-    const std::string wanted = std::to_string(apiDevice);
-
-    for (const auto& d : devices) {
-        if (d.id == wanted) {
-            return !d.supportsExclusive;
-        }
-    }
-
-    // Perangkat tidak ada di daftar (sudah dicabut / belum dikenal): jangan
-    // menyimpulkan apa pun.
-    return false;
+    // (C-CLEAN(g), 2026-11-12): lookup satu perangkat di bawah lock
+    // (deviceLacksExclusive), bukan getAvailableDevices() yang menyalin
+    // SELURUH vector (+ string tiap deskriptor) per panggilan. Id
+    // numerik perangkat hanya berarti di daftar yang dimuat
+    // AudioDeviceManager; kalau perangkat tidak ada di daftar (sudah
+    // dicabut / belum dikenal / daftar kosong), jangan mengarang
+    // jawaban — deviceLacksExclusive mengembalikan false untuk itu.
+    return AudioDeviceManager::get().deviceLacksExclusive(apiDevice);
 }
 
 int32_t AudioStreamController::channelCount()
