@@ -150,6 +150,13 @@ private:
     int swrInputLayoutOrder_ = 0;   // AVChannelOrder sebagai int; 0 = UNSPEC
     uint64_t swrInputLayoutMask_ = 0;
 
+    // 🔥 FIX (2026-11-12, B7-W1): hitung error avcodec_send_packet
+    // BERUNTUN (paket korup). Di-reset tiap paket berhasil dikirim, di
+    // cleanup(), dan di onSeek() — trek/posisi baru mulai dari nol.
+    // Hanya dipakai bila config().continueOnError; ambang batasnya
+    // config().maxConsecutiveErrors (default 3).
+    uint32_t consecutiveSendErrors_ = 0;
+
     uint64_t durationFrames_ = 0;
 
     std::vector<uint8_t> packetBuffer_;

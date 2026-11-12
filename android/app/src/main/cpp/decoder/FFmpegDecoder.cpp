@@ -183,15 +183,57 @@ DecodeResult FFmpegDecoder::onDecode(
             continue;
         }
 
-        if (avcodec_send_packet(
-                codecCtx_,
-                packet_) < 0) {
+        // 🔥 FIX (2026-11-12, B7-W1): avcodec_send_packet bisa gagal karena
+        // dua alasan yang berbeda — jangan samakan.
+        //
+        // EAGAIN = decoder penuh, BUKAN error: paket belum dikonsumsi.
+        // Teruskan ke receive_frame di bawah seperti biasa (drain membebaskan
+        // ruang); jangan hitung sebagai consecutive error, jangan skip lagu.
+        // Praktis tidak terjadi di loop ini (receive di-drain penuh sesudah
+        // tiap send), jadi paket yang terbuang di sini paling banyak satu
+        // frame — glitch terbatas, bukan skip.
+        //
+        // Error lain (mis. AVERROR_INVALIDDATA) = paket korup. Bila
+        // continueOnError, lewati paket itu dan lanjutkan decode; gagal
+        // (Error) hanya sesudah maxConsecutiveErrors beruntun. Bila
+        // continueOnError mati, pertahankan perilaku lama: Error langsung.
+        // Counter di-reset tiap paket berhasil dikirim, dan di-reset di
+        // cleanup()/onSeek() supaya trek/posisi baru mulai dari nol.
+        const int sendResult = avcodec_send_packet(
+            codecCtx_,
+            packet_);
+        if (sendResult == AVERROR(EAGAIN)) {
+            __android_log_print(ANDROID_LOG_WARN, "FFmpegDecoder",
+                "B7-W1: send_packet EAGAIN (decoder penuh) — drain dulu, paket dilewati");
             av_packet_unref(packet_);
-            result.status = DecodeStatus::Error;
-            return result;
+            // Fall through ke receive loop di bawah.
+        } else if (sendResult < 0) {
+            av_packet_unref(packet_);
+            if (!config().continueOnError) {
+                result.status = DecodeStatus::Error;
+                result.errorMessage =
+                    "B7-W1: avcodec_send_packet failed";
+                return result;
+            }
+            if (++consecutiveSendErrors_ >=
+                    config().maxConsecutiveErrors) {
+                __android_log_print(ANDROID_LOG_ERROR, "FFmpegDecoder",
+                    "B7-W1: %u consecutive send_packet errors — stop decoding",
+                    consecutiveSendErrors_);
+                result.status = DecodeStatus::Error;
+                result.errorMessage =
+                    "B7-W1: too many consecutive send_packet errors";
+                return result;
+            }
+            __android_log_print(ANDROID_LOG_WARN, "FFmpegDecoder",
+                "B7-W1: send_packet failed (%d) — lewati paket (%u/%u)",
+                sendResult, consecutiveSendErrors_,
+                config().maxConsecutiveErrors);
+            continue;
+        } else {
+            consecutiveSendErrors_ = 0;
+            av_packet_unref(packet_);
         }
-
-        av_packet_unref(packet_);
 
         while (true) {
             int receiveResult = avcodec_receive_frame(
@@ -481,6 +523,11 @@ bool FFmpegDecoder::onSeek(
 
     avcodec_flush_buffers(codecCtx_);
 
+    // 🔥 FIX (2026-11-12, B7-W1): posisi baru = konteks baru — error
+    // kirim paket sebelum seek tidak boleh dihitung beruntun dengan
+    // error sesudah seek.
+    consecutiveSendErrors_ = 0;
+
     // KOREKSI (2026-11-10): percobaan p-m10 memakai `stream->cur_dts`
     // sebagai posisi AKTUAL pasca-seek DIHAPUS — field itu TIDAK ADA di
     // AVStream publik FFmpeg 6.1.2 (dipakai repo ini); `cur_dts` hanya ada
@@ -743,6 +790,9 @@ void FFmpegDecoder::cleanup() {
     }
 
     audioStreamIndex_ = -1;
+    // 🔥 FIX (2026-11-12, B7-W1): reset hitung error kirim paket supaya
+    // trek baru tidak mewarisi error trek lama.
+    consecutiveSendErrors_ = 0;
     // 🔥 FIX (2026-11-12, B7-D4): reset cache atomik supaya getter tidak
     // melaporkan durasi/posisi trek lama sesudah close (perilaku lama:
     // formatCtx_ == nullptr → durasi 0, posisi 0).

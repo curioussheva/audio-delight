@@ -1387,6 +1387,12 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
         if (cfg.targetSampleRate > 0) {
             cfg.chunkFrames = 4096 * 4;  // 16384 — cukup untuk 4:1 downsample
         }
+
+        // 🔥 FIX (2026-11-12, B7-W1): satu paket korup tidak boleh skip lagu.
+        // Decoder melewati paket korup dan baru gagal sesudah
+        // maxConsecutiveErrors (default 3) beruntun; EAGAIN dari send_packet
+        // bukan error (decoder penuh — drain dulu). Lihat FFmpegDecoder::onDecode.
+        cfg.continueOnError = true;
         __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
             "startDecoder: targetSampleRate=%u (stream=%u file=%u) chunkFrames=%u",
             cfg.targetSampleRate, rate, track.sampleRate, cfg.chunkFrames);
