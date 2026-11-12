@@ -147,9 +147,20 @@ bool AudioEngine::start(
     // supaya resample-nya benar dan tidak ada konversi tambahan.
     const int32_t actualRate = mStreamController.actualSampleRate();
 
+    // (C-P3, 2026-11-12): prepare() menerima kMaxFramesPerCallback, BUKAN
+    // framesPerBurst. framesPerBurst bisa melebihi kMax (mis. stream
+    // 192 kHz burst 20 ms = 3840 frame), sementara yang benar-benar
+    // diterima process() TIDAK PERNAH lebih dari kMax: AudioCallback
+    // memotong buffer besar jadi chunk ≤ kMax (C-C2) dan mLeft/mRight
+    // hanya sebesar itu. Semua node in-place dan tidak ada satu pun yang
+    // mengalokasi buffer sebesar maxFrames (Gain/Limiter/Widener:
+    // prepare() kosong; EQ/Headphone: hanya laju yang diteruskan, buffer
+    // tetap array biquad statis) — jadi nilai yang lebih kecil ini tidak
+    // membuat satu node pun kekurangan buffer. Kontrak kini jujur:
+    // maxFrames = batas atas nyata per pemanggilan process().
     mPipeline.prepare(
         actualRate,
-        mStreamController.framesPerBurst()
+        kMaxFramesPerCallback
     );
 
     mCallback.setSampleRate(
