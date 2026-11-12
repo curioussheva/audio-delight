@@ -14,7 +14,7 @@ namespace pristine::playback {
 // memakai nilai apa adanya dan mask_ = capacity - 1 — kalau capacity
 // bukan power of two, indexMask() salah dan read/write mendarat di slot
 // yang salah (korupsi senyap). Satu-satunya pemanggil saat ini memberi
-// 1<<21 (sudah power of two), jadi ini pertahanan, bukan perbaikan bug
+// 1<<22 (sudah power of two), jadi ini pertahanan, bukan perbaikan bug
 // yang sedang terjadi.
 static size_t roundUpPowerOfTwo(size_t v) noexcept {
     size_t p = 1;

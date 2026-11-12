@@ -31,9 +31,18 @@ bool PlaybackController::initialize() {
 
     __android_log_print(ANDROID_LOG_INFO, "PlaybackController", "initialize called");
 
-    // 2^21 = 2097152 float samples = ~21.8 dtk stereo @ 48kHz.
+    // PB6-MINOR(c) (2026-11-12): 2^22 = 4194304 float samples (16 MiB).
+    // Kapasitas dihitung dalam SAMPEL, jadi durasinya tergantung laju:
+    // ~43,7 dtk stereo @48k, ~21,8 dtk @96k, ~10,9 dtk @192k, ~5,5 dtk
+    // @384k. Naik dari 2^21 (8 MiB): di sana file 192k/384k hanya
+    // menampung 5,5/2,7 dtk — terlalu pendek sebagai lookahead saat
+    // render starve sesaat. Biaya: +8 MiB sekali di initialize() —
+    // diterima (satu alokasi, bukan per track). Ambang backpressure
+    // (pause 90% / resume 60%, lihat startDecoder) dihitung sebagai
+    // FRAKSI kapasitas, jadi menaikkan kapasitas tidak mengubah perilaku
+    // ambang — hanya durasi absolut buffer.
     // WAJIB power of 2: PCMQueue pakai bitmask, bukan modulo!
-    pcmQueue_ = std::make_shared<PCMQueue>(1 << 21);  // 🔥 21.8s buffer
+    pcmQueue_ = std::make_shared<PCMQueue>(1 << 22);  // 🔥 43.7s buffer @48k
     clock_ = std::make_shared<PlaybackClock>();
     state_ = std::make_shared<PlaybackState>();
     queue_ = std::make_shared<TrackQueue>();
@@ -900,7 +909,7 @@ size_t PlaybackController::render(float* output,
     // 🔥 FIX (2026-11-10, P-M2): JANGAN drain queue saat paused/stopped.
     //
     // Sebelumnya render() membaca queue tanpa cek playing_ — pause() hanya
-    // menghentikan producer (decoder), queue 60–90% penuh (~13–20 dtk)
+    // menghentikan producer (decoder), queue 60–90% penuh (~26–39 dtk @48k)
     // tetap mengalir ke speaker. Audio terus jalan belasan detik setelah
     // pause ditekan.
     //
@@ -1523,7 +1532,7 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
                     // Dulu chunk yang tidak muat langsung dibuang
                     // sebagian (written < size -> recordOverrun + DATA
                     // DROP). Backpressure 90% + chunk 8192 sample
-                    // (0,39% dari kapasitas 2^21) membuat queue penuh
+                    // (0,20% dari kapasitas 2^22) membuat queue penuh
                     // praktis tak terjangkau steady state — tapi saat
                     // TERTUNDA (render starve sesaat) drop itu nyata.
                     // Sekarang: tunggu sampai ada ruang, sleep 2 ms
@@ -1839,7 +1848,7 @@ void PlaybackController::processAdvance(const std::string& finishedUri) {
     //
     // Sebelumnya scheduleAdvance langsung loadTrack → pcmQueue_->clear()
     // membuang audio yang sudah di-decode tapi belum dimainkan. Decoder
-    // jalan 13–20 dtk di depan playback (queue 21,8 dtk, pause 90% /
+    // jalan 26–39 dtk di depan playback (queue 43,7 dtk @48k, pause 90% /
     // resume 60%), jadi tiap auto-advance memotong ekor sepanjang itu.
     //
     // Sekarang: decoder sudah selesai (EOF), tidak ada lagi yang mengisi
