@@ -193,7 +193,25 @@ private:
 
     EngineManager();
 
-    ~EngineManager() = default;
+    // PB6-W6 (2026-11-12): destruktor KUSTOM, bukan = default.
+    //
+    // Urutan deklarasi member: mEngine (:310) sebelum mPlayback (:312),
+    // jadi mPlayback dihancurkan DULU, baru ~AudioEngine() memanggil
+    // stop(). Di antara keduanya callback Oboe masih bisa render() pada
+    // mPlayback yang sudah hancur -> UAF. Body destruktor jalan SEBELUM
+    // member mana pun dihancurkan, jadi mEngine.stop() di sini menutup
+    // stream selagi mPlayback masih hidup.
+    //
+    // Jangkauan sempit: singleton Meyer, destruktor hanya jalan saat
+    // proses exit (Android biasanya SIGKILL, destruktor tak jalan) —
+    // tapi murah dan menutup satu-satunya jendela UAF ini.
+    //
+    // Double-stop aman: stop() idempotent — StreamController::stop()/
+    // close() no-op kalau stream sudah null, reset() hanya clear +
+    // atomic store 0. Jadi stop() di sini + stop() lagi dari
+    // ~AudioEngine() saat mEngine dihancurkan tidak berbahaya.
+    // Urutan deklarasi member SENGAJA tidak diubah.
+    ~EngineManager();
 
     EngineManager(
         const EngineManager&

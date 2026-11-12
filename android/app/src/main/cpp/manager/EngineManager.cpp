@@ -68,6 +68,24 @@ EngineManager::EngineManager()
 }
 
 // =====================================================
+// DESTRUCTOR (PB6-W6, 2026-11-12)
+// =====================================================
+//
+// Body destruktor jalan SEBELUM member mana pun dihancurkan: stream
+// ditutup selagi mPlayback masih hidup. Tanpa ini, urutan hancur member
+// (mPlayback dulu, baru mEngine) membiarkan callback Oboe render() pada
+// mPlayback yang sudah hancur — UAF — karena ~AudioEngine() baru
+// memanggil stop() sesudahnya. Lihat komentar di EngineManager.h.
+//
+// stop() idempotent (StreamController::stop()/close() no-op saat stream
+// null, reset() hanya clear + atomic store 0), jadi stop() di sini +
+// stop() lagi dari ~AudioEngine() aman.
+EngineManager::~EngineManager() {
+
+    mEngine.stop();
+}
+
+// =====================================================
 // SINGLETON
 // =====================================================
 
