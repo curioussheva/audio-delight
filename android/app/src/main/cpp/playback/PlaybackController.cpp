@@ -998,55 +998,26 @@ size_t PlaybackController::render(float* output,
             pitchShifter_.pull(output, frames, channels) * channels;
     }
 
-    // 🔥 FIX 2: resume decoder kalau queue 60% (naik dari 30%)
+    // PB6-W2A (2026-11-12): audio thread TIDAK LAGI me-resume decoder.
     //
-    // FIX (2026-10-06): resume lebih cepat supaya decoder mulai isi sebelum
-    // queue benar-benar lapar. 30% (6.5 detik) terlalu lama untuk file hi-res
-    // yang butuh 2x throughput — saat akhirnya resume, queue sudah hampir
-    // kosong dan underrun tidak bisa dihindari.
+    // Dulu blok di sini memanggil snapshotWorker() + worker->resume()
+    // tiap callback saat queue < 60% — lock decoderMutex_ + notify di
+    // jalur realtime. Sekarang decoder yang backpressure-paused
+    // (queue > 90%, lihat decode callback di startDecoder) bangun
+    // sendiri tiap 10 ms dan menanyakan predikat auto-resume
+    // (setAutoResumeCheck di startDecoder: queue < 60% + playing_ +
+    // bukan fade-out pause). Dua gerbang itu — playing_ (bug
+    // 2026-10-10: resume saat pause menghidupkan lagi audio) dan
+    // fade-out pause (PB6-W4) — pindah bersama predikatnya, bukan
+    // hilang. Jeda eksplisit (user pause / seek) memakai flag terpisah
+    // di worker dan TIDAK PERNAH di-resume predikat ini.
     //
-    // 🔥 FIX (2026-10-09, crash auto-advance): render() jalan di AUDIO THREAD
-    // dan membaca decoderWorker_ TANPA sinkronisasi. Saat auto-advance EOF,
-    // advanceThread (thread biasa) memanggil loadTrack() → stopDecoder() →
-    // decoderWorker_.reset() + make_unique. Antara reset() dan make_unique(),
-    // decoderWorker_ = nullptr → unique_ptr dibaca dari dua thread bersamaan
-    // = data race (TSAN) dan bisa membaca objek setengah-terbangun.
-    //
-    // Kondisi `clearing_` sudah melindungi wilayah ini untuk pcmQueue_, tapi
-    // cek decoderWorker_ tambahan dipindah ke bawah pengecekan clearing_ dan
-    // diambil lewat snapshotWorker() (P-M4, 2026-11-10): salinan shared_ptr
-    // di bawah lock singkat, dipakai tanpa lock.
-    if (pcmQueue_ && !clearing_.load(std::memory_order_seq_cst)) {
-        // Snapshot pointer di bawah lock singkat, lalu pakai salinan TANPA
-        // lock (P-M4, 2026-11-10): advanceThread memegang lock yang sama
-        // saat stopDecoder(), jadi snapshot tidak pernah melihat pointer
-        // setengah-reset; objek tetap hidup lewat shared ownership.
-        if (auto worker = snapshotWorker()) {
-            size_t avail = pcmQueue_->availableSamples();
-            size_t cap = pcmQueue_->capacitySamples();
-            // 🔥 FIX (2026-10-10): JANGAN resume decoder saat user menekan pause.
-            //
-            // BUG: render() dipanggil tiap ~10ms oleh audio thread. Cek
-            // avail < 60% ini untuk menjaga queue terisi — TANPA memeriksa
-            // playing_. User menekan pause → pause() memanggil
-            // decoderWorker_->pause() → tapi 10ms kemudian render() melihat
-            // queue sudah < 60% (karena drain) → memanggil resume() → decoder
-            // balai mengisi lagi → audio TIDAK PERNAH berhenti.
-            //
-            // Bukti dari log 2026-10-10_02-06-52: 2x "pause() called",
-            // tapi system MediaSession 657x state=PLAYING(3), 0x state=PAUSED.
-            // Audio terus jalan, posisi terus merangkak naik (4136→5160→6168).
-            //
-            // PB6-W4: jangan resume juga selama fade-out pause — decoder
-            // sudah di-pause pause() dan fade hanya menghabiskan sisa
-            // queue; resume di sini akan mengisi lagi queue yang baru
-            // saja dijeda.
-            if (avail < cap * 60 / 100 &&
-                playing_.load(std::memory_order_acquire) && !pausing) {
-                worker->resume();
-            }
-        }
-    }
+    // Riwayat threshold (dipertahankan): resume di 60% sejak
+    // 2026-10-06 (30% terlalu lama untuk file hi-res yang butuh 2x
+    // throughput — queue hampir kosong sebelum decoder bangun).
+    // snapshotWorker() di render() masih ada di bawah, tapi HANYA di
+    // cabang self-heal durasi (P-M8, sekali sampai durasi terisi),
+    // bukan per callback.
 
     // 🔥 SAFETY NET: cleanup NaN/Inf di render (untuk sisa race boundary).
     // Berjalan atas OUTPUT (setelah WSOLA) — input kotor dari decoder juga
@@ -1519,11 +1490,11 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
         // yang memilikinya, BUKAN membaca decoderWorker_ (member). Cabang
         // backpressure ini jalan di thread decoder di bawah decodeMutex_;
         // membaca member tanpa lock di sini adalah TOCTOU yang sama seperti
-        // di play()/pause()/seek(). weak_ptr memastikan pause() hanya
-        // menyasar worker yang benar-benar memproduksi data ini — kalau
-        // worker sudah diganti loadTrack, lock() gagal dan cabang dilewati
-        // (queue baru saja di-clear loadTrack, jadi tidak ada yang perlu
-        // di-pause).
+        // di play()/pause()/seek(). weak_ptr memastikan
+        // pauseForBackpressure() hanya menyasar worker yang benar-benar
+        // memproduksi data ini — kalau worker sudah diganti loadTrack,
+        // lock() gagal dan cabang dilewati (queue baru saja di-clear
+        // loadTrack, jadi tidak ada yang perlu di-pause).
         worker->setDecodeCallback(
             [this, weakWorker = std::weak_ptr<decoder::DecoderWorker>(worker)](
                 decoder::DecodeResult&& result) {
@@ -1563,12 +1534,21 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
                     // overhead membuat loop hanya 11/detik x 2238 = 24.8k fps —
                     // di bawah 48k realtime → queue habis → NaN di render.
                     // Jendela 30% lebih sempit = decoder lebih serang.
+                    //
+                    // PB6-W2A (2026-11-12): ini jeda BACKPRESSURE, bukan
+                    // jeda eksplisit — pakai pauseForBackpressure(),
+                    // BUKAN pause(). Resume-nya ditangani thread decoder
+                    // sendiri (timed wait 10 ms + predikat auto-resume
+                    // di bawah, setAutoResumeCheck); render() tidak lagi
+                    // me-resume. Jeda eksplisit (user pause / seek)
+                    // memakai flag terpisah dan tidak pernah dilepas
+                    // predikat ini.
                     size_t avail = pcmQueue_->availableSamples();
                     size_t cap = pcmQueue_->capacitySamples();
                     if (avail > cap * 90 / 100) {
                         if (auto w = weakWorker.lock()) {
                             if (!w->isPaused()) {
-                                w->pause();
+                                w->pauseForBackpressure();
                                 static int pauseCount = 0;
                                 pauseCount++;
                                 if (pauseCount % 20 == 0) {
@@ -1582,6 +1562,47 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
                 }
             }
         );
+
+        // PB6-W2A (2026-11-12): decoder memantau level queue SENDIRI.
+        //
+        // Dulu render() (audio thread) yang me-resume decoder tiap
+        // callback saat queue < 60% — snapshotWorker() + resume() per
+        // callback. Sekarang worker yang backpressure-paused bangun
+        // tiap 10 ms dan menanyakan predikat ini; audio thread tidak
+        // lagi menyentuh worker.
+        //
+        // Predikat ini membawa DUA gerbang yang dulu ada di render()
+        // — JANGAN dihapus tanpa memahami riwayatnya:
+        //  * playing_: resume saat user pause menghidupkan lagi audio
+        //    (bug 2026-10-10: 2x "pause() called" tapi MediaSession
+        //    tetap PLAYING, posisi merangkak 4136→5160→6168). Saat
+        //    paused, render tidak menguras queue (cabang senyap P-M2),
+        //    jadi level queue tidak turun dan predikat ini tetap false.
+        //  * fade-out pause (PB6-W4): selama 15 ms fade, playing_
+        //    masih true dan render menguras queue — tanpa gerbang ini
+        //    decoder mengisi lagi queue yang baru dijeda.
+        //
+        // Sengaja TIDAK ada gerbang seek di sini: jeda seek memakai
+        // pause() EKSPLISIT (flag terpisah di worker), dan predikat ini
+        // hanya dievaluasi untuk jeda backpressure — jadi queue yang
+        // di-clear seek (avail 0 < 60%) tidak pernah me-resume decoder
+        // di tengah seek.
+        //
+        // Lifetime: worker dimiliki controller dan thread-nya di-join
+        // stopDecoder() sebelum worker dihancurkan, jadi menangkap
+        // `this` di sini sama amannya dengan callback EOF/decode-error
+        // di atas. pcmQueue_ ditangkap sebagai shared_ptr (bukan
+        // member mentah) supaya predikat tetap valid.
+        worker->setAutoResumeCheck([this, queue = pcmQueue_]() {
+            if (!queue) return false;
+            if (!playing_.load(std::memory_order_acquire)) return false;
+            if (pauseFadeRemainingFrames_.load(std::memory_order_acquire) > 0) {
+                return false;
+            }
+            const size_t avail = queue->availableSamples();
+            const size_t cap = queue->capacitySamples();
+            return cap > 0 && avail < cap * 60 / 100;
+        });
 
         bool ok = worker->start(track.uri, 0.0);
         __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
@@ -1631,9 +1652,10 @@ void PlaybackController::stopDecoder() {
     // lock. Invarian 2026-10-09 tetap terjaga: unique_ptr hanya disentuh di
     // bawah lock, jadi render() tidak pernah melihat pointer setengah-reset.
     // Worker tetap hidup (dipegang unique_ptr lokal) sampai stop() selesai,
-    // jadi resume() dari render() yang sudah terlanjur masuk tidak pernah
+    // jadi resume() dari play()/seek() yang sudah terlanjur masuk tidak pernah
     // use-after-free — dan resume() sendiri hanya atomic store + notify,
-    // aman dipanggil bersamaan dengan stop().
+    // aman dipanggil bersamaan dengan stop(). (PB6-W2A: render() tidak
+    // lagi me-resume — satu-satunya pemanggil resume() kini play()/seek().)
     std::shared_ptr<decoder::DecoderWorker> worker;
     {
         std::lock_guard<std::recursive_mutex> lock(decoderMutex_);

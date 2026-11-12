@@ -54,6 +54,9 @@ bool DecoderWorker::start(const std::string& uri, double startPosition) {
 
     stopRequested_.store(false);
     paused_.store(false);
+    // PB6-W2A: jeda backpressure ikut di-reset — worker baru tidak
+    // boleh mewarisi flag dari siklus sebelumnya.
+    backpressurePaused_.store(false);
 
     if (!decoder_) {
         if (errorCallback_) errorCallback_("Decoder not set");
@@ -78,6 +81,9 @@ bool DecoderWorker::start(const std::string& uri, double startPosition) {
 void DecoderWorker::stop() {
     stopRequested_.store(true);
     paused_.store(false);
+    // PB6-W2A: jeda backpressure ikut dibatalkan supaya workerLoop
+    // yang sedang timed wait tidak memeriksa predikat basi lagi.
+    backpressurePaused_.store(false);
     pauseCv_.notify_all();
 
     if (workerThread_.joinable()) {
@@ -124,11 +130,32 @@ void DecoderWorker::pause() {
 
 void DecoderWorker::resume() {
     paused_.store(false);
+    // PB6-W2A: resume eksplisit melepas KEDUA jeda — pemanggil
+    // (play()/seek()) sudah memastikan kondisi aman untuk lanjut.
+    backpressurePaused_.store(false);
     pauseCv_.notify_all();
 }
 
+void DecoderWorker::pauseForBackpressure() {
+    // PB6-W2A: HANYA set flag — tanpa ambil decodeMutex_, tanpa notify.
+    // Dipanggil dari decodeCallback_ yang SUDAH berjalan di bawah
+    // decodeMutex_ (workerLoop); mengambil lock itu lagi dari thread
+    // yang sama hanya menambah hitungan rekursif tanpa menunggu apa
+    // pun, dan tidak ada chunk aktif lain yang perlu ditunggu — callback
+    // ini ADALAH chunk aktif itu. workerLoop memeriksa flag ini di
+    // iterasi berikutnya dan masuk timed wait sendiri; notify tidak
+    // diperlukan karena tidak ada yang sedang menunggu.
+    backpressurePaused_.store(true);
+}
+
+void DecoderWorker::setAutoResumeCheck(AutoResumeCheck check) {
+    autoResumeCheck_ = std::move(check);
+}
+
 bool DecoderWorker::isPaused() const noexcept {
-    return paused_.load();
+    // PB6-W2A: kedua jenis jeda terhitung "paused" bagi pemanggil
+    // (decode callback mengecek ini sebelum men-set backpressure).
+    return paused_.load() || backpressurePaused_.load();
 }
 
 // =====================================================
@@ -211,12 +238,54 @@ void DecoderWorker::workerLoop() {
     
     while (!stopRequested_.load()) {
 
-        // PAUSE HANDLING
-        if (paused_.load()) {
+        // PAUSE HANDLING (PB6-W2A, 2026-11-12)
+        //
+        // Dua jenis jeda, DUA flag — JANGAN disamakan:
+        //
+        //  * Pause EKSPLISIT (paused_): user menekan pause, atau seek()
+        //    sedang memindahkan posisi. Hanya resume() eksplisit dari
+        //    controller yang boleh melepasnya — wait TANPA batas di CV.
+        //  * Pause BACKPRESSURE (backpressurePaused_): decode callback
+        //    menjeda karena queue > 90% penuh. Yang ini BOLEH dilepas
+        //    sendiri oleh thread decoder: timed wait 10 ms (≈ satu
+        //    periode callback audio), lalu tanya autoResumeCheck_ —
+        //    predikat dari controller yang memeriksa level queue +
+        //    playing_ + fade-out pause. Audio thread tidak lagi
+        //    menyentuh worker sama sekali (tidak ada snapshotWorker()
+        //    + resume() per callback di render()).
+        //
+        // Timed wait 10 ms, bukan spin: worker yang kehabisan
+        // backpressure tetap tidur di CV dan hanya bangun 100x/detik
+        // untuk satu cek atomik — jauh di bawah biaya satu chunk
+        // decode. resume()/stop() tetap membangunkan lewat notify_all.
+        // Tanpa predikat (tidak di-set controller), worker tetap
+        // tertidur sampai resume() eksplisit — perilaku lama, aman.
+        while (paused_.load() || backpressurePaused_.load()) {
+            if (stopRequested_.load()) break;
             std::unique_lock<std::mutex> lock(mutex_);
-            pauseCv_.wait(lock, [&] {
-                return !paused_.load() || stopRequested_.load();
-            });
+            if (paused_.load()) {
+                // Eksplisit: tunggu tanpa batas sampai resume()/stop().
+                pauseCv_.wait(lock, [&] {
+                    return !paused_.load() || stopRequested_.load();
+                });
+            } else {
+                // Backpressure saja: bangun tiap 10 ms untuk cek level.
+                pauseCv_.wait_for(lock, std::chrono::milliseconds(10), [&] {
+                    return !backpressurePaused_.load() ||
+                           stopRequested_.load();
+                });
+                // Self-resume HANYA dari cabang backpressure, dan HANYA
+                // bila predikat mengizinkan. Cek ulang paused_ di sini:
+                // pause() eksplisit bisa mendarat selama timed wait
+                // (tanpa notify — jeda eksplisit tidak boleh dilepas
+                // predikat level).
+                if (!paused_.load() &&
+                    backpressurePaused_.load() &&
+                    !stopRequested_.load() &&
+                    autoResumeCheck_ && autoResumeCheck_()) {
+                    backpressurePaused_.store(false);
+                }
+            }
         }
 
         if (stopRequested_.load()) break;

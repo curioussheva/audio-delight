@@ -52,6 +52,33 @@ public:
     void pause();
     void resume();
 
+    // PB6-W2A (2026-11-12): pause KHUSUS backpressure (queue penuh).
+    //
+    // BERBEDA dari pause() eksplisit — dua flag terpisah, JANGAN
+    // disamakan (lihat backpressurePaused_ di bawah): jeda ini BOLEH
+    // dilepas sendiri oleh thread decoder saat level queue turun
+    // (timed wait + autoResumeCheck_), sementara pause() eksplisit
+    // (user pause / seek) HANYA boleh dilepas resume() dari controller.
+    // Dulu keduanya berbagi paused_ dan render() (audio thread) yang
+    // me-resume tiap callback — resume itu menghidupkan lagi audio
+    // yang baru dijeda user (bug 2026-10-10) dan bisa mendahului
+    // clear() saat seek.
+    //
+    // Hanya set flag atomik — tanpa ambil decodeMutex_: dipanggil dari
+    // decodeCallback_ yang SUDAH berjalan di bawah lock itu (workerLoop),
+    // jadi tidak ada chunk aktif lain yang perlu ditunggu.
+    void pauseForBackpressure();
+
+    // PB6-W2A: predikat auto-resume untuk jeda backpressure.
+    //
+    // Dipanggil workerLoop dari thread decoder, HANYA saat
+    // backpressure-paused (tidak pernah untuk jeda eksplisit).
+    // Diset sekali sebelum start() (happens-before lewat pembuatan
+    // thread worker); tanpa predikat, worker tetap tertidur sampai
+    // resume() eksplisit — perilaku lama, aman.
+    using AutoResumeCheck = std::function<bool()>;
+    void setAutoResumeCheck(AutoResumeCheck check);
+
     [[nodiscard]]
     bool isPaused() const noexcept;
 
@@ -131,11 +158,32 @@ private:
     // FIX (Prioritas 6): mutex REKURSIF terpisah, khusus melindungi
     // decode()/decodeCallback_()/seek(). Direkursif karena
     // decodeCallback_ (dipanggil dari DALAM lock ini, di workerLoop)
-    // bisa memicu decoderWorker_->pause() lewat backpressure internal
-    // -- dari THREAD YANG SAMA yang sedang memegang lock ini. mutex_
-    // di atas TETAP dipakai apa adanya untuk pauseCv_ (tidak diubah).
+    // dulu bisa memicu decoderWorker_->pause() lewat backpressure
+    // internal -- dari THREAD YANG SAMA yang sedang memegang lock ini.
+    // Sejak PB6-W2A backpressure memakai pauseForBackpressure() yang
+    // TIDAK mengambil lock ini (hanya set flag atomik); pause()
+    // eksplisit tetap rekursif karena dipanggil dari thread lain
+    // (seek()/pause() controller) sambil menunggu chunk aktif selesai.
+    // mutex_ di atas TETAP dipakai apa adanya untuk pauseCv_ (tidak diubah).
     mutable std::recursive_mutex decodeMutex_;
     std::condition_variable pauseCv_;
+
+    // PB6-W2A (2026-11-12): jeda backpressure, TERPISAH dari paused_.
+    //
+    // paused_ = jeda EKSPLISIT (user pause / seek): hanya resume()
+    // yang boleh melepas. backpressurePaused_ = jeda karena queue
+    // > 90% penuh (diset decode callback via pauseForBackpressure()):
+    // workerLoop BOLEH melepasnya sendiri saat autoResumeCheck_
+    // mengizinkan (queue < 60% + playing_ + bukan fade-out pause).
+    // Satu flag untuk keduanya pernah membuat resume berbasis level
+    // menghidupkan lagi audio yang dijeda user (bug 2026-10-10) dan
+    // me-resume di tengah seek (queue habis di-clear = avail 0).
+    std::atomic<bool> backpressurePaused_{false};
+
+    // PB6-W2A: predikat auto-resume (lihat setAutoResumeCheck).
+    // Ditulis sekali sebelum start(), hanya dibaca workerLoop saat
+    // backpressure-paused.
+    AutoResumeCheck autoResumeCheck_;
 };
 
 } // namespace pristine::decoder 
