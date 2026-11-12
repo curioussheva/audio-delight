@@ -166,7 +166,17 @@ int AudioDeviceManager::refreshDevices() {
         return 0;
     }
     JNIEnv* env = scope.env;
-    env->PushLocalFrame(64);
+    // (C-JNIHARD, 2026-11-12): PushLocalFrame bisa gagal (OOM) dan
+    // mengembalikan nilai negatif + exception pending. Tanpa cek return,
+    // PopLocalFrame di bawah dipanggil atas frame yang tidak pernah
+    // dibuat, dan exception OOM tertinggal di thread ini — panggilan JNI
+    // berikutnya di thread yang sama jadi tidak terdefinisi. Kalau gagal,
+    // JANGAN PopLocalFrame; clear exception lalu return.
+    if (env->PushLocalFrame(64) != JNI_OK) {
+        const std::string why = describeAndClear(env);
+        LOGE("refreshDevices: PushLocalFrame gagal (%s)", why.c_str());
+        return 0;
+    }
 
     // Application context
     jclass at = env->FindClass("android/app/ActivityThread");
@@ -184,6 +194,14 @@ int AudioDeviceManager::refreshDevices() {
         ? env->GetMethodID(ctx, "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;")
         : nullptr;
     if (!getSystemService) {
+        // (C-JNIHARD, 2026-11-12): kalau ctx null (FindClass gagal) atau
+        // GetMethodID gagal, ada exception pending (NoClassDefFoundError /
+        // NoSuchMethodError). PopLocalFrame saja tidak membersihkannya —
+        // refreshDevices dipanggil dari C++ (notifyDeviceAdded/Removed),
+        // jadi exception itu tertinggal di thread dan meracuni panggilan
+        // JNI berikutnya. Clear dulu, baru pop + return.
+        const std::string why = describeAndClear(env);
+        LOGE("refreshDevices: getSystemService tidak tersedia (%s)", why.c_str());
         env->PopLocalFrame(nullptr);
         return 0;
     }
@@ -199,7 +217,11 @@ int AudioDeviceManager::refreshDevices() {
     jmethodID getDevices = env->GetMethodID(amCls, "getDevices",
                                             "(I)[Landroid/media/AudioDeviceInfo;");
     if (!getDevices) {
-        LOGW("refreshDevices: getDevices tidak ada (API < 23)");
+        // (C-JNIHARD, 2026-11-12): GetMethodID yang gagal meninggalkan
+        // NoSuchMethodError pending — clear sebelum PopLocalFrame/return,
+        // sama seperti cabang getSystemService di atas.
+        const std::string why = describeAndClear(env);
+        LOGW("refreshDevices: getDevices tidak ada (API < 23) (%s)", why.c_str());
         env->PopLocalFrame(nullptr);
         return 0;
     }
@@ -213,6 +235,15 @@ int AudioDeviceManager::refreshDevices() {
     }
 
     jclass diCls = env->FindClass("android/media/AudioDeviceInfo");
+    // (C-JNIHARD, 2026-11-12): FindClass yang gagal mengembalikan null +
+    // exception pending. GetMethodID(null, ...) di bawah adalah crash
+    // (dulu 4× GetMethodID dipanggil tanpa cek). Guard + clear dulu.
+    if (!diCls) {
+        const std::string why = describeAndClear(env);
+        LOGE("refreshDevices: AudioDeviceInfo tidak ditemukan (%s)", why.c_str());
+        env->PopLocalFrame(nullptr);
+        return 0;
+    }
     jmethodID getId    = env->GetMethodID(diCls, "getId", "()I");
     jmethodID getType  = env->GetMethodID(diCls, "getType", "()I");
     jmethodID getRates = env->GetMethodID(diCls, "getSampleRates", "()[I");
