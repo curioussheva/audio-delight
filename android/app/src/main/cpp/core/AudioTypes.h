@@ -81,16 +81,6 @@ inline float clampFinite(
 }
 
 // =====================================================
-// CHANNEL LAYOUT
-// =====================================================
-
-enum class ChannelLayout : uint8_t {
-
-    Mono  = 1,
-    Stereo = 2
-};
-
-// =====================================================
 // PROCESSING MODE
 // =====================================================
 
@@ -115,41 +105,19 @@ inline bool isValidProcessingMode(
            mode == ProcessingMode::Immersive;
 }
 
-// =====================================================
-// AUDIO ROUTE
-// =====================================================
-
-enum class AudioRoute : int32_t {
-
-    Wired = 0,
-    Bluetooth,
-    USBExclusive,
-    Default
-};
-
+// (ChannelLayout dihapus 2026-11-12, C-CLEAN(c): 0 pemakai. Jangan
+// disamakan dengan decoder::ChannelLayout di decoder/DecoderTypes.h:27,
+// yang masih dipakai decoder.)
 // (StreamState dihapus 2026-11-10: 0 pemakai.)
+// (AudioRoute dihapus 2026-11-12, C-CLEAN(c): 0 pemakai.)
 
-// =====================================================
-// AUDIO FORMAT
-// =====================================================
+// (AudioFormat dihapus 2026-11-12, C-CLEAN(c): 0 pemakai. Jangan
+// disamakan dengan decoder::AudioFormat di decoder/DecoderTypes.h:37,
+// yang masih dipakai decoder.)
 
-enum class AudioFormat : uint8_t {
-
-    PCM16 = 0,
-    PCM24,
-    PCM32,
-    Float32
-};
-
-// =====================================================
-// PERFORMANCE MODE
-// =====================================================
-
-enum class PerformanceMode : uint8_t {
-
-    LowLatency = 0,
-    PowerSaving
-};
+// (PerformanceMode dihapus 2026-11-12, C-CLEAN(c): 0 pemakai. Jangan
+// disamakan dengan oboe::PerformanceMode, yang dipakai
+// AudioStreamController.cpp:239-240.)
 
 // (VisualizerMode + OutputDeviceType dihapus 2026-11-10: 0 pemakai.)
 
