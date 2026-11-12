@@ -53,12 +53,21 @@ std::string toStd(JNIEnv* env, jstring s) {
     return out;
 }
 
-// Sama persis dengan java.lang.String.hashCode(), supaya file cache dari
-// resolusi sisi Kotlin bisa dipakai ulang di sini (tidak salin dua kali).
-int32_t javaStringHashCode(const std::string& s) {
-    int32_t h = 0;
+// FNV-1a 64-bit atas byte UTF-8 URI (B9-cache64, 2026-11-12) — pengganti
+// java.lang.String.hashCode() 32-bit. Nama cache harus IDENTIK dengan sisi
+// Kotlin (NativePlaybackService.kt, NativePlaybackModule.kt) dan sisi TS
+// (cacheNaming.ts) supaya file cache dari satu jalur bisa dipakai ulang
+// jalur lain (tidak salin dua kali). Offset basis 14695981039346656037,
+// prima 1099511628211, per byte: h ^= byte; h *= prima (wrap mod 2^64).
+// Format nama: "audio_<16 digit hex lowercase, zero-padded>.<ext>".
+// Catatan byte: string di sini datang dari GetStringUTFChars (modified
+// UTF-8); untuk URI (ASCII, tanpa NUL / karakter supplementary) identik
+// dengan UTF-8 standar yang dipakai Kotlin/TS.
+uint64_t fnv1a64(const std::string& s) {
+    uint64_t h = 14695981039346656037ull;
     for (unsigned char c : s) {
-        h = 31 * h + static_cast<int32_t>(static_cast<signed char>(c));
+        h ^= static_cast<uint64_t>(c);
+        h *= 1099511628211ull;
     }
     return h;
 }
@@ -192,7 +201,7 @@ PRISTINE_EXPORT std::string ContentUriResolver::resolve(const std::string& uri) 
         "(Landroid/net/Uri;)Ljava/io/InputStream;");
     if (!getType || !openInputStream) { LOGE("resolve: method resolver tidak ada"); return ""; }
 
-    // ---- Nama file cache: "audio_<javaHashCode>.<ext>" ------------------
+    // ---- Nama file cache: "audio_<fnv1a64 hex 16 digit>.<ext>" ---------
     std::string ext = "cache";
     {
         auto jtype = (jstring)env->CallObjectMethod(cr, getType, parsedUri);
@@ -222,8 +231,8 @@ PRISTINE_EXPORT std::string ContentUriResolver::resolve(const std::string& uri) 
     if (cacheDir.empty()) { LOGE("resolve: cache dir kosong"); return ""; }
 
     char nameBuf[160];
-    std::snprintf(nameBuf, sizeof(nameBuf), "audio_%d.%s",
-                  javaStringHashCode(uri), ext.c_str());
+    std::snprintf(nameBuf, sizeof(nameBuf), "audio_%016llx.%s",
+                  static_cast<unsigned long long>(fnv1a64(uri)), ext.c_str());
     std::string target = cacheDir + "/" + nameBuf;
 
     // ---- Cache sudah ada? ------------------------------------------------

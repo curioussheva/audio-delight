@@ -430,6 +430,23 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
     // URI RESOLVER
     // ============================================================
 
+    // FNV-1a 64-bit atas byte UTF-8 URI (B9-cache64, 2026-11-12): pengganti
+    // String.hashCode() 32-bit. Nama cache harus IDENTIK dengan sisi native
+    // (ContentUriResolver.cpp) dan sisi TS (cacheNaming.ts) supaya satu URI
+    // menghasilkan satu file cache di semua jalur. Offset basis
+    // 14695981039346656037, prima 1099511628211; overflow Long membungkus
+    // mod 2^64 (persis aritmetika unsigned 64-bit). Hasil: 16 digit hex
+    // lowercase, zero-padded, tanpa tanda minus.
+    // PENTING: byte HARUS di-mask 0xFF — Byte Kotlin bertanda, toLong()
+    // tanpa mask akan sign-extend byte >= 0x80 dan merusak hash.
+    private fun fnv1a64Hex(s: String): String {
+        var h = -3750763034362895579L // 14695981039346656037 sebagai Long
+        for (b in s.toByteArray(Charsets.UTF_8)) {
+            h = (h xor (b.toLong() and 0xFFL)) * 1099511628211L
+        }
+        return java.lang.Long.toUnsignedString(h, 16).padStart(16, '0')
+    }
+
     /**
      * Resolve `content://` URI ke path file (copy ke cache).
      *
@@ -451,7 +468,7 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
             val ext = resolver.getType(uri)?.substringAfterLast('/') ?: "cache"
             val file = File(
                 reactApplicationContext.cacheDir,
-                "audio_${uriString.hashCode()}.$ext"
+                "audio_${fnv1a64Hex(uriString)}.$ext"
             )
 
             // Kalau sudah ada dan valid, pakai yang ada

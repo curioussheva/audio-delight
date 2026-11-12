@@ -32,9 +32,10 @@ export const NATIVE_STATUS = {
   STOPPED: 3,
 } as const;
 
-// javaStringHashCode dipakai uriMatches() untuk mencocokkan content:// (JS)
-// dengan path cache (native). Replikasi persis java.lang.String.hashCode().
-import { javaStringHashCode } from "./cacheNaming";
+// fnv1a64Hex dipakai uriMatches() untuk mencocokkan content:// (JS)
+// dengan path cache (native). Replikasi persis FNV-1a 64-bit (lihat
+// cacheNaming.ts); format nama cache `audio_<16 digit hex>.<ext>`.
+import { fnv1a64Hex } from "./cacheNaming";
 
 /** Ambang "previous = ulang lagu ini" (detik), perilaku standar player. */
 export const RESTART_THRESHOLD_SECONDS = 3;
@@ -100,9 +101,9 @@ export function uriMatches(
   if (!jsUri || !nativeUri) return false;
   if (jsUri === nativeUri) return true;
 
-  // Native resolve content:// → /data/.../cache/audio_<hashCode>.<ext>.
-  //java.lang.String.hashCode() dari content:// harus sama dengan hash di
-  //nama file cache. Lihat javaStringHashCode() (replikasi persis).
+  // Native resolve content:// → /data/.../cache/audio_<fnv1a64 hex>.<ext>.
+  // FNV-1a 64-bit dari content:// harus sama dengan hash di nama file
+  // cache. Lihat fnv1a64Hex() (replikasi persis).
   const cacheName = cacheFileNameForUri(jsUri);
   if (cacheName && nativeUri.includes(cacheName)) return true;
 
@@ -115,12 +116,12 @@ export function uriMatches(
 }
 
 /** Nama file cache yang dihasilkan Kotlin/native untuk URI ini
- * (`audio_<javaHashCode>.<ext>`), atau null kalau bukan content://. */
+ * (`audio_<fnv1a64 hex 16 digit>.<ext>`), atau null kalau bukan content://. */
 function cacheFileNameForUri(uri: string): string | null {
   if (!uri.startsWith("content://")) return null;
   // Ekstensi tidak bisa ditebak dari URI saja (didapat dari ContentResolver
   // getType), jadi cocokkan hanya prefix `audio_<hash>.` — itu sudah unik.
-  return `audio_${javaStringHashCode(uri)}.`;
+  return `audio_${fnv1a64Hex(uri)}.`;
 }
 
 export function findSongByUri<T extends { uri?: string }>(

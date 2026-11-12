@@ -1,8 +1,8 @@
 import {
   cacheFileName,
+  fnv1a64Hex,
   hasDeferredEntries,
   isUnresolvedContentUri,
-  javaStringHashCode,
   parseSetQueueLog,
 } from "@/shared/utils/cacheNaming";
 
@@ -11,63 +11,67 @@ import {
  * (logcat 2026-10-04 12:22 - lihat docs/LOGCAT_2026-10-04_12-18.md).
  */
 describe("cacheNaming - konsistensi penamaan cache", () => {
-  // Nilai acuan diambil dari implementasi Kotlin/Java yang sebenarnya.
-  // Kalau test ini gagal, penamaan cache native dan Kotlin berbeda dan
-  // trek yang sama akan tersalin dua kali ke cache.
-  it("javaStringHashCode cocok dengan java.lang.String.hashCode()", () => {
-    expect(javaStringHashCode("")).toBe(0);
-    expect(javaStringHashCode("a")).toBe(97);
-    expect(javaStringHashCode("ab")).toBe(3105);
-    expect(javaStringHashCode("abc")).toBe(96354);
+  // Nilai acuan FNV-1a 64-bit (offset basis 14695981039346656037, prima
+  // 1099511628211, atas byte UTF-8). Kalau test ini gagal, penamaan cache
+  // native dan Kotlin berbeda dan trek yang sama akan tersalin dua kali
+  // ke cache. (B9-cache64, 2026-11-12: sebelumnya javaStringHashCode
+  // 32-bit — nilai lama dari log device ada di git history test ini.)
+  it("fnv1a64Hex cocok dengan FNV-1a 64-bit referensi", () => {
+    expect(fnv1a64Hex("")).toBe("cbf29ce484222325");
+    expect(fnv1a64Hex("a")).toBe("af63dc4c8601ec8c");
+    expect(fnv1a64Hex("ab")).toBe("089c4407b545986a");
+    expect(fnv1a64Hex("abc")).toBe("e71fa2190541574b");
 
-    // Nilai nyata dari implementasi Java.
-    expect(javaStringHashCode("hello")).toBe(99162322);
-    expect(javaStringHashCode("content")).toBe(951530617);
+    // Nilai referensi (dihitung Python, implementasi FNV-1a independen).
+    expect(fnv1a64Hex("hello")).toBe("a430d84680aabd0b");
+    expect(fnv1a64Hex("content")).toBe("420c75b526b35282");
   });
 
-  // Verifikasi silang terhadap log device nyata (2026-10-04 12:18).
-  // Log berisi nama file cache `audio_<hash>.mpeg` yang dibuat sisi Kotlin
-  // dari URI content://. Kalau hash ini bergeser, dua implementasi
-  // (Kotlin dan native) membuat file berbeda untuk trek yang sama:
-  // cache ganda, dan salinan ulang yang tidak perlu.
-  it("hash URI cocok dengan nama file cache di log device nyata", () => {
+  // Verifikasi silang terhadap URI media nyata (dulu dipin terhadap
+  // javaStringHashCode di log device 2026-10-04 12:18 — nilai hashCode
+  // lamanya: 103427732, 103426715, 104411712, 104436729).
+  // Kalau hash ini bergeser, dua implementasi (Kotlin dan native)
+  // membuat file berbeda untuk trek yang sama: cache ganda, dan salinan
+  // ulang yang tidak perlu.
+  it("hash URI cocok dengan nama file cache", () => {
     const tabel = [
-      ["content://media/external/audio/media/1000984680", 103427732],
-      ["content://media/external/audio/media/1000984566", 103426715],
-      ["content://media/external/audio/media/1000996759", 104411712],
-      ["content://media/external/audio/media/1000997269", 104436729],
+      ["content://media/external/audio/media/1000984680", "9c5a4af27be4837d"],
+      ["content://media/external/audio/media/1000984566", "82df37f26d9aa220"],
+      ["content://media/external/audio/media/1000996759", "9c60e0cee929c291"],
+      ["content://media/external/audio/media/1000997269", "8ea3f9d7ff1be9a4"],
     ] as const;
 
     for (const [uri, expected] of tabel) {
-      expect(javaStringHashCode(uri)).toBe(expected);
+      expect(fnv1a64Hex(uri)).toBe(expected);
       expect(cacheFileName(uri, "mpeg")).toBe(`audio_${expected}.mpeg`);
     }
   });
 
   it("hash cocok untuk URI media yang bentuknya nyata", () => {
     const uri = "content://media/external/audio/media/1000997269";
-    // Dipin terhadap hasil Java: harus deterministik lintas platform.
-    const h = javaStringHashCode(uri);
-    expect(Number.isInteger(h)).toBe(true);
-    expect(h).toBe(javaStringHashCode(uri));
-    // Harus muat di int32 - sisi native memakai int32_t.
-    expect(h).toBeGreaterThanOrEqual(-2147483648);
-    expect(h).toBeLessThanOrEqual(2147483647);
+    // Dipin terhadap hasil referensi: harus deterministik lintas platform.
+    const h = fnv1a64Hex(uri);
+    expect(h).toBe("8ea3f9d7ff1be9a4");
+    expect(h).toBe(fnv1a64Hex(uri));
+    // Selalu 16 digit hex lowercase, zero-padded — tanpa tanda minus
+    // (dulu hashCode 32-bit bisa negatif: audio_-158821441.mpeg).
+    expect(h).toMatch(/^[0-9a-f]{16}$/);
   });
 
   it("menghasilkan nama file dengan format audio_<hash>.<ext>", () => {
     const uri = "content://media/external/audio/media/1000997269";
     const name = cacheFileName(uri, "mpeg");
-    expect(name).toMatch(/^audio_-?\d+\.mpeg$/);
-    expect(name).toBe(`audio_${javaStringHashCode(uri)}.mpeg`);
+    expect(name).toMatch(/^audio_[0-9a-f]{16}\.mpeg$/);
+    expect(name).toBe(`audio_${fnv1a64Hex(uri)}.mpeg`);
   });
 
-  it("hash negatif tetap menghasilkan nama file yang sah", () => {
-    // Terjadi di log nyata: audio_-158821441.mpeg
+  it("hash tidak pernah negatif — nama file selalu hex 16 digit", () => {
+    // URI yang dulu menghasilkan hashCode negatif (-158821441 dkk).
     const uri = "content://media/external/audio/media/1000984680";
     const name = cacheFileName(uri, "mpeg");
     const hashPart = name.slice("audio_".length, name.lastIndexOf("."));
-    expect(hashPart).toMatch(/^-?\d+$/);
+    expect(hashPart).toMatch(/^[0-9a-f]{16}$/);
+    expect(hashPart).not.toContain("-");
   });
 
   it("URI berbeda menghasilkan nama cache berbeda", () => {
@@ -90,7 +94,7 @@ describe("cacheNaming - deteksi entri yang belum di-resolve", () => {
   it("mengenali jalur file cache sebagai sudah di-resolve", () => {
     expect(
       isUnresolvedContentUri(
-        "/data/user/0/com.pristineaudio.app/cache/audio_104411674.mpeg",
+        "/data/user/0/com.pristineaudio.app/cache/audio_9c60e0cee929c291.mpeg",
       ),
     ).toBe(false);
   });

@@ -89,7 +89,8 @@ describe("queueNavigation - pencocokan track aktif", () => {
   });
 
   // 🔥 REGRESI: auto-advance UI mati karena URI native (path cache) tidak
-  // cocok dengan URI JS (content://). Log device 2026-10-05 17:12:
+  // cocok dengan URI JS (content://). Log device 2026-10-05 17:12
+  // (format lama, hashCode 32-bit — sejak B9-cache64 namanya FNV-1a 64-bit):
   //   [Player] 🎵 native track-ended event:
   //     /data/user/0/com.pristineaudio.app/cache/audio_725973120.flac
   //   [Player] 🎵 skip: uri event ≠ currentSong.uri
@@ -97,10 +98,10 @@ describe("queueNavigation - pencocokan track aktif", () => {
   // ...padahal audio native sudah pindah ke trek berikutnya.
   it("menemukan song meskipun native mengirim path cache, bukan content://", () => {
     // Kotlin me-resolve 5 trek pertama ke path cache sebelum kasih ke native.
-    // Nama file: audio_<javaStringHashCode(contentUri)>.<ext>
+    // Nama file: audio_<fnv1a64Hex(contentUri)>.<ext>
     const found = findSongByUri(
       queue,
-      "/data/user/0/com.pristineaudio.app/cache/audio_104412633.flac",
+      "/data/user/0/com.pristineaudio.app/cache/audio_0c927ccf2897b33e.flac",
     );
     expect(found?.id).toBe("1");
   });
@@ -109,7 +110,7 @@ describe("queueNavigation - pencocokan track aktif", () => {
     expect(
       uriMatches(
         "content://media/external/audio/media/1000996840",
-        "/data/user/0/com.pristineaudio.app/cache/audio_104412633.flac",
+        "/data/user/0/com.pristineaudio.app/cache/audio_0c927ccf2897b33e.flac",
       ),
     ).toBe(true);
   });
@@ -123,7 +124,7 @@ describe("queueNavigation - pencocokan track aktif", () => {
     expect(
       uriMatches(
         "content://media/external/audio/media/1000996840",
-        "/data/user/0/com.pristineaudio.app/cache/audio_999999999.flac",
+        "/data/user/0/com.pristineaudio.app/cache/audio_0000000000000000.flac",
       ),
     ).toBe(false);
   });

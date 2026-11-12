@@ -29,24 +29,68 @@
  *      Kalau berbeda, resolusi Kotlin dan resolusi native menghasilkan dua
  *      file berbeda untuk trek yang sama - cache ganda, dan trek yang sudah
  *      di-resolve Kotlin tetap disalin ulang oleh dekoder.
+ *      (B9-cache64, 2026-11-12: hashnya FNV-1a 64-bit atas byte UTF-8,
+ *      format `audio_<16 digit hex lowercase>.<ext>`; sebelumnya
+ *      java.lang.String.hashCode() 32-bit.)
  *   B. Antrean yang berisi `content://` mentah harus DIBEDAKAN dari antrean
  *      yang sudah di-resolve, supaya regresi ini bisa dideteksi di test
  *      tanpa device.
  *   C. Kalau native play() menolak, state pemutar TIDAK BOLEH jadi playing.
  */
 
-/** java.lang.String.hashCode(), direplikasi persis. */
-export function javaStringHashCode(s: string): number {
-  let h = 0;
+/**
+ * FNV-1a 64-bit atas byte UTF-8 string, hasil 16 digit hex lowercase
+ * (zero-padded). HARUS identik dengan implementasi native
+ * (ContentUriResolver.cpp: fnv1a64) dan Kotlin
+ * (NativePlaybackService.kt / NativePlaybackModule.kt: fnv1a64Hex):
+ * offset basis 14695981039346656037, prima 1099511628211, per byte
+ * h ^= byte; h *= prima (mod 2^64).
+ *
+ * UTF-8 di-encode manual (tanpa TextEncoder) supaya tidak bergantung pada
+ * global runtime; surrogate pair digabung dulu jadi satu code point.
+ * BigInt dipakai karena JS number tidak muat 64-bit (target esnext,
+ * Hermes RN 0.72+ mendukung BigInt); mask tiap byte karena BigInt tidak
+ * wrap otomatis seperti uint64_t / Long.
+ */
+export function fnv1a64Hex(s: string): string {
+  const MASK_64 = 0xffffffffffffffffn;
+  let h = 0xcbf29ce484222325n;
+  const prime = 0x100000001b3n;
   for (let i = 0; i < s.length; i++) {
-    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+    let cp = s.charCodeAt(i);
+    // Gabung surrogate pair jadi satu code point.
+    if (cp >= 0xd800 && cp <= 0xdbff && i + 1 < s.length) {
+      const lo = s.charCodeAt(i + 1);
+      if (lo >= 0xdc00 && lo <= 0xdfff) {
+        cp = 0x10000 + ((cp - 0xd800) << 10) + (lo - 0xdc00);
+        i++;
+      }
+    }
+    // Encode cp ke byte UTF-8, hash per byte.
+    const bytes =
+      cp < 0x80
+        ? [cp]
+        : cp < 0x800
+          ? [0xc0 | (cp >> 6), 0x80 | (cp & 0x3f)]
+          : cp < 0x10000
+            ? [0xe0 | (cp >> 12), 0x80 | ((cp >> 6) & 0x3f), 0x80 | (cp & 0x3f)]
+            : [
+                0xf0 | (cp >> 18),
+                0x80 | ((cp >> 12) & 0x3f),
+                0x80 | ((cp >> 6) & 0x3f),
+                0x80 | (cp & 0x3f),
+              ];
+    for (const b of bytes) {
+      h = (h ^ BigInt(b)) * prime;
+      h &= MASK_64;
+    }
   }
-  return h;
+  return h.toString(16).padStart(16, "0");
 }
 
 /** Nama file cache, sama dengan sisi Kotlin dan sisi native. */
 export function cacheFileName(uri: string, ext: string): string {
-  return `audio_${javaStringHashCode(uri)}.${ext}`;
+  return `audio_${fnv1a64Hex(uri)}.${ext}`;
 }
 
 /** true kalau URI masih `content://` mentah yang belum di-resolve. */
