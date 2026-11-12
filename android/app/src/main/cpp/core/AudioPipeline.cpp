@@ -443,6 +443,27 @@ void AudioPipeline::processImmersive(
     // PANORAMA output, bukan karakter suara. Tanpa keduanya, slider volume
     // di mode immersive akan diam saja.
 
+    // =============================================
+    // IMMERSIVE CHAIN
+    // =============================================
+    //
+    // Rantai nyata (Solfeggio -> Harmonic -> Spatial -> Brainwave).
+    //
+    // (C-I1, 2026-11-12): rantai jalan DULU, master gain & balance
+    // SESUDAHNYA. Urutan lama (gain dulu, rantai sesudah) punya dua
+    // cacat: (a) resonator/exciter/spatial memproses sinyal yang sudah
+    // dilemahkan masterGain, bukan full-level; (b) tone brainwave yang
+    // DITAMBAHKAN BrainwaveGenerator::generate() di akhir rantai
+    // (ImmersiveStage::process tahap 4, `+=`) tidak pernah diskalakan
+    // masterGain — volume slider diam terhadap tone. Sekarang tone ikut
+    // diskalakan gain/balance seperti seluruh output.
+    mImmersive.process(
+        left,
+        right,
+        frames,
+        params
+    );
+
     // ---- Master gain & balance -------------------------------------------
     //
     // (C-PAN, 2026-11-12): hukum pan LINEAR lewat helper bersama
@@ -450,6 +471,11 @@ void AudioPipeline::processImmersive(
     // Dulu di sini constant-power cos/sin: tengah 0,7071 (-3,01 dB),
     // jadi pindah mode DSP -> Immersive di balance 0 terdengar sebagai
     // lompatan volume -3 dB. Alasan pemilihan hukum ada di PanLaw.h.
+    //
+    // (C-I1): blok ini dipindah ke SESUDAH mImmersive.process() —
+    // lihat komentar di atas. Perilaku gain/balance sendiri tidak
+    // berubah, hanya posisinya: seluruh output rantai, termasuk tone
+    // brainwave, ikut diskalakan.
     const float gain = params.masterGain;
     const float bal = params.balance;
     const PanGains pan = panLawLinear(bal);
@@ -471,18 +497,6 @@ void AudioPipeline::processImmersive(
             right[i] *= gainR;
         }
     }
-
-    // =============================================
-    // IMMERSIVE CHAIN
-    // =============================================
-    //
-    // Rantai nyata (Solfeggio -> Harmonic -> Spatial -> Brainwave).
-    mImmersive.process(
-        left,
-        right,
-        frames,
-        params
-    );
 
     // (C-MODESW): fade-in 8 ms sesudah ganti mode ke Immersive — menutupi
     // transien step-response resonator yang baru direset. No-op bila tidak
