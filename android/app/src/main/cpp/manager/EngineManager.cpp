@@ -937,11 +937,13 @@ void EngineManager::setProcessingMode(
         mode
     );
 
-    // 🔥 FASE R (2026-11-11): retune = processing — FORCED OFF di mode
-    // bit-perfect. PlaybackController memakai rasio efektif 1.0 (bypass)
-    // saat tidak diizinkan; rasio yang disimpan tidak hilang, jadi keluar
-    // dari bit-perfect langsung mengembalikan tuning tanpa set ulang.
-    mPlayback.setPitchAllowed(mode != ProcessingMode::BitPerfect);
+    // 🔥 FASE R (2026-11-11) + PB6-W1 (2026-11-12): processing = FORCED
+    // OFF di mode bit-perfect — retune, laju playback, dan fade track.
+    // PlaybackController memakai rasio/laju efektif 1.0 (bypass) saat
+    // tidak diizinkan dan fade anti-klik 10 ms; nilai yang disimpan tidak
+    // hilang, jadi keluar dari bit-perfect langsung mengembalikan tuning
+    // + laju tanpa set ulang.
+    mPlayback.setProcessingAllowed(mode != ProcessingMode::BitPerfect);
 }
 
 // =====================================================

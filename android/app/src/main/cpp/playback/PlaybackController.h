@@ -63,13 +63,15 @@ public:
     // bit-perfect tidak tersentuh). Rentang 0.5–2.0 (±1 oktaf); A=432 =
     // 432/440 = 0.98182.
     //
-    // Gate bit-perfect: retune adalah processing, jadi FORCED OFF di mode
+    // Gate bit-perfect (PB6-W1, 2026-11-12): retune, laju playback, dan
+    // fade track adalah processing, jadi FORCED OFF / dipersingkat di mode
     // bit-perfect. EngineManager::setProcessingMode() memanggil
-    // setPitchAllowed(mode != BitPerfect); render() memakai rasio efektif
-    // 1.0 saat tidak diizinkan (buffer prosesor di-reset di sana).
+    // setProcessingAllowed(mode != BitPerfect); render() memakai rasio
+    // efektif 1.0 saat tidak diizinkan (buffer prosesor di-reset di sana),
+    // dan loadTrack() memakai fade anti-klik 10 ms, bukan 300/500 ms.
     void setPitchRatio(float ratio) noexcept;
     [[nodiscard]] float pitchRatio() const noexcept;
-    void setPitchAllowed(bool allowed) noexcept;
+    void setProcessingAllowed(bool allowed) noexcept;
 
     // Audio thread. Mengembalikan jumlah SAMPLE OUTPUT yang benar-benar
     // dihasilkan (bisa kurang dari frames*channels kalau queue lapar =
@@ -220,13 +222,18 @@ private:
     // 🔥 FASE R (2026-11-11): retune (PitchShifter, phase vocoder).
     // pitchRatio_ = target dari JS (atomic, ditulis thread JS, dibaca audio
     // thread). pitchApplied_ = rasio efektif yang sedang dipakai prosesor
-    // (HANYA audio thread yang menulis). pitchAllowed_ = false di mode
-    // bit-perfect (diset EngineManager::setProcessingMode) — rasio efektif
-    // jadi 1.0 (bypass) walau pitchRatio_ bukan 1.0.
+    // (HANYA audio thread yang menulis).
+    //
+    // PB6-W1 (2026-11-12): processingAllowed_ = false di mode bit-perfect
+    // (diset EngineManager::setProcessingMode) — gerbang umum SEMUA
+    // processing di PlaybackController, bukan cuma pitch: rasio pitch
+    // efektif jadi 1.0 (bypass) walau pitchRatio_ bukan 1.0, laju playback
+    // efektif jadi 1.0 walau playbackRate_ bukan 1.0, dan fade track
+    // dipersingkat ke 10 ms anti-klik (lihat loadTrack()).
     PitchShifter pitchShifter_;
     std::atomic<float> pitchRatio_{1.0f};
     float pitchApplied_ = 1.0f;
-    std::atomic<bool> pitchAllowed_{true};
+    std::atomic<bool> processingAllowed_{true};
 
     // Laju stream aktual (dari device/DAC). 0 = belum diketahui.
     std::atomic<uint32_t> streamSampleRate_{0};

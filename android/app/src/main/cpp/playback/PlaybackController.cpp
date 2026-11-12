@@ -213,11 +213,13 @@ float PlaybackController::pitchRatio() const noexcept {
     return pitchRatio_.load(std::memory_order_acquire);
 }
 
-// Gate bit-perfect (Fase R): retune = processing, jadi tidak boleh jalan
-// di mode bit-perfect. Dipanggil EngineManager::setProcessingMode().
-// Hanya atomic store — render() yang menerapkan (reset buffer di sana).
-void PlaybackController::setPitchAllowed(bool allowed) noexcept {
-    pitchAllowed_.store(allowed, std::memory_order_release);
+// Gate bit-perfect (Fase R + PB6-W1): processing (retune, laju playback,
+// fade track) tidak boleh jalan penuh di mode bit-perfect. Dipanggil
+// EngineManager::setProcessingMode(). Hanya atomic store — render() yang
+// menerapkan rate/pitch (reset buffer di sana), loadTrack() yang
+// menerapkan durasi fade.
+void PlaybackController::setProcessingAllowed(bool allowed) noexcept {
+    processingAllowed_.store(allowed, std::memory_order_release);
 }
 
 // =====================================================
@@ -287,17 +289,34 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
     if (state_) state_->setPosition(0);  // 🔥 FIX: reset posisi state juga
 
     // 🔥 FIX (2026-11-10, P-M7): siapkan kurva fade untuk track baru —
-    // fade-in 300 ms di awal track, fade-out 500 ms di ekor (saat decoder
-    // selesai, lihat render()). Dibuat di sini (bukan audio thread) karena
-    // generateCurve mengalokasi vector. Laju: stream kalau sudah diketahui,
-    // kalau tidak laju file, kalau tidak 48000 — selisih beberapa ms tidak
-    // terdengar.
+    // fade-in di awal track, fade-out di ekor (saat decoder selesai, lihat
+    // render()). Dibuat di sini (bukan audio thread) karena generateCurve
+    // mengalokasi vector. Laju: stream kalau sudah diketahui, kalau tidak
+    // laju file, kalau tidak 48000 — selisih beberapa ms tidak terdengar.
+    //
+    // PB6-W1 (2026-11-12): durasi fade sadar-mode. Di mode processing
+    // (DSP/Solfeggio) tetap 300 ms in / 500 ms out seperti sebelumnya.
+    // Di bit-perfect, fade HANYA anti-klik 10 ms in/out: fade 300/500 ms
+    // adalah processing — ia mengubah amplitudo ~0,8 detik audio yang
+    // seharusnya keluar apa adanya (dan memotong ekor/reverb tail).
+    // 10 ms dipilih, bukan 5 ms: 10 ms = satu periode callback @48 kHz,
+    // jadi fade-in selesai dalam callback pertama; ramp S-curve 480
+    // sampel cukup landai untuk transient keras, sementara 5 ms (240
+    // sampel) curamnya 2x tanpa manfaat — di bawah ~20 ms telinga tidak
+    // lagi mendengar ramp sebagai fade, hanya hilangnya klik.
+    // Durasi diputuskan di sini dari processingAllowed_ SAAT load — ganti
+    // mode di tengah track tidak me-regenerate kurva; fade-out memakai
+    // kurva yang dibuat saat load.
     {
         uint32_t fadeRate = streamSampleRate();
         if (fadeRate == 0) fadeRate = track.sampleRate;
         if (fadeRate == 0) fadeRate = 48000;
-        fadeIn_.generateCurve(FadeCurve::SCurve, fadeRate * 300 / 1000);
-        fadeOut_.generateCurve(FadeCurve::SCurve, fadeRate * 500 / 1000);
+        const bool processingAllowed =
+            processingAllowed_.load(std::memory_order_acquire);
+        const uint32_t fadeInMs = processingAllowed ? 300 : 10;
+        const uint32_t fadeOutMs = processingAllowed ? 500 : 10;
+        fadeIn_.generateCurve(FadeCurve::SCurve, fadeRate * fadeInMs / 1000);
+        fadeOut_.generateCurve(FadeCurve::SCurve, fadeRate * fadeOutMs / 1000);
     }
     framesSinceLoad_.store(0, std::memory_order_release);
     // 🔥 FIX (2026-11-10, P-M9): buang sisa WSOLA track lama (audio basi
@@ -436,8 +455,10 @@ bool PlaybackController::play() {
     updatePlaybackState();  // 🔥 FIX
 
     // 🔥 FIX (2026-11-10, P-M7): resume dimulai dengan fade-in singkat
-    // (300 ms) supaya tidak ada klik saat audio jalan lagi setelah pause.
-    // loadTrack() sudah me-reset untuk track baru; reset di sini idempotent.
+    // (300 ms di mode processing, 10 ms anti-klik di bit-perfect — durasi
+    // kurva diputuskan loadTrack(), PB6-W1) supaya tidak ada klik saat
+    // audio jalan lagi setelah pause. loadTrack() sudah me-reset untuk
+    // track baru; reset di sini idempotent.
     framesSinceLoad_.store(0, std::memory_order_release);
 
     // resume() di salinan aman walau stopDecoder() berjalan bersamaan:
@@ -717,7 +738,20 @@ size_t PlaybackController::render(float* output,
     // setPlaybackRate (thread JS): reset buffer WSOLA harus terjadi di
     // thread yang sama dengan push/pull, kalau tidak vector di-clear
     // sementara render() sedang membacanya.
-    const float rate = playbackRate_.load(std::memory_order_acquire);
+    //
+    // PB6-W1 (2026-11-12): gate bit-perfect — laju efektif 1.0 saat
+    // processing tidak diizinkan, walau playbackRate_ bukan 1.0 (target
+    // tersimpan tetap utuh, jadi keluar dari bit-perfect langsung
+    // mengembalikan laju tanpa set ulang — pola yang sama dengan pitch).
+    // processingAllowed_ dibaca sekali di sini dan dipakai ulang untuk
+    // gerbang pitch di bawah; `rate` di bawah ini adalah laju EFEKTIF,
+    // jadi log render dan applyTrackFades() juga memakai nilai yang
+    // benar-benar didengar.
+    const bool processingAllowed =
+        processingAllowed_.load(std::memory_order_acquire);
+    const float rate = processingAllowed
+        ? playbackRate_.load(std::memory_order_acquire)
+        : 1.0f;
     if (rate != rateApplied_) {
         rateProcessor_.setRate(rate);  // reset buffer bila laju berubah
         rateApplied_ = rate;
@@ -752,13 +786,14 @@ size_t PlaybackController::render(float* output,
     // Frame masuk = frame keluar (frame-count preserving) — clock maju
     // mengikuti frame INPUT (readSamples, di bawah), jadi tidak ada yang
     // perlu diubah di clock. Gate bit-perfect: rasio efektif 1.0 saat
-    // pitchAllowed_ false (diset EngineManager::setProcessingMode).
+    // processingAllowed_ false (diset EngineManager::setProcessingMode) —
+    // flag yang sama dengan gerbang laju di atas (PB6-W1: nama lama flag
+    // ini hanya menyebut pitch, padahal kini mencakup rate+fade).
     // Perubahan rasio diterapkan DI SINI (audio thread), bukan di
     // setPitchRatio (thread JS): reset buffer pitch shifter harus terjadi
     // di thread yang sama dengan push/pull.
     const float pitchTarget = pitchRatio_.load(std::memory_order_acquire);
-    const float pitchRatio =
-        pitchAllowed_.load(std::memory_order_acquire) ? pitchTarget : 1.0f;
+    const float pitchRatio = processingAllowed ? pitchTarget : 1.0f;
     if (pitchRatio != pitchApplied_) {
         pitchShifter_.setRatio(pitchRatio);  // reset buffer bila berubah
         pitchApplied_ = pitchRatio;
@@ -1491,7 +1526,9 @@ void PlaybackController::applyTrackFades(float* output, uint32_t frames,
                                         float rate) noexcept {
     if (!output || frames == 0 || channels == 0) return;
 
-    // ---- fade-in: 300 ms pertama sejak loadTrack/seek/play ----
+    // ---- fade-in: awal track sejak loadTrack/seek/play ----
+    // (durasi kurva: 300 ms di mode processing, 10 ms anti-klik di
+    // bit-perfect — diputuskan loadTrack(), PB6-W1.)
     // (framesSinceLoad_ di sini = nilai SEBELUM callback ini, karena
     // increment-nya terjadi di blok clock advance setelah pemanggilan ini.)
     const uint32_t sinceLoad =
@@ -1501,7 +1538,8 @@ void PlaybackController::applyTrackFades(float* output, uint32_t frames,
         fadeIn_.applyFadeIn(output, frames, channels, sinceLoad);
     }
 
-    // ---- fade-out: 500 ms terakhir, hanya kalau decoder sudah selesai ----
+    // ---- fade-out: ekor track (500 ms di mode processing, 10 ms
+    // anti-klik di bit-perfect), hanya kalau decoder sudah selesai ----
     // Decoder selesai = tidak ada lagi audio yang akan masuk queue, jadi
     // sisa queue saat ini adalah EKOR track yang sebenarnya. (Tanpa flag
     // ini, fade-out akan salah memotong tengah track setiap kali queue
