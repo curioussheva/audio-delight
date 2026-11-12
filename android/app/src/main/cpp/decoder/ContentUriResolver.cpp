@@ -6,6 +6,8 @@
 #include <cstdio>
 #include <cstdint>
 #include <string>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <vector>
 
 #undef LOG_TAG
@@ -352,6 +354,130 @@ PRISTINE_EXPORT std::string ContentUriResolver::resolve(const std::string& uri) 
 
     LOGI("resolve: cached %s (%zu bytes)", nameBuf, total);
     return target;
+}
+
+// =====================================================
+// OPEN FD (B9-fd-AVIO)
+// =====================================================
+//
+// content:// -> fd mentah via openFileDescriptor + detachFd, NOL salinan.
+// Bukan content:// -> -1 (pemanggil memakai resolve() biasa).
+// Gagal -> -1 (pemanggil fallback ke resolve() atau gagal — lihat header).
+//
+// Prolog JNI (ScopedEnv, appContext, Uri.parse, getContentResolver)
+// sengaja diduplikasi dari resolve(), bukan diekstrak ke helper bersama:
+// resolve() adalah jalur yang sudah terbukti (B9-R1) dan tidak boleh
+// berubah perilakunya karena refactor helper di item ini.
+
+PRISTINE_EXPORT int ContentUriResolver::openFd(const std::string& uri) {
+    if (uri.rfind("content://", 0) != 0) {
+        return -1;
+    }
+
+    if (!jni::javaVm()) {
+        LOGE("openFd: JavaVM belum di-init, tidak bisa buka %s", uri.c_str());
+        return -1;
+    }
+
+    jni::ScopedEnv scope;
+    if (!scope.ok()) {
+        LOGE("openFd: JNIEnv tidak tersedia");
+        return -1;
+    }
+    JNIEnv* env = scope.get();
+    LocalFrame frame(env, 48);
+
+    jobject app = jni::appContext();
+    if (!app) {
+        LOGE("openFd: application context belum di-init "
+             "(nativeInitAppContext belum dipanggil)");
+        return -1;
+    }
+
+    jclass ctxClass = env->GetObjectClass(app);
+    if (!ctxClass) { LOGE("openFd: Context tidak ada"); return -1; }
+
+    jmethodID getContentResolver = env->GetMethodID(ctxClass, "getContentResolver",
+                                                    "()Landroid/content/ContentResolver;");
+    if (!getContentResolver) { LOGE("openFd: getContentResolver tidak ada"); return -1; }
+
+    jclass uriClass = env->FindClass("android/net/Uri");
+    if (!uriClass) { LOGE("openFd: Uri tidak ada"); return -1; }
+    jmethodID uriParse = env->GetStaticMethodID(
+        uriClass, "parse", "(Ljava/lang/String;)Landroid/net/Uri;");
+    if (!uriParse) { LOGE("openFd: Uri.parse tidak ada"); return -1; }
+
+    jstring juri = env->NewStringUTF(uri.c_str());
+    if (!juri) { LOGE("openFd: gagal buat jstring"); return -1; }
+    jobject parsedUri = env->CallStaticObjectMethod(uriClass, uriParse, juri);
+    if (describeAndClear(env).size() || !parsedUri) {
+        LOGE("openFd: Uri.parse null untuk %s", uri.c_str());
+        return -1;
+    }
+
+    jobject cr = env->CallObjectMethod(app, getContentResolver);
+    if (describeAndClear(env).size() || !cr) { LOGE("openFd: ContentResolver null"); return -1; }
+
+    jclass resolverClass = env->FindClass("android/content/ContentResolver");
+    if (!resolverClass) { LOGE("openFd: ContentResolver class tidak ada"); return -1; }
+
+    // ContentResolver.openFileDescriptor(Uri, String) — API publik sejak
+    // API 1; mode "r" = baca saja. (Terverifikasi dari Android Developers
+    // reference; repo ini belum pernah memakai method ini sebelumnya —
+    // satu-satunya jejak detachFd() adalah komentar di
+    // NativePlaybackModule.kt:276.)
+    jmethodID openFdMethod = env->GetMethodID(
+        resolverClass, "openFileDescriptor",
+        "(Landroid/net/Uri;Ljava/lang/String;)Landroid/os/ParcelFileDescriptor;");
+    if (!openFdMethod) { LOGE("openFd: openFileDescriptor tidak ada"); return -1; }
+
+    jstring jmode = env->NewStringUTF("r");
+    if (!jmode) { LOGE("openFd: gagal buat jstring mode"); return -1; }
+    jobject pfd = env->CallObjectMethod(cr, openFdMethod, parsedUri, jmode);
+    std::string err = describeAndClear(env);
+    if (!err.empty()) {
+        // Termasuk FileNotFoundException bila provider mengembalikan
+        // sub-section (openFileDescriptor tidak mendukung itu) — jalur
+        // salin (resolve) yang menanganinya lewat openInputStream.
+        LOGE("openFd: openFileDescriptor melempar %s untuk %s", err.c_str(), uri.c_str());
+        return -1;
+    }
+    if (!pfd) {
+        LOGE("openFd: openFileDescriptor null untuk %s", uri.c_str());
+        return -1;
+    }
+
+    // ParcelFileDescriptor.detachFd() -> int. Sesudah detach, objek Java
+    // tidak lagi memiliki fd — GC boleh membebaskan objeknya tanpa
+    // menutup fd kita. fd sepenuhnya milik native mulai titik ini.
+    jclass pfdClass = env->FindClass("android/os/ParcelFileDescriptor");
+    if (!pfdClass) { LOGE("openFd: ParcelFileDescriptor tidak ada"); return -1; }
+    jmethodID detachFd = env->GetMethodID(pfdClass, "detachFd", "()I");
+    if (!detachFd) { LOGE("openFd: detachFd tidak ada"); return -1; }
+
+    jint fd = env->CallIntMethod(pfd, detachFd);
+    err = describeAndClear(env);
+    if (!err.empty() || fd < 0) {
+        LOGE("openFd: detachFd gagal (%s) untuk %s", err.c_str(), uri.c_str());
+        return -1;
+    }
+
+    // pread/lseek di AVIO butuh file reguler: sebagian provider
+    // mengembalikan pipe yang tidak bisa di-seek, dan ukurannya tidak
+    // diketahui (fstat -> 0). Tolak di sini — tutup fd, kembalikan -1
+    // supaya pemanggil fallback ke jalur salin; JANGAN serahkan fd
+    // non-reguler ke FFmpeg.
+    struct stat st;
+    if (::fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
+        LOGW("openFd: fd %d bukan file reguler untuk %s — fallback ke salin cache",
+             (int)fd, uri.c_str());
+        ::close(fd);
+        return -1;
+    }
+
+    LOGI("openFd: %s -> fd %d (%lld bytes)", uri.c_str(), (int)fd,
+         (long long)st.st_size);
+    return static_cast<int>(fd);
 }
 
 } // namespace pristine::decoder

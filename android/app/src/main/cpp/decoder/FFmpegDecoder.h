@@ -9,6 +9,7 @@ struct AVFormatContext;
 struct AVCodecContext;
 struct AVFrame;
 struct AVPacket;
+struct AVIOContext;
 struct SwrContext;
 struct AVChannelLayout;
 
@@ -98,6 +99,23 @@ private:
     );
     void cleanup();
 
+    // B9-fd-AVIO (2026-11-12): buka content:// lewat fd + AVIOContext
+    // (nol salinan) — implementasi di FFmpegDecoder.cpp.
+    // openAvioInput MENGAMBIL ALIH fd di semua jalur: sukses -> contentFd_
+    // (milik decoder sampai freeAvioAndFd), gagal -> close(fd) di dalam.
+    bool openAvioInput(int fd);
+    // Satu-satunya tempat avioCtx_/contentFd_ dibebaskan: avio_context_free
+    // (+ buffer 64 KB) dan close(fd) sekali saja. Dipanggil cleanup() dan
+    // jalur gagal avformat_open_input di onOpen. Idempotent.
+    void freeAvioAndFd();
+    // Callback AVIO: opaque = `this`. readPacket memakai pread(fd, ...,
+    // avioPos_) — posisi eksplisit, 0 byte = AVERROR_EOF. seekPacket
+    // menangani AVSEEK_SIZE (fstat), SEEK_SET/CUR/END (AVSEEK_FORCE
+    // di-mask); hanya mencatat avioPos_, tanpa lseek (pread sudah
+    // berbasis posisi).
+    static int readPacket(void* opaque, uint8_t* buf, int buf_size);
+    static int64_t seekPacket(void* opaque, int64_t offset, int whence);
+
     DecodeResult decodeFrame();
 
     static SampleFormat
@@ -112,6 +130,26 @@ private:
     AVFrame* frame_ = nullptr;
     AVPacket* packet_ = nullptr;
     SwrContext* swrCtx_ = nullptr;
+
+    // B9-fd-AVIO (2026-11-12): AVIOContext + fd untuk jalur content://.
+    // avioCtx_ SELALU milik decoder ini — avformat_close_input TIDAK
+    // membebaskan AVIOContext yang dipasok pemakai bila
+    // AVFMT_FLAG_CUSTOM_IO (FFmpeg 6.1.2 libavformat/demux.c:
+    // avformat_close_input men-NULL-kan pb sebelum ff_format_io_close,
+    // dan fail path avformat_open_input melewati ff_format_io_close
+    // bila flag itu set) — jadi freeAvioAndFd() yang membebaskannya di
+    // semua jalur. fd tidak dikenal FFmpeg sama sekali dan di-close()
+    // di sana juga. Jalur filename biasa: keduanya tetap null/-1.
+    // avioPos_ hanya disentuh thread dekoder (open/seek/decode) —
+    // disiplin yang sama dengan audioStreamIndex_ dkk: open jalan di
+    // thread loadTrack (DecoderWorker::start, sebelum worker thread
+    // dibuat), decode/seek di worker thread, close sesudah join.
+    AVIOContext* avioCtx_ = nullptr;
+    int contentFd_ = -1;
+    int64_t avioPos_ = 0;
+    // Ukuran buffer AVIOContext: 64 KB (dialokasi av_malloc, dibebaskan
+    // avio_context_free bersama konteksnya).
+    static constexpr int kAvioBufferSize = 64 * 1024;
 
     int audioStreamIndex_ = -1;
 

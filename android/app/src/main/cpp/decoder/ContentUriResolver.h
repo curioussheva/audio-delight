@@ -47,6 +47,27 @@ public:
     // memperlakukan itu sebagai kegagalan, BUKAN mencoba uri aslinya.
     PRISTINE_EXPORT static std::string resolve(const std::string& uri);
 
+    // B9-fd-AVIO (2026-11-12): buka `content://` sebagai fd mentah, TANPA
+    // salin — ContentResolver.openFileDescriptor(uri, "r") +
+    // ParcelFileDescriptor.detachFd(). Dipanggil dari thread dekoder mana
+    // pun (ScopedEnv + appContext global ref, pola yang sama dengan
+    // resolve()).
+    //
+    // fd dimiliki PEMANGGIL dan HARUS di-close() sendiri. detachFd()
+    // melepas fd dari objek Java, jadi GC tidak bisa menutupnya di tengah
+    // jalan — inilah yang membedakan jalur ini dari percobaan detachFd()
+    // lama sisi Kotlin (NativePlaybackModule.kt:276), yang menyerahkan fd
+    // ke FFmpeg lewat objek Java.
+    //
+    // Gagal -> -1: bukan content://, JavaVM/context belum siap, provider
+    // menolak fd (mis. sub-section — openFileDescriptor melempar
+    // FileNotFoundException untuk itu), atau fd ternyata bukan file
+    // reguler (pipe tidak bisa pread/seek — pemanggil fallback ke
+    // resolve()). -1 BUKAN "coba uri asli": content:// mentah tidak
+    // bisa dibuka FFmpeg; pemanggil harus fallback ke resolve() atau
+    // gagal.
+    PRISTINE_EXPORT static int openFd(const std::string& uri);
+
 private:
     static JavaVM* vm_;
 

@@ -3,15 +3,22 @@
 
 extern "C" {
 #include <libavformat/avformat.h>
+#include <libavformat/avio.h>
 #include <libavcodec/avcodec.h>
 #include <libswresample/swresample.h>
 #include <libavutil/channel_layout.h>
+#include <libavutil/error.h>
+#include <libavutil/mem.h>
 #include <libavutil/samplefmt.h>
 #include <libavutil/opt.h>
 }
 
 #include <android/log.h>
+#include <cerrno>
 #include <cmath>
+#include <cstdio>
+#include <sys/stat.h>
+#include <unistd.h>
 
 namespace pristine::decoder {
 
@@ -39,36 +46,111 @@ bool FFmpegDecoder::onOpen(
     __android_log_print(ANDROID_LOG_DEBUG, "FFmpegDecoder",
                         "onOpen: %s", uri.c_str());
 
-    // content:// adalah skema ContentProvider Android, BUKAN jalur file.
-    // FFmpeg tidak punya handler untuk itu, jadi avformat_open_input selalu
-    // gagal kalau URI diteruskan mentah. Resolver menyalin isinya ke cache
-    // dan mengembalikan jalur file.
+    // B9-fd-AVIO (2026-11-12): dua jalur buka, dipilih dari skema URI.
     //
-    // Tanpa langkah ini, pemutaran berhenti pada trek pertama yang URI-nya
-    // belum di-resolve sisi Kotlin (MAX_PRE_RESOLVE = 5, sisanya deferred).
-    std::string resolvedUri = ContentUriResolver::resolve(uri);
+    // content:// — JALUR fd+AVIO (nol salinan): fd dibuka native lewat
+    // ContentUriResolver::openFd() (openFileDescriptor + detachFd, satu
+    // panggilan JNI dari thread ini — tanpa perantara Kotlin, jadi tidak
+    // ada race GC seperti percobaan detachFd() lama di
+    // NativePlaybackModule.kt:276), lalu FFmpeg membaca langsung dari fd
+    // lewat AVIOContext berbasis pread/lseek. TIDAK ADA file cache yang
+    // dibuat di jalur ini; hit-check/cache resolver tidak disentuh.
+    //
+    // Bila fd tidak bisa dibuka ATAU avformat_open_input(AVIO) gagal,
+    // jatuh kembali ke jalur salin (resolve() -> cache, B9-R1) supaya
+    // pemutaran tidak regresi — provider yang menolak fd / mengembalikan
+    // sub-section tetap bisa diputar lewat salinan. Kegagalan di sini
+    // SELALU di-log (bukan diam-diam) supaya logcat menunjukkan jalur
+    // mana yang sebenarnya dipakai.
+    //
+    // Bukan content:// — jalur filename seperti semula: resolve()
+    // mengembalikan uri apa adanya, FFmpeg buka langsung dari path.
+    // Pre-resolve Kotlin (NativePlaybackService.resolveContentUriToPath,
+    // NativePlaybackModule.resolveContentUri) TIDAK diubah: URI yang
+    // sudah di-resolve Kotlin tiba di sini sebagai path biasa dan tetap
+    // lewat jalur filename; nasib pre-resolve itu (redundan sesudah
+    // fd+AVIO?) butuh keputusan user — lihat laporan B9-fd-AVIO.
+    //
+    // Catatan probing: avformat_open_input(AVIO) dipanggil dengan nama
+    // "" — demuxer tidak mendapat petunjuk ekstensi, format ditebak
+    // murni dari isi (av_probe_input_buffer2). Untuk format yang
+    // didukung app ini (mp3/aac/m4a/flac/wav/ogg/opus) probing konten
+    // sudah cukup; bila suatu format kelak butuh ekstensi, fallback
+    // salin di bawah yang menanganinya (file cache membawa ekstensi).
+    std::string filename;  // hanya jalur filename / fallback salin
+    bool useAvio = false;
 
-    if (resolvedUri.empty()) {
-        // Resolve gagal - JANGAN jatuh kembali ke uri asli. content://
-        // mentah pasti gagal juga, dan pesan errornya jadi menyesatkan.
-        __android_log_print(ANDROID_LOG_ERROR, "FFmpegDecoder",
-                            "onOpen: gagal resolve content:// uri=%s", uri.c_str());
-        return false;
+    if (uri.rfind("content://", 0) == 0) {
+        const int fd = ContentUriResolver::openFd(uri);
+        if (fd >= 0) {
+            // openAvioInput mengambil alih fd di semua jalur (sukses ->
+            // contentFd_, gagal -> close(fd) di dalam).
+            useAvio = openAvioInput(fd);
+        }
+        if (!useAvio) {
+            __android_log_print(ANDROID_LOG_WARN, "FFmpegDecoder",
+                "onOpen: fd+AVIO tidak bisa dipakai untuk %s — fallback ke salin cache",
+                uri.c_str());
+            filename = ContentUriResolver::resolve(uri);
+            if (filename.empty()) {
+                // Resolve gagal - JANGAN jatuh kembali ke uri asli.
+                // content:// mentah pasti gagal juga, dan pesan errornya
+                // jadi menyesatkan.
+                __android_log_print(ANDROID_LOG_ERROR, "FFmpegDecoder",
+                    "onOpen: gagal resolve content:// uri=%s", uri.c_str());
+                return false;
+            }
+        }
+    } else {
+        filename = ContentUriResolver::resolve(uri);
+        if (filename.empty()) {
+            __android_log_print(ANDROID_LOG_ERROR, "FFmpegDecoder",
+                                "onOpen: gagal resolve uri=%s", uri.c_str());
+            return false;
+        }
     }
 
-    if (resolvedUri != uri) {
-        __android_log_print(ANDROID_LOG_DEBUG, "FFmpegDecoder",
-                            "onOpen: resolved -> %s", resolvedUri.c_str());
-    }
-
-    if (avformat_open_input(
+    // Buka input. Jalur AVIO dulu; bila gagal, bebaskan avio_+fd lalu
+    // coba sekali lagi lewat file hasil resolve() (fallback salin).
+    if (useAvio &&
+        avformat_open_input(
             &formatCtx_,
-            resolvedUri.c_str(),
+            "",
+            nullptr,
+            nullptr) < 0) {
+        __android_log_print(ANDROID_LOG_ERROR, "FFmpegDecoder",
+            "onOpen: avformat_open_input (AVIO) failed (uri=%s)",
+            uri.c_str());
+        // FFmpeg 6.1.2 (libavformat/demux.c, fail path): membebaskan
+        // formatCtx_ (dan men-NULL-kan *ps) tetapi TIDAK avio_ bila
+        // AVFMT_FLAG_CUSTOM_IO — bebaskan avio_ + tutup fd sendiri
+        // sebelum fallback, JANGAN double-free.
+        formatCtx_ = nullptr;
+        freeAvioAndFd();
+        useAvio = false;
+        __android_log_print(ANDROID_LOG_WARN, "FFmpegDecoder",
+            "onOpen: fallback ke salin cache sesudah AVIO gagal (uri=%s)",
+            uri.c_str());
+        filename = ContentUriResolver::resolve(uri);
+        if (filename.empty()) {
+            __android_log_print(ANDROID_LOG_ERROR, "FFmpegDecoder",
+                "onOpen: fallback resolve gagal untuk %s", uri.c_str());
+            return false;
+        }
+    }
+
+    if (useAvio) {
+        __android_log_print(ANDROID_LOG_DEBUG, "FFmpegDecoder",
+                            "onOpen: content:// via fd+AVIO (fd=%d)",
+                            contentFd_);
+    } else if (avformat_open_input(
+            &formatCtx_,
+            filename.c_str(),
             nullptr,
             nullptr) < 0) {
         __android_log_print(ANDROID_LOG_ERROR, "FFmpegDecoder",
                             "onOpen: avformat_open_input failed (uri=%s)",
-                            resolvedUri.c_str());
+                            filename.c_str());
         return false;
     }
 
@@ -771,6 +853,142 @@ bool FFmpegDecoder::setupResampler(
     return true;
 }
 
+// =====================================================
+// AVIO (B9-fd-AVIO, 2026-11-12)
+// =====================================================
+
+bool FFmpegDecoder::openAvioInput(int fd) {
+    // Buffer HARUS av_malloc: avio_context_free membebaskannya dengan
+    // av_free. 64 KB — cukup untuk probing + baca paket tanpa syscall
+    // per paket kecil, dan kecil untuk RAM (bukan buffer isi file).
+    uint8_t* buffer = static_cast<uint8_t*>(av_malloc(kAvioBufferSize));
+    if (!buffer) {
+        __android_log_print(ANDROID_LOG_ERROR, "FFmpegDecoder",
+                            "openAvioInput: av_malloc %d gagal", kAvioBufferSize);
+        ::close(fd);
+        return false;
+    }
+
+    AVIOContext* avio = avio_alloc_context(
+        buffer, kAvioBufferSize,
+        0,  // read-only
+        this,
+        &FFmpegDecoder::readPacket,
+        nullptr,  // tanpa write callback
+        &FFmpegDecoder::seekPacket);
+    if (!avio) {
+        // avio_alloc_context gagal SEBELUM mengambil alih buffer (gagal
+        // alokasi struct) — buffer masih milik kita.
+        av_free(buffer);
+        ::close(fd);
+        return false;
+    }
+
+    AVFormatContext* ctx = avformat_alloc_context();
+    if (!ctx) {
+        // avio_context_free membebaskan buffer juga.
+        avio_context_free(&avio);
+        ::close(fd);
+        return false;
+    }
+
+    ctx->pb = avio;
+    // AVFMT_FLAG_CUSTOM_IO: avformat_open_input/close_input TIDAK boleh
+    // menutup/membebaskan avio_ (demux.c 6.1.2: pb di-NULL-kan sebelum
+    // ff_format_io_close; fail path: ff_format_io_close dilewati).
+    // avformat_open_input juga men-set flag ini sendiri bila pb terisi,
+    // tapi ditulis eksplisit supaya kontrak kepemilikan terbaca di sini.
+    ctx->flags |= AVFMT_FLAG_CUSTOM_IO;
+
+    avioCtx_ = avio;
+    contentFd_ = fd;
+    avioPos_ = 0;
+    formatCtx_ = ctx;
+    return true;
+}
+
+void FFmpegDecoder::freeAvioAndFd() {
+    // Satu-satunya tempat avioCtx_/contentFd_ dibebaskan — dipanggil
+    // cleanup() (sukses, gagal belakangan, close, dtor, open berikutnya)
+    // dan jalur gagal avformat_open_input di onOpen. avio_context_free
+    // men-NULL-kan pointer dan membebaskan buffer 64 KB; close(fd)
+    // sekali saja (contentFd_ kembali -1). Aman dipanggil sesudah
+    // avformat_close_input: close_input TIDAK membebaskan AVIOContext
+    // pemakai (lihat komentar di openAvioInput), jadi avioCtx_ masih
+    // milik kita di titik ini — bukan double-free.
+    if (avioCtx_) {
+        avio_context_free(&avioCtx_);
+    }
+    if (contentFd_ >= 0) {
+        ::close(contentFd_);
+        contentFd_ = -1;
+    }
+    avioPos_ = 0;
+}
+
+int FFmpegDecoder::readPacket(void* opaque, uint8_t* buf, int buf_size) {
+    auto* self = static_cast<FFmpegDecoder*>(opaque);
+    // pread: posisi eksplisit, tidak tergantung file offset bersama —
+    // aman terhadap seek yang mengubah avioPos_ di antara panggilan.
+    ssize_t n;
+    do {
+        n = ::pread(self->contentFd_, buf, static_cast<size_t>(buf_size),
+                    static_cast<off_t>(self->avioPos_));
+    } while (n < 0 && errno == EINTR);
+    if (n < 0) {
+        return AVERROR(errno);
+    }
+    if (n == 0) {
+        return AVERROR_EOF;
+    }
+    self->avioPos_ += n;
+    return static_cast<int>(n);
+}
+
+int64_t FFmpegDecoder::seekPacket(void* opaque, int64_t offset, int whence) {
+    auto* self = static_cast<FFmpegDecoder*>(opaque);
+
+    // AVSEEK_SIZE: FFmpeg menanyakan ukuran file (untuk durasi/seek
+    // table). fstat — fd dijamin file reguler (openFd menolak
+    // non-reguler), jadi st_size valid.
+    if (whence & AVSEEK_SIZE) {
+        struct stat st;
+        if (::fstat(self->contentFd_, &st) != 0) {
+            return AVERROR(errno);
+        }
+        return static_cast<int64_t>(st.st_size);
+    }
+
+    // AVSEEK_FORCE bisa di-OR dengan SEEK_SET/CUR/END — mask dulu.
+    const int wh = whence & ~AVSEEK_FORCE;
+    int64_t newPos;
+    switch (wh) {
+        case SEEK_SET:
+            newPos = offset;
+            break;
+        case SEEK_CUR:
+            newPos = self->avioPos_ + offset;
+            break;
+        case SEEK_END: {
+            struct stat st;
+            if (::fstat(self->contentFd_, &st) != 0) {
+                return AVERROR(errno);
+            }
+            newPos = static_cast<int64_t>(st.st_size) + offset;
+            break;
+        }
+        default:
+            return -1;
+    }
+    if (newPos < 0) {
+        return -1;
+    }
+    // Tidak perlu ::lseek: pread memakai posisi eksplisit, jadi cukup
+    // catat posisi baru (lseek juga akan benar, tapi redundan).
+    self->avioPos_ = newPos;
+    return newPos;
+}
+
 void FFmpegDecoder::cleanup() {
     if (packet_) {
         av_packet_free(&packet_);
@@ -791,6 +1009,13 @@ void FFmpegDecoder::cleanup() {
     if (formatCtx_) {
         avformat_close_input(&formatCtx_);
     }
+
+    // B9-fd-AVIO: avformat_close_input TIDAK membebaskan AVIOContext
+    // yang dipasok pemakai (AVFMT_FLAG_CUSTOM_IO) dan tidak tahu-menahu
+    // soal fd — bebaskan keduanya di sini, di semua jalur (sukses,
+    // gagal belakangan, close, dtor, open berikutnya). freeAvioAndFd
+    // idempotent (null check + fd -1), jadi aman dipanggil berulang.
+    freeAvioAndFd();
 
     audioStreamIndex_ = -1;
     // 🔥 FIX (2026-11-12, B7-W1): reset hitung error kirim paket supaya
