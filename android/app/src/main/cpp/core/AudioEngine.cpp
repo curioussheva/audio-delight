@@ -209,7 +209,14 @@ bool AudioEngine::start(
     mMetrics.updateFramesPerBurst(
         mStreamController.framesPerBurst()
     );
-    mMetrics.setExclusiveMode(exclusiveMode);
+    // (C-CLEAN(i), 2026-11-12): kondisi NYATA dari stream yang terbuka
+    // (mExclusive = opened->getSharingMode() == Exclusive, ditulis
+    // AudioStreamController::open), BUKAN nilai yang DIMINTA. AAudio
+    // bisa menolak exclusive dan jatuh ke Shared — menulis nilai yang
+    // diminta di sini membuat getStats() mengklaim exclusive padahal
+    // stream berjalan shared. (Blast radius NOL: getStats() 0 pemanggil
+    // di seluruh repo — tetap diperbaiki supaya metriknya jujur.)
+    mMetrics.setExclusiveMode(mStreamController.isExclusive());
     // (C-DSPMETRIC, 2026-11-12): laporkan kondisi AKTIF gabungan (mode !=
     // BitPerfect && gate menyala), bukan flag isDSPEnabled() mentah — flag
     // itu default false dan tidak pernah dibaca jalur produksi, jadi nilai
