@@ -48,7 +48,18 @@ public:
     explicit PCMQueue(size_t capacitySamples);
 
     // Producer (decoder thread). `frames` = jumlah SAMPLE (bukan frame stereo).
+    // Mengembalikan jumlah sampel yang benar-benar ditulis; 0 = queue penuh
+    // (atau input null/kosong). PB6-MINOR(e): kalau clear() balapan selama
+    // copy, tulisan DIBUANG tanpa publish dan kembalian adalah
+    // kWriteDiscardedEpoch (bukan 0) — supaya pemanggil bisa membedakannya
+    // dari "queue penuh" dan tidak mencatat overrun palsu.
     size_t write(const float* input, size_t frames);
+
+    // Sentinel kembalian write(): tulisan dibuang karena epoch berubah
+    // (clear() selama copy). Nilai SIZE_MAX — tidak mungkin sebagai jumlah
+    // sampel yang ditulis (kapasitas queue 2^22).
+    static constexpr size_t kWriteDiscardedEpoch =
+        static_cast<size_t>(-1);
 
     // Consumer (audio thread). `frames` = jumlah SAMPLE.
     size_t read(float* output, size_t frames);

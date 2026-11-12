@@ -1589,7 +1589,11 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
                     );
 
                     // 🔥 FIX 1: detect data drop (silent overflow)
-                    if (written < result.samples.size()) {
+                    // PB6-MINOR(e): tulisan yang dibuang karena epoch
+                    // (clear() balapan, kWriteDiscardedEpoch) BUKAN drop —
+                    // jangan catat overrun untuknya.
+                    if (written != PCMQueue::kWriteDiscardedEpoch &&
+                        written < result.samples.size()) {
                         // Overrun nyata: decoder memproduksi lebih cepat
                         // daripada queue dikonsumsi. Catat ke metrik (M5) —
                         // dulu counter overrun selalu 0 karena tidak ada yang

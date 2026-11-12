@@ -88,7 +88,12 @@ size_t PCMQueue::write(const float* input, size_t frames) {
     }
 
     if (epoch_.load(std::memory_order_acquire) != epoch) {
-        return 0;  // clear() terjadi selama copy — jangan publish
+        // PB6-MINOR(e): clear() terjadi selama copy — jangan publish.
+        // Kembalikan sentinel, bukan 0: 0 berarti "queue penuh" dan
+        // pemanggil mencatat overrun; tulisan yang dibuang karena epoch
+        // bukan overrun (jalur ini praktis tak terjangkau — jendela hanya
+        // 1-2 instruksi sebelum store di bawah).
+        return kWriteDiscardedEpoch;
     }
     writeCount_.store(w + toWrite, std::memory_order_release);
     return toWrite;
