@@ -1208,6 +1208,15 @@ size_t PlaybackController::render(float* output,
     // fade sudah dibatalkan dan blok ini dilewati tanpa menulis apa pun.
     // Kurva dibaca SETELAH CAS berhasil — pause() tidak pernah menulis
     // ulang kurva selama remaining_ > 0, jadi total_ stabil di sini.
+    //
+    // B8-M6 (2026-11-12): callback yang MENYELESAIKAN fade menyimpan
+    // playing_=false di bawah, sebelum blok clock di bawah membaca
+    // playing_ — jadi frame yang baru saja di-render callback ini
+    // berkontribusi 0 ke clock dan posisi berhenti 1 callback lebih
+    // cepat. Tangkap penyelesaian fade di flag lokal supaya blok clock
+    // tetap memajukan frame callback ini (sekali saja, lihat penalaran
+    // anti-double-count di blok clock).
+    bool fadeFinishedThisCallback = false;
     {
         uint32_t remaining =
             pauseFadeRemainingFrames_.load(std::memory_order_acquire);
@@ -1226,6 +1235,7 @@ size_t PlaybackController::render(float* output,
                     // Fade habis: baru sekarang benar-benar pause.
                     // Satu-satunya penulis playing_=false di jalur ini —
                     // pause() sengaja tidak mematikannya.
+                    fadeFinishedThisCallback = true;
                     playing_.store(false, std::memory_order_release);
                     updatePlaybackState();
                 }
@@ -1260,11 +1270,27 @@ size_t PlaybackController::render(float* output,
     // Jadi: saat paused, audio memang boleh drain (lebih baik diam),
     // tapi clock harus berhenti. Posisi yang dilaporkan kembali ke posisi
     // saat pause ditekan, bukan posisi setelah buffer habis.
+    // B8-M6 (2026-11-12): callback yang menyelesaikan fade-out pause
+    // (fadeFinishedThisCallback) SUDAH menyimpan playing_=false sebelum
+    // sampai ke sini, tapi frame callback ini nyata di-render (dan
+    // terdengar, ter-fade) — jadi clock tetap maju untuk frame itu.
+    // Penalaran anti-double-count: flag ini hanya true di callback yang
+    // CAS-nya menyelesaikan fade (next == 0); callback BERIKUTNYA
+    // membaca remaining == 0, blok fade dilewati, flag false, dan
+    // playing_ sudah false — jadi frame yang sama tidak pernah dihitung
+    // dua kali. Akurasi posisi: advancedFrames dihitung dari readSamples
+    // (frame INPUT yang benar-benar dibaca dari queue dan di-render),
+    // ukuran yang sama dengan callback normal — tidak ada lompatan
+    // melewati durasi; advanceFrames sendiri hanya fetch_add tanpa
+    // clamp, sama seperti semua callback lain. Jalur normal (tanpa
+    // fade) tidak berubah: flag false, kondisi identik dengan semula.
     const uint32_t ch = (channels > 0) ? channels : 1;
     // Frame INPUT (posisi track): di 2x, satu callback 20 ms membaca 40 ms
     // audio — clock maju 40 ms. Bukan frame output (itu selalu 20 ms).
     const uint32_t advancedFrames = static_cast<uint32_t>(readSamples) / ch;
-    if (advancedFrames > 0 && playing_.load(std::memory_order_acquire)) {
+    if (advancedFrames > 0 &&
+        (playing_.load(std::memory_order_acquire) ||
+         fadeFinishedThisCallback)) {
         clock_->advanceFrames(advancedFrames);
     }
     // Hitung untuk fade-in (P-M7): frame OUTPUT sejak loadTrack/seek/play
