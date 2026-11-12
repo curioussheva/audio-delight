@@ -359,6 +359,14 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
 }
 
 bool PlaybackController::play() {
+    // 🔥 FIX (2026-11-12, PB2-M1): serialisasi terhadap loadTrack().
+    // play() menyentuh decoderWorker_/currentTrack_ yang sama dengan
+    // loadTrack() — tanpa lock, play() dari thread JS bisa jalan bersamaan
+    // dengan loadTrack() dari advance thread. play() memanggil loadTrack()
+    // di bawah saat needsLoad — rekursif, aman karena loadTrackMutex_
+    // rekursif.
+    std::lock_guard<std::recursive_mutex> lock(loadTrackMutex_);
+
     if (!initialized_.load(std::memory_order_acquire)) {
         __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
                             "play(): FAILED - not initialized");
@@ -469,6 +477,14 @@ bool PlaybackController::stop() {
         advanceThread_.join();
     }
 
+    // 🔥 FIX (2026-11-12, PB2-M1): lock loadTrackMutex_ HANYA SETELAH join.
+    // JANGAN pindahkan lock ini ke awal fungsi: stop() yang memegang mutex
+    // lalu join advance thread akan deadlock — advance thread yang sedang
+    // loadTrack() tidak bisa selesai karena menunggu mutex yang sama,
+    // sementara join menunggu advance thread selesai. Urutan
+    // join-dulu-baru-lock adalah bagian dari fix, bukan gaya penulisan.
+    std::lock_guard<std::recursive_mutex> lock(loadTrackMutex_);
+
     stopDecoder();
 
     // 🔥 FIX (2026-11-10, p-m12): kibarkan clearing_ + tunggu in-flight
@@ -503,6 +519,16 @@ bool PlaybackController::stop() {
 }
 
 bool PlaybackController::seek(double seconds) {
+    // 🔥 FIX (2026-11-12, PB2-M1): serialisasi terhadap loadTrack().
+    // seek() menyentuh decoder/PCMQueue/clock yang sama dengan loadTrack()
+    // — tanpa lock, seek dari thread JS bisa jalan bersamaan dengan
+    // loadTrack() dari advance thread (atau sebaliknya). Edge baru
+    // loadTrackMutex_ -> decodeMutex_ (lewat worker->pause/seek/resume)
+    // searah dengan yang sudah ada di loadTrack (stopDecoder -> worker->
+    // stop()); tidak ada jalur balik. Rekursif: aman dipanggil dari
+    // reopenStreamPreservingPlayback() yang berjalan di dalam loadTrack.
+    std::lock_guard<std::recursive_mutex> lock(loadTrackMutex_);
+
     // 🔥 FIX (2026-11-10, p-m13): seek SELAMA INI tanpa satu pun log —
     // tidak terlihat di logcat, padahal play/pause/stop/loadTrack semua log.
     __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
