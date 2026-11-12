@@ -10,10 +10,21 @@ SolfeggioResonator::SolfeggioResonator() = default;
 
 void SolfeggioResonator::prepare(int32_t sampleRate) {
     if (sampleRate > 0) mSampleRate = static_cast<float>(sampleRate);
+    // DSP2-M1: koefisien dihitung dari mSampleRate; laju baru membuat cache
+    // basi (resonansi 528 Hz pindah ke ~485 Hz sesudah reopen 48k->44,1k).
+    // Invalidasi paksa updateCoefficientsIfNeeded() menghitung ulang.
+    mCachedFreq = -1.0f;
 }
 
 void SolfeggioResonator::setFrequency(float hz) {
-    mFreq.store(std::max(20.0f, hz), std::memory_order_relaxed);
+    // DSP-M6: clamp atas 0,45 x laju (di bawah Nyquist) — di atas itu
+    // koefisien RBJ meledak (output inf, mis. 30 kHz @48 kHz). Batas bawah
+    // 20 Hz tetap. mSampleRate default 48000.0f dan prepare() hanya
+    // menerima laju > 0, jadi aman walau dipanggil sebelum prepare().
+    // NaN tetap aman seperti sebelumnya: std::max(20, NaN) -> 20.
+    const float maxFreq = 0.45f * mSampleRate;
+    mFreq.store(std::min(std::max(20.0f, hz), maxFreq),
+                std::memory_order_relaxed);
 }
 
 void SolfeggioResonator::setIntensity(float intensity) {
