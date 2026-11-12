@@ -4,8 +4,6 @@
 
 #include "AudioTypes.h"
 
-#include "../dsp/DSPChain.h"
-
 // Prosesor mode Immersive.
 //
 // Dipindahkan dari `cpp/modes/ImmersivePipeline` (dihapus di 5a386f0a9).
@@ -27,7 +25,12 @@ namespace pristine {
 // IMMERSIVE STAGE
 // =====================================================
 //
-// Rantai proses untuk mode Immersive, dijalankan SETELAH DSPChain.
+// Rantai proses untuk mode Immersive — TIDAK lewat DSPChain.
+//
+// Tiga mode terpisah (lihat AudioPipeline::processImmersive): mode Immersive
+// tidak memanggil DSPChain sama sekali, hanya rantai resonansinya sendiri.
+// Master gain & balance tetap berlaku sesudahnya, karena keduanya soal
+// LEVEL dan PANORAMA output, bukan karakter suara.
 //
 // Empat tahap aktif (urutannya disengaja, lihat process()):
 //   1. Solfeggio resonance  - filter resonan pada frekuensi target
