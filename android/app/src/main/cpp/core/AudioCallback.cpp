@@ -9,11 +9,74 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <ctime>
 #include <android/log.h>
 
 namespace pristine {
+
+// =====================================================
+// FPCR FLUSH-TO-ZERO (C-FTZ, 2026-11-12)
+// =====================================================
+//
+// Sekali per thread callback, set bit FZ (bit 24) di FPCR —
+// Flush-to-Zero untuk operasi floating-point di thread ini.
+//
+// KENAPA PERLU (walau sanitizeOutput() sudah men-nol-kan |x| < 1e-30f):
+// sanitize hanya bekerja di OUTPUT akhir. Di tengah rantai, state
+// feedback IIR (BiquadFilter z1/z2, resonator Solfeggio) meluruh melewati
+// rentang denormal saat ekor sinyal mengecil — dan operasi FP atas nilai
+// denormal jauh lebih lambat di ARMv8. Di thread realtime (callback
+// AAudio/OpenSLES via Oboe) itu risiko xrun. FZ mematikan seluruh kelas
+// stall itu di hardware, tanpa mengubah satu pun nilai DSP di rentang
+// normal.
+//
+// FZ SAJA, TANPA DAZ — putusan dari bukti arsitektur, bukan dari ingatan:
+// di AArch64 TIDAK ADA bit DAZ di FPCR; FZ (bit 24) SUDAH memperlakukan
+// input denormal sebagai nol DAN membuang output denormal ke nol
+// (ARM ARM, register FPCR). DAZ adalah konsep x86 (bit 6 MXCSR) —
+// tidak ada yang bisa di-set di sini. Konsekuensinya: denormal yang
+// dihasilkan decoder (swr_convert di thread DecoderWorker, lalu masuk
+// antrean PCM) dan tiba di audio thread sebagai INPUT DSP juga sudah
+// ditangani FZ ini — tidak perlu perlakuan terpisah.
+//
+// PER-THREAD, BUKAN GLOBAL: FPCR bagian dari state FPSIMD yang disimpan
+// /dipulihkan kernel per thread saat context switch, jadi MSR di sini
+// tidak bocor ke thread JS, decoder, UI, atau visualizer. Guard
+// thread_local memastikan MSR hanya sekali per thread callback —
+// AAudio boleh memakai thread baru sesudah reopen stream, dan fallback
+// OpenSLES memakai thread callback sendiri; keduanya tertutup tanpa
+// menyentuh thread lain. Read-modify-write: bit FPCR lain (mis. DN,
+// RMode) dipertahankan.
+//
+// NON-ARM64 (emulator x86_64): dikompilasi jadi no-op — tidak ada FPCR
+// di x86, dan denormal di sana urusan MXCSR yang tidak disentuh item ini.
+//
+// VERIFIKASI PERANGKAT: log satu kali per thread ("FPCR FZ enabled") —
+// grep logcat untuk memastikan setup jalan di thread callback yang benar.
+namespace {
+
+void enableFlushToZeroOnce() noexcept {
+#if defined(__aarch64__)
+    // thread_local: inisialisasi lambda jalan sekali per thread, di
+    // pemanggilan pertama dari thread itu. Pemanggilan berikutnya hanya
+    // cek guard (satu load TLS + branch terprediksi — murah di jalur
+    // realtime).
+    thread_local const bool enabled = [] {
+        uint64_t fpcr = 0;
+        __asm__ volatile("mrs %0, fpcr" : "=r"(fpcr));
+        fpcr |= (1ULL << 24);  // FPCR.FZ — flush-to-zero
+        __asm__ volatile("msr fpcr, %0" : : "r"(fpcr));
+        __android_log_print(ANDROID_LOG_INFO, "AudioCallback",
+            "FPCR FZ enabled (flush-to-zero) on audio thread");
+        return true;
+    }();
+    (void)enabled;
+#endif
+}
+
+} // namespace
 
 // =====================================================
 // CONSTRUCTOR
@@ -44,6 +107,13 @@ AudioCallback::onAudioReady(
     void* audioData,
     int32_t numFrames
 ) {
+    // (C-FTZ, 2026-11-12): set FZ di FPCR sekali per thread callback —
+    // flush-to-zero denormal (lihat enableFlushToZeroOnce di atas). Harus
+    // di baris pertama: sebelum FP apa pun di callback ini, dan sebelum
+    // early-return numFrames <= 0 — thread baru sesudah reopen tetap
+    // ter-setup di callback pertamanya.
+    enableFlushToZeroOnce();
+
     auto* output = static_cast<float*>(audioData);
 
     // Guard (fix 2026-11-10, m1): JANGAN memset dengan numFrames <= 0 —
