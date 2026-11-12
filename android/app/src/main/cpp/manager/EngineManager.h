@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdint>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -126,6 +127,9 @@ public:
     // benar, tidak melakukan apa-apa. Tidak melakukan apa-apa juga kalau
     // stream tidak berjalan (start() berikutnya sudah memakai laju file)
     // atau kalau sebuah reopen sedang berjalan (mReopening).
+    // (C-W6-mgr, 2026-11-12): tidak meminta reopen untuk pasangan
+    // (perangkat, laju) yang sudah TERBUKTI tidak dihormati — lihat
+    // mDishonoredRateKey. Audio tetap jalan di laju stream yang ada.
     void onTrackLoaded();
 
     // Device dicabut saat stream berjalan (dari AudioDeviceCallback).
@@ -305,6 +309,47 @@ private:
     // reopen-dari-reopen). Reopen sudah memakai laju terbaru, jadi tidak
     // ada yang terlewat saat flag ini aktif.
     std::atomic<bool> mReopening{false};
+
+    // (C-W6-mgr, 2026-11-12): "pelajaran" dari reopen yang terbukti sia-sia.
+    //
+    // Device bisa BERBOHONG soal laju: AudioDeviceInfo.getSampleRates()
+    // mengklaim 96 kHz, pickBestRate() lalu meminta 96 kHz, tapi AAudio
+    // membuka stream di 48 kHz. Tanpa pelajaran, onTrackLoaded() meminta
+    // reopen di SETIAP loadTrack — dan reopen menghitung laju yang SAMA
+    // dari klaim yang SAMA, jadi hasilnya SAMA: satu stop/start + muat
+    // ulang + seek yang terbuang per track, selamanya.
+    //
+    // Isinya SATU pasangan (id perangkat aktual, laju yang diminta) yang
+    // terakhir terbukti tidak dihormati, dikemas dalam satu atomic int64
+    // supaya pasangan itu tidak bisa robek antar-thread (onTrackLoaded
+    // jalan di thread loadTrack, reopen jalan di worker recovery):
+    // bit atas = id perangkat, bit bawah = laju Hz. 0 = belum ada pelajaran.
+    //
+    // Kebijakan belajar (minimal, aman):
+    //   - DICATAT di reopenStreamPreservingPlayback(), sesudah stream baru
+    //     dibuka: laju yang diminta vs laju stream AKTUAL (AAudio,
+    //     getSampleRate() — sumber yang sama dengan isRateHonored()).
+    //     Hanya kalau keduanya > 0 DAN id perangkat aktual > 0.
+    //   - DIPAKAI di onTrackLoaded(): pasangan yang sama tidak lagi
+    //     meminta reopen — audio tetap jalan di laju stream yang ada
+    //     (decoder sudah menargetkan laju itu), hanya bit-perfect yang
+    //     tidak tercapai, dan itu memang keadaan sebenarnya.
+    //   - BATAL dengan sendirinya kalau perangkat berganti (kunci memuat
+    //     id perangkat aktual) atau laju yang diminta berubah (kunci
+    //     memuat laju) — keduanya mendapat SATU percobaan reopen baru
+    //     untuk belajar ulang. Kalau perangkat kemudian MENGHORMATI laju
+    //     itu (mis. sesudah exclusive diaktifkan), reopen yang berhasil
+    //     menghapus pelajaran yang cocok.
+    //   - TIDAK PERNAH memblokir recovery putus-paksa: gerbang ini hanya
+    //     ada di onTrackLoaded(), bukan di requestStreamRecovery() —
+    //     handler onErrorAfterClose Oboe tetap bisa meminta reopen.
+    //   - Hanya SATU slot: pelajaran terbaru menimpa yang lama. Perangkat
+    //     yang berbohong soal DUA laju sekaligus harus belajar ulang
+    //     sekali per pergantian laju — harga yang diterima demi tidak
+    //     menambah struktur (tanpa map/set + lock baru).
+    //   - Id perangkat aktual 0 (sistem memilih, tidak diketahui) tidak
+    //     pernah dicatat/dipakai — perilaku lama dipertahankan di sana.
+    std::atomic<int64_t> mDishonoredRateKey{0};
 
     AudioState mState;
 

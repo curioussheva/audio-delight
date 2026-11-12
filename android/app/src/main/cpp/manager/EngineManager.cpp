@@ -13,6 +13,16 @@
 
 namespace pristine {
 
+// (C-W6-mgr, 2026-11-12): kemas pasangan (id perangkat, laju Hz) jadi satu
+// int64 untuk mDishonoredRateKey — bit atas = id perangkat, bit bawah =
+// laju. Satu atomic = pasangan tidak bisa robek antar-thread. id dan laju
+// di sini selalu > 0 (dijaga call site), jadi hasil tidak pernah 0 —
+// 0 tetap berarti "belum ada pelajaran".
+static int64_t dishonoredRateKey(int32_t deviceId, int32_t rate) {
+    return (static_cast<int64_t>(deviceId) << 32) |
+           static_cast<uint32_t>(rate);
+}
+
 // =====================================================
 // CONSTRUCTOR
 // =====================================================
@@ -715,6 +725,44 @@ void EngineManager::reopenStreamPreservingPlayback() {
     // yang sekarang aktif (headset yang baru dicolok).
     mEngine.start(exclusiveMode, requestedRate, requestedDevice);
 
+    // (C-W6-mgr, 2026-11-12): BELAJAR dari hasil reopen ini — jangan ulangi
+    // permintaan yang sudah terbukti sia-sia. Bandingkan laju yang DIMINTA
+    // dengan laju stream AKTUAL (AAudio, getSampleRate() — sumber yang sama
+    // dengan isRateHonored(), bukan klaim getSampleRates() perangkat):
+    //   - tidak dihormati -> catat pasangan (perangkat aktual, laju yang
+    //     diminta) supaya onTrackLoaded() tidak meminta reopen yang sama
+    //     lagi di loadTrack berikutnya;
+    //   - dihormati -> hapus pelajaran yang cocok (perangkat bisa berubah
+    //     pikiran, mis. sesudah exclusive diaktifkan — pelajaran basi
+    //     tidak boleh menahan reopen yang kini akan berhasil).
+    // Hanya kalau id perangkat aktual diketahui (> 0); kalau 0, tidak ada
+    // yang dicatat — perilaku lama dipertahankan. BUKAN logika pemilihan
+    // laju: requestedRate di sini tetap hasil pickBestRate() seperti biasa.
+    if (requestedRate > 0) {
+        const int32_t actualDevice = mEngine.actualDeviceId();
+        const int32_t actualRate = mEngine.actualSampleRate();
+        if (actualDevice > 0 && actualRate > 0) {
+            const int64_t key = dishonoredRateKey(actualDevice, requestedRate);
+            if (actualRate == requestedRate) {
+                int64_t expected = key;
+                if (mDishonoredRateKey.compare_exchange_strong(
+                        expected, 0, std::memory_order_acq_rel)) {
+                    __android_log_print(ANDROID_LOG_INFO, "EngineManager",
+                        "reopenStream: perangkat %d kini menghormati %d Hz - "
+                        "pelajaran laju-tidak-dihormati dihapus",
+                        actualDevice, requestedRate);
+                }
+            } else {
+                mDishonoredRateKey.store(key, std::memory_order_release);
+                __android_log_print(ANDROID_LOG_WARN, "EngineManager",
+                    "reopenStream: perangkat %d TIDAK menghormati %d Hz "
+                    "(stream tetap %d Hz) - dicatat, reopen untuk laju ini "
+                    "tidak akan diulang sampai perangkat berganti",
+                    actualDevice, requestedRate, actualRate);
+            }
+        }
+    }
+
     // =============================================
     // MUAT ULANG TRACK ke stream baru
     // =============================================
@@ -788,6 +836,29 @@ void EngineManager::onTrackLoaded() {
     // reopen() memanggil handler ini lagi, dan di titik itu stream sudah
     // berjalan di laju baru.
     if (mEngine.actualSampleRate() == wanted) {
+        return;
+    }
+
+    // (C-W6-mgr, 2026-11-12): JANGAN minta reopen untuk pasangan
+    // (perangkat, laju) yang sudah terbukti tidak dihormati. Reopen
+    // sebelumnya untuk pasangan ini sudah menghitung `wanted` yang SAMA
+    // dari klaim getSampleRates() yang SAMA dan tetap dibuka di laju yang
+    // SAMA — mengulanginya di setiap loadTrack hanya membuang satu
+    // stop/start + muat ulang + seek per track. Audio tetap jalan di laju
+    // stream yang ada (decoder menargetkan laju itu); yang tidak tercapai
+    // hanya bit-perfect, dan itu memang keadaan sebenarnya perangkat ini.
+    // Pelajaran batal sendiri kalau perangkat berganti atau laju yang
+    // diminta berubah (keduanya bagian dari kunci). Recovery putus-paksa
+    // TIDAK kena gerbang ini — ia memanggil requestStreamRecovery()
+    // langsung, bukan lewat sini.
+    const int32_t actualDevice = mEngine.actualDeviceId();
+    if (actualDevice > 0 &&
+        mDishonoredRateKey.load(std::memory_order_acquire) ==
+            dishonoredRateKey(actualDevice, wanted)) {
+        __android_log_print(ANDROID_LOG_INFO, "EngineManager",
+            "onTrackLoaded: perangkat %d sudah terbukti tidak menghormati "
+            "%d Hz (stream tetap %d Hz) - reopen dilewati, audio tetap jalan",
+            actualDevice, wanted, mEngine.actualSampleRate());
         return;
     }
 
