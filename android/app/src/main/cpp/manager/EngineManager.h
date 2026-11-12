@@ -116,13 +116,16 @@ public:
     void reopenStreamPreservingPlayback();
 
     // Dipanggil setiap loadTrack() berhasil (via PlaybackController).
-    // Membuka ulang stream kalau laju yang SEHARUSNYA dipakai (dari laju
-    // file / override eksplisit) berbeda dari laju stream yang berjalan —
-    // inilah perbaikan M1 (bit-perfect hilang diam-diam saat ganti track).
-    // Idempotent: kalau stream sudah di laju yang benar, tidak melakukan
-    // apa-apa. Tidak melakukan apa-apa juga kalau stream tidak berjalan
-    // (start() berikutnya sudah memakai laju file) atau kalau sebuah reopen
-    // sedang berjalan (mReopening).
+    // Meminta reopen (lewat worker requestStreamRecovery) kalau laju yang
+    // SEHARUSNYA dipakai (dari laju file / override eksplisit) berbeda dari
+    // laju stream yang berjalan — inilah perbaikan M1 (bit-perfect hilang
+    // diam-diam saat ganti track). TIDAK PERNAH reopen sinkron di sini
+    // (PB6-B1): listener ini berjalan di dalam loadTrack() yang memegang
+    // loadTrackMutex_, sementara reopen butuh mMutex dulu — urutan lock
+    // terbalik = deadlock ABBA. Idempotent: kalau stream sudah di laju yang
+    // benar, tidak melakukan apa-apa. Tidak melakukan apa-apa juga kalau
+    // stream tidak berjalan (start() berikutnya sudah memakai laju file)
+    // atau kalau sebuah reopen sedang berjalan (mReopening).
     void onTrackLoaded();
 
     // Device dicabut saat stream berjalan (dari AudioDeviceCallback).
@@ -215,7 +218,10 @@ private:
     // =====================================================
     //
     // Dipanggil dari THREAD OBOE (onErrorAfterClose), saat Oboe sedang
-    // menutup stream. TIDAK boleh reopen langsung di sini:
+    // menutup stream, dan dari onTrackLoaded() saat laju file berubah
+    // (PB6-B1: listener itu berjalan di dalam loadTrack() yang memegang
+    // loadTrackMutex_, jadi reopen sinkron dari sana = deadlock ABBA).
+    // TIDAK boleh reopen langsung di sini:
     //   - reopen menutup stream yang sedang ditutup Oboe -> deadlock,
     //   - reopen mengambil mMutex yang mungkin sedang dipegang thread lain.
     //
@@ -268,10 +274,11 @@ private:
 
     // true selagi reopenStreamPreservingPlayback() berjalan (M1, 2026-11-10).
     // onTrackLoaded() (yang dipanggil dari loadTrack, termasuk loadTrack DI
-    // DALAM reopen) mengembalikan awal kalau flag ini true — kalau tidak,
-    // handler akan memanggil reopen lagi dari dalam reopen (reentrancy) dan
-    // deadlock di mMutex. Reopen sudah memakai laju terbaru, jadi tidak ada
-    // yang terlewat saat flag ini aktif.
+    // DALAM reopen) mengembalikan awal kalau flag ini true — mencegah
+    // permintaan recovery sia-sia dari dalam reopen sendiri (sejak PB6-B1
+    // handler tidak lagi reopen sinkron, jadi tidak ada lagi reentrancy
+    // reopen-dari-reopen). Reopen sudah memakai laju terbaru, jadi tidak
+    // ada yang terlewat saat flag ini aktif.
     std::atomic<bool> mReopening{false};
 
     AudioState mState;

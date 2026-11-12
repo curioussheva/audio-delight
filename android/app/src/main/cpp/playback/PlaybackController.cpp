@@ -525,8 +525,11 @@ bool PlaybackController::seek(double seconds) {
     // loadTrack() dari advance thread (atau sebaliknya). Edge baru
     // loadTrackMutex_ -> decodeMutex_ (lewat worker->pause/seek/resume)
     // searah dengan yang sudah ada di loadTrack (stopDecoder -> worker->
-    // stop()); tidak ada jalur balik. Rekursif: aman dipanggil dari
-    // reopenStreamPreservingPlayback() yang berjalan di dalam loadTrack.
+    // stop()); tidak ada jalur balik. Tidak ada nesting di bawah
+    // loadTrackMutex_ di sini: dipanggil dari reopenStreamPreservingPlayback()
+    // (yang memegang mMutex, bukan loadTrackMutex_) dan dari JNI. Dulu
+    // reopen bisa berjalan di dalam loadTrack lewat listener — jalur itu
+    // ditutup PB6-B1.
     std::lock_guard<std::recursive_mutex> lock(loadTrackMutex_);
 
     // 🔥 FIX (2026-11-10, p-m13): seek SELAMA INI tanpa satu pun log —
@@ -1000,8 +1003,8 @@ uint32_t PlaybackController::currentFileSampleRate() const noexcept {
 // Aman terhadap reopen: loadTrack di sini memicu trackLoadedListener →
 // onTrackLoaded(); di titik itu stream sudah di laju `wanted`
 // (pickBestRateFor) sehingga tidak ada reopen kedua — kecuali engine tidak
-// menghormati laju yang diminta, dan saat itu reopen sekali (dijaga
-// mReopening) tetap konvergen ke laju aktual.
+// menghormati laju yang diminta, dan saat itu satu permintaan recovery
+// (lewat worker, PB6-B1) tetap konvergen ke laju aktual.
 bool PlaybackController::reloadIfDecoderRateMismatch(uint32_t actualStreamRate) {
     if (actualStreamRate < 8000 || actualStreamRate > 768000) {
         return false;

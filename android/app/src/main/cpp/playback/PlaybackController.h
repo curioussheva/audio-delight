@@ -262,10 +262,12 @@ private:
     // queue. cancelPendingAdvance() hanya menutup jendela drain-wait, bukan
     // jendela antara cek-batal terakhir dan loadTrack() itu sendiri.
     //
-    // RECURSIVE (bukan mutex biasa): loadTrack() memanggil
-    // trackLoadedListener di akhirnya → onTrackLoaded() → reopen →
-    // loadTrack() lagi di thread YANG SAMA (sinkron). Mutex biasa =
-    // deadlock di jalur reopen.
+    // RECURSIVE (bukan mutex biasa): play() memanggil loadTrack() di
+    // bawah saat needsLoad sambil lock sudah dipegang (PB2-M1). Dulu
+    // rantai listener juga bersarang di sini — loadTrack() →
+    // trackLoadedListener → onTrackLoaded() → reopen sinkron → loadTrack()
+    // lagi di thread yang sama — tapi reopen dari listener itu dilarang
+    // sejak PB6-B1 (urutan lock terbalik, deadlock ABBA).
     std::recursive_mutex loadTrackMutex_;
 
     // 🔥 FIX (2026-10-09, crash auto-advance): decoderWorker_ dibaca dari

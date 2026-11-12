@@ -230,9 +230,9 @@ void EngineManager::start() {
     // menargetkan laju stream yang benar.
     //
     // LEPAS lock dulu (pola B1): reload memanggil loadTrack() →
-    // trackLoadedListener → onTrackLoaded() yang bisa memanggil
-    // reopenStreamPreservingPlayback() (mengambil mMutex sendiri).
-    // Memanggilnya saat lock dipegang = deadlock.
+    // trackLoadedListener → onTrackLoaded(). Sejak PB6-B1 handler itu hanya
+    // menjadwalkan recovery async (tanpa lock), tapi loadTrack tetap
+    // pekerjaan decoder yang lambat — jangan menahan mMutex selama itu.
     lock.unlock();
     if (mEngine.isRunning()) {
         mPlayback.reloadIfDecoderRateMismatch(mEngine.actualSampleRate());
@@ -523,7 +523,7 @@ void EngineManager::requestStreamRecovery() {
     }
 
     __android_log_print(ANDROID_LOG_WARN, "EngineManager",
-        "requestStreamRecovery: stream diputus sistem - worker recovery dimulai");
+        "requestStreamRecovery: worker recovery dimulai");
 
     std::thread([this] {
         runStreamRecovery();
@@ -573,10 +573,12 @@ void EngineManager::runStreamRecovery() {
 
 void EngineManager::reopenStreamPreservingPlayback() {
 
-    // Guard reentrancy (M1): onTrackLoaded() dipanggil dari loadTrack(),
-    // dan loadTrack() dipanggil DARI reopen() ini — tanpa flag, handler
-    // akan memanggil reopen lagi dari dalam reopen (deadlock di mMutex).
-    // RAII supaya flag selalu kembali false walau ada exception.
+    // Guard reentrancy (M1): loadTrack() dipanggil DARI reopen() ini, dan
+    // loadTrack() memicu trackLoadedListener → onTrackLoaded(). Sejak
+    // PB6-B1 handler itu tidak lagi reopen sinkron, tapi flag ini tetap
+    // membuatnya kembali lebih awal supaya tidak ada permintaan recovery
+    // sia-sia dari dalam reopen sendiri. RAII supaya flag selalu kembali
+    // false walau ada exception.
     struct ReopenGuard {
         std::atomic<bool>& flag;
         explicit ReopenGuard(std::atomic<bool>& f) : flag(f) {
@@ -713,12 +715,24 @@ void EngineManager::onTrackLoaded() {
         return;
     }
 
+    // 🔥 FIX (2026-11-12, PB6-B1): JANGAN reopen sinkron dari sini.
+    // Listener ini dipanggil dari dalam PlaybackController::loadTrack(),
+    // yang memegang loadTrackMutex_ sepanjang fungsi. reopen...() butuh
+    // mMutex DULU lalu memanggil loadTrack() lagi — urutan
+    // loadTrackMutex_ -> mMutex ini berlawanan dengan urutan di dalam
+    // reopen() (mMutex -> loadTrackMutex_), dan guard mReopening tidak
+    // menutup jalurnya (cek-lalu-bertindak tidak atomik terhadap
+    // set-flag + lock). Jadi hanya minta dijadwalkan:
+    // requestStreamRecovery() tanpa lock (dedup mRecoveryPending), worker
+    // tidur 150 ms lalu reopen setelah loadTrack() pemanggil selesai dan
+    // melepas loadTrackMutex_. Sesudah ini satu-satunya urutan lock yang
+    // ada adalah mMutex -> loadTrackMutex_.
     __android_log_print(ANDROID_LOG_INFO, "EngineManager",
         "onTrackLoaded: laju file berubah (stream=%d, seharusnya=%d) - "
-        "membuka ulang stream",
+        "meminta recovery stream",
         mEngine.actualSampleRate(), wanted);
 
-    reopenStreamPreservingPlayback();
+    requestStreamRecovery();
 }
 
 void EngineManager::onDeviceRemoved(int32_t deviceId) {
