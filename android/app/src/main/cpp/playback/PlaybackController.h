@@ -86,6 +86,15 @@ public:
     // Dipanggil dari audio thread — hanya atomic load, tanpa lock.
     size_t bufferedSamples() const noexcept;
 
+    // PB6-W2C (2026-11-12): total sampel NaN/Inf/|x|>2 yang dibersihkan
+    // safety net render(). Dihitung di audio thread (atomic, tanpa log)
+    // — DILOG dari thread polling JNI (nativeGetPosition, tiap 500 ms,
+    // lihat NativePlaybackModule.cpp), bukan dari render(): log per
+    // callback yang mengandung NaN = sampai 100/dtk @480 frame.
+    // Kumulatif sejak initialize(), tidak di-reset per track (sama
+    // seperti static totalNan lama yang digantikannya).
+    [[nodiscard]] uint32_t nanCleanedTotal() const noexcept;
+
     // Metrik engine (diset EngineManager dari AudioEngine::metrics()).
     // Dipakai untuk mencatat overrun saat decoder membuang data karena queue
     // penuh. Boleh null — PlaybackController tetap jalan tanpa metrik.
@@ -251,6 +260,13 @@ private:
     // Dihitung dalam frame OUTPUT (bukan input — di 2x, 300 ms output =
     // 600 ms input; durasi fade adalah durasi yang didengar).
     std::atomic<uint32_t> framesSinceLoad_{0};
+
+    // PB6-W2C (2026-11-12): total sampel NaN/Inf/|x|>2 yang dibersihkan
+    // safety net render() — lihat nanCleanedTotal(). Atomic supaya
+    // render() (audio thread) dan thread polling JNI bisa berbagi tanpa
+    // lock; fetch_add relaxed cukup (hanya statistik, tanpa urutan
+    // terhadap operasi lain).
+    std::atomic<uint32_t> mNanTotal_{0};
 
     // 🔥 FIX (2026-11-10, P-M9): WSOLA time-stretch untuk laju playback.
     // playbackRate_ = target dari JS (atomic, ditulis thread JS, dibaca

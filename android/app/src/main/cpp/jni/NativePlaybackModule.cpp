@@ -4,6 +4,8 @@
 #include "playback/TrackQueue.h"
 #include "playback/NativeEventEmitter.h"
 #include <android/log.h>
+#include <atomic>
+#include <cstdint>
 #include <mutex>
 #include <vector>
 #include <string>
@@ -127,6 +129,24 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeS
 JNIEXPORT jlong JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetPosition(JNIEnv*, jobject) {
     auto* controller = getController();
     if (!controller) return 0;
+    // PB6-W2C (2026-11-12): log NaN dari thread polling, bukan audio
+    // thread. Jalur ini dipanggil JS tiap 500 ms (position watcher
+    // playerStore + useAudioPlayer), jadi log paling banyak 2/dtk dan
+    // HANYA bila total bertambah sejak poll terakhir — render() sendiri
+    // tidak pernah log lagi, hanya fetch_add ke mNanTotal_.
+    // static atomic (bukan plain static): nativeGetPosition bisa
+    // dipanggil dari thread JS maupun thread service
+    // (PlaybackNativeBridge::getPosition) — plain static = data race.
+    static std::atomic<uint32_t> lastLoggedNanTotal{0};
+    const uint32_t nanTotal = controller->nanCleanedTotal();
+    const uint32_t lastLogged =
+        lastLoggedNanTotal.load(std::memory_order_relaxed);
+    if (nanTotal > lastLogged) {
+        lastLoggedNanTotal.store(nanTotal, std::memory_order_relaxed);
+        __android_log_print(ANDROID_LOG_WARN, "PlaybackController",
+                            "render: cleaned %u NaN samples since last poll (total=%u)",
+                            nanTotal - lastLogged, nanTotal);
+    }
     return static_cast<jlong>(controller->state()->getPosition().positionMs);
 }
 

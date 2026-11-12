@@ -1072,12 +1072,15 @@ size_t PlaybackController::render(float* output,
                 nanCount++;
             }
         }
-        static int totalNan = 0;
-        totalNan += nanCount;
+        // PB6-W2C (2026-11-12): HANYA hitung — JANGAN log di sini.
+        // __android_log_print per callback yang mengandung NaN = sampai
+        // 100 log/dtk @480 frame (25/dtk @1920) di audio thread.
+        // Total dibaca + dilog dari thread polling JNI
+        // (NativePlaybackModule::nativeGetPosition, tiap 500 ms, hanya
+        // bila total bertambah sejak poll terakhir).
         if (nanCount > 0) {
-            __android_log_print(ANDROID_LOG_WARN, "PlaybackController",
-                "render: cleaned %d NaN samples (total=%d)",
-                nanCount, totalNan);
+            mNanTotal_.fetch_add(static_cast<uint32_t>(nanCount),
+                                 std::memory_order_relaxed);
         }
     }
 
@@ -1243,6 +1246,12 @@ void PlaybackController::setTrackLoadedListener(std::function<void()> listener) 
 size_t PlaybackController::bufferedSamples() const noexcept {
     if (!pcmQueue_) return 0;
     return pcmQueue_->availableSamples();
+}
+
+// PB6-W2C (2026-11-12): dibaca thread polling JNI (nativeGetPosition)
+// untuk log throttle; hanya atomic load, tanpa lock.
+uint32_t PlaybackController::nanCleanedTotal() const noexcept {
+    return mNanTotal_.load(std::memory_order_relaxed);
 }
 
 void PlaybackController::setStreamSampleRate(uint32_t rate) noexcept {
