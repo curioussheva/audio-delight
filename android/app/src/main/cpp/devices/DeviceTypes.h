@@ -10,9 +10,10 @@ namespace pristine {
 // kode pemakainya tidak konsisten).
 enum class DeviceType {
     WIRED_HEADSET,
-    BLUETOOTH,          // A2DP / SCO
+    BLUETOOTH,          // A2DP / SCO / BLE (selalu lossy)
     USB_AUDIO,          // DAC USB - satu-satunya yang bisa jalur langsung
-    HDMI,               // termasuk eARC
+    HDMI,               // termasuk ARC (10) dan eARC (29)
+    LINE_OUT,           // line-level analog/digital (mis. SPDIF) + dock analog
     BUILTIN_SPEAKER,
     BUILTIN_EARPIECE,   // speaker telepon
     TELEPHONY,          // routing panggilan
@@ -25,6 +26,7 @@ inline const char* deviceTypeName(DeviceType t) {
         case DeviceType::BLUETOOTH:       return "bluetooth";
         case DeviceType::USB_AUDIO:       return "usb";
         case DeviceType::HDMI:            return "hdmi";
+        case DeviceType::LINE_OUT:        return "line_out";
         case DeviceType::BUILTIN_SPEAKER: return "speaker";
         case DeviceType::BUILTIN_EARPIECE:return "earpiece";
         case DeviceType::TELEPHONY:       return "telephony";

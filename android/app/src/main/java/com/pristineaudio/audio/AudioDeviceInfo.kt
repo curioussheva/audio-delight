@@ -18,7 +18,7 @@ data class AudioDeviceInfo(
     /** Nama yang ditampilkan, mis. "USB Audio DAC". */
     val name: String,
 
-    /** "usb", "speaker", "headset", "bluetooth", "hdmi", "earpiece", "unknown". */
+    /** "usb", "speaker", "headset", "bluetooth", "hdmi", "earpiece", "line_out", "unknown". */
     val type: String,
 
     /**
