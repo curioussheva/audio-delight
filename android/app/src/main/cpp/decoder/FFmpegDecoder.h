@@ -3,12 +3,14 @@
 #include "AudioDecoder.h"
 
 #include <atomic>
+#include <cstdint>
 
 struct AVFormatContext;
 struct AVCodecContext;
 struct AVFrame;
 struct AVPacket;
 struct SwrContext;
+struct AVChannelLayout;
 
 namespace pristine::decoder {
 
@@ -84,7 +86,16 @@ private:
 
 
     bool setupCodec();
-    bool setupResampler();
+    // 🔥 FIX (2026-11-12, B7-W4): setupResampler diparameterisasi supaya
+    // jalur open dan jalur rebuild mid-stream memakai satu implementasi.
+    // Saat open, input diambil dari codecCtx_; saat rebuild, dari frame_
+    // yang parameternya berubah. Mencatat konfigurasi input yang berhasil
+    // di-init ke swrInput*_* (dipakai perbandingan di onDecode).
+    bool setupResampler(
+        int inputSampleRate,
+        int inputSampleFormat,
+        const AVChannelLayout* inputLayout
+    );
     void cleanup();
 
     DecodeResult decodeFrame();
@@ -120,6 +131,24 @@ private:
     // "belum tahu" dan self-heal tetap jalan sampai terisi.
     std::atomic<uint64_t> currentFrame_{0};
     std::atomic<double> durationSeconds_{0.0};
+
+    // 🔥 FIX (2026-11-12, B7-W4): konfigurasi input swr saat ini, dicatat
+    // setupResampler() sesudah swr_init sukses. onDecode membandingkan
+    // parameter tiap frame dengan nilai ini (murah: 5× compare skalar)
+    // dan hanya rebuild bila ada yang berubah — HE-AAC SBR bisa mengubah
+    // sample_rate di tengah file, sementara setupResampler lama hanya
+    // jalan sekali dari codecCtx_ saat open. Layout disimpan sebagai
+    // skalar (order/mask/nb_channels) supaya header ini tetap bebas
+    // include FFmpeg; untuk layout native ketiganya sudah menentukan
+    // layout penuh (setara av_channel_layout_compare). Layout CUSTOM
+    // (map per-kanal di opaque) tidak dibedakan — tidak ada decoder di
+    // app ini yang menghasilkannya; file seperti itu tetap jalan dengan
+    // konfigurasi frame pertama, sama seperti perilaku lama.
+    int swrInputSampleRate_ = 0;
+    int swrInputSampleFormat_ = -1; // AVSampleFormat sebagai int; -1 = belum diset
+    int swrInputChannels_ = 0;
+    int swrInputLayoutOrder_ = 0;   // AVChannelOrder sebagai int; 0 = UNSPEC
+    uint64_t swrInputLayoutMask_ = 0;
 
     uint64_t durationFrames_ = 0;
 

@@ -117,7 +117,9 @@ bool FFmpegDecoder::onOpen(
         return false;
     }
 
-    if (!setupResampler()) {
+    if (!setupResampler(codecCtx_->sample_rate,
+                        codecCtx_->sample_fmt,
+                        &codecCtx_->ch_layout)) {
         __android_log_print(ANDROID_LOG_ERROR, "FFmpegDecoder",
                             "onOpen: setupResampler failed");
         cleanup();
@@ -207,6 +209,53 @@ DecodeResult FFmpegDecoder::onDecode(
             if (receiveResult < 0) {
                 result.status = DecodeStatus::Error;
                 return result;
+            }
+
+            // 🔥 FIX (2026-11-12, B7-W4): parameter frame bisa berubah di
+            // tengah file (HE-AAC SBR: sample_rate naik sesudah SBR aktif)
+            // sementara swr hanya dikonfigurasi sekali saat open dari
+            // codecCtx_. Bandingkan parameter frame dengan konfigurasi swr
+            // saat ini; rebuild hanya bila ada yang berubah, jadi jalur
+            // normal (parameter tetap) cuma tambah 5× compare skalar.
+            //
+            // ch_layout UNSPEC (order == AV_CHANNEL_ORDER_UNSPEC) diberi
+            // default dulu via av_channel_layout_default() dari jumlah
+            // kanal — layout hasil default-lah yang dibandingkan dan
+            // dipakai rebuild. Bila nb_channels juga 0, default gagal dan
+            // layout tetap UNSPEC: perbandingan tetap mendeteksi perubahan
+            // dan rebuild gagal dengan cara yang sama seperti open dengan
+            // layout tak valid (Error, bukan output sampah).
+            //
+            // Rebuild = swr_free + setup ulang penuh (jalur yang sama
+            // dengan open): swr_alloc_set_opts2 di atas konteks yang sudah
+            // di-init tidak dijamin aman. Sisa delay filter lama (±128
+            // sampel) ikut terbuang — glitch ≤ ~3 ms di titik transisi.
+            AVChannelLayout frameLayout = frame_->ch_layout;
+            if (frameLayout.order == AV_CHANNEL_ORDER_UNSPEC) {
+                av_channel_layout_default(&frameLayout, frameLayout.nb_channels);
+            }
+
+            if (frame_->sample_rate != swrInputSampleRate_ ||
+                frame_->format != swrInputSampleFormat_ ||
+                frameLayout.nb_channels != swrInputChannels_ ||
+                frameLayout.order != swrInputLayoutOrder_ ||
+                frameLayout.mask != swrInputLayoutMask_) {
+                __android_log_print(ANDROID_LOG_INFO, "FFmpegDecoder",
+                    "B7-W4: frame params changed (rate %d->%d, fmt %d->%d, ch %d->%d) — rebuilding resampler",
+                    swrInputSampleRate_, frame_->sample_rate,
+                    swrInputSampleFormat_, frame_->format,
+                    swrInputChannels_, frameLayout.nb_channels);
+                swr_free(&swrCtx_);
+                if (!setupResampler(frame_->sample_rate,
+                                    frame_->format,
+                                    &frameLayout)) {
+                    __android_log_print(ANDROID_LOG_ERROR, "FFmpegDecoder",
+                        "B7-W4: resampler rebuild failed — stop decoding");
+                    result.status = DecodeStatus::Error;
+                    return result;
+                }
+                // Log FORMAT CHECK sekali lagi dengan parameter baru.
+                formatLogged_ = false;
             }
 
             // 🔥 FIX (2026-10-06): formatLogged adalah member per-instance,
@@ -598,7 +647,10 @@ bool FFmpegDecoder::setupCodec() {
         nullptr) >= 0;
 }
 
-bool FFmpegDecoder::setupResampler() {
+bool FFmpegDecoder::setupResampler(
+    int inputSampleRate,
+    int inputSampleFormat,
+    const AVChannelLayout* inputLayout) {
     swrCtx_ = swr_alloc();
     if (!swrCtx_)
         return false;
@@ -608,16 +660,16 @@ bool FFmpegDecoder::setupResampler() {
 
     __android_log_print(ANDROID_LOG_DEBUG, "FFmpegDecoder",
                         "setupResampler: input_rate=%d, output_rate=%d",
-                        codecCtx_->sample_rate, config().targetSampleRate);
+                        inputSampleRate, config().targetSampleRate);
 
     int ret = swr_alloc_set_opts2(
         &swrCtx_,
         &stereo,
         AV_SAMPLE_FMT_FLT,
         config().targetSampleRate,
-        &codecCtx_->ch_layout,
-        codecCtx_->sample_fmt,
-        codecCtx_->sample_rate,
+        inputLayout,
+        inputSampleFormat,
+        inputSampleRate,
         0,
         nullptr);
 
@@ -633,7 +685,7 @@ bool FFmpegDecoder::setupResampler() {
     // hanya menambah noise floor tanpa manfaat. Untuk passthrough rate
     // (44.1k→44.1k), dither juga tidak perlu.
     const bool needsResample =
-        (codecCtx_->sample_rate != static_cast<int>(config().targetSampleRate));
+        (inputSampleRate != static_cast<int>(config().targetSampleRate));
 
     int filterSize = 128;
     av_opt_set_int(swrCtx_, "filter_size", filterSize, 0);
@@ -653,7 +705,20 @@ bool FFmpegDecoder::setupResampler() {
     __android_log_print(ANDROID_LOG_INFO, "FFmpegDecoder",
                         "setupResampler: swr_init ret=%d (filter_size=128, cutoff=0.97, dither=%s, needsResample=%d)",
                         init_ret, needsResample ? "triangular_hp(0.5)" : "none", needsResample ? 1 : 0);
-    return init_ret >= 0;
+    if (init_ret < 0)
+        return false;
+
+    // 🔥 FIX (2026-11-12, B7-W4): catat konfigurasi input yang BARU SAJA
+    // berhasil di-init — inilah yang dibandingkan onDecode dengan tiap
+    // frame. Hanya dicatat bila swr_init sukses, supaya rebuild yang gagal
+    // tidak merusak catatan konfigurasi lama.
+    swrInputSampleRate_ = inputSampleRate;
+    swrInputSampleFormat_ = inputSampleFormat;
+    swrInputChannels_ = inputLayout->nb_channels;
+    swrInputLayoutOrder_ = static_cast<int>(inputLayout->order);
+    swrInputLayoutMask_ = inputLayout->mask;
+
+    return true;
 }
 
 void FFmpegDecoder::cleanup() {
