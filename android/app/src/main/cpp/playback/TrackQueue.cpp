@@ -312,12 +312,38 @@ void TrackQueue::setShuffleMode(
     // B9-activeQueue: dulu activeQueue() menyalin SELURUH queue hanya
     // untuk satu elemen [mCurrentIndex]; kini activeAt(mCurrentIndex)
     // langsung. Semantik SAMA (invarian B9-TOCTOU: semua entri
-    // mShuffleOrder valid, jadi activeQueue()[i] == activeAt(i)) dan
-    // logika shuffle di bawah TIDAK disentuh — itu urusan
-    // B9-shuffle-origIdx.
+    // mShuffleOrder valid, jadi activeQueue()[i] == activeAt(i)).
+    // Logika ON→OFF di bawah memakai origIdx — lihat penangkapan
+    // playingOrigIdx (B9-shuffle-origIdx).
     std::optional<TrackInfo> playingTrack;
     if (!mTracks.empty() && mCurrentIndex < activeSizeLocked()) {
         playingTrack = activeAt(mCurrentIndex);
+    }
+
+    // B9-shuffle-origIdx (2026-11-12): indeks ASLI trek yang sedang main,
+    // dibaca dari mShuffleOrder SEBELUM rebuildShuffle() menimpanya.
+    //
+    // ON→OFF dulu memakai std::find + operator== (uri+durationMs+
+    // sampleRate, lihat p-m6 di PlaybackTypes.h) — find mengembalikan
+    // kecocokan PERTAMA, jadi lagu duplikat yang byte-identical (mis.
+    // lagu yang sama ditambahkan 2x) selalu jatuh ke indeks pertama,
+    // bukan ke salinan yang benar-benar sedang diputar.
+    // mShuffleOrder[mCurrentIndex] adalah indeks asli yang persis —
+    // tahan duplikat, tanpa operator==.
+    //
+    // HARUS ditangkap di sini: rebuildShuffle() di bawah mengisi ulang
+    // mShuffleOrder dengan permutasi baru, jadi sesudah itu urutan lama
+    // hilang. Guard: mode lama shuffle (kalau sudah Off, early-return di
+    // atas sudah keluar), mCurrentIndex di dalam mShuffleOrder, dan
+    // entri di dalam mTracks.
+    std::optional<size_t> playingOrigIdx;
+    if (
+        mShuffleMode != ShuffleMode::Off &&
+        !mTracks.empty() &&
+        mCurrentIndex < mShuffleOrder.size() &&
+        mShuffleOrder[mCurrentIndex] < mTracks.size()
+    ) {
+        playingOrigIdx = mShuffleOrder[mCurrentIndex];
     }
 
     mShuffleMode = mode;
@@ -328,16 +354,22 @@ void TrackQueue::setShuffleMode(
         playingTrack &&
         mode == ShuffleMode::Off
     ) {
-        // ON→OFF: cari trek yang sedang main di queue asli, lompat ke sana.
-        const auto it = std::find(
-            mTracks.begin(),
-            mTracks.end(),
-            *playingTrack
-        );
-        if (it != mTracks.end()) {
-            mCurrentIndex = static_cast<size_t>(
-                std::distance(mTracks.begin(), it)
+        // ON→OFF: lompat ke indeks asli trek yang sedang main.
+        if (playingOrigIdx) {
+            mCurrentIndex = *playingOrigIdx;
+        } else {
+            // Fallback (state tak valid / origIdx tak tertangkap):
+            // perilaku lama — find kecocokan pertama via operator==.
+            const auto it = std::find(
+                mTracks.begin(),
+                mTracks.end(),
+                *playingTrack
             );
+            if (it != mTracks.end()) {
+                mCurrentIndex = static_cast<size_t>(
+                    std::distance(mTracks.begin(), it)
+                );
+            }
         }
     } else if (
         playingTrack &&
