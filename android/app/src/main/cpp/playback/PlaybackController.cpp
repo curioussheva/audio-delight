@@ -771,12 +771,13 @@ size_t PlaybackController::render(float* output,
     size_t outputSamples = 0;  // output: sample yang benar-benar dihasilkan
     if (useRate) {
         // PB6-W2B (2026-11-12): JANGAN resize di audio thread — render()
-        // noexcept, bad_alloc = terminate. Kapasitas pre-alokasi (7744)
-        // menutup envelope 1920 frame × laju 2.0 × stereo; di luar itu
-        // (mis. burst 3840 frame @192 kHz — render() dipanggil dengan
-        // numFrames penuh, chunking kMax hanya di applyPipeline/jalur
-        // fallback) callback ini dibisukan — pola yang sama dengan
-        // clearing_/paused di atas (p-m14: laporkan buffer penuh).
+        // noexcept, bad_alloc = terminate. Kapasitas pre-alokasi (16448)
+        // menutup envelope 4096 frame callback Oboe penuh × laju 2.0 ×
+        // stereo — 4096 BUKAN kMax 1920: render() dipanggil dengan
+        // numFrames penuh sebelum chunking pipeline, dan burst 3840
+        // frame @192 kHz (20 ms) muat di dalamnya; di luar itu callback
+        // ini dibisukan — pola yang sama dengan clearing_/paused di
+        // atas (p-m14: laporkan buffer penuh).
         if (inputSamples > rateScratch_.size()) {
             std::fill(output, output + requestedSamples, 0.0f);
             return requestedSamples;

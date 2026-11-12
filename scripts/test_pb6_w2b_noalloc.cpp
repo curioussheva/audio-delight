@@ -24,11 +24,12 @@
 // Cakupan: laju 0.5x/2.0x dan rasio pitch 0.5/2.0 (ujung rentang), callback
 // 1920 frame (kMaxFramesPerCallback) dan 3840 frame (burst maks Oboe
 // @192 kHz, C-C2) — termasuk ganti laju/rasio di tengah stream (reset()
-// harus mempertahankan kapasitas). Envelope WSOLA meniru guard render():
-// push dilewati bila inputSamples > 7744 (callback itu dibisukan render).
-// PlaybackController::render() sendiri TIDAK diuji di sini (butuh
-// android/log.h + FFmpegDecoder + PCMQueue) — verifikasi guard + assign
-// 7744 butuh build GH / device.
+// harus mempertahankan kapasitas). 3840 frame @2.0x kini MUAT di guard
+// (16448), bukan dibisukan seperti di guard 7744 lama. Envelope WSOLA
+// meniru guard render(): push dilewati bila inputSamples > 16448
+// (callback itu dibisukan render). PlaybackController::render() sendiri
+// TIDAK diuji di sini (butuh android/log.h + FFmpegDecoder + PCMQueue) —
+// verifikasi guard + assign 16448 butuh build GH / device.
 
 #include "PlaybackRateProcessor.h"
 #include "PitchShifter.h"
@@ -94,8 +95,10 @@ static void check(bool ok, const char* what) {
 
 constexpr uint32_t kSampleRate = 48000;
 constexpr uint32_t kChannels = 2;
-// 7744 = 1920 frame (kMaxFramesPerCallback) x laju maks 2.0 x 2 ch + 64.
-constexpr size_t kRateScratchSamples = 1920 * 2 * 2 + 64;
+// 16448 = 4096 frame (frame callback Oboe penuh, bukan kMax 1920 —
+// render() dipanggil dengan numFrames penuh sebelum chunking pipeline;
+// burst 3840 @192 kHz muat dengan margin) x laju maks 2.0 x 2 ch + 64.
+constexpr size_t kRateScratchSamples = 4096 * 2 * 2 + 64;
 
 // Sine 440 Hz stereo, N detik.
 static std::vector<float> makeSine(double seconds, double freq = 440.0) {
@@ -119,7 +122,7 @@ struct StreamResult {
 };
 
 // WSOLA: push = callbackFrames * rate (seperti render: baca frames*rate
-// dari queue); bila inputSamples > 7744, render meng-guard (bisukan) dan
+// dari queue); bila inputSamples > 16448, render meng-guard (bisukan) dan
 // prosesor tidak dipanggil — simulasi yang sama di sini (skip push/pull).
 static StreamResult streamRate(float rate, size_t callbackFrames,
                                double warmupSec, double measureSec) {
@@ -220,12 +223,16 @@ int main() {
     std::printf("PB6-W2B no-alloc test\n");
 
     // Aritmetika ukuran rateScratch_ (yang di-assign di initialize()).
-    check(kRateScratchSamples == 7744, "7744 = 1920*2.0*2+64");
-    // Envelope guard: 1920 frame @2.0x muat, 3840 frame @2.0x tidak.
+    check(kRateScratchSamples == 16448, "16448 = 4096*2.0*2+64");
+    // Envelope guard: 1920 frame @2.0x muat, 3840 frame @2.0x muat
+    // (tidak lagi dibisukan seperti di guard 7744 lama), begitu pula
+    // batas 4096 frame @2.0x.
     check(1920u * 2u * 2u <= kRateScratchSamples,
-          "guard: 1920f @2.0x muat di 7744");
-    check(3840u * 2u * 2u > kRateScratchSamples,
-          "guard: 3840f @2.0x melebihi 7744 (dibisukan, bukan resize)");
+          "guard: 1920f @2.0x muat di 16448");
+    check(3840u * 2u * 2u <= kRateScratchSamples,
+          "guard: 3840f @2.0x muat di 16448 (tidak dibisukan)");
+    check(4096u * 2u * 2u <= kRateScratchSamples,
+          "guard: 4096f @2.0x muat di 16448");
 
     char label[128];
     for (float rate : {0.5f, 2.0f}) {
@@ -239,6 +246,17 @@ int main() {
                           "WSOLA %.1fx cb=%zu: output hidup (rms=%.3f)",
                           rate, cb, r.rms);
             check(r.rms > 0.01 && std::isfinite(r.rms), label);
+            // outFrames hampir penuh = callback benar-benar diproses,
+            // bukan dibisukan guard. RMS saja tidak cukup: total 240000
+            // frame habis dibagi 3840 kecuali ekor 1920 — ekor itu saja
+            // lolos guard 7744 lama dan RMS-nya tetap >0,01 walau 62/63
+            // callback dibisukan (baseline: outFrames=1920, tetap PASS).
+            // Ambang 80% (192000/240000) jauh di atas kasus bisu itu dan
+            // di bawah minimum sah yang teramati (218624, 0.5x cb=3840).
+            std::snprintf(label, sizeof(label),
+                          "WSOLA %.1fx cb=%zu: output hampir penuh (%zu/240000 frame)",
+                          rate, cb, r.outFrames);
+            check(r.outFrames >= 192000, label);
         }
     }
 

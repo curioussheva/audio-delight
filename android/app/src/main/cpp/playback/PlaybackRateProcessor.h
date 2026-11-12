@@ -54,15 +54,17 @@ private:
     // audio thread (noexcept) tidak pernah menumbuhkan vector (bad_alloc
     // di noexcept = terminate). clear() di reset() mempertahankan
     // kapasitas, jadi reserve sekali di sini cukup seumur prosesor.
-    // Envelope: callback ≤ 3840 frame (burst maks Oboe @192 kHz, C-C2 di
-    // AudioCallback.cpp), stereo, laju 0.5..2.0 — push ≤ 3872 frame
-    // (render() meng-guard inputSamples ≤ 7744). Turunan (frame):
-    // input_/mono_ ≤ 2048 sisa + 3872 push = 5920; output_ ≤ readPos
-    // 12032 + ~5888 tersedia + 1024 ekor jendela ≈ 18944. Angka reserve
-    // (float) dibulatkan ke atas dengan headroom; di luar envelope vector
-    // masih bisa tumbuh — sama seperti sebelum fix, tidak lebih buruk.
-    static constexpr size_t kInputCapacity = 16384;   // 8192 frame stereo
-    static constexpr size_t kMonoCapacity = 8192;     // 8192 frame
+    // Envelope: callback ≤ 4096 frame (frame callback Oboe penuh —
+    // render() dipanggil sebelum chunking pipeline; burst 3840 @192 kHz
+    // muat, C-C2 di AudioCallback.cpp), stereo, laju 0.5..2.0 — push
+    // ≤ 8224 frame (render() meng-guard inputSamples ≤ 16448).
+    // Turunan (frame): input_/mono_ ≤ 2048 sisa + 8224 push = 10272;
+    // output_ ≤ readPos 12288 + ~6144 tersedia + 1024 ekor jendela
+    // ≈ 19456. Angka reserve (float) dibulatkan ke atas dengan headroom;
+    // di luar envelope vector masih bisa tumbuh — sama seperti sebelum
+    // fix, tidak lebih buruk.
+    static constexpr size_t kInputCapacity = 22528;   // 11264 frame stereo
+    static constexpr size_t kMonoCapacity = 11264;    // 11264 frame
     static constexpr size_t kOutputCapacity = 49152;  // 24576 frame stereo
 
     void processAvailable() noexcept;

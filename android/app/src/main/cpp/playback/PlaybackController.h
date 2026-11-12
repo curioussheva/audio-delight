@@ -220,13 +220,20 @@ private:
 
     // PB6-W2B (2026-11-12): kapasitas rateScratch_ — pre-alokasi di
     // initialize() supaya render() (noexcept, audio thread) tidak pernah
-    // resize() (bad_alloc di noexcept = terminate). 1920 frame maks per
-    // callback (kMaxFramesPerCallback, core/AudioConstants.h) × laju maks
-    // 2.0 (setPlaybackRate/setRate) × 2 channel stereo (AudioCallback
-    // memanggil render() dengan channels=2) + 64 slack pembulatan
-    // (inputFrames = frames*rate+0.5). render() meng-guard: inputSamples
-    // di atas kapasitas → senyap, bukan resize (lihat render()).
-    static constexpr size_t kRateScratchSamples = 1920 * 2 * 2 + 64;  // 7744
+    // resize() (bad_alloc di noexcept = terminate). Batasnya adalah
+    // frame callback Oboe PENUH, bukan kMaxFramesPerCallback (1920):
+    // AudioCallback memanggil render() dengan numFrames penuh SEBELUM
+    // chunking kMax di applyPipeline/jalur fallback, jadi satu callback
+    // bisa sebesar burst Oboe — 3840 frame @192 kHz (burst 20 ms,
+    // C-C2 di AudioCallback.cpp). 4096 frame menutup burst itu dengan
+    // margin × laju maks 2.0 (setPlaybackRate/setRate) × 2 channel
+    // stereo (AudioCallback memanggil render() dengan channels=2)
+    // + 64 slack pembulatan (inputFrames = frames*rate+0.5).
+    // 7744 (= 1920×2×2+64) TIDAK cukup: burst 3840 frame @192 kHz
+    // @2,0x butuh 15360 sampel — guard lama membisukan SETIAP callback.
+    // render() meng-guard: inputSamples di atas kapasitas → senyap,
+    // bukan resize (lihat render()).
+    static constexpr size_t kRateScratchSamples = 4096 * 2 * 2 + 64;  // 16448 (~66 KB float)
     std::vector<float> rateScratch_;
 
     // 🔥 FASE R (2026-11-11): retune (PitchShifter, phase vocoder).
