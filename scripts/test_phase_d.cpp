@@ -164,10 +164,10 @@ int main() {
 
         // Pembaca awal: belum ada preset.
         HeadphonePresetData out;
-        check("awal: belum ada preset", !state.headphonePreset(out));
+        check("awal: belum ada preset", state.headphonePreset(out) == PresetRead::None);
 
         state.setHeadphonePreset(presetA);
-        check("setelah set: ada preset", state.headphonePreset(out));
+        check("setelah set: ada preset", state.headphonePreset(out) == PresetRead::Ok);
         check("filterCount tersalin", out.filterCount == 4);
         check("preamp tersalin", std::fabs(out.preampDb + 6.8f) < 1e-4f);
         check("tipe filter tersalin", out.filters[3].type == 2);
@@ -213,7 +213,11 @@ int main() {
 
             while (std::chrono::steady_clock::now() < deadline) {
 
-                if (!shared.headphonePreset(seen)) continue;
+                // Lewati bila tidak ada snapshot preset yang sah: None
+                // (belum pernah dipasang) maupun Busy (penulisan sedang
+                // berlangsung, out tidak disentuh) — keduanya dulu
+                // mengembalikan false dari headphonePreset() bool.
+                if (shared.headphonePreset(seen) != PresetRead::Ok) continue;
                 reads.fetch_add(1);
 
                 // Hanya dua bentuk sah: A (4 filter, preamp -6.8, f0 105)
