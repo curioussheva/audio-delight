@@ -169,6 +169,16 @@ bool AudioEngine::start(
     mMetrics.updateChannelCount(
         static_cast<uint32_t>(mStreamController.channelCount())
     );
+    // (C-XRUN, 2026-11-12): properti stream yang tetap sesudah open —
+    // diisi sekali di sini, seperti laju/channel. xruns TIDAK diisi di
+    // sini (nilainya berubah selama playback — di-update live dari
+    // AudioCallback::updateCallbackMetrics).
+    mMetrics.updateBufferSizeFrames(
+        mStreamController.bufferSizeInFrames()
+    );
+    mMetrics.updateFramesPerBurst(
+        mStreamController.framesPerBurst()
+    );
     mMetrics.setExclusiveMode(exclusiveMode);
     mMetrics.setDSPEnabled(mState.isDSPEnabled());
 

@@ -519,6 +519,23 @@ const noexcept {
 }
 
 // =====================================================
+// BUFFER SIZE IN FRAMES
+// =====================================================
+
+int32_t AudioStreamController::bufferSizeInFrames()
+const noexcept {
+
+    // Salinan lokal (M4): dibaca dari start() (thread manager), sementara
+    // thread error Oboe bisa me-reset mStream kapan saja.
+    // getBufferSizeInFrames() Oboe = ukuran buffer AKTUAL yang dipakai
+    // stream (bukan kapasitas). Hanya dilaporkan — pemanggil tidak pernah
+    // memanggil setBufferSizeInFrames(), jadi ukuran ini apa adanya dari
+    // Oboe/AAudio (C-XRUN, 2026-11-12).
+    auto stream = streamCopy();
+    return stream ? stream->getBufferSizeInFrames() : 0;
+}
+
+// =====================================================
 // ERROR CALLBACK
 // =====================================================
 

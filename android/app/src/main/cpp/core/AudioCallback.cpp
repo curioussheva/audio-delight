@@ -335,6 +335,27 @@ void AudioCallback::updateCallbackMetrics(
                 mMetrics.updateLatencyMs(latencyMs);
             }
         }
+
+        // XRun Oboe (C-XRUN, 2026-11-12): counter underrun+overrun stream
+        // ini menurut HAL — dibaca di throttle yang sama dengan latensi
+        // (~160 ms), langsung dari `stream` yang diserahkan Oboe ke
+        // callback ini, seperti getTimestamp()/getFramesWritten() di atas
+        // (bukan via streamCopy(): TIDAK ADA polling thread di codebase
+        // ini — metrik live memang ditulis dari audio thread; getter
+        // controller baru akan jadi dead code kalau tidak ada pemanggil).
+        // getXRunCount() AAudio hanya baca atomic di shared memory.
+        // OpenSLES tidak mendukung XRun count (isXRunCountSupported
+        // false) dan getXRunCount() mengembalikan error — nilai lama
+        // dipertahankan, bukan ditimpa 0. Ini BUKAN recordUnderrun()/
+        // recordOverrun() lokal: itu hitungan callback kita sendiri.
+        if (stream->isXRunCountSupported()) {
+            const auto xruns = stream->getXRunCount();
+            if (xruns.error() == oboe::Result::OK && xruns.value() >= 0) {
+                mMetrics.updateXRuns(
+                    static_cast<uint64_t>(xruns.value())
+                );
+            }
+        }
     }
 }
 

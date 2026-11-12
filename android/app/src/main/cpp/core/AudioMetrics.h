@@ -41,6 +41,21 @@ public:
         );
     }
 
+    // XRun Oboe (C-XRUN, 2026-11-12): nilai counter HAL, bukan hitungan
+    // lokal — jadi update (timpa), bukan record (tambah). Dipanggil dari
+    // audio thread (AudioCallback, di-throttle); error/unsupported =
+    // pemanggil mempertahankan nilai lama, tidak memanggil ini.
+    inline void
+    updateXRuns(
+        uint64_t xruns
+    ) noexcept {
+
+        mXRuns.store(
+            xruns,
+            std::memory_order_relaxed
+        );
+    }
+
     // =============================================
     // LATENCY
     // =============================================
@@ -67,6 +82,20 @@ public:
 
         mBufferedSamples.store(
             samples,
+            std::memory_order_relaxed
+        );
+    }
+
+    // Ukuran buffer stream AKTUAL (C-XRUN, 2026-11-12): hanya dilaporkan —
+    // setBufferSizeInFrames() tidak pernah dipanggil. Diisi sekali dari
+    // AudioEngine::start(), seperti laju/channel.
+    inline void
+    updateBufferSizeFrames(
+        int32_t frames
+    ) noexcept {
+
+        mBufferSizeFrames.store(
+            frames,
             std::memory_order_relaxed
         );
     }
@@ -127,6 +156,19 @@ public:
         );
     }
 
+    // Burst stream (C-XRUN, 2026-11-12). Diisi sekali dari
+    // AudioEngine::start(), seperti laju/channel.
+    inline void
+    updateFramesPerBurst(
+        int32_t frames
+    ) noexcept {
+
+        mFramesPerBurst.store(
+            frames,
+            std::memory_order_relaxed
+        );
+    }
+
     // =============================================
     // FLAGS
     // =============================================
@@ -175,6 +217,10 @@ private:
     std::atomic<uint64_t>
         mBufferedSamples{0};
 
+    // (C-XRUN, 2026-11-12): ukuran buffer stream aktual, hanya dilaporkan.
+    std::atomic<int32_t>
+        mBufferSizeFrames{0};
+
     // =============================================
     // XRUNS
     // =============================================
@@ -184,6 +230,10 @@ private:
 
     std::atomic<uint64_t>
         mOverruns{0};
+
+    // (C-XRUN, 2026-11-12): counter XRun Oboe (HAL), bukan hitungan lokal.
+    std::atomic<uint64_t>
+        mXRuns{0};
 
     // =============================================
     // LATENCY
@@ -215,6 +265,10 @@ private:
 
     std::atomic<uint32_t>
         mChannelCount{2};
+
+    // (C-XRUN, 2026-11-12): burst stream, diisi sekali saat start().
+    std::atomic<int32_t>
+        mFramesPerBurst{0};
 
     // =============================================
     // FLAGS

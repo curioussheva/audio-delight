@@ -20,6 +20,11 @@ AudioMetrics::getStats() const noexcept {
             std::memory_order_relaxed
         );
 
+    stats.bufferSizeFrames =
+        mBufferSizeFrames.load(
+            std::memory_order_relaxed
+        );
+
     stats.underruns =
         mUnderruns.load(
             std::memory_order_relaxed
@@ -27,6 +32,11 @@ AudioMetrics::getStats() const noexcept {
 
     stats.overruns =
         mOverruns.load(
+            std::memory_order_relaxed
+        );
+
+    stats.xruns =
+        mXRuns.load(
             std::memory_order_relaxed
         );
 
@@ -55,6 +65,11 @@ AudioMetrics::getStats() const noexcept {
             std::memory_order_relaxed
         );
 
+    stats.framesPerBurst =
+        mFramesPerBurst.load(
+            std::memory_order_relaxed
+        );
+
     stats.exclusiveMode =
         mExclusiveMode.load(
             std::memory_order_relaxed
@@ -79,12 +94,22 @@ void AudioMetrics::reset() noexcept {
         std::memory_order_relaxed
     );
 
+    mBufferSizeFrames.store(
+        0,
+        std::memory_order_relaxed
+    );
+
     mUnderruns.store(
         0,
         std::memory_order_relaxed
     );
 
     mOverruns.store(
+        0,
+        std::memory_order_relaxed
+    );
+
+    mXRuns.store(
         0,
         std::memory_order_relaxed
     );
@@ -114,6 +139,13 @@ void AudioMetrics::reset() noexcept {
 
     mChannelCount.store(
         2,
+        std::memory_order_relaxed
+    );
+
+    // (C-XRUN, 2026-11-12): 0 = belum dibaca / tidak ada stream — sama
+    // seperti bufferSizeFrames di atas.
+    mFramesPerBurst.store(
+        0,
         std::memory_order_relaxed
     );
 

@@ -158,9 +158,10 @@ private:
     void updateParameters();
 
     // Metrik per callback (M5, 2026-11-10): waktu callback + beban CPU +
-    // latensi output (latensi di-throttle tiap 16 callback). Hanya atomic
-    // store + getTimestamp Oboe (baca shared memory, tanpa binder) — aman
-    // di audio thread.
+    // latensi output + XRun Oboe (C-XRUN, 2026-11-12; latensi dan XRun
+    // di-throttle tiap 16 callback). Hanya atomic store + pemanggilan
+    // Oboe yang baca shared memory (getTimestamp, getXRunCount), tanpa
+    // binder — aman di audio thread.
     void updateCallbackMetrics(
         oboe::AudioStream* stream,
         int32_t numFrames,

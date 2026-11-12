@@ -76,6 +76,17 @@ public:
 
     int32_t framesPerBurst() const noexcept;
 
+    // Ukuran buffer stream AKTUAL dalam frame (Oboe getBufferSizeInFrames).
+    // Hanya dilaporkan — setBufferSizeInFrames() TIDAK pernah dipanggil di
+    // codebase ini, dan getter ini tidak mengubah ukuran buffer (C-XRUN,
+    // 2026-11-12). 0 = tidak ada stream.
+    //
+    // (Tidak ada getter isMmap: Oboe tidak mengekspos pemakaian MMAP —
+    // tidak ada isMmap() di AudioStream.h pinned 5714d53. Satu-satunya
+    // sumber adalah AAudio C API AAudioStream_isMMapUsed, yang butuh
+    // API 26+ sementara minSdk 24 dan libaaudio tidak di-link.)
+    int32_t bufferSizeInFrames() const noexcept;
+
     // Laju yang BENAR-BENAR dipakai stream setelah dibuka. Bisa berbeda dari
     // yang diminta kalau device/DAC tidak mendukung laju itu. Dipakai untuk
     // memberi tahu decoder laju mana yang harus dipakai (target resample).
