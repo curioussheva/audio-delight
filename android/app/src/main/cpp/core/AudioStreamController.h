@@ -193,11 +193,22 @@ private:
     std::atomic<bool>
         mExclusive{false};
 
-    int32_t mSampleRate = 48000;
+    // (C-SRATE, 2026-11-12): atomic — ditulis open() (thread JS) dan
+    // close()/onErrorAfterClose() (thread error Oboe), dibaca
+    // actualSampleRate() sebagai fallback saat stream null dari thread JNI
+    // (NativeDSPModule::nativeGetActualSampleRate) dan thread manager
+    // (EngineManager). Plain int32_t di sini = data race.
+    std::atomic<int32_t> mSampleRate{48000};
 
-    int32_t mChannelCount = 2;
+    // (C-SRATE): atomic juga. Hari ini hanya dibaca channelCount() dari
+    // AudioEngine::start(), thread yang sama sesudah open() — tapi atomic
+    // int32_t murah, tanpa lock, dan menutup jalur baca lintas-thread kalau
+    // getter ini nanti dipanggil dari thread lain.
+    std::atomic<int32_t> mChannelCount{2};
 
-    int32_t mFramesPerBurst = 0;
+    // (C-SRATE): atomic juga — alasan sama seperti mChannelCount; hanya
+    // dibaca framesPerBurst() dari AudioEngine::start() hari ini.
+    std::atomic<int32_t> mFramesPerBurst{0};
 
     // true kalau AAudio gagal dan stream dibuka ulang dengan OpenSLES.
     std::atomic<bool> mOpenSLESFallback{false};
@@ -210,6 +221,11 @@ private:
     // Id perangkat yang benar-benar dipakai stream. 0 = dipilih sistem.
     std::atomic<int32_t> mActualDeviceId{0};
 
+    // (C-SRATE, 2026-11-12): SENGAJA tetap plain, bukan atomic — ditulis
+    // (AudioStreamController.cpp:211) dan dibaca (:215) hanya di dalam
+    // open(), thread yang sama; nilainya tidak pernah lolos keluar open().
+    // Satu-satunya yang dibaca lintas-thread adalah mExclusive (atomic)
+    // yang di-store dari nilai ini.
     oboe::SharingMode mSharingMode =
         oboe::SharingMode::Shared;
 

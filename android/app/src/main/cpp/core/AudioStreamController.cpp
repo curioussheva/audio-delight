@@ -190,14 +190,23 @@ bool AudioStreamController::open(
     // mSampleRate (fallback actualSampleRate), mChannelCount + mFramesPerBurst
     // (getter hidup), mSharingMode (untuk mExclusive di bawah). mFormat/mApi/
     // mPerfMode dihapus — getter-nya mati.
-    mSampleRate =
-        opened->getSampleRate();
+    // (C-SRATE, 2026-11-12): store release — ketiganya atomic; dibaca
+    // lintas-thread lewat getter (actualSampleRate fallback saat stream
+    // null; channelCount/framesPerBurst dari start()).
+    mSampleRate.store(
+        opened->getSampleRate(),
+        std::memory_order_release
+    );
 
-    mChannelCount =
-        opened->getChannelCount();
+    mChannelCount.store(
+        opened->getChannelCount(),
+        std::memory_order_release
+    );
 
-    mFramesPerBurst =
-        opened->getFramesPerBurst();
+    mFramesPerBurst.store(
+        opened->getFramesPerBurst(),
+        std::memory_order_release
+    );
 
     mSharingMode =
         opened->getSharingMode();
@@ -353,7 +362,9 @@ void AudioStreamController::close() {
     // mSampleRate memang basi juga (hanya ditulis open(), init 48000) —
     // direset ke 0 bersama; isRateHonored() sudah guard streamRate <= 0.
     mActualDeviceId.store(0, std::memory_order_release);
-    mSampleRate = 0;
+    // (C-SRATE): store atomic — konsisten dengan reset item 17 (0 = tidak
+    // ada stream); dibaca lintas-thread dari actualSampleRate().
+    mSampleRate.store(0, std::memory_order_release);
 
     // Tutup lewat salinan lokal (M4), lalu nol-kan mStream di bawah lock.
     // Kalau error callback sudah me-reset mStream, salinan null dan close()
@@ -408,7 +419,11 @@ int32_t AudioStreamController::actualSampleRate() const noexcept {
     // Salinan lokal (M4): dibaca dari JS thread via JNI, sementara thread
     // error Oboe bisa me-reset mStream kapan saja.
     auto stream = streamCopy();
-    return stream ? stream->getSampleRate() : mSampleRate;
+    // (C-SRATE): load atomic — fallback ini dibaca dari thread JNI +
+    // thread manager sementara open()/close()/onErrorAfterClose() bisa
+    // menulisnya dari thread lain.
+    return stream ? stream->getSampleRate()
+                  : mSampleRate.load(std::memory_order_acquire);
 }
 
 bool AudioStreamController::usingOpenSLESFallback() const noexcept {
@@ -486,7 +501,10 @@ bool AudioStreamController::isPathInherentlyLossy() const noexcept {
 int32_t AudioStreamController::channelCount()
 const noexcept {
 
-    return mChannelCount;
+    // (C-SRATE): load atomic — hari ini hanya dibaca dari start() (thread
+    // yang sama sesudah open()), tapi membernya atomic supaya aman kalau
+    // nanti dibaca lintas-thread.
+    return mChannelCount.load(std::memory_order_acquire);
 }
 
 // =====================================================
@@ -496,7 +514,8 @@ const noexcept {
 int32_t AudioStreamController::framesPerBurst()
 const noexcept {
 
-    return mFramesPerBurst;
+    // (C-SRATE): load atomic — alasan sama seperti channelCount().
+    return mFramesPerBurst.load(std::memory_order_acquire);
 }
 
 // =====================================================
@@ -535,7 +554,9 @@ onErrorAfterClose(
     // paksa sistem, actualDeviceId()/actualSampleRate() tetap melaporkan
     // perangkat/laju stream mati sampai reopen berikutnya.
     mActualDeviceId.store(0, std::memory_order_release);
-    mSampleRate = 0;
+    // (C-SRATE): store atomic — reset item 17 dari thread error Oboe,
+    // dibaca lintas-thread dari actualSampleRate().
+    mSampleRate.store(0, std::memory_order_release);
 
     // Reset di bawah lock (M4): getter dari JS thread (actualSampleRate/
     // actualDeviceId) membaca mStream lewat salinan yang sama.
