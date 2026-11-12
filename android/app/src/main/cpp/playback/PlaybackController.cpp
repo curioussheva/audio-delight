@@ -1499,6 +1499,62 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
             [this, weakWorker = std::weak_ptr<decoder::DecoderWorker>(worker)](
                 decoder::DecodeResult&& result) {
                 if (pcmQueue_ && !result.samples.empty()) {
+                    // PB6-W5 (2026-11-12): wait-for-space, bukan buang.
+                    //
+                    // Dulu chunk yang tidak muat langsung dibuang
+                    // sebagian (written < size -> recordOverrun + DATA
+                    // DROP). Backpressure 90% + chunk 8192 sample
+                    // (0,39% dari kapasitas 2^21) membuat queue penuh
+                    // praktis tak terjangkau steady state — tapi saat
+                    // TERTUNDA (render starve sesaat) drop itu nyata.
+                    // Sekarang: tunggu sampai ada ruang, sleep 2 ms
+                    // per cek, lalu tulis penuh.
+                    //
+                    // KENAPA WAIT INI TIDAK DEADLOCK — callback berjalan
+                    // di thread decoder DI BAWAH decodeMutex_ (workerLoop
+                    // memegangnya selama decode+callback), dan render
+                    // berhenti menguras saat paused, jadi wait tanpa
+                    // cek batal = gantung selamanya + pause()/seek()/
+                    // stop() yang butuh lock itu ikut macet. Dua cek
+                    // batal di bawah MENUTUP semua pemegang lock itu:
+                    //  * paused_ eksplisit — pause() controller men-store
+                    //    paused_=true SEBELUM block di decodeMutex_
+                    //    (DecoderWorker::pause), dan seek() memanggil
+                    //    pause() dulu sebelum clear/seek. Jadi jeda
+                    //    user/seek SELALU terlihat dari wait ini walau
+                    //    lock sedang dipegang callback.
+                    //  * stopRequested_ — stop() men-store ini SEBELUM
+                    //    join thread decoder (DecoderWorker::stop), dan
+                    //    stopDecoder()/loadTrack() lewat jalur yang sama.
+                    //  * Batas 1 dtk — katup pengaman untuk kasus render
+                    //    tidak pernah menguras tanpa pause/stop (mis.
+                    //    stream gagal start): jatuh ke perilaku LAMA
+                    //    (tulis sebagian + DATA DROP di bawah), bukan
+                    //    gantung. Satu chunk terkuras ~85 ms @48kHz
+                    //    stereo, jadi 1 dtk >10x longgar.
+                    // Jalur lain tidak butuh lock ini: resume() /
+                    // pauseForBackpressure() hanya atomic store +
+                    // notify, render() tidak menyentuh decodeMutex_,
+                    // freeSamples() lock-free.
+                    if (auto w = weakWorker.lock()) {
+                        const auto waitStart =
+                            std::chrono::steady_clock::now();
+                        while (pcmQueue_->freeSamples() <
+                               result.samples.size()) {
+                            if (w->isExplicitlyPaused() ||
+                                w->isStopRequested()) {
+                                break;
+                            }
+                            if (std::chrono::steady_clock::now() -
+                                    waitStart >
+                                std::chrono::milliseconds(1000)) {
+                                break;
+                            }
+                            std::this_thread::sleep_for(
+                                std::chrono::milliseconds(2));
+                        }
+                    }
+
                     size_t written = pcmQueue_->write(
                         result.samples.data(),
                         result.samples.size()

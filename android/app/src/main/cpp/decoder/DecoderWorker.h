@@ -82,6 +82,19 @@ public:
     [[nodiscard]]
     bool isPaused() const noexcept;
 
+    // PB6-W5 (2026-11-12): baca saja dua flag batal — dipakai decode
+    // callback (PlaybackController) untuk wait-for-space sebelum write.
+    // isPaused() TIDAK cukup di sini: ia menggabung paused_ eksplisit
+    // dengan backpressurePaused_, sementara wait harus batal HANYA
+    // untuk jeda eksplisit / stop. (Selama callback berjalan,
+    // backpressurePaused_ praktis false — flag itu baru diset callback
+    // yang sama SESUDAH write — tapi mengandalkannya rapuh.)
+    [[nodiscard]]
+    bool isExplicitlyPaused() const noexcept;
+
+    [[nodiscard]]
+    bool isStopRequested() const noexcept;
+
     // =============================================
     // Seeking
     // =============================================

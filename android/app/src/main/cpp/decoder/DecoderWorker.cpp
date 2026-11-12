@@ -158,6 +158,18 @@ bool DecoderWorker::isPaused() const noexcept {
     return paused_.load() || backpressurePaused_.load();
 }
 
+bool DecoderWorker::isExplicitlyPaused() const noexcept {
+    // PB6-W5: HANYA jeda eksplisit (user pause / seek) — bukan
+    // backpressure. Dipakai wait-for-space di decode callback.
+    return paused_.load();
+}
+
+bool DecoderWorker::isStopRequested() const noexcept {
+    // PB6-W5: stop() men-store ini SEBELUM join thread decoder, jadi
+    // wait-for-space di callback bisa melihatnya dan bubar.
+    return stopRequested_.load();
+}
+
 // =====================================================
 // SEEK
 // =====================================================
