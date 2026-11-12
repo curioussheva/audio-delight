@@ -379,7 +379,18 @@ bool dspConfigEquals(
         return false;
     }
 
-    for (int i = 0; i < a.headphonePreset.filterCount; ++i) {
+    // (C-I2, 2026-11-12): defense-in-depth — filterCount diklaim 0..16
+    // (dan sudah dijepit di AudioState::headphonePreset()), tapi fungsi ini
+    // membandingkan dua DSPConfig apa pun, dan loop di bawah mengindeks
+    // filters[i] di KEDUA sisi tanpa guard. Jepit batas loop ke kapasitas
+    // array; filterCount valid (≤ 16) tidak berubah. Kedua sisi sudah
+    // dipastikan sama di atas, jadi satu batas cukup.
+    const int filterCount = std::min(
+        a.headphonePreset.filterCount,
+        HeadphonePresetData::kMaxFilters
+    );
+
+    for (int i = 0; i < filterCount; ++i) {
 
         const auto& fa = a.headphonePreset.filters[i];
         const auto& fb = b.headphonePreset.filters[i];

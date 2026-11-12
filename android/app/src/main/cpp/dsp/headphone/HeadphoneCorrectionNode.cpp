@@ -4,6 +4,8 @@
 
 #include "HeadphoneCorrectionNode.h"
 
+#include <algorithm>
+
 namespace pristine {
 
 // =====================================================
@@ -103,7 +105,20 @@ void HeadphoneCorrectionNode::applyConfig(
                     (mApplied.filterCount == preset.filterCount);
 
         if (same) {
-            for (int i = 0; i < preset.filterCount; ++i) {
+            // (C-I2, 2026-11-12): defense-in-depth — filterCount diklaim
+            // 0..16 (PresetParser menolak > kMaxFilters, dan
+            // AudioState::headphonePreset() menjepit salinan yang keluar),
+            // tapi loop ini mengindeks filters[i] di KEDUA sisi tanpa
+            // guard. Jepit batas loop ke kapasitas array; preset valid
+            // (≤ 16) tidak berubah. Loop pasang di bawah sudah punya guard
+            // `index >= BiquadCascade::kMaxFilters` — terverifikasi, tidak
+            // diubah.
+            const int filterCount = std::min(
+                preset.filterCount,
+                HeadphonePresetData::kMaxFilters
+            );
+
+            for (int i = 0; i < filterCount; ++i) {
 
                 const auto& a = mApplied.filters[i];
                 const auto& b = preset.filters[i];

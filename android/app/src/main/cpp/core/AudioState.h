@@ -653,6 +653,25 @@ public:
                 );
 
             if (before == after) {
+                // (C-I2, 2026-11-12): defense-in-depth — jepit filterCount
+                // ke 0..kMaxFilters SESUDAH salinan terverifikasi konsisten.
+                // Semua penulis hari ini menulis 0..16 (PresetParser menolak
+                // > kMaxFilters, clear = 0, default 0), dan torn read hanya
+                // mencampur dua preset valid — tapi filterCount ini int32_t
+                // polos di struct POD, dan semua pembaca di bawah
+                // (dspConfigEquals, HeadphoneCorrectionNode) mengindeks
+                // filters[filterCount]. Menjepit di batas baca ini, sekali,
+                // menjamin SETIAP salinan yang keluar memenuhi invarian
+                // 0..16; nilai valid tidak berubah, preset kosong (0) tetap
+                // None, preset penuh (16) tetap Ok.
+                if (snapshot.filterCount < 0) {
+                    snapshot.filterCount = 0;
+                } else if (snapshot.filterCount >
+                           HeadphonePresetData::kMaxFilters) {
+                    snapshot.filterCount =
+                        HeadphonePresetData::kMaxFilters;
+                }
+
                 out = snapshot;
                 return snapshot.filterCount > 0
                     ? PresetRead::Ok
