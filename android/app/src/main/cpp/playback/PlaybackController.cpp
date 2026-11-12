@@ -255,7 +255,7 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
     // di loadTrackMutex_.)
 
     stopDecoder();
-    clearing_.store(true, std::memory_order_release);
+    clearing_.store(true, std::memory_order_seq_cst);
     // 🔥 FIX (2026-11-10, p-m12): tunggu in-flight render selesai, ganti
     // sleep 10 ms. Periode callback ~20 ms (960 frame @48 kHz), jadi sleep
     // 10 ms tidak menjamin render yang sudah lolos cek clearing_ selesai —
@@ -490,7 +490,7 @@ bool PlaybackController::stop() {
     // 🔥 FIX (2026-11-10, p-m12): kibarkan clearing_ + tunggu in-flight
     // render selesai sebelum clear — stop() sebelumnya tidak memakai
     // clearing_ sama sekali.
-    clearing_.store(true, std::memory_order_release);
+    clearing_.store(true, std::memory_order_seq_cst);
     waitForRenderIdle();
     pcmQueue_->clear();
     clock_->reset();
@@ -562,7 +562,7 @@ bool PlaybackController::seek(double seconds) {
     // render selesai sebelum clear — seek() sebelumnya tidak memakai
     // clearing_ sama sekali, jadi render yang sedang berjalan bisa copy
     // slot basi selama 1 callback.
-    clearing_.store(true, std::memory_order_release);
+    clearing_.store(true, std::memory_order_seq_cst);
     waitForRenderIdle();
     pcmQueue_->clear();
     // 🔥 FIX (2026-11-10, P-M9): buang sisa WSOLA posisi lama. HARUS di
@@ -637,13 +637,21 @@ bool PlaybackController::seek(double seconds) {
 // RAII: menandai render() sedang berjalan (p-m12, 2026-11-10). Counter
 // renderActive_ dibaca waitForRenderIdle() dari loadTrack/stop/seek.
 // noexcept: fetch_add/fetch_sub tidak pernah throw.
+//
+// PB6-B2 (2026-11-12): keempat operasi clearing_/renderActive_ memakai
+// seq_cst (guard ini, load clearing_ di render(), store clearing_ di
+// loadTrack/stop/seek, load renderActive_ di waitForRenderIdle) — pola
+// Dekker: release/acquire tidak mengurutkan store→load antar thread, di
+// ARM64 kedua sisi bisa sama-sama membaca nilai lama sehingga clear() /
+// reset prosesor jalan bersamaan dengan render() yang sedang membaca queue.
+// fetch_sub ikut seq_cst demi keseragaman dengan fetch_add.
 struct RenderActiveGuard {
     explicit RenderActiveGuard(std::atomic<int>& counter) noexcept
         : counter_(counter) {
-        counter_.fetch_add(1, std::memory_order_acq_rel);
+        counter_.fetch_add(1, std::memory_order_seq_cst);
     }
     ~RenderActiveGuard() {
-        counter_.fetch_sub(1, std::memory_order_acq_rel);
+        counter_.fetch_sub(1, std::memory_order_seq_cst);
     }
     RenderActiveGuard(const RenderActiveGuard&) = delete;
     RenderActiveGuard& operator=(const RenderActiveGuard&) = delete;
@@ -671,7 +679,7 @@ size_t PlaybackController::render(float* output,
         static_cast<size_t>(frames) * channels;
 
     // 🔥 RACE FIX
-    if (clearing_.load(std::memory_order_acquire)) {
+    if (clearing_.load(std::memory_order_seq_cst)) {
         std::fill(output, output + requestedSamples, 0.0f);
         // 🔥 FIX (2026-11-10, p-m14): laporkan buffer penuh (requestedSamples),
         // bukan 0. Buffer MEMANG terisi (dengan senyap) — AudioCallback
@@ -783,7 +791,7 @@ size_t PlaybackController::render(float* output,
     // cek decoderWorker_ tambahan dipindah ke bawah pengecekan clearing_ dan
     // diambil lewat snapshotWorker() (P-M4, 2026-11-10): salinan shared_ptr
     // di bawah lock singkat, dipakai tanpa lock.
-    if (pcmQueue_ && !clearing_.load(std::memory_order_acquire)) {
+    if (pcmQueue_ && !clearing_.load(std::memory_order_seq_cst)) {
         // Snapshot pointer di bawah lock singkat, lalu pakai salinan TANPA
         // lock (P-M4, 2026-11-10): advanceThread memegang lock yang sama
         // saat stopDecoder(), jadi snapshot tidak pernah melihat pointer
@@ -1463,9 +1471,11 @@ void PlaybackController::waitForRenderIdle() noexcept {
     // periode callback) supaya tidak menggantung kalau audio thread macet;
     // setelah timeout, clear() tetap aman (satu atomic store — hanya data
     // basi ≤1 callback, seperti perilaku lama).
+    // PB6-B2: load renderActive_ di bawah seq_cst — pasangan Dekker dari
+    // store clearing_=true pemanggil (lihat komentar di RenderActiveGuard).
     const auto deadline =
         std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
-    while (renderActive_.load(std::memory_order_acquire) > 0) {
+    while (renderActive_.load(std::memory_order_seq_cst) > 0) {
         if (std::chrono::steady_clock::now() >= deadline) {
             __android_log_print(ANDROID_LOG_WARN, "PlaybackController",
                 "waitForRenderIdle: timeout, lanjut (render masih jalan)");
