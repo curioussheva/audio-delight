@@ -67,7 +67,15 @@ size_t PCMQueue::write(const float* input, size_t frames) {
     // dan write() menulis jauh melebihi kapasitas (lihat komentar di header).
     const size_t used = safeDiff(w, r);
     const size_t free = (used < capacity_) ? (capacity_ - used) : 0u;
-    const size_t toWrite = std::min(frames, free);
+    // PB6-MINOR(d) (2026-11-12): jaga paritas GENAP. Queue menyimpan
+    // sampel stereo interleaved — jumlah ganjil membelah satu frame
+    // (L tanpa R) dan menggeser paritas semua baca sesudahnya. Paritas
+    // selama ini cuma asumsi (decoder selalu menulis kelipatan 2);
+    // mask di sini memaksanya: kelebihan 1 sampel dibuang, bukan ditulis.
+    // toWrite ganjil hanya mungkin bila `frames` ganjil (free selalu
+    // genap bila semua tulis sebelumnya genap, karena capacity_ genap).
+    size_t toWrite = std::min(frames, free);
+    toWrite &= ~size_t(1);
 
     if (toWrite == 0) return 0;   // queue penuh: buang, jangan tulis liar
 
