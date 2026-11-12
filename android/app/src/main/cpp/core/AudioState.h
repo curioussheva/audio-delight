@@ -6,10 +6,33 @@
 
 #include <array>
 #include <atomic>
+#include <mutex>
 
 #include "AudioTypes.h"
 
 namespace pristine {
+
+// =====================================================
+// HASIL BACA PRESET HEADPHONE (C-P1, 2026-11-12)
+// =====================================================
+//
+// headphonePreset() dulu mengembalikan bool: false untuk "tidak ada preset"
+// MAUPUN "penulisan sedang berlangsung" — dua keadaan yang menuntut respons
+// berlawanan dari pemanggil (yang satu harus membersihkan preset lama, yang
+// satu harus mempertahankan preset buffer sebelumnya). Pemanggil
+// (AudioCallback::updateParameters) malah mengabaikan return itu sama
+// sekali, jadi keduanya diperlakukan sama. Enum ini memisahkan ketiganya.
+//
+//   Ok   = snapshot konsisten dan ada preset (filterCount > 0).
+//   None = snapshot konsisten dan tidak ada preset (filterCount == 0).
+//   Busy = penulisan sedang berlangsung, tidak selesai dalam batas
+//          percobaan — `out` TIDAK disentuh sama sekali.
+
+enum class PresetRead {
+    Ok,
+    None,
+    Busy
+};
 
 // =====================================================
 // REALTIME ENGINE STATE
@@ -370,9 +393,24 @@ public:
     }
 
     // Penulis: UI thread. Tidak boleh dipanggil dari audio thread.
+    //
+    // (C-P1, 2026-11-12): dua penulis — AudioEngine::loadHeadphonePreset()
+    // dan AudioEngine::clearHeadphonePreset(), keduanya via JNI — diserialisasi
+    // mutex ini. Praktiknya keduanya datang dari UI thread, tapi seqlock saja
+    // tidak cukup bila dua penulis bertumpuk: urutan ganjil/genap dari dua
+    // penulisan yang bersilangan bisa menghasilkan genap palsu di tengah
+    // penulisan, dan pembaca mengira snapshot konsisten padahal robek.
+    // Mutex ini hanya dipegang penulis (pembaca audio thread tetap seqlock
+    // tanpa lock), dan tidak ada lock lain yang dipegang saat mengambilnya —
+    // load/clear masuk lewat EngineManager tanpa memegang mMutex — jadi
+    // tidak ada inversi urutan lock.
     inline void setHeadphonePreset(
         const HeadphonePresetData& preset
     ) {
+
+        const std::lock_guard<std::mutex> lock(
+            mPresetWriterMutex
+        );
 
         const uint32_t seq =
             mPresetSeq.load(
@@ -404,19 +442,27 @@ public:
 
     // Pembaca: audio thread. Menyalin ke `out`.
     //
-    // Mengembalikan true hanya kalau snapshot terbaca KONSISTEN dan ada preset
-    // terpasang. Mengembalikan false kalau:
-    //   - belum ada preset (filterCount 0), atau
-    //   - penulisan sedang berlangsung dan tidak selesai dalam batas percobaan.
+    // Mengembalikan PresetRead:
+    //   Ok   — snapshot terbaca KONSISTEN dan ada preset terpasang.
+    //   None — snapshot terbaca KONSISTEN tapi tidak ada preset
+    //          (filterCount 0). `out` berisi snapshot konsisten itu.
+    //   Busy — penulisan sedang berlangsung dan tidak selesai dalam batas
+    //          percobaan. `out` TIDAK disentuh sama sekali: pemanggil harus
+    //          mempertahankan preset buffer sebelumnya.
     //
-    // Jalur gagal mengembalikan false, BUKAN data yang mungkin robek.
-    // Dulu di sini ada fallback "pakai data terakhir yang terbaca" — itu
-    // mengembalikan snapshot yang bisa berisi campuran dua preset, dan test
-    // konkurensi menangkapnya: 3 robek dari 1,28 juta pembacaan. Melewatkan
-    // koreksi satu buffer tidak terdengar; menerapkan koefisien robek bisa
-    // menimbulkan pop. Gagal berisik, jangan sukses palsu
-    // (docs/BOILERPLATE_AND_STUBS.md §2).
-    inline bool headphonePreset(
+    // Invarian: `out` HANYA ditulis dengan snapshot yang seq-nya
+    // terverifikasi tidak berubah. Dulu `out` ditulis SEBELUM cek seq, jadi
+    // komentar lama di sini ("jalur gagal mengembalikan false, BUKAN data
+    // yang mungkin robek") menyesatkan: kegagalan tetap meninggalkan data
+    // yang mungkin robek di `out`, dan pemanggil memakai `out` itu tanpa
+    // memeriksa return — koefisien robek bisa terpasang walau fungsi
+    // mengembalikan false. Dulu di sini ada fallback "pakai data terakhir
+    // yang terbaca" — itu mengembalikan snapshot yang bisa berisi campuran
+    // dua preset, dan test konkurensi menangkapnya: 3 robek dari 1,28 juta
+    // pembacaan. Melewatkan koreksi satu buffer tidak terdengar; menerapkan
+    // koefisien robek bisa menimbulkan pop. Gagal berisik, jangan sukses
+    // palsu (docs/BOILERPLATE_AND_STUBS.md §2).
+    inline PresetRead headphonePreset(
         HeadphonePresetData& out
     ) const {
 
@@ -428,11 +474,15 @@ public:
                 );
 
             // Ganjil: penulisan sedang berlangsung, coba lagi.
+            // `out` TIDAK disentuh di jalur ini.
             if (before & 1u) {
                 continue;
             }
 
-            out = mHeadphonePreset;
+            // Salin ke lokal dulu: `out` baru ditulis SETELAH seq
+            // terverifikasi tidak berubah selama penyalinan.
+            HeadphonePresetData snapshot =
+                mHeadphonePreset;
 
             std::atomic_thread_fence(
                 std::memory_order_acquire
@@ -444,13 +494,18 @@ public:
                 );
 
             if (before == after) {
-                return out.filterCount > 0;
+                out = snapshot;
+                return snapshot.filterCount > 0
+                    ? PresetRead::Ok
+                    : PresetRead::None;
             }
+            // seq berubah selama penyalinan: snapshot mungkin campuran dua
+            // preset — buang, coba lagi. `out` tetap utuh.
         }
 
         // Penulisan belum selesai setelah 8 percobaan: lewati koreksi buffer
-        // ini. `out` sengaja TIDAK dijamin isinya.
-        return false;
+        // ini. `out` sengaja TIDAK disentuh sama sekali.
+        return PresetRead::Busy;
     }
 
 private:
@@ -541,6 +596,14 @@ private:
 
     std::atomic<uint32_t>
         mPresetSeq{0};
+
+    // (C-P1, 2026-11-12): mutex khusus penulis preset — hanya diambil di
+    // setHeadphonePreset(). Audio thread (pembaca seqlock) tidak pernah
+    // menyentuhnya. AudioState kini non-copyable/non-movable karena mutex;
+    // aman: AudioState hanya hidup sebagai member by-value di AudioEngine,
+    // yang hidup sebagai member by-value di singleton EngineManager —
+    // tidak ada yang menyalin atau memindahkan keduanya.
+    std::mutex mPresetWriterMutex;
 };
 
 } // namespace pristine

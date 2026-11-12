@@ -293,12 +293,35 @@ void AudioCallback::updateParameters() {
     // Seqlock di AudioState memastikan pembacaan konsisten walau UI thread
     // sedang menulis preset baru. Kalau tidak ada preset, filterCount = 0 dan
     // node koreksi dilewati sepenuhnya.
+    //
+    // (C-P1, 2026-11-12): return headphonePreset() dulu bool yang dibuang
+    // pemanggil — Busy (penulisan berlangsung) dan None (tidak ada preset)
+    // sama-sama false, dan `out` sudah ditulis SEBELUM cek seq, jadi data
+    // yang mungkin robek tetap masuk mParams. Sekarang ketiganya dipisah:
+    // Busy mempertahankan preset buffer sebelumnya, None membersihkan
+    // preset lama, Ok memakai salinan konsisten yang baru.
     mParams.headphoneCorrectionEnabled =
         mState.isHeadphoneCorrectionEnabled();
 
-    mState.headphonePreset(
-        mParams.headphonePreset
-    );
+    switch (
+        mState.headphonePreset(
+            mParams.headphonePreset
+        )
+    ) {
+        case PresetRead::Ok:
+            // mParams.headphonePreset sudah berisi salinan konsisten.
+            break;
+        case PresetRead::None:
+            // Tidak ada preset terpasang: pastikan preset lama dari buffer
+            // sebelumnya tidak tertinggal dan terus diterapkan.
+            mParams.headphonePreset = HeadphonePresetData{};
+            break;
+        case PresetRead::Busy:
+            // Penulisan sedang berlangsung: headphonePreset() TIDAK menyentuh
+            // `out`, jadi mParams.headphonePreset masih berisi preset buffer
+            // sebelumnya — pertahankan, jangan pakai data setengah tertulis.
+            break;
+    }
 }
 
 // =====================================================
