@@ -119,8 +119,10 @@ export class AudioEngine {
     // ⚠️ AAudio bisa menolak exclusive (device / Android version). Oboe
     // otomatis fallback ke shared — gejala: bit-perfect "on" tapi mixer
     // tetap menyentuh sampel. Setelah panggil ini, cek
-    // AudioStreamController::isExclusive() (TODO: expose ke JS, lihat
-    // docs/WORKFLOW.md Prioritas 2) untuk tahu apakah benar-benar exclusive.
+    // NativeDSPModule.isExclusiveModeActive() (→
+    // AudioStreamController::isExclusive()) untuk tahu apakah benar-benar
+    // exclusive. Rantai itu sudah lengkap sejak 2026-10-06 (WORKFLOW.md
+    // Prioritas 2) dan dipakai log verifikasi di bawah.
     try {
       NativeDSPModule?.setExclusiveMode?.(enabled);
     } catch (e) {

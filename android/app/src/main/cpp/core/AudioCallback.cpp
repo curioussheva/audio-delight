@@ -222,17 +222,6 @@ void AudioCallback::updateCallbackMetrics(
 }
 
 // =====================================================
-// ERROR AFTER CLOSE
-// =====================================================
-
-void AudioCallback::onErrorAfterClose(
-    oboe::AudioStream*,
-    oboe::Result
-) {
-    mState.setRunning(false);
-}
-
-// =====================================================
 // UPDATE PARAMETERS
 // =====================================================
 

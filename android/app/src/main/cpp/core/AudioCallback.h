@@ -50,11 +50,6 @@ public:
         int32_t numFrames
     ) override;
 
-    void onErrorAfterClose(
-        oboe::AudioStream* stream,
-        oboe::Result error
-    ) override;
-
     // =============================================
     // PLAYBACK SOURCE
     // =============================================
