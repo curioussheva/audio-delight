@@ -42,6 +42,10 @@ void AudioPipeline::prepare(
     mFadeFramesRemaining = 0;
     mFadeFramesTotal = 0;
 
+    // (C-SMOOTH): buka prime gain Immersive — buffer pertama sesudah
+    // prepare() langsung di target, tanpa sapuan dari nilai lama.
+    mGainPrimed = false;
+
     // 🔥 FIX (2026-11-11, DSP-M1): prepare() membangun ulang graph DSP
     // (DSPChain::prepare -> buildGraph: 5 node BARU dengan state default),
     // jadi config yang sudah diterapkan ke node lama HILANG. Guard dedup
@@ -83,6 +87,10 @@ void AudioPipeline::reset() {
     mModeSeen = false;
     mFadeFramesRemaining = 0;
     mFadeFramesTotal = 0;
+
+    // (C-SMOOTH): sama seperti prepare() — buffer pertama sesudah reset()
+    // langsung di target gain.
+    mGainPrimed = false;
 }
 
 // =====================================================
@@ -519,8 +527,30 @@ void AudioPipeline::processImmersive(
     const float gainL = gain * pan.left;
     const float gainR = gain * pan.right;
 
-    // Lewati kalau benar-benar netral (gain 1,0 DAN balance 0) supaya
-    // tidak ada pembulatan tak perlu.
+    // (C-SMOOTH, 2026-11-12): one-pole per sample, konstanta dan ambang
+    // yang SAMA dengan SpatialFieldProcessor::process() dan GainNode
+    // (kSmooth = 0,002f, ~10 ms @48 kHz; ambang 1e-4f). Dulu blok ini
+    // mengalikan gain target seketika per buffer — zipper noise saat
+    // slider volume/balance digeser di mode Immersive.
+    //
+    // Prime pertama kali supaya buffer pertama langsung di target (pola
+    // SpatialFieldProcessor). Nilai akhir TIDAK berubah: begitu sampai,
+    // gain persis target.
+    constexpr float kSmooth = 0.002f;
+
+    if (!mGainPrimed) {
+        mSmoothGainL = gainL;
+        mSmoothGainR = gainR;
+        mGainPrimed = true;
+    }
+
+    const bool gainChanging =
+        std::fabs(mSmoothGainL - gainL) > 1e-4f ||
+        std::fabs(mSmoothGainR - gainR) > 1e-4f;
+
+    // Lewati kalau benar-benar netral (gain 1,0 DAN balance 0) DAN tidak
+    // sedang menyapu kembali ke netral, supaya tidak ada pembulatan tak
+    // perlu.
     //
     // (C-PAN): kondisi lama `gainL != 1.0f || gainR != 1.0f` praktis
     // mati di hukum cosinus — gainL == gainR == 1,0 hanya bila
@@ -528,10 +558,18 @@ void AudioPipeline::processImmersive(
     // Cek input langsung ini ekuivalen di hukum linear (gainL/gainR
     // == 1,0 tepat saat gain == 1,0 dan balance == 0) dan jujur soal
     // kapan skip terjadi.
-    if (gain != 1.0f || bal != 0.0f) {
+    if (gain != 1.0f || bal != 0.0f || gainChanging) {
         for (int32_t i = 0; i < frames; ++i) {
-            left[i] *= gainL;
-            right[i] *= gainR;
+            mSmoothGainL +=
+                std::fabs(gainL - mSmoothGainL) > 1e-4f
+                    ? (gainL - mSmoothGainL) * kSmooth
+                    : (gainL - mSmoothGainL);
+            mSmoothGainR +=
+                std::fabs(gainR - mSmoothGainR) > 1e-4f
+                    ? (gainR - mSmoothGainR) * kSmooth
+                    : (gainR - mSmoothGainR);
+            left[i] *= mSmoothGainL;
+            right[i] *= mSmoothGainR;
         }
     }
 

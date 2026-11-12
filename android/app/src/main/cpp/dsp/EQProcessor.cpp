@@ -33,6 +33,11 @@ void EQProcessor::prepare(
 
     updateBass();
 
+    // (C-SMOOTH): samakan koefisien hidup dengan target — prepare() bukan
+    // tempat menyapu: perilaku startup identik dengan dulu (koefisien
+    // langsung terpasang), sapuan hanya untuk perubahan sesudahnya.
+    snapCoefficients();
+
     reset();
 }
 
@@ -71,6 +76,12 @@ void EQProcessor::process(
         i < frames;
         ++i
     ) {
+
+        // (C-SMOOTH): satu langkah one-pole koefisien sebelum sample ini
+        // diproses — hanya bila ada band/bass yang masih menyapu.
+        if (mSmoothingMask != 0) {
+            smoothCoefficientsStep();
+        }
 
         float l = left[i];
         float r = right[i];
@@ -224,15 +235,20 @@ void EQProcessor::updateBand(
     const auto coeffs =
         filter.getCoefficients();
 
-    mLeft[band]
-        .setCoefficients(
-            coeffs
-        );
+    // (C-SMOOTH): tulis TARGET saja, bukan koefisien hidup — koefisien
+    // hidup didekati per sample di smoothCoefficientsStep(). Tandai
+    // menyapu hanya bila live memang berbeda (kalau sama, mask tetap 0
+    // dan tidak ada biaya per sample).
+    mTargetCoeffs[band] = coeffs;
 
-    mRight[band]
-        .setCoefficients(
+    if (
+        !coeffsSettled(
+            mLeft[band].getCoefficients(),
             coeffs
-        );
+        )
+    ) {
+        mSmoothingMask |= (1u << band);
+    }
 }
 
 // =====================================================
@@ -253,15 +269,134 @@ void EQProcessor::updateBass() noexcept {
     const auto coeffs =
         filter.getCoefficients();
 
-    mBassLeft
-        .setCoefficients(
-            coeffs
-        );
+    // (C-SMOOTH): sama seperti updateBand — target saja, hidup menyusul
+    // per sample.
+    mTargetBass = coeffs;
 
-    mBassRight
-        .setCoefficients(
+    if (
+        !coeffsSettled(
+            mBassLeft.getCoefficients(),
             coeffs
-        );
+        )
+    ) {
+        mSmoothingMask |= kBassBit;
+    }
+}
+
+// =====================================================
+// SMOOTHING KOEFISIEN (C-SMOOTH)
+// =====================================================
+
+bool EQProcessor::coeffsSettled(
+    const BiquadCoefficients& a,
+    const BiquadCoefficients& b
+) noexcept {
+
+    return
+        std::fabs(a.b0 - b.b0) <= kSettledEps &&
+        std::fabs(a.b1 - b.b1) <= kSettledEps &&
+        std::fabs(a.b2 - b.b2) <= kSettledEps &&
+        std::fabs(a.a1 - b.a1) <= kSettledEps &&
+        std::fabs(a.a2 - b.a2) <= kSettledEps;
+}
+
+bool EQProcessor::stepCoefficients(
+    BiquadCoefficients& cur,
+    const BiquadCoefficients& target
+) noexcept {
+
+    // Struktur cabang yang sama dengan SpatialFieldProcessor::process():
+    // di dalam ambang, terapkan selisih penuh (snap); di luar ambang,
+    // langkah kSmooth.
+    const auto step =
+        [](float c, float t) {
+
+            return
+                std::fabs(t - c) > kSettledEps
+                    ? c + (t - c) * kSmooth
+                    : t;
+        };
+
+    cur.b0 = step(cur.b0, target.b0);
+    cur.b1 = step(cur.b1, target.b1);
+    cur.b2 = step(cur.b2, target.b2);
+    cur.a1 = step(cur.a1, target.a1);
+    cur.a2 = step(cur.a2, target.a2);
+
+    if (coeffsSettled(cur, target)) {
+        cur = target;
+        return true;
+    }
+
+    return false;
+}
+
+void EQProcessor::smoothCoefficientsStep() noexcept {
+
+    for (
+        int b = 0;
+        b < kBands;
+        ++b
+    ) {
+
+        if ((mSmoothingMask & (1u << b)) == 0) {
+            continue;
+        }
+
+        // L dan R selalu memakai koefisien yang sama: hitung sekali,
+        // pasang ke keduanya. setCoefficients hanya assign (tidak
+        // menyentuh state z1/z2), jadi aman per sample.
+        BiquadCoefficients cur =
+            mLeft[b].getCoefficients();
+
+        if (
+            stepCoefficients(
+                cur,
+                mTargetCoeffs[b]
+            )
+        ) {
+            mSmoothingMask &= ~(1u << b);
+        }
+
+        mLeft[b].setCoefficients(cur);
+        mRight[b].setCoefficients(cur);
+    }
+
+    if ((mSmoothingMask & kBassBit) != 0) {
+
+        BiquadCoefficients cur =
+            mBassLeft.getCoefficients();
+
+        if (
+            stepCoefficients(
+                cur,
+                mTargetBass
+            )
+        ) {
+            mSmoothingMask &= ~kBassBit;
+        }
+
+        mBassLeft.setCoefficients(cur);
+        mBassRight.setCoefficients(cur);
+    }
+}
+
+void EQProcessor::snapCoefficients() noexcept {
+
+    for (
+        int b = 0;
+        b < kBands;
+        ++b
+    ) {
+
+        mLeft[b].setCoefficients(mTargetCoeffs[b]);
+        mRight[b].setCoefficients(mTargetCoeffs[b]);
+    }
+
+    mBassLeft.setCoefficients(mTargetBass);
+    mBassRight.setCoefficients(mTargetBass);
+
+    mSmoothingMask = 0;
 }
 
 } // namespace pristine

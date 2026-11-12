@@ -161,6 +161,26 @@ private:
     // chunk lebih pendek tetap tertutup) selesai dengan benar.
     int32_t mFadeFramesTotal = 0;
     int32_t mFadeFramesRemaining = 0;
+
+    // =============================================
+    // SMOOTHING GAIN IMMERSIVE (C-SMOOTH, 2026-11-12)
+    // =============================================
+    //
+    // Master gain + balance mode Immersive diterapkan inline di
+    // processImmersive() (bukan lewat GainNode) — dan dulu langsung
+    // menimpa per buffer: zipper noise yang sama seperti GainNode.
+    // Di-smooth per sample dengan one-pole (kSmooth = 0,002f, ambang
+    // 1e-4f — konstanta yang sama dengan SpatialFieldProcessor dan
+    // GainNode). Prime pertama kali supaya buffer pertama langsung di
+    // target; prepare()/reset() membuka prime lagi supaya tidak ada
+    // sapuan dari nilai lama sesudah reopen/stop. Nilai akhir TIDAK
+    // berubah: begitu sampai, gain persis target.
+    //
+    // BitPerfect TIDAK tersentuh: processBitPerfect() no-op dan tidak
+    // pernah membaca state ini (lihat process()).
+    float mSmoothGainL = 1.0f;
+    float mSmoothGainR = 1.0f;
+    bool mGainPrimed = false;
 };
 
 } // namespace pristine 
