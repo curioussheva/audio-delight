@@ -418,6 +418,10 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
         fadeOut_.generateCurve(FadeCurve::SCurve, fadeRate * fadeOutMs / 1000);
     }
     framesSinceLoad_.store(0, std::memory_order_release);
+    // B8-P4: reset throttle self-heal durasi — callback pertama track
+    // baru langsung mencoba heal (counter 0), baru sesudahnya tiap
+    // ~128 callback selama durasi masih 0 (lihat render()).
+    durationHealCounter_.store(0, std::memory_order_release);
     // 🔥 FIX (2026-11-10, P-M9): buang sisa WSOLA track lama (audio basi
     // tidak boleh keluar di track baru). Aman di sini: clearing_ +
     // waitForRenderIdle sudah memastikan render() tidak sedang push/pull.
@@ -1265,13 +1269,28 @@ size_t PlaybackController::render(float* output,
             // fallback ini tidak lagi jalan tiap callback. Saat decoder
             // membuka file hi-res, track duration dari MediaMetadataRetriever
             // bisa 0 → UI durasi 0:00; durasi decoder menutup lubang itu.
-            if (auto worker = snapshotWorker()) {
-                const double decDur = worker->getDuration();
-                if (decDur > 0.0) {
-                    clock_->setDurationFrames(
-                        static_cast<uint64_t>(decDur * sampleRate));
-                    state_->setDuration(
-                        static_cast<uint64_t>(decDur * 1000.0));
+            //
+            // B8-P4 (2026-11-12): THROTTLE — untuk file TANPA durasi
+            // (VBR/stream tanpa durasi), cabang ini tadinya memanggil
+            // snapshotWorker() + worker->getDuration() di SETIAP callback
+            // (lock decoderMutex_ singkat + baca formatCtx_ tiap ~20 ms,
+            // selamanya). Sekarang heal dicoba segera di callback pertama
+            // (counter 0 — file DENGAN durasi tetap terisi secepat
+            // sebelumnya), lalu paling sering tiap ~128 callback selama
+            // durasi masih 0. Begitu durasi terisi, cabang ini berhenti
+            // dan counter membeku; loadTrack() me-reset counter ke 0.
+            const uint32_t healCount = durationHealCounter_.fetch_add(
+                1, std::memory_order_relaxed);
+            if (healCount == 0 ||
+                healCount % kDurationHealIntervalCallbacks == 0) {
+                if (auto worker = snapshotWorker()) {
+                    const double decDur = worker->getDuration();
+                    if (decDur > 0.0) {
+                        clock_->setDurationFrames(
+                            static_cast<uint64_t>(decDur * sampleRate));
+                        state_->setDuration(
+                            static_cast<uint64_t>(decDur * 1000.0));
+                    }
                 }
             }
         }

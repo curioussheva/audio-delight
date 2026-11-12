@@ -275,6 +275,16 @@ private:
     // 600 ms input; durasi fade adalah durasi yang didengar).
     std::atomic<uint32_t> framesSinceLoad_{0};
 
+    // B8-P4 (2026-11-12): throttle self-heal durasi di render().
+    // Dihitung dalam callback render() yang melihat framesDur == 0
+    // (clock belum tahu durasi). Di-increment render() (audio thread,
+    // relaxed — hanya statistik throttle), di-reset loadTrack() supaya
+    // callback pertama track baru langsung mencoba heal (lihat render()).
+    // Begitu durasi terisi, cabang else di render() tidak lagi jalan dan
+    // counter berhenti — tidak perlu reset eksplisit saat terisi.
+    static constexpr uint32_t kDurationHealIntervalCallbacks = 128;
+    std::atomic<uint32_t> durationHealCounter_{0};
+
     // PB6-W2C (2026-11-12): total sampel NaN/Inf/|x|>2 yang dibersihkan
     // safety net render() — lihat nanCleanedTotal(). Atomic supaya
     // render() (audio thread) dan thread polling JNI bisa berbagi tanpa
