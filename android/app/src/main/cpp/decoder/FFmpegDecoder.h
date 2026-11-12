@@ -2,6 +2,8 @@
 
 #include "AudioDecoder.h"
 
+#include <atomic>
+
 struct AVFormatContext;
 struct AVCodecContext;
 struct AVFrame;
@@ -104,7 +106,21 @@ private:
 
     AudioFormat inputFormat_;
 
-    uint64_t currentFrame_ = 0;
+    // 🔥 FIX (2026-11-12, B7-D4): posisi + durasi sebagai atomik.
+    // getDurationSeconds()/getPositionSeconds()/getPositionFrames() dibaca
+    // lintas thread (render thread via DecoderWorker::getPosition/
+    // getDuration — self-heal di PlaybackController::render — dan watcher
+    // JS) sementara formatCtx_ bisa dibebaskan kapan saja oleh close() dari
+    // stopDecoder (UAF: getter lama membaca formatCtx_->duration tanpa
+    // lock). currentFrame_ plain juga data race (ditulis thread decode di
+    // onDecode/onSeek, dibaca thread lain). Cache durasi diisi sekali saat
+    // open (di bawah, formatCtx_ masih valid); posisi dihitung dari
+    // currentFrame_ atomik. Durasi 0.0 = tidak terisi (AV_NOPTS_VALUE /
+    // file tanpa durasi) — pemanggil tetap memperlakukannya sebagai
+    // "belum tahu" dan self-heal tetap jalan sampai terisi.
+    std::atomic<uint64_t> currentFrame_{0};
+    std::atomic<double> durationSeconds_{0.0};
+
     uint64_t durationFrames_ = 0;
 
     std::vector<uint8_t> packetBuffer_;

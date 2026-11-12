@@ -81,6 +81,19 @@ bool FFmpegDecoder::onOpen(
         return false;
     }
 
+    // 🔥 FIX (2026-11-12, B7-D4): cache durasi SEKARANG, saat formatCtx_
+    // masih valid dan stream info sudah ter-probe. Getter durasi tidak
+    // lagi menyentuh formatCtx_ (UAF vs close dari thread lain).
+    // AV_NOPTS_VALUE / negatif = durasi tidak diketahui → 0.0, SAMA
+    // seperti perilaku lama di mata pemanggil (durSec <= 0.0 = fallback
+    // metadata di loadTrack, decDur > 0.0 gate di self-heal render).
+    const int64_t probedDuration = formatCtx_->duration;
+    durationSeconds_.store(
+        (probedDuration != AV_NOPTS_VALUE && probedDuration > 0)
+            ? static_cast<double>(probedDuration) / AV_TIME_BASE
+            : 0.0,
+        std::memory_order_release);
+
     audioStreamIndex_ =
         av_find_best_stream(
             formatCtx_,
@@ -339,7 +352,9 @@ DecodeResult FFmpegDecoder::onDecode(
     // buffer. needsResampling() di-override false di bawah; jangan hapus
     // override itu tanpa memperbaiki domain framesDecoded dulu.
     result.framesDecoded += frame_->nb_samples;
-    currentFrame_ += converted;
+    currentFrame_.fetch_add(
+        static_cast<uint64_t>(converted),
+        std::memory_order_relaxed);
     // FIX (Prioritas 1): counter output lokal — INI yang dipakai exit condition
     outputFramesThisCall += static_cast<uint32_t>(converted);
 
@@ -388,7 +403,8 @@ DecodeResult FFmpegDecoder::onDecode(
             ? DecodeStatus::Success
             : DecodeStatus::EndOfStream;
 
-    result.framePosition = currentFrame_;
+    result.framePosition =
+        currentFrame_.load(std::memory_order_relaxed);
 
     return result;
 }
@@ -435,9 +451,10 @@ bool FFmpegDecoder::onSeek(
     // 96kHz, seek ke 10s menulis 960000 frame, tapi playback stream 48kHz
     // hanya 480000 frame di 10 detik → posisi langsung melompat 2x dan audio
     // yang keluar tidak cocok dengan posisi yang dilaporkan.
-    currentFrame_ =
+    currentFrame_.store(
         static_cast<uint64_t>(
-            positionSeconds * config().targetSampleRate);
+            positionSeconds * config().targetSampleRate),
+        std::memory_order_relaxed);
 
     return true;
 }
@@ -516,11 +533,12 @@ DecoderCapabilities FFmpegDecoder::getCapabilities() const {
     return caps;
 }
 
+// 🔥 FIX (2026-11-12, B7-D4): baca dari cache atomik yang diisi di
+// onOpen — TIDAK LAGI menyentuh formatCtx_ (UAF vs close dari thread
+// lain). 0.0 = durasi tidak diketahui (file tanpa durasi / AV_NOPTS_VALUE
+// saat open); pemanggil sudah memperlakukan <= 0.0 sebagai "belum tahu".
 double FFmpegDecoder::getDurationSeconds() const {
-    if (!formatCtx_)
-        return 0.0;
-
-    return static_cast<double>(formatCtx_->duration) / AV_TIME_BASE;
+    return durationSeconds_.load(std::memory_order_acquire);
 }
 
 // =====================================================
@@ -538,11 +556,12 @@ double FFmpegDecoder::getPositionSeconds() const {
     if (outRate == 0) {
         return 0.0;
     }
-    return static_cast<double>(currentFrame_) / outRate;
+    return static_cast<double>(
+        currentFrame_.load(std::memory_order_relaxed)) / outRate;
 }
 
 uint64_t FFmpegDecoder::getPositionFrames() const {
-    return currentFrame_;
+    return currentFrame_.load(std::memory_order_relaxed);
 }
 
 bool FFmpegDecoder::isSeekable() const {
@@ -659,7 +678,11 @@ void FFmpegDecoder::cleanup() {
     }
 
     audioStreamIndex_ = -1;
-    currentFrame_ = 0;
+    // 🔥 FIX (2026-11-12, B7-D4): reset cache atomik supaya getter tidak
+    // melaporkan durasi/posisi trek lama sesudah close (perilaku lama:
+    // formatCtx_ == nullptr → durasi 0, posisi 0).
+    currentFrame_.store(0, std::memory_order_relaxed);
+    durationSeconds_.store(0.0, std::memory_order_release);
     formatLogged_ = false;  // 🔥 reset supaya trek baru di-log lagi
 }
 
