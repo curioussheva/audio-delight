@@ -36,16 +36,16 @@ class PRISTINE_EXPORT ContentUriResolver {
 public:
     // Simpan JavaVM dari JNI_OnLoad. Wajib dipanggil sekali sebelum resolve().
     // Dipanggil dari OnLoad.cpp (library `appmodules`), jadi HARUS diekspor.
-    PRISTINE_EXPORT static void init(JavaVM* vm);
+    static void init(JavaVM* vm);
 
     // true kalau VM sudah terpasang dan JNI siap dipakai.
-    PRISTINE_EXPORT static bool isReady();
+    static bool isReady();
 
     // Kalau uri adalah `content://`, salin isinya ke cache aplikasi dan
     // kembalikan jalur file hasilnya. Kalau bukan content://, kembalikan uri
     // apa adanya. Kalau gagal, kembalikan string kosong - pemanggil harus
     // memperlakukan itu sebagai kegagalan, BUKAN mencoba uri aslinya.
-    PRISTINE_EXPORT static std::string resolve(const std::string& uri);
+    static std::string resolve(const std::string& uri);
 
     // B9-fd-AVIO (2026-11-12): buka `content://` sebagai fd mentah, TANPA
     // salin — ContentResolver.openFileDescriptor(uri, "r") +
@@ -66,11 +66,9 @@ public:
     // resolve()). -1 BUKAN "coba uri asli": content:// mentah tidak
     // bisa dibuka FFmpeg; pemanggil harus fallback ke resolve() atau
     // gagal.
-    PRISTINE_EXPORT static int openFd(const std::string& uri);
+    static int openFd(const std::string& uri);
 
 private:
-    static JavaVM* vm_;
-
     ContentUriResolver() = delete;
 };
 

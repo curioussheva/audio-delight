@@ -1685,9 +1685,10 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
                     //
                     // Dulu chunk yang tidak muat langsung dibuang
                     // sebagian (written < size -> recordOverrun + DATA
-                    // DROP). Backpressure 90% + chunk 8192 sample
-                    // (0,20% dari kapasitas 2^22) membuat queue penuh
-                    // praktis tak terjangkau steady state — tapi saat
+                    // DROP). Backpressure 90% + chunk 16384 frame
+                    // (32768 sampel stereo, 0,78% dari kapasitas 2^22)
+                    // membuat queue penuh praktis tak terjangkau steady state
+                    // — tapi saat TERTUNDA (render starve sesaat) drop itu nyata.
                     // TERTUNDA (render starve sesaat) drop itu nyata.
                     // Sekarang: tunggu sampai ada ruang, sleep 2 ms
                     // per cek, lalu tulis penuh.

@@ -92,6 +92,25 @@ std::string describeAndClear(JNIEnv* env) {
     return msg;
 }
 
+// B9-hygiene (2026-11-12): jalur gagal JNI — log + bersihkan exception
+// yang mungkin tertinggal. GetMethodID/FindClass/NewStringUTF yang gagal
+// meninggalkan exception pending (mis. NoSuchMethodError /
+// OutOfMemoryError); resolve()/openFd() langsung return tanpa JNI
+// lanjutan, jadi ini hygiene, bukan perbaikan crash — perilaku sukses /
+// gagal tidak berubah, hanya ExceptionClear yang hilang ditambahkan.
+// fail() mengembalikan "" untuk resolve(), failFd() -1 untuk openFd().
+std::string fail(JNIEnv* env, const char* msg) {
+    if (env) env->ExceptionClear();
+    LOGE("%s", msg);
+    return {};
+}
+
+int failFd(JNIEnv* env, const char* msg) {
+    if (env) env->ExceptionClear();
+    LOGE("%s", msg);
+    return -1;
+}
+
 // ---------------------------------------------------------------
 // B9-cacheval (2026-11-12): metadata sumber untuk validasi cache.
 //
@@ -218,7 +237,7 @@ SourceMetadata querySourceMetadata(JNIEnv* env, jobject cr, jobject parsedUri) {
 // INIT
 // =====================================================
 
-PRISTINE_EXPORT void ContentUriResolver::init(JavaVM* vm) {
+void ContentUriResolver::init(JavaVM* vm) {
     // (C-HIDDEN, 2026-11-12): kini hanya meneruskan ke holder bersama di
     // core/JniContext.h — pointer JavaVM-nya memang SATU dan sama untuk
     // semua pemakai, dan itu benar.
@@ -230,7 +249,7 @@ PRISTINE_EXPORT void ContentUriResolver::init(JavaVM* vm) {
     }
 }
 
-PRISTINE_EXPORT bool ContentUriResolver::isReady() {
+bool ContentUriResolver::isReady() {
     return jni::javaVm() != nullptr;
 }
 
@@ -245,7 +264,7 @@ PRISTINE_EXPORT bool ContentUriResolver::isReady() {
 //   selalu gagal, dan pemanggil jadi tidak bisa membedakan "berhasil lewat
 //   jalur lain" dari "tidak perlu resolve".
 
-PRISTINE_EXPORT std::string ContentUriResolver::resolve(const std::string& uri) {
+std::string ContentUriResolver::resolve(const std::string& uri) {
     if (uri.rfind("content://", 0) != 0) {
         return uri;
     }
@@ -285,22 +304,22 @@ PRISTINE_EXPORT std::string ContentUriResolver::resolve(const std::string& uri) 
     }
 
     jclass ctxClass = env->GetObjectClass(app);
-    if (!ctxClass) { LOGE("resolve: Context tidak ada"); return ""; }
+    if (!ctxClass) return fail(env, "resolve: Context tidak ada");
 
     jmethodID getCacheDir = env->GetMethodID(ctxClass, "getCacheDir", "()Ljava/io/File;");
     jmethodID getContentResolver = env->GetMethodID(ctxClass, "getContentResolver",
                                                     "()Landroid/content/ContentResolver;");
-    if (!getCacheDir || !getContentResolver) { LOGE("resolve: method Context tidak ada"); return ""; }
+    if (!getCacheDir || !getContentResolver) return fail(env, "resolve: method Context tidak ada");
 
     // ---- Uri.parse -------------------------------------------------------
     jclass uriClass = env->FindClass("android/net/Uri");
-    if (!uriClass) { LOGE("resolve: Uri tidak ada"); return ""; }
+    if (!uriClass) return fail(env, "resolve: Uri tidak ada");
     jmethodID uriParse = env->GetStaticMethodID(
         uriClass, "parse", "(Ljava/lang/String;)Landroid/net/Uri;");
-    if (!uriParse) { LOGE("resolve: Uri.parse tidak ada"); return ""; }
+    if (!uriParse) return fail(env, "resolve: Uri.parse tidak ada");
 
     jstring juri = env->NewStringUTF(uri.c_str());
-    if (!juri) { LOGE("resolve: gagal buat jstring"); return ""; }
+    if (!juri) return fail(env, "resolve: gagal buat jstring");
     jobject parsedUri = env->CallStaticObjectMethod(uriClass, uriParse, juri);
     if (describeAndClear(env).size() || !parsedUri) {
         LOGE("resolve: Uri.parse null untuk %s", uri.c_str());
@@ -312,14 +331,14 @@ PRISTINE_EXPORT std::string ContentUriResolver::resolve(const std::string& uri) 
     if (describeAndClear(env).size() || !cr) { LOGE("resolve: ContentResolver null"); return ""; }
 
     jclass resolverClass = env->FindClass("android/content/ContentResolver");
-    if (!resolverClass) { LOGE("resolve: ContentResolver class tidak ada"); return ""; }
+    if (!resolverClass) return fail(env, "resolve: ContentResolver class tidak ada");
 
     jmethodID getType = env->GetMethodID(resolverClass, "getType",
                                          "(Landroid/net/Uri;)Ljava/lang/String;");
     jmethodID openInputStream = env->GetMethodID(
         resolverClass, "openInputStream",
         "(Landroid/net/Uri;)Ljava/io/InputStream;");
-    if (!getType || !openInputStream) { LOGE("resolve: method resolver tidak ada"); return ""; }
+    if (!getType || !openInputStream) return fail(env, "resolve: method resolver tidak ada");
 
     // ---- Nama file cache: "audio_<fnv1a64 hex 16 digit>.<ext>" ---------
     std::string ext = "cache";
@@ -329,7 +348,18 @@ PRISTINE_EXPORT std::string ContentUriResolver::resolve(const std::string& uri) 
             std::string type = toStd(env, jtype);
             auto slash = type.find_last_of('/');
             if (slash != std::string::npos && slash + 1 < type.size()) {
-                ext = type.substr(slash + 1);
+                // B9-hygiene (2026-11-12): sanitasi — subtype MIME mentah
+                // bisa berisi karakter apa pun; saring ke [a-z0-9], maks
+                // 5 karakter, supaya nama file cache tetap aman. Hasil
+                // saringan kosong -> tetap "cache".
+                std::string clean;
+                for (char c : type.substr(slash + 1)) {
+                    if (clean.size() >= 5) break;
+                    if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
+                        clean.push_back(c);
+                    }
+                }
+                if (!clean.empty()) ext = clean;
             }
         }
     }
@@ -342,7 +372,7 @@ PRISTINE_EXPORT std::string ContentUriResolver::resolve(const std::string& uri) 
     jmethodID getAbsolutePath = fileClass
         ? env->GetMethodID(fileClass, "getAbsolutePath", "()Ljava/lang/String;")
         : nullptr;
-    if (!getAbsolutePath) { LOGE("resolve: getAbsolutePath tidak ada"); return ""; }
+    if (!getAbsolutePath) return fail(env, "resolve: getAbsolutePath tidak ada");
 
     auto jcachePath = (jstring)env->CallObjectMethod(cacheDirObj, getAbsolutePath);
     if (describeAndClear(env).size() || !jcachePath) { LOGE("resolve: cachePath null"); return ""; }
@@ -372,7 +402,7 @@ PRISTINE_EXPORT std::string ContentUriResolver::resolve(const std::string& uri) 
         : nullptr;
     jmethodID exists = fileClass ? env->GetMethodID(fileClass, "exists", "()Z") : nullptr;
     jmethodID length = fileClass ? env->GetMethodID(fileClass, "length", "()J") : nullptr;
-    if (!fileCtor || !exists || !length) { LOGE("resolve: method File tidak ada"); return ""; }
+    if (!fileCtor || !exists || !length) return fail(env, "resolve: method File tidak ada");
 
     jstring jtarget = env->NewStringUTF(target.c_str());
     jobject targetFile = env->NewObject(fileClass, fileCtor, jtarget);
@@ -428,8 +458,7 @@ PRISTINE_EXPORT std::string ContentUriResolver::resolve(const std::string& uri) 
             env->CallVoidMethod(input, closeMethod);
             describeAndClear(env);
         }
-        LOGE("resolve: method InputStream tidak ada");
-        return "";
+        return fail(env, "resolve: method InputStream tidak ada");
     }
 
     constexpr jsize CHUNK = 256 * 1024;
@@ -530,7 +559,7 @@ PRISTINE_EXPORT std::string ContentUriResolver::resolve(const std::string& uri) 
 // resolve() adalah jalur yang sudah terbukti (B9-R1) dan tidak boleh
 // berubah perilakunya karena refactor helper di item ini.
 
-PRISTINE_EXPORT int ContentUriResolver::openFd(const std::string& uri) {
+int ContentUriResolver::openFd(const std::string& uri) {
     if (uri.rfind("content://", 0) != 0) {
         return -1;
     }
@@ -556,20 +585,20 @@ PRISTINE_EXPORT int ContentUriResolver::openFd(const std::string& uri) {
     }
 
     jclass ctxClass = env->GetObjectClass(app);
-    if (!ctxClass) { LOGE("openFd: Context tidak ada"); return -1; }
+    if (!ctxClass) return failFd(env, "openFd: Context tidak ada");
 
     jmethodID getContentResolver = env->GetMethodID(ctxClass, "getContentResolver",
                                                     "()Landroid/content/ContentResolver;");
-    if (!getContentResolver) { LOGE("openFd: getContentResolver tidak ada"); return -1; }
+    if (!getContentResolver) return failFd(env, "openFd: getContentResolver tidak ada");
 
     jclass uriClass = env->FindClass("android/net/Uri");
-    if (!uriClass) { LOGE("openFd: Uri tidak ada"); return -1; }
+    if (!uriClass) return failFd(env, "openFd: Uri tidak ada");
     jmethodID uriParse = env->GetStaticMethodID(
         uriClass, "parse", "(Ljava/lang/String;)Landroid/net/Uri;");
-    if (!uriParse) { LOGE("openFd: Uri.parse tidak ada"); return -1; }
+    if (!uriParse) return failFd(env, "openFd: Uri.parse tidak ada");
 
     jstring juri = env->NewStringUTF(uri.c_str());
-    if (!juri) { LOGE("openFd: gagal buat jstring"); return -1; }
+    if (!juri) return failFd(env, "openFd: gagal buat jstring");
     jobject parsedUri = env->CallStaticObjectMethod(uriClass, uriParse, juri);
     if (describeAndClear(env).size() || !parsedUri) {
         LOGE("openFd: Uri.parse null untuk %s", uri.c_str());
@@ -580,7 +609,7 @@ PRISTINE_EXPORT int ContentUriResolver::openFd(const std::string& uri) {
     if (describeAndClear(env).size() || !cr) { LOGE("openFd: ContentResolver null"); return -1; }
 
     jclass resolverClass = env->FindClass("android/content/ContentResolver");
-    if (!resolverClass) { LOGE("openFd: ContentResolver class tidak ada"); return -1; }
+    if (!resolverClass) return failFd(env, "openFd: ContentResolver class tidak ada");
 
     // ContentResolver.openFileDescriptor(Uri, String) — API publik sejak
     // API 1; mode "r" = baca saja. (Terverifikasi dari Android Developers
@@ -590,10 +619,10 @@ PRISTINE_EXPORT int ContentUriResolver::openFd(const std::string& uri) {
     jmethodID openFdMethod = env->GetMethodID(
         resolverClass, "openFileDescriptor",
         "(Landroid/net/Uri;Ljava/lang/String;)Landroid/os/ParcelFileDescriptor;");
-    if (!openFdMethod) { LOGE("openFd: openFileDescriptor tidak ada"); return -1; }
+    if (!openFdMethod) return failFd(env, "openFd: openFileDescriptor tidak ada");
 
     jstring jmode = env->NewStringUTF("r");
-    if (!jmode) { LOGE("openFd: gagal buat jstring mode"); return -1; }
+    if (!jmode) return failFd(env, "openFd: gagal buat jstring mode");
     jobject pfd = env->CallObjectMethod(cr, openFdMethod, parsedUri, jmode);
     std::string err = describeAndClear(env);
     if (!err.empty()) {
@@ -612,9 +641,9 @@ PRISTINE_EXPORT int ContentUriResolver::openFd(const std::string& uri) {
     // tidak lagi memiliki fd — GC boleh membebaskan objeknya tanpa
     // menutup fd kita. fd sepenuhnya milik native mulai titik ini.
     jclass pfdClass = env->FindClass("android/os/ParcelFileDescriptor");
-    if (!pfdClass) { LOGE("openFd: ParcelFileDescriptor tidak ada"); return -1; }
+    if (!pfdClass) return failFd(env, "openFd: ParcelFileDescriptor tidak ada");
     jmethodID detachFd = env->GetMethodID(pfdClass, "detachFd", "()I");
-    if (!detachFd) { LOGE("openFd: detachFd tidak ada"); return -1; }
+    if (!detachFd) return failFd(env, "openFd: detachFd tidak ada");
 
     jint fd = env->CallIntMethod(pfd, detachFd);
     err = describeAndClear(env);
