@@ -176,8 +176,11 @@ public:
         float value
     ) {
 
+        // (C-P2, 2026-11-12): nilai dari JS tidak tervalidasi — NaN/Inf
+        // lolos ke master gain. Rentang 0..4 (tugas C-P2; belum ada slider
+        // master gain di UI), fallback 1.0 = gain netral.
         mMasterGain.store(
-            value,
+            clampFinite(value, 0.0f, 4.0f, 1.0f),
             std::memory_order_release
         );
     }
@@ -197,8 +200,11 @@ public:
         float value
     ) {
 
+        // (C-P2): -1 = kiri penuh, +1 = kanan penuh. Di luar itu
+        // OutputStage::setBalance memberi gain kanal NEGATIF (inversi fasa),
+        // jadi batas ini bukan kosmetik. Fallback 0.0 = tengah.
         mBalance.store(
-            value,
+            clampFinite(value, -1.0f, 1.0f, 0.0f),
             std::memory_order_release
         );
     }
@@ -218,8 +224,13 @@ public:
         float value
     ) {
 
+        // (C-P2): skala StereoWidener — 0 = mono, 1 = stereo asli,
+        // 2 = ultra wide (NativeDSPModule.kt + docs/RENCANA_SOLFEGGIO
+        // "Width 0–2"). Slider UI 0..1000 dipetakan Kotlin ke 1..2, jadi
+        // rentang native ini mencakup seluruh nilai valid dari UI.
+        // Fallback 1.0 = stereo asli.
         mStereoWidth.store(
-            value,
+            clampFinite(value, 0.0f, 2.0f, 1.0f),
             std::memory_order_release
         );
     }
@@ -239,8 +250,12 @@ public:
         float value
     ) {
 
+        // (C-P2): rencana UI (docs/RENCANA_SOLFEGGIO_2026-11-11.md) —
+        // slider 20–2000 Hz + preset 396/417/528/639/741/852 Hz.
+        // 2000 Hz di bawah Nyquist laju berapa pun (≥ 8 kHz), jadi tidak
+        // bentrok dengan guard Nyquist resonator (DSP-M6). Fallback 528.
         mSolfeggioFreq.store(
-            value,
+            clampFinite(value, 20.0f, 2000.0f, 528.0f),
             std::memory_order_release
         );
     }
@@ -260,8 +275,11 @@ public:
         float value
     ) {
 
+        // (C-P2): rencana UI — mati / Delta 2 / Theta 6 / Alpha 10 /
+        // Beta 20 / Gamma 40 Hz. 0 = mati (gate di ImmersiveStage).
+        // Fallback 0.0 = mati.
         mBrainwaveFreq.store(
-            value,
+            clampFinite(value, 0.0f, 40.0f, 0.0f),
             std::memory_order_release
         );
     }
@@ -281,8 +299,9 @@ public:
         float value
     ) {
 
+        // (C-P2): rencana UI — Intensitas 0–1. Fallback 0.5 = default.
         mResonanceIntensity.store(
-            value,
+            clampFinite(value, 0.0f, 1.0f, 0.5f),
             std::memory_order_release
         );
     }
@@ -310,8 +329,11 @@ public:
             return;
         }
 
+        // (C-P2): UI meng-clamp ±12 dB (equalizerStore.ts setBandGain);
+        // native ±24 memberi headroom tanpa memangkas satu pun nilai valid
+        // dari UI. Non-finite -> 0.0 (flat).
         mEqGain[band].store(
-            gainDb,
+            clampFinite(gainDb, -24.0f, 24.0f, 0.0f),
             std::memory_order_release
         );
     }
@@ -344,8 +366,10 @@ public:
         float gainDb
     ) {
 
+        // (C-P2): slider UI 0..1000 dipetakan Kotlin ke 0..+12 dB
+        // (kMaxBassBoostDb, NativeDSPModule.kt). Fallback 0.0 = mati.
         mBassBoost.store(
-            gainDb,
+            clampFinite(gainDb, 0.0f, 12.0f, 0.0f),
             std::memory_order_release
         );
     }

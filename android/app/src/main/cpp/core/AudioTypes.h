@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
 
 namespace pristine {
 
@@ -13,6 +14,71 @@ namespace pristine {
 // =====================================================
 
 using Sample = float;
+
+// =====================================================
+// FINITE / CLAMP (C-P2, 2026-11-12)
+// =====================================================
+//
+// Nilai float dari JS (JNI jfloat) TIDAK tervalidasi: NaN/Inf yang lolos
+// masuk ke AudioState lalu ke koefisien biquad (powf(10, NaN/40) = NaN) dan
+// menetap di state DF-II (z1/z2) — hanya reset() via stop/reopen yang
+// membersihkan. Output ke DAC tetap aman (sanitizeOutput + limiter), yang
+// terdengar SENYAP, bukan rusak.
+//
+// Uji finite di sini memakai BIT-PATTERN, bukan std::isnan/std::isfinite:
+// eksponen 0xFF (semua bit 1) = NaN atau Inf, apa pun mantissa-nya (termasuk
+// NaN ber-payload dan signaling NaN). CMakeLists.txt:244 eksplisit
+// -fno-fast-math, jadi std::isnan sebetulnya andal — tapi bit-pattern tetap
+// benar walau flag itu berubah suatu hari, dan tidak bergantung pada
+// optimasi compiler. std::memcpy dipakai supaya tidak ada UB aliasing
+// (bukan reinterpret_cast / union punning).
+//
+// Helper ini tinggal di AudioTypes.h — header dasar yang sudah di-include
+// AudioState.h, DSPConfig.h (lewat DSPNode.h), dan ImmersiveStage.h —
+// supaya dipakai AudioState (semua setter float, C-P2) dan nanti
+// ImmersiveStage/resonator (item 27) tanpa pindah-pindah letak.
+
+// true bila `value` finite (bukan NaN, bukan ±Inf). Denormal dan -0.0
+// dihitung finite.
+inline bool isFiniteFloat(
+    float value
+) noexcept {
+
+    uint32_t bits = 0;
+
+    std::memcpy(
+        &bits,
+        &value,
+        sizeof(bits)
+    );
+
+    return (bits & 0x7F800000u) != 0x7F800000u;
+}
+
+// Nilai non-finite (NaN/Inf) TIDAK punya urutan — tidak bisa di-clamp ke
+// batas — jadi dikembalikan ke `fallback`. Nilai finite di luar [lo, hi]
+// di-clamp ke batas terdekat. Nilai valid di dalam rentang tidak berubah.
+inline float clampFinite(
+    float value,
+    float lo,
+    float hi,
+    float fallback
+) noexcept {
+
+    if (!isFiniteFloat(value)) {
+        return fallback;
+    }
+
+    if (value < lo) {
+        return lo;
+    }
+
+    if (value > hi) {
+        return hi;
+    }
+
+    return value;
+}
 
 // =====================================================
 // CHANNEL LAYOUT
