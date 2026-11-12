@@ -700,10 +700,16 @@ bool PlaybackController::stop() {
     pitchShifter_.reset();  // Fase R: buang sisa pitch shifter juga
     clearing_.store(false, std::memory_order_release);
 
-    // 🔥 FIX (2026-11-10, p-m23): reset laju file/stream supaya tidak basi
+    // 🔥 FIX (2026-11-10, p-m23): reset laju file supaya tidak basi
     // ke siklus start berikutnya (pola sama dengan m5 audit manager+core).
+    // PB6-MINOR(f) (2026-11-12): streamSampleRate_ TIDAK di-reset di sini
+    // — render() mengisi ulang dari laju stream tiap callback
+    // (setStreamSampleRate), jadi store(0) tak berdampak; semua pembaca
+    // di antara stop() dan render() berikutnya punya fallback (laju file /
+    // track / 48000), dan nilai lama adalah laju stream yang benar
+    // (stream belum di-reopen). fileSampleRate_ tetap di-reset: itu
+    // metadata file lama, bukan laju stream.
     fileSampleRate_.store(0, std::memory_order_release);
-    streamSampleRate_.store(0, std::memory_order_release);
 
     // Tidak ada lagi track yang "sudah selesai" setelah stop (P-M7).
     decoderFinished_.store(false, std::memory_order_release);
