@@ -316,6 +316,34 @@ public:
     // =============================================
     // EQ
     // =============================================
+    //
+    // (C-EQATOM, 2026-11-12): 10 band dibaca audio thread sebagai SATU
+    // snapshot, bukan 10 atomic load terpisah.
+    //
+    // Dulu `setFullEqualizer` di Kotlin memanggil JNI 10x (satu per band),
+    // tiap panggilan satu atomic store. `updateParameters()` yang membaca di
+    // tengah-tengah loop itu mendapat preset SETENGAH-JADI, lalu
+    // `dspConfigEquals` melihat config berubah dua kali dan
+    // `DSPChain::applyConfig()` jalan 2x untuk satu preset.
+    //
+    // Mekanisme: SEQLOCK, pola yang sama dengan koreksi headphone di bawah
+    // (`mPresetSeq` / `setHeadphonePreset` / `headphonePreset()`).
+    // `mEqSeq` ganjil saat penulisan berlangsung, genap saat selesai.
+    // Pembaca (audio thread) menyalin ke lokal, lalu memeriksa seq tidak
+    // berubah — kalau berubah, snapshot dibuang dan dibaca ulang (maks 8x);
+    // kalau tetap gagal, pembaca TIDAK menyentuh `out` dan pemanggil
+    // mempertahankan nilai buffer sebelumnya.
+    //
+    // SEMUA penulis mEqGain — per-band (`setEqGain`) maupun massal
+    // (`setEqGains`) — wajib lewat transaksi ini: tanpa seq bump di
+    // per-band, penulisan satu band di tengah pembacaan massal tidak
+    // terdeteksi dan snapshot robek lolos. Dua penulis diserialisasi
+    // `mEqWriterMutex` (alasan yang sama dengan `mPresetWriterMutex` di
+    // C-P1: dua penulisan yang bersilangan bisa menghasilkan genap palsu
+    // di tengah penulisan). Mutex hanya dipegang penulis; audio thread
+    // (pembaca seqlock) tidak pernah menyentuhnya, jadi tidak ada blokir
+    // di jalur realtime dan tidak ada inversi urutan lock — tidak ada lock
+    // lain yang dipegang saat mengambilnya.
 
     inline void setEqGain(
         int band,
@@ -332,10 +360,21 @@ public:
         // (C-P2): UI meng-clamp ±12 dB (equalizerStore.ts setBandGain);
         // native ±24 memberi headroom tanpa memangkas satu pun nilai valid
         // dari UI. Non-finite -> 0.0 (flat).
-        mEqGain[band].store(
-            clampFinite(gainDb, -24.0f, 24.0f, 0.0f),
-            std::memory_order_release
+        const float clamped =
+            clampFinite(gainDb, -24.0f, 24.0f, 0.0f);
+
+        const std::lock_guard<std::mutex> lock(
+            mEqWriterMutex
         );
+
+        const uint32_t seq = beginEqWrite();
+
+        mEqGain[band].store(
+            clamped,
+            std::memory_order_relaxed
+        );
+
+        endEqWrite(seq);
     }
 
     inline float eqGain(
@@ -352,6 +391,102 @@ public:
         return mEqGain[band].load(
             std::memory_order_acquire
         );
+    }
+
+    // Tulis massal: `count` band pertama (1..10) dalam SATU transaksi
+    // seqlock — satu panggilan JNI dari Kotlin `setFullEqualizer`, bukan
+    // 10x loop. Band di luar `count` tidak disentuh (perilaku lama: array
+    // parsial hanya menulis band yang dikirim). Tiap nilai lewat
+    // clampFinite ±24 dB yang sama dengan per-band (C-P2).
+    //
+    // Penulis: UI thread (via JNI). Tidak boleh dipanggil dari audio thread.
+    inline void setEqGains(
+        const float* gains,
+        int count
+    ) {
+
+        if (
+            gains == nullptr ||
+            count <= 0
+        ) {
+            return;
+        }
+
+        if (count > 10) {
+            count = 10;
+        }
+
+        const std::lock_guard<std::mutex> lock(
+            mEqWriterMutex
+        );
+
+        const uint32_t seq = beginEqWrite();
+
+        for (int i = 0; i < count; ++i) {
+            mEqGain[i].store(
+                clampFinite(gains[i], -24.0f, 24.0f, 0.0f),
+                std::memory_order_relaxed
+            );
+        }
+
+        endEqWrite(seq);
+    }
+
+    // Pembaca: audio thread. Menyalin 10 band ke `out`.
+    //
+    // true = snapshot konsisten. false = penulisan sedang berlangsung dan
+    // tidak selesai dalam 8 percobaan — `out` TIDAK disentuh sama sekali,
+    // pemanggil mempertahankan nilai buffer sebelumnya (melewatkan satu
+    // buffer tidak terdengar; memakai campuran dua preset bisa pop).
+    inline bool eqGains(
+        float out[10]
+    ) const {
+
+        for (int attempt = 0; attempt < 8; ++attempt) {
+
+            const uint32_t before =
+                mEqSeq.load(
+                    std::memory_order_acquire
+                );
+
+            // Ganjil: penulisan sedang berlangsung, coba lagi.
+            // `out` TIDAK disentuh di jalur ini.
+            if (before & 1u) {
+                continue;
+            }
+
+            // Salin ke lokal dulu: `out` baru ditulis SETELAH seq
+            // terverifikasi tidak berubah selama penyalinan.
+            float snapshot[10];
+            for (int i = 0; i < 10; ++i) {
+                snapshot[i] =
+                    mEqGain[i].load(
+                        std::memory_order_relaxed
+                    );
+            }
+
+            std::atomic_thread_fence(
+                std::memory_order_acquire
+            );
+
+            const uint32_t after =
+                mEqSeq.load(
+                    std::memory_order_relaxed
+                );
+
+            if (before == after) {
+                for (int i = 0; i < 10; ++i) {
+                    out[i] = snapshot[i];
+                }
+                return true;
+            }
+            // seq berubah selama penyalinan: snapshot mungkin campuran dua
+            // preset — buang, coba lagi. `out` tetap utuh.
+        }
+
+        // Penulisan belum selesai setelah 8 percobaan: lewati update buffer
+        // ini. `out` sengaja TIDAK disentuh sama sekali.
+        return false;
     }
 
     // =============================================
@@ -599,6 +734,53 @@ private:
         0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
         0.0f, 0.0f, 0.0f, 0.0f, 0.0f
     };
+
+    // (C-EQATOM, 2026-11-12): seqlock EQ — `mEqSeq` ganjil saat penulisan
+    // berlangsung, genap saat selesai. Lihat komentar di setEqGain() /
+    // setEqGains() / eqGains(). `mEqWriterMutex` hanya dipegang penulis
+    // (audio thread tidak pernah menyentuhnya).
+    std::atomic<uint32_t>
+        mEqSeq{0};
+
+    std::mutex mEqWriterMutex;
+
+    // (C-EQATOM): transaksi tulis seqlock EQ — hanya dipanggil dengan
+    // mEqWriterMutex dipegang. beginEqWrite() menaikkan seq jadi ganjil
+    // (penulisan berlangsung) + fence release; endEqWrite() fence release
+    // lalu menaikkan lagi jadi genap (selesai). Store data di antara
+    // keduanya boleh relaxed: fence yang mengurutkannya terhadap seq.
+    inline uint32_t beginEqWrite() {
+
+        const uint32_t seq =
+            mEqSeq.load(
+                std::memory_order_relaxed
+            );
+
+        mEqSeq.store(
+            seq + 1,
+            std::memory_order_relaxed
+        );
+
+        std::atomic_thread_fence(
+            std::memory_order_release
+        );
+
+        return seq;
+    }
+
+    inline void endEqWrite(
+        uint32_t seq
+    ) {
+
+        std::atomic_thread_fence(
+            std::memory_order_release
+        );
+
+        mEqSeq.store(
+            seq + 2,
+            std::memory_order_relaxed
+        );
+    }
 
     // 🔥 FIX (2026-10-10): bass boost (dB). Dulu tidak ada di state sama sekali,
     // jadi `AudioEngine::setBassBoost()` tidak punya tempat menyimpan.

@@ -199,6 +199,13 @@ public:
         float gainDb
     );
 
+    // (C-EQATOM, 2026-11-12): tulis massal `count` band pertama (1..10)
+    // dalam satu transaksi seqlock di AudioState.
+    void setEqBands(
+        const float* gains,
+        int count
+    );
+
     // =============================================
     // IMMERSIVE
     // =============================================

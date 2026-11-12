@@ -146,6 +146,9 @@ public:
     void setDSPEnabled(bool enabled);
     void setLimiterEnabled(bool enabled);
     void setEqBand(int band, float gainDb);
+    // (C-EQATOM, 2026-11-12): tulis massal `count` band pertama (1..10)
+    // dalam satu transaksi seqlock di AudioState.
+    void setEqBands(const float* gains, int count);
     void setBassBoost(float gainDb);
 
     // =============================================

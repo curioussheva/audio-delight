@@ -821,6 +821,18 @@ void EngineManager::setEqBand(
     );
 }
 
+// (C-EQATOM, 2026-11-12): satu transaksi seqlock, bukan 10x setEqBand.
+void EngineManager::setEqBands(
+    const float* gains,
+    int count
+) {
+
+    mEngine.setEqBands(
+        gains,
+        count
+    );
+}
+
 void EngineManager::setBassBoost(
     float gainDb
 ) {

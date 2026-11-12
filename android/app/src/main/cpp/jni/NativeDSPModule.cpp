@@ -48,6 +48,51 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeEqualizerBand(
 }
 
 // =====================================================
+// EQUALIZER MASSAL (C-EQATOM, 2026-11-12)
+// =====================================================
+//
+// Satu panggilan JNI untuk seluruh preset, bukan 10x loop per band.
+// Nama fungsi HARUS cocok dengan `external fun` di Kotlin: JNI memakai
+// mangling Java_com_<pkg>_<Class>_<namaFungsi> (lihat setNativeProcessingMode
+// di bawah). Salah nama = UnsatisfiedLinkError saat runtime.
+JNIEXPORT void JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_setNativeEqualizerBands(
+    JNIEnv* env,
+    jobject,
+    jfloatArray gains
+) {
+
+    if (gains == nullptr) {
+        return;
+    }
+
+    const jsize length =
+        env->GetArrayLength(gains);
+
+    if (length <= 0) {
+        return;
+    }
+
+    const jsize count =
+        length > 10 ? 10 : length;
+
+    jfloat buffer[10] = {};
+
+    env->GetFloatArrayRegion(
+        gains,
+        0,
+        count,
+        buffer
+    );
+
+    EngineManager::get()
+        .setEqBands(
+            buffer,
+            static_cast<int>(count)
+        );
+}
+
+// =====================================================
 // BASS BOOST
 // =====================================================
 

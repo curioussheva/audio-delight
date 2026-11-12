@@ -380,10 +380,27 @@ void AudioCallback::updateParameters() {
     // memanggil `DSPChain::applyConfig()`, `config.eqGain[]` selalu nol dan
     // EQ tetap identity. Sekarang nilainya ikut mengalir.
     //
-    // 10 atomic load per buffer — di luar loop sample, jadi tidak menambah
-    // beban per-frame. `relaxed` tidak dipakai; aksesornya `acquire`.
-    for (int i = 0; i < 10; ++i) {
-        mParams.eqGains[i] = mState.eqGain(i);
+    // (C-EQATOM, 2026-11-12): 10 band dibaca sebagai SATU snapshot berversi
+    // (seqlock di AudioState), bukan 10 atomic load terpisah. Dulu loop di
+    // sini bisa membaca preset setengah-jadi — Kotlin setFullEqualizer
+    // memanggil JNI 10x, satu per band — lalu dspConfigEquals melihat config
+    // berubah dua kali dan DSPChain::applyConfig() jalan 2x untuk satu
+    // preset. Sekarang setFullEqualizer satu panggilan JNI dan snapshot ini
+    // konsisten atau tidak dipakai sama sekali: kalau penulisan sedang
+    // berlangsung (return false), mParams.eqGains dipertahankan dari buffer
+    // sebelumnya — melewatkan satu buffer tidak terdengar, memakai campuran
+    // dua preset bisa menimbulkan pop (pola yang sama dengan
+    // headphonePreset() di bawah).
+    //
+    // 1 snapshot per buffer — di luar loop sample, jadi tidak menambah
+    // beban per-frame.
+    float eqSnapshot[10];
+    if (mState.eqGains(eqSnapshot)) {
+        std::memcpy(
+            mParams.eqGains,
+            eqSnapshot,
+            sizeof(eqSnapshot)
+        );
     }
 
     mParams.bassBoostGain = mState.bassBoost();

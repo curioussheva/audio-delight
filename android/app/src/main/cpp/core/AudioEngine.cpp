@@ -424,6 +424,21 @@ void AudioEngine::setEqBand(
 }
 
 // =====================================================
+// EQ BANDS (MASSAL)
+// =====================================================
+
+void AudioEngine::setEqBands(
+    const float* gains,
+    int count
+) {
+
+    // (C-EQATOM, 2026-11-12): satu transaksi seqlock di AudioState, bukan
+    // 10x setEqBand — updateParameters() tidak pernah membaca preset
+    // setengah-jadi.
+    mState.setEqGains(gains, count);
+}
+
+// =====================================================
 // KOREKSI HEADPHONE (Fase D)
 // =====================================================
 

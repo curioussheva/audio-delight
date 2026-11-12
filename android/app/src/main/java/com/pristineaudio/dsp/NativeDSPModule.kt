@@ -36,6 +36,11 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     private external fun setNativeMasterGain(gain: Float)
     private external fun setNativeStereoWide(width: Float)
     private external fun setNativeEqualizerBand(band: Int, gain: Float)
+    // (C-EQATOM, 2026-11-12): tulis massal 10 band dalam 1 panggilan JNI —
+    // dulu setFullEqualizer loop 10x setNativeEqualizerBand, tiap panggilan
+    // satu atomic store, jadi updateParameters() bisa membaca preset
+    // setengah-jadi. Nama HARUS cocok dengan JNI di NativeDSPModule.cpp.
+    private external fun setNativeEqualizerBands(gains: FloatArray)
     private external fun setNativeBassBoost(gain: Float)
     private external fun setNativeBalance(balance: Float)
     private external fun toggleNativeExclusiveMode(enabled: Boolean)
@@ -102,9 +107,12 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     fun setFullEqualizer(gains: ReadableArray, sessionId: Int, promise: Promise) {
         if (!engineAvailable) { promise.resolve(false); return }
         try {
-            for (i in 0 until minOf(gains.size(), 10)) {
-                setNativeEqualizerBand(i, gains.getDouble(i).toFloat())
-            }
+            // (C-EQATOM, 2026-11-12): satu panggilan JNI untuk seluruh
+            // preset — bukan 10x loop per band. Array parsial (< 10) hanya
+            // menulis band yang dikirim, seperti perilaku lama.
+            val count = minOf(gains.size(), 10)
+            val bands = FloatArray(count) { i -> gains.getDouble(i).toFloat() }
+            setNativeEqualizerBands(bands)
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("DSP_ERROR", e.message)
