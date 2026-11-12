@@ -62,6 +62,30 @@ private:
         const DSPParameters& params
     ) noexcept;
 
+    // =============================================
+    // GANTI MODE LIVE (C-MODESW, 2026-11-12)
+    // =============================================
+    //
+    // Dipanggil dari process() HANYA saat mode benar-benar berubah
+    // (mLastMode != mode baru). Mereset rantai TUJUAN dan mempersenjatai
+    // fade-in — lihat onModeChanged() di .cpp untuk alasan masing-masing
+    // pilihan. Bukan tiap buffer: gerbangnya perbandingan mode di
+    // process(), jadi biaya deteksi satu banding enum per chunk.
+    void onModeChanged(
+        ProcessingMode mode
+    ) noexcept;
+
+    // Fade-in linear output rantai tujuan sesudah ganti mode, 0 -> 1
+    // selama mFadeFramesTotal frame. No-op bila tidak ada fade aktif
+    // (mFadeFramesRemaining == 0). Dipanggil dari processDSP() /
+    // processImmersive() SESUDAH rantai diproses, TIDAK dari
+    // processBitPerfect() — BitPerfect harus tetap bit-exact.
+    void applyModeSwitchFade(
+        float* left,
+        float* right,
+        int32_t frames
+    ) noexcept;
+
 private:
 
     // =============================================
@@ -102,6 +126,35 @@ private:
 
     // (mSampleRate/mMaxFrames dihapus 2026-11-10: hanya ditulis di prepare(),
     // tidak pernah dibaca.)
+    // (C-MODESW, 2026-11-12): mSampleRate DIHIDUPKAN LAGI — sekarang dibaca:
+    // durasi fade-in ganti mode (8 ms) dihitung dalam frame dari laju ini.
+    // mMaxFrames tetap tidak disimpan: tidak ada pemakai.
+    int32_t mSampleRate = 0;
+
+    // =============================================
+    // GANTI MODE LIVE (C-MODESW, 2026-11-12)
+    // =============================================
+    //
+    // Mode yang diproses buffer terakhir. Hanya ditulis di process()
+    // (audio thread saja) — tidak perlu atomic: AudioState sudah jadi
+    // satu-satunya jembatan antar-thread, dan mLastMode murni jejak lokal
+    // audio thread atas nilai yang dibaca dari sana.
+    ProcessingMode mLastMode{ProcessingMode::BitPerfect};
+
+    // false = process() belum pernah dipanggil sejak prepare()/reset()
+    // terakhir, jadi buffer pertama HANYA mencatat mode (tanpa reset dan
+    // tanpa fade — node masih segar dari prepare()/buildGraph atau baru
+    // dibersihkan reset(), fade di start playback akan terdengar sebagai
+    // dip di awal lagu).
+    bool mModeSeen = false;
+
+    // Fade-in ganti mode: total frame (8 ms @ mSampleRate) dan sisa frame
+    // yang belum di-fade. 0 = tidak ada fade aktif. Sisa disimpan antar
+    // chunk supaya fade yang lebih panjang dari satu chunk (mis. 8 ms @
+    // 192 kHz = 1536 frame masih < kMax 1920, tapi laju lebih tinggi /
+    // chunk lebih pendek tetap tertutup) selesai dengan benar.
+    int32_t mFadeFramesTotal = 0;
+    int32_t mFadeFramesRemaining = 0;
 };
 
 } // namespace pristine 
