@@ -29,6 +29,40 @@ EngineManager::EngineManager()
     // Beri tahu EngineManager setiap track berhasil dimuat, supaya stream
     // bisa dibuka ulang kalau laju file berubah (M1, 2026-11-10).
     mPlayback.setTrackLoadedListener([this]() { onTrackLoaded(); });
+
+    // =================================================
+    // STREAM DIPUTUS PAKSA OLEH SISTEM (C-K2, 2026-11-12)
+    // =================================================
+    //
+    // Dipasang SEKALI di sini, di konstruktor — bukan tiap start().
+    // Dulu dipasang di start() (di luar cek isRunning()): setiap start()
+    // menulis ulang std::function di AudioEngine tanpa lock, sementara
+    // thread error Oboe bisa menyalinnya di onErrorAfterClose() — race.
+    // Sekali pasang cukup karena:
+    //   - EngineManager singleton (Meyer): konstruktor jalan sekali
+    //     seumur proses, dan mEngine tidak pernah di-recreate;
+    //   - handler tersimpan di AudioStreamController dan bertahan melewati
+    //     stop()/start()/reopen — reopen() memanggil mEngine.start()
+    //     langsung dan tidak pernah memasang ulang;
+    //   - penulisan ini terjadi sebelum stream pertama dibuka, jadi
+    //     sebelum callback error Oboe mana pun bisa membaca handler.
+    //
+    // Kasus nyata: headset dicolok. Android memindahkan rute dan mengirim
+    // `request DISCONNECT in data callback`; stream ditutup paksa dan Oboe
+    // memanggil AudioStreamController::onErrorAfterClose(). Tanpa handler
+    // ini, stream hilang dan audio mati permanen sampai user mengganti
+    // device lewat jalur lain (onDeviceRemoved).
+    mEngine.setStreamDisconnectHandler([this] {
+        __android_log_print(ANDROID_LOG_WARN, "EngineManager",
+            "stream diputus sistem (headset dicolok / rute berubah) - "
+            "menjadwalkan recovery");
+
+        // PENTING: hanya menjadwalkan. Callback ini berjalan di thread Oboe
+        // saat Oboe sedang menutup stream; reopen di sini akan deadlock.
+        // Worker thread (requestStreamRecovery) yang mengerjakan reopen +
+        // muat ulang track.
+        requestStreamRecovery();
+    });
 }
 
 // =====================================================
@@ -76,32 +110,6 @@ void EngineManager::start() {
     // lihat komentar di sana.
     std::unique_lock<std::mutex>
         lock(mMutex);
-
-    // =================================================
-    // STREAM DIPUTUS PAKSA OLEH SISTEM
-    // =================================================
-    //
-    // Dipasang DI LUAR cek isRunning() di bawah: kalau dipasang setelah cek itu,
-    // stream yang sudah berjalan (kasus paling umum - user menekan play lagi)
-    // tidak punya penanganan disconnect, dan audio akan mati begitu headset
-    // dicolok. Pemasangan bersifat idempoten, jadi aman dipanggil berkali-kali.
-    //
-    // Kasus nyata: headset dicolok. Android memindahkan rute dan mengirim
-    // `request DISCONNECT in data callback`; stream ditutup paksa dan Oboe
-    // memanggil AudioStreamController::onErrorAfterClose(). Sebelum ada
-    // penanganan ini, stream hilang dan audio mati permanen sampai user
-    // mengganti device lewat jalur lain (onDeviceRemoved).
-    mEngine.setStreamDisconnectHandler([this] {
-        __android_log_print(ANDROID_LOG_WARN, "EngineManager",
-            "stream diputus sistem (headset dicolok / rute berubah) - "
-            "menjadwalkan recovery");
-
-        // PENTING: hanya menjadwalkan. Callback ini berjalan di thread Oboe
-        // saat Oboe sedang menutup stream; reopen di sini akan deadlock.
-        // Worker thread (requestStreamRecovery) yang mengerjakan reopen +
-        // muat ulang track.
-        requestStreamRecovery();
-    });
 
     if (
         mEngine.isRunning()

@@ -58,9 +58,12 @@ public:
     // pemilik (EngineManager) yang tahu cara membuka ulang + memuat ulang
     // track ke stream baru.
     //
-    // Dipasang oleh EngineManager saat initialize(); kalau kosong, tidak ada
-    // yang menangani dan audio akan mati sampai device berubah lagi -
-    // perilaku lama yang justru jadi bug.
+    // Dipasang SEKALI oleh EngineManager di konstruktornya (C-K2,
+    // 2026-11-12) dan hanya diteruskan ke AudioStreamController — dulu
+    // disimpan dulu di member lalu dipasang ulang tiap start() tanpa lock,
+    // sementara thread error Oboe bisa membacanya: race. Kalau kosong,
+    // tidak ada yang menangani dan audio akan mati sampai device berubah
+    // lagi - perilaku lama yang justru jadi bug.
     void setStreamDisconnectHandler(
         std::function<void()> handler
     );
@@ -254,10 +257,6 @@ private:
 
     AudioPipeline mPipeline;
     AudioCallback mCallback;
-
-    // Diteruskan ke mStreamController sebagai disconnect handler; diset oleh
-    // EngineManager. Lihat setStreamDisconnectHandler().
-    std::function<void()> mStreamDisconnectHandler;
 
     AudioStreamController
         mStreamController;

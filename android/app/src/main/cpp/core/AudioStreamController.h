@@ -216,6 +216,9 @@ private:
     // Dipanggil dari onErrorAfterClose() (thread Oboe) saat stream diputus
     // paksa sistem. Diset oleh pemilik stream lewat setDisconnectHandler().
     // Null = tidak ada yang menangani; stream hanya ditandai berhenti.
+    // Ditulis SEKALI (C-K2, 2026-11-12): di konstruktor EngineManager,
+    // sebelum stream pertama dibuka — jadi tidak ada penulisan yang bisa
+    // balapan dengan salinan di onErrorAfterClose().
     std::function<void()> mDisconnectHandler;
 };
 
