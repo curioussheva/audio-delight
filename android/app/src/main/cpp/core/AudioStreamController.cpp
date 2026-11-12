@@ -343,6 +343,18 @@ void AudioStreamController::close() {
         std::memory_order_release
     );
 
+    // C-CACHE (2026-11-12): reset cache identitas stream. actualDeviceId() /
+    // actualSampleRate() fallback ke cache ini saat mStream null — tanpa
+    // reset, sesudah close() JNI tetap melaporkan perangkat/laju stream yang
+    // sudah mati sebagai aktif (isDeviceHonored() bisa true untuk stream
+    // mati). 0 = tidak ada stream. mRequestedDeviceId SENGAJA tidak direset:
+    // isDeviceHonored() mengembalikan true kalau requested <= 0, jadi
+    // meresetnya justru akan mengaku "dihormati" padahal tidak ada stream.
+    // mSampleRate memang basi juga (hanya ditulis open(), init 48000) —
+    // direset ke 0 bersama; isRateHonored() sudah guard streamRate <= 0.
+    mActualDeviceId.store(0, std::memory_order_release);
+    mSampleRate = 0;
+
     // Tutup lewat salinan lokal (M4), lalu nol-kan mStream di bawah lock.
     // Kalau error callback sudah me-reset mStream, salinan null dan close()
     // jadi no-op (stream sudah ditutup Oboe).
@@ -517,6 +529,13 @@ onErrorAfterClose(
         false,
         std::memory_order_release
     );
+
+    // C-CACHE (2026-11-12): reset cache identitas stream — jalur kematian
+    // stream yang sama seperti close(): tanpa ini, sesudah stream diputus
+    // paksa sistem, actualDeviceId()/actualSampleRate() tetap melaporkan
+    // perangkat/laju stream mati sampai reopen berikutnya.
+    mActualDeviceId.store(0, std::memory_order_release);
+    mSampleRate = 0;
 
     // Reset di bawah lock (M4): getter dari JS thread (actualSampleRate/
     // actualDeviceId) membaca mStream lewat salinan yang sama.
