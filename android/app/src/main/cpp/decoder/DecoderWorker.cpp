@@ -86,7 +86,19 @@ void DecoderWorker::stop() {
 
     running_.store(false);
 
+    // 🔥 FIX (2026-11-12, DC2-M2): tutup decoder di bawah decodeMutex_.
+    // Sebelumnya close() jalan tanpa lock, jadi seek() dari thread JNI
+    // (av_seek_frame + avcodec_flush_buffers di bawah decodeMutex_) bisa
+    // beradu dengan close() dari loadTrack()/advance thread
+    // (avcodec_free_context + avformat_close_input) -> UAF di FFmpeg.
+    // Join TETAP di atas lock (urutan lama dipertahankan): worker thread
+    // sudah mati saat lock diambil, jadi satu-satunya penantang lock di
+    // sini adalah seek()/pause() — keduanya singkat dan tidak pernah
+    // join — tidak ada join-while-holding dan tidak ada inversi urutan
+    // lock. close() sendiri idempotent (AudioDecoder::close early-return
+    // bila !isOpen_), jadi stop() ganda via destructor tetap aman.
     if (decoder_) {
+        std::lock_guard<std::recursive_mutex> lock(decodeMutex_);
         decoder_->close();
     }
 } 
