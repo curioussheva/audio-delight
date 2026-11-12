@@ -168,7 +168,8 @@ public:
 
 private:
 
-    bool buildStream(
+    // (C-CLEAN(f), 2026-11-12): void — dulu bool yang selalu true.
+    void buildStream(
         oboe::AudioStreamBuilder& builder,
         oboe::AudioStreamCallback* callback,
         bool exclusive,

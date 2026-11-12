@@ -74,9 +74,9 @@ bool AudioStreamController::open(
     {
         oboe::AudioStreamBuilder builder;
 
-        if (!buildStream(builder, callback, exclusive, requestedSampleRate, deviceId)) {
-            return false;
-        }
+        // (C-CLEAN(f), 2026-11-12): buildStream() void — hanya menyetel
+        // field builder, tanpa jalur gagal; cek `if (!...)` di sini mati.
+        buildStream(builder, callback, exclusive, requestedSampleRate, deviceId);
         builder.setAudioApi(oboe::AudioApi::AAudio);
 
         std::shared_ptr<oboe::AudioStream> stream;
@@ -106,9 +106,8 @@ bool AudioStreamController::open(
     if (!opened) {
         oboe::AudioStreamBuilder builder;
 
-        if (!buildStream(builder, callback, exclusive, requestedSampleRate, deviceId)) {
-            return false;
-        }
+        // (C-CLEAN(f)): lihat catatan di percobaan 1 — buildStream() void.
+        buildStream(builder, callback, exclusive, requestedSampleRate, deviceId);
         builder.setAudioApi(oboe::AudioApi::OpenSLES);
 
         std::shared_ptr<oboe::AudioStream> stream;
@@ -224,7 +223,10 @@ bool AudioStreamController::open(
 // BUILD STREAM
 // =====================================================
 
-bool AudioStreamController::buildStream(
+// (C-CLEAN(f), 2026-11-12): void — dulu bool yang selalu true (hanya
+// menyetel field builder, tanpa jalur gagal); kedua pemanggil mengecek
+// `if (!buildStream(...)) return false;` yang tidak pernah tercapai.
+void AudioStreamController::buildStream(
     oboe::AudioStreamBuilder& builder,
     oboe::AudioStreamCallback* callback,
     bool exclusive,
@@ -289,8 +291,6 @@ bool AudioStreamController::buildStream(
     builder.setErrorCallback(
         this
     );
-
-    return true;
 }
 
 // =====================================================
