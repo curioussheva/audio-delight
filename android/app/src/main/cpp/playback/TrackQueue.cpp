@@ -98,7 +98,35 @@ bool TrackQueue::advance() {
 
     std::lock_guard lock(mMutex);
 
+    return stepForwardLocked(false);
+}
+
+bool TrackQueue::stepForwardLocked(
+    bool manual
+) {
     if (mTracks.empty()) {
+        return false;
+    }
+
+    // B9-TOCTOU: badan lama advance()/advanceManual() dipindah ke sini
+    // tanpa perubahan semantik — activeQueue().size() diganti
+    // activeSizeLocked() (nilai sama, tanpa salinan vektor).
+    const size_t n = activeSizeLocked();
+
+    if (manual) {
+        // 🔥 FIX (2026-11-10, P-M5): manual next SELALU maju, apa pun
+        // repeat mode. Di ujung queue: wrap ke 0 kalau repeat menyala
+        // (One/All), diam kalau Off.
+        if (mCurrentIndex + 1 < n) {
+            ++mCurrentIndex;
+            return true;
+        }
+
+        if (mRepeatMode != RepeatMode::Off) {
+            mCurrentIndex = 0;
+            return true;
+        }
+
         return false;
     }
 
@@ -111,7 +139,7 @@ bool TrackQueue::advance() {
 
         if (
             mCurrentIndex + 1 >=
-            activeQueue().size()
+            n
         ) {
             mCurrentIndex = 0;
             return true;
@@ -124,7 +152,7 @@ bool TrackQueue::advance() {
 
         if (
             mCurrentIndex + 1 >=
-            activeQueue().size()
+            n
         ) {
             return false;
         }
@@ -150,34 +178,63 @@ bool TrackQueue::advanceManual() {
 
     std::lock_guard lock(mMutex);
 
-    if (mTracks.empty()) {
-        return false;
+    return stepForwardLocked(true);
+}
+
+// B9-TOCTOU (2026-11-12): step + get dalam SATU lock — lihat header.
+// Semantik = advance() + current() lama, tanpa jendela sela.
+std::optional<TrackInfo>
+TrackQueue::advanceAndGet() {
+
+    std::lock_guard lock(mMutex);
+
+    if (!stepForwardLocked(false)) {
+        return std::nullopt;
     }
 
-    if (
-        mCurrentIndex + 1 <
-        activeQueue().size()
-    ) {
-        ++mCurrentIndex;
-        return true;
+    return activeAt(mCurrentIndex);
+}
+
+std::optional<TrackInfo>
+TrackQueue::advanceManualAndGet() {
+
+    std::lock_guard lock(mMutex);
+
+    if (!stepForwardLocked(true)) {
+        return std::nullopt;
     }
 
-    if (mRepeatMode != RepeatMode::Off) {
-        mCurrentIndex = 0;
-        return true;
+    return activeAt(mCurrentIndex);
+}
+
+std::optional<TrackInfo>
+TrackQueue::retreatAndGet() {
+
+    std::lock_guard lock(mMutex);
+
+    if (!stepBackLocked()) {
+        return std::nullopt;
     }
 
-    return false;
+    return activeAt(mCurrentIndex);
 }
 
 bool TrackQueue::retreat() {
 
     std::lock_guard lock(mMutex);
 
+    return stepBackLocked();
+}
+
+bool TrackQueue::stepBackLocked() {
+
     if (mTracks.empty()) {
         return false;
     }
 
+    // B9-TOCTOU: badan lama retreat() dipindah ke sini tanpa perubahan
+    // semantik — activeQueue().size()/empty() diganti activeSizeLocked().
+    //
     // 🔥 FIX (2026-10-10): wrap-around saat repeat All.
     //
     // Versi lama langsung return false kalau mCurrentIndex == 0, jadi
@@ -185,8 +242,8 @@ bool TrackQueue::retreat() {
     // previous() PlaybackController memakai retreat() sekarang, jadi
     // perilaku ini jadi terlihat oleh user.
     if (mCurrentIndex == 0) {
-        if (mRepeatMode == RepeatMode::All && !activeQueue().empty()) {
-            mCurrentIndex = activeQueue().size() - 1;
+        if (mRepeatMode == RepeatMode::All && activeSizeLocked() > 0) {
+            mCurrentIndex = activeSizeLocked() - 1;
             return true;
         }
         return false;
@@ -364,6 +421,52 @@ TrackQueue::currentIndex() const {
 // =====================================
 // Internal
 // =====================================
+
+// B9-TOCTOU (2026-11-12): elemen aktif ke-i TANPA menyalin vektor.
+// Pemanggil WAJIB pegang mMutex dan i < activeSizeLocked().
+const TrackInfo&
+TrackQueue::activeAt(
+    size_t i
+) const {
+
+    if (
+        mShuffleMode ==
+        ShuffleMode::Off
+    ) {
+        return mTracks[i];
+    }
+
+    return mTracks[mShuffleOrder[i]];
+}
+
+// Padanan activeQueue().size() tanpa alokasi: hitung entri
+// mShuffleOrder yang valid saja (filter yang sama dengan activeQueue()).
+size_t
+TrackQueue::activeSizeLocked() const {
+
+    if (
+        mShuffleMode ==
+        ShuffleMode::Off
+    ) {
+        return mTracks.size();
+    }
+
+    size_t n = 0;
+
+    for (
+        size_t index :
+        mShuffleOrder
+    ) {
+        if (
+            index <
+            mTracks.size()
+        ) {
+            ++n;
+        }
+    }
+
+    return n;
+}
 
 std::vector<TrackInfo>
 TrackQueue::activeQueue() const {

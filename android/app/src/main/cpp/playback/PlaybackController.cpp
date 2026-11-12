@@ -151,8 +151,8 @@ bool PlaybackController::next() {
 
     // PB6-W3: batalkan advance DULU (sebelum lock) supaya flag terlihat
     // worker sebelum thread ini ter-block di mutex (pola D-M3), lalu
-    // pegang loadTrackMutex_ sepanjang advanceManual()+loadTrack().
-    // Worker advance memegang mutex yang sama sepanjang advance()+
+    // pegang loadTrackMutex_ sepanjang advanceManualAndGet()+loadTrack().
+    // Worker advance memegang mutex yang sama sepanjang advanceAndGet()+
     // loadTrack() (lihat processAdvance), jadi navigasi manual dan
     // auto-advance atomik satu sama lain dan skip dobel tertutup:
     // worker yang kalah perebutan mutex melihat flag-batal di dalam
@@ -191,9 +191,12 @@ bool PlaybackController::next() {
     // (benar untuk EOF: lagu yang sama diulang), jadi Next me-restart lagu
     // yang sama. advanceManual() selalu maju satu langkah apa pun repeat
     // mode-nya.
-    if (!queue_->advanceManual()) return false;
-
-    auto track = queue_->current();
+    //
+    // B9-TOCTOU (2026-11-12): advanceManual()+current() digabung jadi
+    // advanceManualAndGet() — step dan get dalam SATU lock TrackQueue,
+    // jadi jumpTo()/setTracks()/setShuffleMode() dari JNI tidak bisa
+    // menyela di antaranya dan memberi trek yang salah.
+    auto track = queue_->advanceManualAndGet();
     if (track) {
         return loadTrack(*track);
     }
@@ -204,8 +207,8 @@ bool PlaybackController::previous() {
     if (!queue_) return false;
 
     // PB6-W3: sama dengan next() — batalkan advance dulu, lalu pegang
-    // loadTrackMutex_ sepanjang retreat()+loadTrack() supaya atomik
-    // terhadap advance()+loadTrack() worker (lihat komentar di next()).
+    // loadTrackMutex_ sepanjang retreatAndGet()+loadTrack() supaya atomik
+    // terhadap advanceAndGet()+loadTrack() worker (lihat komentar di next()).
     cancelPendingAdvance();
     std::lock_guard<std::recursive_mutex> lock(loadTrackMutex_);
 
@@ -214,9 +217,11 @@ bool PlaybackController::previous() {
     // tanpa memperbarui mCurrentIndex. Keluhan "previous cuma seek awal,
     // lagu tidak berubah" berasal dari sini — loadTrack jalan, tapi queue
     // pointer tidak mundur, sehingga trek setelahnya kacau.
-    if (!queue_->retreat()) return false;
-
-    auto track = queue_->current();
+    //
+    // B9-TOCTOU (2026-11-12): retreat()+current() digabung jadi
+    // retreatAndGet() — step dan get dalam SATU lock TrackQueue
+    // (lihat advanceManualAndGet() di next()).
+    auto track = queue_->retreatAndGet();
     if (track) {
         return loadTrack(*track);
     }
@@ -2082,8 +2087,8 @@ void PlaybackController::processAdvance(const std::string& finishedUri,
         if (advanceStopRequested_) return;
     }
 
-    // PB6-W3: seksi kritis — advance() + loadTrack() atomik terhadap
-    // advanceManual()/retreat() + loadTrack() di next()/previous()
+    // PB6-W3: seksi kritis — advanceAndGet() + loadTrack() atomik terhadap
+    // advanceManualAndGet()/retreatAndGet() + loadTrack() di next()/previous()
     // (keduanya memegang loadTrackMutex_ yang sama — lihat (a) di header).
     // B8-P3: unique_lock (bukan lock_guard) supaya lock bisa dilepas
     // eksplisit sebelum emitTrackEnded di akhir fungsi — panggilan JNI
@@ -2120,8 +2125,8 @@ void PlaybackController::processAdvance(const std::string& finishedUri,
     // tidak ada emit, tidak ada advance lagi, UI "playing" tanpa suara.
     // Sekarang: coba track berikutnya sampai ada yang berhasil dimuat.
     //
-    // Batas percobaan = ukuran queue — melindungi Repeat One: advance()
-    // mengembalikan true TANPA pindah di bawah One, jadi tanpa batas,
+    // Batas percobaan = ukuran queue — melindungi Repeat One: advanceAndGet()
+    // mengembalikan trek yang sama TANPA pindah di bawah One, jadi tanpa batas,
     // satu-satunya track yang korup membuat loop ini tidak pernah
     // berakhir. (Satu track korup di bawah One = queue habis setelah
     // N percobaan, masuk cabang exhausted di bawah.)
@@ -2135,8 +2140,11 @@ void PlaybackController::processAdvance(const std::string& finishedUri,
     const size_t maxAttempts = std::max<size_t>(queue_->size(), 1);
     bool loaded = false;
     for (size_t attempt = 0; attempt < maxAttempts; ++attempt) {
-        if (!queue_->advance()) break;
-        auto nextTrack = queue_->current();
+        // B9-TOCTOU (2026-11-12): advance()+current() digabung jadi
+        // advanceAndGet() — step dan get dalam SATU lock TrackQueue,
+        // jadi jumpTo()/setTracks()/setShuffleMode() dari JNI tidak bisa
+        // menyela di antaranya dan memberi trek yang salah.
+        auto nextTrack = queue_->advanceAndGet();
         if (!nextTrack) break;
         __android_log_print(
             ANDROID_LOG_INFO, "PlaybackController",

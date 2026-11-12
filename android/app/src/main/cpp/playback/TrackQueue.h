@@ -58,6 +58,35 @@ public:
 
     bool retreat();
 
+    // 🔥 FIX (2026-11-12, B9-TOCTOU): step + get ATOMIK dalam satu lock.
+    //
+    // advance()/advanceManual()/retreat() + current() adalah DUA lock
+    // berurutan — di antaranya jumpTo()/setTracks()/setShuffleMode() dari
+    // JNI bisa menyela, sehingga current() mengembalikan trek yang BUKAN
+    // hasil step tadi (TOCTOU; processAdvance, next(), previous() di
+    // PlaybackController.cpp semuanya kena). Ketiga method ini melakukan
+    // step dan pengambilan trek dalam SATU lock, jadi tidak ada jendela
+    // sela. Semantik Repeat/Shuffle PERSIS sama dengan method lama
+    // (badan step dipindah ke stepForwardLocked/stepBackLocked yang
+    // dipakai kedua belah pihak).
+    //
+    // CATATAN: ini TIDAK menutup lubang Batch 8 P2 (post EOF basi —
+    // sudah ditutup generation counter di PlaybackController); yang
+    // ditutup di sini hanya sela step→get di dalam TrackQueue.
+    // nullopt = tidak ada lagu berikut (ujung queue + Repeat Off, atau
+    // queue kosong).
+    [[nodiscard]]
+    std::optional<TrackInfo>
+    advanceAndGet();
+
+    [[nodiscard]]
+    std::optional<TrackInfo>
+    advanceManualAndGet();
+
+    [[nodiscard]]
+    std::optional<TrackInfo>
+    retreatAndGet();
+
     bool jumpTo(
         size_t index
     );
@@ -119,6 +148,37 @@ private:
     [[nodiscard]]
     std::vector<TrackInfo>
     activeQueue() const;
+
+    // Badan step advance()/advanceManual()/retreat() TANPA lock — pemanggil
+    // WAJIB sudah pegang mMutex. Dipakai method lama DAN method *AndGet
+    // baru, supaya semantik Repeat/Shuffle tidak pernah bercabang dua.
+    // stepForwardLocked(false) = advance() (auto, hormati Repeat One);
+    // stepForwardLocked(true) = advanceManual() (tombol Next, selalu maju).
+    bool stepForwardLocked(
+        bool manual
+    );
+
+    bool stepBackLocked();
+
+    // Elemen ke-i dari queue AKTIF tanpa menyalin vektor (B9-TOCTOU):
+    // mShuffleMode==Off ? mTracks[i] : mTracks[mShuffleOrder[i]].
+    // Pemanggil WAJIB pegang mMutex dan i < activeSizeLocked().
+    // Invarian: mShuffleOrder selalu dibangun ulang dari mTracks
+    // (rebuildShuffle di setTracks/setShuffleMode), jadi setiap entri
+    // < mTracks.size() dan posisi aktif ke-i == mShuffleOrder[i].
+    [[nodiscard]]
+    const TrackInfo&
+    activeAt(
+        size_t i
+    ) const;
+
+    // Ukuran queue AKTIF tanpa menyalin vektor — padanan
+    // activeQueue().size(): entri mShuffleOrder yang tidak valid
+    // (index >= mTracks.size()) tidak dihitung, sama seperti filter
+    // di activeQueue().
+    [[nodiscard]]
+    size_t
+    activeSizeLocked() const;
 
     void rebuildShuffle();
 
