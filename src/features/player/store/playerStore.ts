@@ -567,7 +567,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       safeFireAndForget(
         () =>
           NativePlaybackService.updateRepeatMode(
-            get().repeat === "off" ? 0 : get().repeat === "all" ? 1 : 2,
+            get().repeat === "off" ? 0 : get().repeat === "all" ? 2 : 1,
           ),
         "updateRepeatMode(init)",
       );
