@@ -4,6 +4,8 @@
 #include <jni.h>
 #include <android/log.h>
 #include <algorithm>
+#include <cstdio> // Batch5-minor (2026-11-12): std::snprintf di bawah (baris ~342)
+                   // tanpa ini hanya lolos lewat include transitif (<string>/jni.h).
 
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, "AudioDeviceManager", __VA_ARGS__)
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  "AudioDeviceManager", __VA_ARGS__)
