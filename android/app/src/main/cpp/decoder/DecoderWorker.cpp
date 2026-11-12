@@ -291,10 +291,32 @@ void DecoderWorker::workerLoop() {
                 // pause() eksplisit bisa mendarat selama timed wait
                 // (tanpa notify — jeda eksplisit tidak boleh dilepas
                 // predikat level).
+                //
+                // B7-P2a (2026-11-12): predikat dipanggil DI LUAR
+                // mutex_ — autoResumeCheck_ adalah kode luar
+                // (controller: baca queue + playing_ + fade), dan
+                // memanggil kode luar di bawah lock adalah jebakan
+                // laten (inversi lock / blokir resume()/stop() bila
+                // predikat suatu hari mengambil lock lain). Predikat
+                // dievaluasi sesudah unlock, lalu flag dicek ULANG
+                // di bawah lock sebelum backpressure dilepas: pause()
+                // / stop() / resume() bisa mendarat selama predikat
+                // dievaluasi (lock lepas). Pola wait TIDAK berubah —
+                // predikat wait_for di atas tetap dicek di bawah lock
+                // sebelum tidur, jadi tidak ada celah lost wakeup.
+                bool mayResume = false;
                 if (!paused_.load() &&
                     backpressurePaused_.load() &&
                     !stopRequested_.load() &&
-                    autoResumeCheck_ && autoResumeCheck_()) {
+                    autoResumeCheck_) {
+                    lock.unlock();
+                    mayResume = autoResumeCheck_();
+                    lock.lock();
+                }
+                if (mayResume &&
+                    !paused_.load() &&
+                    backpressurePaused_.load() &&
+                    !stopRequested_.load()) {
                     backpressurePaused_.store(false);
                 }
             }
