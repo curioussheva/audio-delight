@@ -158,6 +158,25 @@ void AudioPipeline::process(
             );
 
             break;
+
+        default:
+
+            // (C-CAST, 2026-11-12): nilai liar TIDAK PERNAH boleh sampai
+            // ke sini (JNI + EngineManager menolaknya), tapi switch tanpa
+            // default dulu berarti mode tak dikenal = buffer lewat tanpa
+            // perlakuan yang jelas. Fail-safe: perlakukan sebagai
+            // BitPerfect — processBitPerfect() adalah no-op, buffer
+            // diteruskan utuh tanpa DSP apa pun. BUKAN DSP/Immersive:
+            // nilai liar tidak boleh diam-diam diproses sebagai mode
+            // apa pun. Tanpa log di sini: jalur audio thread, per buffer
+            // — log akan membanjiri logcat.
+            processBitPerfect(
+                left,
+                right,
+                frames
+            );
+
+            break;
     }
 }
 
@@ -219,6 +238,13 @@ void AudioPipeline::onModeChanged(
             // Stateless + bit-exact: tidak ada reset, tidak ada fade.
             mFadeFramesRemaining = 0;
             mFadeFramesTotal = 0;
+            return;
+
+        default:
+            // (C-CAST, 2026-11-12): mode liar tidak punya rantai untuk
+            // direset dan tidak boleh mempersenjatai fade — keluar tanpa
+            // menyentuh state apa pun. process() menangani mode ini
+            // sebagai passthrough BitPerfect (lihat default di sana).
             return;
     }
 

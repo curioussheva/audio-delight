@@ -198,9 +198,36 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeProcessingMode(
     jint mode
 ) {
 
+    // (C-CAST, 2026-11-12): jint dari JS TIDAK tervalidasi — dulu
+    // static_cast<ProcessingMode>(mode) tanpa cek rentang, jadi nilai liar
+    // (mis. 3, -1) lolos sebagai enum dan tidak diproses switch mana pun
+    // di AudioPipeline (tanpa default) — audio jalan tanpa mode yang jelas.
+    //
+    // Penanganan nilai liar: DITOLAK, mode lama dipertahankan, error di-log.
+    // BUKAN clamp ke DSP: clamp diam-diam menerapkan pemrosesan (EQ dkk.)
+    // yang tidak pernah diminta — paling berbahaya kalau yang dimaksud
+    // pemanggil adalah BitPerfect. BUKAN throw ke JS: tidak ada preseden
+    // ThrowNew di cpp/ mana pun, dan exception yang melintasi @ReactMethod
+    // Kotlin + bridge RN risikonya lebih besar daripada manfaatnya untuk
+    // kasus yang tidak bisa terjadi lewat TS (engine.ts memetakan string
+    // ke 0/1/2 saja, dengan try/catch di sekeliling panggilan). Yang
+    // penting: state tidak berubah, audio terus jalan seperti sebelumnya,
+    // dan nilai liarnya tercatat di logcat untuk diagnosis.
+    const ProcessingMode requested =
+        static_cast<ProcessingMode>(mode);
+
+    if (!isValidProcessingMode(requested)) {
+
+        __android_log_print(ANDROID_LOG_ERROR, "NativeDSPModule",
+            "mode pemrosesan liar ditolak: %d (valid: 0=BitPerfect, "
+            "1=DSP, 2=Immersive) - mode lama dipertahankan",
+            (int)mode);
+        return;
+    }
+
     EngineManager::get()
         .setProcessingMode(
-            static_cast<ProcessingMode>(mode)
+            requested
         );
 
     __android_log_print(ANDROID_LOG_INFO, "NativeDSPModule",

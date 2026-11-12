@@ -936,6 +936,21 @@ void EngineManager::setProcessingMode(
     ProcessingMode mode
 ) {
 
+    // (C-CAST, 2026-11-12): lapis kedua defense-in-depth — JNI sudah
+    // memvalidasi, tapi pemanggil C++ langsung (dan JNI lain di masa depan)
+    // tidak melewati JNI. Nilai liar DITOLAK di sini juga: tidak ada state
+    // yang berubah (mState, mEngine, dan processingAllowed tetap seperti
+    // semula), supaya audio tidak pernah berjalan dengan mode yang tidak
+    // terdefinisi. Bukan clamp ke DSP, alasannya sama seperti di JNI.
+    if (!isValidProcessingMode(mode)) {
+
+        __android_log_print(ANDROID_LOG_ERROR, "EngineManager",
+            "mode pemrosesan liar ditolak: %d (valid: 0=BitPerfect, "
+            "1=DSP, 2=Immersive) - mode lama dipertahankan",
+            static_cast<int>(mode));
+        return;
+    }
+
     mState.setProcessingMode(mode);
 
     mEngine.setProcessingMode(

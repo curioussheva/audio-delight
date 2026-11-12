@@ -101,6 +101,20 @@ enum class ProcessingMode : int32_t {
     Immersive = 2
 };
 
+// (C-CAST, 2026-11-12): satu-satunya sumber kebenaran untuk "mode valid".
+// Dipakai JNI (sebelum static_cast dari jint) dan EngineManager (lapis
+// kedua) — jangan duplikasi rentang 0..2 di tiap call site, nanti drift.
+// Perbandingan eksplisit per varian, bukan rentang numerik: kalau enum
+// kelak tidak lagi kontigu, cek ini tetap benar.
+inline bool isValidProcessingMode(
+    ProcessingMode mode
+) noexcept {
+
+    return mode == ProcessingMode::BitPerfect ||
+           mode == ProcessingMode::DSP ||
+           mode == ProcessingMode::Immersive;
+}
+
 // =====================================================
 // AUDIO ROUTE
 // =====================================================
