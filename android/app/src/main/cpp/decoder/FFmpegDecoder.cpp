@@ -738,32 +738,23 @@ bool FFmpegDecoder::setupResampler(
         return false;
     }
 
-    // 🔥 FIX (2026-10-09, "noise di 44.1kHz"): dither HANYA diterapkan jika
-    // ada konversi sample rate. Output selalu AV_SAMPLE_FMT_FLT (float), jadi
-    // konversi format S16/S32→FLT tidak pernah mengurangi presisi — dither
-    // hanya menambah noise floor tanpa manfaat. Untuk passthrough rate
-    // (44.1k→44.1k), dither juga tidak perlu.
-    const bool needsResample =
-        (inputSampleRate != static_cast<int>(config().targetSampleRate));
-
+    // B7-P2c (2026-11-12): dither sengaja TIDAK disetel di sini. Output
+    // resampler selalu AV_SAMPLE_FMT_FLT (lihat swr_alloc_set_opts2 di
+    // atas), dan libswresample hanya menerapkan dither saat mengonversi
+    // ke output integer — untuk output float, dither_method/dither_scale
+    // diabaikan sepenuhnya (no-op). Setelan lama (TRIANGULAR_HIGHPASS +
+    // scale 0.5 saat resample, NONE saat passthrough) tidak mengubah
+    // output apa pun, hanya menyesatkan pembaca. Bila output suatu hari
+    // berubah ke format integer, dither perlu dipertimbangkan lagi.
     int filterSize = 128;
     av_opt_set_int(swrCtx_, "filter_size", filterSize, 0);
     av_opt_set_double(swrCtx_, "cutoff", 0.97, 0);
     av_opt_set_int(swrCtx_, "linear_interp", 0, 0);
 
-    if (needsResample) {
-        av_opt_set_int(swrCtx_, "dither_method", SWR_DITHER_TRIANGULAR_HIGHPASS, 0);
-        av_opt_set_double(swrCtx_, "dither_scale", 0.5, 0);
-    } else {
-        // Passthrough: tanpa dither, tanpa noise tambahan
-        av_opt_set_int(swrCtx_, "dither_method", SWR_DITHER_NONE, 0);
-        av_opt_set_double(swrCtx_, "dither_scale", 0.0, 0);
-    }
-
     int init_ret = swr_init(swrCtx_);
     __android_log_print(ANDROID_LOG_INFO, "FFmpegDecoder",
-                        "setupResampler: swr_init ret=%d (filter_size=128, cutoff=0.97, dither=%s, needsResample=%d)",
-                        init_ret, needsResample ? "triangular_hp(0.5)" : "none", needsResample ? 1 : 0);
+                        "setupResampler: swr_init ret=%d (filter_size=128, cutoff=0.97)",
+                        init_ret);
     if (init_ret < 0)
         return false;
 
