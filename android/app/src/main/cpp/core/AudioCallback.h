@@ -6,7 +6,6 @@
 
 #include <chrono>
 #include <oboe/Oboe.h>
-#include "AudioBufferController.h"
 #include "AudioConstants.h"
 #include "AudioMetrics.h"
 #include "AudioPipeline.h"
@@ -31,7 +30,6 @@ class AudioCallback
     : public oboe::AudioStreamCallback {
 public:
     AudioCallback(
-        AudioBufferController& buffer,
         AudioPipeline& pipeline,
         AudioMetrics& metrics,
         AudioState& state
@@ -80,8 +78,8 @@ private:
     // REFERENCES
     // =============================================
 
-    AudioBufferController&
-        mBufferController;
+    // (mBufferController dihapus 2026-11-12, C-FALLBACK: jalur fallback
+    // AudioBufferController/RingBuffer dihapus — 0 pemanggil pushData.)
 
     AudioPipeline&
         mPipeline;

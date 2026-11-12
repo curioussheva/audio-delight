@@ -83,13 +83,11 @@ void enableFlushToZeroOnce() noexcept {
 // =====================================================
 
 AudioCallback::AudioCallback(
-    AudioBufferController& buffer,
     AudioPipeline& pipeline,
     AudioMetrics& metrics,
     AudioState& state
 )
-    : mBufferController(buffer),
-      mPipeline(pipeline),
+    : mPipeline(pipeline),
       mMetrics(metrics),
       mState(state) {
 
@@ -126,12 +124,12 @@ AudioCallback::onAudioReady(
     // membisukan SELURUH buffer (memset + return) tanpa log/metrik.
     // kMax = 1920 frame (40 ms @48k) tercapai bila framesPerBurst > 1920 —
     // mis. stream 192 kHz burst 20 ms = 3840 frame → senyap di SETIAP
-    // callback. Sekarang buffer besar diproses dalam chunk ≤ kMax: jalur
-    // utama lewat applyPipeline() (chunk di dalam), jalur fallback lewat
-    // loop chunk di bawah. Tidak ada memset pengganti: render() sudah
+    // callback. Sekarang buffer besar diproses dalam chunk ≤ kMax di dalam
+    // applyPipeline(). Tidak ada memset pengganti: render() sudah
     // zero-fill seluruh buffer yang diminta (clearing_/paused/shortfall —
-    // PlaybackController.cpp:704,725,900), dan jalur fallback mengisi ekor
-    // pendek per chunk dengan std::fill seperti sebelumnya.
+    // PlaybackController.cpp:704,725,900).
+    // (C-FALLBACK, 2026-11-12): jalur fallback AudioBufferController
+    // dihapus — lihat catatan di akhir onAudioReady.
 
     // Waktu mulai callback, untuk metrik (M5). steady_clock di audio thread:
     // tanpa alokasi, tanpa lock, hanya atomic store di akhir.
@@ -191,95 +189,26 @@ AudioCallback::onAudioReady(
     }
 
     // =============================================
-    // FALLBACK: AudioBufferController
+    // TANPA PlaybackController: senyap
     // =============================================
     //
-    // (C-C2, 2026-11-12): popStereo() memakai buffer stack internal sebesar
-    // kMax dan mLeft/mRight juga sebesar kMax — keduanya tidak sanggup
-    // menampung numFrames > kMax. Menghapus guard bisu di atas tanpa
-    // men-chunk jalur ini akan mengubah overflow stack di popStereo menjadi
-    // overflow mLeft/mRight. Jadi jalur ini ikut di-chunk; numFrames <= kMax
-    // tetap satu chunk, perilaku identik kecuali satu perbaikan: popStereo
-    // all-or-nothing per panggilan, jadi buffer yang tadinya hanya cukup
-    // untuk sebagian chunk kini mengalirkan chunk yang cukup itu (dulu
-    // seluruh buffer gagal pop) — underrun tetap dicatat sekali per callback.
-
-    // Parameter dibaca SEKALI per buffer, di luar loop chunk.
-    updateParameters();
-
-    // �� FIX (2026-10-10): jalur fallback juga tidak lagi memakai waveshaper
-    // lama. Mode BitPerfect hanya disanitasi; DSP/Immersive lewat limiter.
-    const bool fallbackShaped =
-        (mParams.processingMode != ProcessingMode::BitPerfect);
-
-    // DSP-M2 (2026-11-11): sama seperti jalur utama - di mode DSP, LimiterNode
-    // di graph sudah membatasi bila limiterEnabled DAN pipeline jalan. Jalur
-    // fallback menggerbang pipeline di isDSPEnabled(), jadi bila flag itu
-    // false, pipeline tidak jalan dan limiter callback tetap jadi
-    // satu-satunya limiter.
-    const bool fallbackDspEnabled = mState.isDSPEnabled();
-    const bool fallbackNodeLimiterRan =
-        (mParams.processingMode == ProcessingMode::DSP) &&
-        mParams.limiterEnabled &&
-        fallbackDspEnabled;
-
-    bool fallbackUnderrun = false;
-
-    for (int32_t offset = 0;
-         offset < numFrames;
-         offset += kMaxFramesPerCallback) {
-
-        const int32_t chunkFrames = std::min(
-            kMaxFramesPerCallback,
-            numFrames - offset
-        );
-
-        const uint64_t readFrames = mBufferController.popStereo(
-            mLeft,
-            mRight,
-            static_cast<uint32_t>(chunkFrames)
-        );
-
-        if (readFrames < static_cast<uint64_t>(chunkFrames)) {
-            fallbackUnderrun = true;
-
-            std::fill(mLeft + readFrames, mLeft + chunkFrames, 0.0f);
-            std::fill(mRight + readFrames, mRight + chunkFrames, 0.0f);
-        }
-
-        if (fallbackDspEnabled) {
-            mPipeline.process(mLeft, mRight, chunkFrames, mParams);
-        }
-
-        float* outChunk = output + offset * 2;
-
-        for (int32_t i = 0; i < chunkFrames; ++i) {
-
-            float l = mLeft[i];
-            float r = mRight[i];
-
-            if (fallbackShaped && !fallbackNodeLimiterRan) {
-                l = Limiter::apply(l);
-                r = Limiter::apply(r);
-            }
-
-            sanitizeOutput(l);
-            sanitizeOutput(r);
-
-            outChunk[i * 2]     = l;
-            outChunk[i * 2 + 1] = r;
-        }
-
-        // Visualizer: write per-sample ke ring buffer — menulis N frame
-        // dalam chunk menghasilkan isi ring yang sama dengan satu write.
-        mVisualizer.write(mLeft, mRight, chunkFrames);
-    }
-
-    if (fallbackUnderrun) {
-        mMetrics.recordUnderrun();
-    }
-
-    mMetrics.updateBufferedSamples(mBufferController.availableFrames());
+    // (C-FALLBACK, 2026-11-12): jalur fallback AudioBufferController
+    // (pushData -> RingBuffer 512 KiB -> popStereo) DIHAPUS — 0 pemanggil
+    // pushData di seluruh cpp/jni/Kotlin, popStereo hanya dipakai di sini,
+    // dan satu-satunya sumber audio yang hidup adalah PlaybackController
+    // (dipasang EngineManager::setPlaybackController, EngineManager.cpp:223).
+    // Cabang ini hanya tercapai bila controller belum/tidak dipasang:
+    // perilaku lamanya dengan ring buffer kosong adalah senyap + underrun,
+    // jadi itu yang dipertahankan — tanpa buffer 512 KiB, tanpa mismatch
+    // satuan pushData (numSamples vs frames), tanpa race clear() RingBuffer,
+    // tanpa duplikasi kondisi fallbackNodeLimiterRan.
+    std::memset(
+        output,
+        0,
+        sizeof(float) * static_cast<size_t>(numFrames) * 2
+    );
+    mMetrics.recordUnderrun();
+    mMetrics.updateBufferedSamples(0);
 
     updateCallbackMetrics(stream, numFrames, callbackStart);
     return oboe::DataCallbackResult::Continue;
@@ -565,9 +494,9 @@ void AudioCallback::applyPipeline(
 // Pilihan tap: deinterleave ke mLeft/mRight yang sudah ada, BUKAN API
 // sadar-stride baru di VisualizerBuffer — write(left, right, frames)
 // sudah men-sanitize per sample (V-M1), dan pola chunk ≤ kMax ini sama
-// persis dengan yang dipakai applyPipeline/jalur fallback, jadi tidak ada
-// jalur mixdown kedua yang harus dijaga tetap sinkron. Tanpa alokasi,
-// tanpa lock, di audio thread.
+// persis dengan yang dipakai applyPipeline, jadi tidak ada jalur mixdown
+// kedua yang harus dijaga tetap sinkron. Tanpa alokasi, tanpa lock,
+// di audio thread.
 //
 // Catatan: di branch gate-on, applyPipeline memberi makan visualizer dari
 // mLeft/mRight pasca-pipeline tapi pra-limiter/sanitize callback (limiter

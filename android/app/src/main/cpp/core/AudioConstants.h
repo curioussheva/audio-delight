@@ -8,14 +8,9 @@
 
 namespace pristine {
 
-// =====================================================
-// RING BUFFER
-// =====================================================
-
-constexpr uint32_t kRingBufferSize =
-    131072; // power of two
-
-// (kRingBufferMask dihapus 2026-11-10: 0 pemakai.)
+// (kRingBufferSize dihapus 2026-11-12, C-FALLBACK: 131072 sampel =
+// 512 KiB/instance — satu-satunya pemakai AudioBufferController dihapus
+// bersama RingBuffer.h.)
 
 // =====================================================
 // CALLBACK

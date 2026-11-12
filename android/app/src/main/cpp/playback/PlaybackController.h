@@ -268,7 +268,7 @@ private:
     // resize() (bad_alloc di noexcept = terminate). Batasnya adalah
     // frame callback Oboe PENUH, bukan kMaxFramesPerCallback (1920):
     // AudioCallback memanggil render() dengan numFrames penuh SEBELUM
-    // chunking kMax di applyPipeline/jalur fallback, jadi satu callback
+    // chunking kMax di applyPipeline, jadi satu callback
     // bisa sebesar burst Oboe — 3840 frame @192 kHz (burst 20 ms,
     // C-C2 di AudioCallback.cpp). 4096 frame menutup burst itu dengan
     // margin × laju maks 2.0 (setPlaybackRate/setRate) × 2 channel

@@ -8,7 +8,6 @@
 #include <functional>
 #include <memory>
 #include <string>
-#include "AudioBufferController.h"
 #include "AudioCallback.h"
 #include "AudioMetrics.h"
 // (AudioModeManager.h dihapus 2026-11-10: class mati, 0 caller. Mode
@@ -109,15 +108,6 @@ public:
 
     void setPlaybackController(
         playback::PlaybackController* controller
-    );
-
-    // =============================================
-    // INPUT
-    // =============================================
-
-    void pushData(
-        const float* data,
-        int32_t numSamples
     );
 
     // =============================================
@@ -259,8 +249,8 @@ private:
     AudioState mState;
     AudioMetrics mMetrics;
 
-    AudioBufferController
-        mBufferController;
+    // (mBufferController dihapus 2026-11-12, C-FALLBACK: jalur fallback
+    // AudioBufferController/RingBuffer dihapus — 0 pemanggil pushData.)
 
     AudioPipeline mPipeline;
     AudioCallback mCallback;

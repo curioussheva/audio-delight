@@ -104,8 +104,8 @@ void AudioPipeline::process(
     // biquad/resonator STALE dari terakhir kali mode itu aktif — bisa di
     // laju/config berbeda — dan transien step-response-nya terdengar
     // sebagai klik/pop. Sekarang mode dibandingkan sekali per chunk di
-    // sini (satu-satunya choke point: kedua pemanggil process() di
-    // AudioCallback — jalur live dan fallback — lewat sini dengan params
+    // sini (satu-satunya choke point: satu-satunya pemanggil process() di
+    // AudioCallback — jalur live (applyPipeline) — lewat sini dengan params
     // yang sama per buffer).
     //
     // Hanya saat BENAR-BENAR berubah: onModeChanged() mereset rantai

@@ -19,7 +19,6 @@ AudioEngine::AudioEngine()
     :
 
     mCallback(
-        mBufferController,
         mPipeline,
         mMetrics,
         mState
@@ -273,20 +272,8 @@ void AudioEngine::setPlaybackController(
     mCallback.setPlaybackController(controller);
 }
 
-// =====================================================
-// PUSH DATA
-// =====================================================
-
-void AudioEngine::pushData(
-    const float* data,
-    int32_t numSamples
-) {
-
-    mBufferController.pushInterleaved(
-        data,
-        static_cast<uint32_t>(numSamples)
-    );
-}
+// (pushData dihapus 2026-11-12, C-FALLBACK: 0 pemanggil di seluruh
+// cpp/jni/Kotlin; jalur fallback AudioBufferController/RingBuffer dihapus.)
 
 // =====================================================
 // PROCESSING MODE
@@ -558,8 +545,6 @@ AudioEngine::getStats() const {
 // =====================================================
 
 void AudioEngine::reset() {
-
-    mBufferController.clear();
 
     mPipeline.reset();
 
