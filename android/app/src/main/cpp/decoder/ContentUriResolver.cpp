@@ -260,79 +260,97 @@ PRISTINE_EXPORT std::string ContentUriResolver::resolve(const std::string& uri) 
     jclass isClass = env->FindClass("java/io/InputStream");
     jmethodID readMethod = isClass ? env->GetMethodID(isClass, "read", "([B)I") : nullptr;
     jmethodID closeMethod = isClass ? env->GetMethodID(isClass, "close", "()V") : nullptr;
-    if (!readMethod || !closeMethod) { LOGE("resolve: method InputStream tidak ada"); return ""; }
-
-    constexpr jsize CHUNK = 256 * 1024;
-    jbyteArray buf = env->NewByteArray(CHUNK);
-    if (!buf) { LOGE("resolve: gagal alokasi buffer"); return ""; }
-
-    // Dibaca penuh ke memori dulu, baru ditulis ke file temp + rename
-    // atomik (D-M9, 2026-11-11): file cache di path target tidak pernah
-    // setengah jadi. (Komentar lama mengklaim baca-penuh-ke-memori saja
-    // sudah menjamin itu — SALAH: kill di antara fopen dan fclose tetap
-    // meninggalkan file parsial.)
-    std::vector<uint8_t> data;
-    data.reserve(8u * 1024u * 1024u);
-
-    for (;;) {
-        jint n = env->CallIntMethod(input, readMethod, buf);
-        std::string rerr = describeAndClear(env);
-        if (!rerr.empty()) {
+    if (!readMethod || !closeMethod) {
+        if (closeMethod) {
             env->CallVoidMethod(input, closeMethod);
             describeAndClear(env);
-            LOGE("resolve: read melempar %s untuk %s", rerr.c_str(), uri.c_str());
-            return "";
         }
-        if (n <= 0) break;
-
-        size_t old = data.size();
-        data.resize(old + static_cast<size_t>(n));
-        env->GetByteArrayRegion(buf, 0, n,
-                                reinterpret_cast<jbyte*>(data.data() + old));
-    }
-
-    env->CallVoidMethod(input, closeMethod);
-    describeAndClear(env);
-
-    if (data.empty()) {
-        LOGE("resolve: sumber kosong (0 byte) untuk %s", uri.c_str());
+        LOGE("resolve: method InputStream tidak ada");
         return "";
     }
 
-    // 🔥 FIX (2026-11-11, D-M9): tulis ke file TEMP lalu rename() atomik.
-    //
-    // Sebelumnya fopen(target, "wb") membuat/meng-truncate target SEGERA —
-    // kill/crash di tengah salinan meninggalkan file parsial yang lolos hit
-    // check (exists() && length() > 0) dan dilayani sebagai hit. rename()
-    // dalam satu filesystem bersifat atomik: target hanya muncul kalau
+    constexpr jsize CHUNK = 256 * 1024;
+    jbyteArray buf = env->NewByteArray(CHUNK);
+    if (!buf) {
+        env->CallVoidMethod(input, closeMethod);
+        describeAndClear(env);
+        LOGE("resolve: gagal alokasi buffer");
+        return "";
+    }
+
+    // Ditulis per-chunk langsung ke file temp + rename atomik (D-M9,
+    // 2026-11-11; B9-R1, 2026-11-12: streaming, tanpa buffer penuh).
+    // File cache di path target tidak pernah setengah jadi: rename()
+    // dalam satu filesystem bersifat atomik, target hanya muncul kalau
     // isinya sudah lengkap. Nama temp unik per panggilan (counter atomik)
     // supaya dua resolve bersamaan untuk URI yang sama tidak menulis ke
     // file temp yang sama (d-m35). Sisa file .tmp dari proses yang mati
     // dibersihkan cold boot (clearCache) — dan tidak pernah dilayani
     // sebagai hit karena namanya tidak cocok pola audio_*.
+    // RAM puncak ~512 KB (buffer JNI 256 KB + buffer salin 256 KB),
+    // bukan ~2x ukuran file seperti baca-penuh-ke-memori sebelumnya.
     static std::atomic<unsigned> s_tmpCounter{0};
     const std::string tmpTarget =
         target + ".tmp." +
         std::to_string(s_tmpCounter.fetch_add(1, std::memory_order_relaxed));
-    if (FILE* fp = std::fopen(tmpTarget.c_str(), "wb")) {
-        size_t written = std::fwrite(data.data(), 1, data.size(), fp);
-        std::fclose(fp);
-        if (written != data.size()) {
-            LOGE("resolve: tulis tidak lengkap (%zu/%zu)", written, data.size());
-            std::remove(tmpTarget.c_str());
-            return "";
-        }
-        if (std::rename(tmpTarget.c_str(), target.c_str()) != 0) {
-            LOGE("resolve: rename %s -> %s gagal", tmpTarget.c_str(), target.c_str());
-            std::remove(tmpTarget.c_str());
-            return "";
-        }
-    } else {
+    FILE* fp = std::fopen(tmpTarget.c_str(), "wb");
+    if (!fp) {
+        env->CallVoidMethod(input, closeMethod);
+        describeAndClear(env);
         LOGE("resolve: tidak bisa menulis %s", tmpTarget.c_str());
         return "";
     }
 
-    LOGI("resolve: cached %s (%zu bytes)", nameBuf, data.size());
+    // Buffer salin heap 256 KB (bukan stack: thread worker bisa ber-stack
+    // kecil); GetByteArrayRegion pindah dari buffer JNI ke sini per chunk.
+    std::vector<uint8_t> chunk(static_cast<size_t>(CHUNK));
+    size_t total = 0;
+    bool failed = false;
+    for (;;) {
+        jint n = env->CallIntMethod(input, readMethod, buf);
+        std::string rerr = describeAndClear(env);
+        if (!rerr.empty()) {
+            LOGE("resolve: read melempar %s untuk %s", rerr.c_str(), uri.c_str());
+            failed = true;
+            break;
+        }
+        if (n <= 0) break;
+
+        env->GetByteArrayRegion(buf, 0, n,
+                                reinterpret_cast<jbyte*>(chunk.data()));
+        if (std::fwrite(chunk.data(), 1, static_cast<size_t>(n), fp) !=
+            static_cast<size_t>(n)) {
+            LOGE("resolve: tulis gagal di byte %zu untuk %s", total, uri.c_str());
+            failed = true;
+            break;
+        }
+        total += static_cast<size_t>(n);
+    }
+
+    // InputStream ditutup di semua jalur (sukses dan gagal); fclose
+    // mem-flush buffer stdio — gagal di sini = disk penuh / I/O error,
+    // jadi harus dicek, bukan diabaikan.
+    env->CallVoidMethod(input, closeMethod);
+    describeAndClear(env);
+    bool closeOk = std::fclose(fp) == 0;
+
+    if (failed || !closeOk) {
+        std::remove(tmpTarget.c_str());
+        return "";
+    }
+    if (total == 0) {
+        LOGE("resolve: sumber kosong (0 byte) untuk %s", uri.c_str());
+        std::remove(tmpTarget.c_str());
+        return "";
+    }
+
+    if (std::rename(tmpTarget.c_str(), target.c_str()) != 0) {
+        LOGE("resolve: rename %s -> %s gagal", tmpTarget.c_str(), target.c_str());
+        std::remove(tmpTarget.c_str());
+        return "";
+    }
+
+    LOGI("resolve: cached %s (%zu bytes)", nameBuf, total);
     return target;
 }
 
