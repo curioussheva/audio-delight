@@ -122,7 +122,30 @@ size_t PCMQueue::read(float* output, size_t frames) {
         std::memcpy(output + first, &buffer_[0], (toRead - first) * sizeof(float));
     }
 
-    readCount_.store(r + toRead, std::memory_order_release);
+    // B9-CAS (2026-11-12): klaim kemajuan pakai CAS, BUKAN load-lalu-store.
+    //
+    // Race lama: read() memuat r, memcpy, lalu store(r + toRead) — bila
+    // clear() (thread JS) menyela di antara keduanya, store menarik
+    // readCount_ MUNDUR (clear() sudah menyetel readCount_ = w yang jauh
+    // lebih besar) dan audio lama yang baru di-clear hidup lagi di awal
+    // track baru. Selama ini hanya dijaga protokol clearing_ +
+    // waitForRenderIdle (timeout 100 ms) di PlaybackController — kalau
+    // render in-flight melewati timeout itu, jendela ini terbuka.
+    //
+    // Sekarang: CAS(expected=r, r+toRead, acq_rel, relaxed). Kalau
+    // readCount_ berubah sejak dimuat (clear() menyela), CAS gagal dan
+    // baca basi ini DIBUANG — return 0, render() mengisi senyap
+    // (zero-fill saat outputSamples < requestedSamples). Satu-satunya
+    // consumer adalah audio thread, jadi tanpa kontensi CAS berhasil di
+    // percobaan pertama; counter uint64_t monotonik (tidak pernah mundur
+    // kecuali clear(), yang justru harus menggagalkan CAS), jadi tidak
+    // ada ABA praktis.
+    uint64_t expected = r;
+    if (!readCount_.compare_exchange_strong(expected, r + toRead,
+                                            std::memory_order_acq_rel,
+                                            std::memory_order_relaxed)) {
+        return 0;
+    }
     return toRead;
 }
 
