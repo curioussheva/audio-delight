@@ -31,7 +31,7 @@ void TrackQueue::setTracks(
     //
     // rebuildShuffle() mengisi mShuffleOrder = [0,1,2,...,n] lalu di-shuffle,
     // jadi mShuffleOrder[0] bisa index BERAPA PUN (mis. 39). Tanpa ini,
-    // play() memanggil queue_->current() → activeQueue()[0] → trek acak.
+    // play() memanggil queue_->current() → activeAt(0) → trek acak.
     // Gejala di device: user tap "Dark Sky Island" (index 0), native main
     // trek URI[39] (1000996760) — UI dan speaker tidak sync.
     if (
@@ -71,8 +71,9 @@ std::vector<TrackInfo> TrackQueue::tracks() const {
 std::vector<TrackInfo> TrackQueue::activeTracks() const {
     std::lock_guard lock(mMutex);
 
-    const auto& queue = activeQueue();
-    return std::vector<TrackInfo>(queue.begin(), queue.end());
+    // B9-activeQueue: activeQueue() sudah mengembalikan vektor by value —
+    // dulu disalin SEKALI LAGI ke vektor baru (2× salinan penuh).
+    return activeQueue();
 }
 
 // =====================================
@@ -88,10 +89,19 @@ TrackQueue::current() const {
         return std::nullopt;
     }
 
-    const auto& queue =
-        activeQueue();
+    // B9-activeQueue: SATU TrackInfo via activeAt, tanpa salinan vektor.
+    // Dulu: activeQueue() menyalin SELURUH queue (1–2 MB + ribuan alokasi
+    // untuk playlist ribuan lagu) hanya untuk mengambil [mCurrentIndex] —
+    // dan current() dipanggil watcher 500 ms via getCurrentTrack, jadi
+    // salinan penuh itu terjadi tiap 500 ms. Guard batas juga baru: dulu
+    // queue[mCurrentIndex] tanpa cek (UB bila indeks di luar ukuran
+    // aktif); di state valid nilainya sama, di state tak valid kini
+    // nullopt, bukan UB.
+    if (mCurrentIndex >= activeSizeLocked()) {
+        return std::nullopt;
+    }
 
-    return queue[mCurrentIndex];
+    return activeAt(mCurrentIndex);
 }
 
 bool TrackQueue::advance() {
@@ -259,8 +269,10 @@ bool TrackQueue::jumpTo(
 ) {
     std::lock_guard lock(mMutex);
 
+    // B9-activeQueue: activeQueue().size() diganti activeSizeLocked()
+    // (nilai sama, tanpa salinan vektor).
     if (
-        index >= activeQueue().size()
+        index >= activeSizeLocked()
     ) {
         return false;
     }
@@ -295,13 +307,17 @@ void TrackQueue::setShuffleMode(
     //
     // ⚠️ JANGAN panggil current() di sini — dia lock mMutex lagi, dan kita
     // sudah pegang lock (std::mutex tidak rekursif → deadlock). Baca
-    // langsung lewat activeQueue().
+    // langsung lewat activeAt().
+    //
+    // B9-activeQueue: dulu activeQueue() menyalin SELURUH queue hanya
+    // untuk satu elemen [mCurrentIndex]; kini activeAt(mCurrentIndex)
+    // langsung. Semantik SAMA (invarian B9-TOCTOU: semua entri
+    // mShuffleOrder valid, jadi activeQueue()[i] == activeAt(i)) dan
+    // logika shuffle di bawah TIDAK disentuh — itu urusan
+    // B9-shuffle-origIdx.
     std::optional<TrackInfo> playingTrack;
-    if (!mTracks.empty()) {
-        const auto& act = activeQueue();
-        if (mCurrentIndex < act.size()) {
-            playingTrack = act[mCurrentIndex];
-        }
+    if (!mTracks.empty() && mCurrentIndex < activeSizeLocked()) {
+        playingTrack = activeAt(mCurrentIndex);
     }
 
     mShuffleMode = mode;
