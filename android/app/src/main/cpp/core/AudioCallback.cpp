@@ -369,6 +369,10 @@ void AudioCallback::updateParameters() {
             // sebelumnya — pertahankan, jangan pakai data setengah tertulis.
             break;
     }
+
+    // (C-CLEAN(d)): nomor urut snapshot — naik tiap snapshot baru ditulis,
+    // walau nilainya sama dengan buffer sebelumnya. Lihat DSPParameters::version.
+    ++mParams.version;
 }
 
 // =====================================================

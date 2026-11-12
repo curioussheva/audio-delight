@@ -240,6 +240,21 @@ struct DSPParameters {
 
     bool headphoneCorrectionEnabled =
         false;
+
+    // (C-CLEAN(d), 2026-11-12): nomor urut snapshot, BUKAN penanda
+    // "config berubah". Naik 1 tiap updateParameters() menulis snapshot
+    // baru (sekali per buffer) — termasuk saat nilainya sama dengan
+    // buffer sebelumnya. Gunanya: konsumen bisa membedakan "snapshot
+    // yang sama dibaca ulang" dari "snapshot baru", tanpa membandingkan
+    // 344 byte field per field. Deteksi PERUBAHAN nilai tetap lewat
+    // perbandingan field (mis. dspConfigEquals), bukan field ini.
+    //
+    // uint32_t membungkus alami setelah ~2^32 buffer (~2,5 tahun pada
+    // 48000 Hz / 960 frame); bandingkan dengan !=, bukan >.
+    // Diletakkan di akhir: mengisi padding ekor struct (bool di atas),
+    // jadi sizeof(DSPParameters) tetap 344.
+    uint32_t version =
+        0;
 };
 
 // (StereoFrame / AudioBufferView / InterleavedBufferView / LatencyInfo /
