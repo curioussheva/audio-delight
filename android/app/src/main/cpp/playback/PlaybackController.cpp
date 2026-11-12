@@ -300,11 +300,16 @@ void PlaybackController::setProcessingAllowed(bool allowed) noexcept {
 bool PlaybackController::loadTrack(const TrackInfo& track) {
     // 🔥 FIX (2026-11-11, D-M3): batalkan advance DULU, sebelum mengambil
     // loadTrackMutex_. Flag ini harus terlihat oleh iterasi skip-loop
-    // advance thread SEBELUM thread ini ter-block di mutex — kalau tidak,
-    // advance yang sudah lolos cek-batal terakhir tetap memuat track basi
-    // setelah navigasi manual dimulai, dan (karena mutex) muatannya bisa
-    // mendarat SETELAH muatan manual. cancelPendingAdvance() hanya atomic
-    // store, jadi aman dipanggil di luar lock.
+    // advance thread SEBELUM thread ini mengambil lock untuk muatan
+    // manual — kalau tidak, advance yang sudah lolos cek-batal terakhir
+    // tetap memuat track basi setelah navigasi manual dimulai, dan
+    // (karena mutex) muatannya bisa mendarat SETELAH muatan manual.
+    // Catatan (PB6-W3, 2026-11-12): cancelPendingAdvance() BUKAN lagi
+    // atomic store murni — ia mengambil loadTrackMutex_ (rekursif)
+    // sebentar saat menaikkan flag. Jadi panggilan dari luar lock ini
+    // bisa block sebentar di belakang load yang sedang berjalan; itu
+    // aman (belum ada lock lain yang dipegang di sini, mutex rekursif),
+    // dan flag tetap terpasang sebelum lock muatan di bawah diambil.
     cancelPendingAdvance();
 
     // 🔥 FIX (2026-11-11, D-M3): serialisasi loadTrack() antar thread JS +
