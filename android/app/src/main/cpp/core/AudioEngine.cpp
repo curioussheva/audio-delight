@@ -8,8 +8,28 @@
 #include "../playback/PlaybackController.h"
 #include "../devices/AudioDeviceManager.h"
 #include "../dsp/PresetParser.h"
+#include "DSPProcessingGate.h"
 
 namespace pristine {
+
+// (C-DSPMETRIC, 2026-11-12): "DSP aktif" yang sebenarnya — BUKAN flag
+// isDSPEnabled() mentah. Flag itu tidak pernah menggerakkan jalur produksi:
+// AudioPipeline.cpp:437 `enabled` sengaja SELALU true, bukan
+// params.dspEnabled, dan setDSPEnabled tidak punya pemanggil TS (hanya
+// deklarasi spec + JNI). Yang benar-benar memproses PCM di jalur produksi
+// adalah DUA syarat sekaligus: gate produksi menyala (AudioCallback.cpp:173
+// memagari applyPipeline) DAN mode bukan BitPerfect (AudioPipeline::process
+// memetakan BitPerfect ke processBitPerfect() yang no-op). Jadi metrik
+// dspEnabled harus melaporkan kondisi gabungan ini, bukan flag mentah —
+// kalau tidak, getStats() mengklaim DSP aktif padahal tidak ada satu sample
+// pun yang diproses (mis. mode BitPerfect, atau gate dimatikan di Settings).
+static bool computeDSPActive(
+    const AudioState& state
+) noexcept {
+
+    return state.processingMode() != ProcessingMode::BitPerfect &&
+        DSPProcessingGate::enabled();
+}
 
 // =====================================================
 // CONSTRUCTOR
@@ -179,7 +199,11 @@ bool AudioEngine::start(
         mStreamController.framesPerBurst()
     );
     mMetrics.setExclusiveMode(exclusiveMode);
-    mMetrics.setDSPEnabled(mState.isDSPEnabled());
+    // (C-DSPMETRIC, 2026-11-12): laporkan kondisi AKTIF gabungan (mode !=
+    // BitPerfect && gate menyala), bukan flag isDSPEnabled() mentah — flag
+    // itu default false dan tidak pernah dibaca jalur produksi, jadi nilai
+    // mentahnya menyesatkan (lihat computeDSPActive di atas).
+    mMetrics.setDSPEnabled(computeDSPActive(mState));
 
     return true;
 }
@@ -305,8 +329,12 @@ void AudioEngine::setDSPEnabled(
 ) {
 
     mState.setDSPEnabled(enabled);
-    // Metrik mengikuti state (M5): flag ini dibaca getStats().
-    mMetrics.setDSPEnabled(enabled);
+    // Metrik mengikuti kondisi AKTIF gabungan (C-DSPMETRIC), bukan flag
+    // mentah ini: flag tetap disimpan di state (disalin updateParameters()
+    // ke mParams.dspEnabled, tapi tidak ada yang menggerakkannya di jalur
+    // produksi) — yang menentukan apakah PCM benar-benar diproses adalah
+    // mode + gate, lihat computeDSPActive di atas.
+    mMetrics.setDSPEnabled(computeDSPActive(mState));
 }
 
 // =====================================================

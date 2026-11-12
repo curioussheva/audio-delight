@@ -93,8 +93,14 @@ struct EngineStats {
     bool exclusiveMode =
         false;
 
+    // (C-DSPMETRIC, 2026-11-12): default false, bukan true. true berarti
+    // "DSP aktif" sebelum ada stream, mode, atau gate yang diperiksa —
+    // persis kebohongan yang diperbaiki item ini. false = belum terbukti
+    // aktif; nilai yang benar ditulis start()/setDSPEnabled() lewat
+    // computeDSPActive(). Konsisten dengan AudioState::mDSPEnabled (false)
+    // dan AudioMetrics::reset() (false).
     bool dspEnabled =
-        true;
+        false;
 };
 
 } // namespace pristine

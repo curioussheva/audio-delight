@@ -189,8 +189,10 @@ public:
     bool isExclusive() const;
     int32_t actualSampleRate() const;
 
-    // (getStats() dihapus 2026-11-10: 0 caller. JNI membaca
-    // engine().getStats() langsung.)
+    // (getStats() dihapus 2026-11-10: 0 caller.
+    // C-DSPMETRIC, 2026-11-12: komentar lama di sini SALAH — "JNI membaca
+    // engine().getStats() langsung" tidak benar. Grep seluruh repo: tidak
+    // ada pemanggil getStats() di mana pun, JNI/Kotlin/TS sekalipun.)
 
 private:
 

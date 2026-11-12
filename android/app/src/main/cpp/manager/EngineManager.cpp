@@ -1003,8 +1003,12 @@ void EngineManager::setExclusiveMode(
 }
 
 // =====================================================
-// (EngineManager::getStats() dihapus 2026-11-10: 0 caller. JNI membaca
-// engine().getStats() langsung.)
+// (EngineManager::getStats() dihapus 2026-11-10: 0 caller.
+// C-DSPMETRIC, 2026-11-12: komentar lama di sini SALAH — "JNI membaca
+// engine().getStats() langsung" tidak benar. Grep seluruh repo (cpp/java/
+// kotlin/src): getStats() TIDAK punya pemanggil di mana pun — tidak ada JNI,
+// Kotlin, maupun TS yang memanggil AudioEngine::getStats() /
+// AudioMetrics::getStats(). Keduanya hanya terdefinisi, tidak pernah dibaca.)
 
 bool EngineManager::isExclusive() const {
     return mEngine.isExclusive();
