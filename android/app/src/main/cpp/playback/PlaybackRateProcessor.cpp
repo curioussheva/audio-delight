@@ -11,6 +11,11 @@
 namespace pristine::playback {
 
 PlaybackRateProcessor::PlaybackRateProcessor() {
+    // PB6-W2B: pre-alokasi buffer streaming (kapasitas di header).
+    // hann_ di bawah SUDAH pre-alloc sejak awal — bukan duplikasi.
+    input_.reserve(kInputCapacity);
+    mono_.reserve(kMonoCapacity);
+    output_.reserve(kOutputCapacity);
     // Hann periodik (penyebut W, bukan W-1): dengan hop W/2 jumlah jendela
     // yang tumpang tindih = 1.0 persis (COLA) — tidak ada modulasi amplitudo.
     hann_.resize(kWindowFrames);

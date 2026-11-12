@@ -79,6 +79,28 @@ private:
     static constexpr int32_t kHopFrames = 512;      // hop analisis
     static constexpr int32_t kHalfBins = kWindowFrames / 2;
 
+    // PB6-W2B (2026-11-12): kapasitas pre-alokasi buffer streaming
+    // (reserve di ctor — ctor bukan audio thread) supaya push()/
+    // feedResampler()/pull() di audio thread (noexcept) tidak pernah
+    // menumbuhkan vector (bad_alloc di noexcept = terminate). clear() di
+    // reset() mempertahankan kapasitas, jadi reserve sekali di sini cukup
+    // seumur prosesor. Envelope: callback ≤ 3840 frame (burst maks Oboe
+    // @192 kHz, C-C2 di AudioCallback.cpp — pitch path TIDAK di-guard
+    // render() seperti rate path, jadi dihitung dari push mentah),
+    // stereo, rasio 0.5..2.0. Turunan (frame): input_ ≤ 2048 sisa + 3840
+    // push = 5888; stretchOut_ ≤ readPos 15872 + ~1024 belum pindah +
+    // 7680 hop callback ini + 2048 ekor ≈ 26624; resampleIn_ ≤ 15872
+    // terkonsumsi + ~4 sisa; output_ ≤ readPos 7936 + ~3840 tersedia.
+    // Angka reserve (float) dibulatkan ke atas dengan headroom; di luar
+    // envelope vector masih bisa tumbuh — sama seperti sebelum fix, tidak
+    // lebih buruk. Buffer kerja per hop (inL_/specL_/synL_/outL_/...) SUDAH
+    // pre-alloc di init list ctor — yang di-reserve di sini hanya vector
+    // streaming, jangan duplikasi yang sudah ada.
+    static constexpr size_t kInputCapacity = 16384;       // 8192 frame stereo
+    static constexpr size_t kStretchOutCapacity = 65536;  // 32768 frame stereo
+    static constexpr size_t kResampleInCapacity = 49152;  // 24576 frame stereo
+    static constexpr size_t kOutputCapacity = 32768;      // 16384 frame stereo
+
     // Satu hop time-stretch: N frame input -> hop sintesis (fraksional)
     // frame output (overlap-add + norm). Mengembalikan true kalau diproses.
     bool processStretchHop() noexcept;

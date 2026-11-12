@@ -38,6 +38,11 @@ bool PlaybackController::initialize() {
     state_ = std::make_shared<PlaybackState>();
     queue_ = std::make_shared<TrackQueue>();
 
+    // PB6-W2B (2026-11-12): pre-alokasi rateScratch_ (kRateScratchSamples,
+    // lihat header) — initialize() bukan audio thread, jadi alokasi di sini
+    // aman; render() (noexcept) tidak boleh resize.
+    rateScratch_.assign(kRateScratchSamples, 0.0f);
+
     initialized_.store(true, std::memory_order_release);
     return true;
 }
@@ -765,8 +770,16 @@ size_t PlaybackController::render(float* output,
     size_t readSamples = 0;    // input: sample yang dibaca dari queue
     size_t outputSamples = 0;  // output: sample yang benar-benar dihasilkan
     if (useRate) {
-        if (rateScratch_.size() < inputSamples) {
-            rateScratch_.resize(inputSamples);
+        // PB6-W2B (2026-11-12): JANGAN resize di audio thread — render()
+        // noexcept, bad_alloc = terminate. Kapasitas pre-alokasi (7744)
+        // menutup envelope 1920 frame × laju 2.0 × stereo; di luar itu
+        // (mis. burst 3840 frame @192 kHz — render() dipanggil dengan
+        // numFrames penuh, chunking kMax hanya di applyPipeline/jalur
+        // fallback) callback ini dibisukan — pola yang sama dengan
+        // clearing_/paused di atas (p-m14: laporkan buffer penuh).
+        if (inputSamples > rateScratch_.size()) {
+            std::fill(output, output + requestedSamples, 0.0f);
+            return requestedSamples;
         }
         readSamples = pcmQueue_->read(rateScratch_.data(), inputSamples);
         rateProcessor_.push(rateScratch_.data(), readSamples / channels,

@@ -217,6 +217,16 @@ private:
     PlaybackRateProcessor rateProcessor_;
     std::atomic<float> playbackRate_{1.0f};
     float rateApplied_ = 1.0f;
+
+    // PB6-W2B (2026-11-12): kapasitas rateScratch_ — pre-alokasi di
+    // initialize() supaya render() (noexcept, audio thread) tidak pernah
+    // resize() (bad_alloc di noexcept = terminate). 1920 frame maks per
+    // callback (kMaxFramesPerCallback, core/AudioConstants.h) × laju maks
+    // 2.0 (setPlaybackRate/setRate) × 2 channel stereo (AudioCallback
+    // memanggil render() dengan channels=2) + 64 slack pembulatan
+    // (inputFrames = frames*rate+0.5). render() meng-guard: inputSamples
+    // di atas kapasitas → senyap, bukan resize (lihat render()).
+    static constexpr size_t kRateScratchSamples = 1920 * 2 * 2 + 64;  // 7744
     std::vector<float> rateScratch_;
 
     // 🔥 FASE R (2026-11-11): retune (PitchShifter, phase vocoder).

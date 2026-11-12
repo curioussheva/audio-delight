@@ -29,6 +29,14 @@ PitchShifter::PitchShifter()
       synR_(kWindowFrames),
       outL_(kWindowFrames),
       outR_(kWindowFrames) {
+    // PB6-W2B: pre-alokasi buffer streaming (kapasitas di header).
+    // Buffer kerja per hop di init list di atas SUDAH pre-alloc sejak
+    // awal — jangan duplikasi; yang di-reserve di sini hanya vector
+    // streaming yang tumbuh di push()/feedResampler().
+    input_.reserve(kInputCapacity);
+    stretchOut_.reserve(kStretchOutCapacity);
+    resampleIn_.reserve(kResampleInCapacity);
+    output_.reserve(kOutputCapacity);
     // Hann periodik: w[n] = 0.5 - 0.5*cos(2*pi*n/N).
     for (int32_t n = 0; n < kWindowFrames; ++n) {
         hann_[n] = 0.5f - 0.5f * std::cos(kTwoPi * static_cast<float>(n) /

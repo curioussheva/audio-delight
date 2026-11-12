@@ -49,6 +49,22 @@ private:
     static constexpr uint32_t kHopFrames = 512;        // W/2 (COLA Hann)
     static constexpr uint32_t kToleranceFrames = 256;  // W/4
 
+    // PB6-W2B (2026-11-12): kapasitas pre-alokasi buffer streaming
+    // (reserve di ctor — ctor bukan audio thread) supaya push()/pull() di
+    // audio thread (noexcept) tidak pernah menumbuhkan vector (bad_alloc
+    // di noexcept = terminate). clear() di reset() mempertahankan
+    // kapasitas, jadi reserve sekali di sini cukup seumur prosesor.
+    // Envelope: callback ≤ 3840 frame (burst maks Oboe @192 kHz, C-C2 di
+    // AudioCallback.cpp), stereo, laju 0.5..2.0 — push ≤ 3872 frame
+    // (render() meng-guard inputSamples ≤ 7744). Turunan (frame):
+    // input_/mono_ ≤ 2048 sisa + 3872 push = 5920; output_ ≤ readPos
+    // 12032 + ~5888 tersedia + 1024 ekor jendela ≈ 18944. Angka reserve
+    // (float) dibulatkan ke atas dengan headroom; di luar envelope vector
+    // masih bisa tumbuh — sama seperti sebelum fix, tidak lebih buruk.
+    static constexpr size_t kInputCapacity = 16384;   // 8192 frame stereo
+    static constexpr size_t kMonoCapacity = 8192;     // 8192 frame
+    static constexpr size_t kOutputCapacity = 49152;  // 24576 frame stereo
+
     void processAvailable() noexcept;
     void placeWindow(size_t start) noexcept;
     void compactInput(size_t frames) noexcept;
