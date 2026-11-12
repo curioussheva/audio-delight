@@ -56,10 +56,28 @@ bool AudioEngine::start(
     int32_t requestedDeviceId
 ) {
 
+    // (C-K3, 2026-11-12): guard memakai isRunning() gabungan — flag saja
+    // tidak cukup. Sesudah stream diputus sistem, onErrorAfterClose()
+    // mematikan mRunning controller tapi mState.running tetap true; guard
+    // lama (flag saja) mengembalikan true tanpa stream yang hidup, dan
+    // EngineManager::start() ikut early-return — audio mati sampai device
+    // berubah lagi.
+    if (
+        isRunning()
+    ) {
+        return true;
+    }
+
+    // Flag masih true tapi stream sudah mati (kasus disconnect di atas):
+    // bersihkan sisa state sebelum membuka stream baru. stop() idempotent
+    // (stop()/close() controller no-op saat stream null, reset() hanya
+    // clear) — dan reopen pun memanggil stop() dulu sebelum start().
+    // Muat ulang track BUKAN di sini: itu tugas EngineManager::start()
+    // (reloadIfDecoderRateMismatch sesudah start) / reopen.
     if (
         mState.isRunning()
     ) {
-        return true;
+        stop();
     }
 
     // Laju 0 = pemanggil tidak menentukan: deteksi sendiri dari perangkat
@@ -207,7 +225,31 @@ void AudioEngine::stop() {
 
 bool AudioEngine::isRunning() const {
 
-    return mState.isRunning();
+    // (C-K3, 2026-11-12): flag saja berbohong sesudah disconnect. Stream
+    // diputus sistem (headset dicolok): onErrorAfterClose() mematikan
+    // mRunning controller + membuang stream, tapi mState.running tetap
+    // true sampai ada yang memanggil stop(). isRunning() harus berarti
+    // "audio BENAR-BENAR mengalir": flag DAN stream hidup. Dua atomic
+    // load (acquire) — tanpa lock, aman dari audio thread.
+    //
+    // Semua pemanggil diperiksa terhadap semantik baru (tidak ada yang
+    // butuh semantik lama "flag saja"):
+    //   - EngineManager::start() guard: kini TIDAK early-return sesudah
+    //     disconnect — start lanjut membuka stream baru (ini inti fix).
+    //   - EngineManager::start() reload guard (:270): hanya reload kalau
+    //     stream baru benar-benar hidup.
+    //   - reopen wasRunning (:627): kini mencerminkan stream nyata; hanya
+    //     dipakai log.
+    //   - reopen reload guard (:645): hanya muat ulang kalau stream baru
+    //     benar-benar hidup.
+    //   - onTrackLoaded (:684), onDeviceRemoved (:741),
+    //     setRequestedDeviceId (:388), setExclusiveMode (:957): sesudah
+    //     disconnect mereka kini "tidak berjalan" — benar, karena recovery
+    //     worker (requestStreamRecovery) yang menangani reopen + muat
+    //     ulang track, bukan mereka.
+    //   - NativePlaybackModule getControllerAndStartEngine(): play()
+    //     sesudah disconnect kini benar-benar memanggil start() lagi.
+    return mState.isRunning() && mStreamController.isRunning();
 }
 
 // =====================================================
