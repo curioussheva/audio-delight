@@ -9,12 +9,13 @@
 
 #include "../core/AudioEngine.h"
 #include "../core/AudioState.h"
+#include "../core/Export.h"
 #include "../devices/AudioDeviceManager.h"
 #include "../playback/PlaybackController.h"
 
 namespace pristine {
 
-class __attribute__((visibility("default"))) EngineManager {
+class PRISTINE_EXPORT EngineManager {
 public:
 
     static EngineManager& get();

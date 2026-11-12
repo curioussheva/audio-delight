@@ -1,6 +1,7 @@
 #pragma once
 #include "AudioDeviceDescriptor.h"
 #include "DeviceCapabilities.h"
+#include "core/Export.h"
 #include <jni.h>
 #include <vector>
 #include <functional>
@@ -106,8 +107,6 @@ private:
 
 // PRISTINE_EXPORT dari core/Export.h - wajib karena fungsi ini dipanggil
 // OnLoad.cpp yang ada di target library lain.
-#include "core/Export.h"
-
 // Dipanggil sekali dari JNI_OnLoad. Dipisah dari kelas karena butuh JavaVM.
 PRISTINE_EXPORT void setAudioDeviceManagerVm(JavaVM* vm);
 
