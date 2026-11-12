@@ -162,7 +162,7 @@ AudioCallback::onAudioReady(
         // PIPELINE (tiga mode)
         // =============================================
         //
-        // ð¥ FIX (2026-10-07): dulu fungsi ini `return` di sini, sehingga
+        // 🔥 FIX (2026-10-07): dulu fungsi ini `return` di sini, sehingga
         // AudioPipeline - tempat mode BitPerfect/DSP/Immersive hidup - TIDAK
         // PERNAH dipanggil saat memutar lagu. Akibatnya mode DSP tidak
         // melakukan apa pun dan bit-perfect hanya benar secara kebetulan.

@@ -159,7 +159,7 @@ bool AudioStreamController::open(
         }
     }
 
-    // ð¥ DEBUG: log actual stream rate
+    // 🔥 DEBUG: log actual stream rate
     {
         int32_t actualRate = opened ? opened->getSampleRate() : 0;
         int32_t actualFrames = opened ? opened->getFramesPerBurst() : 0;

@@ -382,7 +382,7 @@ bool dspConfigEquals(
         if (a.eqGain[i] != b.eqGain[i]) return false;
     }
 
-    // �� FASE D (2026-10-10): preset koreksi headphone WAJIB dibandingkan.
+    // 🔥 FASE D (2026-10-10): preset koreksi headphone WAJIB dibandingkan.
     //
     // Tanpa ini, memilih headphone lain saat koreksi sudah aktif tidak akan
     // terkirim ke rantai — flag-nya tidak berubah, jadi config dianggap sama.

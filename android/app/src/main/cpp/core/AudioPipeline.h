@@ -103,7 +103,7 @@ private:
     // KONFIGURASI DSP
     // =============================================
     //
-    // �� FIX (2026-10-10): `DSPChain::applyConfig()` dulu NOL pemanggil dari
+    // 🔥 FIX (2026-10-10): `DSPChain::applyConfig()` dulu NOL pemanggil dari
     // jalur produksi — semua referensinya berputar di dalam `dsp/` sendiri.
     // Akibatnya `DSPChain::mConfig` selamanya default, dan keempat node
     // (EQ, StereoWidener, Gain, Limiter) berjalan sebagai identity:
