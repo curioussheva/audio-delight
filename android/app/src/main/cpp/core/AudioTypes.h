@@ -226,8 +226,13 @@ struct DSPParameters {
     bool limiterEnabled =
         true;
 
+    // (C-DEFMODE, 2026-11-12): default = DSP, sama seperti AudioState
+    // (mProcessingMode) dan DSPConfig — pemenang runtime adalah AudioState:
+    // updateParameters() menimpa field ini tiap buffer dari sana. Dulu
+    // BitPerfect dengan komentar "FIX: default bypass DSP" — tidak pernah
+    // berefek (struct ini hanya wadah snapshot per-buffer) dan menyesatkan.
     ProcessingMode processingMode =
-        ProcessingMode::BitPerfect;  // 🔥 FIX: default bypass DSP
+        ProcessingMode::DSP;
 
     // =============================================
     // IMMERSIVE AUDIO LAB

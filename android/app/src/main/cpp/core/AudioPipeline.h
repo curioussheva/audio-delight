@@ -139,7 +139,13 @@ private:
     // (audio thread saja) — tidak perlu atomic: AudioState sudah jadi
     // satu-satunya jembatan antar-thread, dan mLastMode murni jejak lokal
     // audio thread atas nilai yang dibaca dari sana.
-    ProcessingMode mLastMode{ProcessingMode::BitPerfect};
+    //
+    // (C-DEFMODE, 2026-11-12): nilai awal DSP, sama seperti default runtime
+    // (AudioState). Nilai ini tidak pernah dibaca sebelum ditulis pertama
+    // kali (mModeSeen == false di buffer pertama), jadi perubahan ini
+    // netral-perilaku — hanya menghapus literal BitPerfect keempat yang
+    // bertentangan dengan default lainnya.
+    ProcessingMode mLastMode{ProcessingMode::DSP};
 
     // false = process() belum pernah dipanggil sejak prepare()/reset()
     // terakhir, jadi buffer pertama HANYA mencatat mode (tanpa reset dan
