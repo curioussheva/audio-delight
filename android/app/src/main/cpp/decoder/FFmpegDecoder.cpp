@@ -383,20 +383,32 @@ DecodeResult FFmpegDecoder::onDecode(
     // 🔥 FIX (2026-10-06): guard magnitudo SEBELUM masuk queue.
     // Bit pattern malloc garbage (1e18-1e32) lolos dari isnan/isinf.
     // Buang di sini supaya queue hanya pernah berisi audio valid.
+    // B7-P2b (2026-11-12): ambang lama ±2.0 men-zero-kan peak float legit
+    // di atas 0 dBFS (mis. +6 dB → peak 2.0) per-sample → dropout.
+    // Sekarang hanya |v|>8 yang di-zero (garbage); sisanya di-clamp ke
+    // ±1.0 supaya sinyal tetap dalam rentang float PCM yang wajar.
     {
         int badCount = 0;
+        int clampedCount = 0;
         const size_t total = static_cast<size_t>(converted) * channels;
         for (size_t i = 0; i < total; ++i) {
             float& v = temp[i];
-            if (std::isnan(v) || std::isinf(v) || v > 2.0f || v < -2.0f) {
+            if (std::isnan(v) || std::isinf(v) || v > 8.0f || v < -8.0f) {
                 badCount++;
                 v = 0.0f;
+            } else if (v > 1.0f) {
+                clampedCount++;
+                v = 1.0f;
+            } else if (v < -1.0f) {
+                clampedCount++;
+                v = -1.0f;
             }
         }
-        if (badCount > 0) {
+        if (badCount > 0 || clampedCount > 0) {
             __android_log_print(ANDROID_LOG_WARN, "FFmpegDecoder",
-                "swr output guard: %zu/%zu samples out-of-range cleaned",
-                (size_t)badCount, total);
+                "swr output guard: %zu/%zu samples out-of-range cleaned "
+                "(zeroed=%d, clamped=%d)",
+                (size_t)badCount, total, badCount, clampedCount);
         }
     }
 
