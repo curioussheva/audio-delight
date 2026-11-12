@@ -529,11 +529,21 @@ bool PlaybackController::play() {
         return false;
     }
 
-    playing_.store(true, std::memory_order_release);
+    // PB6-MINOR(a) (2026-11-12): tangkap transisi paused->playing.
+    // play() yang dipanggil saat SUDAH playing (double-tap tombol play,
+    // MediaSession onPlay saat sinkronisasi JS) dulu me-reset
+    // framesSinceLoad_ tanpa syarat — fade-in mulai lagi dari 0 di tengah
+    // track = dip volume yang terdengar. Reset hanya saat transisi.
+    // Yang tetap benar: track baru — loadTrack() di atas sudah me-reset
+    // sendiri; dan resume di tengah fade-out pause (playing_ masih true,
+    // PB6-W4) — fade-out dibatalkan di bawah dan audio lanjut tanpa
+    // fade-in ulang, satu lompatan gain sekali jalan (jendela 15 ms)
+    // alih-alih ramp 300 ms dari 0.
+    const bool wasPlaying =
+        playing_.exchange(true, std::memory_order_acq_rel);
     // PB6-W4: resume membatalkan fade-out pause yang sedang berjalan
     // (mis. play ditekan <15 ms sesudah pause). Render yang sudah
-    // mengklaim sebagian fade lewat CAS melihat 0 dan berhenti; fade-in
-    // resume di bawah (framesSinceLoad_ = 0) yang mengambil alih.
+    // mengklaim sebagian fade lewat CAS melihat 0 dan berhenti.
     pauseFadeRemainingFrames_.store(0, std::memory_order_release);
     updatePlaybackState();  // 🔥 FIX
 
@@ -541,8 +551,12 @@ bool PlaybackController::play() {
     // (300 ms di mode processing, 10 ms anti-klik di bit-perfect — durasi
     // kurva diputuskan loadTrack(), PB6-W1) supaya tidak ada klik saat
     // audio jalan lagi setelah pause. loadTrack() sudah me-reset untuk
-    // track baru; reset di sini idempotent.
-    framesSinceLoad_.store(0, std::memory_order_release);
+    // track baru; reset di sini hanya saat transisi paused->playing
+    // (PB6-MINOR(a) di atas) — play() berulang saat sudah playing tidak
+    // lagi me-restart fade-in.
+    if (!wasPlaying) {
+        framesSinceLoad_.store(0, std::memory_order_release);
+    }
 
     // resume() di salinan aman walau stopDecoder() berjalan bersamaan:
     // resume() hanya atomic store + notify (lihat M3).
