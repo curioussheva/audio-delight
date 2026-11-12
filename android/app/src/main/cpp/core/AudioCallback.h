@@ -134,7 +134,9 @@ private:
     // buffer terpisah (left/right). Jadi: deinterleave -> proses -> interleave.
     //
     // Memakai mLeft/mRight yang sudah ada supaya tidak ada alokasi di jalur
-    // realtime (keduanya berukuran kMaxFramesPerCallback).
+    // realtime (keduanya berukuran kMaxFramesPerCallback). Buffer lebih besar
+    // dari kMax diproses dalam chunk ≤ kMax (C-C2, 2026-11-12) — bukan
+    // dibisukan.
     void applyPipeline(
         float* interleaved,
         int32_t numFrames

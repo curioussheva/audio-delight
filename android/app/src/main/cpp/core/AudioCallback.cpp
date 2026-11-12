@@ -48,16 +48,20 @@ AudioCallback::onAudioReady(
 
     // Guard (fix 2026-11-10, m1): JANGAN memset dengan numFrames <= 0 —
     // sizeof(float) * numFrames * 2 dikonversi ke size_t raksasa dan menulis
-    // jauh melewati buffer (UB). numFrames > kMax tetap di-silence penuh
-    // (buffer Oboe memang sebesar itu) karena pipeline tidak bisa memakai
-    // scratch mLeft/mRight yang lebih kecil.
+    // jauh melewati buffer (UB).
     if (numFrames <= 0) {
         return oboe::DataCallbackResult::Continue;
     }
-    if (numFrames > kMaxFramesPerCallback) {
-        std::memset(output, 0, sizeof(float) * numFrames * 2);
-        return oboe::DataCallbackResult::Continue;
-    }
+    // (C-C2, 2026-11-12): guard lama `numFrames > kMaxFramesPerCallback`
+    // membisukan SELURUH buffer (memset + return) tanpa log/metrik.
+    // kMax = 1920 frame (40 ms @48k) tercapai bila framesPerBurst > 1920 —
+    // mis. stream 192 kHz burst 20 ms = 3840 frame → senyap di SETIAP
+    // callback. Sekarang buffer besar diproses dalam chunk ≤ kMax: jalur
+    // utama lewat applyPipeline() (chunk di dalam), jalur fallback lewat
+    // loop chunk di bawah. Tidak ada memset pengganti: render() sudah
+    // zero-fill seluruh buffer yang diminta (clearing_/paused/shortfall —
+    // PlaybackController.cpp:704,725,900), dan jalur fallback mengisi ekor
+    // pendek per chunk dengan std::fill seperti sebelumnya.
 
     // Waktu mulai callback, untuk metrik (M5). steady_clock di audio thread:
     // tanpa alokasi, tanpa lock, hanya atomic store di akhir.
@@ -109,25 +113,19 @@ AudioCallback::onAudioReady(
     // =============================================
     // FALLBACK: AudioBufferController
     // =============================================
+    //
+    // (C-C2, 2026-11-12): popStereo() memakai buffer stack internal sebesar
+    // kMax dan mLeft/mRight juga sebesar kMax — keduanya tidak sanggup
+    // menampung numFrames > kMax. Menghapus guard bisu di atas tanpa
+    // men-chunk jalur ini akan mengubah overflow stack di popStereo menjadi
+    // overflow mLeft/mRight. Jadi jalur ini ikut di-chunk; numFrames <= kMax
+    // tetap satu chunk, perilaku identik kecuali satu perbaikan: popStereo
+    // all-or-nothing per panggilan, jadi buffer yang tadinya hanya cukup
+    // untuk sebagian chunk kini mengalirkan chunk yang cukup itu (dulu
+    // seluruh buffer gagal pop) — underrun tetap dicatat sekali per callback.
 
+    // Parameter dibaca SEKALI per buffer, di luar loop chunk.
     updateParameters();
-
-    const uint64_t readFrames = mBufferController.popStereo(
-        mLeft,
-        mRight,
-        static_cast<uint32_t>(numFrames)
-    );
-
-    if (readFrames < static_cast<uint64_t>(numFrames)) {
-        mMetrics.recordUnderrun();
-
-        std::fill(mLeft + readFrames, mLeft + numFrames, 0.0f);
-        std::fill(mRight + readFrames, mRight + numFrames, 0.0f);
-    }
-
-    if (mState.isDSPEnabled()) {
-        mPipeline.process(mLeft, mRight, numFrames, mParams);
-    }
 
     // �� FIX (2026-10-10): jalur fallback juga tidak lagi memakai waveshaper
     // lama. Mode BitPerfect hanya disanitasi; DSP/Immersive lewat limiter.
@@ -139,29 +137,68 @@ AudioCallback::onAudioReady(
     // fallback menggerbang pipeline di isDSPEnabled(), jadi bila flag itu
     // false, pipeline tidak jalan dan limiter callback tetap jadi
     // satu-satunya limiter.
+    const bool fallbackDspEnabled = mState.isDSPEnabled();
     const bool fallbackNodeLimiterRan =
         (mParams.processingMode == ProcessingMode::DSP) &&
         mParams.limiterEnabled &&
-        mState.isDSPEnabled();
+        fallbackDspEnabled;
 
-    for (int32_t i = 0; i < numFrames; ++i) {
+    bool fallbackUnderrun = false;
 
-        float l = mLeft[i];
-        float r = mRight[i];
+    for (int32_t offset = 0;
+         offset < numFrames;
+         offset += kMaxFramesPerCallback) {
 
-        if (fallbackShaped && !fallbackNodeLimiterRan) {
-            l = Limiter::apply(l);
-            r = Limiter::apply(r);
+        const int32_t chunkFrames = std::min(
+            kMaxFramesPerCallback,
+            numFrames - offset
+        );
+
+        const uint64_t readFrames = mBufferController.popStereo(
+            mLeft,
+            mRight,
+            static_cast<uint32_t>(chunkFrames)
+        );
+
+        if (readFrames < static_cast<uint64_t>(chunkFrames)) {
+            fallbackUnderrun = true;
+
+            std::fill(mLeft + readFrames, mLeft + chunkFrames, 0.0f);
+            std::fill(mRight + readFrames, mRight + chunkFrames, 0.0f);
         }
 
-        sanitizeOutput(l);
-        sanitizeOutput(r);
+        if (fallbackDspEnabled) {
+            mPipeline.process(mLeft, mRight, chunkFrames, mParams);
+        }
 
-        output[i * 2]     = l;
-        output[i * 2 + 1] = r;
+        float* outChunk = output + offset * 2;
+
+        for (int32_t i = 0; i < chunkFrames; ++i) {
+
+            float l = mLeft[i];
+            float r = mRight[i];
+
+            if (fallbackShaped && !fallbackNodeLimiterRan) {
+                l = Limiter::apply(l);
+                r = Limiter::apply(r);
+            }
+
+            sanitizeOutput(l);
+            sanitizeOutput(r);
+
+            outChunk[i * 2]     = l;
+            outChunk[i * 2 + 1] = r;
+        }
+
+        // Visualizer: write per-sample ke ring buffer — menulis N frame
+        // dalam chunk menghasilkan isi ring yang sama dengan satu write.
+        mVisualizer.write(mLeft, mRight, chunkFrames);
     }
 
-    mVisualizer.write(mLeft, mRight, numFrames);
+    if (fallbackUnderrun) {
+        mMetrics.recordUnderrun();
+    }
+
     mMetrics.updateBufferedSamples(mBufferController.availableFrames());
 
     updateCallbackMetrics(stream, numFrames, callbackStart);
@@ -278,28 +315,24 @@ void AudioCallback::applyPipeline(
     int32_t numFrames
 ) noexcept {
 
-    if (!interleaved || numFrames <= 0 || numFrames > kMaxFramesPerCallback) {
+    if (!interleaved || numFrames <= 0) {
         return;
     }
 
-    // Parameter dibaca SEKALI per buffer. Mode dan nilai DSP dibaca dari
-    // AudioState (atomic), jadi perpindahan mode berlaku pada buffer berikutnya
-    // tanpa restart stream - itu syarat live switch.
+    // (C-C2, 2026-11-12): buffer lebih besar dari kMax diproses dalam chunk
+    // ≤ kMaxFramesPerCallback, bukan dibisukan dan bukan di-return dini.
+    // Semua node di bawah memproses per sample dengan state yang dibawa
+    // antar pemanggilan (biquad EQ/koreksi headphone, resonator Solfeggio,
+    // pelebar stereo, limiter stateless, generator brainwave) — memotong di
+    // batas chunk TIDAK mengubah output dibanding satu pemanggilan penuh.
+    // numFrames <= kMax tetap satu chunk, perilaku identik; yang berubah
+    // hanya numFrames > kMax yang dulu senyap kini diproses.
+
+    // Parameter dibaca SEKALI per buffer, di luar loop chunk. Mode dan nilai
+    // DSP dibaca dari AudioState (atomic), jadi perpindahan mode berlaku pada
+    // buffer berikutnya tanpa restart stream - itu syarat live switch.
     updateParameters();
 
-    // ---- deinterleave -----------------------------------------------------
-
-    for (int32_t i = 0; i < numFrames; ++i) {
-        mLeft[i]  = interleaved[i * 2];
-        mRight[i] = interleaved[i * 2 + 1];
-    }
-
-    // ---- proses (BitPerfect / DSP / Immersive) ----------------------------
-
-    mPipeline.process(mLeft, mRight, numFrames, mParams);
-
-    // ---- interleave + rapi-kan --------------------------------------------
-    //
     // 🔥 FIX (2026-10-10, "noise di beberapa file"): dulu di sini ada
     //     softClip(zapDenormal(x))
     // untuk SETIAP sample, di SETIAP mode. softClip lama = x/(1+|x|) —
@@ -316,6 +349,9 @@ void AudioCallback::applyPipeline(
     // Limiter tetap ada di DSP/Immersive karena rantai itu (EQ, harmonic
     // exciter, brainwave) bisa menaikkan level melewati full scale. Di bawah
     // ambang 0.98 ia identity, jadi tidak menambah distorsi pada sinyal biasa.
+    //
+    // `shaped`/`nodeLimiterRan` hanya bergantung pada mParams yang sudah
+    // tetap untuk buffer ini — hitung sekali di luar loop chunk.
     const bool shaped =
         (mParams.processingMode != ProcessingMode::BitPerfect);
 
@@ -331,24 +367,51 @@ void AudioCallback::applyPipeline(
         (mParams.processingMode == ProcessingMode::DSP) &&
         mParams.limiterEnabled;
 
-    for (int32_t i = 0; i < numFrames; ++i) {
+    for (int32_t offset = 0;
+         offset < numFrames;
+         offset += kMaxFramesPerCallback) {
 
-        float l = mLeft[i];
-        float r = mRight[i];
+        const int32_t chunkFrames = std::min(
+            kMaxFramesPerCallback,
+            numFrames - offset
+        );
 
-        if (shaped && !nodeLimiterRan) {
-            l = Limiter::apply(l);
-            r = Limiter::apply(r);
+        float* chunk = interleaved + offset * 2;
+
+        // ---- deinterleave (chunk) -----------------------------------------
+
+        for (int32_t i = 0; i < chunkFrames; ++i) {
+            mLeft[i]  = chunk[i * 2];
+            mRight[i] = chunk[i * 2 + 1];
         }
 
-        sanitizeOutput(l);
-        sanitizeOutput(r);
+        // ---- proses (BitPerfect / DSP / Immersive) ------------------------
 
-        interleaved[i * 2]     = l;
-        interleaved[i * 2 + 1] = r;
+        mPipeline.process(mLeft, mRight, chunkFrames, mParams);
+
+        // ---- interleave + rapi-kan (chunk) --------------------------------
+
+        for (int32_t i = 0; i < chunkFrames; ++i) {
+
+            float l = mLeft[i];
+            float r = mRight[i];
+
+            if (shaped && !nodeLimiterRan) {
+                l = Limiter::apply(l);
+                r = Limiter::apply(r);
+            }
+
+            sanitizeOutput(l);
+            sanitizeOutput(r);
+
+            chunk[i * 2]     = l;
+            chunk[i * 2 + 1] = r;
+        }
+
+        // Visualizer: write per-sample ke ring buffer — menulis N frame
+        // dalam chunk menghasilkan isi ring yang sama dengan satu write.
+        mVisualizer.write(mLeft, mRight, chunkFrames);
     }
-
-    mVisualizer.write(mLeft, mRight, numFrames);
 }
 
 // =====================================================
