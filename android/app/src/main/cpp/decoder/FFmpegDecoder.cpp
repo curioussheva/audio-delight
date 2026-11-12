@@ -363,7 +363,7 @@ DecodeResult FFmpegDecoder::onDecode(
                 frame_->format != swrInputSampleFormat_ ||
                 frameLayout.nb_channels != swrInputChannels_ ||
                 frameLayout.order != swrInputLayoutOrder_ ||
-                frameLayout.mask != swrInputLayoutMask_) {
+                frameLayout.u.mask != swrInputLayoutMask_) {
                 __android_log_print(ANDROID_LOG_INFO, "FFmpegDecoder",
                     "B7-W4: frame params changed (rate %d->%d, fmt %d->%d, ch %d->%d) — rebuilding resampler",
                     swrInputSampleRate_, frame_->sample_rate,
@@ -809,7 +809,7 @@ bool FFmpegDecoder::setupResampler(
         AV_SAMPLE_FMT_FLT,
         config().targetSampleRate,
         inputLayout,
-        inputSampleFormat,
+        static_cast<AVSampleFormat>(inputSampleFormat),
         inputSampleRate,
         0,
         nullptr);
@@ -848,7 +848,7 @@ bool FFmpegDecoder::setupResampler(
     swrInputSampleFormat_ = inputSampleFormat;
     swrInputChannels_ = inputLayout->nb_channels;
     swrInputLayoutOrder_ = static_cast<int>(inputLayout->order);
-    swrInputLayoutMask_ = inputLayout->mask;
+    swrInputLayoutMask_ = inputLayout->u.mask;
 
     return true;
 }
