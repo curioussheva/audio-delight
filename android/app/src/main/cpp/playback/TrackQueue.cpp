@@ -16,15 +16,84 @@ TrackQueue::TrackQueue()
 // =====================================
 
 void TrackQueue::setTracks(
-    const std::vector<TrackInfo>& tracks
+    const std::vector<TrackInfo>& tracks,
+    bool keepCurrentUri
 ) {
     std::lock_guard lock(mMutex);
+
+    // B9-setTracks-keep (2026-11-12): tangkap trek yang sedang main
+    // SEBELUM mTracks ditimpa — sesudah itu antrean lama hilang.
+    // ⚠️ JANGAN panggil current() di sini — dia lock mMutex lagi, dan
+    // kita sudah pegang lock (std::mutex tidak rekursif → deadlock).
+    // Baca langsung lewat activeAt(), pola yang sama dengan
+    // setShuffleMode() di bawah. oldActiveIndex = posisi AKTIF lama,
+    // dipakai lagi bila shuffle menyala (lihat bawah).
+    std::optional<TrackInfo> playingTrack;
+    size_t oldActiveIndex = 0;
+    if (
+        keepCurrentUri &&
+        !mTracks.empty() &&
+        mCurrentIndex < activeSizeLocked()
+    ) {
+        playingTrack = activeAt(mCurrentIndex);
+        oldActiveIndex = mCurrentIndex;
+    }
 
     mTracks = tracks;
 
     mCurrentIndex = 0;
 
     rebuildShuffle();
+
+    // B9-setTracks-keep: trek lama masih ada di antrean baru → pertahankan.
+    if (playingTrack) {
+        const auto it = std::find(
+            mTracks.begin(),
+            mTracks.end(),
+            *playingTrack
+        );
+        if (it != mTracks.end()) {
+            const size_t trackIdx = static_cast<size_t>(
+                std::distance(mTracks.begin(), it)
+            );
+            if (mShuffleMode == ShuffleMode::Off) {
+                mCurrentIndex = trackIdx;
+                return;
+            } else {
+                // Shuffle ON: tukar trackIdx ke posisi AKTIF lama, jadi
+                // current() tetap trek yang sama di posisi yang sama
+                // (pola yang sama dengan setShuffleMode() OFF→ON).
+                // Guard: posisi lama bisa di luar antrean baru yang
+                // menyusut — kalau begitu mCurrentIndex = posisi acak
+                // track itu di mShuffleOrder (tetap trek yang sama).
+                const auto sit = std::find(
+                    mShuffleOrder.begin(),
+                    mShuffleOrder.end(),
+                    trackIdx
+                );
+                if (sit != mShuffleOrder.end()) {
+                    if (oldActiveIndex < mShuffleOrder.size()) {
+                        std::iter_swap(
+                            sit,
+                            mShuffleOrder.begin() + oldActiveIndex
+                        );
+                        mCurrentIndex = oldActiveIndex;
+                    } else {
+                        mCurrentIndex = static_cast<size_t>(
+                            std::distance(mShuffleOrder.begin(), sit)
+                        );
+                    }
+                    return;
+                }
+                // State tak valid (trackIdx tidak ada di mShuffleOrder —
+                // seharusnya mustahil karena rebuildShuffle() mengisinya
+                // dari mTracks): JANGAN return — jatuh ke perilaku lama
+                // di bawah (mCurrentIndex=0 + tukar index 0 ke depan).
+                mCurrentIndex = 0;
+            }
+        }
+        // Tidak ketemu di antrean baru → jatuh ke perilaku lama di bawah.
+    }
 
     // 🔥 FIX (2026-10-06): saat shuffle ON, trek pertama queue baru HARUS
     // trek index 0 (yang user tap / sedang diputar), bukan trek acak.

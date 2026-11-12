@@ -33,8 +33,26 @@ public:
     // cpp/ (hanya setTracks yang hidup). Menghapus removeTrack juga
     // menghapus p-m1/p-m2 laten audit (remove di tengah playback tidak
     // menyesuaikan mCurrentIndex / mShuffleOrder dengan benar).
+    //
+    // B9-setTracks-keep (2026-11-12): keepCurrentUri=true mempertahankan
+    // trek yang sedang diputar bila masih ada di tracks baru (cocok
+    // operator==: uri+durationMs+sampleRate, lihat PlaybackTypes.h).
+    // Shuffle OFF: mCurrentIndex = indeksnya di tracks baru. Shuffle ON:
+    // trek itu ditukar ke posisi AKTIF yang sama (mCurrentIndex lama),
+    // jadi current() tetap trek yang sama — pola yang sama dengan
+    // setShuffleMode() OFF→ON di bawah. Tidak ketemu → fallback 0
+    // (perilaku lama). Default false = perilaku lama, IDENTIK:
+    // mCurrentIndex=0 dan (shuffle ON) trek index 0 di posisi aktif 0.
+    //
+    // ⚠️ JANGAN kirim keep=true dari playSong/resume JS: keduanya
+    // mengirim antrean yang SUDAH di-rotate supaya lagu yang di-tap /
+    // di-resume ada di indeks 0 dan justru MENGANDALKAN reset ke 0.
+    // keep=true hanya untuk pengirim-ulang playlist yang TIDAK
+    // me-rotate (mis. refresh library saat memutar) — belum ada
+    // pemanggilnya; API ini disediakan untuk itu.
     void setTracks(
-        const std::vector<TrackInfo>& tracks
+        const std::vector<TrackInfo>& tracks,
+        bool keepCurrentUri = false
     );
 
     // =====================================
