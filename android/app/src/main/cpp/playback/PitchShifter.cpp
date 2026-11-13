@@ -164,9 +164,10 @@ bool PitchShifter::processStretchHop() noexcept {
         const float magL = std::abs(specL_[k]);
         const float magR = std::abs(specR_[k]);
         if (k == 0 || k == kHalfBins) {
-            // Bin DC + Nyquist: real — magnitudo saja, tanpa fase.
-            synL_[k] = Complex(magL, 0.0f);
-            synR_[k] = Complex(magR, 0.0f);
+            // Bin DC + Nyquist: real — jaga tanda (DC negatif tidak lagi
+            // jadi positif di setiap hop); magnitudo saja buang tanda.
+            synL_[k] = Complex(specL_[k].real(), 0.0f);
+            synR_[k] = Complex(specR_[k].real(), 0.0f);
             prevPhase_[k] = 0.0f;
             continue;
         }
