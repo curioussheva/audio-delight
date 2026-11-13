@@ -50,6 +50,10 @@ public:
 
     // Baca ulang daftar device dari Android. Aman dari thread mana pun.
     // Mengembalikan jumlah device yang terdeteksi (0 = gagal/tidak diketahui).
+    // (B13-W1, 2026-11-14): refresh berjalan BERURUTAN — dua refreshDevices()
+    // yang dipanggil bersamaan tidak boleh saling menimpa; snapshot lama
+    // tidak boleh menang sesudah snapshot baru (staleness). Seluruh fungsi
+    // dipegang mRefreshMutex, bukan hanya swap daftar di bawah mMutex.
     int refreshDevices();
 
     // Salinan daftar device terakhir yang berhasil dibaca.
@@ -105,6 +109,14 @@ private:
     AudioDeviceManager() = default;
 
     mutable std::mutex mMutex;
+    // (B13-W1, 2026-11-14): serialisasi refreshDevices() — dipegang
+    // SEPANJANG fungsi, mMutex hanya sebentar untuk swap daftar (seperti
+    // sekarang). Urutan lock SELALU mRefreshMutex -> mMutex, tidak pernah
+    // sebaliknya: refreshDevices() tidak pernah dipanggil sambil memegang
+    // mMutex (notifyDeviceAdded/Removed melepasnya dulu; pemanggil luar
+    // tidak bisa memegangnya — private), dan AudioDeviceManager tidak
+    // pernah memanggil balik ke pemegang lock lain, jadi tidak ada siklus.
+    std::mutex mRefreshMutex;
     std::vector<AudioDeviceDescriptor> mDevices;
     std::string mActiveId;
     int32_t mActiveNumericId = 0;

@@ -146,6 +146,15 @@ AudioDeviceManager& AudioDeviceManager::get() {
 // =====================================================
 
 int AudioDeviceManager::refreshDevices() {
+    // (B13-W1, 2026-11-14): serialisasi SELURUH refresh. Swap di bawah
+    // mMutex saja mencegah data race, tapi bukan staleness: dua refresh
+    // bersamaan bisa selesai terbalik dan snapshot lama menimpa yang baru.
+    // Lock ini dipegang sepanjang fungsi — semua early return di bawah
+    // melepasnya lewat RAII; mMutex tetap hanya sebentar untuk swap
+    // daftar. Urutan lock: mRefreshMutex -> mMutex, tidak pernah sebaliknya
+    // (lihat header), dan refresh tidak pernah mengambil lock pemanggil,
+    // jadi tidak ada siklus deadlock.
+    std::lock_guard<std::mutex> refreshLock(mRefreshMutex);
 
     if (!jni::javaVm()) {
         LOGW("refreshDevices: JavaVM belum di-set");
@@ -204,7 +213,18 @@ int AudioDeviceManager::refreshDevices() {
         return 0;
     }
 
-    jobject audioManager = env->CallObjectMethod(app, getSystemService, env->NewStringUTF("audio"));
+    // (B13-W1, 2026-11-14): NewStringUTF inline di dalam CallObjectMethod
+    // tidak dicek null — kalau OOM, argumennya null dan exception tertinggal
+    // sampai cek sesudahnya. Buat dulu, cek null + exception, baru panggil.
+    // (String ini local ref di dalam PushLocalFrame(64) di atas, jadi
+    // PopLocalFrame di bawah yang membebaskannya.)
+    jstring audioServiceName = env->NewStringUTF("audio");
+    if (!audioServiceName || !describeAndClear(env).empty()) {
+        LOGE("refreshDevices: NewStringUTF(\"audio\") gagal (OOM)");
+        env->PopLocalFrame(nullptr);
+        return 0;
+    }
+    jobject audioManager = env->CallObjectMethod(app, getSystemService, audioServiceName);
     if (!describeAndClear(env).empty() || !audioManager) {
         LOGE("refreshDevices: AudioManager tidak tersedia");
         env->PopLocalFrame(nullptr);
@@ -335,6 +355,10 @@ int AudioDeviceManager::refreshDevices() {
     // thread AudioDeviceCallback via notifyDeviceAdded/Removed) berarti
     // satu thread move-assign mDevices sementara yang lain membacanya
     // (data race, UB).
+    // (B13-W1, 2026-11-14): swap tetap di bawah mMutex saja; staleness
+    // (snapshot lama menang sesudah yang baru) kini dicegah mRefreshMutex
+    // yang memegang SELURUH refreshDevices() — dua refresh tidak pernah
+    // berjalan bersamaan, jadi urutan swap = urutan selesai.
     std::vector<AudioDeviceDescriptor> snapshot;
     {
         std::lock_guard<std::mutex> lock(mMutex);
