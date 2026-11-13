@@ -244,8 +244,7 @@ ParseResult parseParametricPreset(
 
             // Kunci yang dikenal butuh satu nilai setelahnya.
             if (key == "FC" || key == "FREQ" || key == "FREQUENCY" ||
-                key == "GAIN" || key == "Q" || key == "BW" ||
-                key == "S" || key == "SLOPE") {
+                key == "GAIN" || key == "Q") {
 
                 if (i + 1 >= tok.size()) {
                     result.warnings.push_back(
@@ -291,9 +290,12 @@ ParseResult parseParametricPreset(
                 } else if (key == "GAIN") {
                     f.gainDb = v;
                 } else {
-                    // Q, BW, S, SLOPE semuanya diperlakukan sebagai faktor
-                    // bentuk filter. AutoEQ memakai Q; beberapa preset memakai
-                    // S (slope) untuk shelf.
+                    // Hanya Q yang sampai ke sini (FC/GAIN ditangani di
+                    // atas). BW/S/SLOPE SENGAJA tidak diterima (B13-W9):
+                    // BW itu bandwidth dalam oktaf, S/SLOPE itu slope
+                    // dB/oct — BUKAN Q. Menerimanya diam-diam sebagai Q
+                    // akan salah arti; baris yang memakainya jatuh ke
+                    // penolakan "token tidak dikenal" di bawah.
                     f.q = v;
                     haveQ = true;
                 }
