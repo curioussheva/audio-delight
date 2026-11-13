@@ -128,13 +128,8 @@ if(ENABLE_FFMPEG)
 
         set(FFMPEG_LIBRARIES avcodec avformat avutil swresample)
     else()
-        message(WARNING "FFmpeg not found at ${FFMPEG_ROOT}")
+        message(FATAL_ERROR "FFmpeg not found at ${FFMPEG_ROOT}")
     endif()
-endif()
-
-if(NOT PRISTINE_FFMPEG_AVAILABLE)
-    message(WARNING "FFmpeg not found — excluding decoder/FFmpegDecoder.cpp")
-    list(APPEND EXCLUDED_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/decoder/FFmpegDecoder.cpp")
 endif()
 
 if(EXCLUDED_SRCS)
