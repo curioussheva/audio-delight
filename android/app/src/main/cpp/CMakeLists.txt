@@ -270,8 +270,10 @@ elseif(ANDROID_ABI STREQUAL "armeabi-v7a")
   target_compile_options(pristine-audio PRIVATE -mfloat-abi=softfp -mfpu=neon-vfpv4 -marm)
   target_compile_definitions(pristine-audio PRIVATE ARM_NEON=1 __ARM_NEON=1)
 elseif(ANDROID_ABI STREQUAL "x86_64")
-  target_compile_options(pristine-audio PRIVATE -msse4.2 -mavx2)
-  target_compile_definitions(pristine-audio PRIVATE X86_SSE=1 X86_AVX2=1)
+  # B12-C7: x86_64 turun ke -msse4.2 saja; -mavx2 dihapus (tidak ada kode
+  # yang memakai jalur AVX2, dan X86_AVX2 ikut dihapus agar konsisten).
+  target_compile_options(pristine-audio PRIVATE -msse4.2)
+  target_compile_definitions(pristine-audio PRIVATE X86_SSE=1)
 elseif(ANDROID_ABI STREQUAL "x86")
   target_compile_options(pristine-audio PRIVATE -msse4.2)
   target_compile_definitions(pristine-audio PRIVATE X86_SSE=1)
