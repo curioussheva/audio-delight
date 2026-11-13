@@ -61,6 +61,17 @@ android {
         ndk {
             debugSymbolLevel 'SYMBOL_TABLE'
         }
+
+        // B12-C5: teruskan properti Gradle -PstrictWarnings (CI input
+        // strict_warnings di build-dev.yml) sebagai opsi CMake
+        // PRISTINE_STRICT_WARNINGS. Default OFF — build normal tidak berubah.
+        // arguments adalah opsi PER-VARIANT, jadi harus di defaultConfig,
+        // bukan di blok cmake tingkat atas (di sana hanya path + version).
+        externalNativeBuild {
+            cmake {
+                arguments.add("-DPRISTINE_STRICT_WARNINGS=${(project.findProperty('strictWarnings')?.toString() == 'true') ? 'ON' : 'OFF'}")
+            }
+        }
     }
 
     buildFeatures {
@@ -71,10 +82,6 @@ android {
         cmake {
             path "src/main/cpp/CMakeLists.txt"
             version "3.22.1"
-            // B12-C5: teruskan properti Gradle -PstrictWarnings (CI input
-            // strict_warnings di build-dev.yml) sebagai opsi CMake
-            // PRISTINE_STRICT_WARNINGS. Default OFF — build normal tidak berubah.
-            arguments.add("-DPRISTINE_STRICT_WARNINGS=${(project.findProperty('strictWarnings')?.toString() == 'true') ? 'ON' : 'OFF'}")
         }
     }
 
