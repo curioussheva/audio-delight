@@ -207,9 +207,6 @@ target_include_directories(pristine-audio PRIVATE
   dsp dsp/graph dsp/tone dsp/spatial dsp/dynamics
   dsp/filters dsp/convolution dsp/immersive dsp/headphone
   fft devices visualizer utils jni resampler
-  ${_RN_INCLUDES}
-  ${_JSI_INCLUDES}
-  ${_FBJNI_INCLUDES}
   ${AUTOLINKING_JNI_DIR}
 )
 
@@ -265,6 +262,7 @@ endif()
 
 target_link_options(pristine-audio PRIVATE
   -Wl,--gc-sections -Wl,--exclude-libs,ALL -Wl,-z,relro,-z,now
+  -Wl,-z,max-page-size=16384
 )
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -277,10 +275,6 @@ endif()
 
 target_compile_definitions(pristine-audio PRIVATE PRISTINE_AUDIO_ENGINE=1)
 
-if(COMMAND target_compile_reactnative_options)
-  target_compile_reactnative_options(pristine-audio PRIVATE)
-endif()
-
 target_precompile_headers(pristine-audio PRIVATE
   <cstdint> <vector> <memory> <atomic>
   core/AudioTypes.h core/AudioConstants.h utils/AudioMath.h
@@ -288,7 +282,7 @@ target_precompile_headers(pristine-audio PRIVATE
 
 target_link_libraries(pristine-audio
   PUBLIC  ${OBOE_LIB}
-  PRIVATE android log ReactAndroid::jsi ReactAndroid::reactnative fbjni::fbjni
+  PRIVATE android log
 )
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
