@@ -83,16 +83,22 @@ export function validateQueueIndex(
  *
  * ⚠️ URI native dan URI JS bisa berbeda BENTUK untuk trek yang sama:
  * - JS mengirim `content://media/external/audio/media/123` ke setQueue
- * - Kotlin (NativePlaybackService.setQueue) me-resolve MAX_PRE_RESOLVE = 5
- *   trek pertama ke path cache `/data/.../audio_<hash>.flac`, sisanya
- *   dibiarkan `content://`
- * - Decoder juga bisa me-resolve `content://` sendiri ke path cache
- *   (ContentUriResolver)
+ * - DULU (sampai opsi B 2026-11-13): Kotlin (NativePlaybackService.setQueue)
+ *   me-resolve MAX_PRE_RESOLVE = 5 trek pertama ke path cache
+ *   `/data/.../audio_<hash>.flac`, sisanya dibiarkan `content://` — dan
+ *   decoder juga bisa me-resolve `content://` sendiri ke path cache
+ *   (ContentUriResolver).
+ * - SEKARANG: Kotlin tidak lagi me-resolve; antrean native memegang URI
+ *   mentah yang sama dengan JS, jadi `a === b` cocok untuk semua trek.
+ *   Fallback nama-cache di bawah dipertahankan sebagai pertahanan murah
+ *   (C++ fallback copy masih bisa menghasilkan path cache di jalur lain),
+ *   bukan lagi jalur utama.
  *
- * Jadi perbandingan string mentah `a === b` gagal untuk trek yang sudah
+ * Jadi DULU perbandingan string mentah `a === b` gagal untuk trek yang sudah
  * di-resolve — tepatnya trek yang sedang diputar. Tanpa helper ini,
  * `findSongByUri` kembali null, `currentSong` JS tidak update, dan UI
- * menampilkan trek lama padahal audio native sudah next.
+ * menampilkan trek lama padahal audio native sudah next. (Sejak opsi B,
+ * `a === b` sudah cocok; helper ini tinggal sebagai pertahanan.)
  */
 export function uriMatches(
   jsUri: string | null | undefined,

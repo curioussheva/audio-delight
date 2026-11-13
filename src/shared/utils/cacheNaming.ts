@@ -19,6 +19,10 @@
  *   3. `resolveUri()` ada di spec TS dan di Kotlin, tapi TIDAK PERNAH dipanggil
  *      dari JS - silent wiring gap. Jadi entri deferred tidak pernah
  *      di-resolve.
+ *      (2026-11-13, opsi B: pre-resolve Kotlin DIHAPUS seluruhnya —
+ *      setQueue meneruskan URI mentah; native membuka content:// lewat
+ *      fd+AVIO dengan fallback salin di C++. `resolveUri`,
+ *      `MAX_PRE_RESOLVE`, dan `ContentCacheValidator` sudah tidak ada.)
  *
  * Perbaikannya: resolusi dilakukan di sisi native saat dekoder membuka file,
  * jadi tidak bergantung pada JS memanggil resolveUri.

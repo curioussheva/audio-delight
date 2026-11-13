@@ -3,7 +3,6 @@ package com.pristineaudio.audio
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
 import com.pristineaudio.NativeLibrary
-import com.pristineaudio.playback.ContentCacheValidator
 import com.pristineaudio.playback.PlaybackNativeBridge
 
 @ReactModule(name = NativePlaybackModule.NAME)
@@ -181,41 +180,12 @@ class NativePlaybackModule(
         nativeSetPitchRatio(ratio.toFloat())
     }
 
-    // `sampleRates` = laju file (Hz) per entry di `uris`, boleh null.
-    //
-    // 🔥 FIX (2026-10-07): laju file ikut dikirim supaya C++ bisa membuka
-    // stream di laju track (bit-perfect) alih-alih laju tertinggi perangkat.
-    // Sebelumnya array ini tidak ada dan laju file hilang sebelum sampai ke
-    // native. Elemen yang tidak diketahui dikirim 0.
-    @ReactMethod
-    fun setQueue(uris: ReadableArray, sampleRates: ReadableArray?) {
-        if (!ensureNativeReady()) return
-        val list = ArrayList<String>()
-        for (i in 0 until uris.size()) {
-            val uri = uris.getString(i)
-            if (uri != null) {
-                list.add(resolveContentUri(uri))
-            }
-        }
-        nativeSetQueue(list.toTypedArray(), buildRateArray(sampleRates, list.size))
-    }
-
-    // Ambil laju per track dari ReadableArray, samakan panjangnya dengan
-    // daftar URI. Nilai non-numerik / tidak ada menjadi 0 (= tidak diketahui),
-    // yang ditafsirkan native sebagai "deteksi sendiri".
-    private fun buildRateArray(sampleRates: ReadableArray?, expectedSize: Int): IntArray {
-        val rates = IntArray(expectedSize)
-        if (sampleRates == null) return rates
-        val count = minOf(sampleRates.size(), expectedSize)
-        for (i in 0 until count) {
-            rates[i] = try {
-                sampleRates.getInt(i)
-            } catch (e: Exception) {
-                0
-            }
-        }
-        return rates
-    }
+    // (Opsi B, 2026-11-13: @ReactMethod setQueue DIHAPUS — varian copy
+    // tanpa batas (semua URI di-copy, tanpa timeout) dan TIDAK PERNAH
+    // dipanggil JS (spec NativePlaybackModule tidak diimpor siapa pun;
+    // JS memanggil NativePlaybackService.setQueue). Yang live hanya
+    // setQueueFromService di bawah, yang meneruskan URI mentah ke JNI.
+    // buildRateArray modul ikut terhapus — hanya dipakai setQueue ini.)
 
     // Non-void return → WAJIB isBlockingSynchronousMethod = true
     @ReactMethod(isBlockingSynchronousMethod = true)
@@ -263,89 +233,11 @@ class NativePlaybackModule(
         }
     }
 
-    // ========== Helper ==========
-    // FNV-1a 64-bit atas byte UTF-8 URI (B9-cache64, 2026-11-12): pengganti
-    // String.hashCode() 32-bit. Nama cache harus IDENTIK dengan sisi native
-    // (ContentUriResolver.cpp) dan sisi TS (cacheNaming.ts) supaya satu URI
-    // menghasilkan satu file cache di semua jalur. Offset basis
-    // 14695981039346656037, prima 1099511628211; overflow Long membungkus
-    // mod 2^64 (persis aritmetika unsigned 64-bit). Hasil: 16 digit hex
-    // lowercase, zero-padded, tanpa tanda minus.
-    // PENTING: byte HARUS di-mask 0xFF — Byte Kotlin bertanda, toLong()
-    // tanpa mask akan sign-extend byte >= 0x80 dan merusak hash.
-    private fun fnv1a64Hex(s: String): String {
-        var h = -3750763034362895579L // 14695981039346656037 sebagai Long
-        for (b in s.toByteArray(Charsets.UTF_8)) {
-            h = (h xor (b.toLong() and 0xFFL)) * 1099511628211L
-        }
-        return java.lang.Long.toUnsignedString(h, 16).padStart(16, '0')
-    }
-
-    private fun resolveContentUri(uriString: String): String {
-        if (!uriString.startsWith("content://")) {
-            return uriString
-        }
-
-        return try {
-            val uri = android.net.Uri.parse(uriString)
-            val resolver = reactApplicationContext.contentResolver
-
-            // 🔥 FIX: Copy ke cache dir (reliable, tidak ada race condition GC)
-            // detachFd() menyebabkan fd di-close oleh GC sebelum FFmpeg buka
-            //
-            // 🔥 FIX (2026-11-11, D-M8): penamaan cache DISATUKAN dengan
-            // NativePlaybackService + ContentUriResolver native: prefix
-            // `audio_` dan ext default `cache`. Sebelumnya modul ini memakai
-            // `track_` + `tmp`, jadi satu URI yang sama menghasilkan DUA file
-            // cache (audio_<fnv1a64-hex>.mpeg dan track_<hash>.tmp) kalau pernah
-            // lewat jalur ini — dan hit check jalur lain tidak melihat file
-            // dari jalur ini.
-            val cacheDir = reactApplicationContext.cacheDir
-            val ext = resolver.getType(uri)?.substringAfterLast('/') ?: "cache"
-            val cacheFile = java.io.File(cacheDir, "audio_${fnv1a64Hex(uriString)}.$ext")
-
-            // 🔥 FIX (2026-11-11, D-M9): tulis ke temp + rename atomik —
-            // file target hanya muncul kalau isinya lengkap; kill di tengah
-            // copy meninggalkan .tmp, bukan hit palsu (lihat
-            // NativePlaybackService.resolveContentUriToPath).
-            // (B9-cacheval): hit harus lolos validasi _size/date_modified
-            // sumber (ContentCacheValidator) — kalau tidak, salin ulang.
-            if (!ContentCacheValidator.isCacheHit(resolver, uri, cacheFile)) {
-                val tmpFile = java.io.File(cacheDir, "${cacheFile.name}.${System.nanoTime()}.tmp")
-                try {
-                    resolver.openInputStream(uri)?.use { input ->
-                        tmpFile.outputStream().use { output ->
-                            input.copyTo(output)
-                        }
-                    }
-                    if (!tmpFile.renameTo(cacheFile)) {
-                        android.util.Log.e(
-                            "NativePlaybackModule",
-                            "resolveContentUri: rename ${tmpFile.name} gagal"
-                        )
-                        tmpFile.delete()
-                        return uriString
-                    }
-                } catch (e: Exception) {
-                    tmpFile.delete()
-                    throw e
-                }
-            }
-
-            android.util.Log.d(
-                "NativePlaybackModule",
-                "resolveContentUri: $uriString → ${cacheFile.absolutePath} (${cacheFile.length()} bytes)"
-            )
-
-            cacheFile.absolutePath
-        } catch (e: Exception) {
-            android.util.Log.e(
-                "NativePlaybackModule",
-                "resolveContentUri failed: $uriString", e
-            )
-            uriString
-        }
-    }
+    // (Opsi B, 2026-11-13: fnv1a64Hex + resolveContentUri DIHAPUS —
+    // copy ke cache di sisi Kotlin. Satu-satunya pemakai adalah setQueue
+    // modul yang ikut dihapus di atas. Penamaan cache `audio_<fnv1a64>`
+    // tetap hidup di C++ (ContentUriResolver, fallback copy) dan di TS
+    // (cacheNaming.ts, dipakai queueNavigation.ts).)
 
     // ========== Service-friendly methods (tanpa React) ==========
     fun playFromService(): Boolean = if (ensureNativeReady()) nativePlay() else false

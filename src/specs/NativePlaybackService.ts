@@ -53,8 +53,6 @@ export interface Spec extends TurboModule {
   updateShuffleMode(enabled: boolean): Promise<void>;
   updateRepeatMode(mode: number): Promise<void>;
 
-  // Lazy resolve
-  resolveUri(rawUri: string): Promise<string>;
   clearCache(): Promise<number>;
 }
 

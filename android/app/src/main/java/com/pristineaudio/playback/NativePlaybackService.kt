@@ -2,8 +2,6 @@ package com.pristineaudio.playback
 
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
-import java.io.File
-import java.util.concurrent.TimeUnit
 
 @ReactModule(name = NativePlaybackService.NAME)
 class NativePlaybackService(reactContext: ReactApplicationContext) :
@@ -12,13 +10,6 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
     companion object {
         const val NAME = "NativePlaybackService"
 
-        // 🔥 Max time untuk resolve URI (early-out)
-        private const val RESOLVE_TIMEOUT_MS = 3000L
-
-        // 🔥 Resolve sampai N file, sisanya deferred (raw URI)
-        private const val MAX_PRE_RESOLVE = 5
-
-        // 🔥 Kalau user tap next, resolve on-demand
         private const val LOG_TAG = "NativePlaybackService"
     }
 
@@ -186,19 +177,25 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
     }
 
     // ============================================================
-    // 🔥 SET QUEUE — LAZY RESOLVE + PROMISE
+    // 🔥 SET QUEUE — RAW URI LANGSUNG KE NATIVE (opsi B, 2026-11-13)
     // ============================================================
-
-    /**
-     * Set queue dengan lazy URI resolution.
-     *
-     * Strategi:
-     * 1. Resolve max `MAX_PRE_RESOLVE` file pertama (biasanya current + buffer).
-     * 2. Kalau waktu > `RESOLVE_TIMEOUT_MS`, sisanya simpan raw URI.
-     * 3. Resolve sisanya on-demand via `resolveQueueIndex()` nanti.
-     *
-     * Efek: 5-30x lebih cepat dari resolve 50 file sekaligus.
-     */
+    //
+    // DULU (sampai 2026-11-13): pre-resolve Kotlin — 5 file pertama di-copy
+    // ke cache (resolveContentUriToPath), sisanya deferred mentah, resolve
+    // on-demand via resolveUri(). Masalahnya: copy itu jalan DI thread
+    // native-modules (sampai 3 detik / 5 file), dan selama itu SEMUA promise
+    // lain (pause/seek/getPosition) antre di belakangnya — salah satu sumber
+    // jeda JS<->native (audit bridge 2026-11-13).
+    //
+    // SEKARANG: URI mentah diteruskan apa adanya. Sisi native yang membuka
+    // content:// lewat fd+AVIO (FFmpegDecoder::onOpen, B9) tanpa copy, dengan
+    // fallback salin-ke-cache di C++ (ContentUriResolver::resolve) kalau fd
+    // gagal. Terbukti live di logcat #18/#19. Karena itu pre-resolve Kotlin
+    // (loop + resolveContentUriToPath + resolveUri + fnv1a64Hex + batas
+    // MAX_PRE_RESOLVE/RESOLVE_TIMEOUT_MS) DIHAPUS seluruhnya — termasuk
+    // varian tanpa batas di NativePlaybackModule.setQueue dan
+    // ContentCacheValidator (tidak ada lagi pemakai).
+    //
     // `sampleRates` = laju file (Hz) per entry uris, boleh null.
     //
     // 🔥 FIX (2026-10-07): laju file diteruskan ke native supaya stream bisa
@@ -212,37 +209,17 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
             // asli, bukan urutan push.
             val rateIndexes = ArrayList<Int>(uris.size())
             val startTime = System.currentTimeMillis()
-            var resolved = 0
-            var deferred = 0
 
             for (i in 0 until uris.size()) {
                 val raw = uris.getString(i) ?: continue
-
-                // Cek dua kondisi early-out:
-                // 1. Sudah resolve max N file
-                // 2. Sudah lewat timeout
-                val timedOut = (System.currentTimeMillis() - startTime) > RESOLVE_TIMEOUT_MS
-                val maxReached = resolved >= MAX_PRE_RESOLVE
-
                 rateIndexes.add(i)
-
-                if (timedOut || maxReached) {
-                    // Simpan raw URI — resolve nanti saat benar-benar diperlukan
-                    list.add(raw)
-                    deferred++
-                } else {
-                    // Resolve sekarang (copy ke cache)
-                    val path = resolveContentUriToPath(raw)
-                    list.add(path)
-                    resolved++
-                }
+                list.add(raw)
             }
 
             val elapsed = System.currentTimeMillis() - startTime
             android.util.Log.i(
                 LOG_TAG,
-                "setQueue: total=${uris.size()}, resolved=$resolved, deferred=$deferred, " +
-                    "elapsed=${elapsed}ms"
+                "setQueue: total=${uris.size()}, elapsed=${elapsed}ms"
             )
 
             PlaybackNativeBridge.setQueue(
@@ -278,29 +255,11 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
         return rates
     }
 
-    // ============================================================
-    // 🔥 RESOLVE ON-DEMAND
-    // ============================================================
-
-    /**
-     * Resolve single URI on-demand.
-     * Call ini dari JS saat user skip ke track yang belum di-resolve.
-     *
-     * @param rawUri content:// atau path
-     * @return resolved path (atau raw URI kalau gagal)
-     */
-    @ReactMethod
-    fun resolveUri(rawUri: String, promise: Promise) {
-        try {
-            val path = resolveContentUriToPath(rawUri)
-            promise.resolve(path)
-        } catch (e: Exception) {
-            promise.reject("RESOLVE_FAILED", e)
-        }
-    }
-
     /**
      * Cleanup cache — hapus semua `audio_*` file yang menumpuk.
+     * (Masih dipakai: C++ fallback copy (ContentUriResolver::resolve) tetap
+     * menulis cache `audio_*` kalau fd+AVIO gagal — file itu dibersihkan di
+     * sini. Yang dihapus opsi B hanyalah copy di sisi KOTLIN.)
      */
     @ReactMethod
     fun clearCache(promise: Promise) {
@@ -426,105 +385,7 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun removeListeners(count: Int) {}
 
-    // ============================================================
-    // URI RESOLVER
-    // ============================================================
-
-    // FNV-1a 64-bit atas byte UTF-8 URI (B9-cache64, 2026-11-12): pengganti
-    // String.hashCode() 32-bit. Nama cache harus IDENTIK dengan sisi native
-    // (ContentUriResolver.cpp) dan sisi TS (cacheNaming.ts) supaya satu URI
-    // menghasilkan satu file cache di semua jalur. Offset basis
-    // 14695981039346656037, prima 1099511628211; overflow Long membungkus
-    // mod 2^64 (persis aritmetika unsigned 64-bit). Hasil: 16 digit hex
-    // lowercase, zero-padded, tanpa tanda minus.
-    // PENTING: byte HARUS di-mask 0xFF — Byte Kotlin bertanda, toLong()
-    // tanpa mask akan sign-extend byte >= 0x80 dan merusak hash.
-    private fun fnv1a64Hex(s: String): String {
-        var h = -3750763034362895579L // 14695981039346656037 sebagai Long
-        for (b in s.toByteArray(Charsets.UTF_8)) {
-            h = (h xor (b.toLong() and 0xFFL)) * 1099511628211L
-        }
-        return java.lang.Long.toUnsignedString(h, 16).padStart(16, '0')
-    }
-
-    /**
-     * Resolve `content://` URI ke path file (copy ke cache).
-     *
-     * - Kalau uri sudah path (/storage/...) → return as-is.
-     * - Kalau uri content:// → copy ke cache dir, return path.
-     * - Kalau gagal → return uri asli (bukan ideal, tapi tidak crash).
-     */
-    private fun resolveContentUriToPath(uriString: String): String {
-        // Sudah path biasa
-        if (!uriString.startsWith("content://")) {
-            return uriString
-        }
-
-        return try {
-            val resolver = reactApplicationContext.contentResolver
-            val uri = android.net.Uri.parse(uriString)
-
-            // Extension detection
-            val ext = resolver.getType(uri)?.substringAfterLast('/') ?: "cache"
-            val file = File(
-                reactApplicationContext.cacheDir,
-                "audio_${fnv1a64Hex(uriString)}.$ext"
-            )
-
-            // Kalau sudah ada dan valid, pakai yang ada.
-            // (B9-cacheval): hit harus lolos validasi _size/date_modified
-            // sumber — file yang diganti/di-retag dengan URI sama tidak
-            // lagi dianggap hit basi. Metadata tak tersedia -> hit cara
-            // lama (lihat ContentCacheValidator).
-            if (ContentCacheValidator.isCacheHit(resolver, uri, file)) {
-                android.util.Log.d(
-                    LOG_TAG,
-                    "resolveContentUriToPath: cache hit ${file.name} (${file.length()} bytes)"
-                )
-                return file.absolutePath
-            }
-
-            // Copy dari content resolver — tulis ke temp + rename atomik
-            // (D-M9, 2026-11-11): file target hanya muncul kalau isinya
-            // lengkap; kill/exception di tengah copy meninggalkan .tmp,
-            // bukan hit palsu. Nama temp unik per panggilan (nanoTime)
-            // supaya dua resolve bersamaan untuk URI yang sama tidak
-            // menulis ke file temp yang sama.
-            val inputStream = resolver.openInputStream(uri)
-                ?: run {
-                    android.util.Log.e(LOG_TAG, "openInputStream null for $uriString")
-                    return uriString
-                }
-
-            val tmpFile = File(
-                reactApplicationContext.cacheDir,
-                "${file.name}.${System.nanoTime()}.tmp"
-            )
-            try {
-                inputStream.use { input ->
-                    tmpFile.outputStream().use { output ->
-                        input.copyTo(output)
-                    }
-                }
-                if (!tmpFile.renameTo(file)) {
-                    android.util.Log.e(LOG_TAG, "rename ${tmpFile.name} -> ${file.name} gagal")
-                    tmpFile.delete()
-                    return uriString
-                }
-            } catch (e: Exception) {
-                tmpFile.delete()
-                throw e
-            }
-
-            android.util.Log.d(
-                LOG_TAG,
-                "resolveContentUriToPath: cached ${file.name} (${file.length()} bytes)"
-            )
-
-            file.absolutePath
-        } catch (e: Exception) {
-            android.util.Log.e(LOG_TAG, "resolveContentUriToPath failed: $uriString", e)
-            uriString
-        }
-    }
+    // (Opsi B, 2026-11-13: seksi URI RESOLVER dihapus seluruhnya —
+    // fnv1a64Hex + resolveContentUriToPath. Native membuka content://
+    // lewat fd+AVIO; copy fallback ada di C++ ContentUriResolver.)
 } 

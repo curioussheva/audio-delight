@@ -721,8 +721,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         //
         // Sebelumnya: play() gagal 212ms, UI reset ke isPlaying=false, user
         // harus tap dua kali. Sekarang: kalau native queue kosong tapi JS punya
-        // currentSong, lakukan re-sync seperti playSong() — setQueue (resolve
-        // content:// ke cache, bisa 2-3 detik untuk 50 trek) baru play.
+        // currentSong, lakukan re-sync seperti playSong() — setQueue (URI
+        // mentah langsung ke native; fd+AVIO, tanpa copy — opsi B
+        // 2026-11-13) baru play.
         try {
           const nativeSize = NativePlaybackService.getQueueSize();
           if (nativeSize === 0) {
