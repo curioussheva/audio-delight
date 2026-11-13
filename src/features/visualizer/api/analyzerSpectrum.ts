@@ -33,6 +33,7 @@ export function binCenterFreq(bin: number, bins: number = ANALYZER_BIN_COUNT): n
 
 /** Posisi fraksional (0..1) sebuah frekuensi pada sumbu log 20 Hz–20 kHz. */
 export function freqToFraction(freqHz: number): number {
+  "worklet"; // dipanggil dari gridPath (useDerivedValue, UI thread)
   const t =
     Math.log(freqHz / ANALYZER_FREQ_MIN) /
     Math.log(ANALYZER_FREQ_MAX / ANALYZER_FREQ_MIN);
@@ -47,6 +48,7 @@ export function valueToDb(value: number): number {
 
 /** dB -> nilai ternormalisasi 0..1. */
 export function dbToValue(db: number): number {
+  "worklet"; // dipanggil dari gridPath (useDerivedValue, UI thread)
   const v = (db - ANALYZER_DB_FLOOR) / (ANALYZER_DB_CEIL - ANALYZER_DB_FLOOR);
   return Math.max(0, Math.min(1, v));
 }
