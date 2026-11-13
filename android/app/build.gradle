@@ -69,7 +69,7 @@ android {
         // bukan di blok cmake tingkat atas (di sana hanya path + version).
         externalNativeBuild {
             cmake {
-                arguments.add("-DPRISTINE_STRICT_WARNINGS=${(project.findProperty('strictWarnings')?.toString() == 'true') ? 'ON' : 'OFF'}")
+                arguments.add("-DPRISTINE_STRICT_WARNINGS=" + ((project.findProperty('strictWarnings')?.toString() == 'true') ? 'ON' : 'OFF'))
             }
         }
     }
