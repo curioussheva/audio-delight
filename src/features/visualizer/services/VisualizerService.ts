@@ -25,7 +25,7 @@ interface VisualizerConfig {
   smoothingFactor?: number; // 0-1, default 0.3
   minDecibels?: number;     // informational, tidak dipakai native saat ini
   maxDecibels?: number;     // informational
-  pollingIntervalMs?: number; // default 50
+  pollingIntervalMs?: number; // default 100 (eksperimen B 2026-11-13: 50 -> 100, kurangi beban bridge JS)
 }
 
 // ============================================================================
@@ -74,7 +74,7 @@ class VisualizerService {
    * Dipakai untuk memisahkan "gagal sekali" dari "gagal terus". Kegagalan
    * sekali wajar (sesi audio baru dibuat, buffer belum terisi); kegagalan
    * terus berarti ada yang salah dan perlu dilaporkan - tapi hanya sekali,
-   * karena polling berjalan 20x per detik.
+   * karena polling berjalan 10x per detik.
    */
   private consecutiveFailures: number = 0;
 
@@ -109,7 +109,7 @@ class VisualizerService {
     smoothingFactor: 0.3,
     minDecibels: -100,
     maxDecibels: -30,
-    pollingIntervalMs: 50,
+    pollingIntervalMs: 100,
   };
 
   // Data smoothing
@@ -412,7 +412,7 @@ class VisualizerService {
   private startPolling(): void {
     if (this.pollingTimer) return;
 
-    const intervalMs = this.config.pollingIntervalMs ?? 50;
+    const intervalMs = this.config.pollingIntervalMs ?? 100;
     this.pollingTimer = setInterval(async () => {
       if (!this.isStarted) return;
 
@@ -426,7 +426,7 @@ class VisualizerService {
         // Native sekarang menolak (reject) saat terjadi kegagalan nyata -
         // sebelumnya ia mengembalikan array kosong sehingga masalahnya tidak
         // terlihat. Log pertama saja, lalu naikkan hitungan supaya kesalahan
-        // yang berulang tidak membanjiri log 20x per detik.
+        // yang berulang tidak membanjiri log 10x per detik.
         this.consecutiveFailures++;
         if (this.consecutiveFailures === 1) {
           console.warn(
