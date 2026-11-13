@@ -68,26 +68,37 @@ bool BiquadCascade::setFilter(
     BiquadFilter* fl = &mLeft[index];
     BiquadFilter* fr = &mRight[index];
 
+    // B13-K2: desain yang ditolak (parameter tak hingga / sample rate tak
+    // valid) diteruskan sebagai false — koefisien lama dipertahankan dan
+    // filter TIDAK diaktifkan (mActive tidak naik). Kedua kanal dipanggil
+    // walau yang pertama gagal supaya L/R tetap simetris.
+    bool okLeft = false;
+    bool okRight = false;
+
     switch (type) {
 
         case FilterType::LowShelf:
 
-            fl->setLowShelf(freqHz, q, gainDb, mSampleRate);
-            fr->setLowShelf(freqHz, q, gainDb, mSampleRate);
+            okLeft = fl->setLowShelf(freqHz, q, gainDb, mSampleRate);
+            okRight = fr->setLowShelf(freqHz, q, gainDb, mSampleRate);
             break;
 
         case FilterType::HighShelf:
 
-            fl->setHighShelf(freqHz, q, gainDb, mSampleRate);
-            fr->setHighShelf(freqHz, q, gainDb, mSampleRate);
+            okLeft = fl->setHighShelf(freqHz, q, gainDb, mSampleRate);
+            okRight = fr->setHighShelf(freqHz, q, gainDb, mSampleRate);
             break;
 
         case FilterType::Peaking:
         default:
 
-            fl->setPeakingEQ(freqHz, q, gainDb, mSampleRate);
-            fr->setPeakingEQ(freqHz, q, gainDb, mSampleRate);
+            okLeft = fl->setPeakingEQ(freqHz, q, gainDb, mSampleRate);
+            okRight = fr->setPeakingEQ(freqHz, q, gainDb, mSampleRate);
             break;
+    }
+
+    if (!okLeft || !okRight) {
+        return false;
     }
 
     // Menambah filter otomatis menaikkan jumlah aktif, selama belum ada

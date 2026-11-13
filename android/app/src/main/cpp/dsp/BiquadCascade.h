@@ -57,7 +57,10 @@ public:
     // Kosongkan rantai: nol filter, preamp 0 dB, semua state direset.
     void clear() noexcept;
 
-    // Set filter ke-`index`. Mengembalikan false kalau index di luar rentang.
+    // Set filter ke-`index`. Mengembalikan false kalau index di luar rentang
+    // atau desain filter ditolak (parameter tak hingga / sample rate tak
+    // valid, lihat `BiquadFilter`); dalam hal itu koefisien lama
+    // dipertahankan dan filter tidak diaktifkan.
     bool setFilter(
         int index,
         FilterType type,

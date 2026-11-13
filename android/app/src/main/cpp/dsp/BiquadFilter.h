@@ -39,14 +39,18 @@ public:
     // FILTER DESIGN
     // =============================================
 
-    void setPeakingEQ(
+    // B13-K2: mengembalikan false bila parameter ditolak (sample rate
+    // tak valid atau freq/Q/gainDb tak hingga) — koefisien lama
+    // dipertahankan. Bila lolos, parameter di-clamp (freq [1, 0.49*sr],
+    // Q [0.1, 20], gain [-40, +40] dB) lalu koefisien dihitung.
+    bool setPeakingEQ(
         float freq,
         float Q,
         float gainDb,
         float sampleRate
     );
 
-    void setLowShelf(
+    bool setLowShelf(
         float freq,
         float Q,
         float gainDb,
@@ -62,7 +66,12 @@ public:
     //
     // Dibutuhkan preset AutoEQ/Squiglink: tipe `HSC` (high shelf) hampir selalu
     // ada. Lihat docs/HEADPHONE_CORRECTION.md §8.1.
-    void setHighShelf(
+    //
+    // B13-K2: `Q` di sini adalah Q (bentuk alpha = sin(w0)/(2*Q), sama
+    // seperti peaking/low shelf dan seperti yang dipakai AutoEQ) — BUKAN
+    // slope S RBJ. Bentuk S lama dihapus karena sqrt-nya bisa negatif
+    // → NaN (mis. Q=2/+30 dB, Q=4/+15 dB).
+    bool setHighShelf(
         float freq,
         float Q,
         float gainDb,

@@ -5,9 +5,39 @@
 
 #include "BiquadFilter.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace pristine {
+
+namespace {
+
+// =====================================================
+// DESIGN OK (B13-K2)
+// =====================================================
+//
+// Validasi + clamp parameter desain, dipakai di awal ketiga setter.
+// Return false -> pemanggil TIDAK BOLEH menyentuh koefisien lama
+// (filter tetap pakai koefisien sebelumnya, atau identitas bila belum
+// pernah didesain). Return true -> parameter sudah di-clamp in-place:
+//   freq   -> [1, 0.49 * sampleRate]  (di bawah Nyquist, stabil)
+//   Q      -> [0.1, 20]
+//   gainDb -> [-40, +40]
+bool designOk(float& freq, float& q, float& gainDb, float sampleRate) {
+    if (!(sampleRate > 0.0f) ||
+        !std::isfinite(freq) ||
+        !std::isfinite(q) ||
+        !std::isfinite(gainDb)) {
+        return false;
+    }
+
+    freq = std::clamp(freq, 1.0f, 0.49f * sampleRate);
+    q = std::clamp(q, 0.1f, 20.0f);
+    gainDb = std::clamp(gainDb, -40.0f, 40.0f);
+    return true;
+}
+
+} // namespace
 
 // =====================================================
 // SET COEFFICIENTS
@@ -34,23 +64,15 @@ BiquadFilter::getCoefficients() const {
 // PEAKING EQ
 // =====================================================
 
-void BiquadFilter::setPeakingEQ(
+bool BiquadFilter::setPeakingEQ(
     float freq,
     float Q,
     float gainDb,
     float sampleRate
 ) {
 
-    // =============================================
-    // SAFETY
-    // =============================================
-
-    if (
-        freq <= 0.0f ||
-        sampleRate <= 0.0f ||
-        Q <= 0.0f
-    ) {
-        return;
+    if (!designOk(freq, Q, gainDb, sampleRate)) {
+        return false;
     }
 
     // =============================================
@@ -102,29 +124,23 @@ void BiquadFilter::setPeakingEQ(
     coeffs.a2 =
         (1.0f - alpha / A) /
         a0;
+
+    return true;
 }
 
 // =====================================================
 // LOW SHELF
 // =====================================================
 
-void BiquadFilter::setLowShelf(
+bool BiquadFilter::setLowShelf(
     float freq,
     float Q,
     float gainDb,
     float sampleRate
 ) {
 
-    // =============================================
-    // SAFETY
-    // =============================================
-
-    if (
-        freq <= 0.0f ||
-        sampleRate <= 0.0f ||
-        Q <= 0.0f
-    ) {
-        return;
+    if (!designOk(freq, Q, gainDb, sampleRate)) {
+        return false;
     }
 
     // =============================================
@@ -200,38 +216,33 @@ void BiquadFilter::setLowShelf(
             ((A - 1.0f) * cosW0) -
             beta
         ) / a0;
+
+    return true;
 }
 
 // =====================================================
 // HIGH SHELF
 // =====================================================
 
-void BiquadFilter::setHighShelf(
+bool BiquadFilter::setHighShelf(
     float freq,
     float Q,
     float gainDb,
     float sampleRate
 ) {
 
-    // =============================================
-    // SAFETY
-    // =============================================
-
-    if (
-        freq <= 0.0f ||
-        sampleRate <= 0.0f ||
-        Q <= 0.0f
-    ) {
-        return;
+    if (!designOk(freq, Q, gainDb, sampleRate)) {
+        return false;
     }
 
     // =============================================
     // RBJ COOKBOOK
     // =============================================
     //
-    // Cerminan low shelf: semua tanda `cosW0` dibalik. Sama seperti low shelf,
-    // di sini `Q` adalah slope S (RBJ memakai S untuk shelf, bukan Q), jadi
-    // alpha = sin(w0)/2 * sqrt((A + 1/A)*(1/S - 1) + 2).
+    // Cerminan low shelf: semua tanda `cosW0` dibalik. `Q` di sini adalah
+    // Q (bentuk alpha = sin(w0)/(2*Q), seperti low shelf dan seperti yang
+    // dipakai AutoEQ) — BUKAN slope S RBJ. Bentuk S lama dihapus B13-K2
+    // karena sqrt-nya bisa negatif -> NaN (mis. Q=2/+30 dB, Q=4/+15 dB).
 
     const float A =
         powf(
@@ -252,10 +263,8 @@ void BiquadFilter::setHighShelf(
         sinf(w0);
 
     const float alpha =
-        (sinW0 / 2.0f) *
-        sqrtf(
-            ((A + (1.0f / A)) * ((1.0f / Q) - 1.0f)) + 2.0f
-        );
+        sinW0 /
+        (2.0f * Q);
 
     const float beta =
         2.0f *
@@ -304,6 +313,8 @@ void BiquadFilter::setHighShelf(
             ((A - 1.0f) * cosW0) -
             beta
         ) / a0;
+
+    return true;
 }
 
 } // namespace pristine
