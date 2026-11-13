@@ -84,15 +84,6 @@ export default function TabsLayout() {
             ),
           }}
         />
-        <Tabs.Screen
-          name="visualizer"
-          options={{
-            title: "Visualizer",
-            tabBarIcon: ({ color, size }) => (
-              <MaterialIcons name="waves" size={size} color={color} />
-            ),
-          }}
-        />
       </Tabs>
 
       {/* 🔥 Floating Player — posisi absolute di atas tab bar.
