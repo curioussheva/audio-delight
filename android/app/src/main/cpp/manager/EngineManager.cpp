@@ -1055,14 +1055,17 @@ void EngineManager::onTrackLoaded() {
 
 void EngineManager::onDeviceRemoved(int32_t deviceId) {
 
-    // unique_lock (bukan lock_guard): lock HARUS dilepas sebelum
-    // reopenStreamPreservingPlayback() di bawah — fungsi itu mengambil mMutex
-    // sendiri, dan memanggilnya saat lock dipegang = deadlock (B1, 2026-11-10).
-    // Method ini jalan di main thread (AudioDeviceCallback) — deadlock di sini
-    // = ANR.
-    std::unique_lock<std::mutex>
-        lock(mMutex);
-
+    // (B13-K1, 2026-11-14): JANGAN ambil mMutex di sini. Method ini jalan
+    // di thread callback AudioDeviceCallback (HandlerThread
+    // "pristine-device", dulu main thread) — mMutex bisa dipegang reopen
+    // selama detik (FFmpeg open + salin content://), jadi lock di sini =
+    // ANR / callback macet. Semua yang dibaca di bawah ini lock-free:
+    // isRunning() dan actualDeviceId() hanya atomic load (actualDeviceId
+    // menyalin shared_ptr di bawah mStreamMutex, yang tidak pernah
+    // dipegang melewati panggilan Oboe), mRequestedDeviceId atomic,
+    // requestStreamRecovery() hanya atomic exchange + spawn worker.
+    // Reopen dikerjakan worker recovery, bukan callback — pemanggil (JNI
+    // nativeOnDeviceRemoved) tidak menunggu reopen selesai.
     if (!mEngine.isRunning()) {
         return;
     }
@@ -1087,24 +1090,22 @@ void EngineManager::onDeviceRemoved(int32_t deviceId) {
 
     __android_log_print(ANDROID_LOG_WARN, "EngineManager",
         "onDeviceRemoved: device %d hilang saat stream berjalan "
-        "(diminta=%d, dipakai=%d) - memindahkan stream",
+        "(diminta=%d, dipakai=%d) - meminta recovery stream",
         deviceId, requested, actual);
 
     // Permintaan eksplisit untuk device yang sudah tidak ada harus dilepas;
     // kalau tidak, setiap start berikutnya mencoba membuka device hantu.
-    if (requested == deviceId && deviceId > 0) {
-        mRequestedDeviceId.store(0, std::memory_order_release);
-    }
+    // CAS supaya tidak menghapus permintaan BARU yang masuk di antara load
+    // dan store di atas.
+    int32_t expected = deviceId;
+    mRequestedDeviceId.compare_exchange_strong(
+        expected, 0, std::memory_order_acq_rel);
 
-    // Perpindahan device = stream baru. Memakai reopenStreamPreservingPlayback
-    // (bukan mEngine.stop()+start() mentah) karena stream baru butuh decoder
-    // yang benar-benar mengisi queue-nya - kalau tidak, audio jadi senyap
-    // tanpa error. Lihat catatan di EngineManager.h.
-    //
-    // LEPAS lock dulu: reopenStreamPreservingPlayback() mengambil mMutex
-    // sendiri (B1).
-    lock.unlock();
-    reopenStreamPreservingPlayback();
+    // Perpindahan device = stream baru, tapi reopen dikerjakan worker
+    // recovery (requestStreamRecovery), bukan di sini — callback langsung
+    // kembali. Dulu reopenStreamPreservingPlayback() sinkron di sini
+    // (B1, 2026-11-10): butuh mMutex + FFmpeg open, ANR di main thread.
+    requestStreamRecovery();
 }
 
 // (EngineManager::stop() dihapus 2026-11-10: 0 caller. Engine hanya

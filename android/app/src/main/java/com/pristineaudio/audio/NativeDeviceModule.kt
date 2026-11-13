@@ -6,7 +6,6 @@ import android.media.AudioDeviceInfo as AndroidAudioDeviceInfo
 import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
-import android.os.Looper
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
 import com.pristineaudio.NativeLibrary
@@ -61,6 +60,14 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
 
     private var deviceCallback: AudioDeviceCallback? = null
 
+    // (B13-K1, 2026-11-14): callback device jalan di HandlerThread sendiri,
+    // BUKAN main thread — rantai callback -> JNI -> refreshDevices (binder)
+    // + EngineManager tidak boleh memblokir main thread (ANR saat headset
+    // dicabut). Thread dibuat sekali saat module dibuat; dilepas di
+    // invalidate() lewat quitSafely().
+    private val deviceThread = android.os.HandlerThread("pristine-device").apply { start() }
+    private val deviceHandler by lazy { Handler(deviceThread.looper) }
+
     private fun registerDeviceCallback() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
         if (deviceCallback != null) return
@@ -94,7 +101,7 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
             }
         }
 
-        am.registerAudioDeviceCallback(cb, Handler(Looper.getMainLooper()))
+        am.registerAudioDeviceCallback(cb, deviceHandler)
         deviceCallback = cb
         android.util.Log.i("NativeDeviceModule", "AudioDeviceCallback terdaftar")
     }
@@ -152,6 +159,7 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
 
     override fun invalidate() {
         unregisterDeviceCallback()
+        deviceThread.quitSafely()
         super.invalidate()
     }
 

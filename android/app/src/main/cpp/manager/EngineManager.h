@@ -90,7 +90,8 @@ public:
     //
     // KENAPA INI PERLU (bug "audio mati setelah colok headset", 2026-10-08)
     //
-    // `onDeviceRemoved()` menutup stream saat headset dicabut. Stream hanya
+    // `onDeviceRemoved()` meminta recovery saat headset dicabut (worker yang
+    // menutup + membuka ulang stream, bukan callback). Stream hanya
     // dibuka oleh `start()`, dan `start()` hanya dipanggil dari `nativePlay()`.
     // Saat user menekan play lagi, `hasDecoder()` masih true (decoder tidak
     // dibuang saat stream ditutup), sehingga `loadTrack()` DILEWATI - dan
@@ -135,9 +136,13 @@ public:
     // Device dicabut saat stream berjalan (dari AudioDeviceCallback).
     //
     // Kalau stream sedang memakai device itu - atau device itu yang diminta -
-    // stream dibuka ulang di perangkat yang tersisa. Tanpa ini stream tetap
-    // menunjuk device yang sudah tidak ada: audio berhenti atau keluar di
-    // perangkat hantu, dan itu terjadi tepat saat kabel DAC tersentuh.
+    // stream dibuka ulang di perangkat yang tersisa lewat worker recovery
+    // (requestStreamRecovery). TANPA lock dan TANPA reopen sinkron di sini
+    // (B13-K1, 2026-11-14): callback jalan di HandlerThread "pristine-device"
+    // dan mMutex bisa dipegang reopen selama detik — lock di sini = callback
+    // macet / ANR. Pemanggil tidak menunggu reopen selesai. Tanpa ini stream
+    // tetap menunjuk device yang sudah tidak ada: audio berhenti atau keluar
+    // di perangkat hantu, dan itu terjadi tepat saat kabel DAC tersentuh.
     //
     // Aman dipanggil untuk device mana pun: kalau tidak relevan, tidak ada
     // yang dilakukan.
