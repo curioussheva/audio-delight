@@ -177,8 +177,12 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativeOnD
 JNIEXPORT jboolean JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativeSetActiveDevice(JNIEnv* env, jobject, jstring deviceId) {
     return pristine::jni::guarded<jboolean>(env, "nativeSetActiveDevice", JNI_FALSE, [&]() -> jboolean {
     // null = lepas preferensi (biarkan sistem memilih). String kosong juga.
+    // B12-W1: teruskan ke engine juga — tanpa ini mRequestedDeviceId tetap
+    // berisi id lama dan stream tetap di perangkat lama.
     if (!deviceId) {
-        return pristine::AudioDeviceManager::get().setActiveDevice("") ? JNI_TRUE : JNI_FALSE;
+        const bool ok = pristine::AudioDeviceManager::get().setActiveDevice("");
+        return (ok && pristine::EngineManager::get().setRequestedDeviceId(0))
+            ? JNI_TRUE : JNI_FALSE;
     }
 
     const char* id = env->GetStringUTFChars(deviceId, nullptr);
