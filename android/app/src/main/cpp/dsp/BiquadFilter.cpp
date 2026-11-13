@@ -76,53 +76,53 @@ bool BiquadFilter::setPeakingEQ(
     }
 
     // =============================================
-    // RBJ COOKBOOK
+    // RBJ COOKBOOK (B13-K2-double: hitung dalam double)
     // =============================================
 
-    const float A =
-        powf(
-            10.0f,
-            gainDb / 40.0f
+    const double A =
+        std::pow(
+            10.0,
+            gainDb / 40.0
         );
 
-    const float w0 =
-        2.0f *
-        static_cast<float>(M_PI) *
+    const double w0 =
+        2.0 *
+        M_PI *
         freq /
         sampleRate;
 
-    const float cosW0 =
-        cosf(w0);
+    const double cosW0 =
+        std::cos(w0);
 
-    const float sinW0 =
-        sinf(w0);
+    const double sinW0 =
+        std::sin(w0);
 
-    const float alpha =
+    const double alpha =
         sinW0 /
-        (2.0f * Q);
+        (2.0 * Q);
 
-    const float a0 =
-        1.0f +
+    const double a0 =
+        1.0 +
         alpha / A;
 
     coeffs.b0 =
-        (1.0f + alpha * A) /
+        (1.0 + alpha * A) /
         a0;
 
     coeffs.b1 =
-        (-2.0f * cosW0) /
+        (-2.0 * cosW0) /
         a0;
 
     coeffs.b2 =
-        (1.0f - alpha * A) /
+        (1.0 - alpha * A) /
         a0;
 
     coeffs.a1 =
-        (-2.0f * cosW0) /
+        (-2.0 * cosW0) /
         a0;
 
     coeffs.a2 =
-        (1.0f - alpha / A) /
+        (1.0 - alpha / A) /
         a0;
 
     return true;
@@ -144,76 +144,76 @@ bool BiquadFilter::setLowShelf(
     }
 
     // =============================================
-    // RBJ COOKBOOK
+    // RBJ COOKBOOK (B13-K2-double: hitung dalam double)
     // =============================================
 
-    const float A =
-        powf(
-            10.0f,
-            gainDb / 40.0f
+    const double A =
+        std::pow(
+            10.0,
+            gainDb / 40.0
         );
 
-    const float w0 =
-        2.0f *
-        static_cast<float>(M_PI) *
+    const double w0 =
+        2.0 *
+        M_PI *
         freq /
         sampleRate;
 
-    const float cosW0 =
-        cosf(w0);
+    const double cosW0 =
+        std::cos(w0);
 
-    const float sinW0 =
-        sinf(w0);
+    const double sinW0 =
+        std::sin(w0);
 
-    const float alpha =
+    const double alpha =
         sinW0 /
-        (2.0f * Q);
+        (2.0 * Q);
 
-    const float beta =
-        2.0f *
-        sqrtf(A) *
+    const double beta =
+        2.0 *
+        std::sqrt(A) *
         alpha;
 
-    const float a0 =
-        (A + 1.0f) +
-        ((A - 1.0f) * cosW0) +
+    const double a0 =
+        (A + 1.0) +
+        ((A - 1.0) * cosW0) +
         beta;
 
     coeffs.b0 =
         A *
         (
-            (A + 1.0f) -
-            ((A - 1.0f) * cosW0) +
+            (A + 1.0) -
+            ((A - 1.0) * cosW0) +
             beta
         ) / a0;
 
     coeffs.b1 =
-        2.0f *
+        2.0 *
         A *
         (
-            (A - 1.0f) -
-            ((A + 1.0f) * cosW0)
+            (A - 1.0) -
+            ((A + 1.0) * cosW0)
         ) / a0;
 
     coeffs.b2 =
         A *
         (
-            (A + 1.0f) -
-            ((A - 1.0f) * cosW0) -
+            (A + 1.0) -
+            ((A - 1.0) * cosW0) -
             beta
         ) / a0;
 
     coeffs.a1 =
-        -2.0f *
+        -2.0 *
         (
-            (A - 1.0f) +
-            ((A + 1.0f) * cosW0)
+            (A - 1.0) +
+            ((A + 1.0) * cosW0)
         ) / a0;
 
     coeffs.a2 =
         (
-            (A + 1.0f) +
-            ((A - 1.0f) * cosW0) -
+            (A + 1.0) +
+            ((A - 1.0) * cosW0) -
             beta
         ) / a0;
 
@@ -236,7 +236,7 @@ bool BiquadFilter::setHighShelf(
     }
 
     // =============================================
-    // RBJ COOKBOOK
+    // RBJ COOKBOOK (B13-K2-double: hitung dalam double)
     // =============================================
     //
     // Cerminan low shelf: semua tanda `cosW0` dibalik. `Q` di sini adalah
@@ -244,73 +244,73 @@ bool BiquadFilter::setHighShelf(
     // dipakai AutoEQ) — BUKAN slope S RBJ. Bentuk S lama dihapus B13-K2
     // karena sqrt-nya bisa negatif -> NaN (mis. Q=2/+30 dB, Q=4/+15 dB).
 
-    const float A =
-        powf(
-            10.0f,
-            gainDb / 40.0f
+    const double A =
+        std::pow(
+            10.0,
+            gainDb / 40.0
         );
 
-    const float w0 =
-        2.0f *
-        static_cast<float>(M_PI) *
+    const double w0 =
+        2.0 *
+        M_PI *
         freq /
         sampleRate;
 
-    const float cosW0 =
-        cosf(w0);
+    const double cosW0 =
+        std::cos(w0);
 
-    const float sinW0 =
-        sinf(w0);
+    const double sinW0 =
+        std::sin(w0);
 
-    const float alpha =
+    const double alpha =
         sinW0 /
-        (2.0f * Q);
+        (2.0 * Q);
 
-    const float beta =
-        2.0f *
-        sqrtf(A) *
+    const double beta =
+        2.0 *
+        std::sqrt(A) *
         alpha;
 
-    const float a0 =
-        (A + 1.0f) -
-        ((A - 1.0f) * cosW0) +
+    const double a0 =
+        (A + 1.0) -
+        ((A - 1.0) * cosW0) +
         beta;
 
     coeffs.b0 =
         A *
         (
-            (A + 1.0f) +
-            ((A - 1.0f) * cosW0) +
+            (A + 1.0) +
+            ((A - 1.0) * cosW0) +
             beta
         ) / a0;
 
     coeffs.b1 =
-        -2.0f *
+        -2.0 *
         A *
         (
-            (A - 1.0f) +
-            ((A + 1.0f) * cosW0)
+            (A - 1.0) +
+            ((A + 1.0) * cosW0)
         ) / a0;
 
     coeffs.b2 =
         A *
         (
-            (A + 1.0f) +
-            ((A - 1.0f) * cosW0) -
+            (A + 1.0) +
+            ((A - 1.0) * cosW0) -
             beta
         ) / a0;
 
     coeffs.a1 =
-        2.0f *
+        2.0 *
         (
-            (A - 1.0f) -
-            ((A + 1.0f) * cosW0)
+            (A - 1.0) -
+            ((A + 1.0) * cosW0)
         ) / a0;
 
     coeffs.a2 =
         (
-            (A + 1.0f) -
-            ((A - 1.0f) * cosW0) -
+            (A + 1.0) -
+            ((A - 1.0) * cosW0) -
             beta
         ) / a0;
 

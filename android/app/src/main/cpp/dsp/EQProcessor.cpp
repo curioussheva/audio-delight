@@ -307,9 +307,10 @@ bool EQProcessor::stepCoefficients(
 
     // Struktur cabang yang sama dengan SpatialFieldProcessor::process():
     // di dalam ambang, terapkan selisih penuh (snap); di luar ambang,
-    // langkah kSmooth.
+    // langkah kSmooth. (B13-K2-double: langkah dalam double supaya
+    // koefisien tidak terkuantisasi float di tiap langkah sapuan.)
     const auto step =
-        [](float c, float t) {
+        [](double c, double t) {
 
             return
                 std::fabs(t - c) > kSettledEps

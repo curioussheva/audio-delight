@@ -7,11 +7,11 @@ namespace pristine {
 // =====================================================
 
 struct BiquadCoefficients {
-    float b0 = 1.0f;
-    float b1 = 0.0f;
-    float b2 = 0.0f;
-    float a1 = 0.0f;
-    float a2 = 0.0f;
+    double b0 = 1.0;
+    double b1 = 0.0;
+    double b2 = 0.0;
+    double a1 = 0.0;
+    double a2 = 0.0;
 };
 
 // =====================================================
@@ -82,23 +82,28 @@ public:
     // PROCESS
     // =============================================
 
+    // B13-K2-double: state + koefisien double — presisi filter bass di
+    // laju tinggi (mis. 30 Hz @192 kHz, cos(w0) ~1: float mengkuantisasi
+    // koefisien, double tidak). Input/output tetap float (jalur audio).
     inline float process(
         float x
     ) noexcept {
 
-        const float y =
-            coeffs.b0 * x + z1;
+        const double xd = x;
+
+        const double y =
+            coeffs.b0 * xd + z1;
 
         z1 =
-            coeffs.b1 * x -
+            coeffs.b1 * xd -
             coeffs.a1 * y +
             z2;
 
         z2 =
-            coeffs.b2 * x -
+            coeffs.b2 * xd -
             coeffs.a2 * y;
 
-        return y;
+        return static_cast<float>(y);
     }
 
     // =============================================
@@ -106,16 +111,16 @@ public:
     // =============================================
 
     inline void reset() noexcept {
-        z1 = 0.0f;
-        z2 = 0.0f;
+        z1 = 0.0;
+        z2 = 0.0;
     }
 
 private:
 
     BiquadCoefficients coeffs;
 
-    float z1 = 0.0f;
-    float z2 = 0.0f;
+    double z1 = 0.0;
+    double z2 = 0.0;
 };
 
 } // namespace pristine
