@@ -46,7 +46,7 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
             } else {
                 promise.reject("PLAY_FAILED", "native play() returned false - dekoder gagal membuka track")
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             promise.reject("PLAY_FAILED", e)
         }
     }
@@ -56,7 +56,7 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
         try {
             PlaybackNativeBridge.pause()
             promise.resolve(null)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             promise.reject("PAUSE_FAILED", e)
         }
     }
@@ -66,7 +66,7 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
         try {
             PlaybackNativeBridge.stop()
             promise.resolve(null)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             promise.reject("STOP_FAILED", e)
         }
     }
@@ -76,7 +76,7 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
         try {
             PlaybackNativeBridge.next()
             promise.resolve(null)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             promise.reject("NEXT_FAILED", e)
         }
     }
@@ -86,7 +86,7 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
         try {
             PlaybackNativeBridge.previous()
             promise.resolve(null)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             promise.reject("PREVIOUS_FAILED", e)
         }
     }
@@ -96,7 +96,7 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
         try {
             PlaybackNativeBridge.seek(positionMs.toLong())
             promise.resolve(null)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             promise.reject("SEEK_FAILED", e)
         }
     }
@@ -106,7 +106,7 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
         try {
             PlaybackNativeBridge.setShuffle(enabled)
             promise.resolve(null)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             promise.reject("SET_SHUFFLE_FAILED", e)
         }
     }
@@ -131,7 +131,7 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
             } else {
                 promise.reject("JUMP_FAILED", "jumpTo($index) gagal - indeks tidak valid?")
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             promise.reject("JUMP_FAILED", e)
         }
     }
@@ -141,7 +141,7 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
         try {
             PlaybackNativeBridge.setRepeatMode(mode)
             promise.resolve(null)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             promise.reject("SET_REPEAT_FAILED", e)
         }
     }
@@ -152,7 +152,7 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
         try {
             PlaybackNativeBridge.setPlaybackRate(rate.toFloat())
             promise.resolve(null)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             promise.reject("SET_RATE_FAILED", e)
         }
     }
@@ -171,7 +171,7 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
         try {
             PlaybackNativeBridge.setPitchRatio(ratio.toFloat())
             promise.resolve(null)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             promise.reject("SET_PITCH_RATIO_FAILED", e)
         }
     }
@@ -227,7 +227,7 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
                 buildRateArray(sampleRates, rateIndexes, list.size)
             )
             promise.resolve(null)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             android.util.Log.e(LOG_TAG, "setQueue failed", e)
             promise.reject("SET_QUEUE_FAILED", e)
         }
@@ -293,7 +293,7 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
     fun getPosition(promise: Promise) {
         try {
             promise.resolve(PlaybackNativeBridge.getPosition().toDouble())
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             promise.reject("GET_POSITION_FAILED", e)
         }
     }
@@ -302,7 +302,7 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
     fun getStatus(promise: Promise) {
         try {
             promise.resolve(PlaybackNativeBridge.getStatus())
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             promise.reject("GET_STATUS_FAILED", e)
         }
     }
@@ -312,7 +312,7 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
         try {
             val queue = PlaybackNativeBridge.getQueue()
             promise.resolve(queue?.toList() ?: emptyList<String>())
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             promise.reject("GET_QUEUE_FAILED", e)
         }
     }
@@ -321,7 +321,7 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
     fun getCurrentTrack(promise: Promise) {
         try {
             promise.resolve(PlaybackNativeBridge.getCurrentTrack() ?: "")
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             promise.reject("GET_TRACK_FAILED", e)
         }
     }

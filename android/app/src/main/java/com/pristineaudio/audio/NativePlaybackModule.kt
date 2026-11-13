@@ -45,10 +45,10 @@ class NativePlaybackModule(
                 if (!emitterRegistered) {
                     try {
                         nativeInitEventEmitter()
+                        emitterRegistered = true
                     } catch (e: Throwable) {
                         android.util.Log.e("NativePlaybackModule", "registrasi event emitter gagal", e)
                     }
-                    emitterRegistered = true
                 }
             }
         }
@@ -119,7 +119,7 @@ class NativePlaybackModule(
             } else {
                 promise.reject("PLAY_FAILED", "native play() returned false")
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             promise.reject("PLAY_FAILED", e)
         }
     }
@@ -228,7 +228,7 @@ class NativePlaybackModule(
             } else {
                 promise.reject("JUMP_FAILED", "nativeJumpTo($index) gagal - indeks tidak valid?")
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             promise.reject("JUMP_FAILED", e)
         }
     }

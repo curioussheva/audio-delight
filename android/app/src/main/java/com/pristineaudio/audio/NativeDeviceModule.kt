@@ -223,7 +223,7 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
             // id-nya benar-benar ada di daftar device.
             val ok = nativeSetActiveDevice(deviceId)
             promise.resolve(ok)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             promise.reject("DEVICE_ERROR", e.message)
         }
     }
