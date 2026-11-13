@@ -39,7 +39,7 @@ import {
   analyzeBitDepth,
   BitDepthAnalysis,
 } from "@/features/audio/api/BitDepthVerifier";
-import { SpectrumAnalyzer } from "@/features/visualizer/components/SpectrumAnalyzer";
+import { AnalyzerSpectrum } from "@/features/visualizer/components/AnalyzerSpectrum";
 import { cleanAnalyzerWarnings } from "@/features/visualizer/api/analyzerWarnings";
 import { formatFileSize } from "@/shared/types/audio";
 import SQLiteService from "@/shared/lib/sqlite";
@@ -344,7 +344,11 @@ export default function AnalyzerScreen() {
               SPECTRUM ANALYZER
             </Text>
           </View>
-          <SpectrumAnalyzer
+          {/* Spektrum ala Neutron (keputusan csheva 2026-11-13): sumbu Hz
+              berlabel + skala dB + peak hold + frekuensi dominan.
+              Menggantikan SpectrumAnalyzer (bar polos) hanya di tab ini;
+              tab Visualizer sudah dihapus. */}
+          <AnalyzerSpectrum
             width={screenWidth - 64}
             height={160}
             barCount={48}

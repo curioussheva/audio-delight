@@ -7,6 +7,7 @@ export * from "./api/visualizer";
 export * from "./api/DSPPipeline";
 
 // components
+export * from "./components/AnalyzerSpectrum";
 export * from "./components/SpectogramView";
 export * from "./components/SpectrumAnalyzer";
 
