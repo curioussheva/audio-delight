@@ -30,6 +30,22 @@ class NativePlaybackModule(
         // tidak bisa di init karena butuh library sudah termuat.
     }
 
+    // (B13-W14, 2026-11-14): bersihkan companion instance saat bridge
+    // di-destroy/reload — kalau tidak, PlaybackNativeBridge tetap memegang
+    // modul lama (beserta ReactApplicationContext lama) sampai modul baru
+    // dibuat dan menimpa instance. Hanya clear bila instance masih
+    // menunjuk ke modul ini: kalau reload sudah membuat modul baru dulu,
+    // instance sudah milik modul baru dan invalidate() modul lama ini
+    // tidak boleh menghapusnya. Pola sama dengan NativeDeviceModule
+    // (invalidate + super.invalidate()); onCatalystInstanceDestroy tidak
+    // dipakai — deprecated di RN, diganti invalidate().
+    override fun invalidate() {
+        if (instance === this) {
+            instance = null
+        }
+        super.invalidate()
+    }
+
     @Volatile
     private var emitterRegistered = false
 
