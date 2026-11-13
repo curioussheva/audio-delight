@@ -353,8 +353,9 @@ endif()
 #
 # Perbaikannya ada di header ContentUriResolver.h (anotasi PRISTINE_EXPORT),
 # BUKAN dengan mengompilasi ulang file itu di sini. Mengompilasi ulang akan
-# menduplikasi simbol karena appmodules sudah link ke pristine-audio (di bawah),
-# dan `-Wl,--no-undefined` menolak duplikat itu.
+# menduplikasi simbol karena appmodules sudah link ke pristine-audio (di bawah).
+# (Catatan: `-Wl,--no-undefined` menolak simbol TAK TERDEFINISI, bukan duplikat —
+# dan flag itu tidak dipakai di CMakeLists mana pun di repo ini.)
 add_library(appmodules SHARED
   jni/OnLoad.cpp
 )

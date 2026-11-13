@@ -107,3 +107,7 @@ graphify-out/
 
 # Cache clangd (indeks .cpp). Regeneratif, timbul dari scripts/check.sh.
 android/app/src/main/cpp/.cache/
+
+# compile_commands.json (dibuat scripts/generate_compile_commands.py).
+# Regeneratif, tidak layak masuk riwayat git.
+android/app/src/main/cpp/compile_commands.json
