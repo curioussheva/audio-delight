@@ -212,7 +212,24 @@ jobs:
             exit 1
           fi
 
-      # 21. Upload Build Log on Failure
+      # 21. Check JNI symbols in built .so
+      # B12-W10: Kotlin `external fun` yang tidak punya simbol JNI di
+      # libpristine-audio.so baru ketahuan saat runtime (UnsatisfiedLinkError).
+      # Cek ini membandingkan semua `external fun` dengan `llvm-nm -D` dari
+      # .so di dalam APK hasil build — gagalkan build bila ada yang hilang.
+      # llvm-nm diambil dari NDK yang diinstal langkah 6 (via $ANDROID_HOME).
+      # CATATAN: gate ini AKAN gagal sampai NativePristineAudio diselesaikan
+      # (7 simbolnya tidak ada di .so — jni/NativePristineAudio.cpp memang
+      # tidak ada di repo; scripts/check_jni_pairs.py melaporkan hal sama).
+      - name: Check JNI symbols
+        run: |
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          SO_DIR="$(mktemp -d)"
+          trap 'rm -rf "$SO_DIR"' EXIT
+          unzip -o -q "$APK" "lib/*/libpristine-audio.so" -d "$SO_DIR"
+          bash scripts/check-jni-symbols.sh "$SO_DIR"/lib/*/libpristine-audio.so
+
+      # 22. Upload Build Log on Failure
       - name: Upload Build Log
         uses: actions/upload-artifact@v4
         if: failure()
@@ -221,7 +238,7 @@ jobs:
           path: android/build.log
           retention-days: 7
 
-      # 22. Upload APK on Success
+      # 23. Upload APK on Success
       - name: Upload APK
         uses: actions/upload-artifact@v4
         if: success()
