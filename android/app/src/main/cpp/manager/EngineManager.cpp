@@ -136,6 +136,14 @@ EngineManager::state() {
 
 void EngineManager::start() {
 
+    // (B12-W5): play yang sampai ke sini membatalkan idle-close yang
+    // mungkin sedang tidur — stream yang baru dibuka tidak boleh ditutup
+    // timer yang di-arm dari pause sebelumnya. Hanya bump generasi
+    // atomik, tanpa lock. (Jalur play saat engine SUDAH berjalan tidak
+    // lewat sini — di sana nativePlay memanggil cancelIdleClose()
+    // langsung.)
+    cancelIdleClose();
+
     // unique_lock (bukan lock_guard): lock HARUS bisa dilepas sebelum
     // reloadIfDecoderRateMismatch() di akhir fungsi (D-M2, 2026-11-11) —
     // lihat komentar di sana.
@@ -702,6 +710,114 @@ void EngineManager::runStreamRecovery() {
                 "(exception tak dikenal) - flag dibersihkan");
         }
     }
+}
+
+// =====================================================
+// IDLE-CLOSE STREAM (B12-W5, 2026-11-13)
+// =====================================================
+//
+// Menutup stream sesudah 60 detik idle (pause/stop). Pola worker +
+// generasi yang sama dengan requestStreamRecovery/runStreamRecovery:
+// thread detached tidur di luar lock, generasi atomik yang membatalkan
+// worker lama saat arm/cancel baru datang.
+//
+// Perbedaan sengaja dari recovery: tidak ada flag pending/running.
+// Tiap arm adalah jendela idle baru dan menaikkan generasi — worker
+// lama yang masih tidur kalah generasi dan kembali diam-diam. Tidak ada
+// state yang bisa stuck kalau spawn gagal: generasi sudah naik, tidak
+// ada worker yatim.
+
+void EngineManager::armIdleClose() {
+
+    // Tidak ada stream yang berjalan — tidak ada yang perlu ditutup.
+    // (Pause/stop saat engine sudah mati, mis. sesudah idle-close
+    // sebelumnya, mendarat di sini dan langsung kembali.)
+    if (!mEngine.isRunning()) {
+        return;
+    }
+
+    // Generasi baru = jendela idle baru. Worker lama (kalau ada) kalah
+    // generasi dan tidak akan menutup apa pun.
+    const uint64_t generation =
+        mIdleCloseGen.fetch_add(1, std::memory_order_acq_rel) + 1;
+
+    // C-W4-mgr (2026-11-12): konstruktor std::thread bisa melempar
+    // (sistem kehabisan resource). Tanpa try/catch, exception lolos ke
+    // pemanggil — JNI nativePause/nativeStop — dan terminate(). Di sini
+    // tidak ada flag yang perlu dibersihkan: generasi sudah naik dan
+    // tidak ada worker yatim; arm berikutnya memakai generasi baru.
+    try {
+        std::thread([this, generation] {
+            runIdleClose(generation);
+        }).detach();
+    } catch (const std::exception& e) {
+        __android_log_print(ANDROID_LOG_ERROR, "EngineManager",
+            "armIdleClose: gagal membuat worker thread (%s) - "
+            "idle-close dibatalkan untuk jendela ini", e.what());
+    } catch (...) {
+        __android_log_print(ANDROID_LOG_ERROR, "EngineManager",
+            "armIdleClose: gagal membuat worker thread "
+            "(exception tak dikenal) - idle-close dibatalkan "
+            "untuk jendela ini");
+    }
+}
+
+void EngineManager::cancelIdleClose() {
+
+    // Batalkan SEMUA worker idle-close yang sedang tidur: generasi
+    // mereka tidak akan pernah cocok lagi. Dipanggil dari nativePlay
+    // (JNI) dan dari EngineManager::start() (defense-in-depth untuk
+    // jalur play yang membuka stream baru).
+    mIdleCloseGen.fetch_add(1, std::memory_order_acq_rel);
+}
+
+void EngineManager::runIdleClose(uint64_t generation) {
+
+    constexpr int64_t kIdleCloseDelayMs = 60000;
+
+    // TIDAK memegang mMutex selama menunggu: tidur di luar lock supaya
+    // start()/reopen()/setRequestedDeviceId()/setExclusiveMode() tidak
+    // pernah tertahan 60 detik oleh thread ini.
+    std::this_thread::sleep_for(
+        std::chrono::milliseconds(kIdleCloseDelayMs));
+
+    // Dibatalkan (play ditekan) atau digantikan arm baru?
+    if (mIdleCloseGen.load(std::memory_order_acquire) != generation) {
+        return;
+    }
+
+    // Ambil mMutex DULU (pola yang sama dengan
+    // reopenStreamPreservingPlayback): stop() di sini terserialisasi
+    // terhadap start()/reopen()/setRequestedDeviceId()/setExclusiveMode()
+    // — tidak ada stop yang menyelinap di tengah reopen, dan reopen yang
+    // sedang berjalan menahan worker ini sampai selesai.
+    std::lock_guard<std::mutex> lock(mMutex);
+
+    // Cek ulang di bawah lock: cancel (play) yang datang di antara cek
+    // di atas dan lock ini harus tetap menang.
+    if (mIdleCloseGen.load(std::memory_order_acquire) != generation) {
+        return;
+    }
+
+    if (!mEngine.isRunning()) {
+        return;
+    }
+
+    // Defense-in-depth: jangan pernah menutup stream di tengah pemutaran.
+    // Kalau status kembali Playing tanpa cancel (jalur yang tidak lewat
+    // nativePlay), worker ini mundur — play berikutnya yang menentukan.
+    if (auto st = mPlayback.state()) {
+        if (st->getStatus() == playback::PlaybackStatus::Playing) {
+            __android_log_print(ANDROID_LOG_INFO, "EngineManager",
+                "idle-close: dibatalkan, status kembali Playing");
+            return;
+        }
+    }
+
+    __android_log_print(ANDROID_LOG_INFO, "EngineManager",
+        "idle-close: 60 dtk idle (pause/stop) - menutup stream "
+        "(hemat baterai + lepas DAC)");
+    mEngine.stop();
 }
 
 void EngineManager::reopenStreamPreservingPlayback() {

@@ -147,6 +147,42 @@ public:
     // gPlaybackController->play()/pause() langsung. EngineManager::stop()
     // juga dihapus: engine hanya di-stop lewat mEngine.stop() di reopen().)
 
+    // =====================================================
+    // IDLE-CLOSE STREAM (B12-W5, 2026-11-13)
+    // =====================================================
+    //
+    // Menutup stream sesudah 60 detik idle (pause/stop) — hemat baterai +
+    // lepas DAC. Dipanggil dari JNI transport (NativePlaybackModule):
+    // nativePause/nativeStop -> armIdleClose(), nativePlay ->
+    // cancelIdleClose(). EngineManager tidak punya play()/pause() sendiri
+    // (dihapus 2026-11-10), jadi trigger-nya memang dari sana.
+    //
+    // KENAPA SETTING DSP/EQ SELAMAT (dibuktikan dari kode sebelum landing):
+    // setting tinggal di AudioEngine::mState (AudioState, member by-value
+    // AudioEngine — AudioEngine.h), bukan di pipeline/stream; AudioEngine
+    // hidup sebagai member singleton EngineManager dan tidak pernah
+    // di-recreate. AudioEngine::stop() (AudioEngine.cpp:262-271) hanya
+    // setRunning(false) + controller stop/close + reset() =
+    // mPipeline.reset() + mMetrics.reset(); reset()
+    // (AudioPipeline.cpp:76-94) hanya membersihkan STATE node DSP
+    // (biquad/resonator) + flag mode/fade, tidak menyentuh satu pun field
+    // AudioState. start() memanggil mPipeline.prepare() yang membangun
+    // ulang graph DSP DAN me-reset guard mConfigApplied = false
+    // (AudioPipeline.cpp:49-60, fix DSP-M1) supaya config diterapkan ulang
+    // ke node baru; tiap buffer AudioCallback::updateParameters()
+    // (AudioCallback.cpp:303) membaca ulang SEMUA setting dari mState dan
+    // AudioPipeline::applyDSPConfig() menerapkannya. Jadi stop + start
+    // berikutnya memakai setting yang sama persis.
+    //
+    // Resume sesudah idle-close: pause mempertahankan decoder + queue +
+    // posisi (PlaybackController::pause: worker di-pause, queue
+    // dipertahankan); play() lewat getControllerAndStartEngine() hanya
+    // memuat track bila belum ada decoder, lalu EngineManager::start().
+    // Stop menghancurkan decoder seperti biasa — play berikutnya memuat
+    // ulang dari awal, sama seperti perilaku stop hari ini.
+    void armIdleClose();
+    void cancelIdleClose();
+
     // dsp
     void setDSPEnabled(bool enabled);
     void setLimiterEnabled(bool enabled);
@@ -259,6 +295,11 @@ private:
     // Worker yang benar-benar mengerjakan reopen. Berjalan di thread terpisah.
     void runStreamRecovery();
 
+    // Worker idle-close (B12-W5): tidur kIdleCloseDelayMs tanpa memegang
+    // lock, lalu menutup stream kalau generasi masih cocok + status bukan
+    // Playing. Satu-satunya pemanggil: thread detached dari armIdleClose().
+    void runIdleClose(uint64_t generation);
+
     // Perangkat yang akan dipakai stream berikutnya (id numerik Android).
     // Prioritas: override eksplisit (setRequestedDeviceId) -> perangkat aktif
     // dari AudioDeviceManager -> 0 (biarkan sistem memilih).
@@ -300,6 +341,21 @@ private:
     // true selagi worker recovery berjalan; dipakai sebagai guard supaya hanya
     // ada satu worker hidup pada satu waktu.
     std::atomic<bool> mRecoveryRunning{false};
+
+    // (B12-W5, 2026-11-13): generasi idle-close — SATU-SATUNYA state timer.
+    //
+    // armIdleClose() dan cancelIdleClose() sama-sama menaikkan generasi;
+    // worker runIdleClose() hanya menutup stream bila generasi yang ia
+    // bawa masih sama dengan generasi saat ini. Jadi play (cancel) atau
+    // arm baru selalu membatalkan worker lama, tanpa flag terpisah yang
+    // bisa stuck: gagal spawn thread pun aman — generasi sudah naik,
+    // tidak ada worker yatim yang bisa menutup stream.
+    //
+    // Sengaja TIDAK memakai pola dedup mRecoveryPending: di sini tiap arm
+    // adalah jendela idle baru (pause kedua memperpanjang), dan worker
+    // ganda yang tertidur tidak berbahaya — yang kalah generasi diam-diam
+    // kembali lebih awal tanpa menyentuh apa pun.
+    std::atomic<uint64_t> mIdleCloseGen{0};
 
     // (W3-mgr, 2026-11-12): budget GLOBAL percobaan recovery berurutan,
     // lintas worker. kMaxAttempts di runStreamRecovery() hanya membatasi

@@ -109,6 +109,13 @@ JNIEXPORT jboolean JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nat
                             "nativePlay: controller null!");
         return JNI_FALSE;
     }
+    // (B12-W5): play membatalkan idle-close yang mungkin sedang tidur
+    // (di-arm dari pause/stop sebelumnya) — timer tidak boleh menutup
+    // stream yang baru dipakai lagi. EngineManager::start() di atas juga
+    // membatalkan (defense-in-depth), tapi jalur play saat engine SUDAH
+    // berjalan tidak lewat start() — jadi cancel di sini yang menutup
+    // jalur itu.
+    pristine::EngineManager::get().cancelIdleClose();
     const bool ok = controller->play();
     __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
                         "nativePlay() returned ok=%d", ok ? 1 : 0);
@@ -120,6 +127,10 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeP
     pristine::jni::guardedVoid(env, "nativePause", [&] {
     auto* controller = getController();
     if (controller) controller->pause();
+    // (B12-W5): pause memulai jendela idle 60 dtk — sesudah itu stream
+    // ditutup (hemat baterai + lepas DAC). Setting DSP/EQ selamat
+    // melewati stop+start (lihat EngineManager::armIdleClose).
+    pristine::EngineManager::get().armIdleClose();
     });
 }
 
@@ -127,6 +138,10 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeS
     pristine::jni::guardedVoid(env, "nativeStop", [&] {
     auto* controller = getController();
     if (controller) controller->stop();
+    // (B12-W5): sama seperti pause — stream yang menganggur sesudah
+    // stop ditutup sesudah 60 dtk. Play berikutnya memuat ulang track
+    // dari awal (decoder sudah dihancurkan stop(), seperti biasa).
+    pristine::EngineManager::get().armIdleClose();
     });
 }
 
