@@ -71,6 +71,10 @@ android {
         cmake {
             path "src/main/cpp/CMakeLists.txt"
             version "3.22.1"
+            // B12-C5: teruskan properti Gradle -PstrictWarnings (CI input
+            // strict_warnings di build-dev.yml) sebagai opsi CMake
+            // PRISTINE_STRICT_WARNINGS. Default OFF — build normal tidak berubah.
+            arguments "-DPRISTINE_STRICT_WARNINGS=${(project.findProperty('strictWarnings')?.toString() == 'true') ? 'ON' : 'OFF'}"
         }
     }
 

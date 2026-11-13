@@ -103,6 +103,16 @@ endif()
 # =====================================================
 
 option(ENABLE_FFMPEG "Enable FFmpeg decoder support" ON)
+
+# PRISTINE_STRICT_WARNINGS (B12-C5)
+#
+# OFF (default): pasang daftar -Wno-* di target_compile_options di bawah,
+# perilaku build persis seperti sebelumnya. ON: lewati seluruh daftar
+# -Wno-* itu supaya semua warning -Wall/-Wextra terlihat (dipakai CI
+# via input strict_warnings). Opsi ini TIDAK menambah -Werror — warning
+# tetap warning, bukan error (hanya -Werror=return-type/-Werror=uninitialized
+# yang sudah ada yang bersifat error, di kedua mode).
+option(PRISTINE_STRICT_WARNINGS "Skip all -Wno-* suppressions to surface warnings" OFF)
 set(PRISTINE_FFMPEG_AVAILABLE FALSE)
 
 if(ENABLE_FFMPEG)
@@ -233,18 +243,25 @@ target_compile_definitions(pristine-audio PRIVATE PRISTINE_HAVE_LIBLOG=1)
 target_compile_options(pristine-audio PRIVATE
   -Wall -Wextra
   -Werror=return-type -Werror=uninitialized
-  -Wno-unused-parameter -Wno-unused-variable
-  -Wno-unused-private-field
-  -Wno-missing-field-initializers
-  -Wno-mismatched-tags
-  -Wno-reorder-ctor
-  -Wno-defaulted-function-deleted
-  -Wno-macro-redefined
   -fno-fast-math -fstrict-aliasing -fvisibility=hidden
   -ffunction-sections -fdata-sections
   -fstack-protector-strong -D_FORTIFY_SOURCE=2
   -fexceptions -frtti
 )
+
+# B12-C5: daftar -Wno-* hanya dipasang bila PRISTINE_STRICT_WARNINGS OFF.
+# ON: semua warning -Wall/-Wextra dibiarkan terlihat (strict build CI).
+if(NOT PRISTINE_STRICT_WARNINGS)
+  target_compile_options(pristine-audio PRIVATE
+    -Wno-unused-parameter -Wno-unused-variable
+    -Wno-unused-private-field
+    -Wno-missing-field-initializers
+    -Wno-mismatched-tags
+    -Wno-reorder-ctor
+    -Wno-defaulted-function-deleted
+    -Wno-macro-redefined
+  )
+endif()
 
 if(ANDROID_ABI STREQUAL "arm64-v8a")
   target_compile_options(pristine-audio PRIVATE -march=armv8-a+fp+simd)

@@ -2,6 +2,11 @@ name: Build Dev APK
 
 on:
   workflow_dispatch:
+    inputs:
+      strict_warnings:
+        description: 'Build dengan warning C++ penuh (PRISTINE_STRICT_WARNINGS=ON, tanpa -Wno-*)'
+        type: boolean
+        default: false
 
 concurrency:
   group: build-${{ github.ref }}
@@ -198,6 +203,7 @@ jobs:
             -PnewArchEnabled=true \
             -PreactNativeNewArch=true \
             -PhermesEnabled=true \
+            -PstrictWarnings=${{ inputs.strict_warnings }} \
             -DJS_RUNTIME=hermes 2>&1 | tee build.log
 
       # 20. Verify bundle in APK
