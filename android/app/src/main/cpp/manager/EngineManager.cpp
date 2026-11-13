@@ -880,7 +880,31 @@ void EngineManager::reopenStreamPreservingPlayback() {
     // melaporkan penolakan itu sesudah start.
     const bool exclusiveMode = mState.exclusiveMode();
 
-    const int32_t requestedDevice = resolveRequestedDeviceId();
+    // (B13-W4): daftar perangkat bisa basi sesudah colok/cabut — segarkan
+    // dulu, lalu validasi id yang diminta terhadap daftar INTERNAL
+    // (getAvailableDevices, lengkap — BUKAN daftar tersaring JS dari
+    // nativeGetDevices, supaya id sah tapi tak tampil di UI tetap lolos).
+    // Id hantu: lepas preferensi eksplisit + preferensi aktif, sistem yang
+    // memilih — jangan teruskan id mati ke start().
+    AudioDeviceManager::get().refreshDevices();
+
+    int32_t requestedDevice = resolveRequestedDeviceId();
+    if (requestedDevice > 0) {
+        const auto devices =
+            AudioDeviceManager::get().getAvailableDevices();
+        const std::string want = std::to_string(requestedDevice);
+        const bool exists = std::any_of(devices.begin(), devices.end(),
+            [&](const AudioDeviceDescriptor& d) { return d.id == want; });
+        if (!exists) {
+            __android_log_print(ANDROID_LOG_WARN, "EngineManager",
+                "reopenStream: id device %d tidak ada lagi di daftar "
+                "(%zu device) - preferensi dilepas, sistem yang memilih",
+                requestedDevice, devices.size());
+            mRequestedDeviceId.store(0, std::memory_order_release);
+            AudioDeviceManager::get().setActiveDevice("");
+            requestedDevice = 0;
+        }
+    }
     const auto deviceRates = supportedRatesFor(requestedDevice);
 
     int32_t requestedRate = resolveRequestedRate();
@@ -894,7 +918,20 @@ void EngineManager::reopenStreamPreservingPlayback() {
 
     // start() membuka stream BARU. Ini yang memberi stream jalur ke device
     // yang sekarang aktif (headset yang baru dicolok).
-    mEngine.start(exclusiveMode, requestedRate, requestedDevice);
+    // (B13-W4): device yang diminta bisa gagal dibuka (mis. dicabut di
+    // antara validasi dan start) — retry sekali tanpa preferensi device,
+    // sistem yang memilih. start() aman diulang: open() diawali close()
+    // idempotent, dan gagal start tidak meninggalkan stream setengah
+    // terbuka; stop()/posisi/seek TIDAK diulang di sini — itu terjadi
+    // sekali di bawah, sesudah start berhasil.
+    bool ok = mEngine.start(exclusiveMode, requestedRate, requestedDevice);
+    if (!ok && requestedDevice > 0) {
+        __android_log_print(ANDROID_LOG_WARN, "EngineManager",
+            "reopenStream: start di device %d gagal - retry tanpa "
+            "preferensi device (sistem yang memilih)",
+            requestedDevice);
+        ok = mEngine.start(exclusiveMode, requestedRate, 0);
+    }
 
     // (C-W6-mgr, 2026-11-12): BELAJAR dari hasil reopen ini — jangan ulangi
     // permintaan yang sudah terbukti sia-sia. Bandingkan laju yang DIMINTA
