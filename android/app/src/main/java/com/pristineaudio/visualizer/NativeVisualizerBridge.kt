@@ -16,7 +16,8 @@ import kotlin.math.sqrt
  * AudioCallback (C++, audio thread)
  *   -> VisualizerBuffer.write()          mono mixdown, ring buffer 2048
  *   -> EngineManager::engine().getVisualizerData()   (UI thread)
- *   -> JNI Java_..._getVisualizerData    mengembalikan 2048 sample MENTAH
+ *   -> JNI Java_..._getVisualizerData    mengisi FloatArray 2048 sample
+ *        MENTAH yang dipakai ulang (B12-W9, tanpa NewFloatArray per panggilan)
  *   -> [KELAS INI] FFT 2048 -> magnitude -> 128 bin log-scaled
  *   -> JS: getFFTData() -> number[128]
  * ```
@@ -77,7 +78,20 @@ class NativeVisualizerBridge(reactContext: ReactApplicationContext) :
 
     override fun getName() = NAME
 
-    private external fun getVisualizerData(): FloatArray
+    // B12-W9: satu FloatArray yang dipakai ulang tiap panggilan getFFTData().
+    // Sebelumnya JNI mengalokasi NewFloatArray(2048) di tiap panggilan
+    // (~20x/detik dari poller VisualizerService). JNI sekarang menerima
+    // array ini sebagai parameter dan hanya mengisinya via SetFloatArrayRegion.
+    //
+    // Thread-safety: pemanggil satu-satunya adalah poller VisualizerService
+    // (satu setInterval, await), dan @ReactMethod dieksekusi berurutan di
+    // JS thread — jadi tidak ada dua pemanggil bersamaan dalam praktik.
+    // Pengisian + computeSpectrum tetap dibungkus synchronized(samplesLock)
+    // sebagai defense-in-depth, karena array ini dipakai ulang.
+    private val visualizerSamples = FloatArray(FFT_SIZE)
+    private val samplesLock = Any()
+
+    private external fun getVisualizerData(out: FloatArray)
 
     // =====================================================
     // SIKLUS HIDUP
@@ -131,17 +145,27 @@ class NativeVisualizerBridge(reactContext: ReactApplicationContext) :
         }
 
         try {
-            val samples = getVisualizerData()
+            // B12-W9: isi ulang visualizerSamples, lalu hitung spektrum dari
+            // array yang sama — masih di dalam lock supaya tidak ada
+            // pemanggil lain yang menimpa isinya di tengah computeSpectrum.
+            // Kontrak ke JS tidak berubah: getFFTData() tetap Promise<number[128]>.
+            val bins: FloatArray? = synchronized(samplesLock) {
+                getVisualizerData(visualizerSamples)
 
-            if (samples.size < FFT_SIZE) {
+                if (visualizerSamples.size < FFT_SIZE) {
+                    null
+                } else {
+                    computeSpectrum(visualizerSamples)
+                }
+            }
+
+            if (bins == null) {
                 promise.reject(
                     "VISUALIZER_SHORT_BUFFER",
-                    "Engine mengembalikan ${samples.size} sample, butuh $FFT_SIZE",
+                    "Engine mengembalikan ${visualizerSamples.size} sample, butuh $FFT_SIZE",
                 )
                 return
             }
-
-            val bins = computeSpectrum(samples)
 
             val array = Arguments.createArray()
             for (v in bins) {

@@ -16,12 +16,13 @@ extern "C" {
 // VISUALIZER DATA
 // =====================================================
 
-JNIEXPORT jfloatArray JNICALL
+JNIEXPORT void JNICALL
 Java_com_pristineaudio_visualizer_NativeVisualizerBridge_getVisualizerData(
     JNIEnv* env,
-    jobject
+    jobject,
+    jfloatArray out
 ) {
-    return pristine::jni::guarded<jfloatArray>(env, "getVisualizerData", nullptr, [&]() -> jfloatArray {
+    pristine::jni::guardedVoid(env, "getVisualizerData", [&]() {
 
     // FIX B2 (2026-11-10): 2048, bukan 256.
     //
@@ -38,15 +39,22 @@ Java_com_pristineaudio_visualizer_NativeVisualizerBridge_getVisualizerData(
     static_assert(kVisualizerSize == static_cast<int>(VisualizerBuffer::kSize),
                   "kVisualizerSize harus sama dengan VisualizerBuffer::kSize");
 
-    jfloatArray array =
-        env->NewFloatArray(
-            kVisualizerSize
-        );
-
-    if (!array) {
-        return nullptr;
+    // B12-W9: tidak ada lagi NewFloatArray di sini. Kotlin mengirim satu
+    // FloatArray yang dipakai ulang tiap panggilan (~20x/detik) dan fungsi
+    // ini hanya mengisinya via SetFloatArrayRegion. Array null / lebih
+    // pendek dari kVisualizerSize ditolak keras supaya tidak diam-diam
+    // menghitung spektrum dari data basi.
+    if (out == nullptr || env->GetArrayLength(out) < kVisualizerSize) {
+        jclass exClass = env->FindClass("java/lang/IllegalArgumentException");
+        if (exClass != nullptr) {
+            env->ThrowNew(exClass, "getVisualizerData: out null atau < 2048");
+            env->DeleteLocalRef(exClass);
+        }
+        return;
     }
 
+    // Stack array, bukan heap: biaya nyata yang dihapus B12-W9 adalah
+    // NewFloatArray(2048) per panggilan, bukan buffer ini.
     float buffer[kVisualizerSize];
 
     EngineManager::get()
@@ -57,13 +65,11 @@ Java_com_pristineaudio_visualizer_NativeVisualizerBridge_getVisualizerData(
         );
 
     env->SetFloatArrayRegion(
-        array,
+        out,
         0,
         kVisualizerSize,
         buffer
     );
-
-    return array;
     });
 }
 
