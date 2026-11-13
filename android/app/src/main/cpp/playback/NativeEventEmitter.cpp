@@ -31,17 +31,43 @@ PRISTINE_EXPORT void initModuleRef(JNIEnv* env, jobject instance) {
         env->DeleteGlobalRef(g_moduleRef);
     }
     g_moduleRef = env->NewGlobalRef(instance);
+    if (!g_moduleRef) {
+        // OOM — NewGlobalRef sudah melempar OutOfMemoryError; bersihkan
+        // supaya thread ini bisa dipakai JNI lagi, lalu keluar TANPA
+        // menyentuh g_methodId (emit tetap no-op karena moduleRef null).
+        __android_log_print(ANDROID_LOG_ERROR, "NativeEventEmitter",
+                            "initModuleRef: NewGlobalRef gagal — module ref "
+                            "tidak terpasang, track-ended tidak akan sampai ke JS");
+        if (env->ExceptionCheck()) {
+            env->ExceptionDescribe();
+            env->ExceptionClear();
+        }
+        return;
+    }
 
     // Cache method ID sekali: (Ljava/lang/String;)V
     jclass cls = env->GetObjectClass(g_moduleRef);
     if (cls) {
         g_methodId = env->GetMethodID(cls, "onNativeTrackEnded", "(Ljava/lang/String;)V");
         env->DeleteLocalRef(cls);
+        if (env->ExceptionCheck()) {
+            // GetMethodID gagal (NoSuchMethodError) — jangan biarkan
+            // exception pending, dan jangan pakai method ID lama.
+            env->ExceptionDescribe();
+            env->ExceptionClear();
+            g_methodId = nullptr;
+        }
     }
 
-    __android_log_print(ANDROID_LOG_INFO, "NativeEventEmitter",
-                        "initModuleRef: ref=%p method=%p",
-                        (void*)g_moduleRef, (void*)g_methodId);
+    if (!g_methodId) {
+        __android_log_print(ANDROID_LOG_ERROR, "NativeEventEmitter",
+                            "initModuleRef: onNativeTrackEnded tidak ditemukan "
+                            "— track-ended tidak akan sampai ke JS");
+    } else {
+        __android_log_print(ANDROID_LOG_INFO, "NativeEventEmitter",
+                            "initModuleRef: ref=%p method=%p",
+                            (void*)g_moduleRef, (void*)g_methodId);
+    }
 }
 
 PRISTINE_EXPORT void emitTrackEnded(const std::string& uri) {
