@@ -285,12 +285,6 @@ target_link_libraries(pristine-audio
   PRIVATE android log
 )
 
-if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
-  add_custom_command(TARGET pristine-audio POST_BUILD
-    COMMAND ${CMAKE_STRIP} --strip-unneeded $<TARGET_FILE:pristine-audio>
-    COMMENT "Stripping symbols for release...")
-endif()
-
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # =====================================================
