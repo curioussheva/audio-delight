@@ -73,31 +73,18 @@ export const useAudioPlayer = () => {
       isReady.current = false;
     }
   }, []);
-
-// Polling status & progress
-useEffect(() => {
-  if (!isReady.current) return;
-
-  const interval = setInterval(async () => {
-    try {
-      const status = await NativePlaybackService.getStatus();
-      const pos = await NativePlaybackService.getPosition();
-
-      // 🔥 FIX (2026-10-10): sinkronkan local state dengan STATUS NATIVE
-      // (1=PLAYING), bukan kondisi sebelumnya. Ini sumber kebenaran untuk
-      // isPlaying UI setelah pause: getStatus() native kembali 2 (PAUSED)
-      // setelah pause() berhasil, jadi isPlaying lokal akan false.
-      setIsPlaying(status === 1);
-      setPosition(pos / 1000);
-      setPositionStore(pos / 1000);
-      setDurationStore(duration);
-    } catch (error) {
-      // silent
-    }
-  }, 500);
-
-  return () => clearInterval(interval);
-}, [duration, setPositionStore, setDurationStore]);
+  // Polling status & progress DIHAPUS (eksperimen B 2026-11-13).
+  //
+  // Interval 500ms ini (getStatus + getPosition tiap tick, tanpa
+  // in-flight guard) sudah TIDAK PERNAH jalan: useAudioPlayer tidak punya
+  // caller di aplikasi — Controls.tsx membaca store langsung, search.tsx
+  // hanya memakai playSong dari store, dan semua referensi lain ke hook
+  // ini hanyalah komentar + barrel re-export (src/features/player/index.ts).
+  // Jadi penghapusan ini efek runtime-nya NOL; murni hygiene supaya
+  // poller tak-guarded ini tidak hidup lagi kalau hook ini suatu saat
+  // di-mount kembali. Posisi/isPlaying yang live tetap diurus store
+  // watcher (playerStore.ts, guarded) + listener onPlaybackStateChanged.
+  // Hook ini sendiri dicatat sebagai dead code di inventaris PR §C7.
 
   // 3. Fungsi Load & Play Lagu
   const loadSong = useCallback(
