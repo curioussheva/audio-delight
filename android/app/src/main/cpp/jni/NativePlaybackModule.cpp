@@ -374,6 +374,7 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeS
     }
 
     std::vector<pristine::playback::TrackInfo> tracks;
+    tracks.reserve(static_cast<size_t>(length));
     for (jsize i = 0; i < length; ++i) {
         jstring js = (jstring) env->GetObjectArrayElement(uris, i);
         if (!js) continue;
@@ -381,8 +382,13 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeS
         const char* cstr = env->GetStringUTFChars(js, nullptr);
         if (!cstr) { env->DeleteLocalRef(js); continue; }
 
-        __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
-                            "nativeSetQueue: URI[%d] = %s", (int)i, cstr);
+        // B12-W4: log ringkas — total sudah di-log di atas (length=%d),
+        // di sini hanya 3 URI pertama supaya antrean besar tidak
+        // membanjiri logcat dengan 1 baris INFO per URI.
+        if (i < 3) {
+            __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
+                                "nativeSetQueue: URI[%d] = %s", (int)i, cstr);
+        }
 
         pristine::playback::TrackInfo info;
         info.uri = cstr;
