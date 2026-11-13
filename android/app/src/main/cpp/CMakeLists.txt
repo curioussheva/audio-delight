@@ -144,6 +144,13 @@ set(OBOE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/oboe")
 if(EXISTS "${OBOE_DIR}/CMakeLists.txt")
   message(STATUS "Found Oboe at ${OBOE_DIR}")
   add_subdirectory(${OBOE_DIR} oboe EXCLUDE_FROM_ALL)
+  # B12-C6: tarball Oboe 1.9.0 menambahkan -Ofast (khusus RELEASE) di
+  # oboe/CMakeLists.txt:91; -fno-fast-math proyek (target pristine-audio)
+  # tidak berlaku ke target oboe. Override di sini — flag ini ditambahkan
+  # sesudah -Ofast sehingga fast-math mati tapi -O3 dari -Ofast tetap jalan.
+  if(TARGET oboe)
+    target_compile_options(oboe PRIVATE -fno-fast-math)
+  endif()
   set(OBOE_LIB oboe)
 else()
   message(FATAL_ERROR "Oboe not found at ${OBOE_DIR}/CMakeLists.txt")

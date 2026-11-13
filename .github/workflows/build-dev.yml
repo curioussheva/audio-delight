@@ -147,8 +147,14 @@ jobs:
         run: |
           OBOE_DIR="android/app/src/main/cpp/oboe"
           mkdir -p "$OBOE_DIR"
-          curl -L https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz \
-          | tar -xz --strip-components=1 -C "$OBOE_DIR"
+          # B12-C6: pin tarball Oboe 1.9.0 dengan sha256 — gagalkan build
+          # bila artefak yang diunduh berubah (supply-chain / mirror rusak).
+          curl -L -o /tmp/oboe-1.9.0.tar.gz \
+            https://github.com/google/oboe/archive/refs/tags/1.9.0.tar.gz
+          echo "e030276d25b8bdfaeb04f66646821b1ba4a2b6a580a7e84fb144a478eaecd663  /tmp/oboe-1.9.0.tar.gz" \
+            > /tmp/oboe-1.9.0.tar.gz.sha256
+          sha256sum -c /tmp/oboe-1.9.0.tar.gz.sha256
+          tar -xz --strip-components=1 -C "$OBOE_DIR" -f /tmp/oboe-1.9.0.tar.gz
 
       # 16. Clean native caches
       - name: Clean native caches
