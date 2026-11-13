@@ -26,8 +26,10 @@
 //
 // Thread-safety: setter/getter dikunci mutex; pembaca menyalin pointer di
 // bawah lock lalu memakai salinannya di luar lock (pola yang sama dengan
-// NativeEventEmitter). Global ref Context tidak pernah dihapus selama proses
-// hidup — Application hidup selama proses, jadi tidak ada use-after-free.
+// NativeEventEmitter). Pengecualian: setAppContext memakai std::call_once
+// (B11-P2-4) supaya panggilan JNI tidak berjalan sambil memegang mutex.
+// Global ref Context tidak pernah dihapus selama proses hidup — Application
+// hidup selama proses, jadi tidak ada use-after-free.
 //
 // Header-only (inline, C++17): tidak perlu entri CMake baru.
 
@@ -43,6 +45,8 @@ struct JniHolder {
     std::mutex mutex;
     JavaVM* vm = nullptr;
     jobject appContext = nullptr;  // global ref ke Application, atau nullptr
+    // (B11-P2-4): sekali-init untuk appContext — lihat setAppContext.
+    std::once_flag appContextOnce;
 };
 
 inline JniHolder& holder() {
@@ -70,42 +74,55 @@ inline JavaVM* javaVm() {
 // Simpan application Context sebagai global ref. Dipanggil sekali dari
 // Kotlin (nativeInitAppContext). First-wins: panggilan berikutnya diabaikan
 // — Context aplikasi sama selama proses hidup.
+//
+// (B11-P2-4): init sekali via std::call_once, bukan di bawah h.mutex —
+// panggilan JNI di bawah (GetObjectClass/GetMethodID/CallObjectMethod/
+// NewGlobalRef) tidak lagi berjalan sambil memegang mutex. Single-init
+// terbukti, bukan asumsi: satu-satunya call site adalah
+// nativeInitAppContext (NativeDeviceModule.cpp), yang dipanggil sekali dari
+// NativeDeviceModule.initialize() dengan applicationContext yang sama
+// selama proses hidup. Catatan: bila init pertama gagal (mis. NewGlobalRef
+// OOM), call_once tidak mengulang — appContext tetap null dan pemakainya
+// gagal aman (return 0 / "") seperti sebelumnya.
 inline bool setAppContext(JNIEnv* env, jobject context) {
     if (!env || !context) return false;
     auto& h = detail::holder();
-    std::lock_guard<std::mutex> lock(h.mutex);
-    if (h.appContext) return true;  // sudah di-init
-    // Ambil applicationContext() dari apa pun yang diteruskan, supaya
-    // pemanggil yang tidak sengaja meneruskan Activity tetap aman.
-    // (Kalau yang diteruskan sudah Application, ini mengembalikan dirinya.)
-    jobject app = nullptr;
-    jclass cls = env->GetObjectClass(context);
-    if (cls) {
-        jmethodID getAppCtx = env->GetMethodID(
-            cls, "getApplicationContext", "()Landroid/content/Context;");
-        if (getAppCtx) {
-            app = env->CallObjectMethod(context, getAppCtx);
-            if (env->ExceptionCheck()) {
+    std::call_once(h.appContextOnce, [&]() {
+        // Ambil applicationContext() dari apa pun yang diteruskan, supaya
+        // pemanggil yang tidak sengaja meneruskan Activity tetap aman.
+        // (Kalau yang diteruskan sudah Application, ini mengembalikan
+        // dirinya.)
+        jobject app = nullptr;
+        jclass cls = env->GetObjectClass(context);
+        if (cls) {
+            jmethodID getAppCtx = env->GetMethodID(
+                cls, "getApplicationContext", "()Landroid/content/Context;");
+            if (getAppCtx) {
+                app = env->CallObjectMethod(context, getAppCtx);
+                if (env->ExceptionCheck()) {
+                    env->ExceptionClear();
+                    app = nullptr;
+                }
+            } else {
                 env->ExceptionClear();
-                app = nullptr;
             }
-        } else {
-            env->ExceptionClear();
+            env->DeleteLocalRef(cls);
         }
-        env->DeleteLocalRef(cls);
-    }
-    if (!app) app = context;
-    h.appContext = env->NewGlobalRef(app);
-    if (app != context) env->DeleteLocalRef(app);
-    if (!h.appContext) {
-        __android_log_print(ANDROID_LOG_ERROR, "JniContext",
-                            "setAppContext: NewGlobalRef gagal (OOM?)");
-        return false;
-    }
-    __android_log_print(ANDROID_LOG_INFO, "JniContext",
-                        "setAppContext: application context tersimpan %p",
-                        (void*)h.appContext);
-    return true;
+        if (!app) app = context;
+        h.appContext = env->NewGlobalRef(app);
+        if (app != context) env->DeleteLocalRef(app);
+        if (!h.appContext) {
+            __android_log_print(ANDROID_LOG_ERROR, "JniContext",
+                                "setAppContext: NewGlobalRef gagal (OOM?)");
+            return;
+        }
+        __android_log_print(ANDROID_LOG_INFO, "JniContext",
+                            "setAppContext: application context tersimpan %p",
+                            (void*)h.appContext);
+    });
+    // call_once sudah selesai di titik ini, jadi baca hasil di bawah lock.
+    std::lock_guard<std::mutex> lock(h.mutex);
+    return h.appContext != nullptr;
 }
 
 // Global ref ke Application, atau nullptr kalau nativeInitAppContext belum
