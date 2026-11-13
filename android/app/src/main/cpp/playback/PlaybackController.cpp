@@ -2008,8 +2008,13 @@ void PlaybackController::advanceWorkerLoop() {
         // yang lolos (bukan dari loadTrack — ia menangkap sendiri) dicatat
         // dan worker kembali menunggu permintaan berikutnya. Dulu exception
         // di thread advance sekali pakai = std::terminate.
+        // B11-W2: processAdvance mengembalikan URI track yang berakhir
+        // (bukan meng-emit sendiri) — emit dilakukan DI BAWAH, sesudah
+        // worker ditandai idle, supaya stop() yang menunggu idle tidak
+        // pernah melihat worker sibuk saat event sudah terkirim.
+        std::optional<std::string> endedUri;
         try {
-            processAdvance(finishedUri, gen);
+            endedUri = processAdvance(finishedUri, gen);
         } catch (const std::exception& e) {
             __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
                 "advanceWorkerLoop: exception saat memproses advance (%s) - "
@@ -2025,12 +2030,20 @@ void PlaybackController::advanceWorkerLoop() {
             advanceBusy_ = false;
         }
         advanceCv_.notify_all();
+
+        // B11-W2: worker sudah idle di titik ini (flag + notify di atas).
+        // Event bisa tiba sesaat sesudah stop() — diterima, JS
+        // membandingkan URI (listener playerStore sync pada event matched
+        // maupun skipped).
+        if (endedUri) {
+            pristine::playback::emitTrackEnded(*endedUri);
+        }
     }
 }
 
-void PlaybackController::processAdvance(const std::string& finishedUri,
-                                        uint64_t gen) {
-    if (!queue_) return;
+std::optional<std::string> PlaybackController::processAdvance(
+    const std::string& finishedUri, uint64_t gen) {
+    if (!queue_) return std::nullopt;
 
     // 🔥 FIX (2026-11-10, P-M1): TUNGGU ekor track habis dimainkan dulu.
     //
@@ -2052,7 +2065,7 @@ void PlaybackController::processAdvance(const std::string& finishedUri,
         if (advanceCancelled_.load(std::memory_order_acquire)) {
             __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                 "scheduleAdvance: dibatalkan saat menunggu drain");
-            return;
+            return std::nullopt;
         }
         // B8-P2: buang post generasi basi — loadTrack()/stop() menaikkan
         // loadGen_ selama drain-wait (jendela sampai 26–39 dtk). Cek
@@ -2071,13 +2084,13 @@ void PlaybackController::processAdvance(const std::string& finishedUri,
                 static_cast<unsigned long long>(gen),
                 static_cast<unsigned long long>(
                     loadGen_.load(std::memory_order_acquire)));
-            return;
+            return std::nullopt;
         }
         {
             std::lock_guard<std::mutex> lock(advanceMutex_);
-            if (advanceStopRequested_) return;
+            if (advanceStopRequested_) return std::nullopt;
         }
-        if (!pcmQueue_) return;
+        if (!pcmQueue_) return std::nullopt;
         if (pcmQueue_->availableSamples() == 0) break;
         std::unique_lock<std::mutex> lock(advanceMutex_);
         advanceCv_.wait_for(lock, std::chrono::milliseconds(20), [this] {
@@ -2086,27 +2099,29 @@ void PlaybackController::processAdvance(const std::string& finishedUri,
         });
     }
 
-    if (advanceCancelled_.load(std::memory_order_acquire)) return;
+    if (advanceCancelled_.load(std::memory_order_acquire)) return std::nullopt;
     {
         std::lock_guard<std::mutex> lock(advanceMutex_);
-        if (advanceStopRequested_) return;
+        if (advanceStopRequested_) return std::nullopt;
     }
 
     // PB6-W3: seksi kritis — advanceAndGet() + loadTrack() atomik terhadap
     // advanceManualAndGet()/retreatAndGet() + loadTrack() di next()/previous()
     // (keduanya memegang loadTrackMutex_ yang sama — lihat (a) di header).
-    // B8-P3: unique_lock (bukan lock_guard) supaya lock bisa dilepas
-    // eksplisit sebelum emitTrackEnded di akhir fungsi — panggilan JNI
+    // B8-P3: loadLock dilepas eksplisit sebelum kembali — panggilan JNI
     // tidak boleh jalan di dalam critical section (hygiene; premis
     // deadlock opinion salah karena emit fire-and-forget dan tidak
     // menunggu JS, tapi hold lock tetap dipersingkat).
+    // B11-W2: fungsi ini TIDAK lagi meng-emit di sini — ia mengembalikan
+    // URI track yang berakhir; emitTrackEnded dilakukan advanceWorkerLoop
+    // SESUDAH advanceBusy_ = false + notify_all() (lihat di bawah).
     std::unique_lock<std::recursive_mutex> loadLock(loadTrackMutex_);
 
     // Cek-batal DI DALAM lock (lihat (b) di header): cancel yang terjadi
     // sebelum akuisisi ini terlihat di sini; cancel sesudahnya ter-block
     // sampai seksi kritis selesai. Tanpa cek ini, worker yang lolos cek
     // drain terakhir tetap menggeser indeks sesudah navigasi manual.
-    if (advanceCancelled_.load(std::memory_order_acquire)) return;
+    if (advanceCancelled_.load(std::memory_order_acquire)) return std::nullopt;
     // B8-P2: cek gen DI DALAM lock, pasangan cek drain di atas — load
     // manual yang mendarat di antara cek drain terakhir dan akuisisi
     // lock ini sudah menaikkan loadGen_, dan cancel-nya bisa sudah
@@ -2119,9 +2134,9 @@ void PlaybackController::processAdvance(const std::string& finishedUri,
             static_cast<unsigned long long>(gen),
             static_cast<unsigned long long>(
                 loadGen_.load(std::memory_order_acquire)));
-        return;
+        return std::nullopt;
     }
-    if (!queue_) return;
+    if (!queue_) return std::nullopt;
 
     // 🔥 FIX (2026-11-10, P-M10): lewati track yang tidak bisa dimuat.
     //
@@ -2167,7 +2182,8 @@ void PlaybackController::processAdvance(const std::string& finishedUri,
 
     if (loaded) {
         // Ekor track lama SUDAH habis terdengar — sekarang waktunya JS
-        // tahu track itu berakhir (emit di bawah, sesudah lock dilepas).
+        // tahu track itu berakhir (B11-W2: URI dikembalikan di akhir
+        // fungsi; emit dilakukan worker loop sesudah idle).
     } else {
         __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                             "advance: queue exhausted (repeat off atau "
@@ -2181,24 +2197,38 @@ void PlaybackController::processAdvance(const std::string& finishedUri,
         pauseFadeRemainingFrames_.store(0, std::memory_order_release);
         playing_.store(false, std::memory_order_release);
         if (state_) state_->setStatus(PlaybackStatus::Completed);
-        // Emit di bawah, sesudah lock dilepas.
+        // B11-W2: URI dikembalikan di akhir fungsi; emit dilakukan
+        // worker loop sesudah idle.
     }
 
     // B8-P3: emitTrackEnded keluar dari loadLock scope. Kedua cabang di
-    // atas meng-emit URI yang sama (finishedUri), jadi satu emit di sini
-    // cukup. Satu-satunya data yang dibutuhkan emit adalah URI track
-    // yang selesai — disalin ke lokal DI DALAM lock; emit memakai
+    // atas meng-emit URI yang sama (finishedUri), jadi satu nilai kembali
+    // di sini cukup. Satu-satunya data yang dibutuhkan emit adalah URI
+    // track yang selesai — disalin ke lokal DI DALAM lock; emit memakai
     // salinan itu sesudah lock dilepas, jadi tidak ada bacaan state
     // bersama sesudah unlock. Urutan observabel tidak berubah: emit
     // tetap terjadi sesudah advance + loadTrack sukses (atau sesudah
     // exhausted + status Completed diputuskan), sebelum processAdvance
     // kembali ke worker loop.
+    // B11-W2: kembalikan URI-nya saja — JANGAN emit di sini. Emit
+    // dilakukan advanceWorkerLoop sesudah worker ditandai idle
+    // (advanceBusy_ = false + notify_all()), supaya stop() yang menunggu
+    // idle tidak pernah melihat worker sibuk saat event sudah terkirim.
+    // Konsekuensi yang diterima: event bisa tiba sesaat sesudah stop()
+    // — JS membandingkan URI, jadi aman.
     const std::string endedUri = finishedUri;
     loadLock.unlock();
-    pristine::playback::emitTrackEnded(endedUri);
+    return endedUri;
 }
 
 void PlaybackController::waitForAdvanceIdle() {
+    // B11-W2: self-guard — bila dipanggil dari thread advance worker itu
+    // sendiri, wait di sini = deadlock diri sendiri: advanceBusy_ hanya
+    // dibersihkan worker itu sendiri di akhir advanceWorkerLoop, dan
+    // thread itu sedang menunggu dirinya selesai. Saat ini satu-satunya
+    // pemanggil adalah stop() (bukan worker), jadi ini defense-in-depth
+    // murah; return segera tanpa wait.
+    if (std::this_thread::get_id() == advanceWorker_.get_id()) return;
     std::unique_lock<std::mutex> lock(advanceMutex_);
     advanceCv_.wait(lock, [this] { return !advanceBusy_; });
 }

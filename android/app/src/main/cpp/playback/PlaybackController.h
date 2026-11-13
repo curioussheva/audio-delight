@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <functional>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 #include "PlaybackState.h"
@@ -184,9 +185,16 @@ private:
     void advanceWorkerLoop();
     // gen = generasi yang dibawa permintaan saat di-post (B8-P2): dicek
     // di drain loop DAN sesudah loadLock didapat — post basi dibuang.
-    void processAdvance(const std::string& finishedUri, uint64_t gen);
+    // B11-W2: mengembalikan URI track yang berakhir bila event
+    // track-ended harus di-emit (emit dilakukan advanceWorkerLoop
+    // SESUDAH worker idle), std::nullopt bila tidak ada yang di-emit
+    // (dibatalkan / post basi / stop diminta / queue kosong).
+    std::optional<std::string> processAdvance(const std::string& finishedUri,
+                                              uint64_t gen);
     // PB6-W3: tunggu worker advance selesai memproses permintaan yang
     // sedang berjalan (dipakai stop() sebelum mengambil loadTrackMutex_).
+    // B11-W2: no-op bila dipanggil dari thread advance worker itu
+    // sendiri (self-guard — wait di sana = deadlock diri sendiri).
     void waitForAdvanceIdle();
     // 🔥 FIX (2026-11-10, p-m12): tunggu in-flight render() selesai (maks
     // 100 ms) setelah clearing_ dikibarkan, sebelum pcmQueue_->clear().
