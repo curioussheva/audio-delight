@@ -1,5 +1,5 @@
 #include "FFTProcessor.h"
-#include "../dsp/convolution/WindowFunctions.h"
+#include "WindowFunctions.h"
 #include <cmath>
 
 namespace pristine {
