@@ -45,7 +45,7 @@ android {
     namespace 'com.pristineaudio.app'
 
     compileSdk rootProject.ext.compileSdkVersion
-    ndkVersion rootProject.ext.ndkVersion ?: "27.1.12297006"
+    ndkVersion rootProject.ext.ndkVersion ?: "28.2.13676358"
 
     defaultConfig {
         applicationId 'com.pristineaudio.app'

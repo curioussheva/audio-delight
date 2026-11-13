@@ -18,11 +18,11 @@ fi
 
 if [ -z "${ANDROID_NDK_HOME:-}" ]; then
     # Cari NDK di dalam SDK
-    NDK_DIR=$(find "$ANDROID_SDK_HOME/ndk" -maxdepth 1 -type d -name "27.1.12297006" 2>/dev/null | head -1)
+    NDK_DIR=$(find "$ANDROID_SDK_HOME/ndk" -maxdepth 1 -type d -name "28.2.13676358" 2>/dev/null | head -1)
     if [ -n "$NDK_DIR" ]; then
         export ANDROID_NDK_HOME="$NDK_DIR"
     else
-        echo "❌ NDK 27.1.12297006 not found in $ANDROID_SDK_HOME/ndk. Exiting."
+        echo "❌ NDK 28.2.13676358 not found in $ANDROID_SDK_HOME/ndk. Exiting."
         exit 1
     fi
 fi

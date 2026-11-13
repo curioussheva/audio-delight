@@ -4,7 +4,7 @@ buildscript {
         minSdkVersion = findProperty('android.minSdkVersion')?.toInteger() ?: 24
         compileSdkVersion = findProperty('android.compileSdkVersion')?.toInteger() ?: 36
         targetSdkVersion = findProperty('android.targetSdkVersion')?.toInteger() ?: 36
-        ndkVersion = findProperty('android.ndkVersion') ?: "27.1.12297006"
+        ndkVersion = findProperty('android.ndkVersion') ?: "28.2.13676358"
         kotlinVersion = findProperty('android.kotlinVersion') ?: "2.0.21"
     }
     repositories {
