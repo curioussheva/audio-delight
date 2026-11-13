@@ -38,7 +38,9 @@ static pristine::playback::PlaybackController* getController() {
         }
     });
 
-    __android_log_print(ANDROID_LOG_DEBUG, "NativePlaybackModule", "getController: controller=%p", (void*)gPlaybackController);
+    // (Log per-panggilan getController dihapus 2026-11-13, eksperimen B:
+    // J2-m7 — 329 baris DEBUG per sesi 5 menit di logcat #19, spam murni.
+    // Baris ini hanya log pointer yang sama setiap panggilan.)
 
     return gPlaybackController;
 }
