@@ -50,12 +50,10 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     private external fun nativeGetActualSampleRate(): Int
 
     // Additional JNI functions (were missing before)
-    private external fun setNativeDSPEnabled(enabled: Boolean)
     private external fun setNativeLimiterEnabled(enabled: Boolean)
     private external fun setNativeSolfeggioFreq(freq: Float)
     private external fun setNativeBrainwaveFreq(freq: Float)
     private external fun setNativeResonanceIntensity(intensity: Float)
-    private external fun setNativeImmersiveEnabled(enabled: Boolean)
 
     // Ã°ÂÂÂ¥ Mode pemrosesan (BitPerfect=0, DSP=1, Immersive=2).
     //
@@ -346,11 +344,6 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     // ===================== ADDITIONAL REACT METHODS =====================
 
     @ReactMethod
-    fun setDSPEnabled(enabled: Boolean) {
-        if (engineAvailable) setNativeDSPEnabled(enabled)
-    }
-
-    @ReactMethod
     fun setLimiterEnabled(enabled: Boolean) {
         if (engineAvailable) setNativeLimiterEnabled(enabled)
     }
@@ -368,11 +361,6 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     @ReactMethod
     fun setResonanceIntensity(intensity: Float) {
         if (engineAvailable) setNativeResonanceIntensity(intensity)
-    }
-
-    @ReactMethod
-    fun setImmersiveEnabled(enabled: Boolean) {
-        if (engineAvailable) setNativeImmersiveEnabled(enabled)
     }
 
     // ===================== PRIVATE HELPER =====================

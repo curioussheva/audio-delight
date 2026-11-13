@@ -52,12 +52,10 @@ export interface Spec extends TurboModule {
   getActualSampleRate(): number;
 
   // Additional engine controls
-  setDSPEnabled(enabled: boolean): void;
   setLimiterEnabled(enabled: boolean): void;
   setSolfeggioFreq(freq: number): void;
   setBrainwaveFreq(freq: number): void;
   setResonanceIntensity(intensity: number): void;
-  setImmersiveEnabled(enabled: boolean): void;
 
   /**
    * Pilih mode pemrosesan: 0 = BitPerfect, 1 = DSP, 2 = Immersive.

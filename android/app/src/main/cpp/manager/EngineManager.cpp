@@ -1117,15 +1117,6 @@ void EngineManager::onDeviceRemoved(int32_t deviceId) {
 // DSP CONTROL
 // =====================================================
 
-void EngineManager::setDSPEnabled(
-    bool enabled
-) {
-
-    mEngine.setDSPEnabled(
-        enabled
-    );
-}
-
 void EngineManager::setLimiterEnabled(
     bool enabled
 ) {
@@ -1220,10 +1211,6 @@ void EngineManager::setBrainwaveFreq(float freq) {
 
 void EngineManager::setResonanceIntensity(float intensity) {
     mEngine.setResonanceIntensity(intensity);
-}
-
-void EngineManager::setImmersiveEnabled(bool enabled) {
-    mEngine.setImmersiveEnabled(enabled);
 }
 
 void EngineManager::setMasterGain(

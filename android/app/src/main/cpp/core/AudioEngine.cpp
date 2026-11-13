@@ -13,16 +13,16 @@
 namespace pristine {
 
 // (C-DSPMETRIC, 2026-11-12): "DSP aktif" yang sebenarnya — BUKAN flag
-// isDSPEnabled() mentah. Flag itu tidak pernah menggerakkan jalur produksi:
-// AudioPipeline.cpp:437 `enabled` sengaja SELALU true, bukan
-// params.dspEnabled, dan setDSPEnabled tidak punya pemanggil TS (hanya
-// deklarasi spec + JNI). Yang benar-benar memproses PCM di jalur produksi
-// adalah DUA syarat sekaligus: gate produksi menyala (AudioCallback.cpp:173
-// memagari applyPipeline) DAN mode bukan BitPerfect (AudioPipeline::process
-// memetakan BitPerfect ke processBitPerfect() yang no-op). Jadi metrik
-// dspEnabled harus melaporkan kondisi gabungan ini, bukan flag mentah —
-// kalau tidak, getStats() mengklaim DSP aktif padahal tidak ada satu sample
-// pun yang diproses (mis. mode BitPerfect, atau gate dimatikan di Settings).
+// mentah (flag setDSPEnabled/isDSPEnabled + field params.dspEnabled
+// dihapus B12-W7: tidak pernah menggerakkan jalur produksi).
+// AudioPipeline.cpp:437 `enabled` sengaja SELALU true. Yang benar-benar
+// memproses PCM di jalur produksi adalah DUA syarat sekaligus: gate
+// produksi menyala (AudioCallback.cpp:173 memagari applyPipeline) DAN mode
+// bukan BitPerfect (AudioPipeline::process memetakan BitPerfect ke
+// processBitPerfect() yang no-op). Jadi metrik dspEnabled harus melaporkan
+// kondisi gabungan ini, bukan flag mentah — kalau tidak, getStats()
+// mengklaim DSP aktif padahal tidak ada satu sample pun yang diproses
+// (mis. mode BitPerfect, atau gate dimatikan di Settings).
 static bool computeDSPActive(
     const AudioState& state
 ) noexcept {
@@ -218,9 +218,10 @@ bool AudioEngine::start(
     // di seluruh repo — tetap diperbaiki supaya metriknya jujur.)
     mMetrics.setExclusiveMode(mStreamController.isExclusive());
     // (C-DSPMETRIC, 2026-11-12): laporkan kondisi AKTIF gabungan (mode !=
-    // BitPerfect && gate menyala), bukan flag isDSPEnabled() mentah — flag
-    // itu default false dan tidak pernah dibaca jalur produksi, jadi nilai
-    // mentahnya menyesatkan (lihat computeDSPActive di atas).
+    // BitPerfect && gate menyala), bukan flag mentah yang sudah dihapus
+    // (B12-W7) — flag itu default false dan tidak pernah dibaca jalur
+    // produksi, jadi nilai mentahnya menyesatkan (lihat computeDSPActive
+    // di atas).
     mMetrics.setDSPEnabled(computeDSPActive(mState));
 
     return true;
@@ -339,23 +340,6 @@ AudioEngine::getProcessingMode() const {
 }
 
 // =====================================================
-// DSP ENABLE
-// =====================================================
-
-void AudioEngine::setDSPEnabled(
-    bool enabled
-) {
-
-    mState.setDSPEnabled(enabled);
-    // Metrik mengikuti kondisi AKTIF gabungan (C-DSPMETRIC), bukan flag
-    // mentah ini: flag tetap disimpan di state (disalin updateParameters()
-    // ke mParams.dspEnabled, tapi tidak ada yang menggerakkannya di jalur
-    // produksi) — yang menentukan apakah PCM benar-benar diproses adalah
-    // mode + gate, lihat computeDSPActive di atas.
-    mMetrics.setDSPEnabled(computeDSPActive(mState));
-}
-
-// =====================================================
 // LIMITER ENABLE
 // =====================================================
 
@@ -364,17 +348,6 @@ void AudioEngine::setLimiterEnabled(
 ) {
 
     mState.setLimiterEnabled(enabled);
-}
-
-// =====================================================
-// IMMERSIVE ENABLE
-// =====================================================
-
-void AudioEngine::setImmersiveEnabled(
-    bool enabled
-) {
-
-    mState.setImmersiveEnabled(enabled);
 }
 
 // =====================================================

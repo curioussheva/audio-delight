@@ -277,9 +277,9 @@ private:
     std::atomic<bool>
         mExclusiveMode{false};
 
-    // Default harus sama dengan AudioState (mDSPEnabled default false di
-    // sana): metrik mencerminkan state, bukan menebak. Diisi ulang dari
-    // AudioState saat stream start (AudioEngine::start).
+    // Default false (B12-W7: flag mentah AudioState sudah dihapus; metrik
+    // ini diisi ulang dari computeDSPActive saat stream start di
+    // AudioEngine::start, bukan dari flag).
     std::atomic<bool>
         mDSPEnabled{false};
 };

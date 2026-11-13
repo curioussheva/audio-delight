@@ -454,13 +454,14 @@ void AudioPipeline::applyDSPConfig(
     mDspConfig.headphonePreset =
         params.headphonePreset;
 
-    // `enabled` sengaja SELALU true, bukan `params.dspEnabled`.
+    // `enabled` sengaja SELALU true, bukan flag `dspEnabled` lama.
     //
     // `dspEnabled` adalah flag lama yang tidak punya pemanggil di JS dan
-    // defaultnya false. Kalau ia dipakai sebagai gerbang, `DSPChain::process()`
-    // akan langsung `return` dan mode DSP tetap tidak berefek — persis bug yang
-    // sedang diperbaiki. Gerbang yang sah adalah mode itu sendiri: fungsi ini
-    // hanya dipanggil dari cabang DSP/Immersive.
+    // defaultnya false (dihapus B12-W7). Kalau ia dipakai sebagai gerbang,
+    // `DSPChain::process()` akan langsung `return` dan mode DSP tetap tidak
+    // berefek — persis bug yang sedang diperbaiki. Gerbang yang sah adalah
+    // mode itu sendiri: fungsi ini hanya dipanggil dari cabang
+    // DSP/Immersive.
     //
     // Lihat docs/DSP_CHAIN_AUDIT.md § "dspEnabled/limiterEnabled".
 

@@ -202,9 +202,6 @@ struct DSPParameters {
     // FLAGS
     // =============================================
 
-    bool dspEnabled =
-        true;
-
     bool limiterEnabled =
         true;
 

@@ -29,12 +29,10 @@ export interface NativeDSPInterface {
   isDSPProcessingEnabled(): boolean;
 
   // Additional engine controls
-  setDSPEnabled(enabled: boolean): void;
   setLimiterEnabled(enabled: boolean): void;
   setSolfeggioFreq(freq: number): void;
   setBrainwaveFreq(freq: number): void;
   setResonanceIntensity(intensity: number): void;
-  setImmersiveEnabled(enabled: boolean): void;
 }
 
 

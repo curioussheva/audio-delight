@@ -184,7 +184,6 @@ public:
     void cancelIdleClose();
 
     // dsp
-    void setDSPEnabled(bool enabled);
     void setLimiterEnabled(bool enabled);
     void setEqBand(int band, float gainDb);
     // (C-EQATOM, 2026-11-12): tulis massal `count` band pertama (1..10)
@@ -215,7 +214,6 @@ public:
     void setSolfeggioFreq(float freq);
     void setBrainwaveFreq(float freq);
     void setResonanceIntensity(float intensity);
-    void setImmersiveEnabled(bool enabled);
 
     // mode
     void setProcessingMode(

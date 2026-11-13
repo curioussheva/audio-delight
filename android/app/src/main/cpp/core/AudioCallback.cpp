@@ -304,7 +304,6 @@ void AudioCallback::updateParameters() {
     mParams.masterGain = mState.masterGain();
     mParams.balance = mState.balance();
     mParams.stereoWidth = mState.stereoWidth();
-    mParams.dspEnabled = mState.isDSPEnabled();
     mParams.limiterEnabled = mState.isLimiterEnabled();
     mParams.solfeggioFreq = mState.solfeggioFreq();
     mParams.brainwaveFreq = mState.brainwaveFreq();

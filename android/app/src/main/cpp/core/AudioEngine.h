@@ -125,10 +125,6 @@ public:
     // DSP CONTROL
     // =============================================
 
-    void setDSPEnabled(
-        bool enabled
-    );
-
     void setLimiterEnabled(
         bool enabled
     );
@@ -210,14 +206,6 @@ public:
 
     void setResonanceIntensity(
         float intensity
-    );
-
-    // =============================================
-    // IMMERSIVE ENABLE
-    // =============================================
-
-    void setImmersiveEnabled(
-        bool enabled
     );
 
     // =============================================

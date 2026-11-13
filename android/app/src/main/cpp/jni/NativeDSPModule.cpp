@@ -166,23 +166,6 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeBalance(
 }
 
 // =====================================================
-// DSP ENABLE
-// =====================================================
-
-JNIEXPORT void JNICALL
-Java_com_pristineaudio_dsp_NativeDSPModule_setNativeDSPEnabled(
-    JNIEnv* env,
-    jobject,
-    jboolean enabled
-) {
-    pristine::jni::guardedVoid(env, "setNativeDSPEnabled", [&] {
-
-    EngineManager::get()
-        .setDSPEnabled(enabled);
-    });
-}
-
-// =====================================================
 // LIMITER
 // =====================================================
 
@@ -325,14 +308,6 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeResonanceIntensity(
     JNIEnv* env, jobject, jfloat intensity) {
     pristine::jni::guardedVoid(env, "setNativeResonanceIntensity", [&] {
     EngineManager::get().setResonanceIntensity(intensity);
-    });
-}
-
-JNIEXPORT void JNICALL
-Java_com_pristineaudio_dsp_NativeDSPModule_setNativeImmersiveEnabled(
-    JNIEnv* env, jobject, jboolean enabled) {
-    pristine::jni::guardedVoid(env, "setNativeImmersiveEnabled", [&] {
-    EngineManager::get().setImmersiveEnabled(enabled);
     });
 }
 

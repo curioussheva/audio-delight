@@ -63,27 +63,6 @@ public:
     }
 
     // =============================================
-    // DSP ENABLE
-    // =============================================
-
-    inline void setDSPEnabled(
-        bool value
-    ) {
-
-        mDSPEnabled.store(
-            value,
-            std::memory_order_release
-        );
-    }
-
-    inline bool isDSPEnabled() const {
-
-        return mDSPEnabled.load(
-            std::memory_order_acquire
-        );
-    }
-
-    // =============================================
     // LIMITER ENABLE
     // =============================================
 
@@ -100,27 +79,6 @@ public:
     inline bool isLimiterEnabled() const {
 
         return mLimiterEnabled.load(
-            std::memory_order_acquire
-        );
-    }
-
-    // =============================================
-    // IMMERSIVE ENABLE
-    // =============================================
-
-    inline void setImmersiveEnabled(
-        bool value
-    ) {
-
-        mImmersiveEnabled.store(
-            value,
-            std::memory_order_release
-        );
-    }
-
-    inline bool isImmersiveEnabled() const {
-
-        return mImmersiveEnabled.load(
             std::memory_order_acquire
         );
     }
@@ -696,13 +654,7 @@ private:
         mRunning{false};
 
     std::atomic<bool>
-        mDSPEnabled{false};  // 🔥 FIX: default DSP disabled
-
-    std::atomic<bool>
         mLimiterEnabled{true};
-
-    std::atomic<bool>
-        mImmersiveEnabled{false};
 
     std::atomic<bool>
         mExclusiveMode{false};
