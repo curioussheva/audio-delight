@@ -5,8 +5,10 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.module.annotations.ReactModule
+import android.os.Process
 import android.util.Log
 import com.pristineaudio.NativeLibrary
+import java.util.concurrent.Executors
 
 /**
  * Jembatan analisis spektral offline: file audio -> JSON hasil FFT.
@@ -22,9 +24,14 @@ import com.pristineaudio.NativeLibrary
  *   <- JSON string: { ok, measuredCutoffHz, lsbZeroRatio16, ... }
  * ```
  *
- * Pekerjaan berat (decode + FFT) jalan sinkron di thread modul — bukan
- * audio thread, bukan main thread. Decode 5 jendela kecil biasanya
- * < 1 detik untuk file lokal.
+ * Pekerjaan berat (decode + FFT) jalan sinkron di background thread
+ * berprioritas rendah (THREAD_PRIORITY_BACKGROUND) — bukan audio
+ * thread, bukan main thread, bukan thread modul React. Decode 5
+ * jendela kecil biasanya < 1 detik untuk file lokal.
+ *
+ * Kontrak Promise ke TS tetap sama: resolve JSON atau reject dengan
+ * kode yang sama. Satu pemanggilan = satu tugas di executor, dan
+ * tugas itu menyelesaikan promise tepat sekali (resolve ATAU reject).
  *
  * Kontrak kegagalan (pelajaran dari visualizer): tidak ada string kosong
  * diam-diam — null / exception di-reject dengan kode yang jelas supaya
@@ -42,6 +49,18 @@ class NativeAnalyzerModule(reactContext: ReactApplicationContext) :
     companion object {
         const val NAME = "NativeAnalyzerModule"
         private const val TAG = "NativeAnalyzerModule"
+    }
+
+    // Executor satu thread untuk analisis: panggilan berurutan tidak
+    // saling berebut decode/FFT, dan prioritas rendah supaya analisis
+    // offline tidak mengganggu playback / UI. Prioritas di-set di
+    // dalam thread-nya sendiri (setThreadPriority hanya berlaku
+    // untuk thread yang memanggilnya).
+    private val analyzerExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread({
+            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
+            runnable.run()
+        }, "AnalyzerWorker")
     }
 
     override fun getName() = NAME
@@ -63,21 +82,26 @@ class NativeAnalyzerModule(reactContext: ReactApplicationContext) :
             return
         }
 
-        try {
-            val json = nativeAnalyzeFile(uri)
-            if (json == null) {
-                promise.reject(
-                    "ANALYZER_ERROR",
-                    "Analisis spektral gagal (native mengembalikan null)",
-                )
-                return
+        // Validasi cepat di atas tetap di thread modul; hanya pemanggilan
+        // JNI yang berat yang pindah ke background thread. Promise
+        // React Native aman diselesaikan dari thread mana pun.
+        analyzerExecutor.execute {
+            try {
+                val json = nativeAnalyzeFile(uri)
+                if (json == null) {
+                    promise.reject(
+                        "ANALYZER_ERROR",
+                        "Analisis spektral gagal (native mengembalikan null)",
+                    )
+                } else {
+                    Log.d(TAG, "analyzeFile selesai (${json.length} karakter)")
+                    promise.resolve(json)
+                }
+            } catch (e: Throwable) {
+                // Throwable, bukan Exception: UnsatisfiedLinkError adalah Error.
+                Log.e(TAG, "analyzeFile gagal: ${e.message}", e)
+                promise.reject("ANALYZER_ERROR", "Analisis spektral gagal: ${e.message}")
             }
-            Log.d(TAG, "analyzeFile selesai (${json.length} karakter)")
-            promise.resolve(json)
-        } catch (e: Throwable) {
-            // Throwable, bukan Exception: UnsatisfiedLinkError adalah Error.
-            Log.e(TAG, "analyzeFile gagal: ${e.message}", e)
-            promise.reject("ANALYZER_ERROR", "Analisis spektral gagal: ${e.message}")
         }
     }
 
