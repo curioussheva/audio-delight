@@ -16,7 +16,8 @@
 # (.kt vs .cpp). Skrip ini memeriksa level ARTEFAK: apakah simbol itu
 # benar-benar ada di .so yang dikemas ke dalam APK. Itu menangkap kasus
 # yang tidak terlihat di source, mis. file .cpp yang hilang dari build
-# (saat ini: jni/NativePristineAudio.cpp tidak ada — lihat catatan di bawah).
+# (contoh yang pernah tertangkap: modul dormant NativePristineAudio, yang
+# 7 simbol JNI-nya tidak ada di .so — modul itu sudah dihapus, B12-NPA).
 #
 # PEMAKAIAN
 # ---------
@@ -51,13 +52,11 @@
 #  - `external fun` di dalam `companion object` TANPA @JvmStatic tetap
 #    dideklarasikan di kelas LUAR (method_ids classes.dex), jadi simbolnya
 #    memakai nama kelas luar — bukan `..._00024Companion_...`.
-#  - Simbol `Java_` di .so cocok 1:1 dengan daftar ini, KECUALI 7 milik
-#    NativePristineAudio (nativeStart/Stop/PushAudio/IsRunning/GetLatency/
-#    GetUnderruns/GetOverruns) yang TIDAK ADA di .so karena
-#    jni/NativePristineAudio.cpp memang tidak ada di repo. Jadi skrip ini
-#    AKAN gagal (exit 1) sampai modul itu dihapus atau JNI-nya
-#    diimplementasikan — itu disengaja: gate ini dibuat untuk menangkap
-#    tepat kasus seperti itu, bukan untuk diloloskan diam-diam.
+#  - Simbol `Java_` di .so cocok 1:1 dengan daftar ini. Dulu ada pengecualian
+#    7 simbol milik NativePristineAudio yang TIDAK ADA di .so (JNI C++-nya
+#    sudah dihapus di ronde 1, J-M4; modulnya dormant) — gate ini sengaja
+#    dibuat untuk menangkap tepat kasus seperti itu, bukan untuk diloloskan
+#    diam-diam, dan kasus itu ditutup dengan menghapus modulnya (B12-NPA).
 #    (check_jni_pairs.py sudah melaporkan hal yang sama di level source.)
 #
 # OVERLOAD

@@ -8,7 +8,6 @@ import com.facebook.react.uimanager.ViewManager
 import com.pristineaudio.dsp.NativeDSPModule
 import com.pristineaudio.visualizer.NativeVisualizerBridge
 import com.pristineaudio.MediaStoreModule
-import com.pristineaudio.audio.NativePristineAudio
 import com.pristineaudio.audio.NativePlaybackModule
 import com.pristineaudio.audio.NativeDeviceModule
 import com.pristineaudio.audio.NativeAnalyzerModule
@@ -20,7 +19,6 @@ class PristineAudioPackage : ReactPackage {
             NativeDSPModule(reactContext),
             NativeVisualizerBridge(reactContext),
             MediaStoreModule(reactContext),
-            NativePristineAudio(reactContext),
             NativePlaybackModule(reactContext),
             NativeDeviceModule(reactContext),
             NativeAnalyzerModule(reactContext),

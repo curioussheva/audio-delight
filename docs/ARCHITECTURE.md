@@ -68,7 +68,7 @@ pristine/
 
 **Layout fitur** konsisten: `<fitur>/{api, components, hooks, store}` (bukan semua punya keempatnya). `library` paling lengkap: `api | components | hooks | native | services | store | types | utils`.
 
-**8 TurboModule spec** di `src/specs/`: `MediaStoreModule` | `NativeDSPModule` | `NativeDeviceModule` | `NativePlaybackModule` | `NativePlaybackService` | `NativePristineAudio` | `NativeVisualizerBridge` | `USBDACModule`.
+**7 TurboModule spec** di `src/specs/`: `MediaStoreModule` | `NativeDSPModule` | `NativeDeviceModule` | `NativePlaybackModule` | `NativePlaybackService` | `NativeVisualizerBridge` | `USBDACModule`. (`NativePristineAudio` dihapus 2026-11-13, B12-NPA: modul dormant, 7 `external fun` tanpa JNI — JNI C++-nya sudah dihapus di ronde 1, J-M4.)
 
 ---
 
