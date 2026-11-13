@@ -923,7 +923,11 @@ bool PlaybackController::seek(double seconds) {
     // render membaca 0 dan track mulai dari awal (logcat #12, 12:30:40).
     // Store atomik, aman terhadap write render() (nilai yang sama sumbernya).
     if (state_) {
-        const double posSeconds = actualSeconds > 0.0 ? actualSeconds : seconds;
+        // B11-P2-1: posSeconds bisa negatif bila actualSeconds <= 0 dan
+        // seconds negatif (JS kirim ms negatif via JNI jlong) — cast
+        // double -> uint64_t dari nilai negatif/non-finite adalah UB.
+        double posSeconds = actualSeconds > 0.0 ? actualSeconds : seconds;
+        if (!(posSeconds > 0.0)) posSeconds = 0.0;
         state_->setPosition(static_cast<uint64_t>(posSeconds * 1000.0));
     }
 

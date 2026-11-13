@@ -20,6 +20,10 @@ void PlaybackClock::seekToFrame(uint64_t frame) noexcept {
 }
 
 void PlaybackClock::seekToSeconds(double seconds, uint32_t sampleRate) noexcept {
+    // B11-P2-1: cast double -> uint64_t dari nilai negatif/non-finite
+    // adalah UB — clamp ke 0 dulu (NaN tak terjangkau via JNI jlong,
+    // tapi negatif terjangkau bila JS kirim ms negatif).
+    if (!(seconds > 0.0)) seconds = 0.0;
     seekToFrame(static_cast<uint64_t>(seconds * sampleRate));
 }
 
