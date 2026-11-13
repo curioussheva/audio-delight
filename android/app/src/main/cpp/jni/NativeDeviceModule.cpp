@@ -1,4 +1,5 @@
 #include "NativeDeviceModule.h"
+#include "JniGuard.h"
 #include "core/JniContext.h"
 #include "devices/AudioDeviceManager.h"
 #include "manager/EngineManager.h"
@@ -25,15 +26,18 @@ extern "C" {
 // masa depan), kedua pemakai gagal aman (return 0 / "") dengan log, bukan
 // crash.
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativeInitAppContext(JNIEnv* env, jobject, jobject context) {
+    pristine::jni::guardedVoid(env, "nativeInitAppContext", [&] {
     if (!context) {
         __android_log_print(ANDROID_LOG_ERROR, "NativeDeviceModule",
                             "nativeInitAppContext: context null, diabaikan");
         return;
     }
     pristine::jni::setAppContext(env, context);
+    });
 }
 
 JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativeGetDevices(JNIEnv* env, jobject) {
+    return pristine::jni::guarded<jobjectArray>(env, "nativeGetDevices", nullptr, [&]() -> jobjectArray {
     auto& mgr = pristine::AudioDeviceManager::get();
 
     // Baca ulang dari Android supaya device yang baru dicolok ikut terlihat.
@@ -97,6 +101,7 @@ JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_n
                         "nativeGetDevices: mengembalikan %d device (refresh=%d)",
                         (int)devices.size(), count);
     return result;
+    });
 }
 
 // Dipanggil dari AudioDeviceCallback (Kotlin) saat device dicolok.
@@ -104,6 +109,7 @@ JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_n
 // Tanpa ini, DAC yang dicolok saat app berjalan tidak terdeteksi dan laju
 // stream tetap memakai device lama - bit-perfect gagal secara diam-diam.
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativeOnDeviceAdded(JNIEnv* env, jobject, jstring deviceId) {
+    pristine::jni::guardedVoid(env, "nativeOnDeviceAdded", [&] {
     if (!deviceId) return;
     const char* id = env->GetStringUTFChars(deviceId, nullptr);
     if (!id) return;
@@ -136,9 +142,11 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativeOnD
     // Manager melakukan refresh lagi (idempotent) + memanggil callback
     // terdaftar sendiri.
     mgr.notifyDeviceAdded(d);
+    });
 }
 
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativeOnDeviceRemoved(JNIEnv* env, jobject, jstring deviceId) {
+    pristine::jni::guardedVoid(env, "nativeOnDeviceRemoved", [&] {
     if (!deviceId) return;
     const char* id = env->GetStringUTFChars(deviceId, nullptr);
     if (id) {
@@ -163,9 +171,11 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativeOnD
 
         env->ReleaseStringUTFChars(deviceId, id);
     }
+    });
 }
 
 JNIEXPORT jboolean JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativeSetActiveDevice(JNIEnv* env, jobject, jstring deviceId) {
+    return pristine::jni::guarded<jboolean>(env, "nativeSetActiveDevice", JNI_FALSE, [&]() -> jboolean {
     // null = lepas preferensi (biarkan sistem memilih). String kosong juga.
     if (!deviceId) {
         return pristine::AudioDeviceManager::get().setActiveDevice("") ? JNI_TRUE : JNI_FALSE;
@@ -215,6 +225,7 @@ JNIEXPORT jboolean JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativ
 
     env->ReleaseStringUTFChars(deviceId, id);
     return (ok && applied) ? JNI_TRUE : JNI_FALSE;
+    });
 }
 
 // Status perangkat yang BENAR-BENAR dipakai stream, untuk kejujuran UI.
@@ -231,6 +242,7 @@ JNIEXPORT jboolean JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativ
 // Tanpa ini UI tidak bisa membedakan "sedang memakai DAC" dari "mengira
 // memakai DAC" - dan menampilkan badge bit-perfect yang salah.
 JNIEXPORT jintArray JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativeGetActiveDeviceStatus(JNIEnv* env, jobject) {
+    return pristine::jni::guarded<jintArray>(env, "nativeGetActiveDeviceStatus", nullptr, [&]() -> jintArray {
     auto& engine = pristine::EngineManager::get();
 
     jint values[5];
@@ -245,6 +257,7 @@ JNIEXPORT jintArray JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nati
         env->SetIntArrayRegion(result, 0, 5, values);
     }
     return result;
+    });
 }
 
 // Perangkat yang SEDANG dipakai stream, sebagai objek AudioDeviceInfo.
@@ -257,6 +270,7 @@ JNIEXPORT jintArray JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nati
 // tersedia. Kalau permintaan DAC tidak dihormati, yang dikembalikan adalah
 // speaker internal, dan UI jadi tidak bisa menyebut nama DAC.
 JNIEXPORT jobject JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativeGetCurrentOutputDevice(JNIEnv* env, jobject) {
+    return pristine::jni::guarded<jobject>(env, "nativeGetCurrentOutputDevice", nullptr, [&]() -> jobject {
     const auto device = pristine::EngineManager::get().currentOutputDevice();
 
     if (device.id.empty()) {
@@ -305,6 +319,7 @@ JNIEXPORT jobject JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_native
                         pristine::deviceTypeName(device.type));
 
     return obj;
+    });
 }
 
 } // extern "C"

@@ -3,6 +3,7 @@
 // =====================================================
 
 #include <jni.h>
+#include "JniGuard.h"
 #include <android/log.h>
 
 #include <string>
@@ -30,11 +31,12 @@ extern "C" {
 
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_setNativeEqualizerBand(
-    JNIEnv*,
+    JNIEnv* env,
     jobject,
     jint band,
     jfloat gainDb
 ) {
+    pristine::jni::guardedVoid(env, "setNativeEqualizerBand", [&] {
 
     if (band < 0 || band >= 10) {
         return;
@@ -45,6 +47,7 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeEqualizerBand(
             static_cast<int>(band),
             gainDb
         );
+    });
 }
 
 // =====================================================
@@ -61,6 +64,7 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeEqualizerBands(
     jobject,
     jfloatArray gains
 ) {
+    pristine::jni::guardedVoid(env, "setNativeEqualizerBands", [&] {
 
     if (gains == nullptr) {
         return;
@@ -90,6 +94,7 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeEqualizerBands(
             buffer,
             static_cast<int>(count)
         );
+    });
 }
 
 // =====================================================
@@ -98,13 +103,15 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeEqualizerBands(
 
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_setNativeBassBoost(
-    JNIEnv*,
+    JNIEnv* env,
     jobject,
     jfloat gainDb
 ) {
+    pristine::jni::guardedVoid(env, "setNativeBassBoost", [&] {
 
     EngineManager::get()
         .setBassBoost(gainDb);
+    });
 }
 
 // =====================================================
@@ -113,13 +120,15 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeBassBoost(
 
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_setNativeMasterGain(
-    JNIEnv*,
+    JNIEnv* env,
     jobject,
     jfloat gain
 ) {
+    pristine::jni::guardedVoid(env, "setNativeMasterGain", [&] {
 
     EngineManager::get()
         .setMasterGain(gain);
+    });
 }
 
 // =====================================================
@@ -128,13 +137,15 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeMasterGain(
 
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_setNativeStereoWide(
-    JNIEnv*,
+    JNIEnv* env,
     jobject,
     jfloat width
 ) {
+    pristine::jni::guardedVoid(env, "setNativeStereoWide", [&] {
 
     EngineManager::get()
         .setStereoWide(width);
+    });
 }
 
 // =====================================================
@@ -143,13 +154,15 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeStereoWide(
 
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_setNativeBalance(
-    JNIEnv*,
+    JNIEnv* env,
     jobject,
     jfloat balance
 ) {
+    pristine::jni::guardedVoid(env, "setNativeBalance", [&] {
 
     EngineManager::get()
         .setBalance(balance);
+    });
 }
 
 // =====================================================
@@ -158,13 +171,15 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeBalance(
 
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_setNativeDSPEnabled(
-    JNIEnv*,
+    JNIEnv* env,
     jobject,
     jboolean enabled
 ) {
+    pristine::jni::guardedVoid(env, "setNativeDSPEnabled", [&] {
 
     EngineManager::get()
         .setDSPEnabled(enabled);
+    });
 }
 
 // =====================================================
@@ -173,13 +188,15 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeDSPEnabled(
 
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_setNativeLimiterEnabled(
-    JNIEnv*,
+    JNIEnv* env,
     jobject,
     jboolean enabled
 ) {
+    pristine::jni::guardedVoid(env, "setNativeLimiterEnabled", [&] {
 
     EngineManager::get()
         .setLimiterEnabled(enabled);
+    });
 }
 
 // =====================================================
@@ -193,10 +210,11 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeLimiterEnabled(
 // bukan error kompilasi).
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_setNativeProcessingMode(
-    JNIEnv*,
+    JNIEnv* env,
     jobject,
     jint mode
 ) {
+    pristine::jni::guardedVoid(env, "setNativeProcessingMode", [&] {
 
     // (C-CAST, 2026-11-12): jint dari JS TIDAK tervalidasi — dulu
     // static_cast<ProcessingMode>(mode) tanpa cek rentang, jadi nilai liar
@@ -232,6 +250,7 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeProcessingMode(
 
     __android_log_print(ANDROID_LOG_INFO, "NativeDSPModule",
         "mode pemrosesan -> %d", (int)mode);
+    });
 }
 
 // =====================================================
@@ -243,25 +262,29 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeProcessingMode(
 // berefek. Lihat core/DSPProcessingGate.h dan docs/adr/0001-*.
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_setNativeDSPProcessingEnabled(
-    JNIEnv*,
+    JNIEnv* env,
     jobject,
     jboolean enabled
 ) {
+    pristine::jni::guardedVoid(env, "setNativeDSPProcessingEnabled", [&] {
 
     DSPProcessingGate::setEnabled(enabled == JNI_TRUE);
 
     __android_log_print(ANDROID_LOG_INFO, "NativeDSPModule",
         "DSP processing in production: %s",
         DSPProcessingGate::enabled() ? "AKTIF" : "mati");
+    });
 }
 
 JNIEXPORT jboolean JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_nativeIsDSPProcessingEnabled(
-    JNIEnv*,
+    JNIEnv* env,
     jobject
 ) {
+    return pristine::jni::guarded<jboolean>(env, "nativeIsDSPProcessingEnabled", JNI_FALSE, [&]() -> jboolean {
 
     return DSPProcessingGate::enabled() ? JNI_TRUE : JNI_FALSE;
+    });
 }
 
 // =====================================================
@@ -270,37 +293,47 @@ Java_com_pristineaudio_dsp_NativeDSPModule_nativeIsDSPProcessingEnabled(
 
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_toggleNativeExclusiveMode(
-    JNIEnv*,
+    JNIEnv* env,
     jobject,
     jboolean enabled
 ) {
+    pristine::jni::guardedVoid(env, "toggleNativeExclusiveMode", [&] {
 
     EngineManager::get()
         .setExclusiveMode(enabled);
+    });
 }
 
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_setNativeSolfeggioFreq(
-    JNIEnv*, jobject, jfloat freq) {
+    JNIEnv* env, jobject, jfloat freq) {
+    pristine::jni::guardedVoid(env, "setNativeSolfeggioFreq", [&] {
     EngineManager::get().setSolfeggioFreq(freq);
+    });
 }
 
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_setNativeBrainwaveFreq(
-    JNIEnv*, jobject, jfloat freq) {
+    JNIEnv* env, jobject, jfloat freq) {
+    pristine::jni::guardedVoid(env, "setNativeBrainwaveFreq", [&] {
     EngineManager::get().setBrainwaveFreq(freq);
+    });
 }
 
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_setNativeResonanceIntensity(
-    JNIEnv*, jobject, jfloat intensity) {
+    JNIEnv* env, jobject, jfloat intensity) {
+    pristine::jni::guardedVoid(env, "setNativeResonanceIntensity", [&] {
     EngineManager::get().setResonanceIntensity(intensity);
+    });
 }
 
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_setNativeImmersiveEnabled(
-    JNIEnv*, jobject, jboolean enabled) {
+    JNIEnv* env, jobject, jboolean enabled) {
+    pristine::jni::guardedVoid(env, "setNativeImmersiveEnabled", [&] {
     EngineManager::get().setImmersiveEnabled(enabled);
+    });
 }
 
 // =====================================================
@@ -314,18 +347,22 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeImmersiveEnabled(
 
 JNIEXPORT jboolean JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_nativeIsExclusiveModeActive(
-    JNIEnv*, jobject) {
+    JNIEnv* env, jobject) {
+    return pristine::jni::guarded<jboolean>(env, "nativeIsExclusiveModeActive", JNI_FALSE, [&]() -> jboolean {
     return static_cast<jboolean>(
         EngineManager::get().isExclusive()
     );
+    });
 }
 
 JNIEXPORT jint JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_nativeGetActualSampleRate(
-    JNIEnv*, jobject) {
+    JNIEnv* env, jobject) {
+    return pristine::jni::guarded<jint>(env, "nativeGetActualSampleRate", 0, [&]() -> jint {
     return static_cast<jint>(
         EngineManager::get().actualSampleRate()
     );
+    });
 }
 
 // =====================================================
@@ -339,6 +376,7 @@ Java_com_pristineaudio_dsp_NativeDSPModule_nativeGetActualSampleRate(
 JNIEXPORT jboolean JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_nativeLoadHeadphonePreset(
     JNIEnv* env, jobject, jstring presetText) {
+    return pristine::jni::guarded<jboolean>(env, "nativeLoadHeadphonePreset", JNI_FALSE, [&]() -> jboolean {
 
     if (presetText == nullptr) {
         return static_cast<jboolean>(false);
@@ -359,11 +397,13 @@ Java_com_pristineaudio_dsp_NativeDSPModule_nativeLoadHeadphonePreset(
     env->ReleaseStringUTFChars(presetText, chars);
 
     return static_cast<jboolean>(ok);
+    });
 }
 
 JNIEXPORT jint JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_nativeValidateHeadphonePreset(
     JNIEnv* env, jobject, jstring presetText) {
+    return pristine::jni::guarded<jint>(env, "nativeValidateHeadphonePreset", -1, [&]() -> jint {
 
     if (presetText == nullptr) {
         return -1;
@@ -384,26 +424,33 @@ Java_com_pristineaudio_dsp_NativeDSPModule_nativeValidateHeadphonePreset(
     env->ReleaseStringUTFChars(presetText, chars);
 
     return static_cast<jint>(count);
+    });
 }
 
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_nativeClearHeadphonePreset(
-    JNIEnv*, jobject) {
+    JNIEnv* env, jobject) {
+    pristine::jni::guardedVoid(env, "nativeClearHeadphonePreset", [&] {
     EngineManager::get().clearHeadphonePreset();
+    });
 }
 
 JNIEXPORT void JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_setNativeHeadphoneCorrectionEnabled(
-    JNIEnv*, jobject, jboolean enabled) {
+    JNIEnv* env, jobject, jboolean enabled) {
+    pristine::jni::guardedVoid(env, "setNativeHeadphoneCorrectionEnabled", [&] {
     EngineManager::get().setHeadphoneCorrectionEnabled(enabled);
+    });
 }
 
 JNIEXPORT jboolean JNICALL
 Java_com_pristineaudio_dsp_NativeDSPModule_nativeIsHeadphoneCorrectionEnabled(
-    JNIEnv*, jobject) {
+    JNIEnv* env, jobject) {
+    return pristine::jni::guarded<jboolean>(env, "nativeIsHeadphoneCorrectionEnabled", JNI_FALSE, [&]() -> jboolean {
     return static_cast<jboolean>(
         EngineManager::get().isHeadphoneCorrectionEnabled()
     );
+    });
 }
 
 }

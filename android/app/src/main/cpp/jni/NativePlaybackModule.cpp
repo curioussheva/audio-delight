@@ -1,4 +1,5 @@
 #include "NativePlaybackModule.h"
+#include "JniGuard.h"
 #include "manager/EngineManager.h"
 #include "playback/PlaybackController.h"
 #include "playback/TrackQueue.h"
@@ -85,7 +86,9 @@ JNIEXPORT void JNICALL
 Java_com_pristineaudio_audio_NativePlaybackModule_nativeInitEventEmitter(
     JNIEnv* env, jobject instance
 ) {
+    pristine::jni::guardedVoid(env, "nativeInitEventEmitter", [&] {
     pristine::playback::initModuleRef(env, instance);
+    });
 }
 
 // Mengembalikan jboolean supaya lapisan atas bisa tahu play() GAGAL.
@@ -93,7 +96,8 @@ Java_com_pristineaudio_audio_NativePlaybackModule_nativeInitEventEmitter(
 // URI yang belum di-resolve) hilang begitu saja dan UI tetap menampilkan
 // "sedang diputar" walau tidak ada suara. Terbukti pada logcat 2026-10-04
 // 12:22 - play(): FAILED tiga kali, tapi updateMetadata tetap jalan.
-JNIEXPORT jboolean JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativePlay(JNIEnv*, jobject) {
+JNIEXPORT jboolean JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativePlay(JNIEnv* env, jobject) {
+    return pristine::jni::guarded<jboolean>(env, "nativePlay", JNI_FALSE, [&]() -> jboolean {
     __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
                         "nativePlay() called from JS");
     // getControllerAndStartEngine: play() adalah satu-satunya transport yang
@@ -109,24 +113,32 @@ JNIEXPORT jboolean JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nat
     __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
                         "nativePlay() returned ok=%d", ok ? 1 : 0);
     return ok ? JNI_TRUE : JNI_FALSE;
+    });
 }
 
-JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativePause(JNIEnv*, jobject) {
+JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativePause(JNIEnv* env, jobject) {
+    pristine::jni::guardedVoid(env, "nativePause", [&] {
     auto* controller = getController();
     if (controller) controller->pause();
+    });
 }
 
-JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeStop(JNIEnv*, jobject) {
+JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeStop(JNIEnv* env, jobject) {
+    pristine::jni::guardedVoid(env, "nativeStop", [&] {
     auto* controller = getController();
     if (controller) controller->stop();
+    });
 }
 
-JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSeek(JNIEnv*, jobject, jlong positionMs) {
+JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSeek(JNIEnv* env, jobject, jlong positionMs) {
+    pristine::jni::guardedVoid(env, "nativeSeek", [&] {
     auto* controller = getController();
     if (controller) controller->seek(static_cast<double>(positionMs) / 1000.0);
+    });
 }
 
-JNIEXPORT jlong JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetPosition(JNIEnv*, jobject) {
+JNIEXPORT jlong JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetPosition(JNIEnv* env, jobject) {
+    return pristine::jni::guarded<jlong>(env, "nativeGetPosition", 0, [&]() -> jlong {
     auto* controller = getController();
     if (!controller) return 0;
     // PB6-W2C (2026-11-12): log NaN dari thread polling, bukan audio
@@ -148,19 +160,23 @@ JNIEXPORT jlong JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_native
                             nanTotal - lastLogged, nanTotal);
     }
     return static_cast<jlong>(controller->state()->getPosition().positionMs);
+    });
 }
 
-JNIEXPORT jint JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetStatus(JNIEnv*, jobject) {
+JNIEXPORT jint JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetStatus(JNIEnv* env, jobject) {
+    return pristine::jni::guarded<jint>(env, "nativeGetStatus", 0, [&]() -> jint {
     auto* controller = getController();
     if (!controller) return 0;
     return static_cast<jint>(controller->state()->getStatus());
+    });
 }
 
 // Indeks trek aktif di queue native. Native yang memegang queue dan indeks,
 // jadi JS harus menanyakan ini alih-alih menghitung sendiri - kalau JS
 // menghitung sendiri, shuffle dan repeat di sisi native tidak terhitung dan
 // lagu yang dimuat bisa berbeda dari yang ditampilkan UI.
-JNIEXPORT jint JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetCurrentIndex(JNIEnv*, jobject) {
+JNIEXPORT jint JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetCurrentIndex(JNIEnv* env, jobject) {
+    return pristine::jni::guarded<jint>(env, "nativeGetCurrentIndex", -1, [&]() -> jint {
     auto* controller = getController();
     if (!controller || !controller->queue()) return -1;
     // activeTracks(), BUKAN tracks(): indeks ini menunjuk posisi di queue
@@ -169,16 +185,19 @@ JNIEXPORT jint JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeG
     // menampilkan lagu/posisi yang salah.
     if (controller->queue()->activeTracks().empty()) return -1;
     return static_cast<jint>(controller->queue()->currentIndex());
+    });
 }
 
 // Jumlah trek di queue native. Dipakai JS untuk memvalidasi indeks dan
 // mendeteksi queue yang berubah di luar kendalinya.
-JNIEXPORT jint JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetQueueSize(JNIEnv*, jobject) {
+JNIEXPORT jint JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetQueueSize(JNIEnv* env, jobject) {
+    return pristine::jni::guarded<jint>(env, "nativeGetQueueSize", 0, [&]() -> jint {
     auto* controller = getController();
     if (!controller || !controller->queue()) return 0;
     // Ukuran sama untuk tracks() dan activeTracks() (hanya urutannya beda),
     // tapi activeTracks() dipakai supaya satu sumber kebenaran.
     return static_cast<jint>(controller->queue()->activeTracks().size());
+    });
 }
 
 // Lompat ke indeks tertentu di queue native lalu muat treknya.
@@ -187,7 +206,8 @@ JNIEXPORT jint JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeG
 // memanggil setQueue ulang hanya untuk berpindah trek - itu menimpa queue
 // native dan membuang indeks yang sudah dihitung native (termasuk urutan
 // shuffle yang hanya diketahui native).
-JNIEXPORT jboolean JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeJumpTo(JNIEnv*, jobject, jint index) {
+JNIEXPORT jboolean JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeJumpTo(JNIEnv* env, jobject, jint index) {
+    return pristine::jni::guarded<jboolean>(env, "nativeJumpTo", JNI_FALSE, [&]() -> jboolean {
     auto* controller = getController();
     if (!controller || !controller->queue() || index < 0) return JNI_FALSE;
 
@@ -201,24 +221,32 @@ JNIEXPORT jboolean JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nat
     auto track = q->current();
     if (!track) return JNI_FALSE;
     return controller->loadTrack(*track) ? JNI_TRUE : JNI_FALSE;
+    });
 }
 
-JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeNext(JNIEnv*, jobject) {
+JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeNext(JNIEnv* env, jobject) {
+    pristine::jni::guardedVoid(env, "nativeNext", [&] {
     auto* controller = getController();
     if (controller) controller->next();
+    });
 }
 
-JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativePrevious(JNIEnv*, jobject) {
+JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativePrevious(JNIEnv* env, jobject) {
+    pristine::jni::guardedVoid(env, "nativePrevious", [&] {
     auto* controller = getController();
     if (controller) controller->previous();
+    });
 }
 
-JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSetShuffle(JNIEnv*, jobject, jboolean enabled) {
+JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSetShuffle(JNIEnv* env, jobject, jboolean enabled) {
+    pristine::jni::guardedVoid(env, "nativeSetShuffle", [&] {
     auto* controller = getController();
     if (controller) controller->setShuffle(enabled);
+    });
 }
 
-JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSetRepeatMode(JNIEnv*, jobject, jint mode) {
+JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSetRepeatMode(JNIEnv* env, jobject, jint mode) {
+    pristine::jni::guardedVoid(env, "nativeSetRepeatMode", [&] {
     // 🔥 KOREKSI (2026-11-11, J-M1): enum C++ RepeatMode (PlaybackTypes.h)
     // = Off 0, One 1, All 2 — sama dengan konstanta Android. Peta TS lama
     // (all:1, track:2) TERBALIK; peta TS sudah dibetulkan, tapi JNI tetap
@@ -231,20 +259,26 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeS
     }
     auto* controller = getController();
     if (controller) controller->setRepeatMode(static_cast<pristine::playback::RepeatMode>(mode));
+    });
 }
 
-JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSetPlaybackRate(JNIEnv*, jobject, jfloat rate) {
+JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSetPlaybackRate(JNIEnv* env, jobject, jfloat rate) {
+    pristine::jni::guardedVoid(env, "nativeSetPlaybackRate", [&] {
     auto* controller = getController();
     if (controller) controller->setPlaybackRate(rate);
+    });
 }
 
 // 🔥 FASE R (2026-11-11): retune — rasio pitch (1.0 = A=440, 432/440 = A=432).
-JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSetPitchRatio(JNIEnv*, jobject, jfloat ratio) {
+JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSetPitchRatio(JNIEnv* env, jobject, jfloat ratio) {
+    pristine::jni::guardedVoid(env, "nativeSetPitchRatio", [&] {
     auto* controller = getController();
     if (controller) controller->setPitchRatio(ratio);
+    });
 }
 
 JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetQueue(JNIEnv* env, jobject) {
+    return pristine::jni::guarded<jobjectArray>(env, "nativeGetQueue", nullptr, [&]() -> jobjectArray {
     // 🔥 FIX (2026-11-11, J-M5/J-m9): guard queue() + cek FindClass/
     // NewStringUTF. FindClass yang gagal meninggalkan exception pending;
     // NewObjectArray/NewStringUTF sesudahnya jadi no-op dan array
@@ -287,6 +321,7 @@ JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativePlaybackModule
         env->DeleteLocalRef(str);
     }
     return result;
+    });
 }
 
 // `uris`  = daftar URI track (wajib).
@@ -301,6 +336,7 @@ JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativePlaybackModule
 // engine akan mendeteksi sendiri untuk track itu.
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSetQueue(
     JNIEnv* env, jobject, jobjectArray uris, jintArray rates) {
+    pristine::jni::guardedVoid(env, "nativeSetQueue", [&] {
 
     __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
                         "nativeSetQueue() called");
@@ -371,9 +407,11 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeS
     __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
                         "nativeSetQueue: setTracks called with %zu tracks",
                         tracks.size());
+    });
 }
 
 JNIEXPORT jstring JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetCurrentTrack(JNIEnv* env, jobject) {
+    return pristine::jni::guarded<jstring>(env, "nativeGetCurrentTrack", nullptr, [&]() -> jstring {
     auto* controller = getController();
     if (!controller) return env->NewStringUTF("");
     auto queuePtr = controller->queue(); // 🔥 J-m9: guard queue()
@@ -383,6 +421,7 @@ JNIEXPORT jstring JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nati
         return env->NewStringUTF(track->uri.c_str());
     }
     return env->NewStringUTF("");
+    });
 }
 
 } // extern "C"

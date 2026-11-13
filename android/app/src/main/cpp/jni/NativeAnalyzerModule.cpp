@@ -13,6 +13,7 @@
 // NewStringUTF jadi no-op dan mengembalikan null diam-diam).
 
 #include <jni.h>
+#include "JniGuard.h"
 
 #include "decoder/AudioFileAnalyzer.h"
 
@@ -58,6 +59,7 @@ Java_com_pristineaudio_audio_NativeAnalyzerModule_nativeAnalyzeFile(
     jobject /* thiz */,
     jstring jUri
 ) {
+    return pristine::jni::guarded<jstring>(env, "nativeAnalyzeFile", nullptr, [&]() -> jstring {
     if (!jUri) return nullptr;
 
     const char* cUri = env->GetStringUTFChars(jUri, nullptr);
@@ -112,6 +114,7 @@ Java_com_pristineaudio_audio_NativeAnalyzerModule_nativeAnalyzeFile(
         return nullptr;
     }
     return out;
+    });
 }
 
 } // namespace extern "C"

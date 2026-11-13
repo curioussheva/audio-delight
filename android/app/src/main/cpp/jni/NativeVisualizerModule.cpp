@@ -3,6 +3,7 @@
 // =====================================================
 
 #include <jni.h>
+#include "JniGuard.h"
 
 #include "../manager/EngineManager.h"
 #include "../visualizer/VisualizerBuffer.h"
@@ -20,6 +21,7 @@ Java_com_pristineaudio_visualizer_NativeVisualizerBridge_getVisualizerData(
     JNIEnv* env,
     jobject
 ) {
+    return pristine::jni::guarded<jfloatArray>(env, "getVisualizerData", nullptr, [&]() -> jfloatArray {
 
     // FIX B2 (2026-11-10): 2048, bukan 256.
     //
@@ -62,6 +64,7 @@ Java_com_pristineaudio_visualizer_NativeVisualizerBridge_getVisualizerData(
     );
 
     return array;
+    });
 }
 
 }
