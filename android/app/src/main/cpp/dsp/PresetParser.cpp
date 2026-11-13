@@ -12,7 +12,19 @@
 
 namespace pristine {
 
+// Batas kapasitas preset harus sama di kedua sisi: data POD yang menyeberangi
+// thread (HeadphonePresetData) dan cascade DSP (BiquadCascade). Kalau salah
+// satu berubah tanpa yang lain, toPresetData/applyPreset bisa menulis di luar
+// kapasitas. Angka 16 diduplikasi dengan sengaja (lihat AudioTypes.h).
+static_assert(HeadphonePresetData::kMaxFilters == BiquadCascade::kMaxFilters,
+              "kapasitas preset harus sama");
+
 namespace {
+
+// Batas ukuran teks preset dan jumlah baris filter (W8 Batch 13): tanpa ini
+// teks raksasa / ribuan baris bisa diproses tanpa batas.
+constexpr size_t kMaxTextBytes = 64 * 1024;
+constexpr int kMaxFilterLines = 64;
 
 // =====================================================
 // UTILITAS TEKS
@@ -68,7 +80,12 @@ bool parseFloat(const std::string& s, float& out) {
     if (end == num.c_str()) return false;
     if (!std::isfinite(v)) return false;
 
-    out = static_cast<float>(v);
+    // Cek SETELAH cast ke float: nilai seperti 1e39 finite sebagai double
+    // tapi menjadi +inf di float (W8 Batch 13).
+    const float f = static_cast<float>(v);
+    if (!std::isfinite(f)) return false;
+
+    out = f;
     return true;
 }
 
@@ -107,6 +124,11 @@ ParseResult parseParametricPreset(
     ParseResult result;
     result.preset.name = name;
 
+    if (text.size() > kMaxTextBytes) {
+        result.error = "teks preset terlalu besar";
+        return result;
+    }
+
     std::istringstream stream(text);
     std::string raw;
     int lineNo = 0;
@@ -138,6 +160,14 @@ ParseResult parseParametricPreset(
                     ": nilai preamp tidak terbaca - diabaikan");
                 continue;
             }
+            // Preamp di luar -40..+40 dB tidak masuk akal untuk preset
+            // koreksi headphone - abaikan, jangan pasang nilai ekstrem.
+            if (!(db >= -40.0f && db <= 40.0f)) {
+                result.warnings.push_back(
+                    "baris " + std::to_string(lineNo) +
+                    ": nilai preamp di luar rentang - diabaikan");
+                continue;
+            }
             result.preset.preampDb = db;
             continue;
         }
@@ -152,6 +182,10 @@ ParseResult parseParametricPreset(
 
         // Jumlahkan SEMUA baris Filter, termasuk yang OFF, supaya preset yang
         // barisnya gagal di-parse tidak lolos sebagai "preset kecil".
+        if (result.preset.totalFilterLines >= kMaxFilterLines) {
+            result.error = "terlalu banyak baris filter";
+            return result;
+        }
         ++result.preset.totalFilterLines;
 
         // Buang "Filter N:" -> sisanya parameter.
@@ -294,11 +328,16 @@ ParseResult parseParametricPreset(
                 ": tanpa Q - memakai 0.707");
         }
 
-        // Sanity: Fc harus di dalam rentang audio dan Q positif.
-        if (!(f.freqHz > 0.0f) || !(f.q > 0.0f)) {
+        // Sanity rentang: Fc harus di dalam pita audio, Q dan gain dalam
+        // rentang yang masuk akal untuk preset koreksi headphone. Nilai di
+        // luar rentang (mis. Fc 1e39 yang lolos sebagai +inf, atau Q negatif)
+        // ditolak per baris, bukan dipasang ke biquad.
+        if (!(f.freqHz >= 10.0f && f.freqHz <= 20000.0f) ||
+            !(f.q >= 0.1f && f.q <= 20.0f) ||
+            !(f.gainDb >= -30.0f && f.gainDb <= 30.0f)) {
             result.warnings.push_back(
                 "baris " + std::to_string(lineNo) +
-                ": Fc/Q tidak masuk akal - baris dilewati");
+                ": Fc/Q/Gain di luar rentang - baris dilewati");
             continue;
         }
 
