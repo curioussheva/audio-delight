@@ -99,8 +99,14 @@ DeviceType mapDeviceType(jint androidType, bool& outIsUsb) {
         case 10:
         case 29: return DeviceType::HDMI;
         case 11:
-        case 12:
         case 22: outIsUsb = true; return DeviceType::USB_AUDIO;
+        // 12 USB_ACCESSORY (B13-W2, 2026-11-14): accessory-mode, BUKAN
+        // DAC USB audio-class — perangkat protokol accessory (mis. dock
+        // yang jadi USB host), bukan output musik. Sebelumnya ikut
+        // dipetakan ke USB_AUDIO (plus supportsExclusive=true), jadi
+        // tampil di daftar dan diklaim bisa bit-perfect. Sekarang
+        // UNKNOWN supaya tersaring oleh isMusicOutputDevice().
+        case 12: return DeviceType::UNKNOWN;
         // 13 DOCK: sejak API 34 hanya dock digital; jenis transportnya
         // tidak diketahui dari tipenya saja — tetap UNKNOWN.
         case 13: return DeviceType::UNKNOWN;

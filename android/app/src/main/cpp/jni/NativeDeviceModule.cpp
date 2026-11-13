@@ -3,6 +3,7 @@
 #include "core/JniContext.h"
 #include "devices/AudioDeviceManager.h"
 #include "manager/EngineManager.h"
+#include <algorithm>
 #include <vector>
 #include <android/log.h>
 #include <cstdlib>
@@ -44,6 +45,28 @@ JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_n
     // Sebelumnya fungsi ini mengembalikan array KOSONG tanpa membaca apa pun.
     const int count = mgr.refreshDevices();
     auto devices = mgr.getAvailableDevices();
+
+    // B13-W2 (2026-11-14): saring device non-musik SEBELUM dikirim ke JS —
+    // earpiece, telephony, dan UNKNOWN (REMOTE_SUBMIX, BUS, USB_ACCESSORY,
+    // ...) tidak tampil di daftar pemilih output.
+    //
+    // Filter di sini, di batas JNI, bukan di getAvailableDevices() /
+    // refreshDevices(): daftar internal (mDevices) harus tetap lengkap.
+    // EngineManager::setRequestedDeviceId memvalidasi id terhadap daftar
+    // itu, dan currentOutputDevice() mencari perangkat yang BENAR-BENAR
+    // dipakai stream (bisa saja earpiece saat telepon) — menyaring di
+    // manager akan membuat keduanya salah. Satu-satunya jalur daftar ke JS
+    // adalah fungsi ini (getDevices() dan refreshDevices() di Kotlin
+    // sama-sama memanggil nativeGetDevices; emitDeviceListChanged hanya
+    // mengirim event kosong tanpa payload, dan tidak ada listener JS untuk
+    // event itu). Active/requested tidak disentuh.
+    const size_t detectedCount = devices.size();
+    devices.erase(
+        std::remove_if(devices.begin(), devices.end(),
+                       [](const pristine::AudioDeviceDescriptor& d) {
+                           return !pristine::isMusicOutputDevice(d.type);
+                       }),
+        devices.end());
 
     jclass deviceClass = env->FindClass("com/pristineaudio/audio/AudioDeviceInfo");
     if (!deviceClass) {
@@ -98,8 +121,8 @@ JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_n
     }
 
     __android_log_print(ANDROID_LOG_INFO, "NativeDeviceModule",
-                        "nativeGetDevices: mengembalikan %d device (refresh=%d)",
-                        (int)devices.size(), count);
+                        "nativeGetDevices: mengembalikan %d device musik dari %zu terdeteksi (refresh=%d)",
+                        (int)devices.size(), detectedCount, count);
     return result;
     });
 }
