@@ -30,21 +30,28 @@ class NativePlaybackModule(
         // tidak bisa di init karena butuh library sudah termuat.
     }
 
-    // (B13-W14, 2026-11-14): bersihkan companion instance saat bridge
-    // di-destroy/reload — kalau tidak, PlaybackNativeBridge tetap memegang
-    // modul lama (beserta ReactApplicationContext lama) sampai modul baru
-    // dibuat dan menimpa instance. Hanya clear bila instance masih
-    // menunjuk ke modul ini: kalau reload sudah membuat modul baru dulu,
-    // instance sudah milik modul baru dan invalidate() modul lama ini
-    // tidak boleh menghapusnya. Pola sama dengan NativeDeviceModule
-    // (invalidate + super.invalidate()); onCatalystInstanceDestroy tidak
-    // dipakai — deprecated di RN, diganti invalidate().
+    // (B15-K-a, 2026-11-15): invalidate() TIDAK lagi membersihkan companion
+    // instance. Regresi B13-W14: instance = null saat ReactContext hancur
+    // (mis. service restart START_STICKY tanpa ReactContext) membuat semua
+    // perintah transport dari notifikasi/headset via PlaybackNativeBridge
+    // mati diam-diam, padahal engine C++ masih hidup — `external fun` JNI
+    // dipanggil lewat objek modul dan instance "basi" tetap bisa memanggilnya
+    // selama objeknya hidup. Jadi instance dipertahankan supaya bridge/service
+    // tetap bisa memanggil JNI; yang dimatikan hanya flag jsAlive milik
+    // instance ini, sehingga emit ke JS (yang butuh ReactContext hidup)
+    // ditolak, sementara modul baru (instance baru) tidak ikut mati —
+    // jsAlive adalah properti per-instance, bukan companion.
     override fun invalidate() {
-        if (instance === this) {
-            instance = null
-        }
+        jsAlive = false
         super.invalidate()
     }
+
+    // (B15-K-a): true selama ReactContext milik instance ini masih hidup.
+    // Dimatikan di invalidate(); dibaca PlaybackNativeBridge.emit*() untuk
+    // menolak emit ke JS yang sudah mati. Transport (play/pause/dll.) TIDAK
+    // memakai flag ini — harus tetap jalan selama engine C++ hidup.
+    @Volatile
+    var jsAlive = true
 
     @Volatile
     private var emitterRegistered = false

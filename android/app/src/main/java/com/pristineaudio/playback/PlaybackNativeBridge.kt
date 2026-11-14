@@ -149,6 +149,7 @@ object PlaybackNativeBridge {
     fun emitPlaybackStateChanged(isPlaying: Boolean) {
         try {
             val module = NativePlaybackModule.instance ?: return
+            if (!module.jsAlive) return
             val ctx = module.reactContext
             ctx.getJSModule(com.facebook.react.modules.core.DeviceEventManagerModule
                 .RCTDeviceEventEmitter::class.java)
@@ -163,6 +164,7 @@ object PlaybackNativeBridge {
     fun emitTrackChanged(uri: String, index: Int) {
         try {
             val module = NativePlaybackModule.instance ?: return
+            if (!module.jsAlive) return
             val ctx = module.reactContext
             ctx.getJSModule(com.facebook.react.modules.core.DeviceEventManagerModule
                 .RCTDeviceEventEmitter::class.java)
@@ -177,6 +179,7 @@ object PlaybackNativeBridge {
     fun emitTrackEnded(uri: String) {
         try {
             val module = NativePlaybackModule.instance ?: return
+            if (!module.jsAlive) return
             val ctx = module.reactContext
             ctx.getJSModule(com.facebook.react.modules.core.DeviceEventManagerModule
                 .RCTDeviceEventEmitter::class.java)
