@@ -29,7 +29,11 @@ public:
 
 private:
 
+    // (B14-E3, 2026-11-14): mWidth = nilai berjalan (ramp), mTarget =
+    // nilai tujuan dari applyConfig. Dulu setWidth langsung menimpa
+    // mWidth -> zipper saat slider lebar digeser.
     float mWidth = 1.0f;
+    float mTarget = 1.0f;
 };
 
 } // namespace pristine

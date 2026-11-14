@@ -48,12 +48,27 @@ public:
         // 2.0  = ultra wide
         // =========================================
 
+        // (B14-E3, 2026-11-14): NaN/negatif -> 1.0 dulu (defense-in-depth;
+        // jalur live sudah dijaga clampFinite di AudioState, tapi
+        // std::clamp(NaN) mengembalikan NaN). Lalu bypass bit-exact di
+        // width 1.0: (l+r)*0.5 + (l-r)*0.5 tidak mengembalikan l persis
+        // (selisih 1 ulp) — dalam mode DSP netral widener adalah
+        // satu-satunya tahap yang mengubah sampel, jadi tanpa bypass ini
+        // DSP netral tidak pernah sama dengan BitPerfect secara bit.
+        if (!(width >= 0.0f)) {
+            width = 1.0f;
+        }
+
         width =
             std::clamp(
                 width,
                 0.0f,
                 2.0f
             );
+
+        if (width == 1.0f) {
+            return;
+        }
 
         // =========================================
         // MID/SIDE PROCESSING
