@@ -30,6 +30,10 @@ public:
     void setWidth(float width); // 0-2 (1 = netral)
     void setDepth(float depth); // 0-1 (0 = tanpa ruang)
 
+    // Skala tap ambience terhadap laju sampling (B15-I3). Tanpa ini, tap
+    // yang dinyatakan dalam ms terhadap 48 kHz menciut 4x di 192 kHz.
+    void prepare(int32_t sampleRate);
+
     void process(float* left, float* right, int32_t numFrames);
     void reset();
 
@@ -48,8 +52,10 @@ private:
     float mCurrentDepth = 0.0f;
     bool mPrimed = false;
 
-    // Delay line ambience. 8192 sample = ~42 ms @ 192 kHz.
-    static constexpr int32_t kAmbienceSize = 8192;
+    // Delay line ambience. 16384 sample = ~42,7 ms @ 384 kHz.
+    // (B15-I3: tap terjauh terskala 9600 sampel @ 384 kHz masih muat;
+    // 8192 lama hanya muat sampai ~328 kHz.)
+    static constexpr int32_t kAmbienceSize = 16384;
     float mAmbienceL[kAmbienceSize] = {};
     float mAmbienceR[kAmbienceSize] = {};
 
@@ -62,6 +68,13 @@ private:
     static constexpr int32_t kTapNear = 576;   // ~12 ms @ 48 kHz
     static constexpr int32_t kTapMid = 888;    // ~18.5 ms @ 48 kHz
     static constexpr int32_t kTapFar = 1200;   // ~25 ms @ 48 kHz
+
+    // Tap yang sedang dipakai, dalam sample — diskala dari referensi 48 kHz
+    // di prepare() (B15-I3). Default = nilai 48 kHz, jadi perilaku lama
+    // tetap bila prepare() belum pernah dipanggil.
+    int32_t mTapNear = kTapNear;
+    int32_t mTapMid = kTapMid;
+    int32_t mTapFar = kTapFar;
 };
 
 }} // namespace

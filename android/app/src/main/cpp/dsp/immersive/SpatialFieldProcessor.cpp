@@ -2,6 +2,7 @@
 
 #include "../../core/AudioTypes.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace pristine { namespace dsp {
@@ -28,11 +29,39 @@ void SpatialFieldProcessor::setWidth(float width) {
 }
 
 void SpatialFieldProcessor::setDepth(float depth) {
-    mDepth = depth;
+    // (B15-I3): klem seperti setWidth — NaN -> 0.0 (tanpa ruang), finite di
+    // luar [0,1] -> batas terdekat. Jalur live sudah aman (depth <= 0.4 dari
+    // ImmersiveStage), ini hardening API. Prime pakai mDepth yang SUDAH
+    // di-clamp, seperti setWidth (C-IMMVAL): prime dari `depth` mentah
+    // mengembalikan NaN ke mCurrentDepth dan membatalkan clamp di atas.
+    mDepth = clampFinite(depth, 0.0f, 1.0f, 0.0f);
 
     if (!mPrimed) {
-        mCurrentDepth = depth;
+        mCurrentDepth = mDepth;
     }
+}
+
+// =====================================================
+// PREPARE
+// =====================================================
+
+void SpatialFieldProcessor::prepare(int32_t sampleRate) {
+    // (B15-I3): tap dinyatakan dalam ms terhadap referensi 48 kHz; tanpa
+    // penskalaan, kedalaman ruang menciut 4x di 192 kHz (12 ms -> 3 ms).
+    // Laju tidak valid: biarkan tap apa adanya (default 48 kHz / nilai
+    // prepare() valid terakhir). Pemanggil (ImmersiveStage::prepare)
+    // sudah menolak laju <= 0 lebih dulu, jadi ini hanya pengaman.
+    if (sampleRate <= 0) {
+        return;
+    }
+
+    const float scale = static_cast<float>(sampleRate) / 48000.0f;
+    mTapNear = std::min(
+        static_cast<int32_t>(kTapNear * scale + 0.5f), kAmbienceSize - 1);
+    mTapMid = std::min(
+        static_cast<int32_t>(kTapMid * scale + 0.5f), kAmbienceSize - 1);
+    mTapFar = std::min(
+        static_cast<int32_t>(kTapFar * scale + 0.5f), kAmbienceSize - 1);
 }
 
 // =====================================================
@@ -98,11 +127,11 @@ void SpatialFieldProcessor::process(
             // Dengan tap yang berbeda, kedua channel mendapat dekorasi yang
             // tidak sama, dan itu yang terdengar sebagai ruang.
             const int32_t tapA =
-                (mWriteIndex - kTapNear + kAmbienceSize) % kAmbienceSize;
+                (mWriteIndex - mTapNear + kAmbienceSize) % kAmbienceSize;
             const int32_t tapB =
-                (mWriteIndex - kTapFar + kAmbienceSize) % kAmbienceSize;
+                (mWriteIndex - mTapFar + kAmbienceSize) % kAmbienceSize;
             const int32_t tapC =
-                (mWriteIndex - kTapMid + kAmbienceSize) % kAmbienceSize;
+                (mWriteIndex - mTapMid + kAmbienceSize) % kAmbienceSize;
 
             wetL = (mAmbienceR[tapA] * 0.6f + mAmbienceR[tapC] * 0.4f)
                    * mCurrentDepth;
