@@ -89,14 +89,24 @@ void EQProcessor::process(
         // =========================================
         // PARAMETRIC EQ
         // =========================================
-
+        //
+        // (B14-E2, 2026-11-14): band tetap diproses selama bit mask
+        // sapuannya aktif — lewati hanya bila band mati DAN sapuan sudah
+        // selesai. Dulu band yang digeser ke 0 dB langsung di-bypass di
+        // sampel berikutnya, padahal koefisiennya masih menyapu menuju
+        // identitas: loncatan dari sinyal terfilter ke tak terfilter
+        // (klik), tepat yang mau dihindari C-SMOOTH. Koefisien identitas
+        // membuat state meluruh ke nol dengan sendirinya.
         for (
             int b = 0;
             b < kBands;
             ++b
         ) {
 
-            if (!mBandEnabled[b]) {
+            if (
+                !mBandEnabled[b] &&
+                (mSmoothingMask & (1u << b)) == 0
+            ) {
                 continue;
             }
 
@@ -112,8 +122,12 @@ void EQProcessor::process(
         // =========================================
         // BASS BOOST
         // =========================================
-
-        if (mBassEnabled) {
+        //
+        // (B14-E2): pola yang sama seperti band di atas.
+        if (
+            mBassEnabled ||
+            (mSmoothingMask & kBassBit) != 0
+        ) {
 
             l =
                 mBassLeft.process(l);
