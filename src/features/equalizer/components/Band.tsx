@@ -97,9 +97,10 @@ export const EqualizerBand = ({
 
   return (
     <View style={[styles.container, { opacity: disabled ? 0.35 : 1 }]}>
-      {/* DB Value di atas */}
+      {/* DB Value di atas — satu desimal (D4): langkah gesture 0,1 dB,
+          jadi +2,4 dan +2,5 tidak boleh tampil sama. */}
       <Text style={[styles.gainText, { color: gainColor }]}>
-        {gain > 0 ? `+${gain.toFixed(0)}` : gain.toFixed(0)}
+        {gain > 0 ? `+${gain.toFixed(1)}` : gain.toFixed(1)}
       </Text>
 
       <GestureDetector gesture={gesture}>

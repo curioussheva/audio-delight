@@ -25,6 +25,8 @@ import {
   GRAPH_CLIP_RED,
   GRAPH_CLIP_YELLOW,
   formatBoostDb,
+  formatHzLabel,
+  graphHzLabelIndices,
   sampleSmoothCurve,
   splitAboveZero,
 } from "@/features/equalizer/api/graphClip";
@@ -33,12 +35,18 @@ interface Props {
   bands: SharedValue<EqualizerBand[]> | EqualizerBand[]; // Terima dua-duanya agar fleksibel
   width?: number;
   height?: number;
+  /** Bekukan tampilan saat DSP bypass (B3): graph meredup. */
+  disabled?: boolean;
 }
+
+// Tinggi strip label Hz di bawah canvas.
+const HZ_STRIP = 16;
 
 export const FrequencyGraph: React.FC<Props> = ({
   bands,
   width = 340,
   height = 120,
+  disabled,
 }) => {
   const { theme } = useTheme();
 
@@ -161,8 +169,23 @@ export const FrequencyGraph: React.FC<Props> = ({
     [theme],
   );
 
+  // C1: label Hz di sumbu-x — dibaca dari frekuensi band yang sebenarnya
+  // (bands[i].frequency), bukan hafalan. Frekuensi band tidak berubah
+  // (hanya gain yang berubah), jadi baca sekali di render aman.
+  const currentBands = "value" in bands ? bands.value : bands;
+  const labelIndices = graphHzLabelIndices(currentBands?.length ?? 0);
+  const stepX =
+    currentBands && currentBands.length > 1
+      ? width / (currentBands.length - 1)
+      : width;
+
   return (
-    <View style={[styles.container, { width, height }]}>
+    <View
+      style={[
+        styles.container,
+        { width, height: height + HZ_STRIP, opacity: disabled ? 0.4 : 1 },
+      ]}
+    >
       {/* 0dB Reference Line */}
       <View
         style={[
@@ -237,7 +260,25 @@ export const FrequencyGraph: React.FC<Props> = ({
         </View>
       )}
 
-      <View style={styles.debugInfo}>
+      {/* Label Hz di sumbu-x (C1) — posisi x sama dengan titik band. */}
+      {labelIndices.map((i) => {
+        const freq = currentBands?.[i]?.frequency ?? 0;
+        const x = i * stepX;
+        const left = Math.max(0, Math.min(width - 36, x - 18));
+        return (
+          <Text
+            key={`hz-${i}`}
+            style={[
+              styles.hzLabel,
+              { left, top: height + 2, color: theme.colors.text.tertiary },
+            ]}
+          >
+            {formatHzLabel(freq)}
+          </Text>
+        );
+      })}
+
+      <View style={[styles.debugInfo, { height }]}>
         {/* U-P2-30: dulu label debug "#888" hardcoded — 2,96:1 di
             Porcelain (gagal 4,5). Pakai token text.tertiary. */}
         <Text style={[styles.debugText, { color: theme.colors.text.tertiary }]}>+12dB</Text>
@@ -266,7 +307,9 @@ const styles = StyleSheet.create({
   debugInfo: {
     position: "absolute",
     left: 8,
-    height: "100%",
+    top: 0,
+    // height di-override inline (= tinggi canvas) supaya tidak ikut
+    // strip label Hz di bawah.
     justifyContent: "space-between",
     paddingVertical: 10,
   },
@@ -274,10 +317,18 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontFamily: "monospace",
   },
+  hzLabel: {
+    position: "absolute",
+    // top di-override inline (= tepat di bawah canvas).
+    width: 36,
+    textAlign: "center",
+    fontSize: 9,
+  },
   warnPill: {
     position: "absolute",
     right: 8,
-    bottom: 6,
+    // Di atas strip label Hz (16px) supaya tidak menabrak label 16k.
+    bottom: 20,
     backgroundColor: "rgba(0,0,0,0.45)",
     paddingHorizontal: 8,
     paddingVertical: 3,

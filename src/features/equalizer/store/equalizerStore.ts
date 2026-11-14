@@ -231,6 +231,15 @@ export const useEqualizerStore = create<EqualizerStore>()(
         if (preset) {
           const newBands = preset.bands.map((b) => ({ ...b }));
           set({ activePresetId: presetId, bands: newBands });
+          // D1: preset adalah PROFIL penuh, bukan kurva saja — terapkan
+          // efek bila preset mendefinisikannya. undefined = biarkan nilai
+          // saat ini (preset bawaan yang EQ-only tidak me-reset efek).
+          if (preset.bassBoost !== undefined)
+            void get().setBassBoost(preset.bassBoost);
+          if (preset.virtualizer !== undefined)
+            void get().setVirtualizer(preset.virtualizer);
+          if (preset.reverb !== undefined)
+            void get().setReverb(preset.reverb);
           if (get().isEQEnabled && get().audioSessionId !== -1) {
             applyAllEffectsToNative(get());
           }
@@ -243,6 +252,10 @@ export const useEqualizerStore = create<EqualizerStore>()(
           name,
           isCustom: true,
           bands: JSON.parse(JSON.stringify(get().bands)),
+          // D1: simpan racikan lengkap, bukan kurva saja.
+          bassBoost: get().bassStrength,
+          virtualizer: get().virtualizerLevel,
+          reverb: get().reverbPreset,
         };
         set({
           customPresets: [...get().customPresets, newPreset],

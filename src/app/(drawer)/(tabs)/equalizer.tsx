@@ -63,13 +63,15 @@ if (
 }
 
 const { width } = Dimensions.get("window");
+// D2: label reverb Bahasa Indonesia (dulu Inggris di tengah UI Indonesia).
+// "Plate" tetap — itu nama jenis reverb, bukan ukuran ruang.
 const REVERB_LABELS = [
-  "None",
-  "Small Room",
-  "Medium Room",
-  "Large Room",
-  "Medium Hall",
-  "Large Hall",
+  "Tanpa Reverb",
+  "Ruang Kecil",
+  "Ruang Sedang",
+  "Ruang Besar",
+  "Aula Sedang",
+  "Aula Besar",
   "Plate",
 ];
 
@@ -268,6 +270,29 @@ export default function EqualizerScreen() {
     { id: "immersive", label: "Solfeggio", hint: "resonansi" },
   ];
 
+  // B4: pindah ke Bit-Perfect dari tab ini minta konfirmasi yang sama
+  // dengan settings.tsx — redaksi Alert disamakan (DSP mati).
+  const handleSelectMode = (mode: AudioMode) => {
+    if (mode === audioMode) return;
+
+    if (mode === "bit-perfect") {
+      Alert.alert(
+        "Aktifkan Bit-Perfect?",
+        "Mode ini menonaktifkan semua DSP (EQ, Bass, Reverb) untuk output murni tanpa pemrosesan. Pemutaran tetap berjalan walau device tidak mendukung jalur langsung.",
+        [
+          { text: "Batal", style: "cancel" },
+          {
+            text: "Aktifkan",
+            onPress: () => void setAudioMode("bit-perfect"),
+          },
+        ],
+      );
+      return;
+    }
+
+    void setAudioMode(mode);
+  };
+
   // Mode apa pun selain `dsp` membekukan kontrol di layar ini.
   const isDSPFrozen = audioMode !== "dsp";
 
@@ -449,7 +474,7 @@ export default function EqualizerScreen() {
               return (
                 <TouchableOpacity
                   key={m.id}
-                  onPress={() => void setAudioMode(m.id)}
+                  onPress={() => handleSelectMode(m.id)}
                   style={[
                     styles.modeBtn,
                     {
@@ -524,22 +549,35 @@ export default function EqualizerScreen() {
                   berlaku saat ini menyala.
                 </Text>
               </View>
-              <Switch
-                value={eq.isEQEnabled}
-                onValueChange={eq.toggleEQ}
-                disabled={eq.isDSPDisabled}
-                trackColor={{
-                  false: colors.background.tertiary,
-                  true: masterColor,
+              {/* D6: sakelar master dibungkus Pressable 44×44 seperti
+                  MiniSwitch (U-P2-01) — Switch default tingginya di bawah
+                  44dp. Switch di dalam pointerEvents="none", hanya visual;
+                  peran switch + label pindah ke pembungkus. */}
+              <Pressable
+                onPress={() => {
+                  if (!eq.isDSPDisabled) void eq.toggleEQ();
                 }}
-                thumbColor={eq.isEQEnabled ? masterColor : colors.text.tertiary}
+                disabled={eq.isDSPDisabled}
+                style={styles.miniSwitchHit}
                 accessibilityRole="switch"
                 accessibilityLabel="Pemrosesan DSP"
                 accessibilityState={{
                   checked: eq.isEQEnabled,
                   disabled: eq.isDSPDisabled,
                 }}
-              />
+              >
+                <Switch
+                  value={eq.isEQEnabled}
+                  onValueChange={eq.toggleEQ}
+                  disabled={eq.isDSPDisabled}
+                  trackColor={{
+                    false: colors.background.tertiary,
+                    true: masterColor,
+                  }}
+                  thumbColor={eq.isEQEnabled ? masterColor : colors.text.tertiary}
+                  pointerEvents="none"
+                />
+              </Pressable>
             </View>
           </View>
 
@@ -581,9 +619,11 @@ export default function EqualizerScreen() {
               paling awal di DSPChain (sebelum EQ). Koreksi menetralkan alat,
               EQ menyetel selera; menaruh kontrol EQ di atas akan menyesatkan
               tentang urutan yang sebenarnya. */}
-          <HeadphoneSection />
+          <HeadphoneSection disabled={eq.isDSPDisabled} />
 
-          {/* 2. GRAPH SECTION */}
+          {/* 2. GRAPH SECTION — B3: saat DSP bypass (mode non-DSP atau
+              sakelar master mati), graph meredup + label BYPASS supaya
+              kurva tidak terlihat seolah memproses. */}
           {visibleSections.graph && (
             <View
               style={[
@@ -601,7 +641,18 @@ export default function EqualizerScreen() {
                 bands={eq.currentBands}
                 width={width - spacing.md * 2 - spacing.sm * 2 - 2}
                 height={140}
+                disabled={isDSPFrozen || !eq.isEQEnabled}
               />
+              {(isDSPFrozen || !eq.isEQEnabled) && (
+                <Text
+                  style={[
+                    styles.bypassLabel,
+                    { color: colors.text.tertiary },
+                  ]}
+                >
+                  BYPASS — kurva tidak memproses
+                </Text>
+              )}
             </View>
           )}
 
@@ -779,6 +830,7 @@ export default function EqualizerScreen() {
             <Text style={[styles.sectionTitle, { color: colors.text.secondary }]}>
               PROFIL SUARA
             </Text>
+            {/* D5: tombol simpan berteks, bukan ikon saja. */}
             <TouchableOpacity
               onPress={() => setModalVisible(true)}
               disabled={eq.isDSPDisabled}
@@ -790,6 +842,11 @@ export default function EqualizerScreen() {
               ]}
             >
               <Save size={18} color={colors.text.primary} />
+              <Text
+                style={[styles.saveBtnText, { color: colors.text.primary }]}
+              >
+                Simpan
+              </Text>
             </TouchableOpacity>
           </View>
           {/* U-P2-45: hapus preset custom lewat long-press DULU tanpa
@@ -1031,11 +1088,24 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontSize: 10, fontWeight: "900", letterSpacing: 1.5 },
   presetHint: { fontSize: 11 },
+  bypassLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    marginTop: 4,
+    textAlign: "center",
+  },
   iconBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
     minWidth: 44,
     minHeight: 44,
-    alignItems: "flex-end",
-    justifyContent: "center",
+    paddingHorizontal: 8,
+  },
+  saveBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
   presetScroll: { flexGrow: 0 },
   mixerBoard: {

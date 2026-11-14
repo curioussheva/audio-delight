@@ -26,9 +26,13 @@ import { useHeadphoneCorrection } from "../hooks/useHeadphoneCorrection";
 interface Props {
   /** Warna aksen dari layar induk, supaya konsisten dengan tema aktif. */
   accent?: string;
+  /** Bekukan seksi di mode non-DSP (B2): tombol impor/aktivasi nonaktif,
+      seksi meredup seperti seksi lain — koreksi di-bypass di mode itu,
+      jadi kartu tidak boleh tampil seolah aktif. */
+  disabled?: boolean;
 }
 
-export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
+export const HeadphoneSection: React.FC<Props> = ({ accent, disabled }) => {
   const { theme } = useTheme();
 
   const colors = theme.colors;
@@ -100,6 +104,7 @@ export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
           paddingHorizontal: spacing.md,
           paddingTop: spacing.md,
           paddingBottom: spacing.xs,
+          opacity: disabled ? 0.4 : 1,
         },
       ]}
     >
@@ -111,7 +116,9 @@ export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
         {activeProfile && (
           <TouchableOpacity
             onPress={() => void deactivate()}
+            disabled={disabled}
             style={[styles.pill, { borderColor: colors.border.medium }]}
+            accessibilityState={{ disabled: !!disabled }}
           >
             <Text style={[styles.pillText, { color: colors.text.secondary }]}>
               Matikan
@@ -159,7 +166,8 @@ export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
                   (isBound ? ", terikat ke perangkat ini" : "") +
                   ". Tekan lama untuk menghapus."
                 }
-                accessibilityState={{ selected: isActive }}
+                accessibilityState={{ selected: isActive, disabled: !!disabled }}
+                disabled={disabled}
                 onPress={async () => {
                   if (isActive) {
                     void deactivate();
@@ -227,7 +235,9 @@ export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
       <View style={[styles.actions, { gap: spacing.sm }]}>
         <TouchableOpacity
           onPress={() => setShowImport(true)}
+          disabled={disabled}
           style={[styles.action, { borderColor: tint }]}
+          accessibilityState={{ disabled: !!disabled }}
         >
           {/* Warna teks DIPILIH dari kandidat yang lulus AA di atas latar ini.
               `tint` (primary[500]) gagal di banyak tema gelap - mis. 1.30 pada
@@ -253,14 +263,15 @@ export const HeadphoneSection: React.FC<Props> = ({ accent }) => {
             onPress={() =>
               bindCurrentDevice(hasBinding ? null : activeProfile.id)
             }
-            disabled={!currentDevice}
+            disabled={disabled || !currentDevice}
             style={[
               styles.action,
               {
                 borderColor: colors.border.medium,
-                opacity: currentDevice ? 1 : 0.4,
+                opacity: currentDevice && !disabled ? 1 : 0.4,
               },
             ]}
+            accessibilityState={{ disabled: disabled || !currentDevice }}
           >
             <Text style={[styles.actionText, { color: colors.text.primary }]}>
               {hasBinding ? "Lepas ikatan" : "Ikat ke perangkat ini"}

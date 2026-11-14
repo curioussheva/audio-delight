@@ -3,6 +3,8 @@ import {
   BOOST_WARN_DB,
   cubicPoint,
   formatBoostDb,
+  formatHzLabel,
+  graphHzLabelIndices,
   sampleSmoothCurve,
   splitAboveZero,
   type CurveSample,
@@ -85,5 +87,38 @@ describe("formatBoostDb", () => {
 
   it("pecahan satu desimal", () => {
     expect(formatBoostDb(6.5)).toBe("+6.5 dB");
+  });
+});
+
+describe("formatHzLabel", () => {
+  it("di bawah 1 kHz tampil angka Hz", () => {
+    expect(formatHzLabel(31)).toBe("31");
+    expect(formatHzLabel(500)).toBe("500");
+  });
+
+  it("1 kHz ke atas tampil k", () => {
+    expect(formatHzLabel(1000)).toBe("1k");
+    expect(formatHzLabel(2000)).toBe("2k");
+    expect(formatHzLabel(16000)).toBe("16k");
+  });
+
+  it("tidak valid -> 0", () => {
+    expect(formatHzLabel(0)).toBe("0");
+    expect(formatHzLabel(NaN)).toBe("0");
+  });
+});
+
+describe("graphHzLabelIndices", () => {
+  it("10 band -> [0, 2, 4, 6, 8, 9]", () => {
+    expect(graphHzLabelIndices(10)).toEqual([0, 2, 4, 6, 8, 9]);
+  });
+
+  it("selalu sertakan band pertama dan terakhir", () => {
+    expect(graphHzLabelIndices(5)).toEqual([0, 2, 4]);
+    expect(graphHzLabelIndices(1)).toEqual([0]);
+  });
+
+  it("0 band -> kosong", () => {
+    expect(graphHzLabelIndices(0)).toEqual([]);
   });
 });

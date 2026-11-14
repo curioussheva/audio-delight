@@ -121,3 +121,27 @@ export function formatBoostDb(gain: number): string {
   const s = gain % 1 === 0 ? String(gain) : gain.toFixed(1);
   return `+${s} dB`;
 }
+
+/**
+ * Format frekuensi untuk label sumbu-x graph: "31", "125", "500", "2k",
+ * "16k". Format yang sama dengan label fader di Band.tsx.
+ */
+export function formatHzLabel(freq: number): string {
+  if (!Number.isFinite(freq) || freq <= 0) return "0";
+  return freq < 1000 ? `${Math.round(freq)}` : `${freq / 1000}k`;
+}
+
+/**
+ * Indeks band yang diberi label Hz di sumbu-x graph (C1): band pertama,
+ * lalu tiap 2 band, ditambah band terakhir — dihitung dari jumlah band
+ * yang sebenarnya, bukan hafalan. Untuk 10 band: [0, 2, 4, 6, 8, 9]
+ * = 31/125/500/2k/8k/16k.
+ */
+export function graphHzLabelIndices(bandCount: number): number[] {
+  const n = Math.max(0, Math.floor(bandCount));
+  if (n === 0) return [];
+  const picked = new Set<number>();
+  for (let i = 0; i < n; i += 2) picked.add(i);
+  picked.add(n - 1);
+  return [...picked].sort((a, b) => a - b);
+}
