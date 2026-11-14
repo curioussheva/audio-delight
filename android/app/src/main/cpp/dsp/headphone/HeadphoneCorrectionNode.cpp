@@ -143,15 +143,49 @@ void HeadphoneCorrectionNode::applyConfig(
     //
     // Hanya di sini koefisien dihitung. Ini terjadi saat preset berganti,
     // bukan tiap buffer.
+    //
+    // (B15-H1): bangun ke cascade SEMENTARA di stack (tanpa alokasi heap),
+    // tukar ke mCascade hanya bila SEMUA filter berhasil. Preset yang
+    // gagal satu filter pun DITOLAK seluruhnya: mCascade live, preamp
+    // live, mApplied, dan status enabled tidak disentuh — preset lama
+    // tetap berlaku, atau node tetap nonaktif bila belum pernah ada
+    // preset yang berhasil terpasang. Pilihan "preset lama tetap
+    // berlaku" (bukan disable node) karena penolakan berarti preset baru
+    // tidak berpengaruh sama sekali; mematikan node akan membunuh
+    // koreksi yang sedang berjalan dengan benar gara-gara preset baru
+    // yang rusak. Ini menutup tiga lubang lama: (a) mCascade.clear()
+    // di awal menghapus preset lama sebelum tahu preset baru valid;
+    // (b) setPreamp() menempel di cascade live walau semua filter
+    // gagal; (c) mApplied dicatat walau loop break, sehingga dedup
+    // di atas bisa meng-enable kembali preset gagal-sebagian tanpa
+    // mencoba ulang. Karena mApplied tidak dicatat saat gagal,
+    // pemanggilan ulang dengan preset yang sama tidak cocok dengan
+    // dedup dan mencoba applyConfig lagi dari awal.
+    //
+    // Perilaku klem frekuensi (designOk) TIDAK diubah — itu urusan H2.
 
-    mCascade.clear();
-    mCascade.setPreamp(preset.preampDb);
+    BiquadCascade staged;
 
+    // Benih laju dari prepare(), supaya koefisien dihitung dengan laju
+    // yang benar (setFilter di bawah juga meneruskan laju ini; bila
+    // mAppliedSampleRate <= 0, staged memakai default 48 kHz — sama
+    // seperti node baru).
+    if (mAppliedSampleRate > 0) {
+        staged.setSampleRate(static_cast<float>(mAppliedSampleRate));
+    }
+
+    staged.setPreamp(preset.preampDb);
+
+    bool ok = true;
     int index = 0;
 
     for (int i = 0; i < preset.filterCount; ++i) {
 
         if (index >= BiquadCascade::kMaxFilters) {
+            // Preset lebih panjang dari kapasitas: tolak seluruhnya,
+            // jangan pasang prefix-nya saja. (Parser sudah menolak
+            // filterCount > 16, jadi jalur ini praktis tak terjangkau.)
+            ok = false;
             break;
         }
 
@@ -165,16 +199,29 @@ void HeadphoneCorrectionNode::applyConfig(
             type = FilterType::HighShelf;
         }
 
-        if (!mCascade.setFilter(
+        if (!staged.setFilter(
                 index, type, f.freqHz, f.q, f.gainDb,
                 static_cast<float>(mAppliedSampleRate))) {
+            ok = false;
             break;
         }
 
         ++index;
     }
 
-    mCascade.setActiveCount(index);
+    if (!ok) {
+        // Ditolak: jangan sentuh apa pun yang live. `staged` (termasuk
+        // preamp preset gagal) dibuang bersama stack frame.
+        return;
+    }
+
+    staged.setActiveCount(index);
+
+    // Semua filter berhasil: tukar sekaligus. BiquadCascade hanya berisi
+    // array statis + skalar (tanpa pointer/alokasi), jadi copy assignment
+    // default aman. State filter staged masih nol — sama seperti clear()
+    // lama yang me-reset state.
+    mCascade = staged;
 
     mApplied = preset;
     mHasApplied = true;
