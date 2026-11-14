@@ -13,6 +13,22 @@ import { NativeDSPModule } from "@/features/equalizer/api/nativeInterface";
 // Helpers
 // ─────────────────────────────────────────────
 
+// (B14-M-H2, 2026-11-14): rentang gain band UI adalah ±10 dB sejak
+// d413d438. Preset bawaan aman (maks ±6), tapi custom preset yang
+// disimpan sebelumnya bisa membawa ±12 — dan native mengizinkan sampai
+// ±24. Clamp di semua titik baca (applyPreset, rehydrate, pengiriman ke
+// native) supaya preset lama tidak berbunyi ±12 sementara fader berskala
+// ±10 (thumb bisa render di luar trek).
+const BAND_GAIN_MIN = -10;
+const BAND_GAIN_MAX = 10;
+const clampBandGain = (g: number): number =>
+  Math.min(
+    BAND_GAIN_MAX,
+    Math.max(BAND_GAIN_MIN, Number.isFinite(g) ? g : 0),
+  );
+const clampPresetBands = (bands: any[]): any[] =>
+  bands.map((b) => ({ ...b, gain: clampBandGain(b?.gain ?? 0) }));
+
 const getCurrentSessionId = async (): Promise<number> => {
   try {
     if (!NativeDSPModule?.createAudioSession) {
@@ -52,7 +68,10 @@ finalSessionId = sessionResult?.sessionId ?? 0;
 
   try {
     // Ingat: Di Java, gains ini harus dikali 100
-    const gains = bands.map((b: any) => b.gain);
+    // (B14-M-H2): clamp di corong ke native — state seharusnya sudah
+    // ter-clamp (applyPreset/migrate), ini pertahanan terakhir supaya
+    // tidak ada jalur yang mengirim gain di luar ±10.
+    const gains = bands.map((b: any) => clampBandGain(b.gain));
     await NativeDSPModule.setFullEqualizer(gains, finalSessionId);
     console.log(`[DSP] Applied to Session: ${finalSessionId}`);
   } catch (e) {
@@ -232,7 +251,9 @@ export const useEqualizerStore = create<EqualizerStore>()(
           ALL_PRESETS.find((p) => p.id === presetId) ||
           get().customPresets.find((p) => p.id === presetId);
         if (preset) {
-          const newBands = preset.bands.map((b) => ({ ...b }));
+          // (B14-M-H2): jangan salin verbatim — preset lama (custom,
+          // tersimpan sebelum ±10 dB) bisa membawa gain ±12.
+          const newBands = clampPresetBands(preset.bands);
           set({ activePresetId: presetId, bands: newBands });
           // D1: preset adalah PROFIL penuh, bukan kurva saja — terapkan
           // efek bila preset mendefinisikannya. undefined = biarkan nilai
@@ -288,6 +309,29 @@ export const useEqualizerStore = create<EqualizerStore>()(
     {
       name: "equalizer-storage",
       storage: createJSONStorage(() => AsyncStorage),
+      // (B14-M-H2): version 1 = clamp gain band ke ±10 saat rehydrate.
+      // State tersimpan lama (version 0 / tanpa version) bisa membawa
+      // bands + customPresets ±12; migrate jalan sekali untuk state itu.
+      // Preset bawaan maks ±6 — tidak berubah.
+      version: 1,
+      migrate: (persistedState: any, _version: number) => {
+        if (!persistedState || typeof persistedState !== "object") {
+          return persistedState;
+        }
+        const s = { ...persistedState };
+        if (Array.isArray(s.bands)) {
+          s.bands = clampPresetBands(s.bands);
+        }
+        if (Array.isArray(s.customPresets)) {
+          s.customPresets = s.customPresets.map((p: any) => ({
+            ...p,
+            bands: Array.isArray(p?.bands)
+              ? clampPresetBands(p.bands)
+              : p?.bands,
+          }));
+        }
+        return s;
+      },
       partialize: (state) => ({
         bands: state.bands,
         activePresetId: state.activePresetId,

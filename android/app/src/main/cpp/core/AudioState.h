@@ -315,9 +315,10 @@ public:
             return;
         }
 
-        // (C-P2): UI meng-clamp ±12 dB (equalizerStore.ts setBandGain);
-        // native ±24 memberi headroom tanpa memangkas satu pun nilai valid
-        // dari UI. Non-finite -> 0.0 (flat).
+        // (C-P2): UI meng-clamp ±10 dB (equalizerStore.ts setBandGain,
+        // sejak d413d438; preset lama ±12 dikoreksi saat dibaca,
+        // B14-M-H2); native ±24 memberi headroom tanpa memangkas satu
+        // pun nilai valid dari UI. Non-finite -> 0.0 (flat).
         const float clamped =
             clampFinite(gainDb, -24.0f, 24.0f, 0.0f);
 
