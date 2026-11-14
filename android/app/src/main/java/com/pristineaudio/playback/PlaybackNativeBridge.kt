@@ -161,14 +161,20 @@ object PlaybackNativeBridge {
 
     // 🔥 Event native→JS: kirim info trek ke JS tanpa polling.
     // Dipanggil saat track berganti dari sisi native (notification / C++ advance).
+    // B15-K-b: payload WritableMap {uri, index} — dulu androidx Pair, yang
+    // ditolak Arguments.fromJavaArgs (RuntimeException) sehingga event ini
+    // TIDAK PERNAH sampai ke JS.
     fun emitTrackChanged(uri: String, index: Int) {
         try {
             val module = NativePlaybackModule.instance ?: return
             if (!module.jsAlive) return
             val ctx = module.reactContext
+            val payload = com.facebook.react.bridge.Arguments.createMap()
+            payload.putString("uri", uri)
+            payload.putInt("index", index)
             ctx.getJSModule(com.facebook.react.modules.core.DeviceEventManagerModule
                 .RCTDeviceEventEmitter::class.java)
-                .emit("onPlaybackTrackChanged", androidx.core.util.Pair(uri, index))
+                .emit("onPlaybackTrackChanged", payload)
         } catch (e: Exception) {
             android.util.Log.w("PlaybackNativeBridge", "emitTrackChanged: ${e.message}")
         }
