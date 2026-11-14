@@ -112,7 +112,13 @@ public:
 
     // Dipanggil setiap loadTrack() berhasil (M1, 2026-11-10): EngineManager
     // memakai ini untuk membuka ulang stream kalau laju file berubah.
-    // Boleh null. Dipanggil di AKHIR loadTrack, di luar lock apa pun.
+    // Boleh null. Dipanggil di AKHIR loadTrack, DI DALAM loadTrackMutex_
+    // (B15-N1, 2026-11-15: koreksi — loadLock dipegang sepanjang loadTrack,
+    // jadi ini BUKAN "di luar lock apa pun"). Ini callback C++ internal ke
+    // EngineManager::onTrackLoaded, bukan emit ke JS. Aman di bawah lock
+    // hari ini: isinya hanya baca atomik + early-return, dan reopen hanya
+    // dijadwalkan lewat requestStreamRecovery() (worker async, tanpa lock
+    // sinkron).
     void setTrackLoadedListener(std::function<void()> listener);
 
     // Laju stream yang SEDANG dipakai. Diisi oleh pemilik stream (AudioEngine
