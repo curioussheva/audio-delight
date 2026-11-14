@@ -28,6 +28,7 @@ const OUTER_SIZE = 140;
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const parseHexToRGB = (hex: string) => {
+  "worklet";
   const cleanHex = hex.replace("#", "");
   return {
     r: parseInt(cleanHex.substring(0, 2), 16),
@@ -37,6 +38,7 @@ const parseHexToRGB = (hex: string) => {
 };
 
 const hexToRGBA = (hex: string, opacity: number): string => {
+  "worklet";
   const { r, g, b } = parseHexToRGB(hex);
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
 };
