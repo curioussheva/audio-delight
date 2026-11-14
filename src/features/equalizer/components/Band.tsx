@@ -49,13 +49,13 @@ export const EqualizerBand = ({
     color ?? accentOn([colors.accent.blue], colors.background.secondary, [colors.text.primary]);
 
   const translateY = useSharedValue(
-    interpolate(gain, [-12, 12], [SLIDER_HEIGHT, 0]),
+    interpolate(gain, [-10, 10], [SLIDER_HEIGHT, 0]),
   );
 
   // Sync saat gain berubah (misal ganti preset)
   React.useEffect(() => {
     translateY.value = withSpring(
-      interpolate(gain, [-12, 12], [SLIDER_HEIGHT, 0]),
+      interpolate(gain, [-10, 10], [SLIDER_HEIGHT, 0]),
     );
   }, [gain]);
 
@@ -67,7 +67,7 @@ export const EqualizerBand = ({
       if (nextY > SLIDER_HEIGHT) nextY = SLIDER_HEIGHT;
 
       translateY.value = nextY;
-      const newGain = interpolate(nextY, [0, SLIDER_HEIGHT], [12, -12]);
+      const newGain = interpolate(nextY, [0, SLIDER_HEIGHT], [10, -10]);
       runOnJS(onValueChange)(parseFloat(newGain.toFixed(1)));
     });
 
@@ -80,7 +80,7 @@ export const EqualizerBand = ({
   const animatedFillStyle = useAnimatedStyle(() => ({
     height: SLIDER_HEIGHT - translateY.value,
     backgroundColor: accent,
-    opacity: interpolate(Math.abs(gain), [0, 12], [0.2, 0.8]),
+    opacity: interpolate(Math.abs(gain), [0, 10], [0.2, 0.8]),
   }));
 
   const freqLabel = frequency < 1000 ? `${frequency}` : `${frequency / 1000}k`;
@@ -115,7 +115,7 @@ export const EqualizerBand = ({
         >
           {/* Garis-garis Skala (Tick Marks) */}
           <View style={styles.ticks}>
-            {[12, 6, 0, -6, -12].map((v) => (
+            {[10, 5, 0, -5, -10].map((v) => (
               <View
                 key={v}
                 style={[

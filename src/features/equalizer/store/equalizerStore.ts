@@ -191,7 +191,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
       },
 
       setBandGain: (index: number, gain: number) => {
-  const clampedGain = Math.min(12, Math.max(-12, gain));
+  const clampedGain = Math.min(10, Math.max(-10, gain));
   const newBands = get().bands.map((b, i) =>
     i === index ? { ...b, gain: clampedGain } : b,
   );
@@ -209,9 +209,12 @@ export const useEqualizerStore = create<EqualizerStore>()(
 },
 
       setBandsGain: async (gains: number[]) => {
+        // Clamp dipakai untuk state DAN yang dikirim ke native (dulu
+        // native menerima gains mentah tanpa clamp).
+        const clampedGains = gains.map((g) => Math.min(10, Math.max(-10, g)));
         const newBands = get().bands.map((b, i) => ({
           ...b,
-          gain: Math.min(12, Math.max(-12, gains[i] ?? b.gain)),
+          gain: clampedGains[i] ?? b.gain,
         }));
         set({ bands: newBands, activePresetId: "custom" });
 
@@ -220,7 +223,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
           get().audioSessionId !== -1 &&
           NativeDSPModule?.setFullEqualizer
         ) {
-          await NativeDSPModule.setFullEqualizer(gains, get().audioSessionId);
+          await NativeDSPModule.setFullEqualizer(clampedGains, get().audioSessionId);
         }
       },
 

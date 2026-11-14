@@ -52,7 +52,7 @@ export const FrequencyGraph: React.FC<Props> = ({
 
   // Dimensi & Skala Konstan
   const midY = height / 2;
-  const maxGainVisible = 12;
+  const maxGainVisible = 10;
   const verticalScale = (height * 0.45) / maxGainVisible;
 
   // 1. Generate Path di UI Thread (Smooth Transition)
@@ -281,8 +281,8 @@ export const FrequencyGraph: React.FC<Props> = ({
       <View style={[styles.debugInfo, { height }]}>
         {/* U-P2-30: dulu label debug "#888" hardcoded — 2,96:1 di
             Porcelain (gagal 4,5). Pakai token text.tertiary. */}
-        <Text style={[styles.debugText, { color: theme.colors.text.tertiary }]}>+12dB</Text>
-        <Text style={[styles.debugText, { color: theme.colors.text.tertiary }]}>-12dB</Text>
+        <Text style={[styles.debugText, { color: theme.colors.text.tertiary }]}>+10dB</Text>
+        <Text style={[styles.debugText, { color: theme.colors.text.tertiary }]}>-10dB</Text>
       </View>
     </View>
   );
