@@ -8,7 +8,8 @@ namespace dsp {
 
 // Narrowband resonator: menguatkan komponen frekuensi solfeggio yang SUDAH
 // ADA di sinyal musik yang sedang main (RBJ constant skirt-gain bandpass,
-// wet/dry sesuai intensity). Dipanggil langsung dari ImmersivePipeline
+// DITAMBAHKAN ke sinyal asli secara aditif sesuai intensity — di luar band
+// sinyal lewat utuh). Dipanggil langsung dari ImmersivePipeline
 // setiap audio callback — in-place, stereo, real-time safe.
 class SolfeggioResonator {
 public:
@@ -16,7 +17,7 @@ public:
 
     void prepare(int32_t sampleRate);
     void setFrequency(float hz);        // target solfeggio freq, mis. 528.0f
-    void setIntensity(float intensity); // 0-1: jumlah resonansi / wet mix
+    void setIntensity(float intensity); // 0-1: jumlah resonansi yang ditambahkan (aditif)
 
     // In-place, stereo. left/right masing-masing punya IIR state sendiri
     // (independen) supaya tidak ada crosstalk channel.

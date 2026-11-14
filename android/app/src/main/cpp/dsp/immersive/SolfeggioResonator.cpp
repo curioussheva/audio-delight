@@ -53,7 +53,14 @@ void SolfeggioResonator::updateCoefficientsIfNeeded() {
     // Intensity tinggi -> band lebih sempit -> resonansi terasa lebih kuat.
     const float Q = 0.7f + intensity * 7.3f;
 
-    const float w0 = 2.0f * static_cast<float>(M_PI) * freq / mSampleRate;
+    // B15-I1: klem ulang ke 0,45 x laju SAAT INI — mFreq diklem di
+    // setFrequency() terhadap laju saat itu, tapi prepare() ke laju lebih
+    // rendah tidak mengklem ulang mFreq (mis. 21.600 Hz legal @48 kHz,
+    // lalu stream 32 kHz -> w0 ~4,24 > pi, koefisien salah). Klem pada
+    // nilai lokal: mFreq yang disimpan tidak diubah.
+    const float effFreq = std::min(freq, 0.45f * mSampleRate);
+
+    const float w0 = 2.0f * static_cast<float>(M_PI) * effFreq / mSampleRate;
     const float cosW0 = cosf(w0);
     const float sinW0 = sinf(w0);
     const float alpha = sinW0 / (2.0f * Q);
@@ -74,7 +81,6 @@ void SolfeggioResonator::processChannel(
     float& y1, float& y2
 ) {
     const float wet = mCachedIntensity;
-    const float dry = 1.0f - wet;
 
     for (int32_t i = 0; i < numFrames; ++i) {
         const float x0 = channel[i];
@@ -85,7 +91,12 @@ void SolfeggioResonator::processChannel(
         x2 = x1; x1 = x0;
         y2 = y1; y1 = y0;
 
-        channel[i] = dry * x0 + wet * y0;
+        // B15-I1: ADITIF, bukan wet/dry — sinyal asli selalu utuh (unity
+        // di luar band), resonansi DITAMBAHKAN: tengah pita 1 + wet
+        // (maks +6,02 dB @ intensity 1). Rumus lama dry*x0 + wet*y0
+        // memotong sinyal di luar band sampai -6 dB @ 0,5 dan tak pernah
+        // menguatkan apa pun.
+        channel[i] = x0 + wet * y0;
     }
 }
 
