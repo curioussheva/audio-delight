@@ -11,6 +11,8 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
+import { useTheme } from "@/shared/context/ThemeContext";
+
 interface KnobProps {
   label: string;
   value: number; // 0 - 1000
@@ -45,22 +47,25 @@ const AnimatedTick = ({
   angle,
   rotation,
   rgb,
+  inactiveColor,
   disabled,
 }: {
   angle: number;
   rotation: SharedValue<number>;
   rgb: { r: number; g: number; b: number };
+  /** Warna tick yang belum aktif — dari token tema (bukan putih hardcoded). */
+  inactiveColor: string;
   disabled?: boolean;
 }) => {
   const animStyle = useAnimatedStyle(() => {
-    if (disabled) return { backgroundColor: "rgba(255,255,255,0.05)" };
+    if (disabled) return { backgroundColor: hexToRGBA(inactiveColor, 0.15) };
     const diff = Math.abs(rotation.value - angle);
     const isActive = diff < 20;
 
     return {
       backgroundColor: isActive
         ? `rgba(${rgb.r},${rgb.g},${rgb.b},0.9)`
-        : "rgba(255,255,255,0.1)",
+        : hexToRGBA(inactiveColor, 0.35),
       height: isActive ? 14 : 10,
     };
   });
@@ -77,10 +82,17 @@ export const ControlKnob = ({
   color,
   disabled,
 }: KnobProps) => {
+  // Warna dulu hardcoded tema gelap (background #050505, label #AAA,
+  // disabled #444, tick putih) — di tema terang Porcelain knob jadi blob
+  // hitam. Sekarang semuanya dari token tema.
+  const { theme } = useTheme();
+  const colors = theme.colors;
+
   const MIN_ROT = -135;
   const MAX_ROT = 135;
 
   const rgb = parseHexToRGB(color);
+  const tickInactive = colors.text.tertiary;
   const rotation = useSharedValue(
     interpolate(value || 0, [0, 1000], [MIN_ROT, MAX_ROT]),
   );
@@ -123,16 +135,55 @@ export const ControlKnob = ({
 
   const displayValue = !isNaN(value) ? Math.round(value / 10) : 0;
 
+  // Aksesibilitas: knob bisa diatur screen reader lewat aksi
+  // naik/turun (langkah 10%), bukan cuma drag.
+  const handleAccessibilityAction = (event: {
+    nativeEvent: { actionName: string };
+  }) => {
+    const step = 100; // 10% dari rentang 0..1000
+    const next =
+      event.nativeEvent.actionName === "increment"
+        ? Math.min(1000, (value || 0) + step)
+        : Math.max(0, (value || 0) - step);
+    onChange(next);
+  };
+
   return (
-    <View style={[styles.container, { width: OUTER_SIZE }]}>
-      <Text style={[styles.label, { color: disabled ? "#444" : "#AAA" }]}>
+    <View
+      style={[styles.container, { width: OUTER_SIZE }]}
+      accessibilityRole="adjustable"
+      accessibilityLabel={`${label} ${displayValue} persen`}
+      accessibilityValue={{ min: 0, max: 100, now: displayValue }}
+      accessibilityState={{ disabled: !!disabled }}
+      accessibilityActions={[
+        { name: "increment", label: "Naikkan" },
+        { name: "decrement", label: "Turunkan" },
+      ]}
+      onAccessibilityAction={handleAccessibilityAction}
+    >
+      <Text
+        style={[
+          styles.label,
+          {
+            color: disabled
+              ? colors.text.tertiary
+              : colors.text.secondary,
+          },
+        ]}
+      >
         {label}
       </Text>
 
       <GestureDetector gesture={gesture}>
         <Animated.View style={[styles.knobWrapper, containerStyle]}>
           <View
-            style={[styles.knobOuter, { borderColor: hexToRGBA(color, 0.2) }]}
+            style={[
+              styles.knobOuter,
+              {
+                borderColor: hexToRGBA(color, 0.2),
+                backgroundColor: colors.background.tertiary,
+              },
+            ]}
           >
             <View style={styles.tickMarksContainer}>
               {TICK_ANGLES.map((angle) => (
@@ -141,6 +192,7 @@ export const ControlKnob = ({
                   angle={angle}
                   rotation={rotation}
                   rgb={rgb}
+                  inactiveColor={tickInactive}
                   disabled={disabled}
                 />
               ))}
@@ -160,12 +212,23 @@ export const ControlKnob = ({
       </GestureDetector>
 
       <View style={styles.infoContainer}>
-        <Text style={[styles.valueText, { color: disabled ? "#444" : color }]}>
+        <Text
+          style={[
+            styles.valueText,
+            {
+              color: disabled ? colors.text.tertiary : color,
+            },
+          ]}
+        >
           {displayValue}%
         </Text>
         <View style={styles.rangeRow}>
-          <Text style={styles.rangeLabel}>0</Text>
-          <Text style={styles.rangeLabel}>100</Text>
+          <Text style={[styles.rangeLabel, { color: colors.text.tertiary }]}>
+            0
+          </Text>
+          <Text style={[styles.rangeLabel, { color: colors.text.tertiary }]}>
+            100
+          </Text>
         </View>
       </View>
     </View>
@@ -193,7 +256,7 @@ const styles = StyleSheet.create({
     height: KNOB_SIZE,
     borderRadius: KNOB_SIZE / 2,
     borderWidth: 3,
-    backgroundColor: "#050505",
+    // backgroundColor dari token tema (inline) — dulu #050505 hardcoded.
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
@@ -250,9 +313,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "900",
     fontVariant: ["tabular-nums"],
-    textShadowColor: "rgba(0,0,0,0.5)",
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
+    // textShadow hitam dulu dihapus — di tema terang jadi tepi gelap.
   },
   rangeRow: {
     flexDirection: "row",
@@ -262,7 +323,7 @@ const styles = StyleSheet.create({
   },
   rangeLabel: {
     fontSize: 8,
-    color: "#444",
+    // color dari token tema (inline).
     fontWeight: "bold",
   },
 });

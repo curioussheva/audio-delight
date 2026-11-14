@@ -43,7 +43,7 @@ import {
 } from "@/features/player/store/playerStore";
 import { FrequencyGraph } from "@/features/equalizer/components/Graph";
 import { EqualizerBand } from "@/features/equalizer/components/Band";
-import { HorizontalSlider } from "@/features/equalizer/components/HorizontalSlider";
+import { ControlKnob } from "@/features/equalizer/components/ControlKnob";
 import { PresetChip } from "@/features/equalizer/components/PresetChip";
 import { SavePresetModal } from "@/features/equalizer/components/SavePresetModal";
 import { HeadphoneSection } from "@/features/headphone/components/HeadphoneSection";
@@ -89,6 +89,10 @@ interface MiniSwitchProps {
   disabled?: boolean;
   color: string;
   label: string;
+  /** Tata letak bertumpuk (label/switch di tengah kolom) untuk baris knob. */
+  stacked?: boolean;
+  /** Sembunyikan label teks — nama efek sudah ditampilkan knob di bawahnya. */
+  hideLabel?: boolean;
 }
 
 const MiniSwitch = ({
@@ -97,21 +101,30 @@ const MiniSwitch = ({
   disabled,
   color,
   label,
+  stacked,
+  hideLabel,
 }: MiniSwitchProps) => {
   const { theme } = useTheme();
   const colors = theme.colors;
   const on = value && !disabled;
 
   return (
-    <View style={styles.miniSwitchContainer}>
-      <Text
-        style={[
-          styles.miniSwitchLabel,
-          { color: on ? color : colors.text.secondary },
-        ]}
-      >
-        {label}
-      </Text>
+    <View
+      style={[
+        styles.miniSwitchContainer,
+        stacked && styles.miniSwitchStacked,
+      ]}
+    >
+      {!hideLabel && (
+        <Text
+          style={[
+            styles.miniSwitchLabel,
+            { color: on ? color : colors.text.secondary },
+          ]}
+        >
+          {label}
+        </Text>
+      )}
       {/* U-P2-01: Switch di-scale 0,8 lama → area sentuh ~41×25, di bawah
           44dp. Switch sendiri tidak menerima hitSlop yang andal, jadi
           dibungkus Pressable 44×44 yang jadi penangkap sentuh (Switch di
@@ -600,7 +613,13 @@ export default function EqualizerScreen() {
                 { paddingHorizontal: spacing.md, marginBottom: spacing.lg },
               ]}
             >
-              {/* BASS SLIDER */}
+              {/* KNOB BASS + PELEBAR STEREO — dua knob bersebelahan
+                  dalam satu baris, menggantikan HorizontalSlider.
+                  Rentang knob 0..1000 sama persis dengan slider lama dan
+                  dengan yang diterima Kotlin (bass 0..+12 dB, widener
+                  width 1.0..2.0), jadi tanpa konversi. Tiap knob punya
+                  MiniSwitch enable sendiri di atasnya (tanpa label teks —
+                  nama efek sudah di label knob). */}
               <View
                 style={[
                   styles.effectItem,
@@ -611,47 +630,46 @@ export default function EqualizerScreen() {
                   },
                 ]}
               >
-                <MiniSwitch
-                  label="BASS BOOST"
-                  value={eq.isBassEnabled}
-                  onValueChange={eq.setBassEnabled}
-                  disabled={eq.isDSPDisabled}
-                  color={bassColor}
-                />
-                <HorizontalSlider
-                  label="INTENSITAS"
-                  value={eq.bassStrength}
-                  onChange={eq.setBassBoost}
-                  color={bassColor}
-                  disabled={!eq.isBassEnabled || eq.isDSPDisabled}
-                />
-              </View>
-
-              {/* VIRTUALIZER SLIDER */}
-              <View
-                style={[
-                  styles.effectItem,
-                  {
-                    backgroundColor: colors.background.secondary,
-                    borderColor: colors.border.medium,
-                    paddingVertical: spacing.md,
-                  },
-                ]}
-              >
-                <MiniSwitch
-                  label="PELEBAR STEREO"
-                  value={eq.isVirtualizerEnabled}
-                  onValueChange={eq.setVirtualizerEnabled}
-                  disabled={eq.isDSPDisabled}
-                  color={widthColor}
-                />
-                <HorizontalSlider
-                  label="LEBAR"
-                  value={eq.virtualizerLevel}
-                  onChange={eq.setVirtualizer}
-                  color={widthColor}
-                  disabled={!eq.isVirtualizerEnabled || eq.isDSPDisabled}
-                />
+                <View style={styles.knobRow}>
+                  <View style={styles.knobCol}>
+                    <MiniSwitch
+                      label="BASS BOOST"
+                      value={eq.isBassEnabled}
+                      onValueChange={eq.setBassEnabled}
+                      disabled={eq.isDSPDisabled}
+                      color={bassColor}
+                      stacked
+                      hideLabel
+                    />
+                    <ControlKnob
+                      label="BASS BOOST"
+                      value={eq.bassStrength}
+                      onChange={eq.setBassBoost}
+                      color={bassColor}
+                      disabled={!eq.isBassEnabled || eq.isDSPDisabled}
+                    />
+                  </View>
+                  <View style={styles.knobCol}>
+                    <MiniSwitch
+                      label="PELEBAR STEREO"
+                      value={eq.isVirtualizerEnabled}
+                      onValueChange={eq.setVirtualizerEnabled}
+                      disabled={eq.isDSPDisabled}
+                      color={widthColor}
+                      stacked
+                      hideLabel
+                    />
+                    <ControlKnob
+                      label="PELEBAR STEREO"
+                      value={eq.virtualizerLevel}
+                      onChange={eq.setVirtualizer}
+                      color={widthColor}
+                      disabled={
+                        !eq.isVirtualizerEnabled || eq.isDSPDisabled
+                      }
+                    />
+                  </View>
+                </View>
               </View>
 
               {/* REVERB PRESET SELECTOR */}
@@ -954,6 +972,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     // U-P2-01: 32 lama; baris mengikuti tinggi target sentuh 44.
     minHeight: 44,
+  },
+  // Varian bertumpuk untuk baris knob: switch di tengah kolom, label
+  // (bila tidak disembunyikan) di atasnya.
+  miniSwitchStacked: {
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingHorizontal: 0,
+  },
+  knobRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "flex-start",
+    paddingHorizontal: 8,
+  },
+  knobCol: {
+    flex: 1,
+    alignItems: "center",
   },
   // U-P2-01: penangkap sentuh MiniSwitch (lihat komentar di komponen).
   miniSwitchHit: {
