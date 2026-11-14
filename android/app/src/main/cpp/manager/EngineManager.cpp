@@ -914,6 +914,61 @@ void EngineManager::reopenStreamPreservingPlayback() {
 
     const bool wasRunning = mEngine.isRunning();
 
+    // (B15-M5): fade-out sebelum stop() — tanpa ini, stop() mematikan
+    // stream di tengah amplitudo sesaat = klik saat toggle exclusive /
+    // ganti device / recovery sambil memutar.
+    //
+    // Fade TIDAK bisa dikerjakan di dalam AudioEngine::stop(): fade
+    // hidup di render callback (PlaybackController::render menerapkan
+    // pauseFade_), dan stop() mematikan stream seketika (requestStop +
+    // close) — tidak ada callback lagi yang merender fade. stop() juga
+    // dipanggil dari destruktor (~AudioEngine / ~EngineManager) dan
+    // dari guard start() saat stream sudah mati — menunggu render di
+    // sana tidak aman / tidak ada gunanya. AudioEngine pun tidak
+    // memegang mekanisme fade itu (milik PlaybackController).
+    //
+    // Jadi fade dikerjakan DI SINI, selagi stream masih berjalan,
+    // dengan mekanisme pause yang sudah ada (PB6-W4): pause()
+    // mempersenjatai fade-out S-curve 15 ms (kPauseFadeMs,
+    // PlaybackController.h) dan playing_ tetap true sampai render
+    // menyelesaikan fade — baru di situ status jadi Paused. Tunggu
+    // selesainya di sini (bounded 100 ms, pola yang sama dengan
+    // PlaybackController::waitForRenderIdle) sebelum stop(). Hanya
+    // saat benar-benar memutar DAN stream hidup: kalau tidak memutar,
+    // output sudah senyap; kalau stream mati (mis. sesudah disconnect),
+    // tidak ada callback yang menjalankan fade.
+    //
+    // Aman menunggu di sini: reopen berjalan di thread JNI
+    // (setExclusiveMode / setRequestedDeviceId) atau worker recovery —
+    // BUKAN audio thread — dan render tidak pernah mengambil mMutex
+    // yang dipegang reopen. Urutan lock sama dengan yang sudah dipakai
+    // reopen (mMutex -> loadTrackMutex_ -> decodeMutex_). Kalau timeout,
+    // sisa fade dibatalkan loadTrack() / play() di bawah, jadi tidak
+    // ada state fade basi yang lolos ke stream baru.
+    if (wasPlaying && wasRunning) {
+        mPlayback.pause();
+        const auto fadeDeadline = std::chrono::steady_clock::now() +
+            std::chrono::milliseconds(100);
+        bool fadeDone = false;
+        while (std::chrono::steady_clock::now() < fadeDeadline) {
+            bool stillPlaying = false;
+            if (auto st = mPlayback.state()) {
+                stillPlaying =
+                    st->getStatus() == playback::PlaybackStatus::Playing;
+            }
+            if (!stillPlaying) {
+                fadeDone = true;
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        if (!fadeDone) {
+            __android_log_print(ANDROID_LOG_WARN, "EngineManager",
+                "reopenStream: fade-out pause tidak selesai dalam "
+                "100 ms - lanjut stop() tanpa menunggu");
+        }
+    }
+
     mEngine.stop();
 
     // start() membuka stream BARU. Ini yang memberi stream jalur ke device
