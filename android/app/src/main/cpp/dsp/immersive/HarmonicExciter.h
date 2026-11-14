@@ -24,11 +24,16 @@ namespace pristine { namespace dsp {
 //
 // 🔥 FIX (2026-11-11, DSP-M3): shaper di bawah menyuntik DC offset yang
 // bergantung level (suku genap 1.2*(x^2-0.25) hanya zero-mean saat RMS=0.5).
-// Kelas ini sekarang punya DC blocker satu-pole (highpass ~10 Hz) yang
-// berjalan pada output campuran di process() - jadi shaper-nya tetap
-// stateless, tapi kelasnya ber-state (state blocker di-reset di reset() dan
-// di prepare()). Bypass drive 0 tetap bit-exact (return dini, blocker tidak
-// jalan).
+// Kelas ini sekarang punya DC blocker satu-pole (highpass ~50 Hz) yang
+// berjalan HANYA pada produk distorsi (h = shape(x) - x) di process() -
+// jadi shaper-nya tetap stateless, tapi kelasnya ber-state (state blocker
+// di-reset di reset() dan di prepare()). Sinyal dry TIDAK lewat blocker,
+// jadi bass sinyal asli tidak terpotong blocker. Bypass drive 0 tetap
+// bit-exact (return dini, blocker tidak jalan).
+//
+// B15-I2 (2026-11-15): sebelumnya blocker dilewati SELURUH campuran
+// dry+wet, sehingga bass 40 Hz sinyal asli turun ~0,26 dB dan DC sumber
+// ikut dibuang. Sekarang hanya h yang diblokir; out = x + amount*dcBlock(h).
 class HarmonicExciter {
 public:
     HarmonicExciter();
@@ -42,7 +47,8 @@ private:
     // Shaper nonlinear, tanpa state.
     static float shape(float x, float k);
 
-    // DC blocker satu-pole: y = x - prevIn + R*prevOut (R dari laju, ~10 Hz).
+    // DC blocker satu-pole: y = x - prevIn + R*prevOut (R dari laju, ~50 Hz).
+    // B15-I2: hanya dilewati produk distorsi (shape(x) - x), bukan dry.
     float dcBlock(float x, float& prevIn, float& prevOut) const;
 
     float mDrive = 0.0f;
@@ -51,8 +57,10 @@ private:
     float mAmount = 0.0f; // 0..1: seberapa banyak harmonisa dicampur
     float mK = 1.0f;      // ketajaman kurva
 
-    // DC blocker: koefisien R = exp(-2*pi*10/fs), default ~10 Hz @48 kHz.
-    float mDcCoeff = 0.99869f;
+    // DC blocker: koefisien R = exp(-2*pi*50/fs), default ~50 Hz @48 kHz.
+    // Satu state (prevIn/prevOut) per channel; keduanya hanya menyimpan
+    // riwayat produk distorsi h = shape(x) - x, bukan sinyal campuran.
+    float mDcCoeff = 0.99348f;
     float mDcPrevInL = 0.0f;
     float mDcPrevOutL = 0.0f;
     float mDcPrevInR = 0.0f;

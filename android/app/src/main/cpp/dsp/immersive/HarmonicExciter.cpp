@@ -46,16 +46,16 @@ void HarmonicExciter::setDrive(float driveDb) {
 // PREPARE
 // =====================================================
 //
-// Hitung koefisien DC blocker dari laju stream (cutoff ~10 Hz) dan bersihkan
+// Hitung koefisien DC blocker dari laju stream (cutoff ~50 Hz) dan bersihkan
 // state-nya: stream baru harus mulai dari state bersih, bukan ekor stream
-// lama. Bila prepare() tidak pernah dipanggil, mDcCoeff default (~10 Hz
+// lama. Bila prepare() tidak pernah dipanggil, mDcCoeff default (~50 Hz
 // @48 kHz) tetap dipakai - blocker tetap jalan, hanya cutoff-nya sedikit
 // meleset di laju lain.
 void HarmonicExciter::prepare(int32_t sampleRate) {
 
     if (sampleRate > 0) {
         mDcCoeff = std::exp(
-            -2.0f * static_cast<float>(M_PI) * 10.0f /
+            -2.0f * static_cast<float>(M_PI) * 50.0f /
             static_cast<float>(sampleRate)
         );
     }
@@ -71,10 +71,13 @@ void HarmonicExciter::prepare(int32_t sampleRate) {
 // =====================================================
 //
 // One-pole highpass: y = x - prevIn + R*prevOut. Di DC (x konstan) output
-// meluruh ke 0 dengan konstanta waktu ~1/(2*pi*10) detik; atenuasinya
-// ~0.26 dB di 40 Hz, ~0.17 dB di 50 Hz, < 0.05 dB di atas ~100 Hz - jadi
-// sinyal musik praktis tak tersentuh, hanya DC dan ayunan lambat (envelope)
-// yang dibuang.
+// meluruh ke 0 dengan konstanta waktu ~1/(2*pi*50) detik; atenuasinya
+// ~4.1 dB di 40 Hz, ~0.9 dB di 100 Hz, ~0.2 dB di 200 Hz, < 0.05 dB di atas
+// ~500 Hz.
+//
+// B15-I2: blocker ini HANYA dilewati produk distorsi (shape(x) - x), bukan
+// sinyal dry - jadi angka di atas hanya membentuk harmonisa tambahan,
+// bukan memotong bass sinyal asli.
 float HarmonicExciter::dcBlock(float x, float& prevIn, float& prevOut) const {
 
     const float y = x - prevIn + mDcCoeff * prevOut;
@@ -116,9 +119,11 @@ float HarmonicExciter::dcBlock(float x, float& prevIn, float& prevOut) const {
 //     - klaim itu SALAH. E[x^2 - 0.25] = E[x^2] - 0.25, dan E[x^2] = 0.25
 //     hanya bila sinyal ber-RMS tepat 0.5. Di level lain suku genap
 //     menyuntik DC = 1.2*(E[x^2]-0.25)*mAmount (terbukti harness: diam,
-//     drive 6 dB -> DC -0.045; sine A=1.0 -> DC +0.135). DC itu DIBUANG oleh
-//     DC blocker di process(), bukan oleh konstanta -0.25. Jangan hapus
-//     blocker dengan alasan "-0.25 sudah menangani DC".
+//     drive 6 dB -> DC -0.045; sine A=1.0 -> DC +0.135). DC produk distorsi
+//     itu DIBUANG oleh DC blocker di process() (B15-I2: blocker hanya
+//     dilewati h = shape(x) - x, bukan campuran penuh), bukan oleh
+//     konstanta -0.25. Jangan hapus blocker dengan alasan "-0.25 sudah
+//     menangani DC".
 //
 // Konstanta 1.2 dipilih dari pengukuran: memberi h2/f0 ~0.17 (jelas terdengar
 // sebagai kehangatan) dengan perubahan level hanya -0.35 dB pada drive 18.
@@ -135,7 +140,7 @@ float HarmonicExciter::shape(float x, float k) {
 
     // x^2 adalah fungsi GENAP -> menghasilkan harmonisa orde 2.
     // (Pergeseran -0.25 TIDAK menghilangkan DC - lihat koreksi DSP-M3 di
-    // atas. DC dibuang dcBlock() di process().)
+    // atas. DC produk distorsi dibuang dcBlock() di process().)
     const float even = (x * x - 0.25f) * 1.2f;
 
     return soft + even;
@@ -156,19 +161,22 @@ void HarmonicExciter::process(
         return;
     }
 
-    const float dry = 1.0f - mAmount;
-
     for (int32_t i = 0; i < numFrames; ++i) {
-        const float l =
-            dry * left[i] + mAmount * shape(left[i], mK);
-        const float r =
-            dry * right[i] + mAmount * shape(right[i], mK);
+        // B15-I2: HANYA produk distorsi yang lewat DC blocker.
+        //   h = shape(x) - x            (harmonisa tambahan saja)
+        //   out = x + mAmount * dcBlock(h)
+        // Secara matematis identik dengan campuran lama
+        // (1-amount)*x + amount*shape(x); yang berubah hanya penanganan DC:
+        // sinyal dry x TIDAK lagi lewat blocker, jadi bass 40 Hz tidak lagi
+        // turun ~0,26 dB karena blocker, dan DC dari sumber (bukan dari
+        // shaper) lewat utuh. DC yang disuntik suku genap shape() tetap
+        // dibuang - tapi sekarang dari h, bukan dari campuran penuh.
+        // State blocker per-channel (L/R terpisah) tetap dipakai di sini.
+        const float hl = shape(left[i], mK) - left[i];
+        const float hr = shape(right[i], mK) - right[i];
 
-        // DSP-M3: buang DC yang disuntik suku genap shape() (dan DC apa pun
-        // dari sumber) sebelum keluar. Tanpa ini, output diam di drive 6 dB
-        // adalah konstanta -0.045, bukan 0.
-        left[i] = dcBlock(l, mDcPrevInL, mDcPrevOutL);
-        right[i] = dcBlock(r, mDcPrevInR, mDcPrevOutR);
+        left[i] = left[i] + mAmount * dcBlock(hl, mDcPrevInL, mDcPrevOutL);
+        right[i] = right[i] + mAmount * dcBlock(hr, mDcPrevInR, mDcPrevOutR);
     }
 }
 
