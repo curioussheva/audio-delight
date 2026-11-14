@@ -73,4 +73,25 @@ Java_com_pristineaudio_visualizer_NativeVisualizerBridge_getVisualizerData(
     });
 }
 
+// =====================================================
+// LAJU STREAM AKTUAL
+// =====================================================
+//
+// Analyzer full-scale (2026-11-14): pemetaan bin log Kotlin harus memakai
+// Nyquist stream yang benar-benar dibuka Oboe, bukan hardcode 22050 —
+// engine reopen per laju file (44,1/48/96 kHz), dan dengan Nyquist tetap
+// 24000, nada 20 kHz asli di stream 44,1 kHz terbaca ~9% terlalu tinggi
+// di oktaf atas. EngineManager::actualSampleRate() sudah ada (dipakai
+// NativeDSPModule.nativeGetActualSampleRate); JNI ini ekspos yang sama
+// untuk bridge visualizer. 0 = engine belum start (Kotlin fallback 48 kHz).
+JNIEXPORT jint JNICALL
+Java_com_pristineaudio_visualizer_NativeVisualizerBridge_getActualSampleRate(
+    JNIEnv* env, jobject) {
+    return pristine::jni::guarded<jint>(env, "getActualSampleRate", 0, [&]() -> jint {
+    return static_cast<jint>(
+        EngineManager::get().actualSampleRate()
+    );
+    });
+}
+
 }

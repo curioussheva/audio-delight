@@ -347,14 +347,23 @@ export default function AnalyzerScreen() {
           {/* Spektrum ala Neutron (keputusan csheva 2026-11-13): sumbu Hz
               berlabel + skala dB + peak hold + frekuensi dominan.
               Menggantikan SpectrumAnalyzer (bar polos) hanya di tab ini;
-              tab Visualizer sudah dihapus. */}
+              tab Visualizer sudah dihapus. Full scale 0 dB + Nyquist stream
+              + warna clip + scroll horizontal (keputusan 2026-11-14):
+              sensitivity 1 + flatResponse supaya bar mencerminkan dB apa
+              adanya; sampleRate = laju stream aktual (bukan deklarasi file). */}
           <AnalyzerSpectrum
             width={screenWidth - 64}
             height={160}
             barCount={48}
             color={colors.primary[500]}
             backgroundColor="transparent"
-            sensitivity={2.2}
+            sensitivity={1}
+            flatResponse
+            sampleRate={
+              bpStatus.actualSampleRate > 0
+                ? bpStatus.actualSampleRate
+                : 48000
+            }
             isPlaying={isPlaying}
             audioSessionId={audioSessionId}
           />

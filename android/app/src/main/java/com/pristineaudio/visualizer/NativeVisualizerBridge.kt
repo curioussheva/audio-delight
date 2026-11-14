@@ -70,10 +70,12 @@ class NativeVisualizerBridge(reactContext: ReactApplicationContext) :
         private const val OUTPUT_BINS = 128
 
         // Rentang dinamis yang dipetakan ke 0.0-1.0, dalam dB.
-        // -80 dB (praktis senyap) sampai -10 dB (keras). Batas atas bukan 0 dB
-        // supaya puncak tidak langsung mentok di 1.0 dan terlihat "penuh".
+        // Full scale: -80 dB (praktis senyap) sampai 0 dB (clip). Batas atas
+        // DULU -10 dB "supaya puncak terlihat penuh" — akibatnya semua yang
+        // lebih keras dari -10 dB di-clamp ke 1.0 dan bar terpotong di atas
+        // (keputusan csheva 2026-11-14: full scale + warna clip).
         private const val DB_FLOOR = -80.0
-        private const val DB_CEIL = -10.0
+        private const val DB_CEIL = 0.0
     }
 
     override fun getName() = NAME
@@ -92,6 +94,12 @@ class NativeVisualizerBridge(reactContext: ReactApplicationContext) :
     private val samplesLock = Any()
 
     private external fun getVisualizerData(out: FloatArray)
+
+    // Laju stream aktual (Hz) dari engine — 0 bila engine belum start.
+    // Dipakai mapToLogBins supaya Nyquist/bin mengikuti reopen per laju
+    // file (44,1/48/96 kHz); TS harus memakai laju yang sama lewat prop
+    // sampleRate AnalyzerSpectrum (dari useBitPerfectStatus).
+    private external fun getActualSampleRate(): Int
 
     // =====================================================
     // SIKLUS HIDUP
@@ -286,15 +294,21 @@ class NativeVisualizerBridge(reactContext: ReactApplicationContext) :
      * Pengelompokan memakai batas logaritmik, bukan pembagian rata: telinga
      * mendengar frekuensi secara logaritmik, jadi pembagian rata akan
      * menumpuk hampir semua detail musik di beberapa bin pertama.
+     *
+     * Nyquist diambil dari laju stream aktual (bukan hardcode): engine
+     * reopen per laju file, dan bin teratas = Nyquist. Bila engine belum
+     * start (rate 0), fallback 48 kHz — sama dengan default TS.
      */
     private fun mapToLogBins(magnitude: FloatArray): FloatArray {
         val out = FloatArray(OUTPUT_BINS)
         val half = magnitude.size
+        val streamRate = getActualSampleRate().takeIf { it > 0 } ?: 48000
+        val nyquist = streamRate / 2.0
 
         for (b in 0 until OUTPUT_BINS) {
             // Batas bawah/atas bin b pada skala log.
-            val lo = logIndex(b.toDouble() / OUTPUT_BINS, half)
-            val hi = logIndex((b + 1).toDouble() / OUTPUT_BINS, half)
+            val lo = logIndex(b.toDouble() / OUTPUT_BINS, half, nyquist)
+            val hi = logIndex((b + 1).toDouble() / OUTPUT_BINS, half, nyquist)
 
             var sum = 0.0f
             var count = 0
@@ -322,12 +336,11 @@ class NativeVisualizerBridge(reactContext: ReactApplicationContext) :
     }
 
     /** Indeks bin linear untuk posisi normalisasi [t] (0..1) pada skala log. */
-    private fun logIndex(t: Double, half: Int): Int {
+    private fun logIndex(t: Double, half: Int, nyquist: Double): Int {
         if (t <= 0.0) return 0
         val minF = 20.0      // batas bawah pendengaran (Hz)
-        val maxF = 20000.0   // batas atas
+        val maxF = nyquist  // batas atas = Nyquist stream aktual
         val freq = minF * Math.pow(maxF / minF, t)
-        val nyquist = 22050.0
         val idx = (freq / nyquist * half).toInt()
         return idx.coerceIn(0, half - 1)
     }
