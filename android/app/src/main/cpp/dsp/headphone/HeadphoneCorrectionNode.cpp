@@ -176,6 +176,16 @@ void HeadphoneCorrectionNode::applyConfig(
 
     staged.setPreamp(preset.preampDb);
 
+    // (B15-H2): laju efektif untuk guard Nyquist — sama dengan laju yang
+    // dipakai staged.setFilter di bawah (prepare(), atau default 48 kHz
+    // staged bila prepare() belum dipanggil). Pakai default di sini juga:
+    // bila mAppliedSampleRate <= 0, threshold 0,49*0 akan melewati semua
+    // filter, padahal staged mendesain di 48 kHz.
+    const float effectiveSampleRate =
+        mAppliedSampleRate > 0
+            ? static_cast<float>(mAppliedSampleRate)
+            : 48000.0f;
+
     bool ok = true;
     int index = 0;
 
@@ -190,6 +200,17 @@ void HeadphoneCorrectionNode::applyConfig(
         }
 
         const auto& f = preset.filters[i];
+
+        // (B15-H2): LEWATI filter di atas Nyquist, jangan digeser.
+        // designOk mengklem Fc ke 0,49*sr — filter 20 kHz pada stream
+        // 32 kHz akan dibangun di 15.680 Hz, menaruh koreksi di
+        // frekuensi yang salah tanpa penanda. Melewati filter ini
+        // mempertahankan sisa preset tetap benar. Filter yang dilewati
+        // tidak masuk hitungan aktif dan tidak memanggil setFilter sama
+        // sekali, jadi tidak pernah sampai ke designOk untuk diklem.
+        if (f.freqHz >= 0.49f * effectiveSampleRate) {
+            continue;
+        }
 
         FilterType type = FilterType::Peaking;
 
