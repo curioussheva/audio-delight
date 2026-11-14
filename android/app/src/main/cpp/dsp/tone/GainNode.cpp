@@ -46,6 +46,17 @@ void GainNode::process(
         mCurrentGainL = mTargetGainL;
         mCurrentGainR = mTargetGainR;
 
+        // (B14-M-H4, 2026-11-14): lewati perkalian bila kedua gain tepat
+        // 1,0 — hemat CPU (2xframes perkalian + load/store NEON per
+        // buffer). Perkalian dengan tepat 1,0f sudah bit-exact menurut
+        // IEEE-754, jadi ini murni micro-opt, bukan perbaikan bit-exact.
+        if (
+            mCurrentGainL == 1.0f &&
+            mCurrentGainR == 1.0f
+        ) {
+            return;
+        }
+
         GainProcessor::process(
             left,
             right,
