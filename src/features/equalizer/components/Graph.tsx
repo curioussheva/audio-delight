@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { View, StyleSheet, Text } from "react-native";
 
 import {
@@ -10,11 +10,24 @@ import {
   BlurMask,
 } from "@shopify/react-native-skia";
 
-import { useDerivedValue, SharedValue } from "react-native-reanimated";
+import {
+  useDerivedValue,
+  useAnimatedReaction,
+  runOnJS,
+  SharedValue,
+} from "react-native-reanimated";
 
 import { EqualizerBand } from "@/features/equalizer/types";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { accentOn } from "@/shared/utils/contrast";
+import {
+  BOOST_WARN_DB,
+  GRAPH_CLIP_RED,
+  GRAPH_CLIP_YELLOW,
+  formatBoostDb,
+  sampleSmoothCurve,
+  splitAboveZero,
+} from "@/features/equalizer/api/graphClip";
 
 interface Props {
   bands: SharedValue<EqualizerBand[]> | EqualizerBand[]; // Terima dua-duanya agar fleksibel
@@ -35,16 +48,31 @@ export const FrequencyGraph: React.FC<Props> = ({
   const verticalScale = (height * 0.45) / maxGainVisible;
 
   // 1. Generate Path di UI Thread (Smooth Transition)
+  //
+  // Selain kurva + fill, dihitung juga:
+  // - aboveWarn / aboveClip: potongan kurva di atas garis 0 dB (kuning
+  //   0..+6 dB, merah > +6 dB) — supaya boost yang bisa clip langsung
+  //   terlihat. Disampel dari kurva Bezier yang sama (bukan garis lurus
+  //   antar band), jadi overlay menempel persis di kurva.
+  // - maxGain: gain band terbesar, untuk teks peringatan (dicerminkan ke
+  //   React state lewat useAnimatedReaction di bawah).
   const paths = useDerivedValue(() => {
+    const empty = {
+      curve: Skia.Path.Make(),
+      fill: Skia.Path.Make(),
+      aboveWarn: Skia.Path.Make(),
+      aboveClip: Skia.Path.Make(),
+      maxGain: 0,
+    };
     // PROTEKSI: Cek apakah bands ada
-    if (!bands) return { curve: Skia.Path.Make(), fill: Skia.Path.Make() };
+    if (!bands) return empty;
 
     // Ambil data: cek apakah dia SharedValue (punya property .value) atau array biasa
     const currentBands = "value" in bands ? bands.value : bands;
 
     const skPath = Skia.Path.Make();
     if (!currentBands || currentBands.length === 0) {
-      return { curve: skPath, fill: skPath };
+      return empty;
     }
 
     const stepX = width / (currentBands.length - 1);
@@ -68,7 +96,31 @@ export const FrequencyGraph: React.FC<Props> = ({
     fillPath.lineTo(0, height);
     fillPath.close();
 
-    return { curve: skPath, fill: fillPath };
+    // Potongan kurva di atas 0 dB — sampel kurva yang sama, lalu pisah
+    // per zona warna. Satu run = satu subpath (moveTo di titik pertama).
+    const gains = currentBands.map((b) => b.gain);
+    const maxGain = Math.max(...gains);
+    const runs = splitAboveZero(
+      sampleSmoothCurve(gains, width, midY, verticalScale),
+    );
+    const toPath = (polylines: { x: number; y: number }[][]) => {
+      const p = Skia.Path.Make();
+      for (const line of polylines) {
+        line.forEach((pt, j) => {
+          if (j === 0) p.moveTo(pt.x, pt.y);
+          else p.lineTo(pt.x, pt.y);
+        });
+      }
+      return p;
+    };
+
+    return {
+      curve: skPath,
+      fill: fillPath,
+      aboveWarn: toPath(runs.warn),
+      aboveClip: toPath(runs.clip),
+      maxGain,
+    };
   });
 
   // U-P2-43: derived value per path dibuat di ATAS komponen, bukan di
@@ -76,6 +128,20 @@ export const FrequencyGraph: React.FC<Props> = ({
   // derived value baru tiap render (tidak idiomatik, berpotensi bocor).
   const fillPath = useDerivedValue(() => paths.value.fill);
   const curvePath = useDerivedValue(() => paths.value.curve);
+  const aboveWarnPath = useDerivedValue(() => paths.value.aboveWarn);
+  const aboveClipPath = useDerivedValue(() => paths.value.aboveClip);
+
+  // Gain maksimum dicerminkan ke React state (hanya saat berubah) untuk
+  // teks peringatan — pola yang sama dengan frekuensi dominan di
+  // AnalyzerSpectrum. Perubahan band terjadi saat user menggeser slider,
+  // bukan tiap frame, jadi setState di sini murah.
+  const [maxGain, setMaxGain] = useState(0);
+  useAnimatedReaction(
+    () => paths.value.maxGain,
+    (v, prev) => {
+      if (v !== prev) runOnJS(setMaxGain)(v);
+    },
+  );
 
   // 2. Config warna (useMemo agar tidak re-render kecuali tema berubah)
   const colors = useMemo(
@@ -130,7 +196,46 @@ export const FrequencyGraph: React.FC<Props> = ({
           />
           <BlurMask blur={3} style="solid" />
         </Path>
+
+        {/* Potongan kurva di atas 0 dB — overlay tanpa blur supaya warna
+            peringatan terbaca jelas: kuning 0..+6 dB, merah > +6 dB. */}
+        <Path
+          path={aboveWarnPath}
+          color={GRAPH_CLIP_YELLOW}
+          style="stroke"
+          strokeWidth={3}
+          strokeJoin="round"
+          strokeCap="round"
+        />
+        <Path
+          path={aboveClipPath}
+          color={GRAPH_CLIP_RED}
+          style="stroke"
+          strokeWidth={3}
+          strokeJoin="round"
+          strokeCap="round"
+        />
       </Canvas>
+
+      {/* Peringatan boost: gain di atas 0 dB BELUM tentu clip (tergantung
+          level sinyal lagu) — makanya teksnya "bisa clip", bukan "clip". */}
+      {maxGain > 0 && (
+        <View style={styles.warnPill} pointerEvents="none">
+          <Text
+            style={[
+              styles.warnText,
+              {
+                color:
+                  maxGain > BOOST_WARN_DB
+                    ? GRAPH_CLIP_RED
+                    : GRAPH_CLIP_YELLOW,
+              },
+            ]}
+          >
+            Boost {formatBoostDb(maxGain)} — bisa clip di lagu keras
+          </Text>
+        </View>
+      )}
 
       <View style={styles.debugInfo}>
         {/* U-P2-30: dulu label debug "#888" hardcoded — 2,96:1 di
@@ -168,5 +273,18 @@ const styles = StyleSheet.create({
   debugText: {
     fontSize: 9,
     fontFamily: "monospace",
+  },
+  warnPill: {
+    position: "absolute",
+    right: 8,
+    bottom: 6,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  warnText: {
+    fontSize: 9,
+    fontWeight: "700",
   },
 });
