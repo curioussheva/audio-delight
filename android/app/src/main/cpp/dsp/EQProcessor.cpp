@@ -146,12 +146,13 @@ void EQProcessor::setBandGain(
     // 🔥 FIX (2026-10-10, realtime): jangan hitung ulang koefisien kalau nilai
     // tidak berubah.
     //
-    // `updateBand()` memanggil `BiquadFilter::setPeakingEQ()` yang memakai
-    // powf/cosf/sinf. Sejak EQ tersambung ke jalur produksi, `applyConfig()`
-    // dipanggil TIAP BUFFER (~25x/detik) — tanpa guard ini, 10 band × 3 fungsi
-    // transendental berjalan terus-menerus di audio thread hanya untuk nilai
-    // yang sama. Dengan guard, trig hanya jalan saat user benar-benar
-    // menggeser slider atau memuat preset.
+    // `updateBand()` memanggil fungsi desain BiquadFilter (setPeakingEQ /
+    // setLowShelf / setHighShelf) yang memakai powf/cosf/sinf. Sejak EQ
+    // tersambung ke jalur produksi, `applyConfig()` dipanggil TIAP BUFFER
+    // (~25x/detik) — tanpa guard ini, 10 band × 3 fungsi transendental
+    // berjalan terus-menerus di audio thread hanya untuk nilai yang sama.
+    // Dengan guard, trig hanya jalan saat user benar-benar menggeser slider
+    // atau memuat preset.
     //
     // Perbandingan float di sini aman: nilainya berasal dari slider yang
     // sudah dibulatkan, bukan hasil akumulasi.
@@ -225,12 +226,34 @@ void EQProcessor::updateBand(
 
     BiquadFilter filter;
 
-    filter.setPeakingEQ(
-        kBandFreqs[band],
-        1.414f,
-        mBandGain[band],
-        mSampleRate
-    );
+    // (EQ-SHELF, 2026-11-14): konvensi AutoEQ/Squiglink — shelf di ujung,
+    // peaking di tengah. Band 0 (31 Hz) lowshelf dan band 9 (16 kHz)
+    // highshelf, Q 0.707 (tanpa overshoot); band 1–8 peaking Q 1.414.
+    // Sama seperti headphone correction (PresetParser/BiquadCascade), jadi
+    // EQ manual dan koreksi headphone satu arah. Dulu semua band peaking,
+    // padahal `EQ_BAND_TYPES` di TS sudah mengklaim LS/HS di ujung.
+    if (band == 0) {
+        filter.setLowShelf(
+            kBandFreqs[band],
+            0.707f,
+            mBandGain[band],
+            mSampleRate
+        );
+    } else if (band == kBands - 1) {
+        filter.setHighShelf(
+            kBandFreqs[band],
+            0.707f,
+            mBandGain[band],
+            mSampleRate
+        );
+    } else {
+        filter.setPeakingEQ(
+            kBandFreqs[band],
+            1.414f,
+            mBandGain[band],
+            mSampleRate
+        );
+    }
 
     const auto coeffs =
         filter.getCoefficients();
