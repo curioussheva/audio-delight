@@ -78,12 +78,22 @@ private:
     // state z1/z2 yang dihitung dengan koefisien lama.
     //
     // Sekarang update*() hanya menulis TARGET; koefisien hidup didekati
-    // per sample dengan one-pole (kSmooth = 0,002f, ambang 1e-4f — sama
-    // dengan SpatialFieldProcessor dan GainNode). Satu langkah per
-    // sample dihitung sekali per band lalu dipakai L dan R (koefisien
-    // keduanya selalu identik). Nilai akhir TIDAK berubah: begitu sampai,
-    // koefisien persis target (snap), dan prepare() men-snap semuanya
-    // supaya perilaku startup identik dengan dulu.
+    // per sample dengan one-pole (kSmooth = 0,002f — sama dengan
+    // SpatialFieldProcessor dan GainNode). Satu langkah per sample
+    // dihitung sekali per band lalu dipakai L dan R (koefisien keduanya
+    // selalu identik). Nilai akhir TIDAK berubah: begitu sampai, koefisien
+    // persis target (snap), dan prepare() men-snap semuanya supaya
+    // perilaku startup identik dengan dulu.
+    //
+    // (B14-E1, 2026-11-14): mask sapuan menyala pada perubahan koefisien
+    // APA PUN (coeffsEqual, perbandingan eksak) — bukan bila selisihnya
+    // melewati ambang. Dulu ambang 1e-4f menelan langkah gain kecil:
+    // selisih koefisien shelf 31 Hz menyusut sebanding w0 = 2π·fc/fs,
+    // jadi di 192 kHz langkah 2,0 dB pun tidak pernah dipasang, dan di
+    // 48 kHz langkah 0,25–0,5 dB sudah hilang (harness
+    // scripts/test_eq_small_steps.cpp). Ambang snap yang terpisah,
+    // kCoeffSnapEps = 1e-9, dipakai HANYA untuk memutuskan kapan sapuan
+    // selesai (koefisien double; 1e-3 -> 1e-9 dalam ~7000 sampel).
     //
     // Aman: band hanya mengubah gainDb (freq/Q tetap), jadi interpolasi
     // linear antara dua set koefisien stabil berada di dalam segitiga
@@ -108,6 +118,15 @@ private:
         const BiquadCoefficients& b
     ) noexcept;
 
+    // (B14-E1): perbandingan eksak — true hanya bila kelima koefisien
+    // sama persis. Dipakai updateBand()/updateBass() untuk memutuskan
+    // mask sapuan: perubahan sekecil apa pun harus menyalakan sapuan,
+    // karena selisih koefisien shelf di laju tinggi sangat kecil.
+    static bool coeffsEqual(
+        const BiquadCoefficients& a,
+        const BiquadCoefficients& b
+    ) noexcept;
+
     // Satu langkah smoothing untuk semua band/bass yang masih aktif.
     // Dipanggil sekali per sample dari process(), hanya bila mask != 0.
     void smoothCoefficientsStep() noexcept;
@@ -117,7 +136,12 @@ private:
     void snapCoefficients() noexcept;
 
     static constexpr float kSmooth = 0.002f;
-    static constexpr float kSettledEps = 1e-4f;
+
+    // (B14-E1): ambang snap untuk koefisien double — dipakai
+    // stepCoefficients()/coeffsSettled() saja. JANGAN dipakai untuk
+    // memutuskan mask sapuan (lihat coeffsEqual di atas): ambang 1e-4
+    // yang lama menelan langkah gain kecil di laju tinggi.
+    static constexpr double kCoeffSnapEps = 1e-9;
 
     // Bit kBassBit di mSmoothingMask = bass boost masih menyapu.
     static constexpr uint32_t kBassBit = (1u << kBands);

@@ -259,13 +259,13 @@ void EQProcessor::updateBand(
         filter.getCoefficients();
 
     // (C-SMOOTH): tulis TARGET saja, bukan koefisien hidup — koefisien
-    // hidup didekati per sample di smoothCoefficientsStep(). Tandai
-    // menyapu hanya bila live memang berbeda (kalau sama, mask tetap 0
-    // dan tidak ada biaya per sample).
+    // hidup didekati per sample di smoothCoefficientsStep(). (B14-E1):
+    // tandai menyapu pada perubahan koefisien APA PUN (coeffsEqual) —
+    // ambang 1e-4 yang lama menelan langkah gain kecil di laju tinggi.
     mTargetCoeffs[band] = coeffs;
 
     if (
-        !coeffsSettled(
+        !coeffsEqual(
             mLeft[band].getCoefficients(),
             coeffs
         )
@@ -293,11 +293,11 @@ void EQProcessor::updateBass() noexcept {
         filter.getCoefficients();
 
     // (C-SMOOTH): sama seperti updateBand — target saja, hidup menyusul
-    // per sample.
+    // per sample. (B14-E1): mask nyala pada perubahan apa pun.
     mTargetBass = coeffs;
 
     if (
-        !coeffsSettled(
+        !coeffsEqual(
             mBassLeft.getCoefficients(),
             coeffs
         )
@@ -316,11 +316,27 @@ bool EQProcessor::coeffsSettled(
 ) noexcept {
 
     return
-        std::fabs(a.b0 - b.b0) <= kSettledEps &&
-        std::fabs(a.b1 - b.b1) <= kSettledEps &&
-        std::fabs(a.b2 - b.b2) <= kSettledEps &&
-        std::fabs(a.a1 - b.a1) <= kSettledEps &&
-        std::fabs(a.a2 - b.a2) <= kSettledEps;
+        std::fabs(a.b0 - b.b0) <= kCoeffSnapEps &&
+        std::fabs(a.b1 - b.b1) <= kCoeffSnapEps &&
+        std::fabs(a.b2 - b.b2) <= kCoeffSnapEps &&
+        std::fabs(a.a1 - b.a1) <= kCoeffSnapEps &&
+        std::fabs(a.a2 - b.a2) <= kCoeffSnapEps;
+}
+
+// (B14-E1): perbandingan eksak kelima koefisien. Koefisien dihitung
+// deterministik dari (freq, Q, gain, laju), jadi gain yang sama selalu
+// menghasilkan koefisien yang sama persis — tidak ada sapuan palsu.
+bool EQProcessor::coeffsEqual(
+    const BiquadCoefficients& a,
+    const BiquadCoefficients& b
+) noexcept {
+
+    return
+        a.b0 == b.b0 &&
+        a.b1 == b.b1 &&
+        a.b2 == b.b2 &&
+        a.a1 == b.a1 &&
+        a.a2 == b.a2;
 }
 
 bool EQProcessor::stepCoefficients(
@@ -332,11 +348,14 @@ bool EQProcessor::stepCoefficients(
     // di dalam ambang, terapkan selisih penuh (snap); di luar ambang,
     // langkah kSmooth. (B13-K2-double: langkah dalam double supaya
     // koefisien tidak terkuantisasi float di tiap langkah sapuan.)
+    // (B14-E1: ambang snap kCoeffSnapEps = 1e-9, bukan 1e-4 — sapuan
+    // harus sampai ke target sampai ke presisi double, kalau tidak
+    // langkah kecil tertahan di target tanpa pernah dipasang.)
     const auto step =
         [](double c, double t) {
 
             return
-                std::fabs(t - c) > kSettledEps
+                std::fabs(t - c) > kCoeffSnapEps
                     ? c + (t - c) * kSmooth
                     : t;
         };
