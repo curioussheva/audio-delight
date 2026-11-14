@@ -73,6 +73,8 @@ void DSPGraph::prepare(
             maxFrames
         );
     }
+
+    mPrepared = true;
 }
 
 // =====================================================
@@ -99,6 +101,10 @@ void DSPGraph::clear() {
     }
 
     mNodeCount = 0;
+
+    // (B14-M-H6): node sudah tidak ada — addNode berikutnya tidak boleh
+    // prepare langsung (lihat addNode), melainkan menunggu prepare().
+    mPrepared = false;
 }
 
 // =====================================================
@@ -136,10 +142,20 @@ bool DSPGraph::addNode(
         return false;
     }
 
-    node->prepare(
-        mSampleRate,
-        mMaxFrames
-    );
+    // (B14-M-H6): JANGAN prepare di sini bila graph belum pernah
+    // di-prepare — mSampleRate/mMaxFrames masih basi (default 48000 /
+    // laju prepare sebelumnya), dan prepare() yang segera menyusul akan
+    // memanggil node->prepare() lagi dengan laju benar (EQProcessor
+    // di-prepare 2x per start: trig 10 band 2x). Node yang ditambah
+    // sesudah prepare() (graph sudah hidup) tetap di-prepare langsung
+    // dengan laju saat ini.
+    if (mPrepared) {
+
+        node->prepare(
+            mSampleRate,
+            mMaxFrames
+        );
+    }
 
     mNodes[mNodeCount++] =
         std::move(node);

@@ -40,6 +40,13 @@ private:
     int mSampleRate = 48000;
     int mMaxFrames = 1920;
 
+    // (B14-M-H6): true sesudah prepare() pertama; dipakai addNode untuk
+    // memutuskan apakah node baru langsung di-prepare (graph sudah hidup,
+    // laju saat ini benar) atau ditunda sampai prepare() berikutnya
+    // (saat buildGraph, laju masih basi). clear() mengembalikannya ke
+    // false karena node sudah tidak ada.
+    bool mPrepared = false;
+
     std::array<
         std::unique_ptr<DSPNode>,
         kMaxNodes
