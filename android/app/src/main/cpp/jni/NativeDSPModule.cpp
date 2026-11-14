@@ -253,6 +253,13 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeDSPProcessingEnabled(
 
     DSPProcessingGate::setEnabled(enabled == JNI_TRUE);
 
+    // (B15-M1, 2026-11-15): metrik dspEnabled basi — gate tidak memegang
+    // metrics, dan satu-satunya penulis metrik sebelumnya adalah start().
+    // Tanpa ini, getStats() terus melaporkan nilai lama sesudah gate
+    // dimatikan/dinyalakan dari Settings. Nilai yang ditulis = kondisi
+    // gabungan (mode != BitPerfect && gate menyala), sama seperti start().
+    EngineManager::get().engine().refreshDSPEnabledMetric();
+
     __android_log_print(ANDROID_LOG_INFO, "NativeDSPModule",
         "DSP processing in production: %s",
         DSPProcessingGate::enabled() ? "AKTIF" : "mati");

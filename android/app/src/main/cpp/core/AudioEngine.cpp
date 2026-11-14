@@ -327,6 +327,23 @@ void AudioEngine::setProcessingMode(
 ) {
 
     mState.setProcessingMode(mode);
+
+    // (B15-M1, 2026-11-15): metrik dspEnabled basi — dulu hanya start()
+    // yang menulisnya (via computeDSPActive), jadi ganti mode sesudah
+    // start (mis. DSP -> BitPerfect) membuat getStats() terus mengklaim
+    // DSP aktif padahal tidak ada sample yang diproses. Logika yang sama
+    // persis dengan start() (:225): mode != BitPerfect && gate menyala.
+    mMetrics.setDSPEnabled(computeDSPActive(mState));
+}
+
+// (B15-M1, 2026-11-15): hitung ulang metrik dspEnabled dari kondisi
+// gabungan saat ini (mode + gate). Dipanggil dari JNI sesudah
+// DSPProcessingGate::setEnabled — gate hidup di luar engine dan tidak
+// memegang metrics, jadi pembaruan metriknya lewat sini. Aman dari thread
+// mana pun: hanya atomic load (mode, gate) + atomic store (metrik).
+void AudioEngine::refreshDSPEnabledMetric() {
+
+    mMetrics.setDSPEnabled(computeDSPActive(mState));
 }
 
 // =====================================================

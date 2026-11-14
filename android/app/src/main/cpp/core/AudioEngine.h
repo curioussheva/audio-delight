@@ -121,6 +121,12 @@ public:
     ProcessingMode
     getProcessingMode() const;
 
+    // (B15-M1, 2026-11-15): hitung ulang metrik dspEnabled dari kondisi
+    // gabungan saat ini (mode + gate). Dipanggil dari JNI sesudah
+    // DSPProcessingGate::setEnabled — gate hidup di luar engine dan tidak
+    // memegang metrics, jadi pembaruan metriknya lewat sini.
+    void refreshDSPEnabledMetric();
+
     // =============================================
     // DSP CONTROL
     // =============================================
