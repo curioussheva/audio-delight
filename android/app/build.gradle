@@ -89,6 +89,10 @@ android {
         debug {}
         release {
             minifyEnabled false
+            // Preview/internal saja: APK release ditandatangani key debug
+            // supaya bisa diinstal di HP untuk tes. BUKAN untuk rilis toko —
+            // keystore rilis beneran masih keputusan terpisah (lih. B15-K-d).
+            signingConfig signingConfigs.debug
         }
     }
 
