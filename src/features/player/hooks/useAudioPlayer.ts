@@ -109,7 +109,18 @@ export const useAudioPlayer = () => {
         // (bit-perfect), bukan laju tertinggi perangkat.
         // B17-P-b: antrean 1 lagu, startIndex eksplisit 0 (aritas
         // @ReactMethod Kotlin harus cocok — tidak ada default di bridge).
-        await NativePlaybackService.setQueue([song.uri], [song.sampleRate ?? 0], 0);
+        // B17-headless: metadata 1 lagu (judul/artis/album/artwork/
+        // durasi-ms) supaya TrackInfo native terisi.
+        await NativePlaybackService.setQueue(
+          [song.uri],
+          [song.sampleRate ?? 0],
+          0,
+          [song.title ?? ""],
+          [song.artist ?? ""],
+          [song.album ?? ""],
+          [song.artwork ?? ""],
+          [Math.round((song.duration ?? 0) * 1000)],
+        );
         await NativePlaybackService.play();
         setCurrentSong(song);
         setIsPlaying(true);

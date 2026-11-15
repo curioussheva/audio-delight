@@ -206,8 +206,26 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
     // di TrackQueue. Double karena angka JS tiba sebagai Double di bridge
     // legacy; semua pemanggil JS wajib mengirim argumen ini eksplisit
     // (aritas @ReactMethod harus cocok — tidak ada default di bridge).
+    // B17-headless (2026-11-15): metadata per trek (judul/artis/album/
+    // artwork/durasi-ms) — urutan + panjang SAMA dengan `uris` (antrean
+    // ASLI sebelum filter null). Dipasangkan ke `list` lewat rateIndexes
+    // yang sama seperti laju, supaya entry yang dilewati `continue` tidak
+    // menggeser metadata trek lain. Array boleh null / lebih pendek dari
+    // uris — entri yang hilang jadi "" / 0 (lihat buildStringArray).
+    // Arity @ReactMethod harus cocok dengan spec TS — semua pemanggil JS
+    // wajib mengirim ke-8 argumen.
     @ReactMethod
-    fun setQueue(uris: ReadableArray, sampleRates: ReadableArray?, startIndex: Double, promise: Promise) {
+    fun setQueue(
+        uris: ReadableArray,
+        sampleRates: ReadableArray?,
+        startIndex: Double,
+        titles: ReadableArray?,
+        artists: ReadableArray?,
+        albums: ReadableArray?,
+        artworkUris: ReadableArray?,
+        durationsMs: ReadableArray?,
+        promise: Promise,
+    ) {
         try {
             val list = ArrayList<String>(uris.size())
             // Index asli tiap entry di `list`. `continue` di loop bawah bisa
@@ -241,13 +259,42 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
             PlaybackNativeBridge.setQueue(
                 list.toTypedArray(),
                 buildRateArray(sampleRates, rateIndexes, list.size),
-                startInList
+                startInList,
+                buildStringArray(titles, rateIndexes, list.size),
+                buildStringArray(artists, rateIndexes, list.size),
+                buildStringArray(albums, rateIndexes, list.size),
+                buildStringArray(artworkUris, rateIndexes, list.size),
+                buildRateArray(durationsMs, rateIndexes, list.size),
             )
             promise.resolve(null)
         } catch (e: Throwable) {
             android.util.Log.e(LOG_TAG, "setQueue failed", e)
             promise.reject("SET_QUEUE_FAILED", e)
         }
+    }
+
+    // Petakan metadata string ke posisi yang benar di queue hasil
+    // resolve. Pola sama seperti buildRateArray: entry yang dilewati
+    // (`continue`) tidak punya pasangan. Array null / lebih pendek /
+    // berisi null / tipe salah → "" (bukan crash, bukan geser indeks).
+    private fun buildStringArray(
+        source: ReadableArray?,
+        sourceIndexes: List<Int>,
+        expectedSize: Int,
+    ): Array<String> {
+        val out = Array(expectedSize) { "" }
+        if (source == null) return out
+        for (i in 0 until minOf(sourceIndexes.size, expectedSize)) {
+            val src = sourceIndexes[i]
+            if (src < source.size()) {
+                out[i] = try {
+                    source.getString(src) ?: ""
+                } catch (e: Exception) {
+                    ""
+                }
+            }
+        }
+        return out
     }
 
     // Petakan laju file ke posisi yang benar di queue hasil resolve.

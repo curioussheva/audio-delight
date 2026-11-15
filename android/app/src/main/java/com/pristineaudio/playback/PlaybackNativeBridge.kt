@@ -93,14 +93,38 @@ object PlaybackNativeBridge {
 
     // B17-P-b (2026-11-15): startIndex — indeks lagu yang di-tap /
     // di-resume di antrean asli (JS tidak lagi me-rotate).
-    fun setQueue(uris: Array<String>, sampleRates: IntArray = IntArray(uris.size), startIndex: Int = 0) {
+    // B17-headless (2026-11-15): metadata per trek (judul/artis/album/
+    // artwork/durasi-ms), urutan + panjang SAMA dengan uris. Default ""
+    // / 0 supaya pemanggil lama yang tidak membawa metadata tetap jalan.
+    fun setQueue(
+        uris: Array<String>,
+        sampleRates: IntArray = IntArray(uris.size),
+        startIndex: Int = 0,
+        titles: Array<String> = Array(uris.size) { "" },
+        artists: Array<String> = Array(uris.size) { "" },
+        albums: Array<String> = Array(uris.size) { "" },
+        artworkUris: Array<String> = Array(uris.size) { "" },
+        durationsMs: IntArray = IntArray(uris.size),
+    ) {
         android.util.Log.d("PlaybackNativeBridge", "setQueue(${uris.size} items, startIndex=$startIndex) called")
-        NativePlaybackModule.instance?.setQueueFromService(uris, sampleRates, startIndex)
+        NativePlaybackModule.instance?.setQueueFromService(
+            uris, sampleRates, startIndex,
+            titles, artists, albums, artworkUris, durationsMs,
+        )
     }
 
     fun getCurrentTrack(): String? {
         android.util.Log.d("PlaybackNativeBridge", "getCurrentTrack() called")
         return NativePlaybackModule.instance?.getCurrentTrackFromService()
+    }
+
+    // B17-headless (2026-11-15): metadata trek AKTIF menurut native —
+    // [title, artist, album, artworkUri, durationMs]. Dipakai
+    // MediaSessionManager.notifyQueueChanged() supaya notifikasi / lock
+    // screen menampilkan trek yang benar saat Next headless (JS mati).
+    // Array kosong / lebih pendek = native belum siap / tanpa metadata.
+    fun getCurrentTrackInfo(): Array<String>? {
+        return NativePlaybackModule.instance?.getCurrentTrackInfoFromService()
     }
 
     // Indeks trek aktif menurut native. -1 kalau queue kosong / instance null.

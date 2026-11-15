@@ -24,7 +24,26 @@ export interface Spec extends TurboModule {
   // di-resume di antrean ASLI (JS tidak lagi me-rotate). Default 0 =
   // perilaku lama. Opsional di TS, tapi @ReactMethod Kotlin mengharapkan
   // argumen ini selalu dikirim — semua pemanggil wajib eksplisit.
-  setQueue(uris: string[], sampleRates: number[] | null, startIndex?: number): Promise<void>;
+  // B17-headless (2026-11-15): metadata per trek (judul/artis/album/
+  // artwork/durasi-ms) — urutan + panjang SAMA dengan `uris` (antrean
+  // yang sudah difilter). Native menyimpannya di TrackInfo supaya
+  // MediaSessionManager bisa menampilkan trek yang benar saat Next
+  // headless (lock screen / headset, JS mati). Entri boleh "" / 0
+  // (native memakai "" / 0 sebagai "tidak diketahui"); array yang
+  // lebih pendek dari uris juga aman (native mengisi sisanya "").
+  // Arity @ReactMethod harus cocok — semua pemanggil wajib kirim ke-8
+  // argumen ini. Parameter metadata dibuat REQUIRED (bukan opsional
+  // seperti startIndex) supaya tsc menangkap pemanggil yang ketinggalan.
+  setQueue(
+    uris: string[],
+    sampleRates: number[] | null,
+    startIndex: number,
+    titles: string[],
+    artists: string[],
+    albums: string[],
+    artworkUris: string[],
+    durationsMs: number[],
+  ): Promise<void>;
 
   // Query
   getPosition(): Promise<number>;

@@ -124,8 +124,24 @@ class NativePlaybackModule(
     private external fun nativeGetQueue(): Array<String>
     // B17-P-b (2026-11-15): startIndex — indeks lagu yang di-tap /
     // di-resume di antrean asli (JS tidak lagi me-rotate).
-    private external fun nativeSetQueue(uris: Array<String>, sampleRates: IntArray, startIndex: Int)
+    // B17-headless (2026-11-15): metadata per trek (judul/artis/album/
+    // artwork/durasi-ms), urutan + panjang SAMA dengan uris.
+    private external fun nativeSetQueue(
+        uris: Array<String>,
+        sampleRates: IntArray,
+        startIndex: Int,
+        titles: Array<String>,
+        artists: Array<String>,
+        albums: Array<String>,
+        artworkUris: Array<String>,
+        durationsMs: IntArray,
+    )
     private external fun nativeGetCurrentTrack(): String
+    // B17-headless (2026-11-15): metadata trek aktif — Array 5 string:
+    // [title, artist, album, artworkUri, durationMs]. Array kosong kalau
+    // queue kosong / native belum siap. Nullable karena guarded<> JNI
+    // mengembalikan nullptr di jalur FindClass gagal ganda (APK rusak).
+    private external fun nativeGetCurrentTrackInfo(): Array<String>?
 
     override fun getName() = NAME
 
@@ -281,10 +297,30 @@ class NativePlaybackModule(
     fun getPlaybackRateFromService(): Float = if (ensureNativeReady()) nativeGetPlaybackRate() else 1.0f
     fun setPitchRatioFromService(ratio: Float) { if (ensureNativeReady()) nativeSetPitchRatio(ratio) }
     fun getQueueFromService(): Array<String> = if (ensureNativeReady()) nativeGetQueue() else emptyArray()
-    fun setQueueFromService(uris: Array<String>, sampleRates: IntArray = IntArray(uris.size), startIndex: Int = 0) {
-        if (ensureNativeReady()) nativeSetQueue(uris, sampleRates, startIndex)
+    fun setQueueFromService(
+        uris: Array<String>,
+        sampleRates: IntArray = IntArray(uris.size),
+        startIndex: Int = 0,
+        titles: Array<String> = Array(uris.size) { "" },
+        artists: Array<String> = Array(uris.size) { "" },
+        albums: Array<String> = Array(uris.size) { "" },
+        artworkUris: Array<String> = Array(uris.size) { "" },
+        durationsMs: IntArray = IntArray(uris.size),
+    ) {
+        if (ensureNativeReady()) {
+            nativeSetQueue(
+                uris, sampleRates, startIndex,
+                titles, artists, albums, artworkUris, durationsMs,
+            )
+        }
     }
     fun getCurrentTrackFromService(): String = if (ensureNativeReady()) nativeGetCurrentTrack() else ""
+    // B17-headless: metadata trek aktif untuk MediaSessionManager
+    // (notifyQueueChanged). Array kosong kalau native belum siap / JNI
+    // mengembalikan null.
+    fun getCurrentTrackInfoFromService(): Array<String> =
+        if (ensureNativeReady()) nativeGetCurrentTrackInfo() ?: emptyArray()
+        else emptyArray()
     fun getPositionFromService(): Double = if (ensureNativeReady()) nativeGetPosition().toDouble() else 0.0
     fun getStatusFromService(): Int = if (ensureNativeReady()) nativeGetStatus() else 0
     fun getCurrentIndexFromService(): Int = if (ensureNativeReady()) nativeGetCurrentIndex() else -1

@@ -416,6 +416,59 @@ static void test_activeSizeEqualsTrackCount() {
     );
 }
 
+// B17-headless (2026-11-15): setTracks harus menyimpan metadata
+// TrackInfo (title/artist/album/artworkUri/durationMs) apa adanya, dan
+// current() mengembalikannya — metadata inilah yang dibaca
+// nativeGetCurrentTrackInfo untuk notifikasi / lock screen saat Next
+// headless. Tanpa ini, TrackInfo hanya membawa uri + sampleRate.
+static void test_setTracksKeepsMetadata() {
+    TrackQueue q;
+    std::vector<TrackInfo> tracks;
+    for (int i = 0; i < 3; ++i) {
+        TrackInfo t;
+        t.uri = "track-" + std::to_string(i);
+        t.title = "Judul " + std::to_string(i);
+        t.artist = "Artis " + std::to_string(i);
+        t.album = "Album " + std::to_string(i);
+        t.artworkUri = "content://art/" + std::to_string(i);
+        t.durationMs = static_cast<uint64_t>(180000 + i * 1000);
+        t.sampleRate = 44100;
+        tracks.push_back(t);
+    }
+    q.setTracks(tracks);
+
+    const auto cur0 = q.current();
+    ASSERT_TRUE(cur0.has_value(), "meta: current() tidak null");
+    ASSERT_TRUE(cur0->title == "Judul 0", "meta: current() title == Judul 0");
+    ASSERT_TRUE(cur0->artist == "Artis 0", "meta: current() artist == Artis 0");
+    ASSERT_TRUE(cur0->album == "Album 0", "meta: current() album == Album 0");
+    ASSERT_TRUE(
+        cur0->artworkUri == "content://art/0",
+        "meta: current() artworkUri == content://art/0"
+    );
+    ASSERT_TRUE(cur0->durationMs == 180000, "meta: current() durationMs == 180000");
+    ASSERT_TRUE(cur0->sampleRate == 44100, "meta: current() sampleRate tetap 44100");
+
+    // advance() ke track-1: metadata ikut berganti, bukan tertinggal.
+    q.advance();
+    const auto cur1 = q.current();
+    ASSERT_TRUE(cur1.has_value(), "meta: current() sesudah advance tidak null");
+    ASSERT_TRUE(cur1->uri == "track-1", "meta: advance() ke track-1");
+    ASSERT_TRUE(cur1->title == "Judul 1", "meta: advance() title == Judul 1");
+    ASSERT_TRUE(cur1->artist == "Artis 1", "meta: advance() artist == Artis 1");
+    ASSERT_TRUE(cur1->durationMs == 181000, "meta: advance() durationMs == 181000");
+
+    // jumpTo(2): metadata track-2.
+    ASSERT_TRUE(q.jumpTo(2), "meta: jumpTo(2) OK");
+    const auto cur2 = q.current();
+    ASSERT_TRUE(cur2.has_value(), "meta: current() sesudah jumpTo tidak null");
+    ASSERT_TRUE(cur2->title == "Judul 2", "meta: jumpTo title == Judul 2");
+    ASSERT_TRUE(
+        cur2->artworkUri == "content://art/2",
+        "meta: jumpTo artworkUri == content://art/2"
+    );
+}
+
 // repeat=one: advance() tetap di trek yang sama (music player standar).
 static void test_repeatOneStays() {
     TrackQueue q;
@@ -446,6 +499,7 @@ int main() {
     test_currentIndexAfterSetTracks();
     test_activeSizeEqualsTrackCount();
     test_repeatOneStays();
+    test_setTracksKeepsMetadata();
 
     std::fprintf(
         stdout,

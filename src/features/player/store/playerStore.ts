@@ -542,6 +542,17 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         // Laju file dipasangkan dengan uris yang SAMA (setelah filter), supaya
         // track tanpa laju tidak menggeser laju track lain.
         const queueRates = targetQueueSafe.map((s) => s.sampleRate ?? 0);
+        // B17-headless: metadata dipasangkan dengan uris yang SAMA (setelah
+        // filter) — native menyimpannya di TrackInfo supaya notifikasi /
+        // lock screen benar saat Next headless (JS mati). Durasi Song
+        // dalam detik → ms untuk native (TrackInfo.durationMs).
+        const queueTitles = targetQueueSafe.map((s) => s.title ?? "");
+        const queueArtists = targetQueueSafe.map((s) => s.artist ?? "");
+        const queueAlbums = targetQueueSafe.map((s) => s.album ?? "");
+        const queueArtworks = targetQueueSafe.map((s) => s.artwork ?? "");
+        const queueDurationsMs = targetQueueSafe.map(
+          (s) => Math.round((s.duration ?? 0) * 1000),
+        );
         if (uris.length === 0) {
           set({ playError: "No valid URIs" });
           return false;
@@ -564,7 +575,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           targetQueueSafe.findIndex((s) => s.id === playableSong.id),
         );
         await timedCall("setQueue", () =>
-          NativePlaybackService.setQueue(uris, queueRates, tapIndex),
+          NativePlaybackService.setQueue(
+            uris,
+            queueRates,
+            tapIndex,
+            queueTitles,
+            queueArtists,
+            queueAlbums,
+            queueArtworks,
+            queueDurationsMs,
+          ),
         );
 
         // Native me-reject kalau dekoder gagal membuka track (mis. content://
@@ -818,6 +838,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
               const targetSafe = target.filter((x) => !!x.uri);
               const uris = targetSafe.map((x) => x.uri);
               const rates = targetSafe.map((x) => x.sampleRate ?? 0);
+              // B17-headless: metadata dipasangkan dengan uris yang SAMA
+              // (setelah filter) — lihat playSong di atas.
+              const titles = targetSafe.map((x) => x.title ?? "");
+              const artists = targetSafe.map((x) => x.artist ?? "");
+              const albums = targetSafe.map((x) => x.album ?? "");
+              const artworks = targetSafe.map((x) => x.artwork ?? "");
+              const durationsMs = targetSafe.map((x) =>
+                Math.round((x.duration ?? 0) * 1000),
+              );
               if (uris.length > 0) {
                 // B17-P-b: resume TANPA rotasi — `target` sudah urutan
                 // ASLI (LAST_QUEUE_IDS tersimpan asli sejak rotasi
@@ -830,7 +859,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
                   targetSafe.findIndex((x) => x.id === song.id),
                 );
                 await timedCall("setQueue(resume)", () =>
-                  NativePlaybackService.setQueue(uris, rates, resumeIndex),
+                  NativePlaybackService.setQueue(
+                    uris,
+                    rates,
+                    resumeIndex,
+                    titles,
+                    artists,
+                    albums,
+                    artworks,
+                    durationsMs,
+                  ),
                 );
                 if (s.position > 0) {
                   // posisi restore: biarkan decoder siap dulu, baru seek

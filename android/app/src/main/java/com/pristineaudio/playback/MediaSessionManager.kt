@@ -150,6 +150,25 @@ class MediaSessionManager(private val service: PlaybackService) {
                 // Emit ke JS: UI React langsung segarkan.
                 PlaybackNativeBridge.emitTrackChanged(cur, index)
             }
+            // B17-headless: metadata trek AKTIF dari native (TrackInfo,
+            // diisi setQueue) — [title, artist, album, artworkUri,
+            // durationMs]. Tanpa ini, notifikasi / lock screen tetap
+            // menampilkan judul trek SEBELUMNYA saat Next ditekan dari
+            // notification / headset selagi JS mati. JS yang hidup tetap
+            // memanggil updateMetadata sendiri dari playSong; pemanggilan
+            // ganda di sini tidak berbahaya (nilai sama, artwork
+            // di-decode ulang dengan requestId baru).
+            // Guard judul kosong: queue yang di-set tanpa metadata (mis.
+            // testMatrix) tidak boleh menghapus metadata yang sudah tampil.
+            val info = PlaybackNativeBridge.getCurrentTrackInfo()
+            val title = info?.getOrNull(0).orEmpty()
+            if (title.isNotEmpty()) {
+                val artist = info?.getOrNull(1).orEmpty()
+                val album = info?.getOrNull(2).orEmpty()
+                val artwork = info?.getOrNull(3).orEmpty().ifEmpty { null }
+                val durationMs = info?.getOrNull(4)?.toLongOrNull() ?: 0L
+                updateMetadata(title, artist, album, durationMs, artwork)
+            }
             // Notifikasi tetap di-refresh supaya tombol play/pause benar.
             refreshNotification()
         } catch (e: Exception) {

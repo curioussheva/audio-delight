@@ -5,6 +5,7 @@
 #include "playback/TrackQueue.h"
 #include "playback/NativeEventEmitter.h"
 #include <android/log.h>
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <mutex>
@@ -353,18 +354,55 @@ JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativePlaybackModule
     });
 }
 
+// B17-headless: baca array string JNI sekali di luar loop, diindeks
+// posisi ASLI di `uris` (sama seperti `rates`). Hasil SELALU berukuran
+// `count` — array null / lebih pendek / entri null / GetStringUTFChars
+// gagal diisi "" supaya indeks tidak pernah bergeser dan tidak pernah
+// out-of-bounds. Entri lebih panjang dari `count` diabaikan pemanggil.
+static std::vector<std::string> readStringArray(
+    JNIEnv* env, jobjectArray arr, jsize count) {
+    std::vector<std::string> out(
+        static_cast<size_t>(count > 0 ? count : 0));
+    if (!arr || count <= 0) return out;
+    jsize len = env->GetArrayLength(arr);
+    jsize n = std::min(len, count);
+    for (jsize i = 0; i < n; ++i) {
+        jstring js = (jstring) env->GetObjectArrayElement(arr, i);
+        if (!js) continue;
+        const char* cstr = env->GetStringUTFChars(js, nullptr);
+        if (cstr) {
+            out[static_cast<size_t>(i)] = cstr;
+            env->ReleaseStringUTFChars(js, cstr);
+        }
+        env->DeleteLocalRef(js);
+    }
+    return out;
+}
+
 // `uris`  = daftar URI track (wajib).
 // `rates` = laju file per track dalam Hz (opsional, boleh null).
+// `titles`/`artists`/`albums`/`artworkUris` = metadata per track (opsional,
+// boleh null); `durationsMs` = durasi per track dalam ms (opsional, boleh
+// null). Semua array metadata diindeks posisi ASLI di `uris` — sama
+// seperti `rates` — supaya entry URI null yang dilewati loop (`continue`)
+// tidak menggeser metadata track lain.
 //
 // 🔥 FIX (2026-10-07): laju file ikut masuk ke TrackInfo supaya engine bisa
 // membuka stream di laju track (bit-perfect), bukan di laju tertinggi
 // perangkat. Sebelumnya array ini tidak ada dan sampleRate selalu 0, jadi
 // informasi laju file hilang sebelum sampai ke C++.
 //
+// B17-headless (2026-11-15): metadata ikut masuk ke TrackInfo supaya
+// MediaSessionManager bisa menampilkan trek yang benar saat Next headless
+// (lock screen / headset, JS mati). Elemen yang hilang / array lebih
+// pendek dari uris = "" / 0 ("tidak diketahui"), tidak pernah crash.
+//
 // Elemen rates yang 0 / array lebih pendek dari uris = laju tidak diketahui;
 // engine akan mendeteksi sendiri untuk track itu.
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSetQueue(
-    JNIEnv* env, jobject, jobjectArray uris, jintArray rates, jint startIndex) {
+    JNIEnv* env, jobject, jobjectArray uris, jintArray rates, jint startIndex,
+    jobjectArray titles, jobjectArray artists, jobjectArray albums,
+    jobjectArray artworkUris, jintArray durationsMs) {
     pristine::jni::guardedVoid(env, "nativeSetQueue", [&] {
 
     __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
@@ -402,6 +440,29 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeS
         }
     }
 
+    // B17-headless: metadata + durasi dibaca sekali di luar loop, diindeks
+    // posisi ASLI (sama seperti laju). readStringArray selalu mengembalikan
+    // `length` entri ("" kalau hilang), jadi indeks `i` di loop selalu aman.
+    const std::vector<std::string> titleValues =
+        readStringArray(env, titles, length);
+    const std::vector<std::string> artistValues =
+        readStringArray(env, artists, length);
+    const std::vector<std::string> albumValues =
+        readStringArray(env, albums, length);
+    const std::vector<std::string> artworkValues =
+        readStringArray(env, artworkUris, length);
+    jsize durationCount = 0;
+    std::vector<jint> durationValues;
+    if (durationsMs) {
+        durationCount = env->GetArrayLength(durationsMs);
+        if (durationCount > 0) {
+            durationValues.resize(static_cast<size_t>(durationCount));
+            env->GetIntArrayRegion(
+                durationsMs, 0, durationCount, durationValues.data()
+            );
+        }
+    }
+
     std::vector<pristine::playback::TrackInfo> tracks;
     tracks.reserve(static_cast<size_t>(length));
     for (jsize i = 0; i < length; ++i) {
@@ -421,6 +482,25 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeS
 
         pristine::playback::TrackInfo info;
         info.uri = cstr;
+
+        // B17-headless: metadata per track (diindeks posisi asli `i` —
+        // loop boleh `continue` untuk URI null, tapi vektor metadata
+        // tetap sejajar dengan `uris` karena dibaca di luar loop).
+        info.title = titleValues[static_cast<size_t>(i)];
+        info.artist = artistValues[static_cast<size_t>(i)];
+        info.album = albumValues[static_cast<size_t>(i)];
+        info.artworkUri = artworkValues[static_cast<size_t>(i)];
+
+        // Durasi: hanya terima nilai positif sebagai durasi ms. 0 /
+        // negatif / array lebih pendek = tidak diketahui (tetap 0 —
+        // PlaybackController sudah menangani durasi 0 sebagai "tidak ada").
+        if (i < durationCount) {
+            const int32_t dur =
+                static_cast<int32_t>(durationValues[static_cast<size_t>(i)]);
+            if (dur > 0) {
+                info.durationMs = static_cast<uint64_t>(dur);
+            }
+        }
 
         // Laju file: hanya terima nilai yang masuk akal sebagai laju audio.
         // Nilai sampah (0, negatif, di luar rentang) dibiarkan 0 supaya engine
@@ -462,6 +542,69 @@ JNIEXPORT jstring JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nati
         return env->NewStringUTF(track->uri.c_str());
     }
     return env->NewStringUTF("");
+    });
+}
+
+// B17-headless: metadata trek aktif — [title, artist, album, artworkUri,
+// durationMs (desimal)]. Array KOSONG (bukan null) kalau queue kosong /
+// controller null, supaya Kotlin tidak perlu null-check panjang; null hanya
+// di jalur FindClass gagal ganda (APK rusak). Dipakai
+// MediaSessionManager.notifyQueueChanged() supaya notifikasi / lock screen
+// menampilkan trek yang benar saat Next headless (JS mati). Pola guard
+// FindClass/NewStringUTF mengikuti nativeGetQueue (J-M5/J-m9).
+JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetCurrentTrackInfo(JNIEnv* env, jobject) {
+    return pristine::jni::guarded<jobjectArray>(env, "nativeGetCurrentTrackInfo", nullptr, [&]() -> jobjectArray {
+    jclass stringClass = env->FindClass("java/lang/String");
+    if (!stringClass) {
+        env->ExceptionClear();
+        stringClass = env->FindClass("java/lang/Object");
+        if (!stringClass) {
+            env->ExceptionClear();
+            return nullptr; // APK rusak; tidak ada yang bisa dikembalikan
+        }
+    }
+
+    std::string title;
+    std::string artist;
+    std::string album;
+    std::string artworkUri;
+    uint64_t durationMs = 0;
+    auto* controller = getController();
+    if (controller) {
+        auto queuePtr = controller->queue();
+        if (queuePtr) {
+            auto track = queuePtr->current();
+            if (track) {
+                title = track->title;
+                artist = track->artist;
+                album = track->album;
+                artworkUri = track->artworkUri;
+                durationMs = track->durationMs;
+            }
+        }
+    }
+
+    const std::string values[5] = {
+        title, artist, album, artworkUri, std::to_string(durationMs),
+    };
+    jobjectArray result = env->NewObjectArray(5, stringClass, nullptr);
+    if (!result) {
+        env->ExceptionClear();
+        return env->NewObjectArray(0, stringClass, nullptr);
+    }
+    for (int i = 0; i < 5; ++i) {
+        jstring str = env->NewStringUTF(values[i].c_str());
+        if (!str) {
+            // String invalid (Modified UTF-8) / OOM: bersihkan exception,
+            // lewati entri ini (tetap null di index itu) daripada meracuni
+            // seluruh array. Kotlin membaca lewat getOrNull().orEmpty().
+            env->ExceptionClear();
+            continue;
+        }
+        env->SetObjectArrayElement(result, i, str);
+        env->DeleteLocalRef(str);
+    }
+    return result;
     });
 }
 
