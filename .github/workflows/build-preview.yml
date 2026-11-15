@@ -27,8 +27,20 @@ jobs:
           cache: pnpm
 
       # 3. Install dependencies
+      # --ignore-scripts: WAJIB dipertahankan — NODE_ENV=production membuat
+      # pnpm melewatkan devDependencies, sehingga binary `husky` tidak ada
+      # dan script `prepare` (husky install) di package.json akan gagal.
+      # (Percobaan menghapus flag ini gagal di run 43658687354.)
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # 3b. Rebuild Skia — unduh binary prebuilt yang dibutuhkan CMake.
+      # --ignore-scripts di atas juga mematikan postinstall Skia
+      # (node ./scripts/install-skia.mjs); tanpa binary ini, configure
+      # CMake gagal (run 43657475006). `pnpm rebuild` menjalankan hanya
+      # script Skia, tanpa menyentuh husky.
+      - name: Rebuild Skia prebuilt binaries
+        run: pnpm rebuild @shopify/react-native-skia
 
       # 4. Setup Java
       - uses: actions/setup-java@v4
