@@ -31,6 +31,17 @@ class MediaSessionManager(private val service: PlaybackService) {
     // Single-threaded: decode artwork tidak butuh paralel, dan urutan tetap.
     private val artworkExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
 
+    // Nomor permintaan artwork terakhir. Dinaikkan tiap updateMetadata();
+    // task decode yang selesai dengan id lama (track sudah berganti) membuang
+    // hasilnya supaya artwork track lama tidak menimpa track baru.
+    // Executor single-thread FIFO, jadi urutan selesai tetap berurutan —
+    // yang dijaga di sini adalah staleness, bukan out-of-order completion.
+    private val artworkRequestId = java.util.concurrent.atomic.AtomicInteger(0)
+
+    // true setelah release() pertama; release() kedua jadi no-op.
+    @Volatile
+    private var released = false
+
     // Artwork di-downscale ke maksimum sisi ini untuk notifikasi (px).
     // Full-res album art bisa ribuan px — boros memory dan lambat.
     private val ARTWORK_MAX_DIM = 320
@@ -164,8 +175,14 @@ class MediaSessionManager(private val service: PlaybackService) {
     }
 
     fun release() {
+        if (released) return
+        released = true
         mediaSession.isActive = false
         mediaSession.release()
+        // Thread executor non-daemon: tanpa shutdown, thread-nya bocor
+        // tiap siklus service. shutdownNow aman dipanggil ulang, tapi
+        // guard released di atas sudah membuat release() kedua jadi no-op.
+        artworkExecutor.shutdownNow()
     }
 
     // 🔥 NEW: update metadata (judul, artist, durasi) + refresh notifikasi
@@ -181,6 +198,18 @@ class MediaSessionManager(private val service: PlaybackService) {
         lastTitle = title
         lastArtist = artist
 
+        // Track baru belum tentu punya artwork: bersihkan artwork track lama
+        // supaya tidak tampil di notifikasi/lock screen track ini. Metadata
+        // yang dibangun di bawah tidak membawa bitmap, dan buildNotification()
+        // sudah skip setLargeIcon saat lastArtwork null.
+        lastArtwork = null
+
+        // Naikkan id permintaan; task decode membawa id ini + nilai
+        // title/artist/album/duration yang DITANGKAP saat submit (parameter
+        // fungsi, bukan field mutable lastTitle/lastArtist yang bisa berubah
+        // sebelum task dieksekusi).
+        val requestId = artworkRequestId.incrementAndGet()
+
         val metadata = MediaMetadataCompat.Builder()
             .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
             .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
@@ -192,10 +221,11 @@ class MediaSessionManager(private val service: PlaybackService) {
         mediaSession.isActive = true
 
         // Artwork di-update terpisah: decode bitmap butuh IO.
-        // Kunci (synchronized) supaya tidak ada dua thread decode sekaligus.
-        if (!artworkUri.isNullOrEmpty()) {
+        // Skip kalau service sudah release (executor sudah shutdown —
+        // execute() akan melempar RejectedExecutionException).
+        if (!released && !artworkUri.isNullOrEmpty()) {
             artworkExecutor.execute {
-                loadArtwork(artworkUri)
+                loadArtwork(artworkUri, requestId, title, artist, album, durationMs)
             }
         }
 
@@ -264,26 +294,40 @@ class MediaSessionManager(private val service: PlaybackService) {
     // Decode bitmap dari content:// (MediaStore album art) atau path file.
     // Dijalankan di artworkExecutor (background). Hasilnya dipakai untuk
     // METADATA_KEY_ART (lock screen background) + setLargeIcon (notification).
-    private fun loadArtwork(uri: String) {
+    //
+    // title/artist/album/durationMs DITANGKAP saat submit di updateMetadata(),
+    // bukan dibaca dari field mutable lastTitle/lastArtist di sini — field
+    // itu sudah bisa berubah ke track berikutnya saat task ini dieksekusi.
+    // requestId yang sudah tidak cocok dengan artworkRequestId berarti track
+    // sudah berganti: hasil decode dibuang, metadata tidak disentuh.
+    private fun loadArtwork(
+        uri: String,
+        requestId: Int,
+        title: String,
+        artist: String,
+        album: String,
+        durationMs: Long,
+    ) {
         try {
             val bmp = decodeBitmapSafely(uri)
             if (bmp != null) {
+                if (requestId != artworkRequestId.get()) {
+                    // Stale: track sudah berganti selagi decode berjalan.
+                    // Bitmap belum pernah dipublikasikan, aman di-recycle.
+                    bmp.recycle()
+                    return
+                }
                 lastArtwork = bmp
 
                 // Update metadata dengan artwork. putBitmap butuh ukuran
                 // yang wajar — biarkan sistem menangani scaling.
-                val oldMeta = mediaSession.controller.metadata
+                // Metadata dibangun dari nilai yang ditangkap saat submit,
+                // bukan dari field mutable atau metadata lama.
                 val metadata = MediaMetadataCompat.Builder()
-                    .putString(MediaMetadataCompat.METADATA_KEY_TITLE, lastTitle)
-                    .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, lastArtist)
-                    .apply {
-                        oldMeta?.let {
-                            val album = it.getString(MediaMetadataCompat.METADATA_KEY_ALBUM)
-                            if (!album.isNullOrEmpty()) putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album)
-                            val dur = it.getLong(MediaMetadataCompat.METADATA_KEY_DURATION)
-                            if (dur > 0) putLong(MediaMetadataCompat.METADATA_KEY_DURATION, dur)
-                        }
-                    }
+                    .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
+                    .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
+                    .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album)
+                    .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationMs)
                     .putBitmap(MediaMetadataCompat.METADATA_KEY_ART, bmp)
                     .build()
 
