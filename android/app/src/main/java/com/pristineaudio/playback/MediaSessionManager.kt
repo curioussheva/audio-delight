@@ -469,7 +469,11 @@ class MediaSessionManager(private val service: PlaybackService) {
 
     private fun buildNotification(): Notification {
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_media_play)
+            // B17-S-e: ikon kecil notifikasi HARUS monokrom (alpha-only).
+            // android.R.drawable.ic_media_play selalu menampilkan glyph
+            // "play" sistem di status bar, bahkan saat sedang memutar.
+            // R.drawable.ic_notification = glyph not musik putih.
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(lastTitle)
             .setContentText(lastArtist)
             // setOngoing(true) = tidak bisa di-swipe. Wajib untuk kontrol media:
