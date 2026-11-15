@@ -9,7 +9,12 @@ jobs:
 
     env:
       GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
-      NODE_ENV: production
+      # NODE_ENV: JANGAN di-set ke production — pnpm install akan melewatkan
+      # SELURUH devDependencies, padahal release bundle membutuhkannya
+      # (babel-plugin-module-resolver di babel.config.cjs; run 43674911608
+      # gagal di :app:createBundleReleaseJsAndAssets karena modul ini hilang).
+      # Bundle release tetap production: task Gradle release memaksa dev=false
+      # ke Metro sendiri. Sama seperti build-dev.yml (NODE_ENV sengaja dihapus).
       HUSKY: 0    # 🔥 FIX: skip husky install
 
     steps:
@@ -27,10 +32,12 @@ jobs:
           cache: pnpm
 
       # 3. Install dependencies
-      # --ignore-scripts: WAJIB dipertahankan — NODE_ENV=production membuat
-      # pnpm melewatkan devDependencies, sehingga binary `husky` tidak ada
-      # dan script `prepare` (husky install) di package.json akan gagal.
-      # (Percobaan menghapus flag ini gagal di run 43658687354.)
+      # --ignore-scripts: WAJIB dipertahankan — script root `prepare`
+      # (husky install) akan gagal karena binary husky tidak ada bila
+      # script dijalankan. (Percobaan menghapus flag ini gagal di run
+      # 43658687354.) devDependencies TETAP terinstal: NODE_ENV tidak
+      # di-set ke production (lihat env di atas) — release bundle
+      # membutuhkannya (babel-plugin-module-resolver, run 43674911608).
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
