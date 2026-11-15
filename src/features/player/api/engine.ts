@@ -1,11 +1,5 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Song } from "@/shared/types/audio";
-import { requestAudioPermissions } from "@/shared/utils/permissions";
 import NativeDSPModule from "@/features/equalizer/api/nativeInterface";
-import {
-  startVisualizer,
-  stopVisualizer,
-} from "@/features/visualizer/native/VisualizerBridge";
+import { stopVisualizer } from "@/features/visualizer/native/VisualizerBridge";
 import NativePlaybackService from "@/specs/NativePlaybackService";
 import { ProcessingModeValue as NativeDSPModuleValue } from "@/specs/NativeDSPModule";
 
@@ -160,57 +154,6 @@ export class AudioEngine {
     this.isVisualizerRunning = false;
   }
 
-  public async applyDSP(sessionId: number): Promise<void> {
-    if (this.isExclusive) return;
-
-    const mode = await AsyncStorage.getItem("audio_mode_preference");
-    if (mode === "dsp" && NativeDSPModule) {
-      try {
-        const bassStrength =
-          (await AsyncStorage.getItem("dsp_bass_strength")) || "0";
-        await NativeDSPModule.setBassBoost(
-          parseInt(bassStrength, 10),
-          sessionId,
-        );
-        console.log(`💎 [AudioEngine] DSP Applied to Session ${sessionId}`);
-      } catch (e) {
-        console.warn("[AudioEngine] Failed to apply DSP effects", e);
-      }
-    }
-  }
-
-  async setEqBand(bandId: number, gain: number): Promise<void> {
-    if (this.isExclusive || !NativeDSPModule) return;
-    const id = await this.refreshSessionId();
-    if (id) {
-      await NativeDSPModule.setEqualizer(bandId, gain, id);
-    }
-  }
-
-  async setBassBoost(strength: number): Promise<void> {
-    if (this.isExclusive || !NativeDSPModule) return;
-    const id = await this.refreshSessionId();
-    if (id) {
-      await NativeDSPModule.setBassBoost(strength, id);
-    }
-  }
-
-  async setVirtualizer(strength: number): Promise<void> {
-    if (this.isExclusive || !NativeDSPModule) return;
-    const id = await this.refreshSessionId();
-    if (id) {
-      await NativeDSPModule.setVirtualizer(strength, id);
-    }
-  }
-
-  async setReverbPreset(preset: number): Promise<void> {
-    if (this.isExclusive || !NativeDSPModule) return;
-    const id = await this.refreshSessionId();
-    if (id) {
-      await NativeDSPModule.setReverbPreset(preset, id);
-    }
-  }
-
   private async refreshSessionId(): Promise<number | null> {
     try {
       if (!NativeDSPModule?.createAudioSession) {
@@ -228,74 +171,6 @@ export class AudioEngine {
       console.warn("[AudioEngine] refreshSessionId failed:", err);
       return null;
     }
-  }
-
-  async play(): Promise<void> {
-    if (!this.isInitialized) await this.initialize();
-
-    NativePlaybackService.play();
-
-    setTimeout(async () => {
-      const sessionId = await this.refreshSessionId();
-      if (!sessionId) return;
-
-      if (this.isExclusive) {
-        console.log("💎 [AudioEngine] Playback: Bit-Perfect (No FX)");
-        return;
-      }
-
-      const mode = await AsyncStorage.getItem("audio_mode_preference");
-      if (mode !== "bit-perfect") {
-        await this.applyDSP(sessionId);
-      }
-    }, 400);
-  }
-
-  /**
-   * Panggil HANYA saat komponen Visualizer aktif di layar
-   */
-  async enableVisualizer(): Promise<boolean> {
-    if (this.isExclusive || this.isVisualizerRunning) return false;
-
-    // Pastikan Session ID ada sebelum mengaktifkan visualizer
-    const sessionId = this.sessionId ?? (await this.refreshSessionId());
-    if (!sessionId) return false;
-
-    const hasPermission = await requestAudioPermissions();
-    if (hasPermission) {
-      startVisualizer(sessionId);
-      this.isVisualizerRunning = true;
-      return true;
-    }
-    return false;
-  }
-
-  async pause(): Promise<void> {
-    NativePlaybackService.pause();
-    stopVisualizer();
-    this.isVisualizerRunning = false;
-  }
-
-  async stop(): Promise<void> {
-    NativePlaybackService.stop();
-    stopVisualizer();
-    this.isVisualizerRunning = false;
-  }
-
-  async setQueue(songs: Song[], startIndex = 0): Promise<void> {
-    if (!this.isInitialized) await this.initialize();
-    if (songs.length === 0) return;
-
-    const uris = songs.map((s) => s.uri);
-    // 🔥 FIX (2026-10-07): kirim laju file per track supaya native bisa
-    // membuka stream di laju track (bit-perfect), bukan laju tertinggi
-    // perangkat. Track tanpa laju dikirim 0 = biar native yang deteksi.
-    const sampleRates = songs.map((s) => s.sampleRate ?? 0);
-    // B17-P-b (2026-11-15): startIndex diteruskan ke native — dulu ada
-    // skipTo(startIndex) yang dikomentari karena belum diimplementasikan
-    // di C++/Java; sekarang TrackQueue::setTracks(startIndex) yang
-    // menanganinya, jadi tidak perlu skip sesudah setQueue.
-    NativePlaybackService.setQueue(uris, sampleRates, startIndex);
   }
 
   async seekTo(positionSeconds: number): Promise<void> {
@@ -326,11 +201,6 @@ export class AudioEngine {
     };
   }
 
-  async destroy(): Promise<void> {
-    await this.releaseAllFX();
-    NativePlaybackService.stopService();
-    this.isInitialized = false;
-  }
 }
 
 export const audioEngine = new AudioEngine();
