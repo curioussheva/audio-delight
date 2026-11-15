@@ -42,7 +42,10 @@ static bool nearly(float a, float b, float tol = 1e-5f) {
     return std::fabs(a - b) <= tol;
 }
 
-// CATATAN (2026-11-11, V-M1): write() men-sanitize seperti sanitizeOutput —
+// B17-V1 (2026-11-15): ring kSize = 4096, jendela baca kReadSize =
+// 2048. Tes memakai konstanta itu (bukan hardcode 2048) supaya drift
+// ukuran ketahuan di compile-time, bukan lewat hasil yang diam-diam
+// salah. "Satu ring penuh" = 4096 tulis, "jendela" = 2048 baca.
 // NaN/Inf/|x|>2 → 0.0f. Karena itu data pola di test ini HARUS dalam
 // rentang audio (|x| <= 2); nilai penanda seperti 10.0f akan di-nol-kan
 // dan test jendela gagal — bukan karena ring-nya rusak, tapi karena
@@ -52,50 +55,55 @@ static void writePattern(VisualizerBuffer& buf, const std::vector<float>& v) {
 }
 
 // =====================================================
-// 1. Tulis satu ring penuh (2048), baca 2048 -> sama persis
+// 1. Tulis satu ring penuh (4096), baca 2048 -> 2048 terakhir
 // =====================================================
 static void testFullRing() {
-    std::printf("\n[1] Tulis 2048, baca 2048\n");
+    std::printf("\n[1] Tulis 4096 (satu ring penuh), baca 2048\n");
 
     VisualizerBuffer buf;
-    std::vector<float> in(2048);
-    for (int i = 0; i < 2048; ++i) in[i] = std::sin(i * 0.01f) * 0.5f;
+    std::vector<float> in(VisualizerBuffer::kSize);
+    for (uint32_t i = 0; i < VisualizerBuffer::kSize; ++i)
+        in[i] = std::sin(i * 0.01f) * 0.5f;
     writePattern(buf, in);
 
-    std::vector<float> out(2048, -1.0f);
-    buf.read(out.data(), 2048);
+    std::vector<float> out(VisualizerBuffer::kReadSize, -1.0f);
+    buf.read(out.data(), VisualizerBuffer::kReadSize);
 
     bool ok = true;
     bool anyNonZero = false;
-    for (int i = 0; i < 2048; ++i) {
+    for (uint32_t i = 0; i < VisualizerBuffer::kReadSize; ++i) {
         if (out[i] != 0.0f) anyNonZero = true;
-        if (!nearly(out[i], in[i])) { ok = false; break; }
+        // Jendela baca = separuh akhir ring (B17-V1).
+        if (!nearly(out[i], in[VisualizerBuffer::kReadSize + i])) { ok = false; break; }
     }
     check(anyNonZero, "read() mengembalikan data bukan nol (B3)");
     check(ok, "2048 sample terakhir sama dengan yang ditulis");
 }
 
 // =====================================================
-// 2. Tulis 2048 lalu 512 lagi, baca 2048 -> 2048 terakhir
+// 2. Tulis 4096 lalu 512 lagi, baca 2048 -> 2048 terakhir
 // =====================================================
 static void testAdvance() {
-    std::printf("\n[2] Tulis 2048 + 512, baca 2048\n");
+    std::printf("\n[2] Tulis 4096 + 512, baca 2048\n");
 
     VisualizerBuffer buf;
-    std::vector<float> first(2048);
-    for (int i = 0; i < 2048; ++i) first[i] = i * 0.0005f;
+    std::vector<float> first(VisualizerBuffer::kSize);
+    for (uint32_t i = 0; i < VisualizerBuffer::kSize; ++i)
+        // Skala 0.00025: maks ~1.02, di bawah batas sanitasi |x|>2 (V-M1).
+        first[i] = i * 0.00025f;
     writePattern(buf, first);
 
     std::vector<float> second(512);
     for (int i = 0; i < 512; ++i) second[i] = 1.5f + i * 0.0005f;
     writePattern(buf, second);
 
-    std::vector<float> out(2048, -1.0f);
-    buf.read(out.data(), 2048);
+    std::vector<float> out(VisualizerBuffer::kReadSize, -1.0f);
+    buf.read(out.data(), VisualizerBuffer::kReadSize);
 
     bool ok = true;
-    for (int i = 0; i < 2048; ++i) {
-        float expected = (i < 1536) ? first[512 + i] : second[i - 1536];
+    for (uint32_t i = 0; i < VisualizerBuffer::kReadSize; ++i) {
+        // Total 4608 tulis, 2048 terakhir = first[2560..4095] + second[0..511].
+        float expected = (i < 1536) ? first[2560 + i] : second[i - 1536];
         if (!nearly(out[i], expected)) { ok = false; break; }
     }
     check(ok, "jendela 2048 terakhir bergeser mengikuti write()");
@@ -127,14 +135,16 @@ static void testPartial() {
 }
 
 // =====================================================
-// 4. Wrap-around: tulis 3000, baca 2048 -> 2048 terakhir
+// 4. Wrap-around: tulis 5000 (melewati satu putaran ring 4096),
+// baca 2048 -> 2048 terakhir
 // =====================================================
 static void testWrap() {
-    std::printf("\n[4] Tulis 3000 (melewati satu putaran ring), baca 2048\n");
+    std::printf("\n[4] Tulis 5000 (melewati satu putaran ring 4096), baca 2048\n");
 
     VisualizerBuffer buf;
-    std::vector<float> in(3000);
-    for (int i = 0; i < 3000; ++i) in[i] = i * 0.0005f;
+    std::vector<float> in(5000);
+    // Skala 0.00025: maks ~1.25, di bawah batas sanitasi |x|>2 (V-M1).
+    for (int i = 0; i < 5000; ++i) in[i] = i * 0.00025f;
     writePattern(buf, in);
 
     std::vector<float> out(2048, -1.0f);
@@ -142,9 +152,9 @@ static void testWrap() {
 
     bool ok = true;
     for (int i = 0; i < 2048; ++i) {
-        if (!nearly(out[i], (952 + i) * 0.0005f)) { ok = false; break; }
+        if (!nearly(out[i], (2952 + i) * 0.00025f)) { ok = false; break; }
     }
-    check(ok, "setelah wrap, 2048 terakhir benar (952..2999)");
+    check(ok, "setelah wrap, 2048 terakhir benar (2952..4999)");
 }
 
 // =====================================================
@@ -173,7 +183,7 @@ static void testSanitize() {
 }
 
 // =====================================================
-// 6. Guard (V-M2/V-m1): write(frames<=0) no-op, read(size>kSize) clamp
+// 6. Guard (V-M2/V-m1): write(frames<=0) no-op, read(size>kReadSize) clamp
 // =====================================================
 static void testGuards() {
     std::printf("\n[6] Guard: write negatif no-op, read >2048 di-clamp\n");
@@ -200,7 +210,8 @@ static void testGuards() {
     check(posUnchanged, "write(frames<=0/null) tidak mengubah posisi/data");
 
     // read(4096) harus kembalikan 2048 sample terakhir SATU kali
-    // (clamp ke kSize), bukan jendela berulang.
+    // (clamp ke kReadSize, B17-V1 — dulu clamp ke kSize yang sama
+    // dengan jendela), bukan jendela berulang. read(8192) sama.
     std::vector<float> big(4096, -1.0f);
     buf.read(big.data(), 4096);
     bool noRepeat = true;
@@ -208,6 +219,71 @@ static void testGuards() {
         if (!nearly(big[i], before[i])) { noRepeat = false; break; }
     }
     check(noRepeat, "read(4096) di-clamp ke 2048 terakhir (tanpa duplikasi)");
+
+    std::vector<float> huge(8192, -1.0f);
+    buf.read(huge.data(), 8192);
+    bool hugeClamped = true;
+    for (int i = 0; i < 2048; ++i) {
+        if (!nearly(huge[i], before[i])) { hugeClamped = false; break; }
+    }
+    check(hugeClamped, "read(8192) juga di-clamp ke 2048 terakhir");
+}
+
+// =====================================================
+// 7. clear() (B17-V1): sesudah clear, read() nol semua; tulis
+// sesudah clear mengalir normal lagi (tidak ada data basi).
+// =====================================================
+static void testClear() {
+    std::printf("\n[7] clear(): ring kosong, tulis sesudahnya normal\n");
+
+    VisualizerBuffer buf;
+    std::vector<float> in(4096);
+    for (int i = 0; i < 4096; ++i) in[i] = 1.0f;
+    writePattern(buf, in);
+
+    std::vector<float> before(2048, -1.0f);
+    buf.read(before.data(), 2048);
+    bool wasFull = true;
+    for (int i = 0; i < 2048; ++i) {
+        if (!nearly(before[i], 1.0f)) { wasFull = false; break; }
+    }
+    check(wasFull, "sebelum clear: jendela penuh data");
+
+    buf.clear();
+
+    std::vector<float> cleared(2048, -1.0f);
+    buf.read(cleared.data(), 2048);
+    bool allZero = true;
+    for (int i = 0; i < 2048; ++i) {
+        if (cleared[i] != 0.0f) { allZero = false; break; }
+    }
+    check(allZero, "sesudah clear(): read() mengembalikan nol semua");
+
+    // Tulis lagi sesudah clear: 100 sample, jendela = nol + data baru.
+    std::vector<float> again(100, 0.5f);
+    writePattern(buf, again);
+    std::vector<float> after(2048, -1.0f);
+    buf.read(after.data(), 2048);
+    bool headZero = true;
+    for (int i = 0; i < 1948; ++i) {
+        if (after[i] != 0.0f) { headZero = false; break; }
+    }
+    bool tailHalf = true;
+    for (int i = 1948; i < 2048; ++i) {
+        if (!nearly(after[i], 0.5f)) { tailHalf = false; break; }
+    }
+    check(headZero && tailHalf, "tulis sesudah clear() mengalir normal, tanpa data basi");
+
+    // clear() pada buffer kosong: aman, no-op.
+    VisualizerBuffer fresh;
+    fresh.clear();
+    std::vector<float> freshOut(2048, -1.0f);
+    fresh.read(freshOut.data(), 2048);
+    bool freshZero = true;
+    for (int i = 0; i < 2048; ++i) {
+        if (freshOut[i] != 0.0f) { freshZero = false; break; }
+    }
+    check(freshZero, "clear() pada buffer baru aman (tetap nol)");
 }
 
 int main() {
@@ -220,6 +296,7 @@ int main() {
     testWrap();
     testSanitize();
     testGuards();
+    testClear();
 
     std::printf("\n%d lulus, %d gagal\n", gPassed, gFailed);
     return gFailed == 0 ? 0 : 1;

@@ -268,6 +268,11 @@ void AudioEngine::stop() {
 
     mStreamController.close();
 
+    // B17-V1: stream sudah ditutup (audio thread tidak lagi menulis),
+    // jadi ring visualizer aman dikosongkan — kalau tidak, read() terus
+    // mengembalikan frame terakhir dan spektrum membeku sesudah stop.
+    mCallback.clearVisualizer();
+
     reset();
 }
 

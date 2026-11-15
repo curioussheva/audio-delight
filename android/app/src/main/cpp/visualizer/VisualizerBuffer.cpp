@@ -135,6 +135,27 @@ void VisualizerBuffer::writeInterleaved(
 }
 
 // =====================================================
+// CLEAR (stop path — B17-V1)
+// =====================================================
+
+void VisualizerBuffer::clear() noexcept {
+
+    // Dulu tidak ada: sesudah stop, read() terus mengembalikan frame
+    // terakhir dan spektrum membeku. Urutan penting: nol-kan dulu isi
+    // ring, baru reset posisi (release) — pembaca yang load pos sesudah
+    // store ini melihat jendela nol semua. Konsisten dengan write():
+    // write() mem-publish lewat store(pos + frames, release) sesudah
+    // menulis sample; di sini store(0, release) sesudah meng-nol-kan.
+    // Pemanggil WAJIB memastikan audio thread tidak sedang menulis
+    // (dipanggil dari AudioEngine::stop() sesudah stream ditutup).
+    memset(mBufferA, 0, sizeof(mBufferA));
+    mWritePos.store(
+        0,
+        std::memory_order_release
+    );
+}
+
+// =====================================================
 // READ (ui thread)
 // =====================================================
 
@@ -143,14 +164,16 @@ void VisualizerBuffer::read(
     int32_t size
 ) const {
 
-    // 🔥 FIX (2026-11-11, V-M2/V-m1): clamp jendela ke kSize. read(4096)
-    // mengembalikan data yang sama dua kali (index & kMask selalu
-    // in-bounds, bukan OOB — tapi jendela berulang). size <= 0 no-op.
+    // 🔥 FIX (2026-11-11, V-M2/V-m1): clamp jendela ke kReadSize (2048).
+    // read(4096) mengembalikan data yang sama dua kali (index & kMask
+    // selalu in-bounds, bukan OOB — tapi jendela berulang). size <= 0
+    // no-op. B17-V1: clamp ke kReadSize, BUKAN kSize — ring kini 4096
+    // tapi jendela baca tetap 2048 (jendela FFT Kotlin/JNI).
     if (size <= 0 || !dst) {
         return;
     }
-    if (size > static_cast<int32_t>(kSize)) {
-        size = static_cast<int32_t>(kSize);
+    if (size > static_cast<int32_t>(kReadSize)) {
+        size = static_cast<int32_t>(kReadSize);
     }
 
     // Baca dari buffer yang SAMA dengan yang ditulis (mBufferA).
@@ -162,12 +185,22 @@ void VisualizerBuffer::read(
     // 2026-11-11 (V-m4): mBufferB + mWriteBuffer dihapus; satu buffer.
     //
     // Membaca buffer yang sama aman di sini: read() mengambil snapshot
-    // mWritePos sekali (acquire) lalu menyalin jendela [pos-size, pos).
-    // Penulis hanya menulis DI DEPAN jendela itu (posisi >= pos), jadi
-    // tidak ada sample yang ditimpa saat sedang dibaca — kecuali pembacaan
-    // lebih lambat dari satu putaran ring (2048 sample, ~43 ms @ 48 kHz):
-    // tearing lap-around TERBUKTI nyata tapi jarang (0,004% di stress
-    // test, ~1 frame robek per 21 menit di polling 20/s — V-m2, minor).
+    // mWritePos sekali (acquire) lalu menyalin jendela [pos-size, pos)
+    // dari ring. Jendela itu BUKAN kebal dari penulis — penulis menulis
+    // ke indeks (pos+i) & kMask, dan karena indeks dihitung modulo
+    // kSize, penulis yang sudah menulis satu putaran ring penuh AKAN
+    // sampai kembali ke awal jendela dan menimpanya selagi dibaca.
+    // Yang benar: dengan ring 4096 dan jendela 2048 (B17-V1), penulis
+    // harus menulis 2048 sample penuh (~43 ms @ 48 kHz) sesudah snapshot
+    // pos diambil sebelum ia mencapai awal jendela — jadi tear hanya
+    // terjadi kalau satu panggilan read() memakan waktu lebih dari itu
+    // (atau polling UI tertinggal satu putaran). Komentar lama ("penulis
+    // hanya menulis DI DEPAN jendela, posisi >= pos") salah: itu
+    // mengabaikan pembungkusan modulo — posisi mentah memang naik terus,
+    // tapi posisi DALAM RING membungkus dan kembali ke jendela.
+    // Tear lap-around masih mungkin tapi jauh lebih jarang daripada saat
+    // ring == jendela (dulu: chunk berikutnya langsung menimpa awal
+    // jendela; V-m2, 0,004% di stress test).
     //
     // Jangan kembalikan logika "buffer kebalikan" — dan flip per panggilan
     // write() JUGA salah: chunk yang berurutan akan tersebar selang-seling

@@ -73,6 +73,14 @@ public:
         return mVisualizer;
     }
 
+    // B17-V1: kosongkan ring visualizer saat stop supaya spektrum tidak
+    // membeku di frame terakhir. Hanya dipanggil dari AudioEngine::stop()
+    // sesudah stream ditutup (audio thread sudah tidak menulis) — lihat
+    // VisualizerBuffer::clear().
+    void clearVisualizer() noexcept {
+        mVisualizer.clear();
+    }
+
 private:
     // =============================================
     // REFERENCES

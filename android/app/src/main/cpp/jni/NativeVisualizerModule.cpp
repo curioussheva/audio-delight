@@ -29,15 +29,18 @@ Java_com_pristineaudio_visualizer_NativeVisualizerBridge_getVisualizerData(
     // Sebelumnya 256 — sementara FFT di Kotlin butuh FFT_SIZE = 2048 dan
     // menolak apa pun yang kurang (VISUALIZER_SHORT_BUFFER), jadi
     // getFFTData() selalu reject. Ukuran ini harus sama dengan FFT_SIZE
-    // Kotlin DAN dengan VisualizerBuffer::kSize (2048): read() mengembalikan
-    // `size` sample terakhir dari ring.
+    // Kotlin DAN dengan VisualizerBuffer::kReadSize (2048): read()
+    // mengembalikan `size` sample terakhir dari ring. Ring-nya sendiri
+    // lebih besar (kSize = 4096, B17-V1) — jendela baca tetap 2048.
     constexpr int kVisualizerSize = 2048;
 
     // 🔥 FIX (2026-11-11, V-m3): ikat compile-time ke
-    // VisualizerBuffer::kSize. Drift seperti ini sudah pernah terjadi
+    // VisualizerBuffer::kReadSize. Drift seperti ini sudah pernah terjadi
     // (B2: JNI 256 vs buffer 2048, diperbaiki 2026-11-10).
-    static_assert(kVisualizerSize == static_cast<int>(VisualizerBuffer::kSize),
-                  "kVisualizerSize harus sama dengan VisualizerBuffer::kSize");
+    // B17-V1: retarget dari kSize (kini 4096) ke kReadSize (2048) —
+    // jendela FFT yang dibaca, bukan ukuran ring.
+    static_assert(kVisualizerSize == static_cast<int>(VisualizerBuffer::kReadSize),
+                  "kVisualizerSize harus sama dengan VisualizerBuffer::kReadSize");
 
     // B12-W9: tidak ada lagi NewFloatArray di sini. Kotlin mengirim satu
     // FloatArray yang dipakai ulang tiap panggilan (~20x/detik) dan fungsi
