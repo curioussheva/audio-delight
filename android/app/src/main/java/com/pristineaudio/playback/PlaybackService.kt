@@ -181,10 +181,16 @@ class PlaybackService : Service() {
     // battery optimization). Wake lock harus dilepas supaya tidak jadi
     // referensi yang menggantung.
     override fun onDestroy() {
+        // B16-W2: jalur stop dari JS adalah stopService() -> onDestroy(),
+        // BUKAN ACTION_STOP — jadi engine HARUS dihentikan di sini, kalau
+        // tidak audio terus jalan setelah service mati. stop() sinkron
+        // (murah, lihat komentar ACTION_STOP di atas) dan dipanggil SEBELUM
+        // antrean perintah dibuang + thread dimatikan, supaya play yang
+        // sudah terlanjur antre tidak bisa menghidupkan lagi engine
+        // setelah stop.
+        PlaybackNativeBridge.stop()
         // Buang perintah yang masih antre supaya tidak ada play/seek yang
         // jalan setelah service mati, lalu matikan thread perintah.
-        // CATATAN (B16-M1): sengaja TIDAK ada engine-stop di sini — itu
-        // temuan W2, dikerjakan terpisah.
         if (::commandHandler.isInitialized) {
             commandHandler.removeCallbacksAndMessages(null)
         }
