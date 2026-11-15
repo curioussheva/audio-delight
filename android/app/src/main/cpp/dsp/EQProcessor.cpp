@@ -192,7 +192,7 @@ void EQProcessor::setBassBoost(
     float gainDb
 ) noexcept {
 
-    // �� FIX (2026-10-10, realtime): sama seperti setBandGain — `updateBass()`
+    // 🔥 FIX (2026-10-10, realtime): sama seperti setBandGain — `updateBass()`
     // memakai trig, dan `applyConfig()` dipanggil tiap buffer. Tanpa guard,
     // koefisien bass dihitung ulang terus untuk nilai yang sama.
     if (mBassBoost == gainDb) {

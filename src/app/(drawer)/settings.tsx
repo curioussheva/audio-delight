@@ -411,7 +411,7 @@ export default function SettingsScreen() {
   // UI-nya pindah ke TuningControl (dipakai settings + subscreen Solfeggio);
   // reset-all di bawah tetap memakai setTuningCents(0) langsung.
 
-  // Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Mode selector Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+  // ─── Mode selector ─────────────────────────────────────────────
   //
   // Tiga mode, live - tidak ada restart stream, jadi perpindahan berlaku pada
   // frame berikutnya. Ini menggantikan sakelar on/off lama yang menggabungkan
@@ -469,7 +469,7 @@ export default function SettingsScreen() {
     setAudioMode(mode);
   };
 
-  // Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Sections Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+  // ─── Sections ─────────────────────────────────────────────
 
   const renderTampilan = () => (
     <Section colors={colors} spacing={spacing}>
@@ -551,7 +551,7 @@ export default function SettingsScreen() {
     </Section>
   );
 
-  // âââ renderAudioOutput ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── renderAudioOutput ────────────────────────────────────────────────────────
   //
   // Section jalur output audio. Menggantikan section "USB DAC" yang lama, yang
   // hanya melihat perangkat USB sehingga speaker/jack/Bluetooth/HDMI tidak
@@ -656,7 +656,7 @@ export default function SettingsScreen() {
                 }}
               >
                 {activeOutputDevice
-                  ? `${activeOutputDevice.id} â¢ ${activeOutputDevice.sampleRate / 1000} kHz maks â¢ ${pathLabel}`
+                  ? `${activeOutputDevice.id} • ${activeOutputDevice.sampleRate / 1000} kHz maks • ${pathLabel}`
                   : "Tidak ada perangkat spesifik yang dipilih - Android menentukan sendiri."}
               </Text>
 
@@ -766,9 +766,9 @@ export default function SettingsScreen() {
                         <Text
                           style={{ color: colors.text.secondary, fontSize: 11 }}
                         >
-                          {device.id} â¢ {device.sampleRate / 1000} kHz â¢{" "}
+                          {device.id} • {device.sampleRate / 1000} kHz •{" "}
                           {device.type}
-                          {device.exclusive ? " â¢ jalur langsung" : ""}
+                          {device.exclusive ? " • jalur langsung" : ""}
                         </Text>
                       </View>
                       {isActive && (
@@ -858,7 +858,7 @@ export default function SettingsScreen() {
 
       {showAudioSettings && (
         <View style={{ paddingBottom: spacing.sm }}>
-          {/* ââ 1. Mode pemrosesan (3 mode) ââââââââââââââââââââââââââââââââ */}
+          {/* ── 1. Mode pemrosesan (3 mode) ──────────────────────────────── */}
           <View style={{ paddingHorizontal: spacing.md, paddingBottom: spacing.sm }}>
             <Text
               style={{
@@ -914,7 +914,7 @@ export default function SettingsScreen() {
                         }}
                       >
                         {isFallback
-                          ? "Device menolak exclusive. Tetap berbunyi, tapi lewat mixer sistem â tidak bit-perfect."
+                          ? "Device menolak exclusive. Tetap berbunyi, tapi lewat mixer sistem — tidak bit-perfect."
                           : m.hint}
                       </Text>
                     </View>
@@ -949,7 +949,7 @@ export default function SettingsScreen() {
           </View>
 
 
-          {/* Ã¢ÂÂÃ¢ÂÂ 1b. Diagnostik: pemrosesan DSP di jalur produksi Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ */}
+          {/* ── 1b. Diagnostik: pemrosesan DSP di jalur produksi ────────────────── */}
           {!dspGate.unavailable && (
             <SettingRow colors={colors} spacing={spacing}>
               <View style={{ flex: 1, marginRight: spacing.md }}>
@@ -965,8 +965,8 @@ export default function SettingsScreen() {
                   }}
                 >
                   {dspGate.enabled
-                    ? "Aktif Ã¢ÂÂ mode DSP & Solfeggio benar-benar memproses PCM."
-                    : "Mati Ã¢ÂÂ PCM lewat tanpa diproses. Pakai ini untuk membandingkan suara tanpa build ulang."}
+                    ? "Aktif — mode DSP & Solfeggio benar-benar memproses PCM."
+                    : "Mati — PCM lewat tanpa diproses. Pakai ini untuk membandingkan suara tanpa build ulang."}
                 </Text>
                 <Text
                   style={{

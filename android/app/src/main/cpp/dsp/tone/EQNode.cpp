@@ -7,7 +7,7 @@ void EQNode::prepare(
     int
 ) {
 
-    // �� FIX (2026-10-10): dulu bodi kosong, jadi `mEQ.prepare()` tidak pernah
+    // 🔥 FIX (2026-10-10): dulu bodi kosong, jadi `mEQ.prepare()` tidak pernah
     // dipanggil dan `EQProcessor::mSampleRate` tetap nilai default 48000.
     //
     // Akibatnya koefisien biquad untuk file 44.1 kHz dihitung dengan

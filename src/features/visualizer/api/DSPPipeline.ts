@@ -6,7 +6,7 @@ import NativeDSPModuleSpec, {
 } from "@/specs/NativeDSPModule";
 
 /**
- * Mode pemrosesan audio â dikirim ke engine native, bukan ke DSP session
+ * Mode pemrosesan audio — dikirim ke engine native, bukan ke DSP session
  * Android.
  *
  * KENAPA INI DITULIS ULANG
@@ -15,13 +15,13 @@ import NativeDSPModuleSpec, {
  * menyalakan "bit-perfect". Itu jalur yang salah dan tidak mungkin bekerja:
  *
  *  1. `USBDACModule.kt` tidak punya JNI sama sekali (nol `external fun`), jadi
- *     `setExclusiveMode` hanya `resolve({ success: true })` â selalu sukses
+ *     `setExclusiveMode` hanya `resolve({ success: true })` — selalu sukses
  *     palsu, tidak menyentuh stream Oboe.
  *  2. Itu jalur perangkat USB, sedangkan pemilihan perangkat sekarang lewat
  *     `AudioOutputService` (NativeDeviceModule).
  *  3. Pemrosesan (mode) dan jalur (exclusive) adalah dua hal berbeda;
  *     menggabungkannya di satu fungsi membuat keduanya tidak bisa diatur
- *     terpisah â dan itulah yang membuat mode ketiga mustahil ditambahkan.
+ *     terpisah — dan itulah yang membuat mode ketiga mustahil ditambahkan.
  *
  * Sekarang: mode dikirim lewat `NativeDSPModuleSpec.setProcessingMode()`, yang
  * jalurnya lengkap sampai `EngineManager` dan dibaca per-buffer (live, tanpa
@@ -47,7 +47,7 @@ export class DSPPipeline {
   }
 
   /**
-   * Ganti mode pemrosesan. LIVE â berlaku pada buffer audio berikutnya.
+   * Ganti mode pemrosesan. LIVE — berlaku pada buffer audio berikutnya.
    *
    * Tidak menyentuh exclusive: itu syarat jalur, diatur terpisah oleh
    * `AudioEngine.toggleExclusiveMode()`. Mode yang gagal secara jalur
@@ -64,7 +64,7 @@ export class DSPPipeline {
     }
 
     // Di bit-perfect DSP memang dilewati; melepas FX Android mencegah slider
-    // EQ bergerak tanpa efek. Di immersive, FX justru bagian rantainya â
+    // EQ bergerak tanpa efek. Di immersive, FX justru bagian rantainya —
     // jangan dilepas.
     if (mode === "bit-perfect") {
       try {
@@ -78,7 +78,7 @@ export class DSPPipeline {
   /**
    * Terapkan EQ ke DSP session Android.
    *
-   * Ini BUKAN DSPChain C++ â ini efek level Android session. Keduanya bisa
+   * Ini BUKAN DSPChain C++ — ini efek level Android session. Keduanya bisa
    * aktif bersamaan, dan itu memang disengaja: EQ Android bekerja untuk jalur
    * shared, DSPChain bekerja di PCM.
    */
