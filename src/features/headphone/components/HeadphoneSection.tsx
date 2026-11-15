@@ -228,7 +228,7 @@ export const HeadphoneSection: React.FC<Props> = ({ accent, disabled }) => {
           (U-P2-45). */}
       {profiles.length > 0 && (
         <Text style={[styles.hint, { color: colors.text.tertiary }]}>
-          Tekan lama kartu untuk menghapus profil.
+          Tekan lama untuk menghapus.
         </Text>
       )}
 

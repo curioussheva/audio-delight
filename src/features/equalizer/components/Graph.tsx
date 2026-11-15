@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   debugText: {
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: "monospace",
   },
   hzLabel: {
@@ -322,7 +322,7 @@ const styles = StyleSheet.create({
     // top di-override inline (= tepat di bawah canvas).
     width: 36,
     textAlign: "center",
-    fontSize: 9,
+    fontSize: 11,
   },
   warnPill: {
     position: "absolute",
@@ -335,7 +335,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   warnText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "700",
   },
 });

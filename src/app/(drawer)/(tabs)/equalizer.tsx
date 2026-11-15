@@ -15,12 +15,10 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Save,
-  TriangleAlert,
   Zap,
   RotateCcw,
   Eye,
   EyeOff,
-  Settings2,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react-native";
@@ -162,6 +160,50 @@ const MiniSwitch = ({
         />
       </Pressable>
     </View>
+  );
+};
+
+interface SectionToggleProps {
+  label: string;
+  shown: boolean;
+  onPress: () => void;
+  /** Ikon saat tampil: "zap" untuk EFEK, mata untuk seksi lain. */
+  activeIcon?: "zap";
+}
+
+const SectionToggle = ({
+  label,
+  shown,
+  onPress,
+  activeIcon,
+}: SectionToggleProps) => {
+  const { theme } = useTheme();
+  const colors = theme.colors;
+  const Icon = shown ? (activeIcon === "zap" ? Zap : Eye) : EyeOff;
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={[styles.viewBtn, { backgroundColor: colors.background.tertiary }]}
+      accessibilityRole="button"
+      accessibilityLabel={`Tampilkan atau sembunyikan ${label.toLowerCase()}`}
+      accessibilityState={{ expanded: shown }}
+    >
+      <Icon
+        size={12}
+        color={shown ? colors.text.primary : colors.text.tertiary}
+      />
+      <Text
+        style={[
+          styles.viewBtnText,
+          {
+            color: shown ? colors.text.primary : colors.text.tertiary,
+          },
+        ]}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
   );
 };
 
@@ -336,104 +378,6 @@ export default function EqualizerScreen() {
       style={[styles.container, { backgroundColor: colors.background.primary }]}
     >
       <GestureHandlerRootView style={{ flex: 1 }}>
-        {/* UI TOGGLES */}
-        <View
-          style={[
-            styles.viewControls,
-            {
-              backgroundColor: colors.background.secondary,
-              borderBottomColor: colors.border.medium,
-            },
-          ]}
-        >
-          <TouchableOpacity
-            onPress={() => toggleSection("graph")}
-            style={[
-              styles.viewBtn,
-              { backgroundColor: colors.background.tertiary },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Tampilkan atau sembunyikan grafik"
-            accessibilityState={{ expanded: visibleSections.graph }}
-          >
-            {visibleSections.graph ? (
-              <Eye size={12} color={colors.text.primary} />
-            ) : (
-              <EyeOff size={12} color={colors.text.tertiary} />
-            )}
-            <Text
-              style={[
-                styles.viewBtnText,
-                {
-                  color: visibleSections.graph
-                    ? colors.text.primary
-                    : colors.text.tertiary,
-                },
-              ]}
-            >
-              GRAFIK
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => toggleSection("effects")}
-            style={[
-              styles.viewBtn,
-              { backgroundColor: colors.background.tertiary },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Tampilkan atau sembunyikan efek"
-            accessibilityState={{ expanded: visibleSections.effects }}
-          >
-            {visibleSections.effects ? (
-              <Zap size={12} color={colors.text.primary} />
-            ) : (
-              <EyeOff size={12} color={colors.text.tertiary} />
-            )}
-            <Text
-              style={[
-                styles.viewBtnText,
-                {
-                  color: visibleSections.effects
-                    ? colors.text.primary
-                    : colors.text.tertiary,
-                },
-              ]}
-            >
-              EFEK
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => toggleSection("mixer")}
-            style={[
-              styles.viewBtn,
-              { backgroundColor: colors.background.tertiary },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Tampilkan atau sembunyikan mixer"
-            accessibilityState={{ expanded: visibleSections.mixer }}
-          >
-            {visibleSections.mixer ? (
-              <Settings2 size={12} color={colors.text.primary} />
-            ) : (
-              <EyeOff size={12} color={colors.text.tertiary} />
-            )}
-            <Text
-              style={[
-                styles.viewBtnText,
-                {
-                  color: visibleSections.mixer
-                    ? colors.text.primary
-                    : colors.text.tertiary,
-                },
-              ]}
-            >
-              MIXER
-            </Text>
-          </TouchableOpacity>
-        </View>
-
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: LIST_BOTTOM_PADDING }}
@@ -539,6 +483,51 @@ export default function EqualizerScreen() {
             {MODE_INFO[audioMode].description}
           </Text>
 
+          {/* TOGGLE SEKSI (hanya DSP — subscreen lain tidak punya seksi
+              ini). Di bawah header + deskripsi mode supaya tidak
+              menenggelamkan pemilih mode; flexWrap supaya kelima tombol
+              tetap terjangkau di layar sempit tanpa layout rusak. */}
+          {audioMode === "dsp" && (
+            <View
+              style={[
+                styles.viewControls,
+                {
+                  backgroundColor: colors.background.secondary,
+                  borderColor: colors.border.medium,
+                  marginHorizontal: spacing.md,
+                  marginBottom: spacing.md,
+                },
+              ]}
+            >
+              <SectionToggle
+                label="GRAFIK"
+                shown={visibleSections.graph}
+                onPress={() => toggleSection("graph")}
+              />
+              <SectionToggle
+                label="HEADPHONE"
+                shown={visibleSections.headphone}
+                onPress={() => toggleSection("headphone")}
+              />
+              <SectionToggle
+                label="EFEK"
+                shown={visibleSections.effects}
+                onPress={() => toggleSection("effects")}
+                activeIcon="zap"
+              />
+              <SectionToggle
+                label="MIXER"
+                shown={visibleSections.mixer}
+                onPress={() => toggleSection("mixer")}
+              />
+              <SectionToggle
+                label="PRESET"
+                shown={visibleSections.preset}
+                onPress={() => toggleSection("preset")}
+              />
+            </View>
+          )}
+
           {/* Subscreen DSP — seluruh konten DSP lama, verbatim, hanya
               dibungkus kondisional per mode (Ide 1). */}
           {audioMode === "dsp" && (
@@ -603,45 +592,13 @@ export default function EqualizerScreen() {
             </View>
           </View>
 
-          {/* 0b. Mode Bit-Perfect memblokir seluruh DSP. Dulu kontrol hanya
-              diam-diam tidak bereaksi (`if (isDSPDisabled) return`) tanpa
-              penjelasan apa pun di layar. */}
-          {isDSPFrozen && (
-            <View
-              style={[
-                styles.warningCard,
-                {
-                  backgroundColor: colors.background.secondary,
-                  borderColor: colors.status.error,
-                  marginHorizontal: spacing.md,
-                  padding: spacing.md,
-                  marginBottom: spacing.md,
-                },
-              ]}
-            >
-              <TriangleAlert size={18} color={colors.status.error} />
-              <Text
-                style={[
-                  styles.warningText,
-                  { color: colors.text.primary, marginLeft: spacing.sm },
-                ]}
-              >
-                {audioMode === "bit-perfect"
-                  ? "Mode Bit-Perfect aktif — seluruh DSP dilewati supaya " +
-                    "output murni. Pilih mode DSP di atas untuk memakai " +
-                    "kontrol di layar ini."
-                  : "Mode Solfeggio aktif — layar ini mengendalikan mesin " +
-                    "DSP, sedangkan Solfeggio memakai rantai resonansinya " +
-                    "sendiri. Pilih mode DSP di atas kalau ingin menyetel EQ."}
-              </Text>
-            </View>
-          )}
-
           {/* 1. KOREKSI HEADPHONE — diletakkan PALING ATAS karena diproses
               paling awal di DSPChain (sebelum EQ). Koreksi menetralkan alat,
               EQ menyetel selera; menaruh kontrol EQ di atas akan menyesatkan
               tentang urutan yang sebenarnya. */}
-          <HeadphoneSection disabled={eq.isDSPDisabled} />
+          {visibleSections.headphone && (
+            <HeadphoneSection disabled={eq.isDSPDisabled} />
+          )}
 
           {/* 2. GRAPH SECTION — B3: saat DSP bypass (mode non-DSP atau
               sakelar master mati), graph meredup + label BYPASS supaya
@@ -678,7 +635,151 @@ export default function EqualizerScreen() {
             </View>
           )}
 
-          {/* 3. EFFECTS SECTION (SLIDERS & REVERB) */}
+          {/* 3. MIXER SECTION */}
+          {visibleSections.mixer && (
+            <View
+              style={[
+                styles.mixerBoard,
+                {
+                  backgroundColor: colors.background.secondary,
+                  borderColor: colors.border.medium,
+                  marginHorizontal: spacing.md,
+                  paddingVertical: spacing.md,
+                  marginBottom: spacing.xl,
+                },
+              ]}
+            >
+              {/* F3: penjelasan di tempat kontrolnya, bukan cuma di banner
+                  atas yang bisa ter-scroll menjauh. */}
+              {eq.isDSPDisabled && (
+                <Text
+                  style={[
+                    styles.disabledCaption,
+                    {
+                      color: colors.text.tertiary,
+                      paddingHorizontal: spacing.md,
+                      marginBottom: spacing.sm,
+                    },
+                  ]}
+                >
+                  Nonaktif di mode ini — pindah ke DSP untuk menyetel.
+                </Text>
+              )}
+              {/* U-P2-53: daftar band lewat pola daftar bersama. Jalur yang
+                  dipilih tetap FlatList (horizontal + bersarang di
+                  ScrollView — lihat chooseListKind); `directionalLockEnabled`
+                  dipertahankan supaya tidak bentrok dengan scroll utama. */}
+              <ScreenList
+                horizontal
+                nestedInScrollView
+                showsHorizontalScrollIndicator={false}
+                data={eq.currentBands}
+                keyExtractor={(item) => item.frequency.toString()}
+                renderItem={({ item, index }) => (
+                  <EqualizerBand
+                    frequency={item.frequency}
+                    gain={item.gain}
+                    onValueChange={(v) => eq.updateBandGain(index, v)}
+                    disabled={!eq.isEQEnabled || eq.isDSPDisabled}
+                  />
+                )}
+                contentContainerStyle={{ paddingHorizontal: spacing.sm }}
+                directionalLockEnabled={true}
+              />
+            </View>
+          )}
+          {visibleSections.preset && (
+            <>
+          {/* 4. PRESETS */}
+          <View
+            style={[
+              styles.sectionHeader,
+              { paddingHorizontal: spacing.md, marginBottom: spacing.sm },
+            ]}
+          >
+            <Text style={[styles.sectionTitle, { color: colors.text.secondary }]}>
+              PROFIL SUARA
+            </Text>
+            {/* D5: tombol simpan berteks, bukan ikon saja. */}
+            <TouchableOpacity
+              onPress={() => setModalVisible(true)}
+              disabled={eq.isDSPDisabled}
+              accessibilityRole="button"
+              accessibilityLabel="Simpan profil saat ini"
+              style={[
+                styles.iconBtn,
+                eq.isDSPDisabled && { opacity: 0.4 },
+              ]}
+            >
+              <Save size={18} color={colors.text.primary} />
+              <Text
+                style={[styles.saveBtnText, { color: colors.text.primary }]}
+              >
+                Simpan
+              </Text>
+            </TouchableOpacity>
+          </View>
+          {/* F3: penjelasan di tempat kontrolnya, bukan cuma di banner
+              atas yang bisa ter-scroll menjauh. */}
+          {eq.isDSPDisabled && (
+            <Text
+              style={[
+                styles.disabledCaption,
+                {
+                  color: colors.text.tertiary,
+                  paddingHorizontal: spacing.md,
+                  marginBottom: spacing.sm,
+                },
+              ]}
+            >
+              Nonaktif di mode ini — pindah ke DSP untuk menyetel.
+            </Text>
+          )}
+          {/* U-P2-45: hapus preset custom lewat long-press DULU tanpa
+              petunjuk apa pun — user tidak bisa tahu aksinya ada.
+              (Penghapusannya sendiri sudah benar: Alert konfirmasi +
+              hanya untuk preset custom.) */}
+          <Text
+            style={[
+              styles.presetHint,
+              {
+                color: colors.text.tertiary,
+                paddingHorizontal: spacing.md,
+                marginBottom: spacing.sm,
+              },
+            ]}
+          >
+            Tekan lama untuk menghapus.
+          </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={[
+              styles.presetScroll,
+              { paddingLeft: spacing.md, marginBottom: spacing.lg },
+            ]}
+            contentContainerStyle={{ paddingRight: spacing.md }}
+          >
+            {eq.allPresets.map((p) => (
+              <PresetChip
+                key={p.id}
+                label={p.name}
+                isActive={eq.activePresetId === p.id}
+                onPress={() => eq.applyPreset(p.id)}
+                onLongPress={() =>
+                  handlePresetLongPress(p.id, p.name, p.isCustom)
+                }
+                accessibilityHint={
+                  p.isCustom ? "Tekan lama untuk menghapus" : undefined
+                }
+                disabled={eq.isDSPDisabled}
+              />
+            ))}
+          </ScrollView>
+            </>
+          )}
+
+          {/* 5. EFFECTS SECTION (SLIDERS & REVERB) */}
           {visibleSections.effects && (
             <View
               style={[
@@ -686,6 +787,22 @@ export default function EqualizerScreen() {
                 { paddingHorizontal: spacing.md, marginBottom: spacing.lg },
               ]}
             >
+              {/* F3: penjelasan di tempat kontrolnya, bukan cuma di banner
+                  atas yang bisa ter-scroll menjauh. */}
+              {eq.isDSPDisabled && (
+                <Text
+                  style={[
+                    styles.disabledCaption,
+                    {
+                      color: colors.text.tertiary,
+                      paddingHorizontal: spacing.md,
+                      marginBottom: spacing.sm,
+                    },
+                  ]}
+                >
+                  Nonaktif di mode ini — pindah ke DSP untuk menyetel.
+                </Text>
+              )}
               {/* KNOB BASS + PELEBAR STEREO — dua knob bersebelahan
                   dalam satu baris, menggantikan HorizontalSlider.
                   Rentang knob 0..1000 sama persis dengan slider lama dan
@@ -842,116 +959,6 @@ export default function EqualizerScreen() {
             </View>
           )}
 
-          {/* 4. PRESETS */}
-          <View
-            style={[
-              styles.sectionHeader,
-              { paddingHorizontal: spacing.md, marginBottom: spacing.sm },
-            ]}
-          >
-            <Text style={[styles.sectionTitle, { color: colors.text.secondary }]}>
-              PROFIL SUARA
-            </Text>
-            {/* D5: tombol simpan berteks, bukan ikon saja. */}
-            <TouchableOpacity
-              onPress={() => setModalVisible(true)}
-              disabled={eq.isDSPDisabled}
-              accessibilityRole="button"
-              accessibilityLabel="Simpan profil saat ini"
-              style={[
-                styles.iconBtn,
-                eq.isDSPDisabled && { opacity: 0.4 },
-              ]}
-            >
-              <Save size={18} color={colors.text.primary} />
-              <Text
-                style={[styles.saveBtnText, { color: colors.text.primary }]}
-              >
-                Simpan
-              </Text>
-            </TouchableOpacity>
-          </View>
-          {/* U-P2-45: hapus preset custom lewat long-press DULU tanpa
-              petunjuk apa pun — user tidak bisa tahu aksinya ada.
-              (Penghapusannya sendiri sudah benar: Alert konfirmasi +
-              hanya untuk preset custom.) */}
-          <Text
-            style={[
-              styles.presetHint,
-              {
-                color: colors.text.tertiary,
-                paddingHorizontal: spacing.md,
-                marginBottom: spacing.sm,
-              },
-            ]}
-          >
-            Tekan lama preset buatanmu untuk menghapusnya.
-          </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={[
-              styles.presetScroll,
-              { paddingLeft: spacing.md, marginBottom: spacing.lg },
-            ]}
-            contentContainerStyle={{ paddingRight: spacing.md }}
-          >
-            {eq.allPresets.map((p) => (
-              <PresetChip
-                key={p.id}
-                label={p.name}
-                isActive={eq.activePresetId === p.id}
-                onPress={() => eq.applyPreset(p.id)}
-                onLongPress={() =>
-                  handlePresetLongPress(p.id, p.name, p.isCustom)
-                }
-                accessibilityHint={
-                  p.isCustom
-                    ? "Tekan lama untuk menghapus preset ini"
-                    : undefined
-                }
-                disabled={eq.isDSPDisabled}
-              />
-            ))}
-          </ScrollView>
-
-          {/* 5. MIXER SECTION */}
-          {visibleSections.mixer && (
-            <View
-              style={[
-                styles.mixerBoard,
-                {
-                  backgroundColor: colors.background.secondary,
-                  borderColor: colors.border.medium,
-                  marginHorizontal: spacing.md,
-                  paddingVertical: spacing.md,
-                  marginBottom: spacing.xl,
-                },
-              ]}
-            >
-              {/* U-P2-53: daftar band lewat pola daftar bersama. Jalur yang
-                  dipilih tetap FlatList (horizontal + bersarang di
-                  ScrollView — lihat chooseListKind); `directionalLockEnabled`
-                  dipertahankan supaya tidak bentrok dengan scroll utama. */}
-              <ScreenList
-                horizontal
-                nestedInScrollView
-                showsHorizontalScrollIndicator={false}
-                data={eq.currentBands}
-                keyExtractor={(item) => item.frequency.toString()}
-                renderItem={({ item, index }) => (
-                  <EqualizerBand
-                    frequency={item.frequency}
-                    gain={item.gain}
-                    onValueChange={(v) => eq.updateBandGain(index, v)}
-                    disabled={!eq.isEQEnabled || eq.isDSPDisabled}
-                  />
-                )}
-                contentContainerStyle={{ paddingHorizontal: spacing.sm }}
-                directionalLockEnabled={true}
-              />
-            </View>
-          )}
             </>
           )}
 
@@ -996,7 +1003,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   modeHint: {
-    fontSize: 10,
+    fontSize: 11,
     marginTop: 2,
     textAlign: "center",
   },
@@ -1009,10 +1016,13 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   viewControls: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "center",
     gap: 8,
     paddingVertical: 12,
-    borderBottomWidth: 1,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderRadius: 12,
   },
   // U-P2-01: minHeight 36 lama, di bawah 44dp.
   viewBtn: {
@@ -1090,7 +1100,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  miniSwitchLabel: { fontSize: 10, fontWeight: "900", letterSpacing: 1.5 },
+  miniSwitchLabel: { fontSize: 11, fontWeight: "900", letterSpacing: 1.5 },
   reverbRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1120,8 +1130,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     minHeight: 32,
   },
-  sectionTitle: { fontSize: 10, fontWeight: "900", letterSpacing: 1.5 },
+  sectionTitle: { fontSize: 11, fontWeight: "900", letterSpacing: 1.5 },
   presetHint: { fontSize: 11 },
+  // F3: caption "kenapa nonaktif" di tempat kontrolnya.
+  disabledCaption: { fontSize: 11 },
   bypassLabel: {
     fontSize: 11,
     fontWeight: "600",

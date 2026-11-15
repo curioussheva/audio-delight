@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   gainText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     marginBottom: 8,
     fontVariant: ["tabular-nums"],
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
   },
   freqText: {
     marginTop: 12,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "bold",
   },
 });

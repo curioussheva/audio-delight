@@ -1,6 +1,7 @@
 // src/features/equalizer/utils/visibleSections.ts
 //
-// Pilihan tampil/sembunyi seksi layar Equalizer (GRAFIK/EFEK/MIXER) yang
+// Pilihan tampil/sembunyi seksi layar Equalizer
+// (GRAFIK/HEADPHONE/EFEK/MIXER/PRESET) yang
 // disimpan ke AsyncStorage supaya tidak reset tiap kali layar dibuka ulang
 // (U-P2-44). Logika parse dipisah ke sini supaya bisa diuji Jest tanpa
 // React Native.
@@ -9,12 +10,16 @@ export interface VisibleSections {
   graph: boolean;
   effects: boolean;
   mixer: boolean;
+  headphone: boolean;
+  preset: boolean;
 }
 
 export const DEFAULT_VISIBLE_SECTIONS: VisibleSections = {
   graph: true,
   effects: true,
   mixer: true,
+  headphone: true,
+  preset: true,
 };
 
 export const VISIBLE_SECTIONS_KEY = "equalizer-visible-sections";
@@ -35,6 +40,8 @@ export function parseVisibleSections(raw: string | null): VisibleSections {
       graph: parsed.graph !== false,
       effects: parsed.effects !== false,
       mixer: parsed.mixer !== false,
+      headphone: parsed.headphone !== false,
+      preset: parsed.preset !== false,
     };
   } catch {
     return { ...DEFAULT_VISIBLE_SECTIONS };

@@ -22,12 +22,41 @@ describe("parseVisibleSections", () => {
       graph: false,
       effects: true,
       mixer: true,
+      headphone: true,
+      preset: true,
     });
     expect(
       parseVisibleSections(
-        '{"graph":false,"effects":false,"mixer":false}',
+        '{"graph":false,"effects":false,"mixer":false,"headphone":false,"preset":false}',
       ),
-    ).toEqual({ graph: false, effects: false, mixer: false });
+    ).toEqual({
+      graph: false,
+      effects: false,
+      mixer: false,
+      headphone: false,
+      preset: false,
+    });
+  });
+
+  it("kunci baru yang hilang (data lama) dianggap tampil", () => {
+    // Nilai tersimpan sebelum headphone/preset ada: keduanya true.
+    expect(parseVisibleSections('{"graph":true,"effects":true,"mixer":true}')).toEqual({
+      graph: true,
+      effects: true,
+      mixer: true,
+      headphone: true,
+      preset: true,
+    });
+  });
+
+  it("false eksplisit pada kunci baru dihormati", () => {
+    expect(parseVisibleSections('{"headphone":false,"preset":false}')).toEqual({
+      graph: true,
+      effects: true,
+      mixer: true,
+      headphone: false,
+      preset: false,
+    });
   });
 
   it("hanya boolean false yang mematikan seksi", () => {
@@ -35,6 +64,8 @@ describe("parseVisibleSections", () => {
       graph: true,
       effects: true,
       mixer: true,
+      headphone: true,
+      preset: true,
     });
   });
 });
