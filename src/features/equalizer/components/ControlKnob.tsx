@@ -5,13 +5,20 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   SharedValue,
-  interpolate,
   runOnJS,
   withSpring,
   withTiming,
 } from "react-native-reanimated";
 
 import { useTheme } from "@/shared/context/ThemeContext";
+import {
+  KNOB_MAX_ROTATION,
+  KNOB_MIN_ROTATION,
+  KNOB_SENSITIVITY,
+  rotationForDrag,
+  rotationForValue,
+  valueForRotation,
+} from "@/features/equalizer/api/knobMath";
 
 interface KnobProps {
   label: string;
@@ -90,40 +97,54 @@ export const ControlKnob = ({
   const { theme } = useTheme();
   const colors = theme.colors;
 
-  const MIN_ROT = -135;
-  const MAX_ROT = 135;
+  const MIN_ROT = KNOB_MIN_ROTATION;
+  const MAX_ROT = KNOB_MAX_ROTATION;
 
   const rgb = parseHexToRGB(color);
   const tickInactive = colors.text.tertiary;
-  const rotation = useSharedValue(
-    interpolate(value || 0, [0, 1000], [MIN_ROT, MAX_ROT]),
-  );
+  const rotation = useSharedValue(rotationForValue(value || 0));
   const startRotation = useSharedValue(0);
+  // true selama jari menyeret knob — dipakai untuk menahan sync prop
+  // (lihat useEffect di bawah) supaya knob tidak "rebound".
+  const isDragging = useSharedValue(false);
   const offsetY = useSharedValue(0); // ✅ Definisikan offset
 
-  // Sync saat value prop berubah
+  // Sync saat value prop berubah — TAPI jangan saat sedang drag: prop
+  // datang telat (runOnJS -> store -> bridge), jadi spring ke nilai prop
+  // yang tertinggal akan menarik rotasi balik melawan drag ("rebound").
+  // Di akhir drag prop sudah sama dengan nilai drag, jadi tidak perlu
+  // spring penutup.
   useEffect(() => {
+    if (isDragging.value) return;
     if (!isNaN(value)) {
-      const newRot = interpolate(value, [0, 1000], [MIN_ROT, MAX_ROT]);
+      const newRot = rotationForValue(value);
       rotation.value = withSpring(newRot, { damping: 15, stiffness: 100 });
     }
   }, [value]);
 
   const gesture = Gesture.Pan()
     .enabled(!disabled)
+    .hitSlop(20)
     .onStart(() => {
+      isDragging.value = true;
       startRotation.value = rotation.value;
     })
     .onUpdate((e) => {
-      const sensitivity = 0.5;
-      let delta = e.translationY * sensitivity;
-      let newRot = startRotation.value - delta;
-
-      newRot = Math.min(MAX_ROT, Math.max(MIN_ROT, newRot));
+      // Sensitivitas 1.5: rentang penuh 270 derajat tercapai dalam drag
+      // ~180px. Nilai lama 0.5 butuh 540px — hampir satu layar penuh —
+      // sehingga 100% praktis tidak tercapai.
+      const newRot = rotationForDrag(
+        startRotation.value,
+        e.translationY,
+        KNOB_SENSITIVITY,
+      );
       rotation.value = newRot;
 
-      const newValue = interpolate(newRot, [MIN_ROT, MAX_ROT], [0, 1000]);
+      const newValue = valueForRotation(newRot);
       runOnJS(onChange)(Math.round(newValue));
+    })
+    .onFinalize(() => {
+      isDragging.value = false;
     });
 
   const animatedKnobStyle = useAnimatedStyle(() => ({
@@ -163,76 +184,86 @@ export const ControlKnob = ({
       ]}
       onAccessibilityAction={handleAccessibilityAction}
     >
-      <Text
-        style={[
-          styles.label,
-          {
-            color: disabled
-              ? colors.text.tertiary
-              : colors.text.secondary,
-          },
-        ]}
-      >
-        {label}
-      </Text>
-
+      {/* GestureDetector membungkus SELURUH kolom kontrol (label + knob +
+          readout) + hitSlop 20px, supaya pengguna tidak harus mencengkeram
+          tepat lingkaran knob 120px — label/value cuma Text tanpa handler,
+          jadi aman dibungkus. */}
       <GestureDetector gesture={gesture}>
-        <Animated.View style={[styles.knobWrapper, containerStyle]}>
-          <View
+        <View style={styles.gestureArea}>
+          <Text
             style={[
-              styles.knobOuter,
+              styles.label,
               {
-                borderColor: hexToRGBA(color, 0.2),
-                backgroundColor: colors.background.tertiary,
+                color: disabled
+                  ? colors.text.tertiary
+                  : colors.text.secondary,
               },
             ]}
           >
-            <View style={styles.tickMarksContainer}>
-              {TICK_ANGLES.map((angle) => (
-                <AnimatedTick
-                  key={angle}
-                  angle={angle}
-                  rotation={rotation}
-                  rgb={rgb}
-                  inactiveColor={tickInactive}
-                  disabled={disabled}
-                />
-              ))}
-            </View>
+            {label}
+          </Text>
 
-            <View style={[styles.centerDot, { backgroundColor: color }]} />
-
-            <Animated.View style={[styles.knobSurface, animatedKnobStyle]}>
-              <View style={[styles.pointer, { backgroundColor: color }]}>
-                <View
-                  style={[styles.pointerGlow, { backgroundColor: color }]}
-                />
+          <Animated.View style={[styles.knobWrapper, containerStyle]}>
+            <View
+              style={[
+                styles.knobOuter,
+                {
+                  borderColor: hexToRGBA(color, 0.2),
+                  backgroundColor: colors.background.tertiary,
+                },
+              ]}
+            >
+              <View style={styles.tickMarksContainer}>
+                {TICK_ANGLES.map((angle) => (
+                  <AnimatedTick
+                    key={angle}
+                    angle={angle}
+                    rotation={rotation}
+                    rgb={rgb}
+                    inactiveColor={tickInactive}
+                    disabled={disabled}
+                  />
+                ))}
               </View>
-            </Animated.View>
-          </View>
-        </Animated.View>
-      </GestureDetector>
 
-      <View style={styles.infoContainer}>
-        <Text
-          style={[
-            styles.valueText,
-            {
-              color: disabled ? colors.text.tertiary : color,
-            },
-          ]}
-        >
-          {displayValue}%
-        </Text>
-        <View style={styles.rangeRow}>
-          <Text style={[styles.rangeLabel, { color: colors.text.tertiary }]}>
-            0
-          </Text>
-          <Text style={[styles.rangeLabel, { color: colors.text.tertiary }]}>
-            100
-          </Text>
+              <View style={[styles.centerDot, { backgroundColor: color }]} />
+
+              <Animated.View style={[styles.knobSurface, animatedKnobStyle]}>
+                <View style={[styles.pointer, { backgroundColor: color }]}>
+                  <View
+                    style={[styles.pointerGlow, { backgroundColor: color }]}
+                  />
+                </View>
+              </Animated.View>
+            </View>
+          </Animated.View>
+
+          <View style={styles.infoContainer}>
+            <Text
+              style={[
+                styles.valueText,
+                {
+                  color: disabled ? colors.text.tertiary : color,
+                },
+              ]}
+            >
+              {displayValue}%
+            </Text>
+            <View style={styles.rangeRow}>
+              <Text
+                style={[styles.rangeLabel, { color: colors.text.tertiary }]}
+              >
+                0
+              </Text>
+              <Text
+                style={[styles.rangeLabel, { color: colors.text.tertiary }]}
+              >
+                100
+              </Text>
+            </View>
+          </View>
         </View>
-      </View>
+      </GestureDetector>
     </View>
   );
 };
@@ -241,6 +272,9 @@ const styles = StyleSheet.create({
   container: {
     alignItems: "center",
     marginHorizontal: 10,
+  },
+  gestureArea: {
+    alignItems: "center",
   },
   label: {
     fontSize: 10,

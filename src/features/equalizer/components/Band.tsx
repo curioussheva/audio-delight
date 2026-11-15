@@ -17,6 +17,7 @@ import {
   pickReadable,
   AA_NORMAL,
 } from "@/shared/utils/contrast";
+import { gainToY, yToGain } from "@/features/equalizer/api/bandThumbMath";
 
 interface BandProps {
   frequency: number;
@@ -48,26 +49,25 @@ export const EqualizerBand = ({
   const accent =
     color ?? accentOn([colors.accent.blue], colors.background.secondary, [colors.text.primary]);
 
-  const translateY = useSharedValue(
-    interpolate(gain, [-10, 10], [SLIDER_HEIGHT, 0]),
-  );
+  const translateY = useSharedValue(gainToY(gain, SLIDER_HEIGHT));
 
   // Sync saat gain berubah (misal ganti preset)
   React.useEffect(() => {
-    translateY.value = withSpring(
-      interpolate(gain, [-10, 10], [SLIDER_HEIGHT, 0]),
-    );
+    translateY.value = withSpring(gainToY(gain, SLIDER_HEIGHT));
   }, [gain]);
 
   const gesture = Gesture.Pan()
     .enabled(!disabled)
     .onUpdate((e) => {
+      // Travel thumb di-inset ke [12, SLIDER_HEIGHT - 12] supaya di
+      // +10/-10 setengah thumb (12px) tidak menggantung di luar track
+      // dan terpotong parent. Titik tengah thumb = translateY.
       let nextY = e.y;
-      if (nextY < 0) nextY = 0;
-      if (nextY > SLIDER_HEIGHT) nextY = SLIDER_HEIGHT;
+      if (nextY < 12) nextY = 12;
+      if (nextY > SLIDER_HEIGHT - 12) nextY = SLIDER_HEIGHT - 12;
 
       translateY.value = nextY;
-      const newGain = interpolate(nextY, [0, SLIDER_HEIGHT], [10, -10]);
+      const newGain = yToGain(nextY, SLIDER_HEIGHT);
       runOnJS(onValueChange)(parseFloat(newGain.toFixed(1)));
     });
 
