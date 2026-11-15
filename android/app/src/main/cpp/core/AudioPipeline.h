@@ -5,6 +5,7 @@
 #include "AudioTypes.h"
 
 #include "../dsp/DSPChain.h"
+#include "../dsp/headphone/HeadphoneCorrectionNode.h"
 
 #include "ImmersiveStage.h"
 
@@ -119,6 +120,17 @@ private:
         const DSPParameters& params
     ) noexcept;
 
+    // (B-HPIMM, 2026-11-15): config koreksi headphone untuk rantai
+    // Immersive — hanya dua field headphone dari DSPParameters yang
+    // dikirim ke mImmersiveCorrection. Node-nya sendiri yang mendeteksi
+    // perubahan (snapshot mApplied di HeadphoneCorrectionNode), jadi
+    // pemanggilan tiap buffer murah bila preset tidak berubah — sama
+    // seperti applyDSPConfig yang mendeteksi perubahan sebelum memanggil
+    // mDSP.applyConfig(), hanya saja dedup-nya sudah ada di dalam node.
+    void applyImmersiveCorrectionConfig(
+        const DSPParameters& params
+    ) noexcept;
+
     DSPConfig mDspConfig;
 
     // Snapshot config yang terakhir benar-benar dikirim ke rantai. Dipakai
@@ -129,6 +141,22 @@ private:
     bool mConfigApplied = false;
 
     DSPChain mDSP;
+
+    // (B-HPIMM, 2026-11-15): koreksi headphone untuk rantai Immersive —
+    // instans KEDUA HeadphoneCorrectionNode, di luar DSPChain.
+    //
+    // Instans di dalam DSPChain tidak bisa dipakai bersama: ia dimiliki
+    // graph DSPChain (mGraph) dan hanya berjalan saat DSPChain::process()
+    // dipanggil — yaitu hanya di mode DSP. Mode Immersive sengaja tidak
+    // memakai DSPChain (lihat processImmersive), jadi node itu tidak
+    // pernah jalan di sini.
+    //
+    // Instans kedua ini TIDAK menduplikasi parser atau logika filter:
+    // preset yang sama (hasil PresetParser -> AudioState -> DSPParameters)
+    // dikirim ke kelas node yang sama lewat applyConfig() yang sama.
+    // Yang digandakan hanya state biquad (16 filter) — sama seperti
+    // DSPChain yang membangun ulang node-nya sendiri tiap prepare().
+    HeadphoneCorrectionNode mImmersiveCorrection;
 
     // Rantai proses mode Immersive. Dipindahkan dari cpp/modes/ImmersivePipeline
     // (dihapus 5a386f0a9) - lihat docs/adr/0001-tiga-mode-satu-sumber-kebenaran.md.

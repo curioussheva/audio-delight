@@ -62,6 +62,15 @@ void AudioPipeline::prepare(
         maxFrames
     );
 
+    // (B-HPIMM, 2026-11-15): node koreksi rantai Immersive disiapkan di
+    // sini juga — prepare() membangun ulang graph DSP, jadi node ini
+    // harus ikut disiapkan supaya laju sample-nya benar saat
+    // applyConfig pertama menghitung koefisien.
+    mImmersiveCorrection.prepare(
+        sampleRate,
+        maxFrames
+    );
+
     // Immersive ikut disiapkan di sini, bukan saat mode dipilih: perpindahan
     // mode harus bisa terjadi live, dan menyiapkan rantai resonan di audio
     // thread saat user menekan tombol berarti alokasi + perhitungan koefisien
@@ -76,6 +85,13 @@ void AudioPipeline::prepare(
 void AudioPipeline::reset() {
 
     mDSP.reset();
+
+    // (B-HPIMM, 2026-11-15): state biquad koreksi Immersive ikut
+    // dibersihkan — sama seperti mDSP.reset() untuk node koreksi DSP.
+    // Preset yang terpasang (mApplied di node) TIDAK dihapus: applyConfig
+    // berikutnya mengenalinya sebagai "sama" dan meng-enable kembali
+    // node dengan koefisien yang sama di atas state yang sudah nol.
+    mImmersiveCorrection.reset();
 
     mImmersive.reset();
 
@@ -252,6 +268,10 @@ void AudioPipeline::onModeChanged(
 
         case ProcessingMode::Immersive:
             mImmersive.reset();
+            // (B-HPIMM, 2026-11-15): rantai tujuan di sini termasuk node
+            // koreksi Immersive — state biquad-nya dari terakhir kali
+            // mode ini aktif adalah STALE, sama seperti resonator.
+            mImmersiveCorrection.reset();
             break;
 
         case ProcessingMode::BitPerfect:
@@ -476,6 +496,53 @@ void AudioPipeline::applyDSPConfig(
 }
 
 // =====================================================
+// KOREKSI HEADPHONE — RANTAI IMMERSIVE (B-HPIMM, 2026-11-15)
+// =====================================================
+//
+// Hanya dua field headphone yang dikirim ke mImmersiveCorrection; field
+// DSPConfig lain dibiarkan default — node hanya membaca
+// headphoneCorrectionEnabled + headphonePreset (lihat
+// HeadphoneCorrectionNode::applyConfig), jadi tidak ada yang lain yang
+// bisa bocor ke rantai Immersive lewat sini.
+//
+// BIT-PERFECT GATE — kenapa tidak ada pemeriksaan mode di sini:
+//
+//   1. Jalur live: AudioCallback::applyPipeline (AudioCallback.cpp)
+//      memeriksa mState.processingMode() SEBELUM updateParameters() dan
+//      mPipeline.process(): bila BitPerfect, ia hanya mensanitasi +
+//      memberi makan visualizer lalu return — fungsi ini tidak pernah
+//      dipanggil, mParams membeku, dan tidak ada satu node pun yang jalan.
+//   2. Dispatch: AudioPipeline::process() mengarahkan BitPerfect ke
+//      processBitPerfect() yang no-op; processImmersive() — satu-satunya
+//      pemanggil fungsi ini — hanya terjangkau bila
+//      params.processingMode == ProcessingMode::Immersive.
+//   3. Upstream: EngineManager::setProcessingMode() memanggil
+//      PlaybackController::setProcessingAllowed(mode != BitPerfect),
+//      yang memaksa rasio retune/laju playback efektif 1,0 di render()
+//      — gerbang independen di hulu decoder, sebelum buffer sampai ke
+//      pipeline.
+//
+// Ketiganya independen: menghapus salah satu saja masih menyisakan dua
+// lapis. Tidak ada yang perlu ditutup — dan TIDAK ADA pemeriksaan
+// processingAllowed_ di sini karena AudioPipeline tidak memiliki akses
+// ke PlaybackController; menambahkannya akan mengikat pipeline ke state
+// yang bukan miliknya tanpa menambah keamanan.
+void AudioPipeline::applyImmersiveCorrectionConfig(
+    const DSPParameters& params
+) noexcept {
+
+    DSPConfig config;
+
+    config.headphoneCorrectionEnabled =
+        params.headphoneCorrectionEnabled;
+
+    config.headphonePreset =
+        params.headphonePreset;
+
+    mImmersiveCorrection.applyConfig(config);
+}
+
+// =====================================================
 // IMMERSIVE
 // =====================================================
 
@@ -495,7 +562,11 @@ void AudioPipeline::processImmersive(
     // stereo IKUT memproses di mode Immersive. Akibatnya mode tidak
     // benar-benar terpisah: kontrol EQ diam-diam mengubah suara immersive.
     //
-    // Sekarang immersive murni: hanya rantai resonansinya sendiri.
+    // Sekarang immersive murni: hanya rantai resonansinya sendiri, DITAMBAH
+    // koreksi headphone (B-HPIMM, 2026-11-15) — BUKAN lewat DSPChain, tapi
+    // lewat instans HeadphoneCorrectionNode sendiri (mImmersiveCorrection)
+    // di akhir rantai, di bawah. EQ, bass boost, pelebar stereo, dan
+    // limiter node tetap TIDAK jalan di mode ini.
     //
     // Master gain dan balance tetap berlaku, karena keduanya soal LEVEL dan
     // PANORAMA output, bukan karakter suara. Tanpa keduanya, slider volume
@@ -521,6 +592,40 @@ void AudioPipeline::processImmersive(
         frames,
         params
     );
+
+    // ---- Koreksi headphone: TERAKHIR di rantai Immersive --------------
+    //
+    // (B-HPIMM, 2026-11-15): koreksi diterapkan ke sinyal FINAL sesudah
+    // Solfeggio -> Harmonic -> Spatial -> Brainwave — sama alasannya
+    // dengan posisi koreksi di DSPChain (netralisasi alat, bukan selera),
+    // tapi di sini ia menutup rantai, bukan membukanya: resonator dan
+    // exciter membentuk karakter dulu, koreksi meratakan respons alat di
+    // ujung. Ditempatkan SEBELUM master gain & balance di bawah: keduanya
+    // tetap tahap level terakhir (C-I1), dan filter biquad yang linear
+    // komutatif terhadap gain — urutan terhadap gain tidak mengubah
+    // respons, hanya menjaga invarian "gain/balance paling akhir".
+    //
+    // Gerbangnya flag yang SAMA dengan mode DSP
+    // (params.headphoneCorrectionEnabled, dari AudioState lewat
+    // AudioCallback::updateParameters) — node sendiri yang memeriksa
+    // flag + keberadaan preset di applyConfig() dan menonaktifkan diri
+    // bila salah satunya tidak ada, jadi process() di sini hanya jalan
+    // bila node benar-benar aktif (pola yang sama dengan
+    // DSPGraph yang melewati node nonaktif).
+    //
+    // Bit-Perfect TIDAK PERNAH sampai ke sini: AudioCallback::applyPipeline
+    // mengembalikan buffer tanpa memanggil mPipeline.process() saat mode
+    // BitPerfect, dan AudioPipeline::process() sendiri mengarahkan
+    // BitPerfect ke processBitPerfect() yang no-op.
+    applyImmersiveCorrectionConfig(params);
+
+    if (mImmersiveCorrection.isEnabled()) {
+        mImmersiveCorrection.process(
+            left,
+            right,
+            frames
+        );
+    }
 
     // ---- Master gain & balance -------------------------------------------
     //

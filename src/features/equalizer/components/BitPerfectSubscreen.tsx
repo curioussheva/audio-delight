@@ -153,6 +153,15 @@ export function BitPerfectSubscreen() {
         <Text style={[styles.rowNote, { color: colors.text.tertiary }]}>
           Semua pemrosesan di atas dilewati di mode ini.
         </Text>
+        <Text
+          style={[
+            styles.rowNote,
+            { color: colors.text.tertiary, marginTop: spacing.xs },
+          ]}
+        >
+          Koreksi headphone dimatikan otomatis di Bit-Perfect — aktif lagi
+          saat kembali ke DSP atau Solfeggio.
+        </Text>
       </View>
 
       {/* Pindah ke DSP — keluar dari bit-perfect tidak perlu konfirmasi. */}

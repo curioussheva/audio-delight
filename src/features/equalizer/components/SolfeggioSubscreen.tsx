@@ -12,6 +12,7 @@ import {
   getSolfeggioTemplate,
 } from "@/features/equalizer/api/solfeggioTemplates";
 import { TuningControl } from "@/features/player/components/TuningControl";
+import { HeadphoneSection } from "@/features/headphone/components/HeadphoneSection";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 
 /**
@@ -31,6 +32,9 @@ import { usePlayerStore } from "@/features/player/store/playerStore";
  *   lewat playerStore — pola setBassBoost, tanpa throttle.
  * - Tidak ada kontrol binaural: binaural beat tidak diimplementasikan.
  * - Kontrol EQ/DSP tidak berlaku di mode ini; mereka tinggal di tab DSP.
+ *   Pengecualian: koreksi headphone (B-HPIMM) — seksi di bawah, tanpa
+ *   `disabled`, jadi switch-nya bisa dipakai di sini sama seperti di DSP.
+ *   Native menerapkan preset yang sama di akhir rantai Immersive.
  */
 export function SolfeggioSubscreen() {
   const { theme } = useTheme();
@@ -236,8 +240,14 @@ export function SolfeggioSubscreen() {
         </Text>
       </View>
 
+      {/* Koreksi headphone (B-HPIMM) — berlaku di Solfeggio: native
+          menerapkannya di akhir rantai Immersive, dengan switch yang sama
+          seperti di DSP. Tanpa `disabled`: seksi ini TIDAK beku di sini,
+          tidak seperti seksi DSP lain di mode ini. */}
+      <HeadphoneSection />
+
       <Text style={[styles.note, { color: colors.text.tertiary }]}>
-        Kontrol EQ/DSP tidak berlaku di mode ini — atur di tab DSP.
+        Kontrol EQ/DSP lain tidak berlaku di mode ini — atur di tab DSP.
       </Text>
     </View>
   );
