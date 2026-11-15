@@ -26,6 +26,12 @@ class MediaSessionManager(private val service: PlaybackService) {
     private var lastTitle: String = "PristineAudio"
     private var lastArtist: String = "Playing..."
     private var lastIsPlaying: Boolean = false
+    // (Cleanup-4): nilai repeat/shuffle terakhir yang diketahui
+    // MediaSession — payload event native→JS membawa kedua nilai, jadi
+    // satu perubahan (mis. repeat dari lock screen) ikut mengirim shuffle
+    // yang sedang berlaku, dan sebaliknya.
+    private var lastRepeatMode: Int = 0
+    private var lastShuffle: Boolean = false
     private var lastArtwork: android.graphics.Bitmap? = null
 
     // Turunan 256px dari lastArtwork untuk setLargeIcon notifikasi — dibuat
@@ -102,10 +108,9 @@ class MediaSessionManager(private val service: PlaybackService) {
         // pernah di-override. Mapping ke kontrak native mirror
         // updateRepeatMode/updateShuffleMode (koreksi 2026-11-11):
         // repeat 0=off, 1=track (ONE), 2=all; shuffle true=ALL.
-        // CATATAN: tidak ada event bridge native→JS untuk perubahan
-        // repeat/shuffle dari lock screen — JS re-sync lewat jalurnya
-        // sendiri (track-change / polling). Event baru sengaja TIDAK
-        // dibuat di commit ini.
+        // (Cleanup-4): updateRepeatMode/updateShuffleMode di bawah juga
+        // emit event native→JS (onPlaybackRepeatShuffleChanged) supaya
+        // UI React langsung tahu — dulu JS re-sync lewat jalurnya sendiri.
         override fun onSetRepeatMode(repeatMode: Int) {
             val mode = when (repeatMode) {
                 PlaybackStateCompat.REPEAT_MODE_ONE -> 1
@@ -312,6 +317,15 @@ class MediaSessionManager(private val service: PlaybackService) {
             else PlaybackStateCompat.SHUFFLE_MODE_NONE
         )
         refreshNotification()
+        // (Cleanup-4): beri tahu JS — satu-satunya corong semua jalur
+        // yang mengubah shuffle (lock screen via sessionCallback maupun
+        // JS via NativePlaybackService ReactMethod). Emit hanya saat
+        // nilai berubah; listener JS hanya set state (tanpa panggil
+        // balik ke native), jadi tidak ada loop.
+        if (enabled != lastShuffle) {
+            lastShuffle = enabled
+            PlaybackNativeBridge.emitRepeatShuffleChanged(lastRepeatMode, lastShuffle)
+        }
     }
 
     fun updateRepeatMode(mode: Int) {
@@ -322,6 +336,11 @@ class MediaSessionManager(private val service: PlaybackService) {
         }
         mediaSession.setRepeatMode(repeatMode)
         refreshNotification()
+        // (Cleanup-4): sama seperti updateShuffleMode di atas.
+        if (mode != lastRepeatMode) {
+            lastRepeatMode = mode
+            PlaybackNativeBridge.emitRepeatShuffleChanged(lastRepeatMode, lastShuffle)
+        }
     }
 
     private fun applyPlaybackState(isPlaying: Boolean, positionMs: Long) {

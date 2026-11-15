@@ -9,6 +9,7 @@ import { SongQueries, db } from "@/shared/lib/sqlite";
 import NativePlaybackService from "@/specs/NativePlaybackService";
 import NativeDSPModule from "@/features/equalizer/api/nativeInterface";
 import { clampTuningCents } from "@/features/player/utils/tuning";
+import { parseRepeatShuffleEvent } from "@/features/player/utils/repeatShuffle";
 import {
   DEFAULT_SOLFEGEGGIO_FREQ,
   DEFAULT_SOLFEGEGGIO_TEMPLATE_ID,
@@ -399,6 +400,38 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       );
       (globalThis as any).__nativeTrackChangedListener = subscription;
       console.log("[Player] 🔀 Native track-changed listener registered");
+    }
+
+    // 🔥 FIX (Cleanup-4, 2026-11-15): event native→JS untuk repeat/shuffle
+    // yang diubah dari lock screen / Android Auto (MediaSession callback
+    // onSetRepeatMode/onSetShuffleMode → MediaSessionManager.update* →
+    // PlaybackNativeBridge.emitRepeatShuffleChanged). Sebelumnya UI hanya
+    // tahu lewat sync berikutnya — toggle di lock screen tidak tercermin
+    // sampai track berganti. Listener HANYA set state (tanpa panggil balik
+    // ke native), jadi tidak ada loop dengan jalur JS→native.
+    if (!(globalThis as any).__nativeRepeatShuffleListener) {
+      const { NativeEventEmitter } = require("react-native");
+      const emitter = new NativeEventEmitter(NativePlaybackService);
+      const subscription = emitter.addListener(
+        "onPlaybackRepeatShuffleChanged",
+        (payload: { repeatMode: string; shuffle: boolean }) => {
+          // Payload selalu WritableMap {repeatMode, shuffle} dari
+          // PlaybackNativeBridge.emitRepeatShuffleChanged; repeatMode
+          // string "off"|"all"|"track" sesuai RepeatMode store.
+          const parsed = parseRepeatShuffleEvent(payload);
+          if (!parsed) {
+            console.warn(
+              "[Player] 🔁 native repeat/shuffle event tak valid, diabaikan:",
+              payload,
+            );
+            return;
+          }
+          console.log("[Player] 🔁 native repeat/shuffle event:", parsed);
+          set({ repeat: parsed.repeat, shuffle: parsed.shuffle });
+        },
+      );
+      (globalThis as any).__nativeRepeatShuffleListener = subscription;
+      console.log("[Player] 🔁 Native repeat/shuffle listener registered");
     }
 
     // 🔥 FIX: position+duration polling terpusat (bukan di hook useAudioPlayer)

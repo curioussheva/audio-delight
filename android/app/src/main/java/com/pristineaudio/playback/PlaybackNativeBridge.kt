@@ -212,6 +212,34 @@ object PlaybackNativeBridge {
         }
     }
 
+    // (Cleanup-4, 2026-11-15): event native→JS untuk perubahan repeat /
+    // shuffle dari lock screen / Android Auto (MediaSession callback
+    // onSetRepeatMode/onSetShuffleMode → MediaSessionManager.update* →
+    // emit ini). Sebelumnya JS hanya tahu lewat sync berikutnya — toggle
+    // di lock screen tidak tercermin di UI sampai track berganti.
+    // Payload WritableMap {repeatMode, shuffle} — repeatMode string
+    // "off"|"all"|"track" sesuai RepeatMode di playerStore.ts (native
+    // int 0=off, 1=track, 2=all); JANGAN Pair (B15-K-b).
+    fun emitRepeatShuffleChanged(repeatMode: Int, shuffle: Boolean) {
+        try {
+            val module = NativePlaybackModule.instance ?: return
+            if (!module.jsAlive) return
+            val ctx = module.reactContext
+            val payload = com.facebook.react.bridge.Arguments.createMap()
+            payload.putString("repeatMode", when (repeatMode) {
+                1 -> "track"
+                2 -> "all"
+                else -> "off"
+            })
+            payload.putBoolean("shuffle", shuffle)
+            ctx.getJSModule(com.facebook.react.modules.core.DeviceEventManagerModule
+                .RCTDeviceEventEmitter::class.java)
+                .emit("onPlaybackRepeatShuffleChanged", payload)
+        } catch (e: Exception) {
+            android.util.Log.w("PlaybackNativeBridge", "emitRepeatShuffleChanged: ${e.message}")
+        }
+    }
+
     // 🔥 Event native→JS: track selesai (EOF). Dulu JS nebak-nebak pakai
     // __trackEndWatcher polling; sekarang C++ yang kasih tahu.
     fun emitTrackEnded(uri: String) {
