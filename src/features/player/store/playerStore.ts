@@ -503,158 +503,170 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       setTimeout(() => _playInFlightSongIds.delete(song.id), 20_000);
     }
 
-    const state = get();
-    if (state.currentSong?.id === song.id && state.isPlaying) {
-      console.log("[PERF] playSong: already playing same track, skip");
-      return true;
-    }
-
-    let playableSong: Song = song.uri ? { ...song } : await recoverUri(song);
-
-    console.log(`▶️ [Player] playSong: "${playableSong.title}"`);
-
-    let targetQueue = newQueue ?? state.queue;
-    if (targetQueue.length === 0) {
-      set({ playError: "Queue is empty" });
-      return false;
-    }
-
-    // 🔥 FIX: native TrackQueue::setTracks() selalu set currentIndex=0.
-    // Kalau lagu yang di-tap tidak berada di index 0 (misal karena
-    // slice ±N di library.tsx), native akan load track yang SALAH.
-    // Reorder queue di sini supaya lagu yang di-tap selalu index 0.
-    const tapIndex = targetQueue.findIndex((s) => s.id === playableSong.id);
-    if (tapIndex > 0) {
-      targetQueue = [
-        ...targetQueue.slice(tapIndex),
-        ...targetQueue.slice(0, tapIndex),
-      ];
-    }
-
+    // B17-P-a: semua jalur setelah add() — termasuk early return di
+    // bawah dan throw dari recoverUri — harus melewati finally supaya
+    // id dilepas. Kalau tidak, tap lagu yang sedang pause dalam 20 detik
+    // diabaikan diam-diam oleh gate Layer 1. Timeout 20 detik di atas
+    // tetap dipertahankan sebagai backstop kedua.
     try {
-      // ── 1. Filter URIs ─────────────────────────────────
-      const tFilter0 = Date.now();
-      const targetQueueSafe = targetQueue.filter((s) => !!s.uri);
-      const uris = targetQueueSafe.map((s) => s.uri);
-      // Laju file dipasangkan dengan uris yang SAMA (setelah filter), supaya
-      // track tanpa laju tidak menggeser laju track lain.
-      const queueRates = targetQueueSafe.map((s) => s.sampleRate ?? 0);
-      if (uris.length === 0) {
-        set({ playError: "No valid URIs" });
+      const state = get();
+      if (state.currentSong?.id === song.id && state.isPlaying) {
+        console.log("[PERF] playSong: already playing same track, skip");
+        return true;
+      }
+
+      let playableSong: Song = song.uri ? { ...song } : await recoverUri(song);
+
+      console.log(`▶️ [Player] playSong: "${playableSong.title}"`);
+
+      let targetQueue = newQueue ?? state.queue;
+      if (targetQueue.length === 0) {
+        set({ playError: "Queue is empty" });
         return false;
       }
-      const tFilter = Date.now() - tFilter0;
-      console.log(
-        `[PERF] filter URIs: ${tFilter}ms (${uris.length}/${targetQueue.length} valid)`,
-      );
-      console.log(
-        "🔍 [DEBUG] URIs dikirim ke native:",
-        JSON.stringify(uris.slice(0, 3)),
-      );
 
-      // ── 2. setQueue (dengan await!) ────────────────────
-      await timedCall("setQueue", () => NativePlaybackService.setQueue(uris, queueRates));
+      // 🔥 FIX: native TrackQueue::setTracks() selalu set currentIndex=0.
+      // Kalau lagu yang di-tap tidak berada di index 0 (misal karena
+      // slice ±N di library.tsx), native akan load track yang SALAH.
+      // Reorder queue di sini supaya lagu yang di-tap selalu index 0.
+      const tapIndex = targetQueue.findIndex((s) => s.id === playableSong.id);
+      if (tapIndex > 0) {
+        targetQueue = [
+          ...targetQueue.slice(tapIndex),
+          ...targetQueue.slice(0, tapIndex),
+        ];
+      }
 
-      // Native me-reject kalau dekoder gagal membuka track (mis. content://
-      // yang belum di-resolve). Kalau hasilnya diabaikan, UI menampilkan lagu
-      // "sedang diputar" tanpa suara - ini pernah terjadi pada logcat
-      // 2026-10-04 12:22, tiga kali berturut-turut.
       try {
-        await timedCall("play", () => NativePlaybackService.play());
-      } catch (playErr) {
-        console.error(
-          `[Player] playSong: native play() GAGAL untuk "${playableSong.title}"`,
-          playErr,
+        // ── 1. Filter URIs ─────────────────────────────────
+        const tFilter0 = Date.now();
+        const targetQueueSafe = targetQueue.filter((s) => !!s.uri);
+        const uris = targetQueueSafe.map((s) => s.uri);
+        // Laju file dipasangkan dengan uris yang SAMA (setelah filter), supaya
+        // track tanpa laju tidak menggeser laju track lain.
+        const queueRates = targetQueueSafe.map((s) => s.sampleRate ?? 0);
+        if (uris.length === 0) {
+          set({ playError: "No valid URIs" });
+          return false;
+        }
+        const tFilter = Date.now() - tFilter0;
+        console.log(
+          `[PERF] filter URIs: ${tFilter}ms (${uris.length}/${targetQueue.length} valid)`,
         );
+        console.log(
+          "🔍 [DEBUG] URIs dikirim ke native:",
+          JSON.stringify(uris.slice(0, 3)),
+        );
+
+        // ── 2. setQueue (dengan await!) ────────────────────
+        await timedCall("setQueue", () =>
+          NativePlaybackService.setQueue(uris, queueRates),
+        );
+
+        // Native me-reject kalau dekoder gagal membuka track (mis. content://
+        // yang belum di-resolve). Kalau hasilnya diabaikan, UI menampilkan lagu
+        // "sedang diputar" tanpa suara - ini pernah terjadi pada logcat
+        // 2026-10-04 12:22, tiga kali berturut-turut.
+        try {
+          await timedCall("play", () => NativePlaybackService.play());
+        } catch (playErr) {
+          console.error(
+            `[Player] playSong: native play() GAGAL untuk "${playableSong.title}"`,
+            playErr,
+          );
+          set({
+            currentSong: playableSong,
+            queue: targetQueue,
+            isPlaying: false,
+            position: 0,
+            playError: "Gagal memutar lagu ini. Coba lagu lain.",
+          });
+          return false;
+        }
+
+        // ── 4. State update ────────────────────────────────
+        // 🔥 RESTORE POSITION: kalau resume after restart
+        const isResumeAfterRestart =
+          state.currentSong?.id === playableSong.id && state.position > 0;
+
+        const resumePosition = isResumeAfterRestart ? state.position : 0;
+
         set({
           currentSong: playableSong,
           queue: targetQueue,
-          isPlaying: false,
-          position: 0,
-          playError: "Gagal memutar lagu ini. Coba lagu lain.",
+          isPlaying: true,
+          position: resumePosition,
+          playError: null,
         });
+
+        // 🔥 Seek ke restored position (setelah decoder siap)
+        if (resumePosition > 0) {
+          console.log(`[Player] 🔄 Resume from position: ${resumePosition}s`);
+          setTimeout(async () => {
+            try {
+              await NativePlaybackService.seek(resumePosition * 1000);
+              console.log(`[Player] ✅ Seek to ${resumePosition}s done`);
+            } catch (e) {
+              console.warn("[Player] Restore seek failed:", e);
+            }
+          }, 500); // delay 500ms biar decoder siap
+        }
+
+        // 🔥 FIX: safe fire-and-forget (support sync & async native method)
+        safeFireAndForget(
+          () =>
+            NativePlaybackService.updateMetadata(
+              playableSong.title ?? "Unknown Title",
+              playableSong.artist ?? "Unknown Artist",
+              playableSong.album ?? "",
+              (playableSong.duration ?? 0) * 1000,
+              playableSong.artwork ?? null,
+            ),
+          "updateMetadata",
+        );
+
+        safeFireAndForget(
+          () => NativePlaybackService.updatePlaybackState(true, 0),
+          "updatePlaybackState",
+        );
+
+        // 🔥 MediaSession shuffle/repeat sync: kirim state awal supaya lock
+        // screen langsung benar, tidak menunggu user toggle pertama.
+        safeFireAndForget(
+          () => NativePlaybackService.updateShuffleMode(get().shuffle),
+          "updateShuffleMode(init)",
+        );
+        safeFireAndForget(
+          () =>
+            NativePlaybackService.updateRepeatMode(
+              get().repeat === "off" ? 0 : get().repeat === "all" ? 2 : 1,
+            ),
+          "updateRepeatMode(init)",
+        );
+
+        AsyncStorage.setItem(KEYS.LAST_SONG_ID, playableSong.id).catch(
+          () => {},
+        );
+        AsyncStorage.setItem(
+          KEYS.LAST_QUEUE_IDS,
+          JSON.stringify(targetQueue.map((s) => s.id)),
+        ).catch(() => {});
+        AsyncStorage.setItem(KEYS.LAST_POSITION, "0").catch(() => {});
+
+        SongQueries.incrementPlayCount?.(playableSong.id, 0);
+
+        const totalMs = Date.now() - t0;
+        console.log(`[PERF] playSong TOTAL: ${totalMs}ms`);
+
+        return true;
+      } catch (error: any) {
+        const totalMs = Date.now() - t0;
+        console.error(`❌ [Player] playSong failed (${totalMs}ms):`, error);
+        set({ playError: error?.message ?? "Playback failed" });
         return false;
       }
-
-// ── 4. State update ────────────────────────────────
-      // 🔥 RESTORE POSITION: kalau resume after restart
-      const isResumeAfterRestart =
-        state.currentSong?.id === playableSong.id &&
-        state.position > 0;
-
-      const resumePosition = isResumeAfterRestart ? state.position : 0;
-
-      set({
-        currentSong: playableSong,
-        queue: targetQueue,
-        isPlaying: true,
-        position: resumePosition,
-        playError: null,
-      });
-
-      // 🔥 Seek ke restored position (setelah decoder siap)
-      if (resumePosition > 0) {
-        console.log(`[Player] 🔄 Resume from position: ${resumePosition}s`);
-        setTimeout(async () => {
-          try {
-            await NativePlaybackService.seek(resumePosition * 1000);
-            console.log(`[Player] ✅ Seek to ${resumePosition}s done`);
-          } catch (e) {
-            console.warn("[Player] Restore seek failed:", e);
-          }
-        }, 500);  // delay 500ms biar decoder siap
-      }
-
-      // 🔥 FIX: safe fire-and-forget (support sync & async native method)
-      safeFireAndForget(
-        () =>
-          NativePlaybackService.updateMetadata(
-            playableSong.title ?? "Unknown Title",
-            playableSong.artist ?? "Unknown Artist",
-            playableSong.album ?? "",
-            (playableSong.duration ?? 0) * 1000,
-            playableSong.artwork ?? null,
-          ),
-        "updateMetadata",
-      );
-
-      safeFireAndForget(
-        () => NativePlaybackService.updatePlaybackState(true, 0),
-        "updatePlaybackState",
-      );
-
-      // 🔥 MediaSession shuffle/repeat sync: kirim state awal supaya lock
-      // screen langsung benar, tidak menunggu user toggle pertama.
-      safeFireAndForget(
-        () => NativePlaybackService.updateShuffleMode(get().shuffle),
-        "updateShuffleMode(init)",
-      );
-      safeFireAndForget(
-        () =>
-          NativePlaybackService.updateRepeatMode(
-            get().repeat === "off" ? 0 : get().repeat === "all" ? 2 : 1,
-          ),
-        "updateRepeatMode(init)",
-      );
-
-      AsyncStorage.setItem(KEYS.LAST_SONG_ID, playableSong.id).catch(() => {});
-      AsyncStorage.setItem(
-        KEYS.LAST_QUEUE_IDS,
-        JSON.stringify(targetQueue.map((s) => s.id)),
-      ).catch(() => {});
-      AsyncStorage.setItem(KEYS.LAST_POSITION, "0").catch(() => {});
-
-      SongQueries.incrementPlayCount?.(playableSong.id, 0);
-
-      const totalMs = Date.now() - t0;
-      console.log(`[PERF] playSong TOTAL: ${totalMs}ms`);
-
-      return true;
-    } catch (error: any) {
-      const totalMs = Date.now() - t0;
-      console.error(`❌ [Player] playSong failed (${totalMs}ms):`, error);
-      set({ playError: error?.message ?? "Playback failed" });
-      return false;
+    } finally {
+      _playInFlightSongIds.delete(song.id);
     }
   },
  
