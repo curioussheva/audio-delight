@@ -44,15 +44,19 @@ public:
     // (perilaku lama). Default false = perilaku lama, IDENTIK:
     // mCurrentIndex=0 dan (shuffle ON) trek index 0 di posisi aktif 0.
     //
-    // ⚠️ JANGAN kirim keep=true dari playSong/resume JS: keduanya
-    // mengirim antrean yang SUDAH di-rotate supaya lagu yang di-tap /
-    // di-resume ada di indeks 0 dan justru MENGANDALKAN reset ke 0.
-    // keep=true hanya untuk pengirim-ulang playlist yang TIDAK
-    // me-rotate (mis. refresh library saat memutar) — belum ada
-    // pemanggilnya; API ini disediakan untuk itu.
+    // B17-P-b (2026-11-15): startIndex — JS mengirim antrean ASLI (tanpa
+    // rotasi) + indeks lagu yang di-tap / di-resume. Shuffle OFF:
+    // mCurrentIndex = startIndex. Shuffle ON: startIndex ditukar ke
+    // posisi AKTIF 0 (mCurrentIndex = 0), sisa urutan shuffle tetap acak.
+    // Di luar batas → fallback 0 (perilaku lama). keepCurrentUri=true
+    // yang BERHASIL mengabaikan startIndex (trek yang sedang main yang
+    // menang); kalau trek lama tidak ketemu, startIndex yang dipakai.
+    // Rotasi di JS (playSong dulu memutar queue supaya tap jadi index 0)
+    // DIHAPUS — kontrak baru: antrean asli + startIndex.
     void setTracks(
         const std::vector<TrackInfo>& tracks,
-        bool keepCurrentUri = false
+        bool keepCurrentUri = false,
+        size_t startIndex = 0
     );
 
     // =====================================

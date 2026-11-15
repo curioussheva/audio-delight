@@ -519,22 +519,17 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
       console.log(`▶️ [Player] playSong: "${playableSong.title}"`);
 
-      let targetQueue = newQueue ?? state.queue;
+      // B17-P-b (2026-11-15): rotasi DIHAPUS — antrean dikirim ASLI (urutan
+      // file/library) + tapIndex sebagai startIndex ke native. Dulu queue
+      // di-rotate supaya lagu yang di-tap selalu index 0 karena native
+      // selalu reset ke 0; sekarang TrackQueue::setTracks(startIndex)
+      // yang menaruh lagu yang di-tap di posisi aktif. LAST_QUEUE_IDS
+      // di bawah otomatis tersimpan dalam urutan ASLI, dan restore
+      // (initStore) + resume path mengandalkan itu.
+      const targetQueue = newQueue ?? state.queue;
       if (targetQueue.length === 0) {
         set({ playError: "Queue is empty" });
         return false;
-      }
-
-      // 🔥 FIX: native TrackQueue::setTracks() selalu set currentIndex=0.
-      // Kalau lagu yang di-tap tidak berada di index 0 (misal karena
-      // slice ±N di library.tsx), native akan load track yang SALAH.
-      // Reorder queue di sini supaya lagu yang di-tap selalu index 0.
-      const tapIndex = targetQueue.findIndex((s) => s.id === playableSong.id);
-      if (tapIndex > 0) {
-        targetQueue = [
-          ...targetQueue.slice(tapIndex),
-          ...targetQueue.slice(0, tapIndex),
-        ];
       }
 
       try {
@@ -559,8 +554,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         );
 
         // ── 2. setQueue (dengan await!) ────────────────────
+        // B17-P-b: tapIndex dihitung dari antrean YANG SUDAH DIFILTER
+        // (sama dengan uris/rates yang dikirim), supaya lagu tanpa URI
+        // yang terbuang filter tidak menggeser indeks.
+        const tapIndex = Math.max(
+          0,
+          targetQueueSafe.findIndex((s) => s.id === playableSong.id),
+        );
         await timedCall("setQueue", () =>
-          NativePlaybackService.setQueue(uris, queueRates),
+          NativePlaybackService.setQueue(uris, queueRates, tapIndex),
         );
 
         // Native me-reject kalau dekoder gagal membuka track (mis. content://
@@ -815,8 +817,18 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
               const uris = targetSafe.map((x) => x.uri);
               const rates = targetSafe.map((x) => x.sampleRate ?? 0);
               if (uris.length > 0) {
+                // B17-P-b: resume TANPA rotasi — `target` sudah urutan
+                // ASLI (LAST_QUEUE_IDS tersimpan asli sejak rotasi
+                // dihapus; initStore me-restore apa adanya), jadi
+                // startIndex = posisi lagu yang di-resume di antrean
+                // yang sudah difilter. Tidak ketemu → 0 (fallback
+                // aman; terjadi kalau queue = [song] saja).
+                const resumeIndex = Math.max(
+                  0,
+                  targetSafe.findIndex((x) => x.id === song.id),
+                );
                 await timedCall("setQueue(resume)", () =>
-                  NativePlaybackService.setQueue(uris, rates),
+                  NativePlaybackService.setQueue(uris, rates, resumeIndex),
                 );
                 if (s.position > 0) {
                   // posisi restore: biarkan decoder siap dulu, baru seek

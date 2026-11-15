@@ -91,9 +91,11 @@ object PlaybackNativeBridge {
         return NativePlaybackModule.instance?.getQueueFromService()
     }
 
-    fun setQueue(uris: Array<String>, sampleRates: IntArray = IntArray(uris.size)) {
-        android.util.Log.d("PlaybackNativeBridge", "setQueue(${uris.size} items) called")
-        NativePlaybackModule.instance?.setQueueFromService(uris, sampleRates)
+    // B17-P-b (2026-11-15): startIndex — indeks lagu yang di-tap /
+    // di-resume di antrean asli (JS tidak lagi me-rotate).
+    fun setQueue(uris: Array<String>, sampleRates: IntArray = IntArray(uris.size), startIndex: Int = 0) {
+        android.util.Log.d("PlaybackNativeBridge", "setQueue(${uris.size} items, startIndex=$startIndex) called")
+        NativePlaybackModule.instance?.setQueueFromService(uris, sampleRates, startIndex)
     }
 
     fun getCurrentTrack(): String? {

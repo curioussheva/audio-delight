@@ -120,7 +120,9 @@ class NativePlaybackModule(
     // 🔥 FASE R (2026-11-11): retune — rasio pitch (1.0 = A=440).
     private external fun nativeSetPitchRatio(ratio: Float)
     private external fun nativeGetQueue(): Array<String>
-    private external fun nativeSetQueue(uris: Array<String>, sampleRates: IntArray)
+    // B17-P-b (2026-11-15): startIndex — indeks lagu yang di-tap /
+    // di-resume di antrean asli (JS tidak lagi me-rotate).
+    private external fun nativeSetQueue(uris: Array<String>, sampleRates: IntArray, startIndex: Int)
     private external fun nativeGetCurrentTrack(): String
 
     override fun getName() = NAME
@@ -274,8 +276,8 @@ class NativePlaybackModule(
     fun setPlaybackRateFromService(rate: Float) { if (ensureNativeReady()) nativeSetPlaybackRate(rate) }
     fun setPitchRatioFromService(ratio: Float) { if (ensureNativeReady()) nativeSetPitchRatio(ratio) }
     fun getQueueFromService(): Array<String> = if (ensureNativeReady()) nativeGetQueue() else emptyArray()
-    fun setQueueFromService(uris: Array<String>, sampleRates: IntArray = IntArray(uris.size)) {
-        if (ensureNativeReady()) nativeSetQueue(uris, sampleRates)
+    fun setQueueFromService(uris: Array<String>, sampleRates: IntArray = IntArray(uris.size), startIndex: Int = 0) {
+        if (ensureNativeReady()) nativeSetQueue(uris, sampleRates, startIndex)
     }
     fun getCurrentTrackFromService(): String = if (ensureNativeReady()) nativeGetCurrentTrack() else ""
     fun getPositionFromService(): Double = if (ensureNativeReady()) nativeGetPosition().toDouble() else 0.0

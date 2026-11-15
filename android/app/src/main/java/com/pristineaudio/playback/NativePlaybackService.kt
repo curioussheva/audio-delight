@@ -200,8 +200,14 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
     //
     // 🔥 FIX (2026-10-07): laju file diteruskan ke native supaya stream bisa
     // dibuka di laju track (bit-perfect), bukan laju tertinggi perangkat.
+    // B17-P-b (2026-11-15): `startIndex` = indeks lagu yang di-tap /
+    // di-resume di antrean ASLI (JS tidak lagi me-rotate queue supaya tap
+    // jadi index 0). Diteruskan ke native; di luar batas → fallback 0
+    // di TrackQueue. Double karena angka JS tiba sebagai Double di bridge
+    // legacy; semua pemanggil JS wajib mengirim argumen ini eksplisit
+    // (aritas @ReactMethod harus cocok — tidak ada default di bridge).
     @ReactMethod
-    fun setQueue(uris: ReadableArray, sampleRates: ReadableArray?, promise: Promise) {
+    fun setQueue(uris: ReadableArray, sampleRates: ReadableArray?, startIndex: Double, promise: Promise) {
         try {
             val list = ArrayList<String>(uris.size())
             // Index asli tiap entry di `list`. `continue` di loop bawah bisa
@@ -219,12 +225,23 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
             val elapsed = System.currentTimeMillis() - startTime
             android.util.Log.i(
                 LOG_TAG,
-                "setQueue: total=${uris.size()}, elapsed=${elapsed}ms"
+                "setQueue: total=${uris.size()}, startIndex=${startIndex.toInt()}, elapsed=${elapsed}ms"
             )
+
+            // B17-P-b: `list` bisa lebih pendek dari `uris` kalau ada entry
+            // null yang dilewati `continue` di atas — petakan startIndex
+            // asli ke posisinya di `list` (rateIndexes = indeks asli tiap
+            // entry yang dipertahankan). Lagu yang di-tap tidak ada di
+            // `list` → fallback 0 (tidak pernah terjadi dari JS, yang
+            // sudah memfilter lagu tanpa URI).
+            val startInList = rateIndexes
+                .indexOf(startIndex.toInt().coerceAtLeast(0))
+                .takeIf { it >= 0 } ?: 0
 
             PlaybackNativeBridge.setQueue(
                 list.toTypedArray(),
-                buildRateArray(sampleRates, rateIndexes, list.size)
+                buildRateArray(sampleRates, rateIndexes, list.size),
+                startInList
             )
             promise.resolve(null)
         } catch (e: Throwable) {

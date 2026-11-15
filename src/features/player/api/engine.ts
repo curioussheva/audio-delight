@@ -291,11 +291,11 @@ export class AudioEngine {
     // membuka stream di laju track (bit-perfect), bukan laju tertinggi
     // perangkat. Track tanpa laju dikirim 0 = biar native yang deteksi.
     const sampleRates = songs.map((s) => s.sampleRate ?? 0);
-    NativePlaybackService.setQueue(uris, sampleRates);
-    if (startIndex > 0) {
-      // Panggil metode native skipTo/playIndex jika sudah diimplementasikan di C++/Java
-      // NativePlaybackService.skipTo(startIndex);
-    }
+    // B17-P-b (2026-11-15): startIndex diteruskan ke native — dulu ada
+    // skipTo(startIndex) yang dikomentari karena belum diimplementasikan
+    // di C++/Java; sekarang TrackQueue::setTracks(startIndex) yang
+    // menanganinya, jadi tidak perlu skip sesudah setQueue.
+    NativePlaybackService.setQueue(uris, sampleRates, startIndex);
   }
 
   async seekTo(positionSeconds: number): Promise<void> {

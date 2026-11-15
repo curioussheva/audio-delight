@@ -60,8 +60,10 @@ export async function runAudioTestMatrix(
 
     try {
       // 1. Set queue
+      // B17-P-b: antrean 1 file, startIndex eksplisit 0 (aritas
+      // @ReactMethod Kotlin harus cocok — tidak ada default di bridge).
       await Promise.resolve(
-        NativePlaybackService.setQueue([file.uri], [file.sampleRate ?? 0]),
+        NativePlaybackService.setQueue([file.uri], [file.sampleRate ?? 0], 0),
       );
       const tSetQueue = Date.now() - t0;
       console.log(`  ⏱️  setQueue: ${tSetQueue}ms`);

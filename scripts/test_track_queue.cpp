@@ -74,13 +74,153 @@ static void test_setTracksShuffleOnKeepsTrackZeroFirst() {
     );
 }
 
+// B17-P-b (2026-11-15): setTracks(startIndex) — JS mengirim antrean
+// ASLI + indeks lagu yang di-tap, tanpa rotasi. Shuffle OFF: current
+// langsung = startIndex; advance/retreat jalan dari sana.
+static void test_setTracksStartIndexShuffleOff() {
+    TrackQueue q;
+    q.setTracks(makeQueue(10), false, 4);
+
+    ASSERT_TRUE(
+        q.current()->uri == "track-4",
+        "startIndex OFF: current() == trek yang di-tap (index 4)"
+    );
+    ASSERT_TRUE(
+        q.currentIndex() == 4,
+        "startIndex OFF: currentIndex() == 4"
+    );
+    ASSERT_TRUE(q.advance(), "startIndex OFF: advance() dari 4 berhasil");
+    ASSERT_TRUE(
+        q.current()->uri == "track-5",
+        "startIndex OFF: advance() -> track-5"
+    );
+    ASSERT_TRUE(q.retreat(), "startIndex OFF: retreat() berhasil");
+    ASSERT_TRUE(
+        q.current()->uri == "track-4",
+        "startIndex OFF: retreat() balik ke track-4"
+    );
+}
+
+// B17-P-b: shuffle ON — trek yang di-tap ditukar ke posisi aktif 0,
+// sisa urutan shuffle tetap permutasi lengkap (advance menjangkau
+// semua trek, retreat dari 0 kembali ke trek yang di-tap).
+static void test_setTracksStartIndexShuffleOn() {
+    TrackQueue q;
+    q.setTracks(makeQueue(10));
+    q.setShuffleMode(ShuffleMode::On);
+
+    q.setTracks(makeQueue(10), false, 7);
+
+    ASSERT_TRUE(
+        q.current()->uri == "track-7",
+        "startIndex ON: current() == trek yang di-tap (index 7)"
+    );
+    ASSERT_TRUE(
+        q.currentIndex() == 0,
+        "startIndex ON: currentIndex() == 0 (posisi aktif)"
+    );
+    ASSERT_TRUE(
+        q.activeTracks()[0].uri == "track-7",
+        "startIndex ON: activeTracks()[0] == trek yang di-tap"
+    );
+
+    // Permutasi tetap lengkap: 10 advance (repeat=all) menjangkau semua.
+    q.setRepeatMode(RepeatMode::All);
+    std::vector<bool> seen(10, false);
+    for (int i = 0; i < 10; ++i) {
+        const size_t n = static_cast<size_t>(
+            std::stoul(q.current()->uri.substr(6))
+        );
+        seen[n] = true;
+        q.advance();
+    }
+    bool allSeen = true;
+    for (bool s : seen) {
+        if (!s) allSeen = false;
+    }
+    ASSERT_TRUE(allSeen, "startIndex ON: permutasi lengkap, 10 trek terkunjungi");
+
+    // Retreat dari posisi aktif 0 (repeat=all) kembali ke trek yang di-tap.
+    q.setTracks(makeQueue(10), false, 7);
+    q.setRepeatMode(RepeatMode::All);
+    q.retreat(); // 0 -> ujung (wrap)
+    q.advance(); // ujung -> 0
+    ASSERT_TRUE(
+        q.current()->uri == "track-7",
+        "startIndex ON: wrap retreat+advance balik ke trek yang di-tap"
+    );
+}
+
+// B17-P-b: startIndex di luar batas jatuh ke 0 (perilaku lama), baik
+// shuffle OFF maupun ON — tidak pernah UB / indeks liar.
+static void test_setTracksStartIndexOutOfRange() {
+    TrackQueue q;
+    q.setTracks(makeQueue(10), false, 99);
+    ASSERT_TRUE(
+        q.current()->uri == "track-0",
+        "startIndex OOR OFF: fallback ke track-0"
+    );
+    ASSERT_TRUE(
+        q.currentIndex() == 0,
+        "startIndex OOR OFF: currentIndex() == 0"
+    );
+
+    q.setShuffleMode(ShuffleMode::On);
+    q.setTracks(makeQueue(10), false, 99);
+    ASSERT_TRUE(
+        q.current()->uri == "track-0",
+        "startIndex OOR ON: fallback ke track-0 di posisi aktif 0"
+    );
+    ASSERT_TRUE(
+        q.currentIndex() == 0,
+        "startIndex OOR ON: currentIndex() == 0"
+    );
+    ASSERT_TRUE(
+        q.activeTracks()[0].uri == "track-0",
+        "startIndex OOR ON: activeTracks()[0] == track-0"
+    );
+}
+
+// B17-P-b: keepCurrentUri=true yang BERHASIL mengabaikan startIndex —
+// trek yang sedang main yang menang, bukan indeks yang diminta.
+static void test_setTracksKeepIgnoresStartIndex() {
+    TrackQueue q;
+    q.setTracks(makeQueue(10));
+    q.jumpTo(3); // sedang main track-3
+    ASSERT_TRUE(
+        q.current()->uri == "track-3",
+        "keep+startIndex: setup current() == track-3"
+    );
+
+    q.setTracks(makeQueue(8), true, 6);
+    ASSERT_TRUE(
+        q.current()->uri == "track-3",
+        "keep+startIndex: keep=true menang, current() tetap track-3"
+    );
+
+    // Varian shuffle ON: sama — trek yang main dipertahankan.
+    q.setShuffleMode(ShuffleMode::On);
+    ASSERT_TRUE(
+        q.current()->uri == "track-3",
+        "keep+startIndex: setup shuffle ON current() == track-3"
+    );
+    q.setTracks(makeQueue(8), true, 6);
+    ASSERT_TRUE(
+        q.current()->uri == "track-3",
+        "keep+startIndex: shuffle ON keep=true tetap pertahankan track-3"
+    );
+}
+
 // Trek selain 0 juga harus diputar saat di-reorder ke index 0.
 static void test_setTracksShuffleOnArbitraryTapIndex() {
     TrackQueue q;
     q.setTracks(makeQueue(20));
     q.setShuffleMode(ShuffleMode::On);
 
-    // User tap trek index 13 → playSong reorder jadi [13, 14, ...]
+    // Queue sudah tersusun supaya trek yang di-tap ada di index 0
+    // (dulu playSong me-rotate seperti ini; sejak B17-P-b rotasi dihapus
+    // dan startIndex yang dipakai — kasus ini kini memvalidasi default
+    // startIndex=0 dengan antrean yang memang diawali trek target).
     auto tracks = makeQueue(20);
     std::rotate(tracks.begin(), tracks.begin() + 13, tracks.end());
     q.setTracks(tracks);
@@ -295,6 +435,10 @@ int main() {
 
     test_setTracksShuffleOnKeepsTrackZeroFirst();
     test_setTracksShuffleOnArbitraryTapIndex();
+    test_setTracksStartIndexShuffleOff();
+    test_setTracksStartIndexShuffleOn();
+    test_setTracksStartIndexOutOfRange();
+    test_setTracksKeepIgnoresStartIndex();
     test_shuffleOffKeepsPlayingTrack();
     test_shuffleOnKeepsPlayingTrack();
     test_advanceWithShuffleAndRepeatAll();

@@ -17,7 +17,8 @@ TrackQueue::TrackQueue()
 
 void TrackQueue::setTracks(
     const std::vector<TrackInfo>& tracks,
-    bool keepCurrentUri
+    bool keepCurrentUri,
+    size_t startIndex
 ) {
     std::lock_guard lock(mMutex);
 
@@ -95,23 +96,29 @@ void TrackQueue::setTracks(
         // Tidak ketemu di antrean baru → jatuh ke perilaku lama di bawah.
     }
 
-    // 🔥 FIX (2026-10-06): saat shuffle ON, trek pertama queue baru HARUS
-    // trek index 0 (yang user tap / sedang diputar), bukan trek acak.
+    // B17-P-b (2026-11-15): startIndex — JS mengirim antrean ASLI (tanpa
+    // rotasi) + indeks lagu yang di-tap / di-resume. Ini MENGGANTIKAN blok
+    // index-0 lama (2026-10-06) yang menukar trek index 0 ke posisi aktif
+    // 0 saat shuffle ON — logika yang sama, digeneralisasi ke startIndex
+    // berapa pun, plus shuffle OFF yang dulu selalu reset ke 0.
     //
-    // rebuildShuffle() mengisi mShuffleOrder = [0,1,2,...,n] lalu di-shuffle,
-    // jadi mShuffleOrder[0] bisa index BERAPA PUN (mis. 39). Tanpa ini,
-    // play() memanggil queue_->current() → activeAt(0) → trek acak.
-    // Gejala di device: user tap "Dark Sky Island" (index 0), native main
-    // trek URI[39] (1000996760) — UI dan speaker tidak sync.
-    if (
-        mShuffleMode != ShuffleMode::Off &&
-        !mShuffleOrder.empty()
-    ) {
-        // Cari di mana index 0 sekarang berada, lalu tukar ke posisi 0.
+    // Shuffle OFF: current = startIndex langsung. Shuffle ON: startIndex
+    // ditukar ke posisi aktif 0 (mCurrentIndex = 0), sisa urutan shuffle
+    // tetap acak (permutasi lengkap dipertahankan — hanya satu iter_swap).
+    // startIndex di luar batas → fallback 0 (perilaku lama). Antrean
+    // kosong → mCurrentIndex tetap 0, current() nullopt seperti biasa.
+    // keepCurrentUri yang berhasil sudah return di atas dan mengabaikan
+    // startIndex; kalau trek lama tidak ketemu, jalurnya jatuh ke sini.
+    const size_t start =
+        (startIndex < mTracks.size()) ? startIndex : 0;
+    if (mShuffleMode == ShuffleMode::Off) {
+        mCurrentIndex = start;
+    } else if (!mShuffleOrder.empty()) {
+        // Cari di mana start sekarang berada, lalu tukar ke posisi 0.
         const auto it = std::find(
             mShuffleOrder.begin(),
             mShuffleOrder.end(),
-            static_cast<size_t>(0)
+            start
         );
         if (
             it != mShuffleOrder.end() &&
@@ -122,6 +129,7 @@ void TrackQueue::setTracks(
                 mShuffleOrder.begin()
             );
         }
+        mCurrentIndex = 0;
     }
 }
 

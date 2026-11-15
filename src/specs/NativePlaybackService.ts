@@ -20,7 +20,11 @@ export interface Spec extends TurboModule {
   // 🔥 FASE R (2026-11-11): retune — rasio pitch 0.5–2.0 (phase vocoder).
   // 1.0 = A=440, 432/440 = A=432.
   setPitchRatio(ratio: number): Promise<void>;
-  setQueue(uris: string[], sampleRates: number[] | null): Promise<void>;
+  // B17-P-b (2026-11-15): startIndex — indeks lagu yang di-tap /
+  // di-resume di antrean ASLI (JS tidak lagi me-rotate). Default 0 =
+  // perilaku lama. Opsional di TS, tapi @ReactMethod Kotlin mengharapkan
+  // argumen ini selalu dikirim — semua pemanggil wajib eksplisit.
+  setQueue(uris: string[], sampleRates: number[] | null, startIndex?: number): Promise<void>;
 
   // Query
   getPosition(): Promise<number>;

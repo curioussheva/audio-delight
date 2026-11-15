@@ -107,7 +107,9 @@ export const useAudioPlayer = () => {
         //   [PERF] play: 415ms (async=true)   <- playSong (sudah await)
         // Laju file ikut dikirim supaya stream dibuka di laju track ini
         // (bit-perfect), bukan laju tertinggi perangkat.
-        await NativePlaybackService.setQueue([song.uri], [song.sampleRate ?? 0]);
+        // B17-P-b: antrean 1 lagu, startIndex eksplisit 0 (aritas
+        // @ReactMethod Kotlin harus cocok — tidak ada default di bridge).
+        await NativePlaybackService.setQueue([song.uri], [song.sampleRate ?? 0], 0);
         await NativePlaybackService.play();
         setCurrentSong(song);
         setIsPlaying(true);

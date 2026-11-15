@@ -352,7 +352,7 @@ JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativePlaybackModule
 // Elemen rates yang 0 / array lebih pendek dari uris = laju tidak diketahui;
 // engine akan mendeteksi sendiri untuk track itu.
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSetQueue(
-    JNIEnv* env, jobject, jobjectArray uris, jintArray rates) {
+    JNIEnv* env, jobject, jobjectArray uris, jintArray rates, jint startIndex) {
     pristine::jni::guardedVoid(env, "nativeSetQueue", [&] {
 
     __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
@@ -426,10 +426,16 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeS
         env->DeleteLocalRef(js);
     }
 
-    controller->queue()->setTracks(tracks);
+    // B17-P-b (2026-11-15): startIndex — indeks lagu yang di-tap /
+    // di-resume di antrean ASLI (JS tidak lagi me-rotate). Negatif
+    // dijepit ke 0; di luar batas ditangani TrackQueue (fallback 0).
+    const size_t start = startIndex > 0
+        ? static_cast<size_t>(startIndex)
+        : 0;
+    controller->queue()->setTracks(tracks, false, start);
     __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
-                        "nativeSetQueue: setTracks called with %zu tracks",
-                        tracks.size());
+                        "nativeSetQueue: setTracks called with %zu tracks, startIndex=%zu",
+                        tracks.size(), start);
     });
 }
 
