@@ -60,7 +60,7 @@
         android:allowBackup="true"
         android:theme="@style/AppTheme"
         android:supportsRtl="true"
-        android:usesCleartextTraffic="true"
+        android:usesCleartextTraffic="false"
         android:enableOnBackInvokedCallback="false"
         tools:targetApi="35">
 
