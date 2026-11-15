@@ -6,7 +6,7 @@
 // koreksi menetralkan alat dulu, baru EQ menyetel selera. Menaruh kontrol EQ
 // di atas akan menyesatkan tentang urutan yang sebenarnya.
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -21,6 +21,11 @@ import {
 
 import { useTheme } from "@/shared/context/ThemeContext";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+import {
+  BUILTIN_HEADPHONE_PRESETS,
+  type BuiltinHeadphonePreset,
+} from "../data/builtinPresets";
+import { searchBuiltinPresets } from "../data/builtinPresetSearch";
 import { useHeadphoneCorrection } from "../hooks/useHeadphoneCorrection";
 
 interface Props {
@@ -58,6 +63,51 @@ export const HeadphoneSection: React.FC<Props> = ({ accent, disabled }) => {
   const [importText, setImportText] = useState("");
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+
+  // Picker preset bawaan — cari berdasarkan nama, bukan dropdown panjang.
+  const [builtinQuery, setBuiltinQuery] = useState("");
+  const [loadingBuiltinId, setLoadingBuiltinId] = useState<string | null>(
+    null,
+  );
+  const builtinResults = useMemo(
+    () => searchBuiltinPresets(builtinQuery),
+    [builtinQuery],
+  );
+
+  // Muat preset bawaan lewat jalur impor yang sudah ada (validasi native +
+  // addProfile), lalu aktifkan. Kalau profil dengan teks yang sama sudah ada,
+  // aktifkan saja — jangan menduplikasi profil tiap ketukan.
+  const handleLoadBuiltin = async (preset: BuiltinHeadphonePreset) => {
+    if (disabled || loadingBuiltinId) return;
+    const displayName = `${preset.brand} ${preset.model}`;
+    setLoadingBuiltinId(preset.id);
+    try {
+      const existing = profiles.find(
+        (p) => p.presetText.trim() === preset.presetText.trim(),
+      );
+      let id = existing?.id;
+      if (!id) {
+        const result = await importPreset(displayName, preset.presetText);
+        if (!result.ok || !result.profileId) {
+          Alert.alert(
+            "Preset gagal dipasang",
+            `Preset "${displayName}" ditolak. Coba preset lain atau impor manual.`,
+          );
+          return;
+        }
+        id = result.profileId;
+      }
+      const ok = await activate(id);
+      if (!ok) {
+        Alert.alert(
+          "Profil gagal dipasang",
+          `Profil "${displayName}" ditolak. Coba profil lain atau impor ulang presetnya.`,
+        );
+      }
+    } finally {
+      setLoadingBuiltinId(null);
+    }
+  };
 
   // Hapus profil lewat long-press — seperti hapus preset EQ, minta
   // konfirmasi dulu supaya profil tidak hilang karena sentuhan tak sengaja.
@@ -230,6 +280,133 @@ export const HeadphoneSection: React.FC<Props> = ({ accent, disabled }) => {
         <Text style={[styles.hint, { color: colors.text.tertiary }]}>
           Tekan lama untuk menghapus.
         </Text>
+      )}
+
+      {/* Preset bawaan — picker pencarian, bukan dropdown panjang. Mengetuk
+          model memuat preset AutoEq-nya lewat jalur impor yang sudah ada. */}
+      <Text
+        style={[
+          styles.builtinTitle,
+          { color: colors.text.primary, marginTop: spacing.md },
+        ]}
+      >
+        Preset bawaan ({BUILTIN_HEADPHONE_PRESETS.length})
+      </Text>
+
+      <TextInput
+        value={builtinQuery}
+        onChangeText={setBuiltinQuery}
+        placeholder="Cari IEM… (mis. Chu, Aria, Zero)"
+        placeholderTextColor={colors.text.secondary}
+        editable={!disabled}
+        style={[
+          styles.input,
+          styles.builtinSearch,
+          { color: colors.text.primary, borderColor: colors.border.medium },
+        ]}
+      />
+
+      {/* Catatan jujur: preset bawaan adalah perkiraan. Dihitung AutoEq dari
+          SATU hasil pengukuran (satu rig, satu unit) ke SATU kurva target
+          (Harman in-ear 2019) — unit, eartips, dan telinga tiap orang
+          berbeda, jadi hasilnya bisa tidak sama persis di perangkatmu. */}
+      <Text style={[styles.builtinNote, { color: colors.text.secondary }]}>
+        Preset bawaan bersifat perkiraan: dihitung dari satu hasil pengukuran
+        ke satu kurva target — unit, eartips, dan telingamu bisa memberi hasil
+        yang berbeda.
+      </Text>
+
+      {builtinQuery.trim() === "" ? (
+        <Text style={[styles.hint, { color: colors.text.tertiary }]}>
+          Ketik nama IEM untuk mencari dari {BUILTIN_HEADPHONE_PRESETS.length}{" "}
+          preset bawaan.
+        </Text>
+      ) : builtinResults.length === 0 ? (
+        <Text style={[styles.hint, { color: colors.text.tertiary }]}>
+          Tidak ada preset bawaan yang cocok dengan &quot;{builtinQuery.trim()}
+          &quot;.
+        </Text>
+      ) : (
+        <ScrollView
+          style={[styles.builtinList, { borderColor: colors.border.medium }]}
+          nestedScrollEnabled
+        >
+          {builtinResults.map((preset) => {
+            const isLoading = loadingBuiltinId === preset.id;
+            const alreadyAdded = profiles.some(
+              (p) => p.presetText.trim() === preset.presetText.trim(),
+            );
+            const isActive =
+              alreadyAdded &&
+              enabled &&
+              profiles.some(
+                (p) =>
+                  p.presetText.trim() === preset.presetText.trim() &&
+                  p.id === activeProfile?.id,
+              );
+            return (
+              <TouchableOpacity
+                key={preset.id}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  `${preset.brand} ${preset.model}, ${preset.filterCount} filter` +
+                  `, pengukuran ${preset.database}` +
+                  (isActive ? ", aktif" : "") +
+                  (alreadyAdded ? ", sudah ditambahkan" : "")
+                }
+                accessibilityState={{ disabled: !!disabled }}
+                disabled={disabled || isLoading}
+                onPress={() => void handleLoadBuiltin(preset)}
+                style={[
+                  styles.builtinRow,
+                  {
+                    borderBottomColor: colors.border.medium,
+                    opacity: disabled ? 0.4 : 1,
+                  },
+                ]}
+              >
+                <View style={styles.builtinRowText}>
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      styles.builtinRowTitle,
+                      { color: colors.text.primary },
+                    ]}
+                  >
+                    {preset.brand} {preset.model}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.builtinRowMeta,
+                      { color: colors.text.secondary },
+                    ]}
+                  >
+                    {preset.filterCount} filter • {preset.database} • Harman
+                    IE 2019
+                  </Text>
+                </View>
+                {isLoading ? (
+                  <ActivityIndicator color={tint} />
+                ) : isActive ? (
+                  <Text
+                    style={[styles.builtinRowState, { color: tint }]}
+                  >
+                    Aktif
+                  </Text>
+                ) : alreadyAdded ? (
+                  <Text
+                    style={[
+                      styles.builtinRowState,
+                      { color: colors.text.secondary },
+                    ]}
+                  >
+                    Ditambahkan
+                  </Text>
+                ) : null}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       )}
 
       <View style={[styles.actions, { gap: spacing.sm }]}>
@@ -427,6 +604,29 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 13, fontWeight: "600" },
   cardMeta: { fontSize: 11, marginTop: 2 },
   actions: { flexDirection: "row", marginTop: 12 },
+
+  // Picker preset bawaan (pencarian, bukan dropdown panjang). Daftar hasil
+  // dibatasi tingginya supaya 24 model tidak mendorong layar ke bawah.
+  builtinTitle: { fontSize: 14, fontWeight: "600" },
+  builtinSearch: { marginTop: 8, marginBottom: 0 },
+  builtinNote: { fontSize: 11, marginTop: 8, lineHeight: 15 },
+  builtinList: {
+    marginTop: 8,
+    maxHeight: 240,
+    borderWidth: 1,
+    borderRadius: 10,
+  },
+  builtinRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+  },
+  builtinRowText: { flex: 1 },
+  builtinRowTitle: { fontSize: 13, fontWeight: "600" },
+  builtinRowMeta: { fontSize: 11, marginTop: 2 },
+  builtinRowState: { fontSize: 12, fontWeight: "600", marginLeft: 8 },
 
   action: {
     flex: 1,

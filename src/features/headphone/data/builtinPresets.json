@@ -1,0 +1,242 @@
+[
+  {
+    "id": "builtin-7hz-salnotes-zero",
+    "brand": "7Hz",
+    "model": "Salnotes Zero",
+    "database": "oratory1990",
+    "rig": "oratory1990 — GRAS RA0045 (IEC 60318-4)",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/in-ear/7Hz%20Salnotes%20Zero/7Hz%20Salnotes%20Zero%20ParametricEQ.txt",
+    "file": "presets/7hz-salnotes-zero.txt"
+  },
+  {
+    "id": "builtin-7hz-timeless",
+    "brand": "7Hz",
+    "model": "Timeless",
+    "database": "oratory1990",
+    "rig": "oratory1990 — GRAS RA0045 (IEC 60318-4)",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/in-ear/7Hz%20Timeless/7Hz%20Timeless%20ParametricEQ.txt",
+    "file": "presets/7hz-timeless.txt"
+  },
+  {
+    "id": "builtin-7hz-x-crinacle-zero-2",
+    "brand": "7Hz",
+    "model": "x Crinacle Zero 2",
+    "database": "crinacle",
+    "rig": "crinacle — IEC 711 clone coupler",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/crinacle/711%20in-ear/7Hz%20x%20Crinacle%20Zero%202/7Hz%20x%20Crinacle%20Zero%202%20ParametricEQ.txt",
+    "file": "presets/7hz-x-crinacle-zero-2.txt"
+  },
+  {
+    "id": "builtin-etymotic-er2se",
+    "brand": "Etymotic",
+    "model": "ER2SE",
+    "database": "oratory1990",
+    "rig": "oratory1990 — GRAS RA0045 (IEC 60318-4)",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/in-ear/Etymotic%20ER2SE/Etymotic%20ER2SE%20ParametricEQ.txt",
+    "file": "presets/etymotic-er2se.txt"
+  },
+  {
+    "id": "builtin-etymotic-er4sr",
+    "brand": "Etymotic",
+    "model": "ER4SR",
+    "database": "oratory1990",
+    "rig": "oratory1990 — GRAS RA0045 (IEC 60318-4)",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/in-ear/Etymotic%20ER4SR/Etymotic%20ER4SR%20ParametricEQ.txt",
+    "file": "presets/etymotic-er4sr.txt"
+  },
+  {
+    "id": "builtin-final-audio-e3000",
+    "brand": "Final Audio",
+    "model": "E3000",
+    "database": "oratory1990",
+    "rig": "oratory1990 — GRAS RA0045 (IEC 60318-4)",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/in-ear/Final%20Audio%20E3000/Final%20Audio%20E3000%20ParametricEQ.txt",
+    "file": "presets/final-audio-e3000.txt"
+  },
+  {
+    "id": "builtin-kz-zsn-pro-x",
+    "brand": "KZ",
+    "model": "ZSN Pro X",
+    "database": "oratory1990",
+    "rig": "oratory1990 — GRAS RA0045 (IEC 60318-4)",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/in-ear/KZ%20ZSN%20Pro%20X/KZ%20ZSN%20Pro%20X%20ParametricEQ.txt",
+    "file": "presets/kz-zsn-pro-x.txt"
+  },
+  {
+    "id": "builtin-moondrop-aria",
+    "brand": "Moondrop",
+    "model": "Aria",
+    "database": "oratory1990",
+    "rig": "oratory1990 — GRAS RA0045 (IEC 60318-4)",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/in-ear/Moondrop%20Aria/Moondrop%20Aria%20ParametricEQ.txt",
+    "file": "presets/moondrop-aria.txt"
+  },
+  {
+    "id": "builtin-moondrop-blessing-2",
+    "brand": "Moondrop",
+    "model": "Blessing 2",
+    "database": "oratory1990",
+    "rig": "oratory1990 — GRAS RA0045 (IEC 60318-4)",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/in-ear/Moondrop%20Blessing%202/Moondrop%20Blessing%202%20ParametricEQ.txt",
+    "file": "presets/moondrop-blessing-2.txt"
+  },
+  {
+    "id": "builtin-moondrop-blessing-2-dusk",
+    "brand": "Moondrop",
+    "model": "Blessing 2 Dusk",
+    "database": "oratory1990",
+    "rig": "oratory1990 — GRAS RA0045 (IEC 60318-4)",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/in-ear/Moondrop%20x%20Crinacle%20Blessing2%20Dusk/Moondrop%20x%20Crinacle%20Blessing2%20Dusk%20ParametricEQ.txt",
+    "file": "presets/moondrop-blessing-2-dusk.txt"
+  },
+  {
+    "id": "builtin-moondrop-chu",
+    "brand": "Moondrop",
+    "model": "Chu",
+    "database": "oratory1990",
+    "rig": "oratory1990 — GRAS RA0045 (IEC 60318-4)",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/in-ear/Moondrop%20Chu/Moondrop%20Chu%20ParametricEQ.txt",
+    "file": "presets/moondrop-chu.txt"
+  },
+  {
+    "id": "builtin-moondrop-starfield",
+    "brand": "Moondrop",
+    "model": "Starfield",
+    "database": "oratory1990",
+    "rig": "oratory1990 — GRAS RA0045 (IEC 60318-4)",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/in-ear/Moondrop%20Starfield/Moondrop%20Starfield%20ParametricEQ.txt",
+    "file": "presets/moondrop-starfield.txt"
+  },
+  {
+    "id": "builtin-moondrop-variations",
+    "brand": "Moondrop",
+    "model": "Variations",
+    "database": "oratory1990",
+    "rig": "oratory1990 — GRAS RA0045 (IEC 60318-4)",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/in-ear/Moondrop%20Variations/Moondrop%20Variations%20ParametricEQ.txt",
+    "file": "presets/moondrop-variations.txt"
+  },
+  {
+    "id": "builtin-sennheiser-ie-200",
+    "brand": "Sennheiser",
+    "model": "IE 200",
+    "database": "oratory1990",
+    "rig": "oratory1990 — GRAS RA0045 (IEC 60318-4)",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/in-ear/Sennheiser%20IE%20200/Sennheiser%20IE%20200%20ParametricEQ.txt",
+    "file": "presets/sennheiser-ie-200.txt"
+  },
+  {
+    "id": "builtin-sennheiser-ie-600",
+    "brand": "Sennheiser",
+    "model": "IE 600",
+    "database": "oratory1990",
+    "rig": "oratory1990 — GRAS RA0045 (IEC 60318-4)",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/in-ear/Sennheiser%20IE%20600/Sennheiser%20IE%20600%20ParametricEQ.txt",
+    "file": "presets/sennheiser-ie-600.txt"
+  },
+  {
+    "id": "builtin-sennheiser-ie-900",
+    "brand": "Sennheiser",
+    "model": "IE 900",
+    "database": "oratory1990",
+    "rig": "oratory1990 — GRAS RA0045 (IEC 60318-4)",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/in-ear/Sennheiser%20IE%20900/Sennheiser%20IE%20900%20ParametricEQ.txt",
+    "file": "presets/sennheiser-ie-900.txt"
+  },
+  {
+    "id": "builtin-shuoer-s12",
+    "brand": "Shuoer",
+    "model": "S12",
+    "database": "oratory1990",
+    "rig": "oratory1990 — GRAS RA0045 (IEC 60318-4)",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/in-ear/Shuoer%20S12/Shuoer%20S12%20ParametricEQ.txt",
+    "file": "presets/shuoer-s12.txt"
+  },
+  {
+    "id": "builtin-shure-se215",
+    "brand": "Shure",
+    "model": "SE215",
+    "database": "oratory1990",
+    "rig": "oratory1990 — GRAS RA0045 (IEC 60318-4)",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/in-ear/Shure%20SE215/Shure%20SE215%20ParametricEQ.txt",
+    "file": "presets/shure-se215.txt"
+  },
+  {
+    "id": "builtin-simgot-ea500-black-nozzle",
+    "brand": "Simgot Audio",
+    "model": "EA500 (black nozzle)",
+    "database": "Super Review",
+    "rig": "Super Review — IEC 711 clone coupler",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/Super%20Review/in-ear/Simgot%20Audio%20EA500%20%28black%20nozzle%29/Simgot%20Audio%20EA500%20%28black%20nozzle%29%20ParametricEQ.txt",
+    "file": "presets/simgot-ea500-black-nozzle.txt"
+  },
+  {
+    "id": "builtin-sony-ier-z1r",
+    "brand": "Sony",
+    "model": "IER-Z1R",
+    "database": "oratory1990",
+    "rig": "oratory1990 — GRAS RA0045 (IEC 60318-4)",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/in-ear/Sony%20IER-Z1R/Sony%20IER-Z1R%20ParametricEQ.txt",
+    "file": "presets/sony-ier-z1r.txt"
+  },
+  {
+    "id": "builtin-tangzu-waner-sg",
+    "brand": "TANGZU",
+    "model": "Wan'er S.G",
+    "database": "Super Review",
+    "rig": "Super Review — IEC 711 clone coupler",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/Super%20Review/in-ear/TANGZU%20Wan%27er%20S.G/TANGZU%20Wan%27er%20S.G%20ParametricEQ.txt",
+    "file": "presets/tangzu-waner-sg.txt"
+  },
+  {
+    "id": "builtin-truthear-hexa",
+    "brand": "Truthear",
+    "model": "Hexa",
+    "database": "oratory1990",
+    "rig": "oratory1990 — GRAS RA0045 (IEC 60318-4)",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/in-ear/Truthear%20Hexa/Truthear%20Hexa%20ParametricEQ.txt",
+    "file": "presets/truthear-hexa.txt"
+  },
+  {
+    "id": "builtin-truthear-nova",
+    "brand": "Truthear",
+    "model": "Nova",
+    "database": "oratory1990",
+    "rig": "oratory1990 — GRAS RA0045 (IEC 60318-4)",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/in-ear/Truthear%20Nova/Truthear%20Nova%20ParametricEQ.txt",
+    "file": "presets/truthear-nova.txt"
+  },
+  {
+    "id": "builtin-truthear-x-crinacle-zero-red",
+    "brand": "Truthear",
+    "model": "x Crinacle Zero RED",
+    "database": "oratory1990",
+    "rig": "oratory1990 — GRAS RA0045 (IEC 60318-4)",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/in-ear/Truthear%20x%20Crinacle%20Zero%20RED/Truthear%20x%20Crinacle%20Zero%20RED%20ParametricEQ.txt",
+    "file": "presets/truthear-x-crinacle-zero-red.txt"
+  }
+]
