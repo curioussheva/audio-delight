@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.SystemClock
 
 class PlaybackService : Service() {
 
@@ -19,6 +20,26 @@ class PlaybackService : Service() {
         const val EXTRA_SEEK_POSITION = "extra_seek_position"
 
         private const val WAKE_LOCK_TAG = "PristineAudio::PlaybackWakeLock"
+
+        // B16-W1: timeout wake lock + interval re-arm (lihat komentar di
+        // acquireWakeLock()/rearmWakeLock()).
+        //
+        // Timeout 60 menit adalah SAFETY NET melawan kebocoran, BUKAN
+        // mekanisme lepas utama — lepas utama tetap pause/stop/destroy
+        // (updatePlaybackState(false), ACTION_STOP, onDestroy). Dipilih
+        // 60 menit karena updatePlaybackState(true, ...) menembak ~1/detik
+        // selama playback (position watcher JS, playerStore.ts) sehingga
+        // re-arm jalan terus; 60 menit jauh di atas freeze JS terburuk yang
+        // teramati (~50 detik sunyi JS, logcat #22) dan menutupi trek
+        // panjang sekalipun re-arm sempat macet. Usulan pengirim (one-shot
+        // 10 menit tanpa re-arm) DITOLAK: kedaluwarsa di tengah trek 20
+        // menit. 60 menit juga membatasi kebocoran andai service bocor
+        // tanpa onDestroy: lock mati sendiri, tidak menahan CPU selamanya.
+        private const val WAKE_LOCK_TIMEOUT_MS = 60 * 60 * 1000L
+        // Re-arm paling sering tiap 10 menit: dengan timeout 60 menit,
+        // sisa masa lock saat re-arm >= 50 menit. Interval ini yang
+        // mencegah release+acquire tiap detik dari poll watcher.
+        private const val WAKE_LOCK_REARM_INTERVAL_MS = 10 * 60 * 1000L
 
         @Volatile
         var instance: PlaybackService? = null
@@ -45,9 +66,19 @@ class PlaybackService : Service() {
     // PARTIAL_WAKE_LOCK (bukan SCREEN_DIM/SCREEN_BRIGHT) supaya layar tetap
     // bisa mati seperti biasa dan baterai tidak terkuras oleh layar.
     //
-    // Dilepas HANYA saat playback benar-benar berhenti, bukan saat pause -
-    // pause biasanya berlanjut, dan melepas/mengambil lock berulang boros.
+    // B16-W1: lock TIDAK dihapus — usulan pengirim ("Oboe menahan device")
+    // SALAH, tidak ada wake lock di C++. Lock dilepas saat PAUSE
+    // (updatePlaybackState(false)), bukan hanya saat stop: pause yang lama
+    // menahan CPU tanpa alasan dan berkonflik dengan idle-close 60 detik
+    // (B12-W5). Play berikutnya mengambil lagi lewat rearmWakeLock().
+    // Timeout 60 menit hanya safety net andai lepas utama gagal.
     private var wakeLock: PowerManager.WakeLock? = null
+    // Guard karena lock disentuh dari tiga thread: main (lifecycle),
+    // command thread (PlaybackNativeBridge.play/pause), dan bridge JS
+    // (NativePlaybackService.updatePlaybackState).
+    private val wakeLockGuard = Any()
+    // elapsedRealtime() saat acquire terakhir; dasar throttle re-arm.
+    private var wakeLockAcquiredAtMs = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -61,31 +92,66 @@ class PlaybackService : Service() {
     }
 
     private fun acquireWakeLock() {
-        if (wakeLock?.isHeld == true) return
-        try {
-            val pm = getSystemService(POWER_SERVICE) as PowerManager
-            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG).apply {
-                setReferenceCounted(false)
-                acquire()
+        synchronized(wakeLockGuard) {
+            if (wakeLock?.isHeld == true) return
+            try {
+                val pm = getSystemService(POWER_SERVICE) as PowerManager
+                wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG).apply {
+                    setReferenceCounted(false)
+                    // B16-W1: DENGAN timeout. Sebelumnya acquire() tanpa
+                    // timeout — kalau release terlewat (crash path, service
+                    // bocor), CPU ditahan selamanya.
+                    acquire(WAKE_LOCK_TIMEOUT_MS)
+                }
+                wakeLockAcquiredAtMs = SystemClock.elapsedRealtime()
+                android.util.Log.d("PlaybackService", "WakeLock acquired")
+            } catch (e: Exception) {
+                android.util.Log.e("PlaybackService", "WakeLock gagal diambil", e)
             }
-            android.util.Log.d("PlaybackService", "WakeLock acquired")
-        } catch (e: Exception) {
-            android.util.Log.e("PlaybackService", "WakeLock gagal diambil", e)
+        }
+    }
+
+    // B16-W1: perpanjang masa lock saat masih playing.
+    //
+    // Karena lock setReferenceCounted(false), acquire() saat lock dipegang
+    // adalah NO-OP dan TIDAK memperpanjang timeout — re-arm HARUS
+    // release-then-acquire. Dipanggil dari updatePlaybackState(true, ...),
+    // yang menembak ~1/detik selama playback (position watcher JS 500ms,
+    // di-throttle ke perubahan detik; ditambah play/track-change dan
+    // PlaybackNativeBridge.play()). Re-arm di-throttle ke sekali per
+    // WAKE_LOCK_REARM_INTERVAL_MS supaya poll tiap detik tidak memicu
+    // release+acquire + log tiap detik; dengan timeout 60 menit, margin
+    // sisa selalu >= 50 menit — freeze JS terburuk yang teramati (~50 dtk)
+    // tidak akan pernah menghabiskan lock. Kalau lock sedang tidak
+    // dipegang (mis. pause sempat melepas), ambil baru.
+    private fun rearmWakeLock() {
+        synchronized(wakeLockGuard) {
+            if (wakeLock?.isHeld != true) {
+                acquireWakeLock()
+                return
+            }
+            val now = SystemClock.elapsedRealtime()
+            if (now - wakeLockAcquiredAtMs < WAKE_LOCK_REARM_INTERVAL_MS) return
+            releaseWakeLock()
+            acquireWakeLock()
         }
     }
 
     private fun releaseWakeLock() {
-        try {
-            // isHeld bisa melempar kalau lock sudah dilepas; exception dibiarkan
-            // lewat supaya tidak mematikan service.
-            if (wakeLock?.isHeld == true) {
-                wakeLock?.release()
-                android.util.Log.d("PlaybackService", "WakeLock released")
+        synchronized(wakeLockGuard) {
+            try {
+                // isHeld bisa melempar kalau lock sudah dilepas; exception dibiarkan
+                // lewat supaya tidak mematikan service.
+                if (wakeLock?.isHeld == true) {
+                    wakeLock?.release()
+                    android.util.Log.d("PlaybackService", "WakeLock released")
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("PlaybackService", "WakeLock release: ${e.message}")
+            } finally {
+                wakeLock = null
+                wakeLockAcquiredAtMs = 0L
             }
-        } catch (e: Exception) {
-            android.util.Log.w("PlaybackService", "WakeLock release: ${e.message}")
-        } finally {
-            wakeLock = null
         }
     }
 
@@ -160,6 +226,18 @@ class PlaybackService : Service() {
 
     fun updatePlaybackState(isPlaying: Boolean, positionMs: Long) {
         mediaSessionManager.updatePlaybackState(isPlaying, positionMs)
+        // B16-W1: hook wake lock di SATU tempat yang dilalui semua jalur
+        // play/pause — JS (setIsPlaying, playSong, seek, position watcher)
+        // maupun native (PlaybackNativeBridge.play/pause dari notifikasi /
+        // lock screen / bluetooth). Playing -> re-arm (ambil baru kalau
+        // pause sempat melepas); Paused -> lepas. releaseWakeLock()
+        // idempotent (guard isHeld + wakeLock=null), jadi poll watcher
+        // yang menembak tiap ~1 detik saat paused aman.
+        if (isPlaying) {
+            rearmWakeLock()
+        } else {
+            releaseWakeLock()
+        }
     }
 
     fun updateShuffleMode(enabled: Boolean) {
