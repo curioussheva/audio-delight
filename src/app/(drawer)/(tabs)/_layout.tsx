@@ -69,7 +69,7 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="equalizer"
           options={{
-            title: "Equalizer",
+            title: "Audio",
             tabBarIcon: ({ color, size }) => (
               <MaterialIcons name="equalizer" size={size} color={color} />
             ),

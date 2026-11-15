@@ -47,6 +47,9 @@ import { ControlKnob } from "@/features/equalizer/components/ControlKnob";
 import { PresetChip } from "@/features/equalizer/components/PresetChip";
 import { SavePresetModal } from "@/features/equalizer/components/SavePresetModal";
 import { HeadphoneSection } from "@/features/headphone/components/HeadphoneSection";
+import { MODE_INFO } from "@/features/equalizer/api/modeInfo";
+import { SolfeggioSubscreen } from "@/features/equalizer/components/SolfeggioSubscreen";
+import { BitPerfectSubscreen } from "@/features/equalizer/components/BitPerfectSubscreen";
 import {
   DEFAULT_VISIBLE_SECTIONS,
   VISIBLE_SECTIONS_KEY,
@@ -440,7 +443,7 @@ export default function EqualizerScreen() {
               kecil yang disengaja demi satu pola header. Tombol reset
               pindah ke slot `actions`; perilakunya tidak berubah. */}
           <ScreenHeader
-            title="Precision DSP"
+            title="Audio Mode"
             subtitle={`MODE ${modeLabel} · ${engineLabel}`}
             style={{ paddingHorizontal: spacing.md, paddingVertical: 16 }}
             actions={
@@ -521,6 +524,25 @@ export default function EqualizerScreen() {
             })}
           </View>
 
+          {/* Deskripsi mode aktif (B5): sakelar di atas harus menyebut apa
+              yang dilakukan tiap mode, bukan cuma namanya. */}
+          <Text
+            style={[
+              styles.modeDescription,
+              {
+                color: colors.text.secondary,
+                marginHorizontal: spacing.md,
+                marginBottom: spacing.md,
+              },
+            ]}
+          >
+            {MODE_INFO[audioMode].description}
+          </Text>
+
+          {/* Subscreen DSP — seluruh konten DSP lama, verbatim, hanya
+              dibungkus kondisional per mode (Ide 1). */}
+          {audioMode === "dsp" && (
+            <>
           {/* 0a. SAKELAR UTAMA.
               Dulu layar ini TIDAK punya sakelar master: `isEQEnabled` bernilai
               false secara default dan hanya pernah dimatikan
@@ -930,6 +952,13 @@ export default function EqualizerScreen() {
               />
             </View>
           )}
+            </>
+          )}
+
+          {/* Subscreen Solfeggio / Bit-Perfect — shell sementara, diganti
+              langkah berikut ronde ini (lihat komponen masing-masing). */}
+          {audioMode === "immersive" && <SolfeggioSubscreen />}
+          {audioMode === "bit-perfect" && <BitPerfectSubscreen />}
         </ScrollView>
       </GestureHandlerRootView>
       <SavePresetModal
@@ -970,6 +999,11 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 2,
     textAlign: "center",
+  },
+  // Deskripsi satu kalimat mode aktif di bawah sakelar mode (B5).
+  modeDescription: {
+    fontSize: 12,
+    lineHeight: 17,
   },
 
   container: { flex: 1 },
