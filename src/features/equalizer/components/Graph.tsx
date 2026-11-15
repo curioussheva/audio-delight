@@ -5,6 +5,7 @@ import {
   Skia,
   Canvas,
   Path,
+  Circle,
   LinearGradient,
   vec,
   BlurMask,
@@ -13,13 +14,17 @@ import {
 import {
   useDerivedValue,
   useAnimatedReaction,
+  useSharedValue,
   runOnJS,
   SharedValue,
 } from "react-native-reanimated";
 
+import { GestureDetector, Gesture } from "react-native-gesture-handler";
+
 import { EqualizerBand } from "@/features/equalizer/types";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { accentOn } from "@/shared/utils/contrast";
+import { bandPoint, pointToBand } from "@/features/equalizer/api/graphDragMath";
 import {
   BOOST_WARN_DB,
   GRAPH_CLIP_RED,
@@ -37,6 +42,12 @@ interface Props {
   height?: number;
   /** Bekukan tampilan saat DSP bypass (B3): graph meredup. */
   disabled?: boolean;
+  /**
+   * Ide 4b: graph bisa diseret langsung — titik sentuh memetakan ke band
+   * terdekat + gain. Tidak ada = graph read-only (mis. subscreen lain).
+   * Dipanggil di JS thread; pemanggil yang menjaga klem/guard DSP.
+   */
+  onBandChange?: (index: number, gain: number) => void;
 }
 
 // Tinggi strip label Hz di bawah canvas.
@@ -47,6 +58,7 @@ export const FrequencyGraph: React.FC<Props> = ({
   width = 340,
   height = 120,
   disabled,
+  onBandChange,
 }) => {
   const { theme } = useTheme();
 
@@ -54,6 +66,58 @@ export const FrequencyGraph: React.FC<Props> = ({
   const midY = height / 2;
   const maxGainVisible = 10;
   const verticalScale = (height * 0.45) / maxGainVisible;
+
+  // Ide 4b — drag langsung pada kurva. Geometri (stepX / midY /
+  // verticalScale) SAMA dengan yang menggambar kurva di atas, jadi titik
+  // yang disentuh memetakan persis ke titik kurva yang terlihat.
+  // - activeOffsetX + failOffsetY: drag HORIZONTAL mengklaim gesture,
+  //   swipe VERTIKAL gagal cepat supaya ScrollView induk tetap bisa
+  //   scroll — pola yang sama dengan directionalLockEnabled di mixer.
+  // - onStart juga menyetel band, jadi ketuk (tanpa drag) ikut berfungsi.
+  // - onBandChange hanya dipanggil saat (index, gain) berubah, supaya
+  //   frame drag yang nilainya sama tidak membanjiri bridge.
+  // - Gesture dibuat ulang tiap render (pola yang sama dengan ControlKnob),
+  //   jadi closure onBandChange selalu segar.
+  const dragEnabled = !disabled && !!onBandChange;
+  // Dot penanda band aktif saat drag — posisi dari shared value supaya
+  // mengikuti jari tanpa setState per frame; r=0 saat tidak drag.
+  const dotX = useSharedValue(0);
+  const dotY = useSharedValue(0);
+  const dotR = useSharedValue(0);
+  const lastIndex = useSharedValue(-1);
+  const lastGain = useSharedValue(Number.NaN);
+  const bandCount =
+    "value" in bands ? (bands.value?.length ?? 0) : (bands?.length ?? 0);
+  const graphGesture = Gesture.Pan()
+    .enabled(dragEnabled)
+    .activeOffsetX([-10, 10])
+    .failOffsetY([-10, 10])
+    .onStart((e) => {
+      const { index, gain } = pointToBand(e.x, e.y, width, height, bandCount);
+      const pt = bandPoint(index, gain, width, height, bandCount);
+      dotX.value = pt.x;
+      dotY.value = pt.y;
+      dotR.value = 7;
+      lastIndex.value = index;
+      lastGain.value = gain;
+      if (onBandChange) runOnJS(onBandChange)(index, gain);
+    })
+    .onUpdate((e) => {
+      const { index, gain } = pointToBand(e.x, e.y, width, height, bandCount);
+      const pt = bandPoint(index, gain, width, height, bandCount);
+      dotX.value = pt.x;
+      dotY.value = pt.y;
+      if (index !== lastIndex.value || gain !== lastGain.value) {
+        lastIndex.value = index;
+        lastGain.value = gain;
+        if (onBandChange) runOnJS(onBandChange)(index, gain);
+      }
+    })
+    .onFinalize(() => {
+      dotR.value = 0;
+      lastIndex.value = -1;
+      lastGain.value = Number.NaN;
+    });
 
   // 1. Generate Path di UI Thread (Smooth Transition)
   //
@@ -194,51 +258,61 @@ export const FrequencyGraph: React.FC<Props> = ({
         ]}
       />
 
-      <Canvas style={{ width, height }}>
-        {/* Shaded Area */}
-        <Path path={fillPath}>
-          <LinearGradient
-            start={vec(0, 0)}
-            end={vec(0, height)}
-            colors={colors.fillGradient}
-          />
-        </Path>
+      {/* Ide 4b: GestureDetector membungkus Canvas lewat View berukuran
+          sama — koordinat sentuh (e.x/e.y) relatif ke View ini, jadi sama
+          dengan koordinat canvas. */}
+      <GestureDetector gesture={graphGesture}>
+        <View style={{ width, height }}>
+          <Canvas style={{ width, height }}>
+            {/* Shaded Area */}
+            <Path path={fillPath}>
+              <LinearGradient
+                start={vec(0, 0)}
+                end={vec(0, height)}
+                colors={colors.fillGradient}
+              />
+            </Path>
 
-        {/* Glowing Curve */}
-        <Path
-          path={curvePath}
-          style="stroke"
-          strokeWidth={3}
-          strokeJoin="round"
-          strokeCap="round"
-        >
-          <LinearGradient
-            start={vec(0, 0)}
-            end={vec(width, 0)}
-            colors={colors.lineGradient}
-          />
-          <BlurMask blur={3} style="solid" />
-        </Path>
+            {/* Glowing Curve */}
+            <Path
+              path={curvePath}
+              style="stroke"
+              strokeWidth={3}
+              strokeJoin="round"
+              strokeCap="round"
+            >
+              <LinearGradient
+                start={vec(0, 0)}
+                end={vec(width, 0)}
+                colors={colors.lineGradient}
+              />
+              <BlurMask blur={3} style="solid" />
+            </Path>
 
-        {/* Potongan kurva di atas 0 dB — overlay tanpa blur supaya warna
+            {/* Potongan kurva di atas 0 dB — overlay tanpa blur supaya warna
             peringatan terbaca jelas: kuning 0..+6 dB, merah > +6 dB. */}
-        <Path
-          path={aboveWarnPath}
-          color={GRAPH_CLIP_YELLOW}
-          style="stroke"
-          strokeWidth={3}
-          strokeJoin="round"
-          strokeCap="round"
-        />
-        <Path
-          path={aboveClipPath}
-          color={GRAPH_CLIP_RED}
-          style="stroke"
-          strokeWidth={3}
-          strokeJoin="round"
-          strokeCap="round"
-        />
-      </Canvas>
+            <Path
+              path={aboveWarnPath}
+              color={GRAPH_CLIP_YELLOW}
+              style="stroke"
+              strokeWidth={3}
+              strokeJoin="round"
+              strokeCap="round"
+            />
+            <Path
+              path={aboveClipPath}
+              color={GRAPH_CLIP_RED}
+              style="stroke"
+              strokeWidth={3}
+              strokeJoin="round"
+              strokeCap="round"
+            />
+
+            {/* Dot band aktif saat drag (r=0 saat tidak drag). */}
+            <Circle cx={dotX} cy={dotY} r={dotR} color={colors.primary} />
+          </Canvas>
+        </View>
+      </GestureDetector>
 
       {/* Peringatan boost: gain di atas 0 dB BELUM tentu clip (tergantung
           level sinyal lagu) — makanya teksnya "bisa clip", bukan "clip". */}

@@ -621,6 +621,9 @@ export default function EqualizerScreen() {
                 width={width - spacing.md * 2 - spacing.sm * 2 - 2}
                 height={140}
                 disabled={isDSPFrozen || !eq.isEQEnabled}
+                onBandChange={(index, gain) =>
+                  eq.updateBandGain(index, gain)
+                }
               />
               {(isDSPFrozen || !eq.isEQEnabled) && (
                 <Text
