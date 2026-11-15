@@ -28,7 +28,7 @@ jobs:
 
       # 3. Install dependencies
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
+        run: pnpm install --frozen-lockfile
 
       # 4. Setup Java
       - uses: actions/setup-java@v4
@@ -146,6 +146,10 @@ jobs:
       - name: Build Preview APK (Release)
         working-directory: android
         run: |
+          # 🔥 FIX (2026-11-15): pipefail — tanpa ini, exit code langkah ini
+          # adalah exit code `tee` (0) sehingga Gradle yang gagal tetap
+          # tercatat success dan baru ketahuan di langkah Upload (APK tidak ada).
+          set -o pipefail
           ./gradlew assembleRelease \
             --no-daemon \
             -PnewArchEnabled=true \
