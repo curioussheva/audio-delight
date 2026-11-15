@@ -94,6 +94,32 @@ class MediaSessionManager(private val service: PlaybackService) {
             PlaybackNativeBridge.stop()
             notifyPlaybackStateChanged()
         }
+
+        // B17-S-d: lock screen / Android Auto repeat/shuffle selama ini
+        // no-op — ACTION_SET_REPEAT_MODE / ACTION_SET_SHUFFLE_MODE sudah
+        // dideklarasikan di playbackStateBuilder tapi callback-nya tidak
+        // pernah di-override. Mapping ke kontrak native mirror
+        // updateRepeatMode/updateShuffleMode (koreksi 2026-11-11):
+        // repeat 0=off, 1=track (ONE), 2=all; shuffle true=ALL.
+        // CATATAN: tidak ada event bridge native→JS untuk perubahan
+        // repeat/shuffle dari lock screen — JS re-sync lewat jalurnya
+        // sendiri (track-change / polling). Event baru sengaja TIDAK
+        // dibuat di commit ini.
+        override fun onSetRepeatMode(repeatMode: Int) {
+            val mode = when (repeatMode) {
+                PlaybackStateCompat.REPEAT_MODE_ONE -> 1
+                PlaybackStateCompat.REPEAT_MODE_ALL -> 2
+                else -> 0
+            }
+            PlaybackNativeBridge.setRepeatMode(mode)
+            updateRepeatMode(mode)
+        }
+
+        override fun onSetShuffleMode(shuffleMode: Int) {
+            val enabled = shuffleMode == PlaybackStateCompat.SHUFFLE_MODE_ALL
+            PlaybackNativeBridge.setShuffle(enabled)
+            updateShuffleMode(enabled)
+        }
     }
 
     // Beri tahu JS kalau trek berganti dari sisi native (notification/lock
