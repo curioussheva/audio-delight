@@ -112,7 +112,15 @@ class MediaSessionManager(private val service: PlaybackService) {
 
     private val mediaSession: MediaSessionCompat =
         MediaSessionCompat(context, "PristineAudio").apply {
-            setCallback(sessionCallback)
+            // B16-M1: callback MediaSession jalan di command thread, BUKAN
+            // main looper — callback memanggil bridge yang berakhir di JNI
+            // loadTrack sinkron (risiko ANR kalau di main thread).
+            // Yang dipanggil callback di sini aman di thread ini:
+            // NotificationManager.notify dan MediaSessionCompat
+            // (setPlaybackState/setMetadata) thread-safe; emit event ke JS
+            // lewat RCTDeviceEventEmitter diantrekan ke JS thread oleh
+            // bridge; refresh artwork sudah mem-post ke main looper.
+            setCallback(sessionCallback, service.commandHandler)
             setFlags(
                 MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
                     MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS

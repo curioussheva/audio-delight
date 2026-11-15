@@ -2,6 +2,8 @@ package com.pristineaudio.playback
 
 import android.app.Service
 import android.content.Intent
+import android.os.Handler
+import android.os.HandlerThread
 import android.os.IBinder
 import android.os.PowerManager
 
@@ -24,6 +26,16 @@ class PlaybackService : Service() {
 
     private lateinit var mediaSessionManager: MediaSessionManager
 
+    // B16-M1: thread perintah kontrol media. Play/pause/next/prev/seek dan
+    // callback MediaSession TIDAK BOLEH jalan di main thread — rantai bridge
+    // berakhir di JNI loadTrack yang sinkron di bawah loadTrackMutex_
+    // (FFmpeg open; fallback content:// menyalin seluruh file), risiko ANR.
+    // Satu thread serial: perintah dieksekusi berurutan, tanpa balapan antar
+    // perintah (mis. play lalu seek langsung).
+    private lateinit var commandThread: HandlerThread
+    lateinit var commandHandler: Handler
+        private set
+
     // Wake lock parsial: menahan CPU tetap hidup saat layar mati.
     //
     // Tanpa ini, audio bisa putus saat layar mati / device masuk doze, karena
@@ -39,6 +51,10 @@ class PlaybackService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // Thread perintah harus hidup SEBELUM MediaSessionManager dibuat:
+        // MediaSessionManager memakai commandHandler untuk setCallback.
+        commandThread = HandlerThread("pristine-playback-cmd").apply { start() }
+        commandHandler = Handler(commandThread.looper)
         mediaSessionManager = MediaSessionManager(this)
         instance = this
         acquireWakeLock()
@@ -93,17 +109,30 @@ class PlaybackService : Service() {
             mediaSessionManager.refreshNotification()
         }
 
+        // Perintah kontrol media jalan di command thread (B16-M1), bukan
+        // main thread — startForeground/refreshNotification di atas tetap
+        // di main thread, itu bagian lifecycle service.
         when (intent?.action) {
-            ACTION_PLAY -> PlaybackNativeBridge.play()
-            ACTION_PAUSE -> PlaybackNativeBridge.pause()
-            ACTION_NEXT -> PlaybackNativeBridge.next()
-            ACTION_PREVIOUS -> PlaybackNativeBridge.previous()
+            ACTION_PLAY -> commandHandler.post { PlaybackNativeBridge.play() }
+            ACTION_PAUSE -> commandHandler.post { PlaybackNativeBridge.pause() }
+            ACTION_NEXT -> commandHandler.post { PlaybackNativeBridge.next() }
+            ACTION_PREVIOUS -> commandHandler.post { PlaybackNativeBridge.previous() }
             ACTION_SEEK -> {
                 val pos = intent.getLongExtra(EXTRA_SEEK_POSITION, 0L)
-                PlaybackNativeBridge.seek(pos)
+                commandHandler.post { PlaybackNativeBridge.seek(pos) }
             }
             ACTION_STOP -> {
-                // Berhenti total: lepas wake lock dan keluarkan dari foreground.
+                // STOP SINKRON, sengaja TIDAK di-post ke commandHandler (B16-M1).
+                // Kalau stop di-post lalu stopSelf() dipanggil langsung, ada
+                // jendela di mana service sudah mati tapi audio masih jalan
+                // (stop belum sempat dieksekusi). stop() sendiri murah — tidak
+                // membuka FFmpeg, hanya mengambil loadTrackMutex_ sebentar —
+                // jadi aman dijalankan di thread pemanggil (main thread).
+                // Perintah yang sudah terlanjur antre di commandHandler
+                // dibuang, supaya play/seek yang datang sesaat sebelum STOP
+                // tidak menghidupkan lagi audio setelah engine berhenti.
+                PlaybackNativeBridge.stop()
+                commandHandler.removeCallbacksAndMessages(null)
                 releaseWakeLock()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
@@ -146,6 +175,16 @@ class PlaybackService : Service() {
     // battery optimization). Wake lock harus dilepas supaya tidak jadi
     // referensi yang menggantung.
     override fun onDestroy() {
+        // Buang perintah yang masih antre supaya tidak ada play/seek yang
+        // jalan setelah service mati, lalu matikan thread perintah.
+        // CATATAN (B16-M1): sengaja TIDAK ada engine-stop di sini — itu
+        // temuan W2, dikerjakan terpisah.
+        if (::commandHandler.isInitialized) {
+            commandHandler.removeCallbacksAndMessages(null)
+        }
+        if (::commandThread.isInitialized) {
+            commandThread.quitSafely()
+        }
         releaseWakeLock()
         mediaSessionManager.release()
         if (instance == this) instance = null
