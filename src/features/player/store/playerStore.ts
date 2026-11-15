@@ -10,6 +10,13 @@ import NativePlaybackService from "@/specs/NativePlaybackService";
 import NativeDSPModule from "@/features/equalizer/api/nativeInterface";
 import { clampTuningCents } from "@/features/player/utils/tuning";
 import {
+  DEFAULT_SOLFEGEGGIO_FREQ,
+  DEFAULT_SOLFEGEGGIO_TEMPLATE_ID,
+  activeSolfeggioTemplateId,
+  clampSolfeggioFreq,
+  getSolfeggioTemplate,
+} from "@/features/equalizer/api/solfeggioTemplates";
+import {
   findSongByUri,
   isPlayingFromStatus,
   shouldCorrectDuration,
@@ -47,6 +54,8 @@ const KEYS = {
   SPEED: "playback_speed",
   TUNING_CENTS: "tuning_cents",
   RESONANCE_INTENSITY: "resonance_intensity",
+  SOLFEGGIO_FREQ: "solfeggio_freq",
+  SOLFEGGIO_TEMPLATE: "solfeggio_template",
   MODE: "audio_mode_preference",
   LAST_SONG_ID: "last_song_id",
   LAST_QUEUE_IDS: "last_queue_ids",
@@ -126,6 +135,11 @@ export interface PlayerState {
   // Intensitas master Solfeggio (0..1, default 0.5 = default native
   // ImmersiveStage). Satu nilai untuk resonansi + exciter + spatial.
   resonanceIntensity: number;
+  // Frekuensi resonator Solfeggio (Hz, default 528 = default native).
+  // Template yang dipilih user ("fokus", "tenang", …) atau "kustom" kalau
+  // frekuensi/intensitas tidak lagi cocok dengan template mana pun.
+  solfeggioFreq: number;
+  solfeggioTemplateId: string;
   audioMode: AudioMode;
   lyrics: LyricLine[];
   sleepTimerEnd: number | null;
@@ -152,6 +166,8 @@ export interface PlayerState {
   setPlaybackSpeed: (speed: number) => Promise<void>;
   setTuningCents: (cents: number) => Promise<void>;
   setResonanceIntensity: (intensity: number) => Promise<void>;
+  setSolfeggioFreq: (freq: number) => Promise<void>;
+  setSolfeggioTemplate: (id: string) => Promise<void>;
   setAudioMode: (mode: AudioMode) => Promise<void>;
   setSleepTimer: (minutes: number | null) => void;
   setCurrentSong: (song: Song | null) => void;
@@ -180,6 +196,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   playbackSpeed: 1.0,
   tuningCents: 0,
   resonanceIntensity: 0.5,
+  solfeggioFreq: DEFAULT_SOLFEGEGGIO_FREQ,
+  solfeggioTemplateId: DEFAULT_SOLFEGEGGIO_TEMPLATE_ID,
   audioMode: "dsp",
   lyrics: [],
   sleepTimerEnd: null,
@@ -196,6 +214,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         speed,
         tuningCents,
         resonanceIntensity,
+        solfeggioFreqRaw,
+        solfeggioTemplateRaw,
         mode,
         lastSongId,
         lastQueueIdsRaw,
@@ -204,22 +224,43 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           AsyncStorage.getItem(KEYS.SPEED),
           AsyncStorage.getItem(KEYS.TUNING_CENTS),
           AsyncStorage.getItem(KEYS.RESONANCE_INTENSITY),
+          AsyncStorage.getItem(KEYS.SOLFEGGIO_FREQ),
+          AsyncStorage.getItem(KEYS.SOLFEGGIO_TEMPLATE),
           AsyncStorage.getItem(KEYS.MODE),
           AsyncStorage.getItem(KEYS.LAST_SONG_ID),
           AsyncStorage.getItem(KEYS.LAST_QUEUE_IDS),
           AsyncStorage.getItem(KEYS.LAST_POSITION),
         ]);
 
+      // Frekuensi + template Solfeggio tersimpan. Template tersimpan
+      // dipakai hanya kalau masih cocok dengan frekuensi/intensitas
+      // tersimpan; kalau tidak, diturunkan dari pasangan nilainya
+      // (bisa jadi "kustom").
+      const restoredIntensity = resonanceIntensity
+        ? Math.min(1, Math.max(0, parseFloat(resonanceIntensity)))
+        : 0.5;
+      const restoredFreq = solfeggioFreqRaw
+        ? clampSolfeggioFreq(parseFloat(solfeggioFreqRaw))
+        : DEFAULT_SOLFEGEGGIO_FREQ;
+      const restoredTemplate =
+        solfeggioTemplateRaw &&
+        getSolfeggioTemplate(solfeggioTemplateRaw)?.freq === restoredFreq &&
+        getSolfeggioTemplate(solfeggioTemplateRaw)?.intensity ===
+          restoredIntensity
+          ? solfeggioTemplateRaw
+          : activeSolfeggioTemplateId(restoredFreq, restoredIntensity);
+
       set({
         ...(speed ? { playbackSpeed: parseFloat(speed) } : {}),
         ...(tuningCents ? { tuningCents: parseFloat(tuningCents) } : {}),
         ...(resonanceIntensity
           ? {
-              resonanceIntensity: Math.min(
-                1,
-                Math.max(0, parseFloat(resonanceIntensity)),
-              ),
+              resonanceIntensity: restoredIntensity,
             }
+          : {}),
+        ...(solfeggioFreqRaw ? { solfeggioFreq: restoredFreq } : {}),
+        ...(solfeggioFreqRaw || solfeggioTemplateRaw
+          ? { solfeggioTemplateId: restoredTemplate }
           : {}),
         ...(mode ? { audioMode: mode as AudioMode } : {}),
       });
@@ -828,6 +869,17 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           );
         }
 
+        // Frekuensi resonator Solfeggio tersimpan — terapkan sebelum play,
+        // pola yang sama (native default 528 Hz setelah app restart).
+        try {
+          const freq = get().solfeggioFreq;
+          if (freq !== DEFAULT_SOLFEGEGGIO_FREQ) {
+            NativeDSPModule?.setSolfeggioFreq?.(freq);
+          }
+        } catch (freqErr) {
+          console.warn("[Player] terapkan solfeggioFreq gagal:", freqErr);
+        }
+
         // Kalau native menolak (dekoder gagal), jangan tandai playing.
         try {
           await timedCall("play", () => NativePlaybackService.play());
@@ -955,8 +1007,57 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       // Sync void — rantai JNI lengkap (NativeDSPModule.cpp →
       // EngineManager → AudioEngine → AudioState); default native 0.5.
       NativeDSPModule?.setResonanceIntensity?.(clamped);
+      // Intensitas berubah -> template aktif bisa jadi "kustom".
+      const templateId = activeSolfeggioTemplateId(
+        get().solfeggioFreq,
+        clamped,
+      );
+      set({ solfeggioTemplateId: templateId });
+      await AsyncStorage.setItem(KEYS.SOLFEGGIO_TEMPLATE, templateId);
     } catch (error) {
       console.error("[Player] setResonanceIntensity failed:", error);
+    }
+  },
+
+  // Frekuensi resonator Solfeggio (Hz). Pola setResonanceIntensity:
+  // jepit 100–2000, simpan, dorong langsung ke native — live, tanpa
+  // throttle/debounce. Template aktif ikut dihitung ulang (bisa "kustom").
+  setSolfeggioFreq: async (freq: number) => {
+    try {
+      const clamped = clampSolfeggioFreq(freq);
+      set({ solfeggioFreq: clamped });
+      await AsyncStorage.setItem(KEYS.SOLFEGGIO_FREQ, clamped.toString());
+      // Sync void — rantai JNI lengkap (NativeDSPModule.cpp →
+      // EngineManager → AudioEngine → AudioState); default native 528 Hz.
+      NativeDSPModule?.setSolfeggioFreq?.(clamped);
+      const templateId = activeSolfeggioTemplateId(
+        clamped,
+        get().resonanceIntensity,
+      );
+      set({ solfeggioTemplateId: templateId });
+      await AsyncStorage.setItem(KEYS.SOLFEGGIO_TEMPLATE, templateId);
+    } catch (error) {
+      console.error("[Player] setSolfeggioFreq failed:", error);
+    }
+  },
+
+  // Pilih template Solfeggio: atur frekuensi + intensitas template, live
+  // ke native (lewat setSolfeggioFreq / setResonanceIntensity), lalu
+  // simpan id template-nya. Template hanya titik awal — mengubah slider
+  // atau frekuensi sesudahnya membuat template aktif jadi "kustom".
+  setSolfeggioTemplate: async (id: string) => {
+    try {
+      const template = getSolfeggioTemplate(id);
+      if (!template) {
+        console.warn("[Player] setSolfeggioTemplate: id tak dikenal:", id);
+        return;
+      }
+      await get().setSolfeggioFreq(template.freq);
+      await get().setResonanceIntensity(template.intensity);
+      set({ solfeggioTemplateId: template.id });
+      await AsyncStorage.setItem(KEYS.SOLFEGGIO_TEMPLATE, template.id);
+    } catch (error) {
+      console.error("[Player] setSolfeggioTemplate failed:", error);
     }
   },
 

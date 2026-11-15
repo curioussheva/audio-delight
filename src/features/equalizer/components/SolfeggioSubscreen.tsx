@@ -1,15 +1,29 @@
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, Pressable } from "react-native";
 import Slider from "@react-native-community/slider";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { accentOn } from "@/shared/utils/contrast";
 import { MODE_INFO } from "@/features/equalizer/api/modeInfo";
+import {
+  CUSTOM_TEMPLATE_ID,
+  SOLFEGGIO_FREQ_MAX,
+  SOLFEGGIO_FREQ_MIN,
+  SOLFEGGIO_TEMPLATES,
+  getSolfeggioTemplate,
+} from "@/features/equalizer/api/solfeggioTemplates";
 import { TuningControl } from "@/features/player/components/TuningControl";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 
 /**
- * Subscreen Solfeggio (mode immersive): tuning + intensitas master.
+ * Subscreen Solfeggio (mode immersive): template + tuning + intensitas master.
  *
+ * - Template: 7 frekuensi Solfeggio (396–963 Hz), masing-masing dengan
+ *   intensitas default. Memilih template mengatur frekuensi + intensitas,
+ *   live ke NativeDSPModule lewat playerStore. Template hanya titik awal:
+ *   mengubah slider intensitas atau frekuensi sesudahnya membuat template
+ *   aktif jadi "Kustom". Asosiasi ditulis sebagai atribusi tradisional,
+ *   bukan klaim medis/penyembuhan.
+ * - Frekuensi: slider 100–2000 Hz (jepit di store) untuk pilihan kustom.
  * - Tuning: TuningControl bersama (dipakai juga settings) — preset A=440 /
  *   A=432, stepper ±5 sen, nonaktif di Bit-Perfect.
  * - Intensitas: slider master 0–100% (resonansi + exciter + spatial
@@ -23,6 +37,10 @@ export function SolfeggioSubscreen() {
   const { colors, spacing } = theme;
   const resonanceIntensity = usePlayerStore((s) => s.resonanceIntensity);
   const setResonanceIntensity = usePlayerStore((s) => s.setResonanceIntensity);
+  const solfeggioFreq = usePlayerStore((s) => s.solfeggioFreq);
+  const solfeggioTemplateId = usePlayerStore((s) => s.solfeggioTemplateId);
+  const setSolfeggioFreq = usePlayerStore((s) => s.setSolfeggioFreq);
+  const setSolfeggioTemplate = usePlayerStore((s) => s.setSolfeggioTemplate);
 
   const info = MODE_INFO.immersive;
   // Nilai % sebagai teks aksen — pola Equalizer: aksen dipakai selama
@@ -33,6 +51,9 @@ export function SolfeggioSubscreen() {
     [colors.text.primary, colors.text.secondary],
   );
 
+  const activeTemplate = getSolfeggioTemplate(solfeggioTemplateId);
+  const isCustom = solfeggioTemplateId === CUSTOM_TEMPLATE_ID;
+
   return (
     <View
       style={[styles.wrap, { marginHorizontal: spacing.md, gap: spacing.md }]}
@@ -40,6 +61,117 @@ export function SolfeggioSubscreen() {
       <Text style={[styles.description, { color: colors.text.secondary }]}>
         {info.description}
       </Text>
+
+      {/* Template Solfeggio */}
+      <View
+        style={[
+          styles.card,
+          {
+            backgroundColor: colors.background.secondary,
+            borderColor: colors.border.medium,
+            padding: spacing.md,
+          },
+        ]}
+      >
+        <View style={styles.rowBetween}>
+          <Text style={[styles.cardTitle, { color: colors.text.primary }]}>
+            Template Solfeggio
+          </Text>
+          <Text style={[styles.value, { color: accentOnSecondary }]}>
+            {isCustom ? "Kustom" : activeTemplate?.name}
+          </Text>
+        </View>
+        <Text style={[styles.cardHint, { color: colors.text.tertiary }]}>
+          Pilih frekuensi + intensitas awal. Mengubah slider di bawah
+          sesudahnya tidak mengunci template — status jadi Kustom.
+        </Text>
+        <View style={[styles.chipGrid, { marginTop: spacing.sm }]}>
+          {SOLFEGGIO_TEMPLATES.map((template) => {
+            const active = template.id === solfeggioTemplateId;
+            return (
+              <Pressable
+                key={template.id}
+                onPress={() => setSolfeggioTemplate(template.id)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`Template ${template.name}, ${template.freq} Hz`}
+                style={[
+                  styles.chip,
+                  {
+                    borderColor: active
+                      ? colors.primary[500]
+                      : colors.border.medium,
+                    borderWidth: active ? 2 : 1,
+                    backgroundColor: active
+                      ? colors.background.tertiary
+                      : colors.background.secondary,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.chipName,
+                    {
+                      color: colors.text.primary,
+                      fontWeight: active ? "800" : "700",
+                    },
+                  ]}
+                >
+                  {template.name}
+                </Text>
+                <Text
+                  style={[styles.chipFreq, { color: colors.text.secondary }]}
+                >
+                  {template.freq} Hz
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={[styles.cardHint, { color: colors.text.tertiary }]}>
+          {isCustom
+            ? "Kustom — frekuensi atau intensitas diubah dari template."
+            : activeTemplate?.association}
+        </Text>
+      </View>
+
+      {/* Frekuensi resonator */}
+      <View
+        style={[
+          styles.card,
+          {
+            backgroundColor: colors.background.secondary,
+            borderColor: colors.border.medium,
+            padding: spacing.md,
+          },
+        ]}
+      >
+        <View style={styles.rowBetween}>
+          <Text style={[styles.cardTitle, { color: colors.text.primary }]}>
+            Frekuensi
+          </Text>
+          <Text style={[styles.value, { color: accentOnSecondary }]}>
+            {Math.round(solfeggioFreq)} Hz
+          </Text>
+        </View>
+        <Slider
+          style={styles.slider}
+          minimumValue={SOLFEGGIO_FREQ_MIN}
+          maximumValue={SOLFEGGIO_FREQ_MAX}
+          step={1}
+          value={solfeggioFreq}
+          onValueChange={setSolfeggioFreq}
+          minimumTrackTintColor={colors.primary[500]}
+          maximumTrackTintColor={colors.background.tertiary}
+          thumbTintColor={colors.primary[500]}
+          accessibilityLabel="Frekuensi Solfeggio"
+          accessibilityRole="adjustable"
+        />
+        <Text style={[styles.cardHint, { color: colors.text.tertiary }]}>
+          Frekuensi resonator — pilih template di atas atau geser sendiri
+          (100–2000 Hz).
+        </Text>
+      </View>
 
       {/* Tuning (Nada Dasar) */}
       <View
@@ -144,6 +276,27 @@ const styles = StyleSheet.create({
   slider: {
     width: "100%",
     height: 40,
+  },
+  chipGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  chip: {
+    flexGrow: 1,
+    flexBasis: "30%",
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    alignItems: "center",
+  },
+  chipName: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  chipFreq: {
+    fontSize: 11,
+    marginTop: 2,
   },
   note: {
     fontSize: 12,
