@@ -92,6 +92,12 @@ class PlaybackService : Service() {
     private var isForegroundStarted = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // B16-P2: service mengembalikan START_STICKY, jadi setelah proses
+        // dimatikan sistem me-restart service dengan intent null. Tanpa
+        // guard ini, restart itu menjalankan startForeground() +
+        // acquireWakeLock() padahal tidak ada antrean/engine — notifikasi
+        // hantu (tombol Play dengan default idle). Matikan sebelum apa pun.
+        if (intent == null) { stopSelf(); return START_NOT_STICKY }
         // startForeground() dipanggil SETIAP kali service di-start ulang oleh
         // sistem, bukan hanya sekali. Setelah proses dimatikan dan di-restart
         // dengan START_STICKY, service WAJIB memanggil startForeground() lagi
