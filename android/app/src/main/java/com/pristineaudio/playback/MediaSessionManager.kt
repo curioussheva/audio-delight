@@ -27,6 +27,11 @@ class MediaSessionManager(private val service: PlaybackService) {
     private var lastIsPlaying: Boolean = false
     private var lastArtwork: android.graphics.Bitmap? = null
 
+    // Turunan 256px dari lastArtwork untuk setLargeIcon notifikasi — dibuat
+    // sekali saat artwork selesai di-decode, bukan di-scale ulang tiap
+    // buildNotification(). Dibersihkan bersama lastArtwork.
+    private var lastArtworkIcon: android.graphics.Bitmap? = null
+
     // Executor untuk decode artwork (IO + bitmap decode butuh background thread).
     // Single-threaded: decode artwork tidak butuh paralel, dan urutan tetap.
     private val artworkExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
@@ -42,9 +47,14 @@ class MediaSessionManager(private val service: PlaybackService) {
     @Volatile
     private var released = false
 
-    // Artwork di-downscale ke maksimum sisi ini untuk notifikasi (px).
+    // Artwork di-decode sekali pada ukuran metadata (1024px), lalu ikon
+    // notifikasi 256px diturunkan dari bitmap itu tanpa baca ulang disk.
+    // Dua ukuran karena dua pemakaian: METADATA_KEY_ART tampil besar di
+    // lock screen (320px terlalu kecil/blur), sedangkan setLargeIcon
+    // notifikasi cukup 256px — bitmap 1024px di sana boros memory.
     // Full-res album art bisa ribuan px — boros memory dan lambat.
-    private val ARTWORK_MAX_DIM = 320
+    private val ARTWORK_METADATA_MAX_DIM = 1024
+    private val ARTWORK_LARGE_ICON_MAX_DIM = 256
 
     private val sessionCallback = object : MediaSessionCompat.Callback() {
         override fun onPlay() {
@@ -202,7 +212,9 @@ class MediaSessionManager(private val service: PlaybackService) {
         // supaya tidak tampil di notifikasi/lock screen track ini. Metadata
         // yang dibangun di bawah tidak membawa bitmap, dan buildNotification()
         // sudah skip setLargeIcon saat lastArtwork null.
+        // Ikon 256px dibersihkan bersama bitmap metadata-nya.
         lastArtwork = null
+        lastArtworkIcon = null
 
         // Naikkan id permintaan; task decode membawa id ini + nilai
         // title/artist/album/duration yang DITANGKAP saat submit (parameter
@@ -309,7 +321,9 @@ class MediaSessionManager(private val service: PlaybackService) {
         durationMs: Long,
     ) {
         try {
-            val bmp = decodeBitmapSafely(uri)
+            // Decode sekali pada ukuran metadata (1024px); ikon notifikasi
+            // diturunkan dari bitmap ini, tanpa baca ulang disk.
+            val bmp = decodeBitmapSafely(uri, ARTWORK_METADATA_MAX_DIM)
             if (bmp != null) {
                 if (requestId != artworkRequestId.get()) {
                     // Stale: track sudah berganti selagi decode berjalan.
@@ -318,6 +332,7 @@ class MediaSessionManager(private val service: PlaybackService) {
                     return
                 }
                 lastArtwork = bmp
+                lastArtworkIcon = downscaleToMaxDim(bmp, ARTWORK_LARGE_ICON_MAX_DIM)
 
                 // Update metadata dengan artwork. putBitmap butuh ukuran
                 // yang wajar — biarkan sistem menangani scaling.
@@ -347,9 +362,26 @@ class MediaSessionManager(private val service: PlaybackService) {
         }
     }
 
+    // Downscale bitmap ke sisi terpanjang <= maxDim, jaga aspect ratio.
+    // Kalau sudah cukup kecil, kembalikan bitmap yang sama (tanpa salinan).
+    private fun downscaleToMaxDim(
+        src: android.graphics.Bitmap,
+        maxDim: Int,
+    ): android.graphics.Bitmap {
+        val maxSide = maxOf(src.width, src.height)
+        if (maxSide <= maxDim) return src
+        val scale = maxDim.toFloat() / maxSide
+        return android.graphics.Bitmap.createScaledBitmap(
+            src,
+            (src.width * scale).toInt().coerceAtLeast(1),
+            (src.height * scale).toInt().coerceAtLeast(1),
+            true,
+        )
+    }
+
     // Decode + downscale. Bitmap full-res dari album art bisa 4000x4000;
-    // notifikasi tidak butuh lebih dari ~320px sisi terpanjang.
-    private fun decodeBitmapSafely(uri: String): android.graphics.Bitmap? {
+    // ukuran maksimum sisi terpanjang diatur pemanggil lewat maxDim.
+    private fun decodeBitmapSafely(uri: String, maxDim: Int): android.graphics.Bitmap? {
         return try {
             val resolver = context.contentResolver
             val opts = android.graphics.BitmapFactory.Options().apply {
@@ -368,10 +400,10 @@ class MediaSessionManager(private val service: PlaybackService) {
 
             if (opts.outWidth <= 0 || opts.outHeight <= 0) return null
 
-            // Hitung sample size supaya sisi terpanjang <= 320px.
-            val maxDim = maxOf(opts.outWidth, opts.outHeight)
+            // Hitung sample size supaya sisi terpanjang <= maxDim.
+            val maxDimSide = maxOf(opts.outWidth, opts.outHeight)
             var sampleSize = 1
-            while (maxDim / sampleSize > ARTWORK_MAX_DIM) {
+            while (maxDimSide / sampleSize > maxDim) {
                 sampleSize *= 2
             }
 
@@ -430,8 +462,10 @@ class MediaSessionManager(private val service: PlaybackService) {
 
         // 🔥 Artwork: gambar album di notifikasi (large icon) + lock screen.
         // lastArtwork di-set async oleh loadArtwork; null = belum ada artwork.
-        lastArtwork?.let { bmp ->
-            builder.setLargeIcon(bmp)
+        // Large icon memakai turunan 256px yang di-cache (lastArtworkIcon),
+        // bukan bitmap metadata 1024px — dan tidak di-scale ulang tiap refresh.
+        lastArtworkIcon?.let { icon ->
+            builder.setLargeIcon(icon)
         }
 
         builder.setStyle(
