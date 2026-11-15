@@ -286,6 +286,18 @@ JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeS
     });
 }
 
+// B17-S-c (2026-11-15): getter laju playback aktual untuk MediaSession.
+// MediaSessionManager.applyPlaybackState() dulu hardcode 1.0f di setState,
+// jadi scrubber lock screen meleset saat laju 1.5x. 1.0f juga fallback
+// kalau controller null (defensif, sama seperti guard setter di atas).
+JNIEXPORT jfloat JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeGetPlaybackRate(JNIEnv* env, jobject) {
+    return pristine::jni::guarded<jfloat>(env, "nativeGetPlaybackRate", 1.0f, [&]() -> jfloat {
+    auto* controller = getController();
+    if (!controller) return 1.0f;
+    return controller->playbackRate();
+    });
+}
+
 // 🔥 FASE R (2026-11-11): retune — rasio pitch (1.0 = A=440, 432/440 = A=432).
 JNIEXPORT void JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nativeSetPitchRatio(JNIEnv* env, jobject, jfloat ratio) {
     pristine::jni::guardedVoid(env, "nativeSetPitchRatio", [&] {

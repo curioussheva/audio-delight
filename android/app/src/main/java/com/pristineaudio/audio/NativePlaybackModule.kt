@@ -117,6 +117,8 @@ class NativePlaybackModule(
     private external fun nativeSetShuffle(enabled: Boolean)
     private external fun nativeSetRepeatMode(mode: Int)
     private external fun nativeSetPlaybackRate(rate: Float)
+    // B17-S-c (2026-11-15): laju playback aktual untuk MediaSession.setState.
+    private external fun nativeGetPlaybackRate(): Float
     // 🔥 FASE R (2026-11-11): retune — rasio pitch (1.0 = A=440).
     private external fun nativeSetPitchRatio(ratio: Float)
     private external fun nativeGetQueue(): Array<String>
@@ -274,6 +276,9 @@ class NativePlaybackModule(
     fun setShuffleFromService(enabled: Boolean) { if (ensureNativeReady()) nativeSetShuffle(enabled) }
     fun setRepeatModeFromService(mode: Int) { if (ensureNativeReady()) nativeSetRepeatMode(mode) }
     fun setPlaybackRateFromService(rate: Float) { if (ensureNativeReady()) nativeSetPlaybackRate(rate) }
+    // B17-S-c (2026-11-15): laju playback aktual (native = source of truth,
+    // benar juga saat headless). 1.0f kalau native belum siap.
+    fun getPlaybackRateFromService(): Float = if (ensureNativeReady()) nativeGetPlaybackRate() else 1.0f
     fun setPitchRatioFromService(ratio: Float) { if (ensureNativeReady()) nativeSetPitchRatio(ratio) }
     fun getQueueFromService(): Array<String> = if (ensureNativeReady()) nativeGetQueue() else emptyArray()
     fun setQueueFromService(uris: Array<String>, sampleRates: IntArray = IntArray(uris.size), startIndex: Int = 0) {

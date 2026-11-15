@@ -121,6 +121,12 @@ object PlaybackNativeBridge {
     return NativePlaybackModule.instance?.getPositionFromService()?.toLong() ?: 0L
     }
 
+    // B17-S-c (2026-11-15): laju playback aktual untuk MediaSession.setState
+    // (MediaSessionManager.applyPlaybackState). 1.0f kalau instance null.
+    fun getPlaybackRate(): Float {
+        return NativePlaybackModule.instance?.getPlaybackRateFromService() ?: 1.0f
+    }
+
     fun getStatus(): Int {
     return NativePlaybackModule.instance?.getStatusFromService() ?: 0
     }

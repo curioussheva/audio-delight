@@ -305,12 +305,22 @@ class MediaSessionManager(private val service: PlaybackService) {
     }
 
     private fun applyPlaybackState(isPlaying: Boolean, positionMs: Long) {
+        // B17-S-c (2026-11-15): rate aktual dari native, bukan hardcode 1.0f
+        // (dulu scrubber lock screen meleset saat laju 1.5x). Fallback 1.0f
+        // kalau bridge throw / modul belum siap — applyPlaybackState jalan
+        // di command thread + jalur JS, jadi tidak boleh throw.
+        val rate = try {
+            PlaybackNativeBridge.getPlaybackRate()
+        } catch (e: Exception) {
+            android.util.Log.w("MediaSessionManager", "applyPlaybackState: rate fallback 1.0f: ${e.message}")
+            1.0f
+        }
         val state = playbackStateBuilder
             .setState(
                 if (isPlaying) PlaybackStateCompat.STATE_PLAYING
                 else PlaybackStateCompat.STATE_PAUSED,
                 positionMs,
-                1.0f
+                rate
             )
             .build()
 
