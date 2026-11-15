@@ -55,7 +55,7 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     private external fun setNativeBrainwaveFreq(freq: Float)
     private external fun setNativeResonanceIntensity(intensity: Float)
 
-    // Ã°ÂÂÂ¥ Mode pemrosesan (BitPerfect=0, DSP=1, Immersive=2).
+    // 🔥 Mode pemrosesan (BitPerfect=0, DSP=1, Immersive=2).
     //
     // JNI-nya sudah ada sejak lama (NativeDSPModule.cpp) tapi TIDAK PERNAH
     // di-expose ke Kotlin, sehingga mode ketiga mustahil dipilih dari JS.
@@ -149,7 +149,7 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     fun setVirtualizer(strength: Float, sessionId: Int, promise: Promise) {
         if (!engineAvailable) { promise.resolve(false); return }
         try {
-            // �� FIX (2026-10-10): slider ini bernama "WIDTH" di UI, jadi harus
+            // 🔥 FIX (2026-10-10): slider ini bernama "WIDTH" di UI, jadi harus
             // benar-benar MELEBARKAN.
             //
             // `StereoWidener` (dsp/StereoWidener.h) memakai skala:

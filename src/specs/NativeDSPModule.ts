@@ -42,8 +42,8 @@ export interface Spec extends TurboModule {
   setBalance(balance: number): void;
   setExclusiveMode(enabled: boolean): void;
 
-  // ð¥ Status stream AKTUAL, bukan yang diminta.
-  // AAudio bisa menolak exclusive â Oboe fallback ke shared secara diam-diam.
+  // 🔥 Status stream AKTUAL, bukan yang diminta.
+  // AAudio bisa menolak exclusive → Oboe fallback ke shared secara diam-diam.
   // isExclusiveModeActive() false meski setExclusiveMode(true) dipanggil.
   // getActualSampleRate() = laju stream yang benar-benar dibuka Oboe.
   // Sinkron supaya satu read atomic (stop/start stream di tengah bisa kasih

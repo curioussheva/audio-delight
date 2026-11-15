@@ -389,8 +389,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       const emitter = new NativeEventEmitter(NativePlaybackService);
       const subscription = emitter.addListener(
         "onPlaybackTrackChanged",
-        async (payload: { uri: string; index: number } | string) => {
-          // Payload bisa berupa Pair (Android) atau string polos.
+        async (payload: { uri: string; index: number }) => {
+          // Payload selalu WritableMap {uri, index} dari
+          // PlaybackNativeBridge.emitTrackChanged (B15-K-b); dulu
+          // androidx Pair yang ditolak Arguments.fromJavaArgs.
           console.log("[Player] 🔀 native track-changed event:", payload);
           await get().syncFromNative();
         },

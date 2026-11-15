@@ -84,7 +84,7 @@ export class AudioEngine {
 
     try {
       NativeDSPModule?.setProcessingMode?.(value);
-      console.log(`ðï¸ [AudioEngine] Mode pemrosesan -> ${mode} (${value})`);
+      console.log(`🎛️ [AudioEngine] Mode pemrosesan -> ${mode} (${value})`);
     } catch (e) {
       console.warn("[AudioEngine] setProcessingMode gagal:", e);
     }
