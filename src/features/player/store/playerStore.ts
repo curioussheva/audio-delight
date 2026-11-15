@@ -7,6 +7,8 @@ import { Song } from "@/shared/types/audio";
 import { LibraryScanner } from "@/features/library/api/scanner";
 import { SongQueries, db } from "@/shared/lib/sqlite";
 import NativePlaybackService from "@/specs/NativePlaybackService";
+import NativeDSPModule from "@/features/equalizer/api/nativeInterface";
+import { clampTuningCents } from "@/features/player/utils/tuning";
 import {
   findSongByUri,
   isPlayingFromStatus,
@@ -44,6 +46,7 @@ export type AudioMode = "bit-perfect" | "dsp" | "immersive";
 const KEYS = {
   SPEED: "playback_speed",
   TUNING_CENTS: "tuning_cents",
+  RESONANCE_INTENSITY: "resonance_intensity",
   MODE: "audio_mode_preference",
   LAST_SONG_ID: "last_song_id",
   LAST_QUEUE_IDS: "last_queue_ids",
@@ -120,6 +123,9 @@ export interface PlayerState {
   repeat: RepeatMode;
   playbackSpeed: number;
   tuningCents: number;
+  // Intensitas master Solfeggio (0..1, default 0.5 = default native
+  // ImmersiveStage). Satu nilai untuk resonansi + exciter + spatial.
+  resonanceIntensity: number;
   audioMode: AudioMode;
   lyrics: LyricLine[];
   sleepTimerEnd: number | null;
@@ -145,6 +151,7 @@ export interface PlayerState {
   toggleRepeat: () => void;
   setPlaybackSpeed: (speed: number) => Promise<void>;
   setTuningCents: (cents: number) => Promise<void>;
+  setResonanceIntensity: (intensity: number) => Promise<void>;
   setAudioMode: (mode: AudioMode) => Promise<void>;
   setSleepTimer: (minutes: number | null) => void;
   setCurrentSong: (song: Song | null) => void;
@@ -172,6 +179,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   repeat: "off",
   playbackSpeed: 1.0,
   tuningCents: 0,
+  resonanceIntensity: 0.5,
   audioMode: "dsp",
   lyrics: [],
   sleepTimerEnd: null,
@@ -184,10 +192,18 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   // ── Initialization ───────────────────────────────────────────────────────
   initStore: async () => {
     try {
-      const [speed, tuningCents, mode, lastSongId, lastQueueIdsRaw, lastPositionRaw] =
-        await Promise.all([
+      const [
+        speed,
+        tuningCents,
+        resonanceIntensity,
+        mode,
+        lastSongId,
+        lastQueueIdsRaw,
+        lastPositionRaw,
+      ] = await Promise.all([
           AsyncStorage.getItem(KEYS.SPEED),
           AsyncStorage.getItem(KEYS.TUNING_CENTS),
+          AsyncStorage.getItem(KEYS.RESONANCE_INTENSITY),
           AsyncStorage.getItem(KEYS.MODE),
           AsyncStorage.getItem(KEYS.LAST_SONG_ID),
           AsyncStorage.getItem(KEYS.LAST_QUEUE_IDS),
@@ -197,6 +213,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       set({
         ...(speed ? { playbackSpeed: parseFloat(speed) } : {}),
         ...(tuningCents ? { tuningCents: parseFloat(tuningCents) } : {}),
+        ...(resonanceIntensity
+          ? {
+              resonanceIntensity: Math.min(
+                1,
+                Math.max(0, parseFloat(resonanceIntensity)),
+              ),
+            }
+          : {}),
         ...(mode ? { audioMode: mode as AudioMode } : {}),
       });
 
@@ -789,6 +813,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           console.warn("[Player] terapkan tuningCents gagal:", tuneErr);
         }
 
+        // Intensitas master Solfeggio tersimpan — terapkan sebelum play,
+        // pola yang sama dengan tuning di atas (native default 0.5
+        // setelah app restart).
+        try {
+          const intensity = get().resonanceIntensity;
+          if (intensity !== 0.5) {
+            NativeDSPModule?.setResonanceIntensity?.(intensity);
+          }
+        } catch (intensityErr) {
+          console.warn(
+            "[Player] terapkan resonanceIntensity gagal:",
+            intensityErr,
+          );
+        }
+
         // Kalau native menolak (dekoder gagal), jangan tandai playing.
         try {
           await timedCall("play", () => NativePlaybackService.play());
@@ -893,7 +932,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setTuningCents: async (cents: number) => {
     try {
       // ±100 sen = rasio 0.944–1.059 (jauh di dalam rentang native 0.5–2.0).
-      const clamped = Math.max(-100, Math.min(100, cents));
+      const clamped = clampTuningCents(cents);
       set({ tuningCents: clamped });
       await AsyncStorage.setItem(KEYS.TUNING_CENTS, clamped.toString());
       // 🔥 FASE R (2026-11-11): retune — sen diubah ke rasio (2^(sen/1200))
@@ -902,6 +941,22 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       await audioEngine.setPitchRatio(Math.pow(2, clamped / 1200));
     } catch (error) {
       console.error("[Player] setTuningCents failed:", error);
+    }
+  },
+
+  // Intensitas master Solfeggio (0..1). Pola setBassBoost
+  // (equalizerStore): jepit, simpan, dorong langsung ke native — live,
+  // tanpa throttle/debounce.
+  setResonanceIntensity: async (intensity: number) => {
+    try {
+      const clamped = Math.min(1, Math.max(0, intensity));
+      set({ resonanceIntensity: clamped });
+      await AsyncStorage.setItem(KEYS.RESONANCE_INTENSITY, clamped.toString());
+      // Sync void — rantai JNI lengkap (NativeDSPModule.cpp →
+      // EngineManager → AudioEngine → AudioState); default native 0.5.
+      NativeDSPModule?.setResonanceIntensity?.(clamped);
+    } catch (error) {
+      console.error("[Player] setResonanceIntensity failed:", error);
     }
   },
 

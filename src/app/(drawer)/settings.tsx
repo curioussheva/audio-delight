@@ -40,6 +40,7 @@ import { pickReadable, accentOn, AA_NORMAL } from "@/shared/utils/contrast";
 import { useAudioOutput } from "@/features/hardware/hooks/useAudioOutput";
 import { useDSPProcessingGate } from "@/features/hardware/hooks/useDSPProcessingGate";
 import { usePlayerStore } from "@/features/player/store/playerStore";
+import { TuningControl } from "@/features/player/components/TuningControl";
 import { useBitPerfectStatus } from "@/features/player/hooks/useBitPerfectStatus";
 import { ThemePicker } from "@/shared/components/ui/ThemePicker";
 import type { Theme } from "@/constants/themes/types";
@@ -187,12 +188,6 @@ export default function SettingsScreen() {
   const { theme, isDarkMode, toggleTheme, setTheme } = useTheme();
   const { colors, spacing } = theme;
 
-  // Teks di atas permukaan primary[500] — dipilih dari luminansi primary
-  // (putih 2,24:1 di Noir, hitam 9,37:1), bukan hardcoded "#fff".
-  const onPrimary =
-    pickReadable(["#FFFFFF", "#000000"], colors.primary[500], AA_NORMAL) ??
-    "#FFFFFF";
-
   // Aksen sebagai TEKS/IKON — pola Equalizer: aksen dipakai selama terbaca di
   // atas permukaan, jatuh ke warna teks bila tidak. primary[500] mentah
   // gagal 4,5 di 9/22 tema (teks) dan gagal 3,0 di 8 tema (ikon).
@@ -267,7 +262,6 @@ export default function SettingsScreen() {
   const {
     playbackSpeed,
     setPlaybackSpeed,
-    tuningCents,
     setTuningCents,
     audioMode, // <--- Add this
     setAudioMode, // <--- Add this
@@ -414,16 +408,8 @@ export default function SettingsScreen() {
 
   // 🔥 FASE R (2026-11-11): retune — preset tuning + geser halus ±5 sen.
   // -31.77 sen = A=432 (Verdi): 1200*log2(432/440). Store men-clamp ±100 sen.
-  const handleTuningPreset = (cents: number) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setTuningCents(cents);
-  };
-
-  const handleTuningChange = (delta: number) => {
-    const current = tuningCents ?? 0;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setTuningCents(current + delta);
-  };
+  // UI-nya pindah ke TuningControl (dipakai settings + subscreen Solfeggio);
+  // reset-all di bawah tetap memakai setTuningCents(0) langsung.
 
   // Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Mode selector Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   //
@@ -1171,155 +1157,8 @@ export default function SettingsScreen() {
             Verdi). Tidak berlaku di mode Bit-Perfect.
           </Text>
         </View>
-        <View
-          style={{
-            alignItems: "flex-end",
-            gap: 6,
-            opacity: audioMode === "bit-perfect" ? 0.4 : 1,
-          }}
-        >
-          <View style={{ flexDirection: "row", gap: 6 }}>
-            <TouchableOpacity
-              onPress={() => handleTuningPreset(0)}
-              disabled={audioMode === "bit-perfect"}
-              style={{
-                paddingHorizontal: 10,
-                paddingVertical: 6,
-                borderRadius: 8,
-                backgroundColor:
-                  Math.abs(tuningCents ?? 0) < 0.5
-                    ? colors.primary[500]
-                    : colors.background.tertiary,
-              }}
-            >
-              <Text
-                style={{
-                  color:
-                    Math.abs(tuningCents ?? 0) < 0.5
-                      ? onPrimary
-                      : colors.text.primary,
-                  fontSize: 13,
-                  fontWeight: "700",
-                }}
-              >
-                A=440
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() =>
-                handleTuningPreset(1200 * Math.log2(432 / 440))
-              }
-              disabled={audioMode === "bit-perfect"}
-              style={{
-                paddingHorizontal: 10,
-                paddingVertical: 6,
-                borderRadius: 8,
-                backgroundColor:
-                  Math.abs((tuningCents ?? 0) + 31.77) < 0.5
-                    ? colors.primary[500]
-                    : colors.background.tertiary,
-              }}
-            >
-              <Text
-                style={{
-                  color:
-                    Math.abs((tuningCents ?? 0) + 31.77) < 0.5
-                      ? onPrimary
-                      : colors.text.primary,
-                  fontSize: 13,
-                  fontWeight: "700",
-                }}
-              >
-                A=432
-              </Text>
-            </TouchableOpacity>
-          </View>
-          <View
-            style={{ flexDirection: "row", alignItems: "center", gap: 2 }}
-          >
-            <TouchableOpacity
-              onPress={() => handleTuningChange(-5)}
-              disabled={
-                audioMode === "bit-perfect" || (tuningCents ?? 0) <= -100
-              }
-              accessibilityRole="button"
-              accessibilityLabel="Turunkan tuning 5 sen"
-              style={{
-                // U-P2-01: 32×32 lama, di bawah 44dp.
-                width: 44,
-                height: 44,
-                borderRadius: 8,
-                backgroundColor: colors.background.tertiary,
-                justifyContent: "center",
-                alignItems: "center",
-                opacity: (tuningCents ?? 0) <= -100 ? 0.3 : 1,
-              }}
-            >
-              <Text
-                style={{
-                  color: colors.text.primary,
-                  fontSize: 18,
-                  lineHeight: 20,
-                }}
-              >
-                −
-              </Text>
-            </TouchableOpacity>
-            <View
-              style={{
-                minWidth: 92,
-                alignItems: "center",
-                paddingHorizontal: 4,
-              }}
-            >
-              <Text
-                style={{
-                  color: accentOnSecondary,
-                  fontWeight: "800",
-                  fontSize: 13,
-                }}
-              >
-                A=
-                {(440 * Math.pow(2, (tuningCents ?? 0) / 1200)).toFixed(1)}{" "}
-                Hz
-              </Text>
-              <Text
-                style={{ color: colors.text.tertiary, fontSize: 11 }}
-              >
-                {(tuningCents ?? 0) > 0 ? "+" : ""}
-                {(tuningCents ?? 0).toFixed(1)} sen
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => handleTuningChange(5)}
-              disabled={
-                audioMode === "bit-perfect" || (tuningCents ?? 0) >= 100
-              }
-              accessibilityRole="button"
-              accessibilityLabel="Naikkan tuning 5 sen"
-              style={{
-                // U-P2-01: 32×32 lama, di bawah 44dp.
-                width: 44,
-                height: 44,
-                borderRadius: 8,
-                backgroundColor: colors.background.tertiary,
-                justifyContent: "center",
-                alignItems: "center",
-                opacity: (tuningCents ?? 0) >= 100 ? 0.3 : 1,
-              }}
-            >
-              <Text
-                style={{
-                  color: colors.text.primary,
-                  fontSize: 18,
-                  lineHeight: 20,
-                }}
-              >
-                +
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        {/* Kontrolnya di TuningControl — dipakai juga subscreen Solfeggio. */}
+        <TuningControl style={{ alignItems: "flex-end" }} />
       </SettingRow>
 
       {/* ── EQ Picker Modal ──────────────────────────────────────────────── */}
