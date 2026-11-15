@@ -9,6 +9,7 @@
 
 #include "playback/TrackQueue.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -207,6 +208,74 @@ static void test_currentIndexAfterSetTracks() {
     );
 }
 
+// B16-T3 (2026-11-15): activeSizeLocked() O(1) — ukuran queue aktif
+// harus selalu == size(), shuffle ON maupun OFF, termasuk sesudah
+// setTracks dengan keepCurrentUri true/false. activeSizeLocked() sendiri
+// private, jadi yang diuji adalah perilaku publik yang memakainya:
+// activeTracks().size() + batas jumpTo().
+static void test_activeSizeEqualsTrackCount() {
+    TrackQueue q;
+
+    // Queue kosong.
+    ASSERT_TRUE(q.activeTracks().empty(), "activeSize: queue kosong -> 0");
+    ASSERT_TRUE(!q.jumpTo(0), "activeSize: jumpTo(0) gagal di queue kosong");
+
+    q.setTracks(makeQueue(10));
+    ASSERT_TRUE(
+        q.activeTracks().size() == q.size(),
+        "activeSize: shuffle OFF == size()"
+    );
+    ASSERT_TRUE(q.jumpTo(9), "activeSize: jumpTo(size-1) OK shuffle OFF");
+    ASSERT_TRUE(!q.jumpTo(10), "activeSize: jumpTo(size) ditolak shuffle OFF");
+
+    q.setShuffleMode(ShuffleMode::On);
+    ASSERT_TRUE(
+        q.activeTracks().size() == q.size(),
+        "activeSize: shuffle ON == size()"
+    );
+    ASSERT_TRUE(q.jumpTo(9), "activeSize: jumpTo(size-1) OK shuffle ON");
+    ASSERT_TRUE(!q.jumpTo(10), "activeSize: jumpTo(size) ditolak shuffle ON");
+
+    // setTracks keepCurrentUri=true: trek yang sedang main (track-3)
+    // masih ada di queue baru yang lebih kecil.
+    q.setShuffleMode(ShuffleMode::Off);
+    q.jumpTo(3); // shuffle OFF: urutan asli, current() == track-3
+    q.setShuffleMode(ShuffleMode::On); // toggle pertahankan trek yang main
+    ASSERT_TRUE(
+        q.current()->uri == "track-3",
+        "activeSize: setup keep=true, current() == track-3"
+    );
+    q.setTracks(makeQueue(8), true); // track-0..track-7, berisi track-3
+    ASSERT_TRUE(
+        q.activeTracks().size() == 8,
+        "activeSize: setTracks keep=true, shuffle ON == size()"
+    );
+    ASSERT_TRUE(
+        q.current()->uri == "track-3",
+        "activeSize: keep=true pertahankan trek yang sedang main"
+    );
+    ASSERT_TRUE(q.jumpTo(7), "activeSize: jumpTo(size-1) OK sesudah keep=true");
+    ASSERT_TRUE(!q.jumpTo(8), "activeSize: jumpTo(size) ditolak sesudah keep=true");
+
+    // setTracks keepCurrentUri=false: reset ke posisi 0.
+    q.setTracks(makeQueue(6), false);
+    ASSERT_TRUE(
+        q.activeTracks().size() == 6,
+        "activeSize: setTracks keep=false, shuffle ON == size()"
+    );
+    ASSERT_TRUE(
+        q.currentIndex() == 0,
+        "activeSize: keep=false reset ke posisi 0"
+    );
+
+    // Matikan shuffle: ukuran tetap == size().
+    q.setShuffleMode(ShuffleMode::Off);
+    ASSERT_TRUE(
+        q.activeTracks().size() == 6,
+        "activeSize: shuffle OFF sesudah setTracks == size()"
+    );
+}
+
 // repeat=one: advance() tetap di trek yang sama (music player standar).
 static void test_repeatOneStays() {
     TrackQueue q;
@@ -231,6 +300,7 @@ int main() {
     test_advanceWithShuffleAndRepeatAll();
     test_activeQueueShrunkQueue();
     test_currentIndexAfterSetTracks();
+    test_activeSizeEqualsTrackCount();
     test_repeatOneStays();
 
     std::fprintf(

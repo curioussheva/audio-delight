@@ -556,33 +556,13 @@ TrackQueue::activeAt(
     return mTracks[mShuffleOrder[i]];
 }
 
-// Padanan activeQueue().size() tanpa alokasi: hitung entri
-// mShuffleOrder yang valid saja (filter yang sama dengan activeQueue()).
+// B16-T3 (2026-11-15): O(1) — mShuffleOrder selalu permutasi lengkap
+// dari mTracks (rebuildShuffle() mengisi 0..n-1 lalu shuffle; satu-satunya
+// mutasi lain adalah std::iter_swap yang mempertahankan permutasi),
+// jadi ukuran aktif == mTracks.size() di shuffle ON maupun OFF.
 size_t
 TrackQueue::activeSizeLocked() const {
-
-    if (
-        mShuffleMode ==
-        ShuffleMode::Off
-    ) {
-        return mTracks.size();
-    }
-
-    size_t n = 0;
-
-    for (
-        size_t index :
-        mShuffleOrder
-    ) {
-        if (
-            index <
-            mTracks.size()
-        ) {
-            ++n;
-        }
-    }
-
-    return n;
+    return mTracks.size();
 }
 
 std::vector<TrackInfo>
@@ -616,8 +596,9 @@ TrackQueue::activeQueue() const {
         auto index :
         mShuffleOrder
     ) {
-        // Guard: setelah setTracks, mShuffleOrder bisa berisi index >= size
-        // kalau ukuran queue menyusut. Skip index tidak valid, jangan UB.
+        // Guard (defense-in-depth): invarian B16-T3 menjamin setiap entri
+        // mShuffleOrder < mTracks.size() (rebuildShuffle() selalu jalan di
+        // setTracks/setShuffleMode). Skip index tidak valid, jangan UB.
         if (
             index < mTracks.size()
         ) {

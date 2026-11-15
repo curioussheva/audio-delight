@@ -191,9 +191,9 @@ private:
     ) const;
 
     // Ukuran queue AKTIF tanpa menyalin vektor — padanan
-    // activeQueue().size(): entri mShuffleOrder yang tidak valid
-    // (index >= mTracks.size()) tidak dihitung, sama seperti filter
-    // di activeQueue().
+    // activeQueue().size(), O(1): mShuffleOrder selalu permutasi
+    // lengkap dari mTracks (lihat rebuildShuffle), jadi ukuran aktif
+    // == mTracks.size() di shuffle ON maupun OFF.
     [[nodiscard]]
     size_t
     activeSizeLocked() const;
