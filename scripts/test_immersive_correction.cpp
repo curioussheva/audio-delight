@@ -28,6 +28,24 @@
 //      onModeChanged() menolkan state biquad tapi TIDAK menghapus preset
 //      yang terpasang (mApplied di node), jadi applyConfig berikutnya
 //      meng-enable kembali node dengan koefisien yang sama.
+//   6. (Batch 18 C1) Preset GAGAL: preset lama tetap berlaku dan node
+//      segar tetap nonaktif — guard dedup luar di
+//      applyImmersiveCorrectionConfig() tidak boleh mengubah perilaku
+//      B15-H1 (preset gagal tidak dicatat sebagai mApplied di node).
+//      Preset gagal = filterCount 17 (> kMaxFilters 16): node menolak
+//      wholesale tanpa menyentuh cascade live. Yang TIDAK bisa diuji
+//      dari harness ini: guard melewatkan pemanggilan applyConfig
+//      kedua — tidak ada counter pemanggilan di node, dan output audio
+//      identik baik applyConfig gagal dipanggil tiap buffer maupun
+//      dilewati (cascade live tidak disentuh saat gagal). Yang diuji
+//      di sini adalah invarian yang harus dipertahankan guard: preset
+//      lama tetap berbunyi, node segar tetap diam.
+//   7. (Batch 18 C1) Reopen stream (prepare() ulang, laju + preset
+//      sama): koreksi tetap jalan — prepare() me-reset guard dedup,
+//      jadi config dikirim ulang ke node yang baru disiapkan
+//      (mHasApplied-nya dihapus prepare() node). Tanpa reset itu,
+//      guard akan melewatkan pengiriman dan koreksi mati diam-diam
+//      sesudah reopen — pola bug DSP-M1.
 //
 // Bangun & jalankan:
 //   g++ -std=c++17 -O2 -I android/app/src/main/cpp \
@@ -82,6 +100,15 @@ static HeadphonePresetData makePreset() {
     p.filters[0].freqHz = 1000.0f;
     p.filters[0].q = 1.0f;
     p.filters[0].gainDb = 6.0f;
+    return p;
+}
+
+// Preset yang PASTI ditolak node: filterCount 17 > kMaxFilters (16).
+// Loop pasang node memeriksa `index >= kMaxFilters` SEBELUM membaca
+// filters[i], jadi filters[16] yang tidak ada tidak pernah dibaca.
+static HeadphonePresetData makeFailingPreset() {
+    HeadphonePresetData p = makePreset();
+    p.filterCount = 17;
     return p;
 }
 
@@ -230,6 +257,40 @@ int main() {
         ratioTrip);
     check("immersive: koreksi tetap ON sesudah Immersive->DSP->Immersive",
         ratioTrip > 1.7 && ratioTrip < 2.3);
+
+    // 6. (Batch 18 C1) Preset gagal: preset lama tetap berlaku (6a),
+    //    node segar tetap nonaktif (6b) — guard dedup luar tidak boleh
+    //    mencatat preset gagal sebagai "sudah diterapkan" (B15-H1).
+    DSPParameters bad = on;
+    bad.headphonePreset = makeFailingPreset();
+    AudioPipeline pipeBadAfterGood;
+    pipeBadAfterGood.prepare(48000, 1920);
+    (void)settledRms(pipeBadAfterGood, on, 5);
+    const double rmsBadAfterGood = settledRms(pipeBadAfterGood, bad, 20);
+    const double ratioBadAfterGood = rmsBadAfterGood / rmsOff;
+    std::printf("  (rasio RMS preset gagal sesudah preset baik = %.3f, harap ~2,0)\n",
+        ratioBadAfterGood);
+    check("immersive: preset gagal tidak membunuh preset lama (B15-H1)",
+        ratioBadAfterGood > 1.7 && ratioBadAfterGood < 2.3);
+
+    AudioPipeline pipeBadOnly;
+    pipeBadOnly.prepare(48000, 1920);
+    check("immersive: node segar + preset gagal saja = bit-identik dengan OFF",
+        identical(settledBuffer(pipeBadOnly, bad, 20), ref));
+
+    // 7. (Batch 18 C1) Reopen: prepare() ulang lalu preset yang sama
+    //    tetap mengoreksi — guard direset prepare(), config dikirim
+    //    ulang ke node baru.
+    AudioPipeline pipeReopen;
+    pipeReopen.prepare(48000, 1920);
+    (void)settledRms(pipeReopen, on, 5);
+    pipeReopen.prepare(48000, 1920);
+    const double rmsReopen = settledRms(pipeReopen, on, 20);
+    const double ratioReopen = rmsReopen / rmsOff;
+    std::printf("  (rasio RMS sesudah prepare() ulang = %.3f, harap ~2,0)\n",
+        ratioReopen);
+    check("immersive: koreksi tetap jalan sesudah prepare() ulang (guard direset)",
+        ratioReopen > 1.7 && ratioReopen < 2.3);
 
     std::printf("IMMERSIVE-CORRECTION: %d pass, %d fail\n", gPass, gFail);
     return gFail == 0 ? 0 : 1;

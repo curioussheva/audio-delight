@@ -57,6 +57,12 @@ void AudioPipeline::prepare(
     // (buffer pertama sesudah reopen) menerapkan ulang config ke node baru.
     mConfigApplied = false;
 
+    // (Batch 18 C1): reset yang sama untuk guard jalur Immersive —
+    // prepare() node (mImmersiveCorrection.prepare) menghapus
+    // mHasApplied-nya, jadi config harus dikirim ulang ke node baru di
+    // buffer pertama sesudah reopen, apa pun isi snapshot lama.
+    mImmersiveConfigApplied = false;
+
     mDSP.prepare(
         sampleRate,
         maxFrames
@@ -444,6 +450,54 @@ bool dspConfigEquals(
     return true;
 }
 
+// (Batch 18 C1): bandingkan config koreksi headphone yang akan dikirim
+// ke instans Immersive dengan yang sudah dikirim.
+//
+// Hanya dua field headphone yang dibaca mImmersiveCorrection —
+// headphoneCorrectionEnabled + headphonePreset — jadi hanya keduanya
+// yang dibandingkan. Pola field-by-field preset-nya sama dengan
+// dspConfigEquals di atas (termasuk jepit filterCount ke kMaxFilters);
+// field DSPConfig lain selalu default di kedua sisi config ini, jadi
+// tidak ikut dibandingkan.
+bool immersiveCorrectionConfigEquals(
+    const DSPConfig& a,
+    const DSPConfig& b
+) noexcept {
+
+    if (a.headphoneCorrectionEnabled != b.headphoneCorrectionEnabled) {
+        return false;
+    }
+
+    if (a.headphonePreset.preampDb != b.headphonePreset.preampDb) {
+        return false;
+    }
+
+    if (a.headphonePreset.filterCount != b.headphonePreset.filterCount) {
+        return false;
+    }
+
+    // (C-I2): jepit batas loop ke kapasitas array — sama seperti
+    // dspConfigEquals. Kedua sisi sudah dipastikan sama di atas, jadi
+    // satu batas cukup.
+    const int filterCount = std::min(
+        a.headphonePreset.filterCount,
+        HeadphonePresetData::kMaxFilters
+    );
+
+    for (int i = 0; i < filterCount; ++i) {
+
+        const auto& fa = a.headphonePreset.filters[i];
+        const auto& fb = b.headphonePreset.filters[i];
+
+        if (fa.type != fb.type) return false;
+        if (fa.freqHz != fb.freqHz) return false;
+        if (fa.q != fb.q) return false;
+        if (fa.gainDb != fb.gainDb) return false;
+    }
+
+    return true;
+}
+
 } // namespace
 
 void AudioPipeline::applyDSPConfig(
@@ -539,7 +593,36 @@ void AudioPipeline::applyImmersiveCorrectionConfig(
     config.headphonePreset =
         params.headphonePreset;
 
+    // (Batch 18 C1): guard dedup — sama seperti applyDSPConfig().
+    //
+    // Tanpa guard ini, preset yang GAGAL dirancang ulang tiap buffer:
+    // node TIDAK mencatat mApplied saat gagal (B15-H1, disengaja),
+    // jadi dedup internal node tidak pernah cocok dan `staged`
+    // (hingga 16 filter, ≤ 64 trig double + 1 powf) dihitung ulang
+    // di audio thread setiap buffer.
+    //
+    // Snapshot di sini mencatat config yang sudah DIKIRIM ke node,
+    // persis mAppliedConfig jalur DSP — BUKAN "berhasil dipasang".
+    // Ini TIDAK membuka kembali B15-H1: snapshot tinggal di pipeline
+    // dan tidak menyentuh mApplied/mHasApplied node, jadi jalur dedup
+    // `same` -> setEnabled(true) node tidak pernah melihat preset
+    // gagal sebagai "sudah diterapkan". Preset gagal dicoba sekali
+    // per perubahan config, lalu dilewati sampai config berubah.
+    // Kegagalan deterministik per (preset, laju): laju ikut
+    // dibandingkan di bawah, dan prepare() me-reset guard ini, jadi
+    // ganti laju (stream reopen) tetap mencoba ulang.
+    if (mImmersiveConfigApplied &&
+        mImmersiveAppliedSampleRate == mSampleRate &&
+        immersiveCorrectionConfigEquals(
+            config, mImmersiveAppliedConfig)) {
+        return;
+    }
+
     mImmersiveCorrection.applyConfig(config);
+
+    mImmersiveAppliedConfig = config;
+    mImmersiveAppliedSampleRate = mSampleRate;
+    mImmersiveConfigApplied = true;
 }
 
 // =====================================================

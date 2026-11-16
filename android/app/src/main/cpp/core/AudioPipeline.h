@@ -122,11 +122,13 @@ private:
 
     // (B-HPIMM, 2026-11-15): config koreksi headphone untuk rantai
     // Immersive — hanya dua field headphone dari DSPParameters yang
-    // dikirim ke mImmersiveCorrection. Node-nya sendiri yang mendeteksi
-    // perubahan (snapshot mApplied di HeadphoneCorrectionNode), jadi
-    // pemanggilan tiap buffer murah bila preset tidak berubah — sama
-    // seperti applyDSPConfig yang mendeteksi perubahan sebelum memanggil
-    // mDSP.applyConfig(), hanya saja dedup-nya sudah ada di dalam node.
+    // dikirim ke mImmersiveCorrection. Node-nya sendiri yang memeriksa
+    // flag + keberadaan preset di applyConfig(), TAPI dedup internal
+    // node tidak menutup preset GAGAL: mApplied tidak dicatat saat
+    // gagal (B15-H1, disengaja), jadi pemanggilan tiap buffer akan
+    // merancang ulang `staged` terus — lihat guard dedup luar di
+    // applyImmersiveCorrectionConfig() (Batch 18 C1), yang menyamakan
+    // jalur ini dengan applyDSPConfig().
     void applyImmersiveCorrectionConfig(
         const DSPParameters& params
     ) noexcept;
@@ -139,6 +141,20 @@ private:
 
     // false = belum pernah dikirim, jadi kirim pertama selalu dilakukan.
     bool mConfigApplied = false;
+
+    // (Batch 18 C1): snapshot yang sama untuk jalur Immersive —
+    // config koreksi terakhir yang DIKIRIM ke mImmersiveCorrection
+    // beserta laju saat dikirim. "Dikirim", bukan "berhasil dipasang":
+    // node TIDAK mencatat mApplied saat preset gagal (B15-H1), jadi
+    // snapshot inilah yang menghentikan percobaan ulang tiap buffer.
+    // Snapshot tinggal di pipeline dan tidak menyentuh mApplied /
+    // mHasApplied node — preset gagal tidak pernah tercatat sebagai
+    // "sudah diterapkan" di node, jadi lubang B15-H1 tetap tertutup.
+    DSPConfig mImmersiveAppliedConfig;
+
+    int32_t mImmersiveAppliedSampleRate = 0;
+
+    bool mImmersiveConfigApplied = false;
 
     DSPChain mDSP;
 
