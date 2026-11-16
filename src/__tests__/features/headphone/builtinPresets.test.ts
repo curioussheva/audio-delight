@@ -233,9 +233,9 @@ function parsePresetMirror(text: string): MirrorResult {
 // ============================================================
 
 describe("preset IEM bawaan", () => {
-  it("indeks berisi 24 model, id unik, metadata lengkap", () => {
-    expect(index.length).toBe(24);
-    expect(BUILTIN_HEADPHONE_PRESETS.length).toBe(24);
+  it("indeks berisi 26 model, id unik, metadata lengkap", () => {
+    expect(index.length).toBe(26);
+    expect(BUILTIN_HEADPHONE_PRESETS.length).toBe(26);
     const ids = new Set(index.map((e) => e.id));
     expect(ids.size).toBe(index.length);
     for (const e of index) {
@@ -245,10 +245,25 @@ describe("preset IEM bawaan", () => {
       expect(e.database.trim().length).toBeGreaterThan(0);
       // Rig + target tercatat per preset — bukan klaim umum.
       expect(e.rig.trim().length).toBeGreaterThan(0);
-      expect(e.target).toContain("Harman in-ear 2019");
-      expect(e.source).toMatch(
-        /^https:\/\/raw\.githubusercontent\.com\/jaakkopasanen\/AutoEq\/master\/results\//,
-      );
+      // 25 preset ke target Harman; SATU pengecualian yang disengaja:
+      // "builtin-gk-kunten-cinematic" memakai target custom preferensi
+      // genre (bonus; bukan Harman) — keputusan csheva 2026-11-16.
+      if (e.id === "builtin-gk-kunten-cinematic") {
+        expect(e.target).toContain("Custom");
+      } else {
+        expect(e.target).toContain("Harman in-ear 2019");
+      }
+      // Sumber: 24 preset dari repo AutoEq; dua entri Kunten dari Squiglink
+      // (pengukuran B&K 5128, tidak ada di repo AutoEq) — keputusan yang sama.
+      if (e.id.startsWith("builtin-gk-kunten")) {
+        expect(e.source).toBe(
+          "https://theaudiostore.squig.link/?share=GK_KUNTEN",
+        );
+      } else {
+        expect(e.source).toMatch(
+          /^https:\/\/raw\.githubusercontent\.com\/jaakkopasanen\/AutoEq\/master\/results\//,
+        );
+      }
       expect(e.file).toMatch(/^presets\/[a-z0-9-]+\.txt$/);
     }
   });

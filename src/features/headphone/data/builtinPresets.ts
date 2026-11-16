@@ -5,8 +5,12 @@
 // Regenerasi: `node scripts/gen-builtin-headphone-presets.mjs`.
 //
 // Setiap preset = hasil parametric-EQ AutoEq (jaakkopasanen/AutoEq) untuk
-// satu model IEM, ke target Harman in-ear 2019. Rig + target + URL sumber
-// tercatat per preset di bawah; teks presetnya sendiri TIDAK diutak-atik.
+// satu model IEM. 25 di antaranya ke target Harman in-ear 2019; SATU
+// pengecualian: "GK-Kunten — Cinematic Grandeur (Orchestral) ★ Bonus"
+// memakai target custom preferensi genre (bukan Harman) — lihat entri
+// "builtin-gk-kunten-cinematic" di builtinPresets.json. Rig + target +
+// URL sumber tercatat per preset di bawah; teks presetnya sendiri TIDAK
+// diutak-atik.
 
 export interface BuiltinHeadphonePreset {
   /** Id stabil, mis. "builtin-moondrop-chu". */
@@ -101,6 +105,30 @@ export const BUILTIN_HEADPHONE_PRESETS: BuiltinHeadphonePreset[] = [
     "presetText": "Preamp: -4.9 dB\nFilter 1: ON LSC Fc 105 Hz Gain 14.3 dB Q 0.70\nFilter 2: ON PK Fc 53 Hz Gain -13.7 dB Q 0.28\nFilter 3: ON PK Fc 5187 Hz Gain 4.0 dB Q 1.54\nFilter 4: ON PK Fc 1381 Hz Gain 2.9 dB Q 0.32\nFilter 5: ON PK Fc 6770 Hz Gain -2.0 dB Q 1.49\nFilter 6: ON HSC Fc 10000 Hz Gain 0.3 dB Q 0.70\nFilter 7: ON PK Fc 1242 Hz Gain -0.9 dB Q 2.59\nFilter 8: ON PK Fc 810 Hz Gain 0.7 dB Q 2.40\nFilter 9: ON PK Fc 361 Hz Gain -0.2 dB Q 1.45\nFilter 10: ON PK Fc 2087 Hz Gain 0.5 dB Q 3.04\n",
     "filterCount": 10,
     "preampDb": -4.9
+  },
+  {
+    "id": "builtin-gk-kunten",
+    "brand": "GK Audio Lab",
+    "model": "GK-Kunten",
+    "database": "squiglink",
+    "rig": "The Audio Store — B&K 5128 (2026-01-20)",
+    "target": "Harman in-ear 2019 (target default AutoEq untuk hasil in-ear; targets/Harman in-ear 2019.csv)",
+    "source": "https://theaudiostore.squig.link/?share=GK_KUNTEN",
+    "presetText": "Preamp: -8.2 dB\nFilter 1: ON PK Fc 20 Hz Gain -0.8 dB Q 1.900\nFilter 2: ON PK Fc 200 Hz Gain -2.2 dB Q 0.700\nFilter 3: ON PK Fc 780 Hz Gain 0.5 dB Q 2.000\nFilter 4: ON PK Fc 1700 Hz Gain -3.5 dB Q 1.100\nFilter 5: ON PK Fc 5500 Hz Gain 6.0 dB Q 0.600\nFilter 6: ON PK Fc 6800 Hz Gain 5.3 dB Q 2.000\nFilter 7: ON PK Fc 8900 Hz Gain -7.8 dB Q 2.000\n",
+    "filterCount": 7,
+    "preampDb": -8.2
+  },
+  {
+    "id": "builtin-gk-kunten-cinematic",
+    "brand": "GK Audio Lab",
+    "model": "GK-Kunten — Cinematic Grandeur (Orchestral) ★ Bonus",
+    "database": "squiglink",
+    "rig": "The Audio Store — B&K 5128 (2026-01-20)",
+    "target": "Custom — Cinematic Grandeur (Orchestral), target preferensi genre (bonus; bukan Harman)",
+    "source": "https://theaudiostore.squig.link/?share=GK_KUNTEN",
+    "presetText": "Preamp: -2.7 dB\nFilter 1: ON PK Fc 56 Hz Gain 1.2 dB Q 2.000\nFilter 2: ON PK Fc 83 Hz Gain 1.5 dB Q 0.700\nFilter 3: ON PK Fc 2400 Hz Gain 1.6 dB Q 0.600\nFilter 4: ON PK Fc 7600 Hz Gain 2.2 dB Q 2.000\nFilter 5: ON PK Fc 15000 Hz Gain 2.3 dB Q 1.800\n",
+    "filterCount": 5,
+    "preampDb": -2.7
   },
   {
     "id": "builtin-kz-zsn-pro-x",

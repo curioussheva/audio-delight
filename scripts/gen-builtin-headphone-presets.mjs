@@ -49,8 +49,12 @@ const header = `// src/features/headphone/data/builtinPresets.ts
 // Regenerasi: \`node scripts/gen-builtin-headphone-presets.mjs\`.
 //
 // Setiap preset = hasil parametric-EQ AutoEq (jaakkopasanen/AutoEq) untuk
-// satu model IEM, ke target Harman in-ear 2019. Rig + target + URL sumber
-// tercatat per preset di bawah; teks presetnya sendiri TIDAK diutak-atik.
+// satu model IEM. 25 di antaranya ke target Harman in-ear 2019; SATU
+// pengecualian: "GK-Kunten — Cinematic Grandeur (Orchestral) ★ Bonus"
+// memakai target custom preferensi genre (bukan Harman) — lihat entri
+// "builtin-gk-kunten-cinematic" di builtinPresets.json. Rig + target +
+// URL sumber tercatat per preset di bawah; teks presetnya sendiri TIDAK
+// diutak-atik.
 
 export interface BuiltinHeadphonePreset {
   /** Id stabil, mis. "builtin-moondrop-chu". */
