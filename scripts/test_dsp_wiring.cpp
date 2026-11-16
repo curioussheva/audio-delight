@@ -22,6 +22,8 @@
 //     android/app/src/main/cpp/dsp/dynamics/LimiterNode.cpp \
 //     android/app/src/main/cpp/dsp/EQProcessor.cpp \
 //     android/app/src/main/cpp/dsp/BiquadFilter.cpp \
+//     android/app/src/main/cpp/dsp/headphone/HeadphoneCorrectionNode.cpp \
+//     android/app/src/main/cpp/dsp/BiquadCascade.cpp \
 //     -o "$TMPDIR/test_dsp_wiring"
 
 #include <cmath>
