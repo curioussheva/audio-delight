@@ -1,5 +1,6 @@
 #include "NativePlaybackModule.h"
 #include "JniGuard.h"
+#include "core/JniContext.h"
 #include "manager/EngineManager.h"
 #include "playback/PlaybackController.h"
 #include "playback/TrackQueue.h"
@@ -103,6 +104,23 @@ JNIEXPORT jboolean JNICALL Java_com_pristineaudio_audio_NativePlaybackModule_nat
     return pristine::jni::guarded<jboolean>(env, "nativePlay", JNI_FALSE, [&]() -> jboolean {
     __android_log_print(ANDROID_LOG_INFO, "NativePlaybackModule",
                         "nativePlay() called from JS");
+    // F2 (logcat #25, 2026-11-16): cold-start race — play() bisa dipanggil
+    // SEBELUM NativeDeviceModule.initialize() sempat jalan (TurboModule
+    // lazy: init baru 22:02:25, tap pertama 22:02:17), jadi JniContext
+    // belum punya app Context dan decoder gagal resolve content:// —
+    // sementara stream tetap dibuka dan jalan senyap 12 dtk. Gagal-cepat
+    // di sini: jangan buka stream kalau Context belum siap. Init eager di
+    // BOOT (_layout.tsx) menutup jalur normal; guard ini menutup jalur
+    // patologis (init gagal / belum jalan). Satu-satunya jalur yang
+    // tertahan adalah URI non-content:// (file://) saat init belum jalan —
+    // library memakai content://, dan kegagalan di sini berisik (log +
+    // JS reject), bukan senyap.
+    if (!pristine::jni::hasAppContext()) {
+        __android_log_print(ANDROID_LOG_ERROR, "NativePlaybackModule",
+                            "nativePlay: app Context belum siap (JniContext) - "
+                            "play ditolak, stream tidak dibuka");
+        return JNI_FALSE;
+    }
     // getControllerAndStartEngine: play() adalah satu-satunya transport yang
     // memulai stream, dan ia melakukannya SETELAH queue terisi, supaya stream
     // dibuka di laju track (bit-perfect).

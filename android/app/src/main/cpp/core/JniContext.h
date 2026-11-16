@@ -133,6 +133,14 @@ inline jobject appContext() {
     return h.appContext;
 }
 
+// F2 (logcat #25, 2026-11-16): cold-start race — play() bisa dipanggil
+// SEBELUM NativeDeviceModule.initialize() sempat jalan (TurboModule lazy),
+// jadi Context belum ada dan decoder gagal resolve content://. Guard
+// nativePlay memakai ini: gagal-cepat tanpa membuka stream.
+inline bool hasAppContext() {
+    return appContext() != nullptr;
+}
+
 // ---------------------------------------------------------------
 // RAII: attach thread ke JVM kalau belum, detach hanya kalau kita
 // yang attach. Dipakai dari thread mana pun (JS, audio, dekoder).

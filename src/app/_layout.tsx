@@ -285,6 +285,22 @@ const performInitialization = useCallback(async () => {
     await audioEngine.initialize();
     await initStore();
 
+    // F2 (logcat #25, 2026-11-16): cold-start race — NativeDeviceModule
+    // adalah TurboModule lazy: initialize() (→ nativeInitAppContext,
+    // JniContext) baru jalan saat JS pertama menyentuh modul. Play pertama
+    // bisa menang (tap 22:02:17, init baru 22:02:25) → decoder gagal
+    // resolve content:// sementara stream jalan senyap 12 dtk. Sentuh
+    // modul di BOOT — sebelum UI interaktif — supaya Context sudah siap
+    // jauh sebelum tap pertama. listDevices() idempotent dan sudah
+    // dipanggil saat pemakaian normal.
+    try {
+      const { AudioOutputService } = require("@/features/hardware/api/audioOutput");
+      const devices = await AudioOutputService.listDevices();
+      console.log(`[BOOT] NativeDeviceModule ready (${devices.length} perangkat)`);
+    } catch (e) {
+      console.warn("[BOOT] NativeDeviceModule warm-up dilewati:", e);
+    }
+
     // 🔥 FIX: Clear old audio cache (anti penumpukan)
     try {
       const { NativeModules } = require("react-native");
