@@ -939,8 +939,8 @@ export default function SettingsScreen() {
                       }}
                     >
                       {bpStatus.streamExclusive
-                        ? `Output murni tanpa EQ/DSP${bpStatus.actualSampleRate > 0 ? ` @ ${bpStatus.actualSampleRate / 1000}kHz` : ""}.`
-                        : "Output murni tanpa EQ/DSP. Cocok untuk DAC eksternal."}
+                        ? `Output tanpa DSP${bpStatus.actualSampleRate > 0 ? ` @ ${bpStatus.actualSampleRate / 1000}kHz` : ""}.`
+                        : "Output tanpa DSP. Cocok untuk DAC eksternal."}
                     </Text>
                   )}
                 </TouchableOpacity>

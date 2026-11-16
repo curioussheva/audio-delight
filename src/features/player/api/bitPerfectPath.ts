@@ -26,9 +26,12 @@ export interface BitPerfectPathVerdict {
  *     keadaan TERAKHIR DIKETAHUI (Exclusive/Shared) dengan catatan
  *     "diperbarui saat memutar". Jangan pernah menampilkan verdict live
  *     sebagai keadaan saat ini selama stale.
- *  3. `isBitPerfect` → aktif; `exclusiveFailed` → fallback shared.
- *     `exclusiveFailed` hanya bisa true bila native sudah terbaca
- *     (`available`), jadi di titik ini "ditolak" adalah tuduhan yang sah.
+ *  3. `isBitPerfect` → aktif; `rateMismatch` → exclusive tapi laju
+ *     berbeda (decoder meresample) — bukan bit-perfect, jangan tuduh
+ *     exclusive gagal; `exclusiveFailed` → fallback shared.
+ *     `exclusiveFailed` dan `rateMismatch` hanya bisa true bila native
+ *     sudah terbaca (`available`), jadi di titik ini keduanya tuduhan
+ *     yang sah.
  *  4. Bukan bit-perfect sama sekali → idle.
  */
 export function describeBitPerfectPath(
@@ -38,6 +41,7 @@ export function describeBitPerfectPath(
     | "streamExclusive"
     | "isBitPerfect"
     | "exclusiveFailed"
+    | "rateMismatch"
     | "unavailable"
     | "stale"
   >,
@@ -61,9 +65,17 @@ export function describeBitPerfectPath(
 
   if (status.isBitPerfect) {
     return {
-      label: "Bit-Perfect aktif — output murni",
+      label: "Exclusive, tanpa DSP",
       tone: "active",
-      note: "Sinyal langsung ke perangkat, tanpa DSP — hanya fade anti-klik 10 ms di awal/akhir lagu dan setelah seek/resume, 15 ms saat pause.",
+      note: "Exclusive ke perangkat, tanpa DSP. Fade anti-klik 10 ms di awal, akhir, seek, dan resume; 15 ms saat pause.",
+    };
+  }
+
+  if (status.rateMismatch) {
+    return {
+      label: "Exclusive — laju berbeda",
+      tone: "fallback",
+      note: "Exclusive, tetapi laju stream berbeda dari file — ada resampling.",
     };
   }
 
@@ -78,6 +90,6 @@ export function describeBitPerfectPath(
   return {
     label: "Bit-Perfect tidak dipilih",
     tone: "idle",
-    note: "Pilih mode Bit-Perfect untuk jalur langsung ke perangkat — tanpa DSP, hanya fade anti-klik.",
+    note: "Status exclusive baru diketahui saat memutar.",
   };
 }

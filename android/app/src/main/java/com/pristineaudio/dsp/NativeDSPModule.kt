@@ -48,6 +48,7 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     // 🔥 Status stream aktual — lihat isExclusiveModeActive() di bawah.
     private external fun nativeIsExclusiveModeActive(): Boolean
     private external fun nativeGetActualSampleRate(): Int
+    private external fun nativeIsRateHonored(): Boolean
 
     // Additional JNI functions (were missing before)
     private external fun setNativeLimiterEnabled(enabled: Boolean)
@@ -340,6 +341,13 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     @ReactMethod(isBlockingSynchronousMethod = true)
     fun getActualSampleRate(): Int =
         if (engineAvailable) nativeGetActualSampleRate() else 0
+
+    // C3.3 (Batch 18 susulan): laju stream == laju file? Fallback true
+    // bila engine belum tersedia — jangan menuduh resampling saat status
+    // belum bisa dibaca (cabang unavailable yang bicara).
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    fun isRateHonored(): Boolean =
+        if (engineAvailable) nativeIsRateHonored() else true
 
     // ===================== ADDITIONAL REACT METHODS =====================
 

@@ -11,6 +11,7 @@ type StatusInput = Pick<
   | "streamExclusive"
   | "isBitPerfect"
   | "exclusiveFailed"
+  | "rateMismatch"
   | "unavailable"
   | "stale"
 >;
@@ -20,6 +21,7 @@ const base: StatusInput = {
   streamExclusive: false,
   isBitPerfect: false,
   exclusiveFailed: false,
+  rateMismatch: false,
   unavailable: false,
   stale: false,
 };
@@ -31,13 +33,27 @@ describe("describeBitPerfectPath", () => {
       streamExclusive: true,
       isBitPerfect: true,
     });
-    expect(verdict.label).toBe("Bit-Perfect aktif — output murni");
+    expect(verdict.label).toBe("Exclusive, tanpa DSP");
     expect(verdict.tone).toBe("active");
     // Note aktif harus jujur soal fade anti-klik (C3.2): 10 ms awal/akhir
     // + seek/resume, 15 ms saat pause — bukan "tanpa pemrosesan".
-    expect(verdict.note).toContain("fade anti-klik");
+    expect(verdict.note).toContain("anti-klik");
     expect(verdict.note).toContain("10 ms");
     expect(verdict.note).toContain("15 ms");
+  });
+
+  it("requested + exclusive + laju berbeda → rateMismatch, bukan aktif", () => {
+    const verdict = describeBitPerfectPath({
+      ...base,
+      streamExclusive: true,
+      isBitPerfect: false,
+      rateMismatch: true,
+    });
+    expect(verdict.label).toBe("Exclusive — laju berbeda");
+    expect(verdict.tone).toBe("fallback");
+    expect(verdict.note).toContain("ada resampling");
+    // Jangan menuduh exclusive gagal — yang berbeda lajunya.
+    expect(verdict.label).not.toContain("Fallback");
   });
 
   it("requested + ditolak + native terbaca → fallback shared", () => {
@@ -88,5 +104,6 @@ describe("describeBitPerfectPath", () => {
     const verdict = describeBitPerfectPath({ ...base, requested: false });
     expect(verdict.label).toBe("Bit-Perfect tidak dipilih");
     expect(verdict.tone).toBe("idle");
+    expect(verdict.note).toBe("Status exclusive baru diketahui saat memutar.");
   });
 });

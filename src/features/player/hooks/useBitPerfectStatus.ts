@@ -10,8 +10,11 @@
  * Hook ini menjembatani keduanya:
  *   - `audioMode`        = pilihan user  (playerStore)
  *   - `streamExclusive`  = keadaan nyata (NativeDSPModule.isExclusiveModeActive)
- *   - `isBitPerfect`     = keduanya true
+ *   - `rateHonored`      = laju stream == laju file (NativeDSPModule.isRateHonored)
+ *   - `isBitPerfect`     = ketiganya true
  *   - `exclusiveFailed`  = user minta bit-perfect tapi AAudio menolak
+ *   - `rateMismatch`     = exclusive diterima, tapi laju stream != laju file
+ *                          (decoder meresample) — bukan bit-perfect (C3.3).
  *
  * Lihat docs/WORKFLOW.md syarat 1 & 2.
  */
@@ -31,6 +34,12 @@ export interface BitPerfectStatus {
    *  native belum siap, exclusive=false adalah "belum tahu", bukan
    *  "ditolak" (U-P1-04: dulu langsung menuduh FALLBACK). */
   exclusiveFailed: boolean;
+  /** Laju stream sama dengan laju file (tidak ada resampling). */
+  rateHonored: boolean;
+  /** Exclusive diterima, tapi laju stream != laju file — decoder
+   *  meresample, jadi bukan bit-perfect. Hanya true bila native sudah
+   *  terbaca (available), supaya tidak menuduh saat "belum tahu". */
+  rateMismatch: boolean;
   /** Laju stream yang benar-benar dibuka Oboe (Hz). 0 = belum start. */
   actualSampleRate: number;
   /** Native module belum siap (library belum load / engine belum start). */
@@ -48,6 +57,8 @@ const INITIAL: BitPerfectStatus = {
   streamExclusive: false,
   isBitPerfect: false,
   exclusiveFailed: false,
+  rateHonored: true,
+  rateMismatch: false,
   actualSampleRate: 0,
   unavailable: true,
   stale: true,
@@ -63,20 +74,25 @@ const INITIAL: BitPerfectStatus = {
 const readStreamStatus = (): {
   exclusive: boolean;
   rate: number;
+  rateHonored: boolean;
   available: boolean;
 } => {
   try {
     if (!NativeDSPModule?.isExclusiveModeActive) {
-      return { exclusive: false, rate: 0, available: false };
+      return { exclusive: false, rate: 0, rateHonored: true, available: false };
     }
     return {
       exclusive: NativeDSPModule.isExclusiveModeActive(),
       rate: NativeDSPModule.getActualSampleRate?.() ?? 0,
+      // C3.3: metode baru di spec/Kotlin/JNI; `?.() ?? true` supaya JS
+      // lama tetap jalan lawan APK lama (jangan tuduh resampling bila
+      // metodenya belum ada).
+      rateHonored: NativeDSPModule.isRateHonored?.() ?? true,
       available: true,
     };
   } catch {
     // Native tidak ter-load atau engine belum start — bukan error fatal.
-    return { exclusive: false, rate: 0, available: false };
+    return { exclusive: false, rate: 0, rateHonored: true, available: false };
   }
 };
 
@@ -91,16 +107,23 @@ export const useBitPerfectStatus = (
 
   useEffect(() => {
     const sync = () => {
-      const { exclusive, rate, available } = readStreamStatus();
+      const { exclusive, rate, rateHonored, available } = readStreamStatus();
       const requested = audioMode === "bit-perfect";
 
       setStatus({
         requested,
         streamExclusive: exclusive,
-        isBitPerfect: requested && exclusive,
+        // C3.3: syarat ketiga — laju stream harus sama dengan laju file.
+        // File 44,1 kHz di stream 48 kHz (decoder meresample) bukan
+        // bit-perfect meski exclusive diterima.
+        isBitPerfect: requested && exclusive && rateHonored,
         // Jangan tuduh FALLBACK saat native belum siap: exclusive=false
         // di situ artinya "belum tahu", bukan "ditolak" (U-P1-04).
         exclusiveFailed: requested && available && !exclusive,
+        rateHonored,
+        // Exclusive diterima tapi laju berbeda — jangan tuduh exclusive
+        // gagal, yang berbeda lajunya.
+        rateMismatch: requested && available && exclusive && !rateHonored,
         actualSampleRate: rate,
         unavailable: !available,
         // Saat pause polling berhenti — verdict yang tersisa bisa basi

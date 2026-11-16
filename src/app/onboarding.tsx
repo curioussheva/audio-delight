@@ -351,7 +351,7 @@ export default function OnboardingScreen() {
         <ModeCard
           mode="bit-perfect"
           title="Bit-Perfect Mode"
-          description="Output lossless murni. Terbaik untuk USB DAC & High-Res Audio."
+          description="Output lossless tanpa DSP. Terbaik untuk USB DAC & High-Res Audio."
           icon="lock-closed"
           tags={["LOSSLESS", "DAC"]}
           isSelected={selectedMode === "bit-perfect"}

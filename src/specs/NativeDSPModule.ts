@@ -51,6 +51,13 @@ export interface Spec extends TurboModule {
   isExclusiveModeActive(): boolean;
   getActualSampleRate(): number;
 
+  // C3.3 (Batch 18 susulan): laju stream AKTUAL == laju file?
+  // EngineManager::isRateHonored() membandingkan keduanya (bukan yang
+  // diminta) — kalau decoder meresample 44,1 kHz ke stream 48 kHz, ini
+  // false dan label "Bit-Perfect aktif" tidak boleh tampil. Sinkron
+  // seperti dua query di atas.
+  isRateHonored(): boolean;
+
   // Additional engine controls
   setLimiterEnabled(enabled: boolean): void;
   setSolfeggioFreq(freq: number): void;

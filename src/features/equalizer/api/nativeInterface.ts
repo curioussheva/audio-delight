@@ -20,6 +20,9 @@ export interface NativeDSPInterface {
   // Status stream aktual — AAudio bisa tolak exclusive, fallback diam-diam.
   isExclusiveModeActive(): boolean;
   getActualSampleRate(): number;
+  // C3.3: laju stream AKTUAL == laju file? (spec/Kotlin/JNI baru; `?.()`
+  // di pemakai supaya JS lama tetap jalan lawan APK lama).
+  isRateHonored(): boolean;
 
   // Mode pemrosesan (0 = BitPerfect, 1 = DSP, 2 = Immersive). Live.
   setProcessingMode(mode: number): void;

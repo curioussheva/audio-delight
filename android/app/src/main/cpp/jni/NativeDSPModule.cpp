@@ -347,6 +347,19 @@ Java_com_pristineaudio_dsp_NativeDSPModule_nativeGetActualSampleRate(
     });
 }
 
+// C3.3 (Batch 18 susulan): laju stream AKTUAL == laju file?
+// Fallback JNI_TRUE — jangan menuduh resampling bila bacaannya gagal;
+// cabang unavailable di TS yang bicara saat engine belum siap.
+JNIEXPORT jboolean JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_nativeIsRateHonored(
+    JNIEnv* env, jobject) {
+    return pristine::jni::guarded<jboolean>(env, "nativeIsRateHonored", JNI_TRUE, [&]() -> jboolean {
+    return static_cast<jboolean>(
+        EngineManager::get().isRateHonored()
+    );
+    });
+}
+
 // =====================================================
 // KOREKSI HEADPHONE (Fase D)
 // =====================================================
