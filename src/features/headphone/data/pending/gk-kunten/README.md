@@ -72,3 +72,20 @@ koreksinya didominasi selisih rig, bukan IEM-nya:
 - csheva memutuskan preset GK-Kunten memakai target JM-1 (target native
   5128) — saat itu varian (2) di atas bisa dipakai ulang, dengan catatan
   targetnya berbeda dari 24 preset lain dan harus ditulis jelas di UI.
+
+## Keputusan (2026-11-16, csheva)
+DIBUNDEL — dua preset sekaligus (commit ae011cf2):
+- **GK-Kunten** (Harman in-ear 2019, 7 filter, preamp -8.2 dB) — tanpa label
+  khusus, seragam dengan 24 preset bawaan lainnya. File
+  `data/presets/gk-kunten.txt`.
+- **GK-Kunten — Cinematic Grandeur (Orchestral) ★ Bonus** (target custom
+  preferensi genre orkestral/cinematic, 5 filter, preamp -2.7 dB) — label
+  khusus di model + target. File `data/presets/gk-kunten-cinematic.txt`.
+
+Catatan jujur yang tetap berlaku: preset Harman dikonversi dari pengukuran
+B&K 5128 ke target Harman (711) — zona 3–7 kHz tempat konversi rig tidak
+andal; fitur paling dramatisnya (scoop 6 kHz + peak 9 kHz) bisa sebagian
+artefak rig. Preset Cinematic adalah target preferensi genre, bukan koreksi
+netral. Keduanya diverifikasi lewat PresetParser asli (ok=1); tsc 0,
+jest 426/426. Opsi JM-1 / tunggu 711/GRAS TIDAK lagi ditunggu — keputusan
+ini menggantikannya.
