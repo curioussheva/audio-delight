@@ -377,7 +377,7 @@ Yang **harus** dilihat di logcat saat menguji APK dari CI:
 ```
 EngineManager  start: laju file=96000 -> laju stream=96000 (bit-perfect=ya, perangkat=23)
 EngineManager  start: perangkat diminta=23 (0 = pilih sistem)
-AudioStreamController  OPEN RESULT: ACTUAL rate=96000, framesPerBurst=..., api=AAudio
+AudioStreamController  OPEN RESULT: app rate=96000, hardware rate=96000, framesPerBurst=..., api=AAudio
 EngineManager  start: hasil -> laju diminta=96000 dipakai=96000 (sama=ya),
                exclusive=ya, jalur-mustahil-bit-perfect=tidak, bit-perfect=YA
 ```
@@ -471,7 +471,9 @@ jalur yang mustahil, dan melaporkan batas jalur sebagai kegagalan.
   perangkatnya sendiri tidak punya jalur langsung (`supportsExclusive` false:
   speaker internal, jack, Bluetooth). Perangkat dicari di
   `AudioDeviceManager` lewat id stream yang SEDANG berjalan.
-- `EngineManager::isRateHonored()` Ã¢ÂÂ membandingkan laju stream **aktual**
+- `EngineManager::isRateHonored()` — membandingkan laju stream **hardware**
+  (bukan laju sisi app — logcat #23: `actualSampleRate()` mengembalikan laju
+  app, yang selalu sama dengan yang diminta kalau Oboe menyisipkan filter)
   dengan laju **file**. Bukan hasil `pickBestRate()`: kalau perangkat menolak
   laju yang diminta, stream terbuka di laju lain dan perbandingan ini
   menangkapnya. Menghitung dari yang diminta akan selalu mengaku bit-perfect.

@@ -464,6 +464,15 @@ bool EngineManager::isPathInherentlyLossy() const {
 // perangkat menolak laju yang diminta, stream terbuka di laju lain dan
 // perbandingan ini menangkapnya. Menghitung dari yang DIMINTA akan selalu
 // mengaku bit-perfect.
+//
+// (logcat #23, 2026-11-16): "laju stream aktual" di sini = laju HARDWARE,
+// BUKAN actualSampleRate(). actualSampleRate() mengembalikan laju SISI APP
+// (getSampleRate() Oboe) — begitu Oboe menyisipkan FilterAudioStream, nilai
+// itu = laju file yang diminta app, sementara hardware jalan 48000, sehingga
+// gate ini selalu true secara vacuous. hardwareSampleRate() membaca
+// getHardwareSampleRate() Oboe (disalin filter dari child stream-nya).
+// Kalau hardware rate tidak diketahui (0 — fungsi tidak tersedia di device
+// lama), kembalikan false: klaim bit-perfect harus TERBUKTI, bukan asumsi.
 bool EngineManager::isRateHonored() const {
 
     const uint32_t fileRate = mPlayback.currentFileSampleRate();
@@ -472,8 +481,9 @@ bool EngineManager::isRateHonored() const {
         return false;
     }
 
-    const int32_t streamRate = mEngine.actualSampleRate();
+    const int32_t streamRate = mEngine.hardwareSampleRate();
     if (streamRate <= 0) {
+        // Laju hardware tidak bisa diverifikasi - jangan klaim bit-perfect.
         return false;
     }
 

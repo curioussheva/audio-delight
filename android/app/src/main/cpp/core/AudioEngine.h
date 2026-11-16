@@ -69,7 +69,14 @@ public:
 
     // Laju yang BENAR-BENAR dipakai stream. Dipakai decoder sebagai target
     // resample supaya tidak ada konversi yang tidak perlu.
+    //
+    // PERHATIAN (logcat #23): ini laju SISI APP (lihat AudioStreamController).
+    // Untuk gate bit-perfect pakai hardwareSampleRate() di bawah.
     int32_t actualSampleRate() const;
+
+    // Laju HARDWARE stream (lihat AudioStreamController::hardwareSampleRate).
+    // Dipakai HANYA oleh gate bit-perfect (EngineManager::isRateHonored).
+    int32_t hardwareSampleRate() const;
 
     // Id perangkat yang BENAR-BENAR dipakai stream. 0 = dipilih sistem.
     // Bandingkan dengan yang diminta untuk tahu apakah pilihan dihormati.

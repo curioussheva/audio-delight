@@ -130,7 +130,7 @@ Tiga syarat bit-perfect ke DAC, semuanya harus terpenuhi:
 ```
 AudioEngine::start(requestedSampleRate)
   -> AudioStreamController::open(rate)         buka stream di laju itu
-  -> actualSampleRate()                        laju yang benar-benar didapat
+  -> actualSampleRate()                        laju sisi app yang benar-benar didapat (target decoder/DSP)
   -> PlaybackController::setStreamSampleRate()
   -> DecodeConfig.targetSampleRate
   -> FFmpegDecoder::setupResampler()

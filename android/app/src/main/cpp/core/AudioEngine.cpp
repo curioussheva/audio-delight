@@ -235,6 +235,10 @@ int32_t AudioEngine::actualSampleRate() const {
     return mStreamController.actualSampleRate();
 }
 
+int32_t AudioEngine::hardwareSampleRate() const {
+    return mStreamController.hardwareSampleRate();
+}
+
 int32_t AudioEngine::actualDeviceId() const {
     return mStreamController.actualDeviceId();
 }

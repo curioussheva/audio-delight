@@ -90,7 +90,29 @@ public:
     // Laju yang BENAR-BENAR dipakai stream setelah dibuka. Bisa berbeda dari
     // yang diminta kalau device/DAC tidak mendukung laju itu. Dipakai untuk
     // memberi tahu decoder laju mana yang harus dipakai (target resample).
+    //
+    // PERHATIAN (logcat #23, 2026-11-16): ini laju SISI APP — laju yang ditulis
+    // app ke stream — BUKAN laju hardware. Oboe menyisipkan FilterAudioStream
+    // kalau laju yang diminta ≠ laju device (QuirksManager, LowLatency +
+    // conversion quality default Medium), dan getSampleRate() si filter
+    // mengembalikan laju app (44100/96000) sementara hardware jalan 48000.
+    // Decoder + rantai DSP memang harus pakai laju ini (mereka menulis ke
+    // stream pada laju ini). Untuk pertanyaan "apakah laju file dihormati
+    // hardware (tanpa konversi)?" pakai hardwareSampleRate() di bawah.
     int32_t actualSampleRate() const noexcept;
+
+    // Laju HARDWARE stream yang berjalan (laju yang benar-benar keluar ke
+    // DAC/mixer), dari Oboe getHardwareSampleRate() — FilterAudioStream
+    // menyalinnya dari child stream-nya, jadi nilai ini benar walau ada
+    // filter konversi di tengah. 0 = tidak diketahui (fungsi tidak tersedia
+    // di device lama / tidak ada stream) — pemanggil JANGAN mengarang jawaban
+    // dari nilai ini, dan gate bit-perfect harus mengembalikan false kalau 0.
+    //
+    // Dipakai HANYA oleh gate bit-perfect (EngineManager::isRateHonored):
+    // laju file vs laju hardware. Decoder/DSP tetap memakai actualSampleRate()
+    // (laju sisi app) — mengubahnya akan mengubah laju operasi DSP + target
+    // decoder, itu keputusan audio terpisah, bukan perbaikan gate.
+    int32_t hardwareSampleRate() const noexcept;
 
     // true kalau stream jatuh ke OpenSLES karena AAudio gagal. AAudio adalah
     // jalur utama (punya mode exclusive untuk bit-perfect); OpenSLES hanya
@@ -169,12 +191,40 @@ public:
 private:
 
     // (C-CLEAN(f), 2026-11-12): void — dulu bool yang selalu true.
+    //
+    // `conversionQuality` — kualitas konversi laju Oboe untuk stream ini.
+    // Default Oboe = Medium. Khusus jalur exclusive (bit-perfect) pemanggil
+    // memakai None (logcat #23, 2026-11-16): QuirksManager Oboe 1.9.0 memaksa
+    // child rate=Unspecified + menyisipkan FilterAudioStream untuk stream
+    // LowLatency yang ratenya dispesifikasi SELAMA quality != None — jadi
+    // dengan Medium, stream exclusive TIDAK PERNAH benar-benar exclusive di
+    // laju file (selalu ada konversi 44100/96000 -> 48000). Dengan None,
+    // Oboe membuka stream di laju yang diminta atau GAGAL — dan kegagalan
+    // itulah yang jujur (pemanggil lalu mencoba shared AAudio). Jalur shared/
+    // DSP/Solfeggio tetap Medium: konversi di sana memang dibutuhkan
+    // (file 96 kHz harus turun ke stream 48 kHz) dan tidak ada klaim
+    // bit-perfect yang perlu dijaga.
     void buildStream(
         oboe::AudioStreamBuilder& builder,
         oboe::AudioStreamCallback* callback,
         bool exclusive,
         int32_t requestedSampleRate,
-        int32_t deviceId
+        int32_t deviceId,
+        oboe::SampleRateConversionQuality conversionQuality
+    );
+
+    // Mencoba membuka SATU stream AAudio dengan parameter yang diberikan.
+    // Mengembalikan stream yang terbuka, atau null kalau gagal. TIDAK
+    // menyentuh mStream / cache — pemanggil (open()) yang memutuskan apakah
+    // mencoba lagi dengan parameter lain dan kapan hasil akhirnya disimpan.
+    // Dipisah supaya percobaan exclusive-None dan fallback shared-Medium
+    // tidak menduplikasi ~30 baris builder + openStream + log.
+    std::shared_ptr<oboe::AudioStream> tryOpenAAudio(
+        oboe::AudioStreamCallback* callback,
+        bool exclusive,
+        int32_t requestedSampleRate,
+        int32_t deviceId,
+        oboe::SampleRateConversionQuality conversionQuality
     );
 
 private:
@@ -211,6 +261,14 @@ private:
     // (NativeDSPModule::nativeGetActualSampleRate) dan thread manager
     // (EngineManager). Plain int32_t di sini = data race.
     std::atomic<int32_t> mSampleRate{48000};
+
+    // (logcat #23, 2026-11-16): laju HARDWARE stream terakhir yang berhasil
+    // dibuka (dari opened->getHardwareSampleRate(), 0 kalau tidak diketahui).
+    // Cache dipakai hardwareSampleRate() sebagai cadangan saat stream null —
+    // pola yang sama seperti mSampleRate untuk actualSampleRate(). Direset ke
+    // 0 di close()/onErrorAfterClose() bersama mSampleRate, supaya JNI tidak
+    // melaporkan laju stream yang sudah mati.
+    std::atomic<int32_t> mHardwareSampleRate{0};
 
     // (C-SRATE): atomic juga. Hari ini hanya dibaca channelCount() dari
     // AudioEngine::start(), thread yang sama sesudah open() — tapi atomic
