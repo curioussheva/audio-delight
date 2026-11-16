@@ -67,6 +67,9 @@ let _positionSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
 // 🔥 FIX Bug #1: dedupe concurrent playSong (crash saat tap cepat)
 const _playInFlightSongIds = new Set<string>();
+// C4.2 (Batch 18): handle timer backstop per lagu, supaya timer panggilan
+// lama bisa dibatalkan saat playSong selesai (lihat finally di playSong).
+const _playInFlightTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let _lastPlayRequest: { songId: string; ts: number } | null = null;
 const savePositionThrottled = (position: number) => {
   if (_positionSaveTimer) return;
@@ -535,7 +538,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       _lastPlayRequest = { songId: song.id, ts: _now };
       _playInFlightSongIds.add(song.id);
       // Safety cleanup: auto-release setelah 20s (max durasi setQueue terlihat 15s)
-      setTimeout(() => _playInFlightSongIds.delete(song.id), 20_000);
+      _playInFlightTimers.set(
+        song.id,
+        setTimeout(() => {
+          _playInFlightSongIds.delete(song.id);
+          _playInFlightTimers.delete(song.id);
+        }, 20_000),
+      );
     }
 
     // B17-P-a: semua jalur setelah add() — termasuk early return di
@@ -723,6 +732,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         return false;
       }
     } finally {
+      // C4.2 (Batch 18): batalkan timer backstop 20 dtk panggilan ini,
+      // supaya timer lama tidak menghapus id in-flight panggilan baru
+      // (tap ulang lagu sama < 20 dtk). clearTimeout(undefined) aman.
+      clearTimeout(_playInFlightTimers.get(song.id));
+      _playInFlightTimers.delete(song.id);
       _playInFlightSongIds.delete(song.id);
     }
   },
@@ -1159,7 +1173,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   /**
-   * Ganti mode pemrosesan. LIVE: tidak ada restart stream, tanpa jeda.
+   * Ganti mode pemrosesan.
+   *
+   * Dua jalur yang berbeda sifatnya — jangan samakan:
+   *  - `setProcessingMode` (DSP <-> Immersive): LIVE, berlaku pada buffer
+   *    berikutnya, tanpa restart stream.
+   *  - `toggleExclusiveMode` (keluar/masuk bit-perfect): REOPEN stream
+   *    (stop + start ulang) + reload track, jadi ada jeda — bukan live.
    *
    * Dua hal yang dikirim ke native, dan keduanya terpisah:
    *
