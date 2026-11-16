@@ -239,8 +239,6 @@ export default function SettingsScreen() {
     devices: outputDevices,
     currentDevice: activeOutputDevice,
     status: outputStatus,
-    pathLossy,
-    canBeBitPerfect,
     bluetoothCodec,
     loading: outputLoading,
     error: outputError,
@@ -561,12 +559,21 @@ export default function SettingsScreen() {
   // engine dan stream dibuka ulang di perangkat itu, dengan laju dihitung dari
   // kapabilitas perangkat BARU.
   const renderAudioOutput = () => {
+    // F1 (2026-11-16): label jalur dari STATUS STREAM LIVE, bukan dari
+    // klasifikasi statis per tipe device (yang terbalik: speaker/headset
+    // ditandai mustahil padahal exclusive justru hanya mungkin lewat jalur
+    // internal di HP ber-MMAP). Saat pause/belum siap, verdict bisa basi —
+    // tampilkan "belum diketahui".
     const pathLabel =
-      pathLossy || outputStatus?.pathLossy
-        ? "lewat mixer sistem - tidak bisa bit-perfect"
-        : canBeBitPerfect === true
-          ? "jalur langsung - bit-perfect mungkin"
-          : "belum diketahui";
+      bpStatus.unavailable || bpStatus.stale
+        ? "belum diketahui"
+        : bpStatus.isBitPerfect
+          ? "jalur langsung — bit-perfect aktif"
+          : bpStatus.rateMismatch
+            ? "jalur langsung — laju berbeda (ada resampling)"
+            : bpStatus.exclusiveFailed
+              ? "lewat mixer sistem — device menolak jalur langsung"
+              : "belum diketahui";
 
     return (
       <Section colors={colors} spacing={spacing}>
@@ -810,16 +817,22 @@ export default function SettingsScreen() {
                     lineHeight: 15,
                   }}
                 >
-                  {pathLossy
-                    ? "Jalur perangkat ini selalu lewat mixer sistem. Bit-perfect tidak mungkin di sini - pakai USB DAC."
-                    : canBeBitPerfect === true
-                      ? "Jalur langsung. Bit-perfect mungkin kalau device menerima exclusive."
-                      : "Pilih perangkat dulu untuk tahu apakah jalurnya sanggup."}
+                  {/* F1 (2026-11-16): teks dari status stream live. Toggle
+                      TIDAK PERNAH disabled dari tipe device — klasifikasi
+                      statis lama ("speaker selalu lewat mixer") terbalik
+                      dengan kenyataan; biarkan user mencoba, stream yang
+                      memutuskan, dan statusnya dilaporkan di sini. */}
+                  {bpStatus.isBitPerfect
+                    ? "Exclusive ke perangkat, tanpa DSP."
+                    : bpStatus.rateMismatch
+                      ? "Exclusive, tapi laju stream berbeda dari file — ada resampling."
+                      : bpStatus.exclusiveFailed
+                        ? "Device menolak exclusive — audio lewat mixer Android."
+                        : "Meminta jalur langsung ke perangkat. Kalau device menolak, audio tetap jalan lewat mixer Android."}
                 </Text>
               </View>
               <Switch
                 value={audioMode === "bit-perfect"}
-                disabled={pathLossy}
                 onValueChange={(value) => {
                   // Zustand store yang meneruskan ke engine.
                   setAudioMode(value ? "bit-perfect" : "dsp");

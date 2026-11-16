@@ -24,6 +24,13 @@
 // diketahui), "Jalur mustahil bit-perfect" (jalur lossy secara arsitektur),
 // dan "Bukan bit-perfect" tetap seperti sebelumnya.
 //
+// (F1, 2026-11-16): `pathLossy` di sini kini HANYA true untuk jalur yang
+// TERBUKTI tidak bisa bit-perfect (Bluetooth/A2DP — transcode; OpenSLES —
+// mixer) — bukan lagi untuk speaker/headset. Jadi gerbang `pathLossy` di
+// bawah sudah benar: stream exclusive yang terkonfirmasi tidak mungkin
+// muncul di jalur yang benar-benar lossy. Logika TIDAK diubah; yang
+// diperbaiki adalah arti inputnya di hulu (native + audioOutput.ts).
+//
 // Logika MURNI (tanpa React Native) supaya bisa diuji Jest.
 
 export interface OutputModeLabelInput {
@@ -31,7 +38,9 @@ export interface OutputModeLabelInput {
   canBeBitPerfect: boolean | null;
   /** true kalau laju stream sama dengan laju file (tidak ada konversi). */
   rateHonored: boolean;
-  /** true kalau jalur ini secara arsitektur TIDAK BISA bit-perfect. */
+  /** true kalau jalur ini secara arsitektur TIDAK BISA bit-perfect
+   *  (Bluetooth/A2DP, OpenSLES — TERBUKTI lossy; speaker/headset TIDAK
+   *  termasuk sejak F1, 2026-11-16). */
   pathLossy: boolean;
   /** true kalau permintaan perangkat dihormati (yang dipakai = yang diminta). */
   honored: boolean;

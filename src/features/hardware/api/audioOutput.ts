@@ -25,11 +25,15 @@ export type { ActiveDeviceStatus, AudioDeviceDescriptor, BluetoothA2dpStatusInfo
 /**
  * Jalur output secara arsitektur.
  *
- * - `direct`      : perangkat punya jalur langsung; bit-perfect MUNGKIN
- *                   (USB DAC, HDMI) - tergantung apakah stream berhasil
- *                   dibuka exclusive.
- * - `audioflinger`: perangkat selalu lewat mixer sistem; bit-perfect TIDAK
- *                   MUNGKIN (speaker internal, jack headset, Bluetooth).
+ * - `direct`      : perangkat TIDAK DIKENAL mustahil bit-perfect — boleh
+ *                   dicoba, stream yang memutuskan (USB DAC, HDMI, speaker
+ *                   internal, jack headset, line-out). Exclusive AAudio
+ *                   hanya mungkin lewat jalur INTERNAL di HP ber-MMAP
+ *                   (F1, 2026-11-16); USB justru tidak pernah bisa
+ *                   exclusive via AAudio, tapi tetap "direct" di sini
+ *                   karena jalurnya bypass (USB Direct) di luar AAudio.
+ * - `audioflinger`: perangkat selalu lewat mixer sistem / transcode;
+ *                   bit-perfect TIDAK MUNGKIN (Bluetooth/A2DP, panggilan).
  *
  * Pembedaan ini penting supaya "exclusive ditolak" pada speaker tidak
  * dilaporkan sebagai kegagalan, dan tidak ikut menutupi kegagalan nyata pada
@@ -41,7 +45,15 @@ export const pathKindOf = (
   device: AudioDeviceDescriptor | null | undefined,
 ): OutputPathKind => {
   if (!device) return "unknown";
-  if (device.type === "usb" || device.type === "hdmi") return "direct";
+  if (
+    device.type === "usb" ||
+    device.type === "hdmi" ||
+    device.type === "speaker" ||
+    device.type === "headset" ||
+    device.type === "earpiece" ||
+    device.type === "line_out"
+  )
+    return "direct";
   if (device.type === "unknown") return "unknown";
   return "audioflinger";
 };

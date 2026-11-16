@@ -56,7 +56,7 @@ describe("getOutputModeLabel", () => {
     ).toBe("Tidak dapat disimpulkan");
   });
 
-  it("jalur lossy → jalur mustahil bit-perfect (tetap, walau exclusive aktif)", () => {
+  it("jalur yang terbukti lossy (BT/OpenSLES) → jalur mustahil bit-perfect (tetap, walau exclusive aktif)", () => {
     expect(
       getOutputModeLabel({
         canBeBitPerfect: false,

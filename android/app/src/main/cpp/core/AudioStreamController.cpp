@@ -564,13 +564,22 @@ bool AudioStreamController::isDeviceHonored() const noexcept {
 }
 
 // Jalur yang secara arsitektur tidak bisa bit-perfect: perangkatnya tidak
-// punya jalur langsung ke perangkat keras, atau stream jatuh ke OpenSLES.
+// punya jalur langsung ke perangkat keras (Bluetooth/A2DP — transcode), atau
+// stream jatuh ke OpenSLES.
 //
 // Kenapa perlu: pada jalur ini AAudio/OpenSLES SELALU menolak exclusive, jadi
 // `isExclusive()` false - dan tanpa pembedaan ini UI akan menampilkan
 // "exclusive ditolak" seolah-olah ada yang salah, padahal itu memang batas
-// jalurnya. Sebaliknya pada USB DAC + AAudio, exclusive yang ditolak adalah
-// kegagalan nyata yang harus dilaporkan.
+// jalurnya. Sebaliknya pada jalur yang tidak inherently lossy (USB DAC, atau
+// speaker/headset di HP ber-MMAP), exclusive yang ditolak adalah kegagalan
+// nyata yang harus dilaporkan.
+//
+// (F1, 2026-11-16): speaker/headphone built-in TIDAK lagi di sini —
+// klasifikasi lama (hanya USB/HDMI yang bisa exclusive) terbalik dengan
+// kenyataan: exclusive AAudio hanya mungkin lewat jalur INTERNAL di HP
+// ber-MMAP, dan USB justru tidak pernah bisa exclusive via AAudio.
+// `deviceLacksExclusive()` kini hanya true untuk BT/TELEPHONY/UNKNOWN
+// (lihat AudioDeviceManager.cpp).
 bool AudioStreamController::isPathInherentlyLossy() const noexcept {
 
     // OpenSLES tidak punya mode exclusive sama sekali.

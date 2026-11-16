@@ -335,13 +335,25 @@ int AudioDeviceManager::refreshDevices() {
             d.preferredSampleRate = d.supportedSampleRates.back();
         }
 
-        // Hanya USB/HDMI yang bisa punya jalur langsung ke perangkat keras.
-        // Speaker dan headphone built-in SELALU lewat mixer sistem - jadi
-        // jangan pernah menandainya sebagai bit-perfect capable.
-        // (DV2-M1, 2026-11-12): LINE_OUT sengaja TIDAK exclusive di sini.
-        // LINE_DIGITAL (SPDIF) memang bisa bit-perfect PCM, tapi itu klaim
-        // terpisah yang butuh pembuktian device — konservatif dulu.
-        d.supportsExclusive = (d.type == DeviceType::USB_AUDIO || d.type == DeviceType::HDMI);
+        // (F1, 2026-11-16 — KOREKSI atas klaim lama di bawah): flag ini
+        // BUKAN "jalur ini pasti bisa exclusive", melainkan "jalur ini
+        // TIDAK DIKENAL mustahil exclusive" — boleh dicoba, stream yang
+        // memutuskan (isExclusiveModeActive + isRateHonored). Buktinya:
+        // exclusive via AAudio ditolak di POCO M6 (jack maupun USB, logcat
+        // #23/#24) karena HAL-nya tidak implementasikan MMAP — tapi Oboe
+        // yang sama di HP ber-MMAP (Pixel dsb.) BISA exclusive lewat jalur
+        // internal. Jadi speaker/headset TIDAK BOLEH ditandai mustahil.
+        // false hanya untuk yang TERBUKTI tidak bisa: BLUETOOTH (transcode
+        // A2DP — selalu lossy), TELEPHONY (routing panggilan, bukan musik),
+        // UNKNOWN (tidak dikenal). LINE_OUT true: SPDIF bisa bit-perfect
+        // PCM (catatan lama DV2-M1 justru mengakuinya), dan line-out analog
+        // memakai jalur codec internal yang sama dengan headset.
+        d.supportsExclusive = (d.type == DeviceType::USB_AUDIO ||
+                               d.type == DeviceType::HDMI ||
+                               d.type == DeviceType::BUILTIN_SPEAKER ||
+                               d.type == DeviceType::BUILTIN_EARPIECE ||
+                               d.type == DeviceType::WIRED_HEADSET ||
+                               d.type == DeviceType::LINE_OUT);
 
         found.push_back(std::move(d));
         env->DeleteLocalRef(dev);
@@ -429,8 +441,8 @@ bool AudioDeviceManager::setActiveDevice(const std::string& deviceId) {
 
     if (!it->supportsExclusive) {
         LOGW("setActiveDevice: '%s' tidak punya jalur langsung - "
-             "speaker/headphone built-in selalu lewat mixer sistem, "
-             "bit-perfect ke DAC tidak mungkin di device ini",
+             "bit-perfect tidak mungkin di jalur ini "
+             "(Bluetooth/A2DP, panggilan, atau tipe tidak dikenal)",
              it->name.c_str());
     }
 

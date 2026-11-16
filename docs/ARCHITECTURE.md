@@ -234,7 +234,7 @@ Oboe 1.9.0 diunduh ke `cpp/oboe/` (363 file) lewat `pnpm download-oboe` / `eas-h
 
 **Keputusan.** Manager membaca daftar device nyata dan memvalidasi pilihan terhadap daftar itu - `false` kalau id tidak ada. Penerapan sebenarnya ke stream dilakukan lewat `Oboe setDeviceId()` saat stream dibuka, karena Android tidak punya API publik untuk "paksa output sekarang".
 
-**Konsekuensi.** Pemanggil mendapat jawaban jujur soal validitas pilihan, tapi masih tidak bisa menjamin sistem menghormatinya. `supportsExclusive` disimpan per device supaya UI tidak menawarkan bit-perfect untuk speaker/headphone built-in yang secara teknis selalu lewat mixer.
+**Konsekuensi.** Pemanggil mendapat jawaban jujur soal validitas pilihan, tapi masih tidak bisa menjamin sistem menghormatinya. `supportsExclusive` disimpan per device sebagai "tidak dikenal mustahil exclusive" — false hanya untuk Bluetooth/A2DP, panggilan, dan tipe tidak dikenal. (Koreksi F1, 2026-11-16: klaim lama "speaker/headphone built-in selalu lewat mixer" SALAH — exclusive AAudio justru hanya mungkin lewat jalur internal di HP ber-MMAP; buktinya logcat #23/#24 di POCO M6.)
 
 ### ADR-10 - `ThemeId` dideklarasikan manual, bukan diturunkan dari `ALL_THEMES`
 

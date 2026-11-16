@@ -4,10 +4,12 @@ import { TurboModuleRegistry } from 'react-native';
 /**
  * Satu perangkat output audio.
  *
- * `exclusive` = perangkat punya jalur langsung ke perangkat keras (lewati
- * mixer AudioFlinger). Hanya USB dan HDMI. Speaker internal dan jack headset
- * SELALU lewat mixer - jadi `exclusive: false` di situ bukan kegagalan,
- * melainkan batas jalurnya.
+ * `exclusive` = perangkat TIDAK DIKENAL mustahil punya jalur langsung
+ * (lewati mixer AudioFlinger) — boleh dicoba, stream yang memutuskan.
+ * true untuk USB, HDMI, speaker internal, jack headset, line-out; false
+ * untuk Bluetooth/A2DP (transcode — selalu lossy), panggilan, dan tipe
+ * tidak dikenal. (F1, 2026-11-16: klaim lama "hanya USB dan HDMI" SALAH —
+ * exclusive AAudio justru hanya mungkin lewat jalur internal di HP ber-MMAP.)
  */
 export interface AudioDeviceDescriptor {
   id: string;
@@ -16,7 +18,9 @@ export interface AudioDeviceDescriptor {
   type: string;
   /** Laju maksimum yang didukung perangkat (Hz). */
   sampleRate: number;
-  /** true kalau perangkat bisa punya jalur langsung (USB/HDMI). */
+  /** true kalau perangkat bisa punya jalur langsung (tidak dikenal mustahil:
+   *  USB, HDMI, speaker, headset, line-out). false untuk Bluetooth/A2DP,
+   *  panggilan, dan tipe tidak dikenal. */
   exclusive: boolean;
   isUsb: boolean;
 }
@@ -35,8 +39,10 @@ export interface ActiveDeviceStatus {
   /** true kalau permintaan perangkat dihormati. */
   honored: boolean;
   /**
-   * true kalau jalur ini memang TIDAK BISA bit-perfect (speaker internal,
-   * jack, Bluetooth, atau OpenSLES) - apa pun yang diminta user.
+   * true kalau jalur ini memang TIDAK BISA bit-perfect (Bluetooth/A2DP,
+   * panggilan, tipe tidak dikenal, atau OpenSLES) - apa pun yang diminta
+   * user. Speaker internal dan jack TIDAK termasuk: keduanya bisa
+   * exclusive di HP ber-MMAP (F1, 2026-11-16).
    *
    * Bedakan dari `honored`: yang itu soal apakah perangkat yang dipilih
    * benar-benar dipakai, yang ini soal apakah jalurnya sanggup.

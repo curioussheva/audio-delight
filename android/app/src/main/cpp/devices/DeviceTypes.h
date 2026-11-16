@@ -11,7 +11,9 @@ namespace pristine {
 enum class DeviceType {
     WIRED_HEADSET,
     BLUETOOTH,          // A2DP / SCO / BLE (selalu lossy)
-    USB_AUDIO,          // DAC USB - satu-satunya yang bisa jalur langsung
+    USB_AUDIO,          // DAC USB - bisa jalur langsung (bukan satu-satunya:
+                        // jalur internal juga bisa di HP ber-MMAP; lihat
+                        // AudioDeviceManager.cpp, F1 2026-11-16)
     HDMI,               // termasuk ARC (10) dan eARC (29)
     LINE_OUT,           // line-level analog/digital (mis. SPDIF) + dock analog
     BUILTIN_SPEAKER,

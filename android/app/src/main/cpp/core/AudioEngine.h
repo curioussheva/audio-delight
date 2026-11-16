@@ -97,9 +97,10 @@ public:
     // jalur exclusive, jadi bit-perfect ke DAC tidak tersedia di jalur itu.
     bool usingOpenSLESFallback() const;
 
-    // true kalau jalur yang berjalan memang tidak bisa bit-perfect: perangkat
-    // tidak punya jalur langsung (speaker/jack/Bluetooth) atau stream jatuh ke
-    // OpenSLES.
+    // true kalau jalur yang berjalan memang tidak bisa bit-perfect:
+    // perangkat tidak punya jalur langsung (Bluetooth/A2DP) atau stream
+    // jatuh ke OpenSLES. Speaker/jack TIDAK termasuk: di HP ber-MMAP
+    // jalur internal bisa exclusive (F1, 2026-11-16).
     //
     // Dipakai UI supaya pembedakan "memang tidak mungkin" dari "mungkin tapi
     // ditolak". Lihat AudioStreamController::isPathInherentlyLossy().

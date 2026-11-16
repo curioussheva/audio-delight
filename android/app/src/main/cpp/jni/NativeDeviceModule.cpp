@@ -261,8 +261,10 @@ JNIEXPORT jboolean JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_nativ
 //   [0] id yang diminta (0 = tidak ada preferensi)
 //   [1] id yang benar-benar dipakai stream (0 = dipilih sistem)
 //   [2] 1 kalau permintaan device dihormati, 0 kalau tidak
-//   [3] 1 kalau jalur ini memang TIDAK BISA bit-perfect (speaker internal,
-//       jack, Bluetooth, OpenSLES), 0 kalau secara arsitektur mungkin
+//   [3] 1 kalau jalur ini memang TIDAK BISA bit-perfect (Bluetooth/A2DP,
+//       panggilan, tipe tidak dikenal, atau OpenSLES), 0 kalau secara
+//       arsitektur mungkin — termasuk speaker internal dan jack, yang
+//       BISA exclusive di HP ber-MMAP (F1, 2026-11-16).
 //   [4] 1 kalau laju stream yang berjalan sama dengan laju file (tidak ada
 //       konversi), 0 kalau tidak / laju file tidak diketahui
 //
