@@ -20,6 +20,10 @@ export interface NativeDSPInterface {
   // Status stream aktual — AAudio bisa tolak exclusive, fallback diam-diam.
   isExclusiveModeActive(): boolean;
   getActualSampleRate(): number;
+  // F2: laju HARDWARE stream (bukan laju sisi app). 0 = belum dibuka /
+  // tidak diketahui. `?.()` di pemakai supaya JS lama tetap jalan lawan
+  // APK lama (tanpa metode ini, tampilkan "—", bukan menebak).
+  getHardwareSampleRate(): number;
   // C3.3: laju stream AKTUAL == laju file? (spec/Kotlin/JNI baru; `?.()`
   // di pemakai supaya JS lama tetap jalan lawan APK lama).
   isRateHonored(): boolean;

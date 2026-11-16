@@ -59,6 +59,10 @@ export function BitPerfectSubscreen() {
   const deviceType = currentDevice?.type;
   const sampleRate =
     status.actualSampleRate > 0 ? `${status.actualSampleRate} Hz` : "—";
+  // F2: laju HARDWARE — yang benar-benar jalan di DAC/mixer. Bisa berbeda
+  // dari laju app (mis. file 96 kHz → hardware 48 kHz: mixer meresample).
+  const hardwareRate =
+    status.hardwareSampleRate > 0 ? `${status.hardwareSampleRate} Hz` : "—";
 
   return (
     <View
@@ -121,10 +125,10 @@ export function BitPerfectSubscreen() {
           </Text>
         </View>
 
-        {/* Laju stream */}
+        {/* Laju stream (sisi app) */}
         <View style={styles.row}>
           <Text style={[styles.rowLabel, { color: colors.text.secondary }]}>
-            Laju stream
+            Laju stream (app)
           </Text>
           <Text
             style={[
@@ -133,6 +137,21 @@ export function BitPerfectSubscreen() {
             ]}
           >
             {sampleRate}
+          </Text>
+        </View>
+
+        {/* Laju hardware — yang benar-benar jalan di DAC/mixer */}
+        <View style={styles.row}>
+          <Text style={[styles.rowLabel, { color: colors.text.secondary }]}>
+            Laju hardware
+          </Text>
+          <Text
+            style={[
+              styles.rowValue,
+              { color: colors.text.primary, textAlign: "right" },
+            ]}
+          >
+            {hardwareRate}
           </Text>
         </View>
 

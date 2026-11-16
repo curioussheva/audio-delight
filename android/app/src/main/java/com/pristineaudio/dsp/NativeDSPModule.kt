@@ -48,6 +48,7 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     // 🔥 Status stream aktual — lihat isExclusiveModeActive() di bawah.
     private external fun nativeIsExclusiveModeActive(): Boolean
     private external fun nativeGetActualSampleRate(): Int
+    private external fun nativeGetHardwareSampleRate(): Int
     private external fun nativeIsRateHonored(): Boolean
 
     // Additional JNI functions (were missing before)
@@ -341,6 +342,12 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     @ReactMethod(isBlockingSynchronousMethod = true)
     fun getActualSampleRate(): Int =
         if (engineAvailable) nativeGetActualSampleRate() else 0
+
+    // F2 (2026-11-16): laju HARDWARE stream. 0 = belum dibuka / tidak
+    // diketahui — UI menampilkan "—", bukan menebak.
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    fun getHardwareSampleRate(): Int =
+        if (engineAvailable) nativeGetHardwareSampleRate() else 0
 
     // C3.3 (Batch 18 susulan): laju stream == laju file? Fallback true
     // bila engine belum tersedia — jangan menuduh resampling saat status

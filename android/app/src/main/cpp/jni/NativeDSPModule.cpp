@@ -347,6 +347,18 @@ Java_com_pristineaudio_dsp_NativeDSPModule_nativeGetActualSampleRate(
     });
 }
 
+// F2 (2026-11-16): laju HARDWARE stream (bukan laju sisi app).
+// Fallback 0 — "tidak diketahui"; UI menampilkan "—" dan tidak mengklaim.
+JNIEXPORT jint JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_nativeGetHardwareSampleRate(
+    JNIEnv* env, jobject) {
+    return pristine::jni::guarded<jint>(env, "nativeGetHardwareSampleRate", 0, [&]() -> jint {
+    return static_cast<jint>(
+        EngineManager::get().hardwareSampleRate()
+    );
+    });
+}
+
 // C3.3 (Batch 18 susulan): laju stream AKTUAL == laju file?
 // Fallback JNI_TRUE — jangan menuduh resampling bila bacaannya gagal;
 // cabang unavailable di TS yang bicara saat engine belum siap.

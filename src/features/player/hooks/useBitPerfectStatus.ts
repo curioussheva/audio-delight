@@ -42,6 +42,10 @@ export interface BitPerfectStatus {
   rateMismatch: boolean;
   /** Laju stream yang benar-benar dibuka Oboe (Hz). 0 = belum start. */
   actualSampleRate: number;
+  /** Laju HARDWARE stream (Hz) — yang benar-benar jalan di DAC/mixer.
+   *  Bisa berbeda dari actualSampleRate (laju sisi app). 0 = belum start /
+   *  tidak diketahui. (F2, 2026-11-16.) */
+  hardwareSampleRate: number;
   /** Native module belum siap (library belum load / engine belum start). */
   unavailable: boolean;
   /**
@@ -60,6 +64,7 @@ const INITIAL: BitPerfectStatus = {
   rateHonored: true,
   rateMismatch: false,
   actualSampleRate: 0,
+  hardwareSampleRate: 0,
   unavailable: true,
   stale: true,
 };
@@ -74,16 +79,26 @@ const INITIAL: BitPerfectStatus = {
 const readStreamStatus = (): {
   exclusive: boolean;
   rate: number;
+  hardwareRate: number;
   rateHonored: boolean;
   available: boolean;
 } => {
   try {
     if (!NativeDSPModule?.isExclusiveModeActive) {
-      return { exclusive: false, rate: 0, rateHonored: true, available: false };
+      return {
+        exclusive: false,
+        rate: 0,
+        hardwareRate: 0,
+        rateHonored: true,
+        available: false,
+      };
     }
     return {
       exclusive: NativeDSPModule.isExclusiveModeActive(),
       rate: NativeDSPModule.getActualSampleRate?.() ?? 0,
+      // F2: metode baru di spec/Kotlin/JNI; `?.() ?? 0` supaya JS lama
+      // tetap jalan lawan APK lama (tampilkan "—", bukan menebak).
+      hardwareRate: NativeDSPModule.getHardwareSampleRate?.() ?? 0,
       // C3.3: metode baru di spec/Kotlin/JNI; `?.() ?? true` supaya JS
       // lama tetap jalan lawan APK lama (jangan tuduh resampling bila
       // metodenya belum ada).
@@ -92,7 +107,13 @@ const readStreamStatus = (): {
     };
   } catch {
     // Native tidak ter-load atau engine belum start — bukan error fatal.
-    return { exclusive: false, rate: 0, rateHonored: true, available: false };
+    return {
+      exclusive: false,
+      rate: 0,
+      hardwareRate: 0,
+      rateHonored: true,
+      available: false,
+    };
   }
 };
 
@@ -107,7 +128,8 @@ export const useBitPerfectStatus = (
 
   useEffect(() => {
     const sync = () => {
-      const { exclusive, rate, rateHonored, available } = readStreamStatus();
+      const { exclusive, rate, hardwareRate, rateHonored, available } =
+        readStreamStatus();
       const requested = audioMode === "bit-perfect";
 
       setStatus({
@@ -125,6 +147,7 @@ export const useBitPerfectStatus = (
         // gagal, yang berbeda lajunya.
         rateMismatch: requested && available && exclusive && !rateHonored,
         actualSampleRate: rate,
+        hardwareSampleRate: hardwareRate,
         unavailable: !available,
         // Saat pause polling berhenti — verdict yang tersisa bisa basi
         // (mis. DAC dicabut saat pause). Pemakai harus menyembunyikan

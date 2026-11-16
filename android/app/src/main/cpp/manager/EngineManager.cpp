@@ -1433,4 +1433,11 @@ int32_t EngineManager::actualSampleRate() const {
     return mEngine.actualSampleRate();
 }
 
+// F2 (2026-11-16): laju HARDWARE stream — getHardwareSampleRate() Oboe.
+// 0 kalau stream belum dibuka / tidak diketahui. Dipakai UI (subscreen
+// Bit-Perfect) supaya "Laju stream" tidak lagi menampilkan laju app saja.
+int32_t EngineManager::hardwareSampleRate() const {
+    return mEngine.hardwareSampleRate();
+}
+
 } // namespace pristine 

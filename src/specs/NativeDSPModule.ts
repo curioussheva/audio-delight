@@ -45,17 +45,26 @@ export interface Spec extends TurboModule {
   // 🔥 Status stream AKTUAL, bukan yang diminta.
   // AAudio bisa menolak exclusive → Oboe fallback ke shared secara diam-diam.
   // isExclusiveModeActive() false meski setExclusiveMode(true) dipanggil.
-  // getActualSampleRate() = laju stream yang benar-benar dibuka Oboe.
-  // Sinkron supaya satu read atomic (stop/start stream di tengah bisa kasih
-  // data dari stream lama).
+  // getActualSampleRate() = laju SISI APP (getSampleRate() Oboe) — BUKAN
+  // laju hardware. Setelah Oboe menyisipkan FilterAudioStream, nilai itu =
+  // laju file yang diminta app, sementara hardware bisa jalan di laju lain
+  // (F2, 2026-11-16: komentar lama "laju stream yang benar-benar dibuka
+  // Oboe" di sini SALAH). Untuk laju hardware pakai
+  // getHardwareSampleRate() di bawah. Sinkron supaya satu read atomic
+  // (stop/start stream di tengah bisa kasih data dari stream lama).
   isExclusiveModeActive(): boolean;
   getActualSampleRate(): number;
 
+  // F2 (2026-11-16): laju HARDWARE stream (getHardwareSampleRate() Oboe).
+  // 0 = stream belum dibuka / tidak diketahui. Dipakai UI supaya "Laju
+  // stream" tidak lagi menampilkan laju app saja.
+  getHardwareSampleRate(): number;
+
   // C3.3 (Batch 18 susulan): laju stream AKTUAL == laju file?
-  // EngineManager::isRateHonored() membandingkan keduanya (bukan yang
-  // diminta) — kalau decoder meresample 44,1 kHz ke stream 48 kHz, ini
-  // false dan label "Bit-Perfect aktif" tidak boleh tampil. Sinkron
-  // seperti dua query di atas.
+  // EngineManager::isRateHonored() membandingkan laju FILE vs laju
+  // HARDWARE (bukan laju app, bukan yang diminta) — kalau hardware jalan
+  // 48 kHz sementara file 44,1 kHz, ini false dan label "Bit-Perfect
+  // aktif" tidak boleh tampil. Sinkron seperti dua query di atas.
   isRateHonored(): boolean;
 
   // Additional engine controls

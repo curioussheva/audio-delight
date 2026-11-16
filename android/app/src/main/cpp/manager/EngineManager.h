@@ -232,6 +232,9 @@ public:
     // Status stream AKTUAL, bukan yang diminta. Lihat AudioEngine::isExclusive.
     bool isExclusive() const;
     int32_t actualSampleRate() const;
+    // F2 (2026-11-16): laju HARDWARE stream (bukan laju sisi app) — supaya
+    // UI bisa menampilkan laju yang benar-benar jalan di DAC/mixer.
+    int32_t hardwareSampleRate() const;
 
     // (getStats() dihapus 2026-11-10: 0 caller.
     // C-DSPMETRIC, 2026-11-12: komentar lama di sini SALAH — "JNI membaca
