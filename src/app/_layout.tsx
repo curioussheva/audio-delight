@@ -1,6 +1,12 @@
 import { configureReanimatedLogger, ReanimatedLogLevel } from "react-native-reanimated";
+import Constants from "expo-constants";
+import { startJsLagMonitor } from "@/shared/utils/jsLagMonitor";
 
 console.log("[BOOT] 0. _layout module loaded");
+// app-debug: penanda build yang tegas (pengganti tebak-tebakan DevLauncherActivity di #27)
+// + pemantau lag event-loop JS (diagnostik tidur JS, hanya branch app-debug).
+console.log("[BOOT] build=%s dev=%s", Constants.expoConfig?.version ?? "?", __DEV__);
+startJsLagMonitor();
 const Platform = require("react-native").Platform;
 configureReanimatedLogger({ level: ReanimatedLogLevel.warn, strict: false });
 

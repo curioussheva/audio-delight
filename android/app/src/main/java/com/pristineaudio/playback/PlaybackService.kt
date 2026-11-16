@@ -184,6 +184,9 @@ class PlaybackService : Service() {
         // Perintah kontrol media jalan di command thread (B16-M1), bukan
         // main thread — startForeground/refreshNotification di atas tetap
         // di main thread, itu bagian lifecycle service.
+        // app-debug: catat sumber aksi (notifikasi vs pemanggil startService
+        // lain) — MediaSession (lock screen/headset) TIDAK lewat sini.
+        android.util.Log.d("PlaybackService", "onStartCommand action=${intent?.action}")
         when (intent?.action) {
             ACTION_PLAY -> commandHandler.post { PlaybackNativeBridge.play() }
             ACTION_PAUSE -> commandHandler.post { PlaybackNativeBridge.pause() }

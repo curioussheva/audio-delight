@@ -10,6 +10,7 @@ import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ExpoReactHostFactory
 import com.pristineaudio.PristineAudioPackage
+import com.pristineaudio.debug.JsWatchdog
 
 class MainApplication : Application(), ReactApplication {
 
@@ -33,6 +34,8 @@ class MainApplication : Application(), ReactApplication {
     override fun onCreate() {
         super.onCreate()
         Log.d("PristineApp", "onCreate")
+        // Diagnostik tidur JS — HANYA branch app-debug, jangan merge ke release.
+        JsWatchdog.start()
         loadReactNative(this)
         ApplicationLifecycleDispatcher.onApplicationCreate(this)
         Log.d("PristineApp", "onCreate done")

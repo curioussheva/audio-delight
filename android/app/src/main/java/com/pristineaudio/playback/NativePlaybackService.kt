@@ -355,6 +355,8 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun getPosition(promise: Promise) {
+        // Detak watchdog tidur JS (app-debug): hanya JS yang memanggil ke sini.
+        com.pristineaudio.debug.JsWatchdog.beat()
         try {
             promise.resolve(PlaybackNativeBridge.getPosition().toDouble())
         } catch (e: Throwable) {
