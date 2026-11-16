@@ -10,14 +10,14 @@ namespace {
 //   - cukup rendah agar beat-nya terasa jelas,
 //   - cukup tinggi agar tidak terasa seperti drone bass,
 //   - masih jauh dari batas atas pendengaran pada semua laju sampling.
-constexpr float kCarrierHz = 200.0f;
+constexpr double kCarrierHz = 200.0;
 
 // Amplitudo dasar carrier. Sengaja kecil (0.08) supaya ia menjadi lapisan
 // halus di bawah musik. Kalau terlalu besar, yang terdengar justru nadanya,
 // bukan efeknya.
-constexpr float kCarrierAmplitude = 0.08f;
+constexpr double kCarrierAmplitude = 0.08;
 
-constexpr float kTwoPi = 6.28318530718f;
+constexpr double kTwoPi = 6.283185307179586;
 
 } // namespace
 
@@ -85,36 +85,37 @@ void BrainwaveGenerator::generate(
     }
 
     const float vol = mVolume > 1.0f ? 1.0f : mVolume;
-    const float amplitude = kCarrierAmplitude * vol;
+    const double amplitude = kCarrierAmplitude * static_cast<double>(vol);
 
-    const float beatHz = beatFrequency(mType);
+    const double beatHz = static_cast<double>(beatFrequency(mType));
 
     // Setengah beat di kiri, setengah di kanan. Selisih keduanya = beatHz,
     // sehingga otak mempersepsikan denyut sebesar beatHz.
-    const float leftHz = kCarrierHz - beatHz * 0.5f;
-    const float rightHz = kCarrierHz + beatHz * 0.5f;
+    const double leftHz = kCarrierHz - beatHz * 0.5;
+    const double rightHz = kCarrierHz + beatHz * 0.5;
 
-    const float incL = kTwoPi * leftHz / sampleRate;
-    const float incR = kTwoPi * rightHz / sampleRate;
+    const double incL = kTwoPi * leftHz / static_cast<double>(sampleRate);
+    const double incR = kTwoPi * rightHz / static_cast<double>(sampleRate);
 
     for (int32_t i = 0; i < numFrames; ++i) {
 
-        left[i] += std::sin(mPhaseL) * amplitude;
-        right[i] += std::sin(mPhaseR) * amplitude;
+        left[i] += static_cast<float>(std::sin(mPhaseL) * amplitude);
+        right[i] += static_cast<float>(std::sin(mPhaseR) * amplitude);
 
         mPhaseL += incL;
         mPhaseR += incR;
 
-        // Bungkus fase supaya tidak tumbuh tanpa batas. Presisi float mulai
-        // kabur di sekitar 1e7, dan pada 48 kHz itu tercapai dalam ~4 menit.
+        // Bungkus fase supaya tidak tumbuh tanpa batas. Dengan double,
+        // presisi kabur baru di sekitar 1e15 — praktis tidak pernah
+        // tercapai; bungkus tetap dijaga supaya fase tetap bounded.
         if (mPhaseL >= kTwoPi) mPhaseL -= kTwoPi;
         if (mPhaseR >= kTwoPi) mPhaseR -= kTwoPi;
     }
 }
 
 void BrainwaveGenerator::reset() {
-    mPhaseL = 0.0f;
-    mPhaseR = 0.0f;
+    mPhaseL = 0.0;
+    mPhaseR = 0.0;
 }
 
 }} // namespace

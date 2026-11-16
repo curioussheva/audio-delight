@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../BiquadFilter.h"
+
 #include <atomic>
 #include <cstdint>
 
@@ -33,8 +35,7 @@ private:
     float processChannel(
         float* channel,
         int32_t numFrames,
-        float& x1, float& x2,
-        float& y1, float& y2,
+        BiquadFilter& bp,
         float wet,
         float wetTarget
     );
@@ -58,12 +59,12 @@ private:
     static constexpr float kWetSmooth = 0.002f;
     static constexpr float kWetSettledEps = 1e-4f;
 
-    // RBJ bandpass coefficients (constant 0 dB peak gain)
-    float mB0 = 0.0f, mB1 = 0.0f, mB2 = 0.0f, mA1 = 0.0f, mA2 = 0.0f;
-
-    // Direct Form I state — terpisah per channel.
-    float mLx1 = 0.0f, mLx2 = 0.0f, mLy1 = 0.0f, mLy2 = 0.0f;
-    float mRx1 = 0.0f, mRx2 = 0.0f, mRy1 = 0.0f, mRy2 = 0.0f;
+    // RBJ bandpass (constant 0 dB peak gain), satu per channel supaya
+    // tidak ada crosstalk. I1-double: BiquadFilter ber-state + berkoefisien
+    // double (DF-II Transposed) — menggantikan DF-I float (mB0…mA2,
+    // mLx1…mRy2) yang galatnya -67,9 dBFS di 384 kHz. Input/output tetap
+    // float (jalur audio).
+    BiquadFilter mBpL, mBpR;
 };
 
 } // namespace dsp

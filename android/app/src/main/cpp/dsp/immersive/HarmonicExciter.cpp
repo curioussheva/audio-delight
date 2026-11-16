@@ -55,15 +55,15 @@ void HarmonicExciter::prepare(int32_t sampleRate) {
 
     if (sampleRate > 0) {
         mDcCoeff = std::exp(
-            -2.0f * static_cast<float>(M_PI) * 50.0f /
-            static_cast<float>(sampleRate)
+            -2.0 * M_PI * 50.0 /
+            static_cast<double>(sampleRate)
         );
     }
 
-    mDcPrevInL = 0.0f;
-    mDcPrevOutL = 0.0f;
-    mDcPrevInR = 0.0f;
-    mDcPrevOutR = 0.0f;
+    mDcPrevInL = 0.0;
+    mDcPrevOutL = 0.0;
+    mDcPrevInR = 0.0;
+    mDcPrevOutR = 0.0;
 }
 
 // =====================================================
@@ -78,14 +78,14 @@ void HarmonicExciter::prepare(int32_t sampleRate) {
 // B15-I2: blocker ini HANYA dilewati produk distorsi (shape(x) - x), bukan
 // sinyal dry - jadi angka di atas hanya membentuk harmonisa tambahan,
 // bukan memotong bass sinyal asli.
-float HarmonicExciter::dcBlock(float x, float& prevIn, float& prevOut) const {
+float HarmonicExciter::dcBlock(double x, double& prevIn, double& prevOut) const {
 
-    const float y = x - prevIn + mDcCoeff * prevOut;
+    const double y = x - prevIn + mDcCoeff * prevOut;
 
     prevIn = x;
     prevOut = y;
 
-    return y;
+    return static_cast<float>(y);
 }
 
 // =====================================================
@@ -183,10 +183,10 @@ void HarmonicExciter::process(
 void HarmonicExciter::reset() {
     // Shaper-nya stateless, tapi DC blocker ber-state - bersihkan supaya
     // tidak ada transient dari ekor track/stream sebelumnya.
-    mDcPrevInL = 0.0f;
-    mDcPrevOutL = 0.0f;
-    mDcPrevInR = 0.0f;
-    mDcPrevOutR = 0.0f;
+    mDcPrevInL = 0.0;
+    mDcPrevOutL = 0.0;
+    mDcPrevInR = 0.0;
+    mDcPrevOutR = 0.0;
 }
 
 }} // namespace

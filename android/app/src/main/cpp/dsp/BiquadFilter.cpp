@@ -317,4 +317,44 @@ bool BiquadFilter::setHighShelf(
     return true;
 }
 
+// =====================================================
+// BANDPASS (constant 0 dB peak gain)
+// =====================================================
+//
+// Untuk SolfeggioResonator (I1-double): menggantikan DF-I float yang
+// galatnya mencapai -67,9 dBFS di 384 kHz. designOk mengklem freq ke
+// [1, 0.49*sr] dan Q ke [0.1, 20]; gain tidak dipakai (bandpass tidak
+// punya gainDb) jadi dilewat dummy 0. Gagal -> koefisien lama dipertahankan.
+bool BiquadFilter::setBandpass(
+    float freq,
+    float Q,
+    float sampleRate
+) {
+
+    float g = 0.0f;
+    if (!designOk(freq, Q, g, sampleRate)) {
+        return false;
+    }
+
+    // =============================================
+    // RBJ COOKBOOK (B13-K2-double: hitung dalam double)
+    // =============================================
+
+    const double w0 =
+        2.0 * M_PI *
+        static_cast<double>(freq) /
+        static_cast<double>(sampleRate);
+    const double alpha =
+        std::sin(w0) / (2.0 * static_cast<double>(Q));
+    const double a0 = 1.0 + alpha;
+
+    coeffs.b0 = alpha / a0;
+    coeffs.b1 = 0.0;
+    coeffs.b2 = -alpha / a0;
+    coeffs.a1 = -2.0 * std::cos(w0) / a0;
+    coeffs.a2 = (1.0 - alpha) / a0;
+
+    return true;
+}
+
 } // namespace pristine

@@ -58,10 +58,19 @@ static void check(bool ok, const std::string& what) {
 // menuju target + snap 1e-4, bypass bila target <= 0 dan wet < 1e-4.
 // Wet dimajukan sekali per sampel dan dipakai bersama oleh L dan R
 // pada sampel yang sama.
+//
+// I1-double: bentuk filter referensi = DF-II Transposed, SAMA dengan
+// produksi (BiquadFilter). DF-I dan DF-II-T merealisasikan fungsi
+// transfer yang sama, TAPI state-nya mengodekan riwayat secara berbeda
+// — saat koefisien berubah (ganti frekuensi, tes 4), transien kedua
+// bentuk menyimpang sampai ~6e-4 lalu meluruh, walau koefisiennya benar.
+// Referensi DF-I lama membuat tes 4 gagal palsu (6,05e-04); dengan
+// referensi DF-II-T, selisih di switch < 1e-6. State dibawa melewati
+// pergantian koefisien di kedua sisi (tanpa reset), seperti produksi.
 struct RefPerSample {
     double b0 = 0.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
-    double lx1 = 0.0, lx2 = 0.0, ly1 = 0.0, ly2 = 0.0;
-    double rx1 = 0.0, rx2 = 0.0, ry1 = 0.0, ry2 = 0.0;
+    double lz1 = 0.0, lz2 = 0.0;
+    double rz1 = 0.0, rz2 = 0.0;
     double wet = 0.0;
     double cachedFreq = -1.0;
 
@@ -94,14 +103,14 @@ struct RefPerSample {
         wet += (target - wet) * 0.002;
         if (std::fabs(target - wet) <= 1e-4) wet = target;
 
-        const double yL = b0 * xL + b1 * lx1 + b2 * lx2 - a1 * ly1 - a2 * ly2;
-        lx2 = lx1; lx1 = xL;
-        ly2 = ly1; ly1 = yL;
+        const double yL = b0 * xL + lz1;
+        lz1 = b1 * xL - a1 * yL + lz2;
+        lz2 = b2 * xL - a2 * yL;
         outL = xL + wet * yL;
 
-        const double yR = b0 * xR + b1 * rx1 + b2 * rx2 - a1 * ry1 - a2 * ry2;
-        rx2 = rx1; rx1 = xR;
-        ry2 = ry1; ry1 = yR;
+        const double yR = b0 * xR + rz1;
+        rz1 = b1 * xR - a1 * yR + rz2;
+        rz2 = b2 * xR - a2 * yR;
         outR = xR + wet * yR;
         return true;
     }

@@ -52,8 +52,11 @@ private:
 
     // Fase carrier kiri & kanan. TIDAK direset tiap buffer - fase harus
     // kontinu, kalau tidak akan terdengar klik di setiap batas buffer.
-    float mPhaseL = 0.0f;
-    float mPhaseR = 0.0f;
+    // I1-double: akumulator double — kenaikan per sampel kecil
+    // (~0,026 rad @48 kHz) dan fase berjalan lama; float mulai kabur
+    // di sekitar 1e7 (~4 menit @48 kHz), double praktis tidak pernah.
+    double mPhaseL = 0.0;
+    double mPhaseR = 0.0;
 };
 
 }} // namespace

@@ -49,7 +49,11 @@ private:
 
     // DC blocker satu-pole: y = x - prevIn + R*prevOut (R dari laju, ~50 Hz).
     // B15-I2: hanya dilewati produk distorsi (shape(x) - x), bukan dry.
-    float dcBlock(float x, float& prevIn, float& prevOut) const;
+    // I1-double: koefisien + state double — di 384 kHz R = 0,99918,
+    // selisih 1-R ~8e-4: float masih bisa, tapi double menghilangkan
+    // kuantisasi koefisien/state sepenuhnya (murah, satu-pole).
+    // Input/output tetap float (jalur audio), seperti BiquadFilter.
+    float dcBlock(double x, double& prevIn, double& prevOut) const;
 
     float mDrive = 0.0f;
 
@@ -60,11 +64,12 @@ private:
     // DC blocker: koefisien R = exp(-2*pi*50/fs), default ~50 Hz @48 kHz.
     // Satu state (prevIn/prevOut) per channel; keduanya hanya menyimpan
     // riwayat produk distorsi h = shape(x) - x, bukan sinyal campuran.
-    float mDcCoeff = 0.99348f;
-    float mDcPrevInL = 0.0f;
-    float mDcPrevOutL = 0.0f;
-    float mDcPrevInR = 0.0f;
-    float mDcPrevOutR = 0.0f;
+    // I1-double: koefisien + state double (lihat dcBlock).
+    double mDcCoeff = 0.9934763870659812;
+    double mDcPrevInL = 0.0;
+    double mDcPrevOutL = 0.0;
+    double mDcPrevInR = 0.0;
+    double mDcPrevOutR = 0.0;
 };
 
 }} // namespace

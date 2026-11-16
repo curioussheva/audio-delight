@@ -78,6 +78,15 @@ public:
         float sampleRate
     );
 
+    // Bandpass RBJ (constant 0 dB peak gain) — untuk SolfeggioResonator
+    // (I1-double). Validasi + clamp sama seperti setter lain (designOk);
+    // koefisien + state double (B13-K2-double). Q tetap 4.0 di pemakai.
+    bool setBandpass(
+        float freq,
+        float Q,
+        float sampleRate
+    );
+
     // =============================================
     // PROCESS
     // =============================================

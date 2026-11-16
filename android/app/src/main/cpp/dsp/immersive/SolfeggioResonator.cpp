@@ -68,25 +68,17 @@ void SolfeggioResonator::updateCoefficientsIfNeeded() {
     // nilai lokal: mFreq yang disimpan tidak diubah.
     const float effFreq = std::min(freq, 0.45f * mSampleRate);
 
-    const float w0 = 2.0f * static_cast<float>(M_PI) * effFreq / mSampleRate;
-    const float cosW0 = cosf(w0);
-    const float sinW0 = sinf(w0);
-    const float alpha = sinW0 / (2.0f * Q);
-
-    // RBJ bandpass, constant 0 dB peak gain.
-    const float a0 = 1.0f + alpha;
-    mB0 = alpha / a0;
-    mB1 = 0.0f;
-    mB2 = -alpha / a0;
-    mA1 = (-2.0f * cosW0) / a0;
-    mA2 = (1.0f - alpha) / a0;
+    // I1-double: koefisien + state double di BiquadFilter (DF-II-T).
+    // setBandpass memvalidasi + mengklem ulang (designOk: freq [1, 0.49*sr],
+    // Q [0.1, 20]); gagal -> koefisien lama dipertahankan, filter tetap jalan.
+    mBpL.setBandpass(effFreq, Q, mSampleRate);
+    mBpR.setBandpass(effFreq, Q, mSampleRate);
 }
 
 float SolfeggioResonator::processChannel(
     float* channel,
     int32_t numFrames,
-    float& x1, float& x2,
-    float& y1, float& y2,
+    BiquadFilter& bp,
     float wet,
     float wetTarget
 ) {
@@ -100,11 +92,9 @@ float SolfeggioResonator::processChannel(
 
         const float x0 = channel[i];
 
-        const float y0 = mB0 * x0 + mB1 * x1 + mB2 * x2
-                        - mA1 * y1 - mA2 * y2;
-
-        x2 = x1; x1 = x0;
-        y2 = y1; y1 = y0;
+        // I1-double: filter bandpass double (BiquadFilter::process,
+        // DF-II Transposed, state + koefisien double).
+        const float y0 = bp.process(x0);
 
         // B15-I1: ADITIF, bukan wet/dry — sinyal asli selalu utuh (unity
         // di luar band), resonansi DITAMBAHKAN: tengah pita 1 + wet
@@ -135,19 +125,19 @@ void SolfeggioResonator::process(float* left, float* right, int32_t numFrames) {
     // L dan R mulai dari wet yang sama dan maju identik (jumlah langkah
     // sama, target sama) — wL == wR; mWetSmooth diperbarui dari kiri.
     const float wetStart = mWetSmooth;
-    const float wL = processChannel(left, numFrames, mLx1, mLx2, mLy1, mLy2,
+    const float wL = processChannel(left, numFrames, mBpL,
                                     wetStart, wetTarget);
     mWetSmooth = wL;
 
     if (right != nullptr && right != left) {
-        processChannel(right, numFrames, mRx1, mRx2, mRy1, mRy2,
+        processChannel(right, numFrames, mBpR,
                        wetStart, wetTarget);
     }
 }
 
 void SolfeggioResonator::reset() {
-    mLx1 = mLx2 = mLy1 = mLy2 = 0.0f;
-    mRx1 = mRx2 = mRy1 = mRy2 = 0.0f;
+    mBpL.reset();
+    mBpR.reset();
     mWetSmooth = 0.0f;
 }
 
