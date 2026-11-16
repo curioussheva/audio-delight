@@ -197,6 +197,13 @@ object PlaybackNativeBridge {
     // ditolak Arguments.fromJavaArgs (RuntimeException) sehingga event ini
     // TIDAK PERNAH sampai ke JS.
     fun emitTrackChanged(uri: String, index: Int) {
+        // F5 (logcat #25): penanda di sisi emit — logcat sudah memberi
+        // waktu tiap baris; yang hilang adalah BARIS emit-nya sendiri,
+        // sehingga stall 9,6 dtk (next → event) tidak bisa dibedakan JS
+        // tidur vs emit telat. Dengan baris ini: onNativeTrackEnded
+        // (waktu native) → baris ini (waktu emit Kotlin→JS) → log event
+        // di JS (waktu terima).
+        android.util.Log.d("PlaybackNativeBridge", "emitTrackChanged: uri=$uri index=$index")
         try {
             val module = NativePlaybackModule.instance ?: return
             if (!module.jsAlive) return
