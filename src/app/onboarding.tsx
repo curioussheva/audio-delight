@@ -270,7 +270,9 @@ export default function OnboardingScreen() {
       // AudioFlinger mixer (resample + gain) — bit-perfect hanya namanya.
       // Audio tetap berbunyi, jadi user tidak tahu kalau exclusive mati.
       // Log yang membuktikan: "[Onboarding] Finishing with mode: bit-perfect"
-      // tapi tidak ada "🚀 [AudioEngine] Exclusive Mode: ON".
+      // tapi tidak ada "💎 [AudioEngine] Stream: exclusive=..." — baris
+      // "🚀 [AudioEngine] Exclusive Mode: ON" TIDAK bisa jadi bukti, karena
+      // itu hanya mencatat yang DIMINTA, bukan yang diberikan (F3, 2026-11-16).
       //
       // setAudioMode() melakukan DUA hal sekaligus (lihat playerStore):
       //   1. setProcessingMode — sama seperti DSPPipeline di atas

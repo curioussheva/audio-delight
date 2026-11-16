@@ -34,7 +34,6 @@ export class AudioEngine {
   private sessionId: number | null = null;
   private config: Required<AudioEngineConfig>;
   private isVisualizerRunning = false;
-  private isExclusive = false;
 
   constructor(config: AudioEngineConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -91,8 +90,11 @@ export class AudioEngine {
   }
 
   async toggleExclusiveMode(enabled: boolean): Promise<void> {
-    this.isExclusive = enabled;
-    console.log(`🚀 [AudioEngine] Exclusive Mode: ${enabled ? "ON" : "OFF"}`);
+    // F3 (2026-11-16): log ini HANYA mencatat yang DIMINTA — AAudio bisa
+    // menolak, dan kebenarannya ada di log verifikasi 💎 di bawah.
+    // (Flag `isExclusive` dihapus di ronde yang sama: write-only, tidak
+    // pernah dibaca.)
+    console.log(`🚀 [AudioEngine] Exclusive Mode diminta: ${enabled ? "ON" : "OFF"}`);
 
     // 🔥 FIX (2026-10-06): nyalakan Oboe exclusive mode di native.
     //
