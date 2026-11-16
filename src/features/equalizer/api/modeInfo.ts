@@ -14,7 +14,7 @@ export const MODE_INFO: Record<AudioMode, ModeInfo> = {
     label: "Bit-Perfect",
     hint: "tanpa DSP",
     description:
-      "Jalur langsung ke perangkat: EQ, DSP dan retune dilewati, hanya fade anti-klik.",
+      "Meminta jalur langsung ke perangkat (kalau device menerima exclusive): EQ, DSP dan retune dilewati, hanya fade anti-klik.",
   },
   dsp: {
     label: "DSP",
