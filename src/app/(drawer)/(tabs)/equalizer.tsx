@@ -48,6 +48,8 @@ import { HeadphoneSection } from "@/features/headphone/components/HeadphoneSecti
 import { MODE_INFO } from "@/features/equalizer/api/modeInfo";
 import { SolfeggioSubscreen } from "@/features/equalizer/components/SolfeggioSubscreen";
 import { BitPerfectSubscreen } from "@/features/equalizer/components/BitPerfectSubscreen";
+import { useBitPerfectStatus } from "@/features/player/hooks/useBitPerfectStatus";
+import { describeBitPerfectPath } from "@/features/player/api/bitPerfectPath";
 import {
   DEFAULT_VISIBLE_SECTIONS,
   VISIBLE_SECTIONS_KEY,
@@ -219,6 +221,14 @@ export default function EqualizerScreen() {
 
   const eq = useEqualizer();
   const { audioMode, setAudioMode } = usePlayerStore();
+
+  // Status tanpa-MMAP di tab mode (keputusan 2026-11-16 19:07): tampilkan
+  // di sini, bukan notifikasi sekali — persisten, terlihat di semua mode
+  // begitu verdict diketahui (bit-perfect pernah dicoba dan exclusive
+  // ditolak). Subscreen bit-perfect sudah menampilkannya saat mode itu
+  // aktif; baris di bawah membuatnya terlihat juga dari mode lain.
+  const bpStatus = useBitPerfectStatus();
+  const bpVerdict = describeBitPerfectPath(bpStatus);
 
   const [isModalVisible, setModalVisible] = useState(false);
 
@@ -482,6 +492,28 @@ export default function EqualizerScreen() {
           >
             {MODE_INFO[audioMode].description}
           </Text>
+
+          {/* Status tanpa-MMAP di tab mode (keputusan 2026-11-16 19:07):
+              hanya muncul kalau exclusive PERNAH ditolak (tone fallback) —
+              sebelum bit-perfect dicoba, verdict belum tahu dan baris ini
+              tidak tampil. Kata-katanya bicara soal penolakan yang
+              teramati, bukan mekanisme (MMAP) yang tidak terukur dari
+              sinyal ini. */}
+          {bpVerdict.tone === "fallback" && (
+            <Text
+              style={[
+                styles.modeDescription,
+                {
+                  color: colors.accent.orange,
+                  marginHorizontal: spacing.md,
+                  marginBottom: spacing.md,
+                },
+              ]}
+            >
+              Bit-perfect: exclusive ditolak di perangkat ini — audio lewat
+              mixer (fallback shared).
+            </Text>
+          )}
 
           {/* TOGGLE SEKSI (hanya DSP — subscreen lain tidak punya seksi
               ini). Di bawah header + deskripsi mode supaya tidak
