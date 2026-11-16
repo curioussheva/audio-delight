@@ -63,7 +63,7 @@ export function describeBitPerfectPath(
     return {
       label: "Bit-Perfect aktif — output murni",
       tone: "active",
-      note: "Sinyal langsung ke perangkat, tanpa pemrosesan.",
+      note: "Sinyal langsung ke perangkat, tanpa DSP — hanya fade anti-klik 10 ms di awal/akhir lagu dan setelah seek/resume, 15 ms saat pause.",
     };
   }
 
@@ -71,13 +71,13 @@ export function describeBitPerfectPath(
     return {
       label: "Fallback shared",
       tone: "fallback",
-      note: "Device menolak exclusive — fallback shared, tetap tanpa pemrosesan.",
+      note: "Device menolak exclusive — audio lewat mixer Android (volume dan resampling sistem tetap berlaku). App hanya melakukan fade anti-klik (10 ms awal/akhir/seek/resume, 15 ms saat pause).",
     };
   }
 
   return {
     label: "Bit-Perfect tidak dipilih",
     tone: "idle",
-    note: "Pilih mode Bit-Perfect untuk output murni.",
+    note: "Pilih mode Bit-Perfect untuk jalur langsung ke perangkat — tanpa DSP, hanya fade anti-klik.",
   };
 }

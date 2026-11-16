@@ -33,6 +33,11 @@ describe("describeBitPerfectPath", () => {
     });
     expect(verdict.label).toBe("Bit-Perfect aktif — output murni");
     expect(verdict.tone).toBe("active");
+    // Note aktif harus jujur soal fade anti-klik (C3.2): 10 ms awal/akhir
+    // + seek/resume, 15 ms saat pause — bukan "tanpa pemrosesan".
+    expect(verdict.note).toContain("fade anti-klik");
+    expect(verdict.note).toContain("10 ms");
+    expect(verdict.note).toContain("15 ms");
   });
 
   it("requested + ditolak + native terbaca → fallback shared", () => {
@@ -42,7 +47,9 @@ describe("describeBitPerfectPath", () => {
     });
     expect(verdict.label).toBe("Fallback shared");
     expect(verdict.tone).toBe("fallback");
-    expect(verdict.note).toContain("tetap tanpa pemrosesan");
+    expect(verdict.note).toContain("mixer Android");
+    // App tetap melakukan fade anti-klik walau DSP dilewati (C3.1).
+    expect(verdict.note).toContain("fade anti-klik");
   });
 
   it("stale → bukan verdict live, hanya keadaan terakhir diketahui", () => {

@@ -12,9 +12,9 @@ export interface ModeInfo {
 export const MODE_INFO: Record<AudioMode, ModeInfo> = {
   "bit-perfect": {
     label: "Bit-Perfect",
-    hint: "tanpa pemrosesan",
+    hint: "tanpa DSP",
     description:
-      "Output murni tanpa pemrosesan: EQ, DSP dan retune dilewati.",
+      "Jalur langsung ke perangkat: EQ, DSP dan retune dilewati, hanya fade anti-klik.",
   },
   dsp: {
     label: "DSP",

@@ -454,7 +454,7 @@ export default function SettingsScreen() {
     if (mode === "bit-perfect") {
       Alert.alert(
         "Aktifkan Bit-Perfect?",
-        "Mode ini menonaktifkan semua DSP (EQ, Bass, Reverb) untuk output murni tanpa pemrosesan. Pemutaran tetap berjalan walau device tidak mendukung jalur langsung.",
+        "Mode ini menonaktifkan semua DSP (EQ, Bass, Reverb) — hanya fade anti-klik yang tetap jalan. Pemutaran tetap berjalan walau device tidak mendukung jalur langsung; saat itu audio lewat mixer Android.",
         [
           { text: "Batal", style: "cancel" },
           {

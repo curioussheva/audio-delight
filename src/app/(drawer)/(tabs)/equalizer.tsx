@@ -310,7 +310,7 @@ export default function EqualizerScreen() {
   // pelebar, koreksi headphone) HANYA hidup di mode `dsp`; Immersive memakai
   // rantai resonansinya sendiri dan tidak memakai seksi di bawah.
   const modes: Array<{ id: AudioMode; label: string; hint: string }> = [
-    { id: "bit-perfect", label: "Bit-Perfect", hint: "tanpa pemrosesan" },
+    { id: "bit-perfect", label: "Bit-Perfect", hint: "tanpa DSP" },
     { id: "dsp", label: "DSP", hint: "EQ & efek" },
     { id: "immersive", label: "Solfeggio", hint: "resonansi" },
   ];
@@ -323,7 +323,7 @@ export default function EqualizerScreen() {
     if (mode === "bit-perfect") {
       Alert.alert(
         "Aktifkan Bit-Perfect?",
-        "Mode ini menonaktifkan semua DSP (EQ, Bass, Reverb) untuk output murni tanpa pemrosesan. Pemutaran tetap berjalan walau device tidak mendukung jalur langsung.",
+        "Mode ini menonaktifkan semua DSP (EQ, Bass, Reverb) — hanya fade anti-klik yang tetap jalan. Pemutaran tetap berjalan walau device tidak mendukung jalur langsung; saat itu audio lewat mixer Android.",
         [
           { text: "Batal", style: "cancel" },
           {
