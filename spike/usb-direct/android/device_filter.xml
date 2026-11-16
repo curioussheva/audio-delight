@@ -1,0 +1,33 @@
+<!-- =====================================================
+     spike/usb-direct/android/device_filter.xml — TEMPLATE
+     =====================================================
+
+     BELUM AKTIF. File ini hanya perlu bila app harus AUTO-LAUNCH
+     saat DAC dicolok (USB_DEVICE_ATTACHED). Discovery + permission
+     dinamis (UsbDirectManager.kt) bekerja TANPA file ini.
+
+     CARA MENGISI (setelah DAC CX31993 dibeli — JANGAN menebak angka):
+       1. Colok DAC ke HP, jalankan di Termux:  lsusb
+          (atau:  adb shell dumpsys usb  — cari vendorId/productId)
+       2. Isi vendor-id + product-id di bawah (desimal, bukan hex).
+       3. Salin file ini ke android/app/src/main/res/xml/device_filter.xml
+       4. Tambah ke AndroidManifest.xml di dalam <activity> MainActivity:
+            <intent-filter>
+              <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                       android:resource="@xml/device_filter" />
+       5. Ingat AGENTS.md: intent-filter + meta-data device_filter
+          adalah SATU UNIT — jangan tambah salah satu saja.
+
+     Catatan: filter juga bisa ditulis generik (tanpa vendor/product),
+     mis. <usb-device class="1" subclass="2" /> untuk semua perangkat
+     audio UAC2 — tapi itu membuat app terdaftar untuk SEMUA DAC,
+     termasuk yang UAC1 (CM108) yang TIDAK didukung spike ini.
+     Lebih aman filter per VID:PID setelah DAC dibeli.
+-->
+<resources>
+    <!-- GANTI dengan VID:PID DAC CX31993 yang sebenarnya (desimal). -->
+    <!-- Contoh format (ANGKA DI BAWAH HANYA CONTOH — JANGAN PAKAI): -->
+    <!-- <usb-device vendor-id="1234" product-id="5678" /> -->
+</resources>
