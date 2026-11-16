@@ -523,11 +523,7 @@ export default function LibraryScreen() {
                 colors={colors}
                 // Gunakan handleSongPress agar konsisten
                 onPress={() => {
-                  // 🔥 FIX: kirim slice sekitar lagu, bukan 1195 lagu semua
-                  const idx = filteredSource.findIndex((s: any) => s.id === item.id);
-                  const start = Math.max(0, idx - 10);
-                  const end = Math.min(filteredSource.length, idx + 40);
-                  handleSongPress(item, filteredSource.slice(start, end));
+                  handleSongPress(item, filteredSource);
                 }}
                 onToggleFavorite={toggleFavorite}
               />
