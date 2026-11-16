@@ -31,27 +31,35 @@ void SolfeggioResonator::setFrequency(float hz) {
 
 void SolfeggioResonator::setIntensity(float intensity) {
     // C-IMMVAL: std::clamp TIDAK menahan NaN — perbandingannya false
-    // dua-duanya, jadi NaN lolos mentah, lalu Q = 0.7 + NaN*7.3 = NaN dan
-    // seluruh koefisien RBJ jadi NaN (updateCoefficientsIfNeeded).
-    // clampFinite: non-finite -> fallback 0.5 = default AudioState,
-    // finite di luar [0,1] -> batas terdekat.
+    // dua-duanya, jadi NaN lolos mentah, lalu wetTarget = NaN dan
+    // mWetSmooth ikut jadi NaN (processChannel). clampFinite:
+    // non-finite -> fallback 0.5 = default AudioState, finite di luar
+    // [0,1] -> batas terdekat.
     mIntensity.store(clampFinite(intensity, 0.0f, 1.0f, 0.5f),
                      std::memory_order_relaxed);
 }
 
-// Recompute hanya saat freq/intensity berubah — real-time safe, tidak ada
+// Recompute hanya saat FREKUENSI berubah — real-time safe, tidak ada
 // trig/alloc/lock per-sample.
+//
+// C2 Batch 18: Q DIPATOK 4.0f, tidak lagi mengikuti intensity
+// (dulu Q = 0.7 + intensity*7.3, jadi tiap geser slider menghitung ulang
+// koefisien RBJ seketika = zipper). Intensity hanya mengubah wet (yang
+// dihaluskan di processChannel), bukan lebar pita. Karena itu intensity
+// sengaja TIDAK masuk syarat early-return di sini — perubahan intensity
+// saja tidak boleh memicu hitung ulang koefisien.
+// CATATAN KARAKTER: di intensity 1.0 Q berubah 8 -> 4 (pita lebih lebar),
+// di 0.1 berubah 1,43 -> 4 (pita lebih sempit); di default 0,5 hampir
+// sama (4,35 -> 4). Butuh verdict telinga di device.
 void SolfeggioResonator::updateCoefficientsIfNeeded() {
     const float freq = mFreq.load(std::memory_order_relaxed);
-    const float intensity = mIntensity.load(std::memory_order_relaxed);
 
-    if (freq == mCachedFreq && intensity == mCachedIntensity) return;
+    if (freq == mCachedFreq) return;
 
     mCachedFreq = freq;
-    mCachedIntensity = intensity;
 
-    // Intensity tinggi -> band lebih sempit -> resonansi terasa lebih kuat.
-    const float Q = 0.7f + intensity * 7.3f;
+    // Q tetap — lebar pita konstan di semua intensity.
+    const float Q = 4.0f;
 
     // B15-I1: klem ulang ke 0,45 x laju SAAT INI — mFreq diklem di
     // setFrequency() terhadap laju saat itu, tapi prepare() ke laju lebih
@@ -74,15 +82,22 @@ void SolfeggioResonator::updateCoefficientsIfNeeded() {
     mA2 = (1.0f - alpha) / a0;
 }
 
-void SolfeggioResonator::processChannel(
+float SolfeggioResonator::processChannel(
     float* channel,
     int32_t numFrames,
     float& x1, float& x2,
-    float& y1, float& y2
+    float& y1, float& y2,
+    float wet,
+    float wetTarget
 ) {
-    const float wet = mCachedIntensity;
-
     for (int32_t i = 0; i < numFrames; ++i) {
+        // C2 Batch 18: wet dihaluskan one-pole per sampel menuju target
+        // (kWetSmooth = 0.002f, sama dengan GainNode/EQProcessor/
+        // SpatialFieldProcessor) — bukan lompatan per buffer. Snap ke
+        // target persis bila sudah dalam eps, ala GainNode.
+        wet += (wetTarget - wet) * kWetSmooth;
+        if (std::fabs(wetTarget - wet) <= kWetSettledEps) wet = wetTarget;
+
         const float x0 = channel[i];
 
         const float y0 = mB0 * x0 + mB1 * x1 + mB2 * x2
@@ -98,24 +113,42 @@ void SolfeggioResonator::processChannel(
         // menguatkan apa pun.
         channel[i] = x0 + wet * y0;
     }
+
+    return wet;
 }
 
 void SolfeggioResonator::process(float* left, float* right, int32_t numFrames) {
     updateCoefficientsIfNeeded();
 
-    // Bypass total saat intensity 0 — hemat CPU, tidak ada efek sama sekali.
-    if (mCachedIntensity <= 0.0f) return;
+    // mCachedIntensity = target wet terbaru (intensity tidak lagi dibaca
+    // di updateCoefficientsIfNeeded sejak C2 — koefisien hanya soal freq).
+    mCachedIntensity = mIntensity.load(std::memory_order_relaxed);
 
-    processChannel(left, numFrames, mLx1, mLx2, mLy1, mLy2);
+    // Bypass total HANYA bila target 0 DAN wet sudah meluruh di bawah eps
+    // — ekor resonansi tidak dipotong mendadak (dulu: return mentah saat
+    // intensity <= 0 = klik). Selama wet meramp turun, filter tetap jalan
+    // supaya state meluruh alami.
+    if (mCachedIntensity <= 0.0f && mWetSmooth < kWetSettledEps) return;
+
+    const float wetTarget = mCachedIntensity;
+
+    // L dan R mulai dari wet yang sama dan maju identik (jumlah langkah
+    // sama, target sama) — wL == wR; mWetSmooth diperbarui dari kiri.
+    const float wetStart = mWetSmooth;
+    const float wL = processChannel(left, numFrames, mLx1, mLx2, mLy1, mLy2,
+                                    wetStart, wetTarget);
+    mWetSmooth = wL;
 
     if (right != nullptr && right != left) {
-        processChannel(right, numFrames, mRx1, mRx2, mRy1, mRy2);
+        processChannel(right, numFrames, mRx1, mRx2, mRy1, mRy2,
+                       wetStart, wetTarget);
     }
 }
 
 void SolfeggioResonator::reset() {
     mLx1 = mLx2 = mLy1 = mLy2 = 0.0f;
     mRx1 = mRx2 = mRy1 = mRy2 = 0.0f;
+    mWetSmooth = 0.0f;
 }
 
 } // namespace dsp

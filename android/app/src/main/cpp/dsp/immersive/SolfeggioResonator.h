@@ -27,11 +27,16 @@ public:
 
 private:
     void updateCoefficientsIfNeeded();
-    void processChannel(
+    // Mengembalikan wet akhir (sudah dimajukan per sampel menuju
+    // wetTarget). wet masuk per nilai (bukan referensi) supaya L dan R
+    // memulai dari wet yang sama dan maju identik.
+    float processChannel(
         float* channel,
         int32_t numFrames,
         float& x1, float& x2,
-        float& y1, float& y2
+        float& y1, float& y2,
+        float wet,
+        float wetTarget
     );
 
     // Ditulis dari control thread (JNI), dibaca dari audio thread.
@@ -42,6 +47,16 @@ private:
     float mCachedFreq = -1.0f;
     float mCachedIntensity = -1.0f;
     float mSampleRate = 48000.0f;
+
+    // Wet yang SUDAH dihaluskan (one-pole menuju mCachedIntensity).
+    // C2 Batch 18: wet mentah (= intensity) tidak lagi dipakai langsung —
+    // lompatan per buffer = zipper/klik.
+    float mWetSmooth = 0.0f;
+
+    // Konstanta smoothing wet — SAMA dengan kSmooth di GainNode /
+    // EQProcessor / SpatialFieldProcessor (tau ~10,4 ms @48 kHz).
+    static constexpr float kWetSmooth = 0.002f;
+    static constexpr float kWetSettledEps = 1e-4f;
 
     // RBJ bandpass coefficients (constant 0 dB peak gain)
     float mB0 = 0.0f, mB1 = 0.0f, mB2 = 0.0f, mA1 = 0.0f, mA2 = 0.0f;
