@@ -98,6 +98,25 @@ class NativePlaybackModule(
         if (uri.isNullOrEmpty()) return
         android.util.Log.d("NativePlaybackModule", "onNativeTrackEnded: $uri")
         PlaybackNativeBridge.emitTrackEnded(uri)
+        // F6 (logcat #25, 2026-11-16): auto-advance TIDAK PERNAH emit
+        // track-changed ke JS (0/3) — satu-satunya emit ada di
+        // MediaSessionManager.notifyQueueChanged(), yang hanya dipanggil
+        // dari tombol next/prev notification. Akibatnya UI tetap
+        // menampilkan lagu lama sampai sync berikutnya. C++ meng-emit
+        // trackEnded SETELAH advance + loadTrack trek baru selesai
+        // (PlaybackController::advanceWorkerLoop), jadi di titik ini
+        // getCurrentTrack() sudah trek BARU. Emit hanya kalau antrean
+        // memang maju (trek sekarang != trek yang berakhir) — di trek
+        // terakhir dengan Repeat Off tidak ada trek baru.
+        try {
+            val cur = PlaybackNativeBridge.getCurrentTrack()
+            val index = PlaybackNativeBridge.getCurrentIndex()
+            if (!cur.isNullOrEmpty() && cur != uri) {
+                PlaybackNativeBridge.emitTrackChanged(cur, index)
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("NativePlaybackModule", "onNativeTrackEnded emit track-changed: ${e.message}")
+        }
     }
 
     private external fun nativeInitEventEmitter()
