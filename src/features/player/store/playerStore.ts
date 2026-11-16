@@ -538,6 +538,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       _lastPlayRequest = { songId: song.id, ts: _now };
       _playInFlightSongIds.add(song.id);
       // Safety cleanup: auto-release setelah 20s (max durasi setQueue terlihat 15s)
+      // Batalkan dulu timer lama untuk id ini (bila ada) supaya timer basi
+      // tidak menghapus entri in-flight panggilan baru untuk lagu yang sama.
+      clearTimeout(_playInFlightTimers.get(song.id));
       _playInFlightTimers.set(
         song.id,
         setTimeout(() => {
