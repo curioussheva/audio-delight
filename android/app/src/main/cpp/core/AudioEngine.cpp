@@ -167,11 +167,14 @@ bool AudioEngine::start(
         actualRate
     );
 
+    // F3 #24 (2026-11-16): "exclusive" di sini dulu mencetak flag DIMINTA
+    // (exclusiveMode), bukan mode yang DIBERIKAN — cetak keduanya.
     __android_log_print(ANDROID_LOG_INFO, "AudioEngine",
         "start: diminta rate=%d device=%d, dipakai rate=%d device=%d, "
-        "exclusive=%s, api=%s%s",
+        "exclusive=%s [diminta %s], api=%s%s",
         requestedSampleRate, requestedDeviceId,
         actualRate, mStreamController.actualDeviceId(),
+        isExclusive() ? "ya" : "tidak",
         exclusiveMode ? "ya" : "tidak",
         mStreamController.usingOpenSLESFallback() ? "OpenSLES" : "AAudio",
         mStreamController.usingOpenSLESFallback()

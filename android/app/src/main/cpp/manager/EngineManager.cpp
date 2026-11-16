@@ -265,10 +265,13 @@ void EngineManager::start() {
     // lewat mixer. Catat eksplisit supaya bisa dibuktikan dari logcat tanpa
     // menebak dari UI.
     if (requestedRate > 0) {
+        // F3 #24 (2026-11-16): "dipakai" dulu = laju APP (actualSampleRate),
+        // bukan laju hardware — cetak ketiganya supaya gate bisa dibaca langsung.
         __android_log_print(ANDROID_LOG_INFO, "EngineManager",
-            "start: hasil -> laju diminta=%d dipakai=%d (sama=%s), "
+            "start: hasil -> laju diminta=%d laju-app=%d laju-hardware=%d "
+            "(dihormati=%s), "
             "exclusive=%s, jalur-mustahil-bit-perfect=%s, bit-perfect=%s",
-            requestedRate, mEngine.actualSampleRate(),
+            requestedRate, mEngine.actualSampleRate(), hardwareSampleRate(),
             isRateHonored() ? "ya" : "TIDAK",
             mEngine.isExclusive() ? "ya" : "tidak",
             isPathInherentlyLossy() ? "ya" : "tidak",
