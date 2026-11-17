@@ -17,6 +17,7 @@ import {
   formatFreq,
   freqLabelsFor,
   freqToFraction,
+  nextPeakHold,
   parametricDbColor,
   parametricDbZone,
   valueToDb,
@@ -182,13 +183,57 @@ describe("parametricDbZone / parametricDbColor (biru→merah, main player)", () 
     expect(parametricDbZone(-3)).toBe("red");
     expect(parametricDbZone(0)).toBe("red");
   });
+});
 
-  it("warna konsisten dengan zona (hijau/kuning/merah sama dengan Analyzer)", () => {
+describe("parametricDbColor — gradient MULUS (bukan zona terpisah)", () => {
+  it("ujung: -80 dB = biru, 0 dB = merah", () => {
     expect(parametricDbColor(-80)).toBe(PARAMETRIC_COLOR_BLUE);
-    expect(parametricDbColor(-50)).toBe(PARAMETRIC_COLOR_CYAN);
-    expect(parametricDbColor(-30)).toBe(PARAMETRIC_COLOR_GREEN);
-    expect(parametricDbColor(-15)).toBe(PARAMETRIC_COLOR_YELLOW);
-    expect(parametricDbColor(-6)).toBe(PARAMETRIC_COLOR_ORANGE);
     expect(parametricDbColor(0)).toBe(PARAMETRIC_COLOR_RED);
+  });
+
+  it("jangkar tepat sama dengan warna zona lama", () => {
+    expect(parametricDbColor(-60)).toBe(PARAMETRIC_COLOR_CYAN);
+    expect(parametricDbColor(-40)).toBe(PARAMETRIC_COLOR_GREEN);
+    expect(parametricDbColor(-20)).toBe(PARAMETRIC_COLOR_YELLOW);
+    expect(parametricDbColor(-12)).toBe(PARAMETRIC_COLOR_ORANGE);
+  });
+
+  it("tengah segmen = lerp RGB antar jangkar (bukan warna zona)", () => {
+    // -70: tengah biru #2563EB ↔ cyan #06B6D4.
+    expect(parametricDbColor(-70)).toBe("#168DE0");
+    // -50: tengah cyan #06B6D4 ↔ hijau #22C55E.
+    expect(parametricDbColor(-50)).toBe("#14BE99");
+    // Bukan warna zona mana pun.
+    expect(parametricDbColor(-70)).not.toBe(PARAMETRIC_COLOR_BLUE);
+    expect(parametricDbColor(-70)).not.toBe(PARAMETRIC_COLOR_CYAN);
+    expect(parametricDbColor(-50)).not.toBe(PARAMETRIC_COLOR_CYAN);
+    expect(parametricDbColor(-50)).not.toBe(PARAMETRIC_COLOR_GREEN);
+  });
+
+  it("di luar rentang di-clamp ke ujung", () => {
+    expect(parametricDbColor(-100)).toBe(PARAMETRIC_COLOR_BLUE);
+    expect(parametricDbColor(-1000)).toBe(PARAMETRIC_COLOR_BLUE);
+    expect(parametricDbColor(10)).toBe(PARAMETRIC_COLOR_RED);
+  });
+});
+
+describe("nextPeakHold (peak hold main player)", () => {
+  it("naik instan ke nilai saat ini", () => {
+    expect(nextPeakHold(0.5, 0.8)).toBe(0.8);
+    expect(nextPeakHold(0.05, 0.9)).toBe(0.9);
+  });
+
+  it("tetap bila nilai sama dengan puncak", () => {
+    expect(nextPeakHold(0.5, 0.5)).toBe(0.5);
+  });
+
+  it("turun pelan (PEAK_HOLD_DECAY) bila nilai di bawah puncak", () => {
+    expect(nextPeakHold(0.8, 0.5)).toBeCloseTo(0.77, 10);
+    expect(nextPeakHold(0.5, 0.1)).toBeCloseTo(0.47, 10);
+  });
+
+  it("tidak pernah di bawah lantai 0.05", () => {
+    expect(nextPeakHold(0.06, 0.05)).toBe(0.05);
+    expect(nextPeakHold(0.05, 0.05)).toBe(0.05);
   });
 });

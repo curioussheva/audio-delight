@@ -67,12 +67,13 @@ export function dbColor(db: number): string {
 
 /**
  * Skala warna parametrik biru→merah untuk main player
- * (ParametricSpectrumView) — gradasi mengikuti dB, satu zona per warna.
- * Ambang atas (oranye/merah) sejajar zona Analyzer supaya "keras" dan
- * "clip" dibaca sama di kedua tempat; ujung bawah ditambah biru/cyan
- * supaya audio tenang tetap terbaca (bukan cuma hijau gelap).
- * dB < -60 biru, -60..-40 cyan, -40..-20 hijau, -20..-12 kuning,
- * -12..-3 oranye, >= -3 merah.
+ * (ParametricSpectrumView) — gradasi mengikuti dB.
+ *
+ * Sejak 2026-11-18 (atas permintaan csheva: "-80 biru sampai 0 dB merah"
+ * + sedikit efek): interpolasi KONTINU antar jangkar, bukan zona terpisah.
+ * Jangkarnya sama dengan zona lama supaya "keras" dan "clip" dibaca sama
+ * seperti Analyzer; yang berubah hanya transisinya: mulus, bukan patah.
+ * dB -80 biru, -60 cyan, -40 hijau, -20 kuning, -12 oranye, 0 merah.
  * SINGLE-CHANNEL (mono): warna dihitung dari satu array FFT campuran
  * (getFFTData), BUKAN per-channel L/R — dual-channel butuh FFT native
  * per channel (follow-up, bukan di sini).
@@ -89,6 +90,21 @@ export const PARAMETRIC_COLOR_GREEN = ANALYZER_COLOR_LOW;
 export const PARAMETRIC_COLOR_YELLOW = ANALYZER_COLOR_WARN;
 export const PARAMETRIC_COLOR_ORANGE = "#F97316";
 export const PARAMETRIC_COLOR_RED = ANALYZER_COLOR_CLIP;
+
+/** Jangkar gradient parametrik (dB → warna). Dipakai parametricDbColor
+ * dan shader LinearGradient di ParametricSpectrumView (posisinya lewat
+ * dbToValue). */
+export const PARAMETRIC_GRADIENT_STOPS: readonly {
+  db: number;
+  color: string;
+}[] = [
+  { db: ANALYZER_DB_FLOOR, color: PARAMETRIC_COLOR_BLUE },
+  { db: PARAMETRIC_DB_CYAN, color: PARAMETRIC_COLOR_CYAN },
+  { db: PARAMETRIC_DB_GREEN, color: PARAMETRIC_COLOR_GREEN },
+  { db: PARAMETRIC_DB_YELLOW, color: PARAMETRIC_COLOR_YELLOW },
+  { db: PARAMETRIC_DB_ORANGE, color: PARAMETRIC_COLOR_ORANGE },
+  { db: ANALYZER_DB_CEIL, color: PARAMETRIC_COLOR_RED },
+];
 
 export type ParametricDbZone =
   | "blue"
@@ -109,16 +125,77 @@ export function parametricDbZone(db: number): ParametricDbZone {
   return "blue";
 }
 
-/** Warna parametrik (biru→merah) untuk satu nilai dB. */
+/** "#RRGGBB" -> [r, g, b] 0..255. Murni, worklet-safe. */
+function hexToRgb(hex: string): [number, number, number] {
+  "worklet";
+  return [
+    parseInt(hex.slice(1, 3), 16),
+    parseInt(hex.slice(3, 5), 16),
+    parseInt(hex.slice(5, 7), 16),
+  ];
+}
+
+/** [r, g, b] 0..255 -> "#RRGGBB" (huruf besar). Murni, worklet-safe. */
+function rgbToHex(r: number, g: number, b: number): string {
+  "worklet";
+  const d = "0123456789ABCDEF";
+  const h = (n: number) => {
+    const v = Math.round(Math.max(0, Math.min(255, n)));
+    return d[Math.floor(v / 16)] + d[v % 16];
+  };
+  return `#${h(r)}${h(g)}${h(b)}`;
+}
+
+/**
+ * Warna parametrik (biru→merah) untuk satu nilai dB — interpolasi
+ * KONTINU (lerp RGB) antar jangkar PARAMETRIC_GRADIENT_STOPS, bukan
+ * warna zona yang patah. -80 dB = biru, 0 dB = merah; di luar rentang
+ * di-clamp ke ujung. Dipakai test + spesifikasi gradient; gambar bar
+ * sendiri memakai shader LinearGradient dengan jangkar yang sama.
+ */
 export function parametricDbColor(db: number): string {
-  "worklet"; // dipanggil dari barsPath (useDerivedValue, UI thread)
-  const zone = parametricDbZone(db);
-  if (zone === "red") return PARAMETRIC_COLOR_RED;
-  if (zone === "orange") return PARAMETRIC_COLOR_ORANGE;
-  if (zone === "yellow") return PARAMETRIC_COLOR_YELLOW;
-  if (zone === "green") return PARAMETRIC_COLOR_GREEN;
-  if (zone === "cyan") return PARAMETRIC_COLOR_CYAN;
-  return PARAMETRIC_COLOR_BLUE;
+  "worklet";
+  const stops = PARAMETRIC_GRADIENT_STOPS;
+  const first = stops[0];
+  const last = stops[stops.length - 1];
+  if (db <= first.db) return first.color;
+  if (db >= last.db) return last.color;
+  for (let i = 0; i < stops.length - 1; i++) {
+    const a = stops[i];
+    const b = stops[i + 1];
+    if (db >= a.db && db <= b.db) {
+      const t = (db - a.db) / (b.db - a.db);
+      const [r1, g1, b1] = hexToRgb(a.color);
+      const [r2, g2, b2] = hexToRgb(b.color);
+      return rgbToHex(
+        r1 + (r2 - r1) * t,
+        g1 + (g2 - g1) * t,
+        b1 + (b2 - b1) * t,
+      );
+    }
+  }
+  return last.color;
+}
+
+/**
+ * Peak hold (main player): laju jatuh puncak per tick reaksi (~10 Hz,
+ * mengikuti poll VisualizerService 100 ms). 0.03/tick ≈ 0.3 amp/detik
+ * ≈ 24 dB/detik — puncak turun pelan, ~3 detik dari 0 dB ke lantai.
+ */
+export const PEAK_HOLD_DECAY = 0.03;
+/** Lantai peak hold — sama dengan lantai bar diam (0.05). */
+export const PEAK_HOLD_FLOOR = 0.05;
+
+/**
+ * Langkah peak hold berikutnya: naik INSTAN ke nilai saat ini, turun
+ * pelan (PEAK_HOLD_DECAY) bila nilai saat ini di bawah puncak, tidak
+ * pernah di bawah lantai. Murni, bisa diuji jest; dipanggil dari
+ * useAnimatedReaction di ParametricSpectrumView (UI thread).
+ */
+export function nextPeakHold(peak: number, current: number): number {
+  "worklet";
+  if (current >= peak) return current;
+  return Math.max(PEAK_HOLD_FLOOR, peak - PEAK_HOLD_DECAY);
 }
 
 /**

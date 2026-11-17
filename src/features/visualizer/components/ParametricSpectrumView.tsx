@@ -2,27 +2,33 @@
 //
 // Bar spektrum parametrik untuk MAIN PLAYER — menggantikan SpectogramView
 // (waterfall) di sana sejak 2026-11-17. Beda dengan tab Analyzer:
-// - Tanpa sumbu/grid/label dB, tanpa peak hold, tanpa pill CLIP, tanpa
-//   scroll — tampilan minimal yang muat di ruang 120px main player.
-// - Warna bar gradasi BIRU→MERAH mengikuti dB (bukan hijau/kuning/merah
-//   Analyzer): biru < -60, cyan -60..-40, hijau -40..-20, kuning -20..-12,
-//   oranye -12..-3, merah >= -3 dB (lihat parametricDbZone di
-//   @/features/visualizer/api/analyzerSpectrum).
+// - Tanpa sumbu/grid/label dB, tanpa pill CLIP, tanpa scroll — tampilan
+//   minimal yang muat di ruang 120px main player.
+// - Warna bar GRADIENT MULUS biru→merah mengikuti dB (sejak 2026-11-18,
+//   atas permintaan csheva: "-80 biru sampai 0 dB merah" + sedikit efek):
+//   SATU gradient vertikal (biru bawah → merah atas) untuk semua bar —
+//   ujung atas tiap bar = warna dB-nya karena tinggi bar ∝ dB. Bukan
+//   satu warna solid per bar, bukan zona yang patah.
+// - PEAK HOLD: topi kecil di puncak terakhir tiap bar, naik instan,
+//   turun pelan (~3 detik dari 0 dB ke lantai).
+// - GLOW murah: halo (bar yang sama, sedikit lebih lebar, opacity
+//   rendah) di belakang bar utama — TANPA BlurMask (mahal untuk 48 bar).
 // - SINGLE-CHANNEL (mono): satu array FFT campuran dari
 //   VisualizerService.getFFTData(). BUKAN dobel channel L/R —
 //   dual-channel butuh FFT native per channel (follow-up, bukan di sini).
 //
 // Hemat resource (keputusan csheva 2026-11-17 — pertimbangkan pemakaian
 // resources dulu):
-// - Data + processed hidup di SharedValue (UI thread), SATU Path per zona
-//   warna, TANPA setState per frame, TANPA BlurMask, TANPA ribuan elemen
-//   React per frame (kesalahan waterfall lama yang sudah diperbaiki).
+// - Data + processed + peak hidup di SharedValue (UI thread), TIGA Path
+//   saja (halo, bar, topi peak) + SATU shader gradient, TANPA setState
+//   per frame, TANPA BlurMask, TANPA ribuan elemen React per frame
+//   (kesalahan waterfall lama yang sudah diperbaiki).
 // - Bar count 48 (sama seperti Analyzer), bukan 128.
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { View, StyleSheet, Dimensions, Text } from "react-native";
 
-import { Canvas, Path, Skia, Group } from "@shopify/react-native-skia";
+import { Canvas, Path, Skia, Group, LinearGradient, vec } from "@shopify/react-native-skia";
 
 import {
   useSharedValue,
@@ -34,14 +40,10 @@ import {
 
 import { visualizerService } from "@/features/visualizer/services/VisualizerService";
 import {
-  PARAMETRIC_COLOR_BLUE,
-  PARAMETRIC_COLOR_CYAN,
-  PARAMETRIC_COLOR_GREEN,
-  PARAMETRIC_COLOR_ORANGE,
-  PARAMETRIC_COLOR_RED,
-  PARAMETRIC_COLOR_YELLOW,
-  parametricDbZone,
-  valueToDb,
+  PARAMETRIC_GRADIENT_STOPS,
+  PEAK_HOLD_FLOOR,
+  dbToValue,
+  nextPeakHold,
 } from "@/features/visualizer/api/analyzerSpectrum";
 
 export interface ParametricSpectrumViewProps {
@@ -61,6 +63,24 @@ const MIN_BAR_COUNT = 16;
 // Bar digambar setinggi maks 85% area (sama seperti AnalyzerSpectrum) —
 const BAR_HEIGHT_FACTOR = 0.85;
 
+// Gradient vertikal SATU shader untuk halo + bar + topi peak: biru di
+// bawah (amp 0 = -80 dB) → merah di atas (amp 1 = 0 dB). Posisi jangkar
+// = dbToValue(dB) — ujung atas bar setinggi amp tepat menyentuh warna
+// dB-nya. Start/end gradient dihitung per render (butuh `height`).
+const GRADIENT_COLORS = PARAMETRIC_GRADIENT_STOPS.map((s) => s.color);
+const GRADIENT_POSITIONS = PARAMETRIC_GRADIENT_STOPS.map((s) =>
+  dbToValue(s.db),
+);
+
+// Glow halo: bar yang sama, 2 px lebih lebar (1 px tiap sisi), opacity
+// rendah — halo lembut tanpa BlurMask.
+const HALO_EXTRA_WIDTH = 2;
+const HALO_OPACITY = 0.22;
+const HALO_OPACITY_WAITING = 0.12;
+
+// Topi peak hold: garis kecil 3 px di puncak terakhir tiap bar.
+const PEAK_CAP_HEIGHT = 3;
+
 export const ParametricSpectrumView: React.FC<
   ParametricSpectrumViewProps
 > = ({
@@ -79,6 +99,11 @@ export const ParametricSpectrumView: React.FC<
 
   const freqData = useSharedValue<number[]>(Array(MAX_BAR_COUNT).fill(0.1));
   const prevData = useSharedValue<number[]>(Array(barCount).fill(0.1));
+  // Puncak terakhir tiap bar (peak hold) — naik instan, turun pelan
+  // lewat nextPeakHold di useAnimatedReaction di bawah.
+  const peaks = useSharedValue<number[]>(
+    Array(barCount).fill(PEAK_HOLD_FLOOR),
+  );
 
   // FIX: hasRealData dan isPlayingSV sebagai SharedValue agar bisa dibaca worklet
   const hasRealData = useSharedValue(false);
@@ -175,6 +200,7 @@ export const ParametricSpectrumView: React.FC<
           "worklet";
           freqData.value = Array(MAX_BAR_COUNT).fill(0.1);
           prevData.value = Array(barCount).fill(0.1);
+          peaks.value = Array(barCount).fill(PEAK_HOLD_FLOOR);
           hasRealData.value = false;
         })();
         setHasRealDataState(false);
@@ -237,85 +263,87 @@ export const ParametricSpectrumView: React.FC<
     () => processedData.value,
     (current) => {
       prevData.value = [...current];
+      // Peak hold: naik instan ke nilai saat ini, turun pelan bila
+      // nilainya di bawah puncak (nextPeakHold, ~10 Hz dari poll).
+      const p = peaks.value;
+      const next = new Array(barCount);
+      for (let i = 0; i < barCount; i++) {
+        next[i] = nextPeakHold(
+          p[i] ?? PEAK_HOLD_FLOOR,
+          current[i] ?? PEAK_HOLD_FLOOR,
+        );
+      }
+      peaks.value = next;
     },
   );
 
-  // Geometri bar (dipakai semua path zona) — worklet karena dipanggil
-  // dari useDerivedValue. Tanpa direktif ini, Reanimated throw di runtime.
+  // Geometri bar — worklet karena dipanggil dari useDerivedValue. Tanpa
+  // direktif ini, Reanimated throw di runtime. `extraWidth` untuk halo
+  // glow (bar yang sama, sedikit lebih lebar, posisi x digeser setengahnya
+  // supaya tetap di tengah).
   const barGeometry = useCallback(
-    (data: number[]) => {
+    (data: number[], extraWidth = 0) => {
       "worklet";
       const gap = 3;
       const barWidth = (width - (barCount - 1) * gap) / barCount;
       return data.map((amp, i) => {
         const barHeight = Math.max(4, amp * height * BAR_HEIGHT_FACTOR);
-        const x = i * (barWidth + gap);
+        const x = i * (barWidth + gap) - extraWidth / 2;
         const y = height - barHeight;
-        return { rect: Skia.XYWHRect(x, y, barWidth, barHeight), amp };
+        return {
+          rect: Skia.XYWHRect(x, y, barWidth + extraWidth, barHeight),
+          amp,
+        };
       });
     },
     [width, barCount, height],
   );
 
-  // Bar per zona warna parametrik (biru→merah) — satu Path per zona,
-  // zona dari dB bar itu (valueToDb). TANPA BlurMask (mahal) — bar
-  // dibiarkan tajam supaya hemat resource di main player.
-  const barsBluePath = useDerivedValue(() => {
+  // SATU Path untuk semua bar — warna dari SATU gradient vertikal
+  // (biru bawah → merah atas, jangkar PARAMETRIC_GRADIENT_STOPS):
+  // ujung atas bar setinggi amp menyentuh warna dB-nya karena tinggi
+  // bar ∝ dB. 1 path + 1 shader, bukan 48 path berwarna sendiri-sendiri.
+  const barsPath = useDerivedValue(() => {
     const path = Skia.Path.Make();
-    for (const { rect, amp } of barGeometry(processedData.value)) {
-      if (parametricDbZone(valueToDb(amp)) === "blue") {
-        path.addRRect(Skia.RRectXY(rect, 4, 4));
-      }
+    for (const { rect } of barGeometry(processedData.value)) {
+      path.addRRect(Skia.RRectXY(rect, 4, 4));
     }
     return path;
   });
 
-  const barsCyanPath = useDerivedValue(() => {
+  // Glow murah: bar yang sama, sedikit lebih lebar, opacity rendah, di
+  // belakang bar utama — TANPA BlurMask (mahal untuk 48 bar per frame).
+  // Halo memakai shader gradient yang sama, jadi warnanya ikut dB bar.
+  const haloPath = useDerivedValue(() => {
     const path = Skia.Path.Make();
-    for (const { rect, amp } of barGeometry(processedData.value)) {
-      if (parametricDbZone(valueToDb(amp)) === "cyan") {
-        path.addRRect(Skia.RRectXY(rect, 4, 4));
-      }
+    for (const { rect } of barGeometry(
+      processedData.value,
+      HALO_EXTRA_WIDTH,
+    )) {
+      path.addRRect(Skia.RRectXY(rect, 4, 4));
     }
     return path;
   });
 
-  const barsGreenPath = useDerivedValue(() => {
+  // Topi peak hold: garis kecil di puncak terakhir tiap bar. Puncak
+  // dibaca dari SharedValue `peaks` (naik instan, turun pelan) — topi
+  // memakai shader gradient yang sama, jadi warnanya = warna dB puncak.
+  const peaksPath = useDerivedValue(() => {
     const path = Skia.Path.Make();
-    for (const { rect, amp } of barGeometry(processedData.value)) {
-      if (parametricDbZone(valueToDb(amp)) === "green") {
-        path.addRRect(Skia.RRectXY(rect, 4, 4));
-      }
-    }
-    return path;
-  });
-
-  const barsYellowPath = useDerivedValue(() => {
-    const path = Skia.Path.Make();
-    for (const { rect, amp } of barGeometry(processedData.value)) {
-      if (parametricDbZone(valueToDb(amp)) === "yellow") {
-        path.addRRect(Skia.RRectXY(rect, 4, 4));
-      }
-    }
-    return path;
-  });
-
-  const barsOrangePath = useDerivedValue(() => {
-    const path = Skia.Path.Make();
-    for (const { rect, amp } of barGeometry(processedData.value)) {
-      if (parametricDbZone(valueToDb(amp)) === "orange") {
-        path.addRRect(Skia.RRectXY(rect, 4, 4));
-      }
-    }
-    return path;
-  });
-
-  const barsRedPath = useDerivedValue(() => {
-    const path = Skia.Path.Make();
-    for (const { rect, amp } of barGeometry(processedData.value)) {
-      if (parametricDbZone(valueToDb(amp)) === "red") {
-        path.addRRect(Skia.RRectXY(rect, 4, 4));
-      }
+    const gap = 3;
+    const barWidth = (width - (barCount - 1) * gap) / barCount;
+    for (let i = 0; i < barCount; i++) {
+      const peak = peaks.value[i] ?? PEAK_HOLD_FLOOR;
+      const barHeight = Math.max(4, peak * height * BAR_HEIGHT_FACTOR);
+      const x = i * (barWidth + gap);
+      const y = height - barHeight;
+      path.addRRect(
+        Skia.RRectXY(
+          Skia.XYWHRect(x, y, barWidth, PEAK_CAP_HEIGHT),
+          2,
+          2,
+        ),
+      );
     }
     return path;
   });
@@ -328,42 +356,45 @@ export const ParametricSpectrumView: React.FC<
           apa-apa. Ukuran eksplisit seperti SpectogramView. */}
       <Canvas style={{ width, height }}>
         <Group>
+          {/* Glow: halo di belakang bar utama (opacity rendah). */}
           <Path
-            path={barsBluePath}
-            color={PARAMETRIC_COLOR_BLUE}
+            path={haloPath}
+            style="fill"
+            opacity={hasRealDataState ? HALO_OPACITY : HALO_OPACITY_WAITING}
+          >
+            <LinearGradient
+              start={vec(0, height)}
+              end={vec(0, height * (1 - BAR_HEIGHT_FACTOR))}
+              colors={GRADIENT_COLORS}
+              positions={GRADIENT_POSITIONS}
+            />
+          </Path>
+          {/* Bar utama — gradient mulus biru (-80 dB) → merah (0 dB). */}
+          <Path
+            path={barsPath}
             style="fill"
             opacity={hasRealDataState ? 1 : 0.5}
-          />
+          >
+            <LinearGradient
+              start={vec(0, height)}
+              end={vec(0, height * (1 - BAR_HEIGHT_FACTOR))}
+              colors={GRADIENT_COLORS}
+              positions={GRADIENT_POSITIONS}
+            />
+          </Path>
+          {/* Topi peak hold di puncak terakhir tiap bar. */}
           <Path
-            path={barsCyanPath}
-            color={PARAMETRIC_COLOR_CYAN}
+            path={peaksPath}
             style="fill"
-            opacity={hasRealDataState ? 1 : 0.5}
-          />
-          <Path
-            path={barsGreenPath}
-            color={PARAMETRIC_COLOR_GREEN}
-            style="fill"
-            opacity={hasRealDataState ? 1 : 0.5}
-          />
-          <Path
-            path={barsYellowPath}
-            color={PARAMETRIC_COLOR_YELLOW}
-            style="fill"
-            opacity={hasRealDataState ? 1 : 0.5}
-          />
-          <Path
-            path={barsOrangePath}
-            color={PARAMETRIC_COLOR_ORANGE}
-            style="fill"
-            opacity={hasRealDataState ? 1 : 0.5}
-          />
-          <Path
-            path={barsRedPath}
-            color={PARAMETRIC_COLOR_RED}
-            style="fill"
-            opacity={hasRealDataState ? 1 : 0.5}
-          />
+            opacity={hasRealDataState ? 0.9 : 0.4}
+          >
+            <LinearGradient
+              start={vec(0, height)}
+              end={vec(0, height * (1 - BAR_HEIGHT_FACTOR))}
+              colors={GRADIENT_COLORS}
+              positions={GRADIENT_POSITIONS}
+            />
+          </Path>
         </Group>
       </Canvas>
 
