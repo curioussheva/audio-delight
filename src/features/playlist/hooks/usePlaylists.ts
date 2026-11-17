@@ -70,20 +70,26 @@ export const usePlaylists = () => {
     }
   }, []);
 
-  // Import dari isi mentah file M3U (raw string content, belum di-parse)
+  // Import dari isi mentah file M3U (raw string content, belum di-parse).
+  // B1 (ronde 9): dulu objek hasil import di-append langsung ke state
+  // — padahal `songs`-nya [] (lihat createPlaylist di service) — jadi
+  // detail playlist tampil "0 track" sampai relaunch. Sekarang reload
+  // dari DB (getAllPlaylists mengisi `songs` lewat JOIN), pola yang
+  // sama dengan addToPlaylist/removeFromPlaylist di hook ini.
   const importM3U = useCallback(async (content: string) => {
     try {
       const newPlaylist = await PlaylistService.importM3U(content);
-      setPlaylists((prev) => [...prev, newPlaylist]);
+      await loadPlaylists();
       return newPlaylist;
     } catch (err: any) {
       setError(err.message);
       throw err;
     }
-  }, []);
+  }, [loadPlaylists]);
 
   // Import dari hasil parseM3U() — array path lagu yang sudah di-parse,
-  // dipakai oleh handleImportM3U di playlist.tsx
+  // dipakai oleh handleImportM3U di playlist.tsx.
+  // B1 (ronde 9): reload setelah import — lihat komentar di importM3U.
   const importM3UPaths = useCallback(
     async (name: string, paths: string[], description?: string) => {
       try {
@@ -92,14 +98,14 @@ export const usePlaylists = () => {
           paths,
           description,
         );
-        setPlaylists((prev) => [...prev, newPlaylist]);
+        await loadPlaylists();
         return newPlaylist;
       } catch (err: any) {
         setError(err.message);
         throw err;
       }
     },
-    [],
+    [loadPlaylists],
   );
 
   const exportM3U = useCallback(async (playlist: Playlist) => {
