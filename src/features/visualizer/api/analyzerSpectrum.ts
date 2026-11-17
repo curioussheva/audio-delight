@@ -175,12 +175,21 @@ export function formatFreq(hz: number): string {
   return `${Math.round(hz)} Hz`;
 }
 
-/** Indeks bin dengan nilai terbesar, atau -1 bila data kosong/semua nol. */
-export function dominantBin(data: readonly number[]): number {
+/**
+ * Indeks bin dengan nilai terbesar, atau -1 bila data kosong/semua nol.
+ * `upto` (E): batasi pencarian ke bin [0, upto) — frekuensi dominan
+ * hanya dihitung dari bin yang tampil di grafik (di bawah batas atas
+ * slider); default seluruh data (perilaku lama).
+ */
+export function dominantBin(
+  data: readonly number[],
+  upto: number = data.length,
+): number {
   "worklet"; // dipanggil dari AnalyzerSpectrum (useAnimatedReaction, UI thread)
   let best = -1;
   let bestVal = 0;
-  for (let i = 0; i < data.length; i++) {
+  const limit = Math.max(0, Math.min(data.length, upto));
+  for (let i = 0; i < limit; i++) {
     const v = data[i] ?? 0;
     if (v > bestVal) {
       bestVal = v;

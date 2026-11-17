@@ -62,6 +62,7 @@ import {
   ANALYZER_COLOR_LOW,
   ANALYZER_COLOR_WARN,
   ANALYZER_DB_GRID,
+  ANALYZER_FREQ_MIN,
   CLIP_DB,
   binCenterFreq,
   dbToValue,
@@ -86,6 +87,11 @@ export interface AnalyzerSpectrumProps {
   /** Laju stream aktual (Hz) dari useBitPerfectStatus; menentukan Nyquist
    *  sumbu frekuensi. Default 48 kHz. */
   sampleRate?: number;
+  /** Batas atas sumbu frekuensi (Hz) — dari slider tab Analyzer (E).
+   *  Default Nyquist stream penuh (sampleRate/2, keputusan csheva
+   *  2026-11-17); slider bisa menurunkan sampai 20 kHz. Bar, label Hz,
+   *  grid, dan frekuensi dominan mengikuti nilai ini. */
+  freqMaxHz?: number;
   isPlaying: boolean;
   audioSessionId?: number;
 }
@@ -119,6 +125,7 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
   sensitivity = 2.2,
   flatResponse = false,
   sampleRate = 48000,
+  freqMaxHz,
   isPlaying,
   audioSessionId,
 }) => {
@@ -133,7 +140,17 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
   const contentWidth = Math.max(barsWidth, barCount * MIN_BAR_WIDTH);
 
   // Nyquist stream aktual — label Hz mengikuti laju (44,1/48/96 kHz).
-  const freqMax = (sampleRate > 0 ? sampleRate : 48000) / 2;
+  const nyquist = (sampleRate > 0 ? sampleRate : 48000) / 2;
+  // E: batas atas tampilan grafik — default Nyquist penuh (keputusan
+  // csheva), slider di tab bisa menurunkan sampai 20 kHz untuk memeriksa
+  // konten ultrasonik. Dijepit ke [20 kHz, Nyquist].
+  const freqMax =
+    freqMaxHz == null
+      ? nyquist
+      : Math.min(
+          Math.max(freqMaxHz, Math.min(ANALYZER_FREQ_MIN, nyquist)),
+          nyquist,
+        );
   const freqLabels = useMemo(() => freqLabelsFor(freqMax), [freqMax]);
 
   const freqData = useSharedValue<number[]>(Array(MAX_BAR_COUNT).fill(0.1));
@@ -141,6 +158,8 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
   const peakData = useSharedValue<number[]>(Array(barCount).fill(0.05));
   // Laju untuk worklet (prop bisa berubah saat reopen ganti laju file).
   const sampleRateSV = useSharedValue(sampleRate);
+  // E: batas atas tampilan untuk worklet (slider tab bisa mengubahnya).
+  const freqMaxSV = useSharedValue(freqMax);
   // Penghitung frame + cermin worklet untuk readout JS yang di-throttle
   // (frekuensi dominan, latch CLIP) — supaya runOnJS hanya dipanggil
   // bila nilainya berubah, bukan tiap frame.
@@ -186,6 +205,10 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
   useEffect(() => {
     sampleRateSV.value = sampleRate;
   }, [sampleRate]);
+
+  useEffect(() => {
+    freqMaxSV.value = freqMax;
+  }, [freqMax]);
 
   // U-P1-29: JANGAN tampilkan animasi sinus palsu seolah spektrum live
   // saat FFT native tidak mengembalikan data. Bar diam di lantai (0.05)
@@ -233,7 +256,14 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
       // bila berubah — supaya tidak setState tiap frame.
       if (frameCountSV.value % 5 === 0) {
         if (isReal) {
-          const bin = dominantBin(data);
+          // E: frekuensi dominan hanya dari bin yang tampil (di bawah
+          // batas atas slider); pemetaan bin->Hz tetap pakai Nyquist.
+          const nyquist = sampleRateSV.value / 2;
+          const binLimit =
+            Math.floor(
+              freqToFraction(freqMaxSV.value, nyquist) * (data.length - 1),
+            ) + 1;
+          const bin = dominantBin(data, binLimit);
           if (bin >= 0) {
             const label = formatFreq(
               binCenterFreq(bin, data.length, sampleRateSV.value / 2),
@@ -334,14 +364,21 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
 
     if (!raw || raw.length === 0) return Array(barCount).fill(0.1);
 
+    // E: bar hanya memetakan bin sampai batas atas tampilan — bin di atas
+    // freqMax tidak digambar (zoom jujur, bukan sekadar relabel sumbu).
+    // freqMax == Nyquist -> maxBin == raw.length - 1 (perilaku lama).
+    const nyquist = sampleRateSV.value / 2;
+    const maxBin =
+      freqToFraction(freqMaxSV.value, nyquist) * (raw.length - 1);
+
     const result = new Array(barCount).fill(0);
     const falloff = 0.85;
 
     for (let i = 0; i < barCount; i++) {
       const t = i / (barCount - 1);
       const logT = Math.pow(t, 1.2);
-      const startIdx = Math.floor(logT * (raw.length - 1));
-      const endIdx = Math.min(raw.length - 1, startIdx + 8);
+      const startIdx = Math.floor(logT * maxBin);
+      const endIdx = Math.min(Math.floor(maxBin), startIdx + 8);
 
       let sum = 0,
         count = 0;
@@ -477,7 +514,7 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
   // konsisten dengan path lain.
   const gridPath = useDerivedValue(() => {
     const path = Skia.Path.Make();
-    const freqMax = sampleRateSV.value / 2;
+    const freqMax = freqMaxSV.value;
     for (const db of ANALYZER_DB_GRID) {
       if (db === 0) continue;
       const v = dbToValue(db);

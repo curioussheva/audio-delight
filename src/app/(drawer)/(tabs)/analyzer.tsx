@@ -12,6 +12,7 @@ import {
   Alert,
 } from "react-native";
 import { Image } from "expo-image";
+import Slider from "@react-native-community/slider";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   RefreshCw,
@@ -40,6 +41,7 @@ import {
   BitDepthAnalysis,
 } from "@/features/audio/api/BitDepthVerifier";
 import { AnalyzerSpectrum } from "@/features/visualizer/components/AnalyzerSpectrum";
+import { formatFreq } from "@/features/visualizer/api/analyzerSpectrum";
 import { cleanAnalyzerWarnings } from "@/features/visualizer/api/analyzerWarnings";
 import { formatFileSize } from "@/shared/types/audio";
 import SQLiteService from "@/shared/lib/sqlite";
@@ -91,6 +93,23 @@ export default function AnalyzerScreen() {
     null,
   );
   const [waitingForSession, setWaitingForSession] = useState(false);
+
+  // E: batas atas grafik Analyzer (Hz). null = Nyquist stream penuh
+  // (default, keputusan csheva 2026-11-17) — slider mengisinya saat
+  // digeser; nilainya dijepit ke Nyquist bila laju stream turun.
+  const [freqMaxHz, setFreqMaxHz] = useState<number | null>(null);
+  const streamRate =
+    bpStatus.actualSampleRate > 0 ? bpStatus.actualSampleRate : 48000;
+  const streamNyquist = streamRate / 2;
+  const effectiveFreqMax = freqMaxHz ?? streamNyquist;
+
+  // Jepit nilai slider bila Nyquist stream turun (ganti file/laju) di
+  // bawah nilai yang dipilih — jangan tampilkan rentang yang tidak ada.
+  useEffect(() => {
+    setFreqMaxHz((prev) =>
+      prev == null ? null : Math.min(prev, streamNyquist),
+    );
+  }, [streamNyquist]);
 
   // U-P2-24: pola "tidak ada audio session" disamakan dengan tab
   // Visualizer — pesan yang sama + tombol retry yang benar-benar
@@ -359,14 +378,58 @@ export default function AnalyzerScreen() {
             backgroundColor="transparent"
             sensitivity={1}
             flatResponse
-            sampleRate={
-              bpStatus.actualSampleRate > 0
-                ? bpStatus.actualSampleRate
-                : 48000
-            }
+            sampleRate={streamRate}
+            freqMaxHz={effectiveFreqMax}
             isPlaying={isPlaying}
             audioSessionId={audioSessionId}
           />
+          {/* E: slider batas atas grafik — default Nyquist penuh; geser
+              ke 20 kHz untuk fokus rentang terdengar, ke Nyquist untuk
+              memeriksa konten ultrasonik (hi-res asli vs upsample).
+              Bar + label Hz + grid mengikuti nilai slider. */}
+          <View style={{ marginTop: 12 }}>
+            <View style={styles.freqSliderRow}>
+              <Text
+                style={[
+                  styles.freqSliderLabel,
+                  { color: colors.text.tertiary },
+                ]}
+              >
+                BATAS ATAS GRAFIK
+              </Text>
+              <Text
+                style={[
+                  styles.freqSliderValue,
+                  { color: colors.primary[500] },
+                ]}
+              >
+                {formatFreq(effectiveFreqMax)}
+              </Text>
+            </View>
+            <Slider
+              style={{ width: "100%", height: 40 }}
+              minimumValue={Math.min(20000, streamNyquist)}
+              maximumValue={streamNyquist}
+              step={50}
+              value={effectiveFreqMax}
+              onValueChange={setFreqMaxHz}
+              minimumTrackTintColor={colors.primary[500]}
+              maximumTrackTintColor={colors.background.tertiary}
+              thumbTintColor={colors.primary[500]}
+              accessibilityLabel="Batas atas frekuensi grafik"
+              accessibilityRole="adjustable"
+            />
+            <Text
+              style={[
+                styles.freqSliderHint,
+                { color: colors.text.tertiary },
+              ]}
+            >
+              20 kHz – {formatFreq(streamNyquist)} (Nyquist). Geser ke 20
+              kHz untuk fokus rentang terdengar; ke Nyquist untuk memeriksa
+              konten ultrasonik.
+            </Text>
+          </View>
         </View>
       ) : (
         <View
@@ -817,6 +880,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  freqSliderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+  },
+  freqSliderLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+  },
+  freqSliderValue: { fontSize: 13, fontWeight: "700" },
+  freqSliderHint: { fontSize: 11, lineHeight: 16, marginTop: 2 },
   retryBtn: {
     flexDirection: "row",
     alignItems: "center",

@@ -157,6 +157,14 @@ describe("dominantBin", () => {
     expect(dominantBin([])).toBe(-1);
     expect(dominantBin([0, 0, 0])).toBe(-1);
   });
+
+  it("upto membatasi pencarian ke bin yang tampil (E)", () => {
+    // Puncak di bin 3, tapi di luar jangkauan upto=3.
+    expect(dominantBin([0.1, 0.5, 0.3, 0.9], 3)).toBe(1);
+    expect(dominantBin([0.1, 0.5, 0.3, 0.9], 4)).toBe(3);
+    // upto di luar panjang data = seluruh data.
+    expect(dominantBin([0.1, 0.5], 99)).toBe(1);
+  });
 });
 
 describe("parametricDbZone / parametricDbColor (biru→merah, main player)", () => {
