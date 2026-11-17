@@ -62,8 +62,12 @@ class PlaylistService {
       [id, dto.name, dto.description || null, now, now, playlist.songCount],
     );
 
+    // B1: db.transaction() di react-native-quick-sqlite ASYNC (Promise) —
+    // HARUS di-await. Tanpa await, createPlaylist return sebelum INSERT
+    // playlist_songs commit; loadPlaylists() yang jalan sesudahnya membaca
+    // JOIN kosong → detail "0 track" sampai relaunch.
     if (songIds.length > 0) {
-      db.transaction((tx) => {
+      await db.transaction((tx) => {
         songIds.forEach((songId, i) => {
           tx.execute(
             "INSERT INTO playlist_songs (playlist_id, song_id, position, addedAt) VALUES (?, ?, ?, ?)",
@@ -137,7 +141,9 @@ class PlaylistService {
     const currentCount = playlist.songs.length;
     const now = Date.now();
 
-    db.transaction((tx) => {
+    // B1: await transaction (lihat createPlaylist) — tanpa await,
+    // loadPlaylists() di hook bisa membaca sebelum INSERT commit.
+    await db.transaction((tx) => {
       songIds.forEach((songId, i) => {
         tx.execute(
           "INSERT OR IGNORE INTO playlist_songs (playlist_id, song_id, position, addedAt) VALUES (?, ?, ?, ?)",
@@ -155,7 +161,8 @@ class PlaylistService {
   async removeFromPlaylist(playlistId: string, songId: string) {
     await this.ensureInitialized();
 
-    db.transaction((tx) => {
+    // B1: await transaction (lihat createPlaylist).
+    await db.transaction((tx) => {
       tx.execute(
         "DELETE FROM playlist_songs WHERE playlist_id = ? AND song_id = ?",
         [playlistId, songId],
@@ -238,7 +245,8 @@ class PlaylistService {
   }
 
   async addSongs(songs: Song[]): Promise<void> {
-    db.transaction((tx) => {
+    // B1: await transaction (lihat createPlaylist).
+    await db.transaction((tx) => {
       for (const song of songs) {
         tx.execute(
           `INSERT OR REPLACE INTO songs (
