@@ -12,8 +12,10 @@
 // - Warna bar per zona dB: hijau < -12 dB, kuning -12..-3 dB, merah >= -3 dB.
 // - Pill CLIP yang LATCH (tetap menyala) saat ada bin >= -1 dB; ketuk
 //   untuk clear. Frekuensi dominan (diperbarui ~2 Hz, bukan tiap frame).
-// - Scroll horizontal: konten ~2x lebar tampak supaya bar lebih lebar dan
-//   detail treble bisa digeser; label dB tetap diam di luar scroll.
+// - Scroll horizontal HANYA di atas 20 kHz: sampai 20 kHz grafik muat
+//   satu layar (bar menyusut menyesuaikan viewport); di atasnya konten
+//   ~2x lebar tampak supaya bar lebih lebar dan detail treble/ultrasonik
+//   bisa digeser; label dB tetap diam di luar scroll.
 //
 // Data: VisualizerService menulis LANGSUNG ke SharedValue freqData
 // (subscribeSharedValue) — TIDAK ADA callback JS per frame. Data mentah
@@ -62,6 +64,7 @@ import {
   ANALYZER_COLOR_LOW,
   ANALYZER_COLOR_WARN,
   ANALYZER_DB_GRID,
+  ANALYZER_FIT_MAX_HZ,
   ANALYZER_FREQ_MIN,
   CLIP_DB,
   binCenterFreq,
@@ -136,8 +139,6 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
 
   const barsWidth = Math.max(1, width - DB_GUTTER);
   const barsHeight = Math.max(1, height - FREQ_STRIP);
-  // Konten scroll: minimal selebar viewport, atau barCount x lebar minimum.
-  const contentWidth = Math.max(barsWidth, barCount * MIN_BAR_WIDTH);
 
   // Nyquist stream aktual — label Hz mengikuti laju (44,1/48/96 kHz).
   const nyquist = (sampleRate > 0 ? sampleRate : 48000) / 2;
@@ -151,6 +152,14 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
           Math.max(freqMaxHz, Math.min(ANALYZER_FREQ_MIN, nyquist)),
           nyquist,
         );
+  // Ronde 9: sampai 20 kHz grafik MUAT SATU LAYAR (contentWidth =
+  // barsWidth, bar menyusut menyesuaikan viewport, tanpa scroll); di atas
+  // 20 kHz konten boleh scroll — menampilkan rentang ultrasonik butuh
+  // lebar bar minimum (barCount x MIN_BAR_WIDTH).
+  const contentWidth =
+    freqMax <= ANALYZER_FIT_MAX_HZ
+      ? barsWidth
+      : Math.max(barsWidth, barCount * MIN_BAR_WIDTH);
   const freqLabels = useMemo(() => freqLabelsFor(freqMax), [freqMax]);
 
   const freqData = useSharedValue<number[]>(Array(MAX_BAR_COUNT).fill(0.1));

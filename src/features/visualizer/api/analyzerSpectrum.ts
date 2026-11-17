@@ -18,6 +18,10 @@ export const ANALYZER_BIN_COUNT = 128;
 export const ANALYZER_FREQ_MIN = 20;
 /** Nyquist default (stream 48 kHz). Untuk laju lain, oper freqMax eksplisit. */
 export const ANALYZER_FREQ_MAX = 24000;
+/** Batas atas grafik yang masih muat satu layar (tanpa scroll) — 20 kHz,
+ *  batas atas pendengaran manusia (keputusan csheva ronde 9, 2026-11-17).
+ *  Di atas ini grafik boleh scroll untuk menampilkan konten ultrasonik. */
+export const ANALYZER_FIT_MAX_HZ = 20000;
 export const ANALYZER_DB_FLOOR = -80;
 export const ANALYZER_DB_CEIL = 0;
 
