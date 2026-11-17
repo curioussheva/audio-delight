@@ -792,6 +792,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   // di notification / lock screen, yang tidak lewat store.
   syncFromNative: async () => {
     try {
+      // Lagu sebelum sync — dipakai untuk mendeteksi pergantian trek
+      // (lihat pencatatan playCount di bawah).
+      const prevSong = get().currentSong;
       const [uri, index, status, posMs] = await Promise.all([
         NativePlaybackService.getCurrentTrack(),
         Promise.resolve(NativePlaybackService.getCurrentIndex()),
@@ -823,6 +826,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       // Judul di notification harus ikut berubah setelah next/prev, kalau
       // tidak lock screen tetap menampilkan lagu lama.
       const cur = get().currentSong;
+
+      // Catat pemutaran saat trek berganti (auto-advance / next / prev dari
+      // notifikasi / lock screen). Sebelumnya hanya playSong eksplisit yang
+      // mencatat playCount + recent_plays + LAST_SONG_ID, jadi lagu yang
+      // diputar lewat auto-advance tidak pernah tercatat (ronde 2/3 emulator).
+      // Guard id berbeda mencegah hitung ganda dari sync berulang lagu sama.
+      if (cur && prevSong && cur.id !== prevSong.id) {
+        SongQueries.incrementPlayCount?.(cur.id, 0);
+        AsyncStorage.setItem(KEYS.LAST_SONG_ID, cur.id).catch(() => {});
+      }
       if (cur) {
         safeFireAndForget(
           () =>
