@@ -437,6 +437,25 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       console.log("[Player] 🔁 Native repeat/shuffle listener registered");
     }
 
+    // J1-3 fix 1 (Batch JS-1): sync-on-wake. Jalur next() in-app dan
+    // notifikasi tidak emit track-changed, jadi saat JS tidur/beku atau app
+    // kembali dari background, UI bisa menampilkan lagu lama. Saat app kembali
+    // aktif, baca ulang keadaan native (track, indeks, status, posisi) lewat
+    // syncFromNative yang sudah ada — murah (hanya saat transisi foreground,
+    // bukan polling).
+    if (!(globalThis as any).__appStateSyncListener) {
+      const { AppState } = require("react-native");
+      const subscription = AppState.addEventListener(
+        "change",
+        (state: string) => {
+          if (state === "active") {
+            void get().syncFromNative();
+          }
+        },
+      );
+      (globalThis as any).__appStateSyncListener = subscription;
+    }
+
     // 🔥 FIX: position+duration polling terpusat (bukan di hook useAudioPlayer)
     // Supaya slider progress bergerak walaupun hook unmount.
     if (!(globalThis as any).__positionWatcher) {

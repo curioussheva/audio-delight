@@ -60,6 +60,12 @@ class VisualizerService {
 
   private pollingTimer: ReturnType<typeof setInterval> | null = null;
 
+  // J1-1 (Batch JS-1): penjaga overlap poll. Tanpa ini, tick setInterval yang
+  // async bisa menumpuk kalau satu getFFTData() > 100 ms (pola yang sama
+  // dengan _posInFlight di playerStore). Tick yang datang saat poll masih
+  // jalan dilewati saja — data terbaru datang di tick berikut.
+  private pollInFlight = false;
+
   // Status
   private isStarted: boolean = false;
   private isPaused: boolean = false;
@@ -415,6 +421,9 @@ class VisualizerService {
     const intervalMs = this.config.pollingIntervalMs ?? 100;
     this.pollingTimer = setInterval(async () => {
       if (!this.isStarted) return;
+      // J1-1: jangan tumpuk — lewati tick kalau poll sebelumnya belum selesai.
+      if (this.pollInFlight) return;
+      this.pollInFlight = true;
 
       try {
         const data = await NativeVisualizerBridge?.getFFTData();
@@ -439,6 +448,8 @@ class VisualizerService {
             } catch (_) {}
           }
         }
+      } finally {
+        this.pollInFlight = false;
       }
     }, intervalMs);
   }
