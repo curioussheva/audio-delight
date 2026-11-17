@@ -52,3 +52,56 @@ export function rotationForDrag(
   const newRot = startRotation - translationY * sensitivity;
   return Math.min(KNOB_MAX_ROTATION, Math.max(KNOB_MIN_ROTATION, newRot));
 }
+
+// ─── Drag melingkar (rotary, R10) ────────────────────────────────────────────
+//
+// Sudut pointer dihitung dari pusat knob: atan2(dy, dx) dalam derajat,
+// 0 = kanan, positif = searah jarum jam di layar (sumbu y ke bawah).
+// Pointer knob di rotasi 0 menunjuk ke atas (sudut -90), jadi putaran
+// searah jarum jam menaikkan rotasi — dan nilai — secara langsung
+// (delta sudut == delta rotasi, tanpa faktor konversi).
+
+/** Jari-jari minimum (px) dari pusat knob agar sudut pointer stabil —
+ * sentuhan yang terlalu dekat ke pusat diabaikan (atan2 tidak stabil). */
+export const KNOB_ROTARY_MIN_RADIUS = 20;
+
+/** Jari-jari maksimum (px) sentuhan awal yang dianggap "di atas knob" —
+ * KNOB_SIZE 120 -> jari-jari 60 + toleransi 10. Sentuhan awal di luar
+ * ini (label di atas / readout di bawah) tetap memakai drag vertikal. */
+export const KNOB_ROTARY_MAX_RADIUS = 70;
+
+/** Sudut pointer (derajat) dari titik (x, y) terhadap pusat (cx, cy). */
+export function pointerAngleDeg(
+  x: number,
+  y: number,
+  cx: number,
+  cy: number,
+): number {
+  "worklet"; // dipanggil dari gesture (UI thread)
+  return (Math.atan2(y - cy, x - cx) * 180) / Math.PI;
+}
+
+/**
+ * Selisih sudut terpendek (-180, 180] — unwrap supaya putaran yang
+ * melewati ±180° tidak lompat (mis. -170 -> 170 = +20, bukan -340).
+ */
+export function unwrapAngleDelta(current: number, previous: number): number {
+  "worklet"; // dipanggil dari gesture (UI thread)
+  let delta = current - previous;
+  while (delta > 180) delta -= 360;
+  while (delta <= -180) delta += 360;
+  return delta;
+}
+
+/**
+ * Rotasi baru dari delta sudut pointer (drag melingkar), dijepit ke
+ * [-135, 135] seperti rotationForDrag.
+ */
+export function rotationForAngleDelta(
+  rotation: number,
+  angleDelta: number,
+): number {
+  "worklet"; // dipanggil dari gesture (UI thread)
+  const newRot = rotation + angleDelta;
+  return Math.min(KNOB_MAX_ROTATION, Math.max(KNOB_MIN_ROTATION, newRot));
+}

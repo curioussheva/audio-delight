@@ -3,8 +3,11 @@ import {
   KNOB_MAX_ROTATION,
   KNOB_MIN_ROTATION,
   KNOB_SENSITIVITY,
+  pointerAngleDeg,
+  rotationForAngleDelta,
   rotationForDrag,
   rotationForValue,
+  unwrapAngleDelta,
   valueForRotation,
 } from "@/features/equalizer/api/knobMath";
 
@@ -60,5 +63,82 @@ describe("rotationForDrag", () => {
     }
     // Setengah jalan (90px) -> setengah rentang.
     expect(valueForRotation(rotationForDrag(KNOB_MIN_ROTATION, -90))).toBe(500);
+  });
+});
+
+describe("drag melingkar (rotary, R10)", () => {
+  it("pointerAngleDeg: kanan 0, bawah 90, kiri 180, atas -90", () => {
+    const cx = 70;
+    const cy = 88;
+    expect(pointerAngleDeg(cx + 50, cy, cx, cy)).toBe(0); // kanan
+    expect(pointerAngleDeg(cx, cy + 50, cx, cy)).toBe(90); // bawah
+    expect(pointerAngleDeg(cx - 50, cy, cx, cy)).toBe(180); // kiri
+    expect(pointerAngleDeg(cx, cy - 50, cx, cy)).toBe(-90); // atas
+  });
+
+  it("unwrapAngleDelta: melewati ±180 tidak lompat", () => {
+    expect(unwrapAngleDelta(170, -170)).toBe(-20);
+    expect(unwrapAngleDelta(-170, 170)).toBe(20);
+    expect(unwrapAngleDelta(10, 0)).toBe(10);
+    expect(unwrapAngleDelta(-10, 0)).toBe(-10);
+    expect(unwrapAngleDelta(180, -180)).toBe(0);
+  });
+
+  it("rotationForAngleDelta dijepit di ujung", () => {
+    expect(rotationForAngleDelta(KNOB_MAX_ROTATION, 45)).toBe(
+      KNOB_MAX_ROTATION,
+    );
+    expect(rotationForAngleDelta(KNOB_MIN_ROTATION, -45)).toBe(
+      KNOB_MIN_ROTATION,
+    );
+    expect(rotationForAngleDelta(0, 45)).toBe(45);
+    expect(rotationForAngleDelta(0, -45)).toBe(-45);
+  });
+
+  it("melingkar searah jarum jam dari atas menaikkan nilai secara mulus", () => {
+    // Busur 90° searah jarum jam dari atas (-90 -> 0): delta +45 tiap langkah.
+    let rotation = rotationForValue(500); // 0
+    let prevAngle = -90;
+    for (const angle of [-45, 0]) {
+      rotation = rotationForAngleDelta(
+        rotation,
+        unwrapAngleDelta(angle, prevAngle),
+      );
+      prevAngle = angle;
+    }
+    expect(rotation).toBe(90);
+    expect(valueForRotation(rotation)).toBeCloseTo(833.33, 1);
+  });
+
+  it("melingkar berlawanan jarum jam dari atas menurunkan nilai", () => {
+    // Busur 90° berlawanan jarum jam dari atas (-90 -> -180).
+    let rotation = rotationForValue(500); // 0
+    let prevAngle = -90;
+    for (const angle of [-135, -180]) {
+      rotation = rotationForAngleDelta(
+        rotation,
+        unwrapAngleDelta(angle, prevAngle),
+      );
+      prevAngle = angle;
+    }
+    expect(rotation).toBe(-90);
+    expect(valueForRotation(rotation)).toBeCloseTo(166.67, 1);
+  });
+
+  it("putaran penuh searah jarum jam melewati ±180 tanpa lompat, dijepit di maks", () => {
+    // Lingkaran penuh dari atas: -90 -> -45 -> 0 -> 45 -> 90 -> 135 ->
+    // 180 -> -135 -> -90. Delta tiap langkah +45 (unwrap menangani
+    // lompatan 180 -> -135). Total +360 tapi dijepit di +135.
+    let rotation = rotationForValue(500); // 0
+    let prevAngle = -90;
+    for (const angle of [-45, 0, 45, 90, 135, 180, -135, -90]) {
+      rotation = rotationForAngleDelta(
+        rotation,
+        unwrapAngleDelta(angle, prevAngle),
+      );
+      prevAngle = angle;
+    }
+    expect(rotation).toBe(KNOB_MAX_ROTATION);
+    expect(valueForRotation(rotation)).toBe(1000);
   });
 });

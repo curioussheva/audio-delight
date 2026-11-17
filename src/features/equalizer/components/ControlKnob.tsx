@@ -14,9 +14,14 @@ import { useTheme } from "@/shared/context/ThemeContext";
 import {
   KNOB_MAX_ROTATION,
   KNOB_MIN_ROTATION,
+  KNOB_ROTARY_MAX_RADIUS,
+  KNOB_ROTARY_MIN_RADIUS,
   KNOB_SENSITIVITY,
+  pointerAngleDeg,
+  rotationForAngleDelta,
   rotationForDrag,
   rotationForValue,
+  unwrapAngleDelta,
   valueForRotation,
 } from "@/features/equalizer/api/knobMath";
 
@@ -109,6 +114,22 @@ export const ControlKnob = ({
   const isDragging = useSharedValue(false);
   const offsetY = useSharedValue(0); // ✅ Definisikan offset
 
+  // R10 — drag melingkar (rotary): pusat knob dalam koordinat gesture
+  // area (e.x/e.y gestur diukur terhadap view yang sama). Nilai awal
+  // perkiraan layout (label ~13px + margin 15 + setengah knob 60);
+  // dikoreksi onLayout knobWrapper di bawah.
+  const knobCenterX = useSharedValue(OUTER_SIZE / 2);
+  const knobCenterY = useSharedValue(13 + 15 + KNOB_SIZE / 2);
+  // Mode gestur diputuskan di onStart: sentuhan awal di atas knob
+  // (jari-jari <= KNOB_ROTARY_MAX_RADIUS) -> rotary; di luar itu
+  // (label/readout) -> vertikal seperti dulu.
+  const useRotary = useSharedValue(false);
+  // Sudut pointer terakhir (derajat) + apakah sudah ada acuan yang
+  // valid — sentuhan awal yang terlalu dekat ke pusat belum punya
+  // sudut acuan (atan2 tidak stabil), ditunggu sampai jari menjauh.
+  const lastAngle = useSharedValue(0);
+  const angleReady = useSharedValue(false);
+
   // Sync saat value prop berubah — TAPI jangan saat sedang drag: prop
   // datang telat (runOnJS -> store -> bridge), jadi spring ke nilai prop
   // yang tertinggal akan menarik rotasi balik melawan drag ("rebound").
@@ -125,14 +146,63 @@ export const ControlKnob = ({
   const gesture = Gesture.Pan()
     .enabled(!disabled)
     .hitSlop(20)
-    .onStart(() => {
+    .onStart((e) => {
       isDragging.value = true;
       startRotation.value = rotation.value;
+      // R10: putuskan mode dari titik sentuhan awal. e.x/e.y diukur
+      // terhadap gesture area — sama seperti koordinat onLayout.
+      const dx = e.x - knobCenterX.value;
+      const dy = e.y - knobCenterY.value;
+      const radius = Math.sqrt(dx * dx + dy * dy);
+      useRotary.value = radius <= KNOB_ROTARY_MAX_RADIUS;
+      if (useRotary.value) {
+        lastAngle.value = pointerAngleDeg(
+          e.x,
+          e.y,
+          knobCenterX.value,
+          knobCenterY.value,
+        );
+        // Sentuhan awal di dekat pusat belum punya sudut acuan yang
+        // stabil — tunggu jari menjauh sebelum memutar (lihat onUpdate).
+        angleReady.value = radius >= KNOB_ROTARY_MIN_RADIUS;
+      }
     })
     .onUpdate((e) => {
-      // Sensitivitas 1.5: rentang penuh 270 derajat tercapai dalam drag
-      // ~180px. Nilai lama 0.5 butuh 540px — hampir satu layar penuh —
-      // sehingga 100% praktis tidak tercapai.
+      if (useRotary.value) {
+        // R10 — drag melingkar: rotasi mengikuti sudut pointer terhadap
+        // pusat knob. Searah jarum jam -> nilai naik, berlawanan -> turun.
+        const dx = e.x - knobCenterX.value;
+        const dy = e.y - knobCenterY.value;
+        const radius = Math.sqrt(dx * dx + dy * dy);
+        const angle = pointerAngleDeg(
+          e.x,
+          e.y,
+          knobCenterX.value,
+          knobCenterY.value,
+        );
+        if (!angleReady.value) {
+          if (radius >= KNOB_ROTARY_MIN_RADIUS) {
+            lastAngle.value = angle;
+            angleReady.value = true;
+          }
+          return; // belum ada sudut acuan — jangan putar
+        }
+        if (radius < KNOB_ROTARY_MIN_RADIUS) {
+          return; // terlalu dekat ke pusat — sudut tidak stabil
+        }
+        const delta = unwrapAngleDelta(angle, lastAngle.value);
+        lastAngle.value = angle;
+        const newRot = rotationForAngleDelta(rotation.value, delta);
+        rotation.value = newRot;
+
+        const newValue = valueForRotation(newRot);
+        runOnJS(onChange)(Math.round(newValue));
+        return;
+      }
+      // Drag vertikal (fallback, perilaku lama): rentang penuh 270
+      // derajat tercapai dalam drag ~180px (sensitivitas 1.5). Nilai
+      // lama 0.5 butuh 540px — hampir satu layar penuh — sehingga 100%
+      // praktis tidak tercapai.
       const newRot = rotationForDrag(
         startRotation.value,
         e.translationY,
@@ -203,7 +273,16 @@ export const ControlKnob = ({
             {label}
           </Text>
 
-          <Animated.View style={[styles.knobWrapper, containerStyle]}>
+          {/* R10: ukur posisi knob di gesture area (e.x/e.y gestur
+              diukur terhadap view yang sama) untuk pusat drag melingkar. */}
+          <Animated.View
+            style={[styles.knobWrapper, containerStyle]}
+            onLayout={(e) => {
+              const { x, y } = e.nativeEvent.layout;
+              knobCenterX.value = x + KNOB_SIZE / 2;
+              knobCenterY.value = y + KNOB_SIZE / 2;
+            }}
+          >
             <View
               style={[
                 styles.knobOuter,
