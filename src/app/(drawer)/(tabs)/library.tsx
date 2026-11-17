@@ -76,6 +76,7 @@ import { FolderList } from "@/features/library/components/FolderList";
 import { FileTypeList } from "@/features/library/components/FileTypeList";
 import { PlaylistList, PlaylistItem } from "@/features/library/components/PlaylistList";
 import { usePlaylists } from "@/features/playlist/hooks/usePlaylists";
+import { CreatePlaylistModal } from "@/features/playlist/components/CreatePlaylistModal";
 import { parseM3U } from "@/features/library/api/m3u";
 import { formatTime } from "@/shared/utils/time";
 import type { Song } from "@/shared/types/audio";
@@ -169,6 +170,9 @@ export default function LibraryScreen() {
     usePlaylists();
   const [selectedPlaylist, setSelectedPlaylist] =
     useState<PlaylistItem | null>(null);
+  // B2 (ronde 9): dialog nama playlist lintas-platform — dulu
+  // Alert.prompt (iOS-only, no-op di Android).
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // U-P1-18: detail view (Album/Artist/Genre/Folder/Format) menerima
   // favoriteIds sebagai Set — dulu tidak pernah dioper, jadi semua hati
@@ -350,26 +354,22 @@ export default function LibraryScreen() {
 
   // ── Playlist handlers (F) ────────────────────────────────────────────────
   // Pola yang sama dengan layar drawer Playlist
-  // (src/app/(drawer)/playlist.tsx): Alert.prompt untuk nama,
+  // (src/app/(drawer)/playlist.tsx): modal lintas-platform untuk nama,
   // DocumentPicker + parseM3U untuk import, Alert konfirmasi untuk hapus.
+  // B2 (ronde 9): tap "Buat Playlist Baru" → buka modal; submit nama →
+  // createPlaylist → tutup modal. Alert.prompt dihapus — iOS-only,
+  // di Android no-op tanpa warning.
   const handleCreatePlaylist = useCallback(() => {
-    Alert.prompt(
-      "Buat Playlist Baru",
-      "Masukkan nama playlist",
-      [
-        { text: "Batal", style: "cancel" },
-        {
-          text: "Buat",
-          onPress: (name?: string) => {
-            if (name && name.trim()) {
-              createPlaylist({ name: name.trim(), songIds: [] });
-            }
-          },
-        },
-      ],
-      "plain-text",
-    );
-  }, [createPlaylist]);
+    setShowCreateModal(true);
+  }, []);
+
+  const handleCreatePlaylistSubmit = useCallback(
+    async (name: string) => {
+      await createPlaylist({ name, songIds: [] });
+      setShowCreateModal(false);
+    },
+    [createPlaylist],
+  );
 
   const handleImportM3U = useCallback(async () => {
     try {
@@ -959,6 +959,13 @@ export default function LibraryScreen() {
       <EnrichMetadataModal
         visible={showEnrichModal}
         onClose={() => setShowEnrichModal(false)}
+      />
+
+      {/* B2 (ronde 9): dialog buat playlist lintas-platform. */}
+      <CreatePlaylistModal
+        visible={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSubmit={handleCreatePlaylistSubmit}
       />
     </View>
   );
