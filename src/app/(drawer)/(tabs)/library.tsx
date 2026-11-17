@@ -11,6 +11,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
   Platform,
   TextInput,
   Keyboard,
@@ -20,10 +21,14 @@ import {
 import { FlashList } from "@shopify/flash-list";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import * as DocumentPicker from "expo-document-picker";
 
 // Icons
 import {
   ArrowLeft,
+  ChevronLeft,
+  Music2,
+  Trash2,
   X,
   Search,
   ScanText,
@@ -69,7 +74,11 @@ import { ArtistList } from "@/features/library/components/ArtistList";
 import { GenreList } from "@/features/library/components/GenreList";
 import { FolderList } from "@/features/library/components/FolderList";
 import { FileTypeList } from "@/features/library/components/FileTypeList";
-import { PlaylistList } from "@/features/library/components/PlaylistList";
+import { PlaylistList, PlaylistItem } from "@/features/library/components/PlaylistList";
+import { usePlaylists } from "@/features/playlist/hooks/usePlaylists";
+import { parseM3U } from "@/features/library/api/m3u";
+import { formatTime } from "@/shared/utils/time";
+import type { Song } from "@/shared/types/audio";
 import {
   FLOATING_PLAYER_CLEARANCE,
   FLOATING_PLAYER_HEIGHT,
@@ -149,7 +158,17 @@ export default function LibraryScreen() {
   // Panggil useLibrary + useFavorites langsung supaya tidak ada komputasi
   // filter/sort yang hasilnya dibuang.
   const { loading, error: libraryError, reload } = useLibrary();
-  const { isFavorite, toggleFavorite, favoriteIds } = useFavorites();
+  const { isFavorite, toggleFavorite, favoriteIds, favoriteSongs } =
+    useFavorites();
+
+  // ── Playlist (tab playlist) ──────────────────────────────────────────────
+  // Wiring F: tab playlist dulu stub (playlists={[]}, handler no-op).
+  // Data + aksi dari usePlaylists — hook/service yang sama dengan layar
+  // drawer Playlist (src/app/(drawer)/playlist.tsx).
+  const { playlists, createPlaylist, deletePlaylist, importM3UPaths } =
+    usePlaylists();
+  const [selectedPlaylist, setSelectedPlaylist] =
+    useState<PlaylistItem | null>(null);
 
   // U-P1-18: detail view (Album/Artist/Genre/Folder/Format) menerima
   // favoriteIds sebagai Set — dulu tidak pernah dioper, jadi semua hati
@@ -204,6 +223,34 @@ export default function LibraryScreen() {
   const fileTypes = useMemo(
     () => selectFileTypes(filteredSource),
     [filteredSource],
+  );
+
+  // F: PlaylistList mengharapkan `count`, Playlist pakai `songCount`.
+  const playlistItems: PlaylistItem[] = useMemo(
+    () =>
+      playlists.map((p) => ({
+        id: p.id,
+        name: p.name,
+        count: p.songCount,
+      })),
+    [playlists],
+  );
+
+  // F: playlist lengkap (dengan `songs`) untuk detail view; "favorites"
+  // bukan playlist DB — lagunya dari favoriteSongs.
+  const selectedFull = useMemo(
+    () =>
+      selectedPlaylist && selectedPlaylist.id !== "favorites"
+        ? playlists.find((p) => p.id === selectedPlaylist.id)
+        : undefined,
+    [playlists, selectedPlaylist],
+  );
+  const selectedSongs: Song[] = useMemo(
+    () =>
+      selectedPlaylist?.id === "favorites"
+        ? favoriteSongs
+        : (selectedFull?.songs ?? []),
+    [selectedPlaylist, favoriteSongs, selectedFull],
   );
 
   // ── CORE LOGIC: Reactive Filtering + URI Safety ───────────────────────────
@@ -272,6 +319,8 @@ export default function LibraryScreen() {
       setShowSearch(false);
       setSearchQuery("");
     }
+    // F: tutup detail playlist saat pindah tab.
+    setSelectedPlaylist(null);
   }, [activeTab]);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
@@ -298,6 +347,106 @@ export default function LibraryScreen() {
     setShowEnrichModal(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
+
+  // ── Playlist handlers (F) ────────────────────────────────────────────────
+  // Pola yang sama dengan layar drawer Playlist
+  // (src/app/(drawer)/playlist.tsx): Alert.prompt untuk nama,
+  // DocumentPicker + parseM3U untuk import, Alert konfirmasi untuk hapus.
+  const handleCreatePlaylist = useCallback(() => {
+    Alert.prompt(
+      "Buat Playlist Baru",
+      "Masukkan nama playlist",
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Buat",
+          onPress: (name?: string) => {
+            if (name && name.trim()) {
+              createPlaylist({ name: name.trim(), songIds: [] });
+            }
+          },
+        },
+      ],
+      "plain-text",
+    );
+  }, [createPlaylist]);
+
+  const handleImportM3U = useCallback(async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["audio/x-mpegurl", "application/x-mpegurl", "text/plain"],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        return;
+      }
+
+      const file = result.assets[0];
+      const parsedData = await parseM3U(file.uri);
+
+      // PENTING: jangan pakai parsedData.name untuk nama playlist.
+      // Dengan copyToCacheDirectory: true, DocumentPicker meng-copy
+      // file terpilih ke cache app dengan nama file yang di-generate
+      // ulang (biasanya UUID) — parseM3U() menebak nama dari path
+      // hasil copy itu, bukan nama asli. Nama asli file tersimpan di
+      // file.name (metadata dari picker), pakai itu.
+      const originalName =
+        file.name?.replace(/\.(m3u|m3u8)$/i, "") ||
+        parsedData?.name ||
+        "Imported Playlist";
+
+      if (parsedData && parsedData.paths.length > 0) {
+        // Simpan playlist baru dari hasil parse M3U/M3U8 — tiap path
+        // lagu di-resolve ke songId di database lewat importM3UPaths.
+        const newPlaylist = await importM3UPaths(
+          originalName,
+          parsedData.paths,
+        );
+
+        const matchedCount = newPlaylist.songIds.length;
+        const skippedCount = parsedData.paths.length - matchedCount;
+
+        Alert.alert(
+          "Import Berhasil",
+          skippedCount > 0
+            ? `Playlist "${originalName}" ditambahkan (${matchedCount} track cocok, ${skippedCount} track dilewati karena tidak ditemukan di library).`
+            : `Playlist "${originalName}" berhasil ditambahkan (${matchedCount} track).`,
+        );
+      } else {
+        Alert.alert(
+          "Import Gagal",
+          "File M3U/M3U8 kosong atau format tidak valid.",
+        );
+      }
+    } catch (error) {
+      console.error("[M3U Import Error]:", error);
+      Alert.alert("Error", "Gagal membaca file M3U/M3U8.");
+    }
+  }, [importM3UPaths]);
+
+  const handlePlaylistPress = useCallback((playlist: PlaylistItem) => {
+    setSelectedPlaylist(playlist);
+  }, []);
+
+  const handleDeletePlaylist = useCallback(() => {
+    if (!selectedPlaylist || selectedPlaylist.id === "favorites") return;
+    Alert.alert(
+      "Hapus Playlist",
+      `Hapus playlist "${selectedPlaylist.name}"?`,
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Hapus",
+          style: "destructive",
+          onPress: async () => {
+            await deletePlaylist(selectedPlaylist.id);
+            setSelectedPlaylist(null);
+          },
+        },
+      ],
+    );
+  }, [selectedPlaylist, deletePlaylist]);
 
   const toggleSearch = () => {
     if (showSearch) {
@@ -467,6 +616,85 @@ export default function LibraryScreen() {
   };
 
   const renderContent = () => {
+    // F: detail playlist — tap row playlist di tab playlist membuka
+    // daftar lagunya di dalam tab (pola yang sama dengan layar drawer
+    // Playlist); "favorites" menampilkan lagu favorit. Dicek paling
+    // dulu supaya detail tetap tampil walau ada teks pencarian.
+    if (selectedPlaylist) {
+      return (
+        <View style={{ flex: 1 }}>
+          <View style={s.detailHeader}>
+            <TouchableOpacity
+              onPress={() => setSelectedPlaylist(null)}
+              style={s.backBtn}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Kembali ke daftar playlist"
+            >
+              <ChevronLeft size={28} color={colors.text.primary} />
+            </TouchableOpacity>
+            <View style={s.detailTitleWrap}>
+              <Text
+                style={[s.detailTitle, { color: colors.text.primary }]}
+                numberOfLines={1}
+              >
+                {selectedPlaylist.name}
+              </Text>
+              <Text
+                style={[s.detailSubtitle, { color: colors.text.secondary }]}
+              >
+                {selectedSongs.length} track
+                {selectedFull?.duration
+                  ? ` • ${formatTime(selectedFull.duration)}`
+                  : ""}
+              </Text>
+            </View>
+            {selectedPlaylist.id !== "favorites" && (
+              <TouchableOpacity
+                onPress={handleDeletePlaylist}
+                style={s.backBtn}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Hapus playlist"
+              >
+                <Trash2 size={20} color={colors.status.error} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {selectedSongs.length === 0 ? (
+            <View style={s.center}>
+              <EmptyState
+                title="Belum ada lagu di playlist ini."
+                icon={<Music2 size={40} color={colors.text.tertiary} />}
+              />
+            </View>
+          ) : (
+            <FlashList
+              data={selectedSongs}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{
+                paddingBottom: FLOATING_BOTTOM,
+                paddingHorizontal: 12,
+              }}
+              renderItem={({ item }) => (
+                <SongListItem
+                  item={item as any}
+                  isNowPlaying={currentSong?.id === item.id && isPlaying}
+                  isFavorite={isFavorite(item.id)}
+                  colors={colors}
+                  onPress={() => {
+                    handleSongPress(item, selectedSongs);
+                  }}
+                  onToggleFavorite={toggleFavorite}
+                />
+              )}
+            />
+          )}
+        </View>
+      );
+    }
+
     if (loading && tracks.length === 0) {
       return (
         <View style={s.center}>
@@ -629,10 +857,11 @@ export default function LibraryScreen() {
       case "playlist":
         return (
           <PlaylistList
-            playlists={[]}
+            playlists={playlistItems}
             favoriteCount={tracks.filter((t) => isFavorite(t.id)).length}
-            onPlaylistPress={() => {}}
-            onCreateNew={() => {}}
+            onPlaylistPress={handlePlaylistPress}
+            onCreateNew={handleCreatePlaylist}
+            onImportM3U={handleImportM3U}
           />
         );
       default:
@@ -891,5 +1120,29 @@ const createStyles = (colors: any) =>
     retryBtnText: {
       fontSize: 14,
       fontWeight: "700",
+    },
+    // F: header detail playlist (pola yang sama dengan layar drawer
+    // Playlist) — tombol kembali + judul + hapus.
+    detailHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 8,
+      paddingTop: 12,
+      paddingBottom: 8,
+    },
+    backBtn: {
+      padding: 8,
+    },
+    detailTitleWrap: {
+      flex: 1,
+      marginLeft: 4,
+    },
+    detailTitle: {
+      fontSize: 20,
+      fontWeight: "800",
+    },
+    detailSubtitle: {
+      fontSize: 13,
+      marginTop: 2,
     },
   }); 
