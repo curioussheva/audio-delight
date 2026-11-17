@@ -15,15 +15,20 @@
 // - Scroll horizontal: konten ~2x lebar tampak supaya bar lebih lebar dan
 //   detail treble bisa digeser; label dB tetap diam di luar scroll.
 //
-// Data: VisualizerService -> getFFTData() Kotlin (128 bin 0..1, log-scaled;
-// dB = -80 + v*80 sejak full-scale 2026-11-14; DULU -80 + v*70 dengan
-// ceiling -10 sehingga bar terpotong). Matematika sumbu ada di
-// @/features/visualizer/api/analyzerSpectrum.
+// Data: VisualizerService menulis LANGSUNG ke SharedValue freqData
+// (subscribeSharedValue) — TIDAK ADA callback JS per frame. Data mentah
+// 128 bin 0..1, log-scaled; dB = -80 + v*80 sejak full-scale 2026-11-14;
+// DULU -80 + v*70 dengan ceiling -10 sehingga bar terpotong). Matematika
+// sumbu ada di @/features/visualizer/api/analyzerSpectrum.
 //
 // Arsitektur render sama seperti SpectrumAnalyzer/SpectogramView:
 // data + peak hidup di SharedValue (UI thread), TIDAK ADA setState di
-// jalur panas — kecuali readout frekuensi dominan + latch CLIP yang
-// di-throttle.
+// jalur panas — frekuensi dominan + latch CLIP dihitung di UI thread
+// (useAnimatedReaction) dan hanya memanggil runOnJS bila nilainya
+// berubah (~2 Hz, bukan tiap frame). Jalur data penuh (D, 2026-11-17):
+// VisualizerService.subscribeSharedValue(freqData) — data FFT tidak
+// pernah menyentuh JS thread per frame; callback setDataCallback lama
+// (handleData) dihapus.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -136,9 +141,13 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
   const peakData = useSharedValue<number[]>(Array(barCount).fill(0.05));
   // Laju untuk worklet (prop bisa berubah saat reopen ganti laju file).
   const sampleRateSV = useSharedValue(sampleRate);
-  // Laju terbaru untuk handleData (callback stabil, baca lewat ref).
-  const sampleRateRef = useRef(sampleRate);
-  sampleRateRef.current = sampleRate;
+  // Penghitung frame + cermin worklet untuk readout JS yang di-throttle
+  // (frekuensi dominan, latch CLIP) — supaya runOnJS hanya dipanggil
+  // bila nilainya berubah, bukan tiap frame.
+  const frameCountSV = useSharedValue(0);
+  const silentFramesSV = useSharedValue(0);
+  const dominantFreqSV = useSharedValue<string | null>(null);
+  const clipLatchedSV = useSharedValue(false);
 
   // FIX: hasRealData dan isPlayingSV sebagai SharedValue agar bisa dibaca worklet
   const hasRealData = useSharedValue(false);
@@ -168,7 +177,6 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const isStarted = useRef(false);
   const lastSessionId = useRef<number | null>(null);
-  const frameCount = useRef(0);
 
   // Sync isPlaying + sampleRate prop → SharedValue
   useEffect(() => {
@@ -191,44 +199,61 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
     },
   );
 
-  // Callback data — stabil (hanya memakai ref/SharedValue), jadi bisa
-  // dipakai ulang tiap kali effect start/stop subscribe ulang.
-  const handleData = useCallback((newData: number[]) => {
-    if (!newData || newData.length === 0) return;
+  // Jalur data panas (D, 2026-11-17): tiap kali VisualizerService
+  // menulis freqData (SharedValue), reaksi ini jalan DI UI THREAD —
+  // tanpa callback JS, tanpa setState per frame. Yang dihitung di sini:
+  // hasRealData (bar hidup vs lantai), frekuensi dominan + latch CLIP
+  // (paling sering tiap 5 frame ≈ 2 Hz, dan runOnJS hanya bila
+  // nilainya berubah). Smoothing + peak hold tetap di tempat lama
+  // (smoothing di service, peak di useAnimatedReaction processedData).
+  useAnimatedReaction(
+    () => freqData.value,
+    (data) => {
+      if (!data || data.length === 0) return;
 
-    frameCount.current++;
-    const maxVal = Math.max(...newData);
-    const isReal = maxVal > 0.01;
-    const shouldClear = !isReal && frameCount.current > 10;
-
-    // Frekuensi dominan + latch CLIP: hitung di JS thread, paling sering
-    // 2 Hz saja (tiap 5 frame pada polling 10 Hz) dan hanya bila berubah —
-    // supaya tidak setState tiap frame.
-    if (isReal && frameCount.current % 5 === 0) {
-      const bin = dominantBin(newData);
-      if (bin >= 0) {
-        const label = formatFreq(
-          binCenterFreq(bin, newData.length, sampleRateRef.current / 2),
-        );
-        setDominantFreq((prev) => (prev === label ? prev : label));
+      frameCountSV.value += 1;
+      let maxVal = 0;
+      for (let i = 0; i < data.length; i++) {
+        const v = data[i] ?? 0;
+        if (v > maxVal) maxVal = v;
       }
-      if (valueToDb(maxVal) >= CLIP_DB) {
-        setClipLatched((prev) => (prev ? prev : true));
-      }
-    } else if (!isReal && frameCount.current % 5 === 0) {
-      setDominantFreq((prev) => (prev === null ? prev : null));
-    }
-
-    runOnUI((data: number[], real: boolean, clear: boolean) => {
-      "worklet";
-      freqData.value = data;
-      if (real) {
+      const isReal = maxVal > 0.01;
+      if (isReal) {
         hasRealData.value = true;
-      } else if (clear) {
-        hasRealData.value = false;
+        silentFramesSV.value = 0;
+      } else {
+        // Data sunyi >10 frame berturut-turut = sesi benar-benar
+        // tidak mengalirkan FFT (bukan jeda antar-frame).
+        silentFramesSV.value += 1;
+        if (silentFramesSV.value > 10) hasRealData.value = false;
       }
-    })(newData, isReal, shouldClear);
-  }, []);
+
+      // Frekuensi dominan + latch CLIP: hitung di UI thread, paling
+      // sering 2 Hz saja (tiap 5 frame pada polling 10 Hz) dan hanya
+      // bila berubah — supaya tidak setState tiap frame.
+      if (frameCountSV.value % 5 === 0) {
+        if (isReal) {
+          const bin = dominantBin(data);
+          if (bin >= 0) {
+            const label = formatFreq(
+              binCenterFreq(bin, data.length, sampleRateSV.value / 2),
+            );
+            if (dominantFreqSV.value !== label) {
+              dominantFreqSV.value = label;
+              runOnJS(setDominantFreq)(label);
+            }
+          }
+          if (valueToDb(maxVal) >= CLIP_DB && !clipLatchedSV.value) {
+            clipLatchedSV.value = true;
+            runOnJS(setClipLatched)(true);
+          }
+        } else if (dominantFreqSV.value !== null) {
+          dominantFreqSV.value = null;
+          runOnJS(setDominantFreq)(null);
+        }
+      }
+    },
+  );
 
   // Start/Stop berdasarkan isPlaying dan audioSessionId.
   //
@@ -242,15 +267,20 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
       if (!isStarted.current || lastSessionId.current !== audioSessionId) {
         console.log(`[AnalyzerSpectrum] Starting session ${audioSessionId}`);
         unsubscribeRef.current?.();
+        // D: langganan SharedValue langsung — VisualizerService menulis
+        // freqData.value tiap poll; tidak ada callback JS per frame.
         unsubscribeRef.current =
-          visualizerService.setDataCallback(handleData);
+          visualizerService.subscribeSharedValue(freqData);
         visualizerService.start(audioSessionId);
         isStarted.current = true;
         lastSessionId.current = audioSessionId;
-        frameCount.current = 0;
         runOnUI(() => {
           "worklet";
           hasRealData.value = false;
+          frameCountSV.value = 0;
+          silentFramesSV.value = 0;
+          dominantFreqSV.value = null;
+          clipLatchedSV.value = false;
         })();
         setHasRealDataState(false);
         setDominantFreq(null);
@@ -270,13 +300,17 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
           prevData.value = Array(barCount).fill(0.1);
           peakData.value = Array(barCount).fill(0.05);
           hasRealData.value = false;
+          frameCountSV.value = 0;
+          silentFramesSV.value = 0;
+          dominantFreqSV.value = null;
+          clipLatchedSV.value = false;
         })();
         setHasRealDataState(false);
         setDominantFreq(null);
         setClipLatched(false);
       }
     }
-  }, [isPlaying, audioSessionId, barCount, handleData]);
+  }, [isPlaying, audioSessionId, barCount]);
 
   // Cleanup saat unmount: lepas subscription (bukan stop() global).
   useEffect(() => {

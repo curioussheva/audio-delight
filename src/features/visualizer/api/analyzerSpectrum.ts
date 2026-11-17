@@ -133,6 +133,7 @@ export function binCenterFreq(
   bins: number = ANALYZER_BIN_COUNT,
   freqMax: number = ANALYZER_FREQ_MAX,
 ): number {
+  "worklet"; // dipanggil dari AnalyzerSpectrum (useAnimatedReaction, UI thread)
   const t = (bin + 0.5) / bins;
   return ANALYZER_FREQ_MIN * Math.pow(freqMax / ANALYZER_FREQ_MIN, t);
 }
@@ -165,6 +166,7 @@ export function dbToValue(db: number): number {
 
 /** Format frekuensi untuk label: "440 Hz", "1.2 kHz", "10 kHz". */
 export function formatFreq(hz: number): string {
+  "worklet"; // dipanggil dari AnalyzerSpectrum (useAnimatedReaction, UI thread)
   if (hz >= 1000) {
     const k = hz / 1000;
     const s = k >= 10 ? String(Math.round(k)) : k.toFixed(1).replace(/\.0$/, "");
@@ -175,6 +177,7 @@ export function formatFreq(hz: number): string {
 
 /** Indeks bin dengan nilai terbesar, atau -1 bila data kosong/semua nol. */
 export function dominantBin(data: readonly number[]): number {
+  "worklet"; // dipanggil dari AnalyzerSpectrum (useAnimatedReaction, UI thread)
   let best = -1;
   let bestVal = 0;
   for (let i = 0; i < data.length; i++) {
