@@ -62,6 +62,62 @@ export function dbColor(db: number): string {
 }
 
 /**
+ * Skala warna parametrik biru→merah untuk main player
+ * (ParametricSpectrumView) — gradasi mengikuti dB, satu zona per warna.
+ * Ambang atas (oranye/merah) sejajar zona Analyzer supaya "keras" dan
+ * "clip" dibaca sama di kedua tempat; ujung bawah ditambah biru/cyan
+ * supaya audio tenang tetap terbaca (bukan cuma hijau gelap).
+ * dB < -60 biru, -60..-40 cyan, -40..-20 hijau, -20..-12 kuning,
+ * -12..-3 oranye, >= -3 merah.
+ * SINGLE-CHANNEL (mono): warna dihitung dari satu array FFT campuran
+ * (getFFTData), BUKAN per-channel L/R — dual-channel butuh FFT native
+ * per channel (follow-up, bukan di sini).
+ */
+export const PARAMETRIC_DB_CYAN = -60;
+export const PARAMETRIC_DB_GREEN = -40;
+export const PARAMETRIC_DB_YELLOW = -20;
+export const PARAMETRIC_DB_ORANGE = -12;
+export const PARAMETRIC_DB_RED = -3;
+
+export const PARAMETRIC_COLOR_BLUE = "#2563EB";
+export const PARAMETRIC_COLOR_CYAN = "#06B6D4";
+export const PARAMETRIC_COLOR_GREEN = ANALYZER_COLOR_LOW;
+export const PARAMETRIC_COLOR_YELLOW = ANALYZER_COLOR_WARN;
+export const PARAMETRIC_COLOR_ORANGE = "#F97316";
+export const PARAMETRIC_COLOR_RED = ANALYZER_COLOR_CLIP;
+
+export type ParametricDbZone =
+  | "blue"
+  | "cyan"
+  | "green"
+  | "yellow"
+  | "orange"
+  | "red";
+
+/** Zona warna parametrik (biru→merah) untuk satu nilai dB. */
+export function parametricDbZone(db: number): ParametricDbZone {
+  "worklet"; // dipanggil dari barsPath (useDerivedValue, UI thread)
+  if (db >= PARAMETRIC_DB_RED) return "red";
+  if (db >= PARAMETRIC_DB_ORANGE) return "orange";
+  if (db >= PARAMETRIC_DB_YELLOW) return "yellow";
+  if (db >= PARAMETRIC_DB_GREEN) return "green";
+  if (db >= PARAMETRIC_DB_CYAN) return "cyan";
+  return "blue";
+}
+
+/** Warna parametrik (biru→merah) untuk satu nilai dB. */
+export function parametricDbColor(db: number): string {
+  "worklet"; // dipanggil dari barsPath (useDerivedValue, UI thread)
+  const zone = parametricDbZone(db);
+  if (zone === "red") return PARAMETRIC_COLOR_RED;
+  if (zone === "orange") return PARAMETRIC_COLOR_ORANGE;
+  if (zone === "yellow") return PARAMETRIC_COLOR_YELLOW;
+  if (zone === "green") return PARAMETRIC_COLOR_GREEN;
+  if (zone === "cyan") return PARAMETRIC_COLOR_CYAN;
+  return PARAMETRIC_COLOR_BLUE;
+}
+
+/**
  * Label frekuensi yang ditampilkan untuk satu freqMax: label kanonik yang
  * <= freqMax, ditambah freqMax sendiri sebagai label ujung bila belum ada.
  */

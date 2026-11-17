@@ -25,8 +25,10 @@ import { FullLyricsView } from "@/features/player/components/FullLyricsView";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { useSafePadding } from "@/shared/hooks/useSafePadding";
 
-// ✅ Import SpectogramView (bukan SpectrumAnalyzer)
-import { SpectogramView } from "@/features/visualizer/components/SpectogramView";
+// ✅ Parametric bar visualizer (biru→merah mengikuti dB) — ganti
+// SpectogramView (waterfall) di main player sejak 2026-11-17.
+// BUKAN SpectrumAnalyzer (dead code, jangan dipakai).
+import { ParametricSpectrumView } from "@/features/visualizer/components/ParametricSpectrumView";
 import { accentOn, pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import { safeGoBack } from "@/shared/utils/navigation";
 
@@ -453,17 +455,17 @@ export default function PlayerScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ✅ SPECTOGRAM VIEW */}
-        <SpectogramView
+        {/* ✅ PARAMETRIC SPECTRUM VIEW (bar biru→merah mengikuti dB) —
+            ganti SpectogramView (waterfall) sejak 2026-11-17.
+            Single-channel (mono FFT); dual-channel L/R butuh FFT native
+            per channel (follow-up). */}
+        <ParametricSpectrumView
           width={width - 48}
           height={120}
           isPlaying={isPlaying}
           audioSessionId={audioSessionId}
-          bins={64}
-          maxRows={30}
-          colorScheme="classic"
+          barCount={48}
           sensitivity={2.0}
-          showLabels={false} // bisa dimatikan untuk tampilan minimal
         />
 
         {/* Progress Section — U-P2-11: selama drag, slider menampilkan

@@ -3,6 +3,12 @@ import {
   ANALYZER_BIN_COUNT,
   ANALYZER_DB_CEIL,
   ANALYZER_DB_FLOOR,
+  PARAMETRIC_COLOR_BLUE,
+  PARAMETRIC_COLOR_CYAN,
+  PARAMETRIC_COLOR_GREEN,
+  PARAMETRIC_COLOR_ORANGE,
+  PARAMETRIC_COLOR_RED,
+  PARAMETRIC_COLOR_YELLOW,
   binCenterFreq,
   dbColor,
   dbToValue,
@@ -11,6 +17,8 @@ import {
   formatFreq,
   freqLabelsFor,
   freqToFraction,
+  parametricDbColor,
+  parametricDbZone,
   valueToDb,
 } from "@/features/visualizer/api/analyzerSpectrum";
 
@@ -148,5 +156,31 @@ describe("dominantBin", () => {
   it("-1 untuk data kosong atau semua nol", () => {
     expect(dominantBin([])).toBe(-1);
     expect(dominantBin([0, 0, 0])).toBe(-1);
+  });
+});
+
+describe("parametricDbZone / parametricDbColor (biru→merah, main player)", () => {
+  it("zona mengikuti ambang dB: biru < -60, cyan -60..-40, hijau -40..-20, kuning -20..-12, oranye -12..-3, merah >= -3", () => {
+    expect(parametricDbZone(-80)).toBe("blue");
+    expect(parametricDbZone(-61)).toBe("blue");
+    expect(parametricDbZone(-60)).toBe("cyan");
+    expect(parametricDbZone(-41)).toBe("cyan");
+    expect(parametricDbZone(-40)).toBe("green");
+    expect(parametricDbZone(-21)).toBe("green");
+    expect(parametricDbZone(-20)).toBe("yellow");
+    expect(parametricDbZone(-13)).toBe("yellow");
+    expect(parametricDbZone(-12)).toBe("orange");
+    expect(parametricDbZone(-4)).toBe("orange");
+    expect(parametricDbZone(-3)).toBe("red");
+    expect(parametricDbZone(0)).toBe("red");
+  });
+
+  it("warna konsisten dengan zona (hijau/kuning/merah sama dengan Analyzer)", () => {
+    expect(parametricDbColor(-80)).toBe(PARAMETRIC_COLOR_BLUE);
+    expect(parametricDbColor(-50)).toBe(PARAMETRIC_COLOR_CYAN);
+    expect(parametricDbColor(-30)).toBe(PARAMETRIC_COLOR_GREEN);
+    expect(parametricDbColor(-15)).toBe(PARAMETRIC_COLOR_YELLOW);
+    expect(parametricDbColor(-6)).toBe(PARAMETRIC_COLOR_ORANGE);
+    expect(parametricDbColor(0)).toBe(PARAMETRIC_COLOR_RED);
   });
 });
