@@ -19,6 +19,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { ThemeProvider, useTheme } from "@/shared/context/ThemeContext";
 import { accentOn } from "@/shared/utils/contrast";
+import { loadAppFonts } from "@/shared/utils/fonts";
 import LoadingScreen from "@/shared/components/ui/LoadingScreen";
 import { AudioPropertyToast } from "@/features/player/components/AudioPropertyToast";
 
@@ -273,6 +274,17 @@ const performInitialization = useCallback(async () => {
   try {
     bootMark("mulai");
     console.log("[BOOT] 1. Initializing Audio Engine & Stores...");
+
+    bootMark("font");
+
+    // Fase 1 redesign: font Playfair Display + Inter dibundel di
+    // assets/fonts/. Muat di boot sebelum UI pertama — tapi tidak pernah
+    // memblokir boot (loadAppFonts mengembalikan false bila gagal, app
+    // lanjut dengan font sistem).
+    const fontsOk = await loadAppFonts();
+    console.log(
+      `[BOOT] Font ${fontsOk ? "dimuat (Playfair Display + Inter)" : "gagal — lanjut font sistem"}`,
+    );
 
     bootMark("izin");
 
