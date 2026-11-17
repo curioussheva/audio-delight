@@ -113,84 +113,97 @@ export function startAudioDiagnostics(options?: {
   // masalah audio sungguhan.
   let isFirstSnapshot = true;
 
+  // J1-4 (Batch JS-1): guard in-flight, pola _posInFlight playerStore.
+  // getAudioSnapshot() menunggu bridge call; tanpa guard, tick berikut
+  // tetap jalan kalau snapshot sebelumnya belum selesai dan panggilan
+  // menumpuk. Monitor ini dev-only + interval orde detik, tapi guard
+  // tetap murah dan konsisten dengan J1-1.
+  let snapInFlight = false;
+
   const timer = setInterval(async () => {
-    const snap = await getAudioSnapshot();
-    if (!snap) return;
-    lastSnapshot = snap;
+    if (snapInFlight) return;
+    snapInFlight = true;
+    try {
+      const snap = await getAudioSnapshot();
+      if (!snap) return;
+      lastSnapshot = snap;
 
-    const now = snap.timestamp;
-    const elapsed = (now - lastTime) / 1000;
-    const deltaPos = (snap.positionMs - lastPosition) / 1000;
+      const now = snap.timestamp;
+      const elapsed = (now - lastTime) / 1000;
+      const deltaPos = (snap.positionMs - lastPosition) / 1000;
 
-    // 🔥 FIX Bug #3: skip speed calc saat glitch-prone
-    const MIN_ELAPSED_S = 0.3;
-    const MAX_SPEED = 3.0;
-    const MIN_SPEED = -0.5;
+      // 🔥 FIX Bug #3: skip speed calc saat glitch-prone
+      const MIN_ELAPSED_S = 0.3;
+      const MAX_SPEED = 3.0;
+      const MIN_SPEED = -0.5;
 
-    const isStateChange = snap.status !== lastStatus;
-    const suspiciousDrop = deltaPos < MIN_SPEED;
-    const tooShortWindow = elapsed < MIN_ELAPSED_S;
+      const isStateChange = snap.status !== lastStatus;
+      const suspiciousDrop = deltaPos < MIN_SPEED;
+      const tooShortWindow = elapsed < MIN_ELAPSED_S;
 
-    if (isStateChange) {
-      events.push({
-        type: "STATE_CHANGE",
-        detail: `${lastStatus} → ${snap.status} (${snap.statusLabel})`,
-        timestamp: now,
-      });
-      lastStatus = snap.status;
-    }
-
-    // Track change / seek / window pendek → reset baseline, skip speed
-    if (suspiciousDrop || tooShortWindow) {
-      lastPosition = snap.positionMs;
-      lastTime = now;
-      return;
-    }
-
-    // 🔥 FIX: snapshot pertama hanya untuk baseline, jangan hitung speed
-    // (posisi yang dilaporkan sudah jalan sebelum monitor mulai).
-    if (isFirstSnapshot) {
-      isFirstSnapshot = false;
-      lastPosition = snap.positionMs;
-      lastTime = now;
-      lastStatus = snap.status;
-      return;
-    }
-
-    const speed = elapsed > 0 ? deltaPos / elapsed : 0;
-    const speedInRange = speed >= MIN_SPEED && speed <= MAX_SPEED;
-
-    // 🔥 FIX: status 1 = PLAYING (bukan 2)
-    if (snap.status === 1 && speedInRange) {
-      if (speed < speedLow && speed >= 0) {
+      if (isStateChange) {
         events.push({
-          type: "SLOW",
-          detail: `${speed.toFixed(2)}x (expected 1.0x)`,
+          type: "STATE_CHANGE",
+          detail: `${lastStatus} → ${snap.status} (${snap.statusLabel})`,
           timestamp: now,
         });
-      } else if (speed > speedHigh) {
-        events.push({
-          type: "FAST",
-          detail: `${speed.toFixed(2)}x (expected 1.0x)`,
-          timestamp: now,
-        });
+        lastStatus = snap.status;
       }
+
+      // Track change / seek / window pendek → reset baseline, skip speed
+      if (suspiciousDrop || tooShortWindow) {
+        lastPosition = snap.positionMs;
+        lastTime = now;
+        return;
+      }
+
+      // 🔥 FIX: snapshot pertama hanya untuk baseline, jangan hitung speed
+      // (posisi yang dilaporkan sudah jalan sebelum monitor mulai).
+      if (isFirstSnapshot) {
+        isFirstSnapshot = false;
+        lastPosition = snap.positionMs;
+        lastTime = now;
+        lastStatus = snap.status;
+        return;
+      }
+
+      const speed = elapsed > 0 ? deltaPos / elapsed : 0;
+      const speedInRange = speed >= MIN_SPEED && speed <= MAX_SPEED;
+
+      // 🔥 FIX: status 1 = PLAYING (bukan 2)
+      if (snap.status === 1 && speedInRange) {
+        if (speed < speedLow && speed >= 0) {
+          events.push({
+            type: "SLOW",
+            detail: `${speed.toFixed(2)}x (expected 1.0x)`,
+            timestamp: now,
+          });
+        } else if (speed > speedHigh) {
+          events.push({
+            type: "FAST",
+            detail: `${speed.toFixed(2)}x (expected 1.0x)`,
+            timestamp: now,
+          });
+        }
+      }
+
+      const shouldLog =
+        verbose &&
+        speedInRange &&
+        (snap.status === 1 || isStateChange ||
+          (speed > 0 && Math.abs(speed - 1.0) > 0.5));
+
+      if (shouldLog) {
+        console.log(
+          `[DIAG] ${snap.statusLabel} pos=${snap.positionMs}ms speed=${speed.toFixed(2)}x`,
+        );
+      }
+
+      lastPosition = snap.positionMs;
+      lastTime = now;
+    } finally {
+      snapInFlight = false;
     }
-
-    const shouldLog =
-      verbose &&
-      speedInRange &&
-      (snap.status === 1 || isStateChange ||
-        (speed > 0 && Math.abs(speed - 1.0) > 0.5));
-
-    if (shouldLog) {
-      console.log(
-        `[DIAG] ${snap.statusLabel} pos=${snap.positionMs}ms speed=${speed.toFixed(2)}x`,
-      );
-    }
-
-    lastPosition = snap.positionMs;
-    lastTime = now;
   }, intervalMs);
 
   return {

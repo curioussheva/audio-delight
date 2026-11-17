@@ -71,6 +71,17 @@ const _playInFlightSongIds = new Set<string>();
 // lama bisa dibatalkan saat playSong selesai (lihat finally di playSong).
 const _playInFlightTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let _lastPlayRequest: { songId: string; ts: number } | null = null;
+
+// J1-3 fix 2 (Batch JS-1): coalesce sync pergantian trek. Satu navigasi
+// bisa memicu handleTrackChanged dua kali berurutan — auto-advance native
+// meng-emit onPlaybackTrackEnded DAN onPlaybackTrackChanged untuk advance
+// yang sama (lihat onNativeTrackEnded di NativePlaybackModule.kt) — dan
+// tanpa guard dua syncFromNative berjalan bersamaan (4 bridge call +
+// updateMetadata masing-masing). Flag in-flight + pending memastikan
+// paling banyak satu sync berjalan; pemicu yang datang saat sync berjalan
+// tidak hilang, tapi dijalankan sekali setelahnya (bukan ditumpuk).
+let _trackChangedSyncInFlight = false;
+let _trackChangedSyncPending: string | null = null;
 const savePositionThrottled = (position: number) => {
   if (_positionSaveTimer) return;
   _positionSaveTimer = setTimeout(() => {
@@ -162,6 +173,14 @@ export interface PlayerState {
   // Dipakai setelah perintah navigasi supaya UI menampilkan apa yang
   // benar-benar dimuat native - termasuk perubahan dari tombol notification.
   syncFromNative: () => Promise<void>;
+  // J1-3 fix 2: SATU corong penanganan pergantian trek dari semua jalur
+  // (in-app next/prev/skip, event native track-changed, auto-advance
+  // track-ended). Setiap jalur memanggil ini — bukan syncFromNative
+  // langsung — supaya tidak ada jalur yang diam dan supaya pemicu ganda
+  // untuk satu navigasi di-coalesce (lihat flag _trackChangedSync*).
+  // syncFromNative sendiri tetap dipakai jalur lain (sync-on-wake,
+  // playback-state) dan tetap idempotent (playCount dijaga guard id).
+  handleTrackChanged: (source: string) => Promise<void>;
   setIsPlaying: (isPlaying: boolean) => Promise<void>;
   togglePlay: () => Promise<void>;
   seek: (pos: number) => Promise<void>;
@@ -309,10 +328,23 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // Sekarang C++ yang kasih tahu (DecoderWorker EOF callback →
     // NativePlaybackModule.onNativeTrackEnded → DeviceEventEmitter).
     // Polling __trackEndWatcher dihapus.
-    if (!(globalThis as any).__nativeTrackEndListener) {
+
+    // J1-6 (Batch JS-1): SATU NativeEventEmitter bersama untuk semua event
+    // native→JS (dulu 4 emitter, satu per event — redundan, hanya boros
+    // objek). Emitter dibuat sekali dan disimpan di globalThis; tiap
+    // listener di bawah tetap dijaga guard singleton-nya sendiri supaya
+    // initStore yang dipanggil ulang tidak double-subscribe. Perilaku
+    // emit/listen tidak berubah — hanya konsolidasi emitter.
+    if (!(globalThis as any).__nativePlayerEmitter) {
       const { NativeEventEmitter } = require("react-native");
-      const emitter = new NativeEventEmitter(NativePlaybackService);
-      const subscription = emitter.addListener(
+      (globalThis as any).__nativePlayerEmitter = new NativeEventEmitter(
+        NativePlaybackService,
+      );
+    }
+    const nativeEmitter = (globalThis as any).__nativePlayerEmitter;
+
+    if (!(globalThis as any).__nativeTrackEndListener) {
+      const subscription = nativeEmitter.addListener(
         "onPlaybackTrackEnded",
           async (uri: string) => {
           console.log(`[Player] 🎵 native track-ended event: ${uri}`);
@@ -350,14 +382,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
             // currentSong JS ke trek yang BENAR-BENAR diputar sekarang.
             // Kalau ternyata sama, tidak ada yang berubah (no-op). Kalau
             // beda, UI jadi benar. Idempoten dan aman dipanggil berulang.
-            await get().syncFromNative();
+            await get().handleTrackChanged("track-ended");
             return;
           }
 
           // 🔥 C++ sudah advance queue di EOF callback (TrackQueue::advance).
           // Jadi kita hanya perlu sync dari native — JANGAN panggil
           // NativePlaybackService.next() lagi (double-advance).
-          await get().syncFromNative();
+          await get().handleTrackChanged("track-ended");
         },
       );
       (globalThis as any).__nativeTrackEndListener = subscription;
@@ -369,9 +401,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // Sebelumnya UI React hanya tahu lewat polling 500ms, jadi tombol UI
     // ketinggalan vs notifikasi.
     if (!(globalThis as any).__nativePlaybackStateListener) {
-      const { NativeEventEmitter } = require("react-native");
-      const emitter = new NativeEventEmitter(NativePlaybackService);
-      const subscription = emitter.addListener(
+      const subscription = nativeEmitter.addListener(
         "onPlaybackStateChanged",
         async (isPlaying: boolean) => {
           console.log("[Player] ▶️ native playback-state event:", isPlaying);
@@ -389,16 +419,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // 🔥 FIX #4: event native→JS kalau user pencet next/prev di lock screen.
     // Native sudah ganti trek (PlaybackNativeBridge.next()), JS tinggal sync.
     if (!(globalThis as any).__nativeTrackChangedListener) {
-      const { NativeEventEmitter } = require("react-native");
-      const emitter = new NativeEventEmitter(NativePlaybackService);
-      const subscription = emitter.addListener(
+      const subscription = nativeEmitter.addListener(
         "onPlaybackTrackChanged",
         async (payload: { uri: string; index: number }) => {
           // Payload selalu WritableMap {uri, index} dari
           // PlaybackNativeBridge.emitTrackChanged (B15-K-b); dulu
           // androidx Pair yang ditolak Arguments.fromJavaArgs.
           console.log("[Player] 🔀 native track-changed event:", payload);
-          await get().syncFromNative();
+          await get().handleTrackChanged("track-changed");
         },
       );
       (globalThis as any).__nativeTrackChangedListener = subscription;
@@ -413,9 +441,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // sampai track berganti. Listener HANYA set state (tanpa panggil balik
     // ke native), jadi tidak ada loop dengan jalur JS→native.
     if (!(globalThis as any).__nativeRepeatShuffleListener) {
-      const { NativeEventEmitter } = require("react-native");
-      const emitter = new NativeEventEmitter(NativePlaybackService);
-      const subscription = emitter.addListener(
+      const subscription = nativeEmitter.addListener(
         "onPlaybackRepeatShuffleChanged",
         (payload: { repeatMode: string; shuffle: boolean }) => {
           // Payload selalu WritableMap {repeatMode, shuffle} dari
@@ -779,10 +805,46 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
     try {
       await NativePlaybackService.jumpTo(valid);
-      await get().syncFromNative();
+      await get().handleTrackChanged("skip-to-index");
     } catch (e) {
       console.error(`[Player] skipToIndex(${valid}) gagal:`, e);
       set({ playError: "Tidak bisa pindah lagu." });
+    }
+  },
+
+  // J1-3 fix 2 (Batch JS-1): satu corong untuk SEMUA jalur pergantian
+  // trek — in-app next/prev/skip, event native onPlaybackTrackChanged
+  // (MediaSession), dan onPlaybackTrackEnded (auto-advance). Sebelumnya
+  // tiap jalur memanggil syncFromNative langsung (atau tidak sama sekali —
+  // silent-next: native next() in-app TIDAK meng-emit track-changed,
+  // hanya onSkipToNext MediaSession dan auto-advance yang emit; lihat
+  // NativePlaybackModule.next() vs MediaSessionManager.onSkipToNext).
+  // Sekarang semua jalur navigasi memanggil fungsi ini, jadi tidak ada
+  // lagi jalur yang diam.
+  //
+  // Cegah emit/sync ganda: native TIDAK meng-emit untuk next/prev in-app
+  // (verifikasi di Kotlin), jadi jalur in-app tidak bisa double dengan
+  // event native. Satu-satunya double yang nyata adalah auto-advance —
+  // native meng-emit trackEnded DAN trackChanged untuk advance yang sama —
+  // dan itu di-coalesce di sini: kalau sync sedang berjalan, pemicu kedua
+  // hanya menandai pending dan dijalankan sekali setelahnya. syncFromNative
+  // sendiri idempotent (playCount dijaga guard pergantian id), jadi
+  // kalaupun dua sync tetap terjadi berurutan, tidak ada efek ganda.
+  handleTrackChanged: async (source: string) => {
+    if (_trackChangedSyncInFlight) {
+      _trackChangedSyncPending = source;
+      return;
+    }
+    _trackChangedSyncInFlight = true;
+    try {
+      await get().syncFromNative();
+    } finally {
+      _trackChangedSyncInFlight = false;
+      if (_trackChangedSyncPending) {
+        const pending = _trackChangedSyncPending;
+        _trackChangedSyncPending = null;
+        await get().handleTrackChanged(pending);
+      }
     }
   },
 
@@ -867,7 +929,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // lagu yang berbeda dari yang ditampilkan.
     try {
       await NativePlaybackService.next();
-      await get().syncFromNative();
+      await get().handleTrackChanged("in-app-next");
     } catch (e) {
       console.error("[Player] playNext gagal:", e);
       // Fallback: hanya kalau native menolak (mis. akhir queue dengan
@@ -889,7 +951,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
     try {
       await NativePlaybackService.previous();
-      await get().syncFromNative();
+      await get().handleTrackChanged("in-app-previous");
     } catch (e) {
       console.error("[Player] playPrevious gagal:", e);
     }

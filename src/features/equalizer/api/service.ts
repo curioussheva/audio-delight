@@ -22,23 +22,36 @@ class EqualizerService {
 
     // TUNGGU SEBENTAR: Beri waktu bagi Android Audio Framework untuk
     // membersihkan state Session ID sebelumnya dan menyiapkan AudioTrack baru.
+    //
+    // J1-5 (Batch JS-1): jeda 300 ms ini DIPERTAHANKAN — tidak ada
+    // event/sinyal session-ready yang bisa ditunggu sebagai gantinya (grep
+    // di seluruh src + Kotlin: tidak ada emit SessionReady/onAudioSession
+    // atau sejenisnya; satu-satunya yang ada hanya plumbing audioSessionId).
+    // Menghapus jeda tanpa pengganti berisiko DSP diterapkan ke session
+    // lama yang belum bersih. Kalau native nanti menyediakan event
+    // session-ready, ganti setTimeout ini dengan menunggu event itu.
     await new Promise((resolve) => setTimeout(resolve, 300));
 
     try {
       console.log(`🎛️ [EQ Service] Syncing DSP to Session: ${sessionId}`);
 
-      // 1. EQ Bands
+      // J1-5 (Batch JS-1): keempat panggilan independen (tidak saling
+      // bergantung, masing-masing Promise<boolean>) — jalankan paralel
+      // via Promise.all, bukan 4 await berurutan. Perilaku kalau satu
+      // gagal: yang lain tetap sudah dijalankan (Promise.all tidak
+      // membatalkan yang sudah dimulai), lalu catch di bawah mencatat
+      // kegagalan. Sebelumnya satu gagal menghentikan sisanya.
       const gains = this.currentBands.map((b) => b.gain);
-      await NativeDSPModule.setFullEqualizer(gains, sessionId);
-
-      // 2. Bass Boost
-      await NativeDSPModule.setBassBoost(this.bassStrength, sessionId);
-
-      // 3. Virtualizer (Stage)
-      await NativeDSPModule.setVirtualizer(this.virtualizerLevel, sessionId);
-
-      // 4. Reverb
-      await NativeDSPModule.setReverbPreset(this.reverbPreset, sessionId);
+      await Promise.all([
+        // 1. EQ Bands
+        NativeDSPModule.setFullEqualizer(gains, sessionId),
+        // 2. Bass Boost
+        NativeDSPModule.setBassBoost(this.bassStrength, sessionId),
+        // 3. Virtualizer (Stage)
+        NativeDSPModule.setVirtualizer(this.virtualizerLevel, sessionId),
+        // 4. Reverb
+        NativeDSPModule.setReverbPreset(this.reverbPreset, sessionId),
+      ]);
     } catch (e) {
       console.error("[EqualizerService] Failed to apply DSP:", e);
     }
