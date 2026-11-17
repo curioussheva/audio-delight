@@ -322,7 +322,11 @@ export const ParametricSpectrumView: React.FC<
 
   return (
     <View style={[styles.container, { width, height, backgroundColor }]}>
-      <Canvas style={{ flex: 1 }}>
+      {/* R10: Canvas Skia tidak punya ukuran intrinsik — `flex: 1` di
+          container `alignItems: "center"` memberi tinggi 120px tapi lebar
+          0 (sumbu silang ikut alignItems), sehingga tidak menggambar
+          apa-apa. Ukuran eksplisit seperti SpectogramView. */}
+      <Canvas style={{ width, height }}>
         <Group>
           <Path
             path={barsBluePath}
