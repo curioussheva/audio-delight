@@ -49,6 +49,10 @@ import {
 
 // Scan System
 import { useScanManager } from "@/features/library/hooks/useScanManager";
+import {
+  RESUME_SCAN_COOLDOWN_MS,
+  MIN_BACKGROUND_MS,
+} from "@/features/library/hooks/useScanManager";
 import { ScanStatusBar } from "@/features/library/components/ScanStatusBar";
 import { EnrichMetadataModal } from "@/features/library/components/EnrichMetadataModal";
 
@@ -112,6 +116,15 @@ export default function LibraryScreen() {
   );
 
   const searchInputRef = useRef<TextInput>(null);
+  // J3-1: penjaga refresh foreground — cooldown + durasi background yang
+  // SAMA seperti quickDiff di useScanManager. quickDiff TIDAK bisa
+  // menggantikan refresh ini: ia return kosong saat auto-scan mati
+  // (default OFF, libraryStore.ts) dan tidak pernah setTracks, jadi tanpa
+  // refresh ini UI tidak menampilkan lagu baru/hilang. Yang diperbaiki di
+  // sini hanya penjaganya: dulu tiap kembali foreground = refresh penuh
+  // tanpa cooldown dan tanpa cek durasi background.
+  const lastForegroundRefreshRef = useRef(0);
+  const backgroundedAtRef = useRef(0);
   const BOTTOM_COMPENSATION = Platform.OS === "ios" ? insets.bottom + 20 : 30;
 
   const { playSong, currentSong, isPlaying } = usePlayerStore();
@@ -226,11 +239,29 @@ export default function LibraryScreen() {
     [refreshLibrary],
   );
 
+  // J3-1: SATU penjaga bersama quickDiff (useScanManager) — skip kalau
+  // baru <3 dtk di background, cooldown 60 dtk antar refresh foreground.
+  // syncFromNative (J1-3 fix 1, playerStore) punya listener AppState
+  // sendiri dan tidak disentuh di sini.
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
-        debouncedRefresh();
+      if (state === "background" || state === "inactive") {
+        backgroundedAtRef.current = Date.now();
+        return;
       }
+      if (state !== "active") return;
+      const now = Date.now();
+      if (
+        backgroundedAtRef.current > 0 &&
+        now - backgroundedAtRef.current < MIN_BACKGROUND_MS
+      ) {
+        return;
+      }
+      if (now - lastForegroundRefreshRef.current < RESUME_SCAN_COOLDOWN_MS) {
+        return;
+      }
+      lastForegroundRefreshRef.current = now;
+      debouncedRefresh();
     });
     return () => subscription.remove();
   }, [debouncedRefresh]);

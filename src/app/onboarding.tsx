@@ -23,7 +23,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import * as MediaLibrary from "expo-media-library";
 import { Image } from "expo-image";
-import { DSPPipeline } from "@/features/visualizer/api/DSPPipeline";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 
 type AudioMode = "bit-perfect" | "dsp" | "immersive";
@@ -256,10 +255,7 @@ export default function OnboardingScreen() {
       await AsyncStorage.setItem("audio_mode_preference", selectedMode);
       await AsyncStorage.setItem("has_onboarded", "true");
 
-      // 🟢 3. Set Processing Mode
-      await DSPPipeline.setProcessingMode(selectedMode);
-
-      // 🟢 3b. Jalur exclusive (hanya bit-perfect)
+      // 🟢 3. Set Processing Mode + jalur exclusive (hanya bit-perfect)
       //
       // 🔥 FIX (2026-10-09): onboarding hanya mengirim mode PEMROSESAN
       // (setProcessingMode) tapi tidak pernah memanggil setAudioMode(). Mode
@@ -275,10 +271,15 @@ export default function OnboardingScreen() {
       // itu hanya mencatat yang DIMINTA, bukan yang diberikan (F3, 2026-11-16).
       //
       // setAudioMode() melakukan DUA hal sekaligus (lihat playerStore):
-      //   1. setProcessingMode — sama seperti DSPPipeline di atas
+      //   1. setProcessingMode
       //   2. toggleExclusiveMode(true) untuk bit-perfect
       // Ini juga cara Settings mengganti mode (handleSelectMode), jadi
       // onboarding sekarang konsisten dengan Settings.
+      //
+      // J3-5: panggilan DSPPipeline.setProcessingMode() yang dulu ada di sini
+      // DIHAPUS — redundan, karena setAudioMode() di bawah sudah memanggil
+      // audioEngine.setProcessingMode(mode) yang sama (satu bridge call
+      // mode-switch, bukan dua).
       await setAudioMode(selectedMode);
 
       // Success haptic feedback

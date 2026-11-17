@@ -10,9 +10,10 @@ import { useLibraryStore } from "../store/libraryStore";
 import { ScanProgress } from "../types/scan";
 import { MetadataEnricher } from "../services/MetadataEnricher";
 
-// Minimum interval antara resume scan
-const RESUME_SCAN_COOLDOWN_MS = 60_000;  // 🔥 FIX Bug #4: 60s
-const MIN_BACKGROUND_MS = 3_000;          // 🔥 FIX Bug #4: skip resume <3s di bg
+// Minimum interval antara resume scan — diekspor supaya pemicu refresh
+// foreground lain (library.tsx) memakai cooldown yang SAMA (J3-1).
+export const RESUME_SCAN_COOLDOWN_MS = 60_000;  // 🔥 FIX Bug #4: 60s
+export const MIN_BACKGROUND_MS = 3_000;          // 🔥 FIX Bug #4: skip resume <3s di bg
 
 // 🔥 FIX Bug #4: module-level state (survive across hook remount)
 let _globalLastResumeScan = 0;

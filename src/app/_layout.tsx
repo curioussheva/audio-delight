@@ -1,6 +1,10 @@
 import { configureReanimatedLogger, ReanimatedLogLevel } from "react-native-reanimated";
 
 console.log("[BOOT] 0. _layout module loaded");
+// J3-4: pemantau lag event-loop JS — dipanggil sekali di sini (modul scope),
+// state timer-nya hidup di `global` supaya Fast Refresh tidak menumpuk
+// interval + listener (lihat jsLagMonitor.ts).
+startJsLagMonitor();
 const Platform = require("react-native").Platform;
 configureReanimatedLogger({ level: ReanimatedLogLevel.warn, strict: false });
 
@@ -28,6 +32,7 @@ import {
 import type { Song } from "@/shared/types/audio";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
 import { requestAudioPermissions } from "@/shared/utils/permissions";
+import { startJsLagMonitor } from "@/shared/utils/jsLagMonitor";
 
 // 🔥 DIAGNOSTICS
 import {
@@ -52,6 +57,18 @@ const DIAGNOSTIC_INTERVAL_MS = 5000;
 // Proses baru me-reload modul ini, jadi guard reset tepat saat re-init yang
 // sesungguhnya dibutuhkan. Tombol Retry tetap bisa reset guard ini.
 let hasInitializedModule = false;
+
+// J3-3: penjaga in-flight performInitialization — tap Retry dua kali cepat
+// (atau boot effect + Retry bersamaan) tidak boleh menjalankan dua init.
+// Guard modul hasInitializedModule di atas hanya ada di boot effect, bukan
+// di dalam performInitialization sendiri.
+// J3-2: watchdog boot — nama langkah yang sedang berjalan + timer 20 dtk
+// yang HANYA menulis warning ke log (langkah mana yang macet + sudah berapa
+// lama). Bukan timer paksa-ready: LoadingScreen tetap menunggu prop
+// `finishing` by design (U-P1-23).
+let initInFlight = false;
+let bootCurrentStep = "belum mulai";
+let bootWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
 
 // ── Komponen dalam yang butuh tema ──────────────────────────────────────────
 //
@@ -223,8 +240,41 @@ export default function RootLayout() {
 
   // Init
 const performInitialization = useCallback(async () => {
+  // J3-3: tolak panggilan kedua selama init masih berjalan (tap Retry dua
+  // kali cepat, atau boot effect + Retry bersamaan).
+  if (initInFlight) {
+    console.log("[BOOT] init sudah berjalan, panggilan ganda diabaikan");
+    return;
+  }
+  initInFlight = true;
+
+  // J3-2: watchdog boot — cap timestamp + durasi tiap langkah. bootMark
+  // dipanggil di AWAL tiap langkah, jadi log-nya menunjukkan durasi langkah
+  // sebelumnya; kalau satu langkah macet, log terakhir menunjukkan langkah
+  // mana dan catch di bawah melaporkan sudah berapa lama. Timer 20 dtk
+  // hanya menulis warning (bukan memaksa ready).
+  const bootT0 = Date.now();
+  let bootLastMarkAt = bootT0;
+  const bootMark = (step: string) => {
+    bootCurrentStep = step;
+    const now = Date.now();
+    console.log(
+      `[BOOT] ⏱ ${step} — +${now - bootLastMarkAt}ms (total ${now - bootT0}ms)`,
+    );
+    bootLastMarkAt = now;
+  };
+  if (bootWatchdogTimer) clearTimeout(bootWatchdogTimer);
+  bootWatchdogTimer = setTimeout(() => {
+    console.warn(
+      `[BOOT] ⚠ Boot lambat: masih di langkah "${bootCurrentStep}" setelah ${Date.now() - bootT0}ms`,
+    );
+  }, 20_000);
+
   try {
+    bootMark("mulai");
     console.log("[BOOT] 1. Initializing Audio Engine & Stores...");
+
+    bootMark("izin");
 
     // ==========================================================
     // URUTAN IZIN - SEBELUM ENGINE
@@ -282,8 +332,12 @@ const performInitialization = useCallback(async () => {
       console.warn("[BOOT] Pemeriksaan izin awal dilewati:", e);
     }
 
+    bootMark("audioEngine.initialize");
     await audioEngine.initialize();
+    bootMark("initStore");
     await initStore();
+
+    bootMark("listDevices");
 
     // F2 (logcat #25, 2026-11-16): cold-start race — NativeDeviceModule
     // adalah TurboModule lazy: initialize() (→ nativeInitAppContext,
@@ -302,6 +356,7 @@ const performInitialization = useCallback(async () => {
     }
 
     // 🔥 FIX: Clear old audio cache (anti penumpukan)
+    bootMark("clearCache");
     try {
       const { NativeModules } = require("react-native");
       const svc = NativeModules.NativePlaybackService;
@@ -316,6 +371,7 @@ const performInitialization = useCallback(async () => {
     }
 
     // 🔥 FIX: Reset stuck scan state (anti macet)
+    bootMark("reset scan state");
     try {
       const { UnifiedScanService } = require("@/features/library/services/UnifiedScanService");
       const libraryStore = require("@/features/library/store/libraryStore").useLibraryStore.getState();
@@ -344,6 +400,7 @@ const performInitialization = useCallback(async () => {
       console.warn("[BOOT] Scan reset skipped:", e);
     }
 
+    bootMark("setAudioMode");
     const savedMode = await AsyncStorage.getItem("audio_mode_preference");
     const eqStore = useEqualizerStore.getState();
 
@@ -368,12 +425,22 @@ const performInitialization = useCallback(async () => {
     // berarti user baru akan melihat permintaan yang sama dua kali (sekali
     // tanpa konteks dari sini, sekali dari onboarding).
 
+    bootMark("selesai");
     console.log("[BOOT] Engine & Store initialization success.");
     setAppState("loading");
   } catch (error) {
-    console.error("[BOOT] Initialization Fatal Error:", error);
+    console.error(
+      `[BOOT] Initialization Fatal Error (langkah "${bootCurrentStep}", ${Date.now() - bootT0}ms):`,
+      error,
+    );
     setErrorMessage(error instanceof Error ? error.message : "Engine Failure");
     setAppState("error");
+  } finally {
+    if (bootWatchdogTimer) {
+      clearTimeout(bootWatchdogTimer);
+      bootWatchdogTimer = null;
+    }
+    initInFlight = false;
   }
 }, [initStore, setAudioMode]);
 
