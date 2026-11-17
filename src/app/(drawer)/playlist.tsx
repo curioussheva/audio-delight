@@ -15,6 +15,7 @@ import { ScreenHeader } from "@/shared/components/ui/ScreenHeader";
 import { EmptyState } from "@/shared/components/ui/EmptyState";
 import { ScreenList } from "@/shared/components/ui/ScreenList";
 import { usePlaylists } from "@/features/playlist/hooks/usePlaylists";
+import { CreatePlaylistModal } from "@/features/playlist/components/CreatePlaylistModal";
 import { PlaylistList, PlaylistItem } from "@/features/library/components/PlaylistList";
 import { SongListItem } from "@/features/library/components/SongListItem";
 import { usePlayerStore } from "@/features/player/store/playerStore";
@@ -30,6 +31,9 @@ export default function PlaylistsScreen() {
   const { playlists, createPlaylist, deletePlaylist, importM3UPaths } =
     usePlaylists();
   const [selectedPlaylist, setSelectedPlaylist] = useState<PlaylistItem | null>(null);
+  // B2 (ronde 9): dialog nama playlist lintas-platform — dulu
+  // Alert.prompt (iOS-only, no-op di Android).
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   const { playSong, currentSong } = usePlayerStore();
 
@@ -42,11 +46,22 @@ export default function PlaylistsScreen() {
         : undefined,
     [playlists, selectedPlaylist],
   );
-  const selectedSongs: Song[] = selectedFull?.songs ?? [];
   // U-P1-17: favorit dibaca dari sumber kebenaran tunggal (kolom
   // songs.isFavorite via libraryStore). favoriteCount dulu placeholder 0.
   const { isFavorite, toggleFavorite, favoriteSongs } = useFavorites();
   const favoriteCount = favoriteSongs.length;
+
+  // Ronde 9 (fix 3): "favorites" bukan playlist DB — lagunya dari
+  // favoriteSongs, pola yang sama dengan tab library
+  // (src/app/(drawer)/(tabs)/library.tsx). Dulu dicari di daftar
+  // playlist DB → tidak ketemu → detail kosong (0 lagu).
+  const selectedSongs: Song[] = useMemo(
+    () =>
+      selectedPlaylist?.id === "favorites"
+        ? favoriteSongs
+        : (selectedFull?.songs ?? []),
+    [selectedPlaylist, favoriteSongs, selectedFull],
+  );
 
   const handleSongPress = useCallback(
     (song: Song) => {
@@ -56,7 +71,9 @@ export default function PlaylistsScreen() {
   );
 
   const handleDeletePlaylist = useCallback(() => {
-    if (!selectedPlaylist) return;
+    // Ronde 9 (fix 3): "Lagu Disukai" bukan playlist DB — tidak bisa
+    // dihapus; tombol hapusnya juga disembunyikan (lihat detail view).
+    if (!selectedPlaylist || selectedPlaylist.id === "favorites") return;
     Alert.alert(
       "Hapus Playlist",
       `Hapus playlist "${selectedPlaylist.name}"?`,
@@ -88,24 +105,20 @@ export default function PlaylistsScreen() {
   );
 
   // ── Handler: Buat Playlist Baru ──────────────────────────────────────────
+  // B2 (ronde 9): tap "Buat Playlist Baru" → buka modal; submit nama →
+  // createPlaylist → tutup modal. Alert.prompt dihapus — iOS-only,
+  // di Android no-op tanpa warning.
   const handleCreateNew = useCallback(() => {
-    Alert.prompt(
-      "Buat Playlist Baru",
-      "Masukkan nama playlist",
-      [
-        { text: "Batal", style: "cancel" },
-        {
-          text: "Buat",
-          onPress: (name?: string) => {
-            if (name && name.trim()) {
-              createPlaylist({ name: name.trim(), songIds: [] });
-            }
-          },
-        },
-      ],
-      "plain-text"
-    );
-  }, [createPlaylist]);
+    setShowCreateModal(true);
+  }, []);
+
+  const handleCreatePlaylistSubmit = useCallback(
+    async (name: string) => {
+      await createPlaylist({ name, songIds: [] });
+      setShowCreateModal(false);
+    },
+    [createPlaylist],
+  );
 
   // ── Handler: Import File M3U / M3U8 ──────────────────────────────────────
   const handleImportM3U = useCallback(async () => {
@@ -196,13 +209,17 @@ export default function PlaylistsScreen() {
                 : ""}
             </Text>
           </View>
-          <TouchableOpacity
-            onPress={handleDeletePlaylist}
-            style={styles.backBtn}
-            hitSlop={8}
-          >
-            <Trash2 size={20} color={colors.status.error} />
-          </TouchableOpacity>
+          {/* Ronde 9 (fix 3): sembunyikan tombol hapus untuk
+              "Lagu Disukai" — pola yang sama dengan tab library. */}
+          {selectedPlaylist.id !== "favorites" && (
+            <TouchableOpacity
+              onPress={handleDeletePlaylist}
+              style={styles.backBtn}
+              hitSlop={8}
+            >
+              <Trash2 size={20} color={colors.status.error} />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* U-P2-53: isi playlist lewat pola daftar bersama — jalur
@@ -247,6 +264,13 @@ export default function PlaylistsScreen() {
         onPlaylistPress={handlePlaylistPress}
         onCreateNew={handleCreateNew}
         onImportM3U={handleImportM3U}
+      />
+
+      {/* B2 (ronde 9): dialog buat playlist lintas-platform. */}
+      <CreatePlaylistModal
+        visible={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSubmit={handleCreatePlaylistSubmit}
       />
     </View>
   );
