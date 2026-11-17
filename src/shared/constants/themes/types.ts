@@ -98,7 +98,12 @@ export interface ThemeTypography {
   fontFamily?: {
     regular?: string;
     medium?: string;
+    semiBold?: string;
     bold?: string;
+    /** Serif display (Playfair Display) — judul layar, judul lagu, angka besar. */
+    display?: string;
+    /** Serif display tebal (Playfair Display Bold) — judul utama. */
+    displayBold?: string;
   };
   fontSize?: {
     xs: number;
@@ -128,11 +133,34 @@ export interface ThemeSpacing {
   xxs?: number;
   xs: number;
   sm: number;
+  // Nilai sela dari kebiasaan nyata kode (Fase 0 §3.3): 12 dan 20 adalah
+  // nilai tersering ke-2/3 (107× dan 72×) tapi tidak ada di skala lama
+  // 2/4/8/16/24/32/48/64. Ditambah di Fase 1 supaya migrasi spacing
+  // (Fase 3) tidak memaksa perubahan visual yang tidak diniatkan.
+  s10?: number;
+  s12?: number;
   md: number;
+  s20?: number;
   lg: number;
   xl: number;
   xxl: number;
   xxxl?: number;
+}
+
+/**
+ * Skala radius (Fase 1, dari pengelompokan nyata Fase 0 §3.4).
+ *
+ * Pemakaian radius mengumpul di 8/12/16/20 + pill 999, tapi tanpa
+ * pembagian peran yang konsisten (tabrakan T1/T2). Skala ini memberi
+ * peran: sm = elemen kecil, md = kartu, lg/xl = permukaan besar,
+ * pill = pill/chip. Migrasi per layar mengikuti di Fase 3.
+ */
+export interface ThemeRadius {
+  sm: number;
+  md: number;
+  lg: number;
+  xl: number;
+  pill: number;
 }
 
 export interface ThemeShadows {
@@ -162,6 +190,9 @@ export type ThemeId =
   // pristine.ts themes
   | "pristine-noir"
   | "pristine-porcelain"
+  // warm.ts themes (Fase 1 redesign) — tema hangat, jadi default
+  | "pristine-ember"
+  | "pristine-hearth"
   // dark.ts themes
   | "cozy-metallic"
   | "blue-jeans"
@@ -177,5 +208,6 @@ export interface Theme {
   colors: ThemeColors;
   typography: ThemeTypography;
   spacing: ThemeSpacing;
+  radius: ThemeRadius;
   shadows: ThemeShadows;
 }
