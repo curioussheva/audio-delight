@@ -90,7 +90,9 @@ const MAX_BAR_COUNT = 128;
 const MIN_BAR_COUNT = 16;
 
 // Ruang untuk label sumbu: kiri untuk dB, bawah untuk Hz.
-const DB_GUTTER = 30;
+// Gutter 64px supaya label "0 (maks)" / "-80 (senyap)" muat —
+// user awam bingung karena di dBFS 0 = paling keras, bukan senyap.
+const DB_GUTTER = 64;
 const FREQ_STRIP = 18;
 
 // Lebar minimum tiap bar (px) — menentukan lebar konten scroll.
@@ -467,11 +469,15 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
 
   return (
     <View style={[styles.container, { width, height, backgroundColor }]}>
-      {/* Label dB (kiri) — statis, React biasa, DIAM di luar ScrollView. */}
-      <Text style={[styles.dbCaption, { color }]}>dB</Text>
+      {/* Label dBFS (kiri) — statis, React biasa, DIAM di luar ScrollView. */}
+      <Text style={[styles.dbCaption, { color }]}>dBFS</Text>
       {ANALYZER_DB_GRID.map((db) => {
         const v = dbToValue(db);
         const y = barsHeight * (1 - BAR_HEIGHT_FACTOR * v);
+        // dBFS membingungkan user awam (0 = paling keras, bukan senyap),
+        // jadi ujung skala diberi keterangan: 0 (maks), -80 (senyap).
+        const label =
+          db === 0 ? "0 (maks)" : db === -80 ? "-80 (senyap)" : `${db}`;
         return (
           <Text
             key={`db-${db}`}
@@ -481,7 +487,7 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
               db === 0 ? styles.dbLabelClip : undefined,
             ]}
           >
-            {db}
+            {label}
           </Text>
         );
       })}
@@ -625,7 +631,7 @@ const styles = StyleSheet.create({
   dbLabel: {
     position: "absolute",
     left: 0,
-    width: 26,
+    width: 60,
     textAlign: "right",
     fontSize: 9,
     color: "#888888",
