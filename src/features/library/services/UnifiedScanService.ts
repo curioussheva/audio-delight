@@ -4,7 +4,7 @@
 
 // ✅ Import ScanDiffEngine sebagai object — quickDiff dan runMediaStoreDiff
 //    adalah methods, bukan named exports
-import { ScanDiffEngine } from "./ScanDiffEngine";
+import { ScanDiffEngine, ScanAbortedError } from "./ScanDiffEngine";
 import { MetadataEnricher } from "./MetadataEnricher";
 import { useLibraryStore } from "../store/libraryStore";
 import { ScanResult, ScanProgress, EnrichmentLevel } from "../types/scan";
@@ -42,7 +42,11 @@ export class UnifiedScanService {
       store.startAutoScan();
 
       // ✅ ScanDiffEngine.quickDiff() — bukan quickDiff() langsung
-      const diffResult = await ScanDiffEngine.quickDiff();
+      // J2-4: sinyal diteruskan supaya cancel menghentikan diff di
+      // checkpoint-nya (sebelum transaction / per 20 lagu di loop tulis).
+      const diffResult = await ScanDiffEngine.quickDiff(
+        this.abortController.signal,
+      );
 
       if (Platform.OS === "android") {
         await this.showScanNotification(
@@ -91,6 +95,10 @@ export class UnifiedScanService {
       console.log(`✅ [UnifiedScan] Auto scan completed`, result);
       return result;
     } catch (error) {
+      if (error instanceof ScanAbortedError) {
+        console.log("[UnifiedScan] Auto scan cancelled");
+        throw error;
+      }
       console.error("[UnifiedScan] Auto scan failed:", error);
       throw error;
     } finally {
@@ -128,6 +136,7 @@ export class UnifiedScanService {
       });
 
       // ✅ ScanDiffEngine.runMediaStoreDiff() — bukan runMediaStoreDiff() langsung
+      // J2-4: sinyal diteruskan (checkpoint sebelum transaction + per 20 lagu).
       const diffResult = await ScanDiffEngine.runMediaStoreDiff(
         (current, total) => {
           onProgress?.({
@@ -137,6 +146,7 @@ export class UnifiedScanService {
             message: `Processing file ${current} of ${total}...`,
           });
         },
+        this.abortController.signal,
       );
 
       result = {
@@ -154,6 +164,10 @@ export class UnifiedScanService {
       console.log(`✅ [UnifiedScan] Manual scan completed`, result);
       return result;
     } catch (error) {
+      if (error instanceof ScanAbortedError) {
+        console.log("[UnifiedScan] Manual scan cancelled");
+        throw error;
+      }
       console.error("[UnifiedScan] Manual scan failed:", error);
       throw error;
     } finally {
@@ -179,6 +193,12 @@ export class UnifiedScanService {
       ) => void;
     } = {},
   ): Promise<{ processed: number; success: number; failed: number }> {
+    // J2-3: guard yang sama seperti auto/manual — enrichment tidak boleh
+    // mulai di tengah scan, dan sebaliknya (isRunning satu lock bersama).
+    if (this.isRunning) {
+      throw new Error("Scan already in progress. Please wait or cancel.");
+    }
+
     const store = useLibraryStore.getState();
     let targetIds = options.songIds;
 
@@ -199,6 +219,9 @@ export class UnifiedScanService {
 
     this.isRunning = true;
     this.currentMode = "auto";
+    // J2-3: abortController sendiri — cancel() meng-abort ini dan loop
+    // enrichBatch berhenti di item berikut (bukan jalan sampai habis).
+    this.abortController = new AbortController();
 
     try {
       store.startEnrichment(2, targetIds.length);
@@ -217,6 +240,7 @@ export class UnifiedScanService {
           });
           options.onProgress?.(current, total, songInfo);
         },
+        this.abortController.signal,
       );
 
       store.finishEnrichment();
@@ -238,7 +262,14 @@ export class UnifiedScanService {
     console.log("[UnifiedScan] Cancelling current operation...");
     this.abortController?.abort();
     MetadataEnricher.stop?.();
-    this.cleanup();
+    // J2-4: SENGAJA tidak memanggil cleanup() di sini. isRunning tetap
+    // true sampai operasi yang sedang jalan mendeteksi abort di
+    // checkpoint-nya (sebelum transaction / per 20 lagu / per item batch)
+    // dan keluar lewat finally -> cleanup(). Kalau isRunning direset di
+    // sini, scan kedua bisa mulai sementara scan pertama masih menulis DB.
+    // Satu-satunya tahap yang tidak bisa dibatalkan adalah query
+    // MediaStore bridge itu sendiri; begitu query kembali, checkpoint
+    // berikutnya langsung membatalkan.
   }
 
   static getStatus() {

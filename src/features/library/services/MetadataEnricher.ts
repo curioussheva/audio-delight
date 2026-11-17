@@ -5,6 +5,10 @@
 
 import { ScanQueue } from "./ScanQueue";
 import MetadataExtractor from "../api/metadata";
+import {
+  MediaStore,
+  NativeSong,
+} from "../native/MediaStoreModule";
 import { LibraryScanner } from "../api/scanner";
 import { useLibraryStore } from "../store/libraryStore";
 import { analyzeBitDepth } from "../../audio/api/BitDepthVerifier";
@@ -17,6 +21,37 @@ export class MetadataEnricher {
   private static isRunning = false;
   private static abortController: AbortController | null = null;
   private static processedCount = 0;
+
+  // J2-1: cache uri -> NativeSong, dibangun SEKALI per worker-run / batch
+  // dari satu queryAudioFiles. Enrichment lookup di memori, bukan query
+  // MediaStore penuh per lagu. null = belum dibangun atau query gagal
+  // (processItem fallback ke extract(uri) per lagu seperti dulu).
+  private static nativeSongCache: Map<string, NativeSong> | null = null;
+
+  /**
+   * J2-1: satu query MediaStore untuk seluruh run. Gagal -> cache tetap
+   * null dan tiap item fallback ke extract(uri); enrichment tetap jalan,
+   * hanya tanpa hemat query.
+   */
+  private static async warmNativeSongCache(): Promise<void> {
+    try {
+      const songs = await MediaStore.queryAudioFiles();
+      const map = new Map<string, NativeSong>();
+      for (const song of songs) {
+        if (song?.uri) map.set(song.uri, song);
+      }
+      this.nativeSongCache = map;
+      console.log(
+        `[MetadataEnricher] NativeSong cache warmed: ${map.size} songs (1 query)`,
+      );
+    } catch (error) {
+      console.warn(
+        "[MetadataEnricher] Failed to warm NativeSong cache, falling back to per-song lookup:",
+        error,
+      );
+      this.nativeSongCache = null;
+    }
+  }
 
   /**
    * Menjalankan worker di background untuk memproses antrian secara perlahan
@@ -33,6 +68,9 @@ export class MetadataEnricher {
     this.isRunning = true;
     this.abortController = new AbortController();
     this.processedCount = 0;
+
+    // J2-1: satu query MediaStore untuk seluruh worker-run.
+    await this.warmNativeSongCache();
 
     console.log("[MetadataEnricher] Background worker started");
     const store = useLibraryStore.getState();
@@ -59,6 +97,7 @@ export class MetadataEnricher {
       await new Promise((r) => setTimeout(r, 350));
     }
 
+    this.nativeSongCache = null;
     this.isRunning = false;
     this.abortController = null;
 
@@ -92,7 +131,13 @@ export class MetadataEnricher {
 
     try {
       // === LEVEL 1 & 2: Technical Metadata & Basic Tags ===
-      const metadata = await MetadataExtractor.extract(uri);
+      // J2-1: pakai NativeSong dari cache run (1 query per run); fallback
+      // ke extract(uri) = 1 query penuh, hanya kalau lagu tidak ada di
+      // cache (mis. ditambahkan setelah cache dibangun / query gagal).
+      const cachedNative = this.nativeSongCache?.get(uri);
+      const metadata = cachedNative
+        ? MetadataExtractor.extractFromNative(cachedNative)
+        : await MetadataExtractor.extract(uri);
 
       if (metadata) {
         // === LEVEL 3: Deep Verification (Pristine Engine) ===
@@ -170,10 +215,16 @@ export class MetadataEnricher {
       total: number,
       songInfo?: { title?: string; artist?: string },
     ) => void,
+    // J2-3: sinyal abort dari UnifiedScanService.enrichMetadata — cancel()
+    // meng-abort controller ini, loop di bawah berhenti di item berikut.
+    signal?: AbortSignal,
   ): Promise<{ success: number; failed: number; skipped: number }> {
     console.log(
       `[MetadataEnricher] enrichBatch started with ${songIds.length} songs`,
     );
+
+    // J2-1: satu query MediaStore untuk seluruh batch.
+    await this.warmNativeSongCache();
 
     let success = 0,
       failed = 0,
@@ -181,6 +232,16 @@ export class MetadataEnricher {
     const store = useLibraryStore.getState();
 
     for (let i = 0; i < songIds.length; i++) {
+      // J2-3: batalkan batch — sisa lagu yang belum diproses dihitung
+      // skipped supaya success + failed + skipped = total.
+      if (signal?.aborted) {
+        console.log(
+          `[MetadataEnricher] enrichBatch cancelled after ${success + failed} of ${songIds.length} songs`,
+        );
+        skipped += songIds.length - i;
+        break;
+      }
+
       const songId = songIds[i];
       const song = store.tracks?.find((t) => t.id === songId);
 
@@ -213,6 +274,7 @@ export class MetadataEnricher {
       if (i % 5 === 0) await new Promise((r) => setTimeout(r, 10));
     }
 
+    this.nativeSongCache = null;
     store.finishEnrichment({ success, failed });
     return { success, failed, skipped };
   }

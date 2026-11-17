@@ -46,6 +46,24 @@ async function getNativeSongs(): Promise<NativeSong[]> {
   return songs.filter((song): song is NativeSong => Boolean(song && song.id));
 }
 
+/**
+ * J2-4: error pembatalan — dilempar saat sinyal abort terdeteksi di
+ * antara tahap diff / per N lagu di loop tulis. Transaction yang sedang
+ * berjalan di-rollback oleh catch di pemanggil, lalu error ini diteruskan
+ * (bukan ditelan jadi hasil kosong) supaya pemanggil tahu scan berhenti
+ * karena cancel, bukan karena selesai.
+ */
+export class ScanAbortedError extends Error {
+  constructor() {
+    super("Scan cancelled");
+    this.name = "ScanAbortedError";
+  }
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new ScanAbortedError();
+}
+
 function _emptyQuickResult(): QuickDiffResult {
   return {
     newCount: 0,
@@ -202,7 +220,12 @@ async function saveBasicSongInfo(song: NativeSong): Promise<void> {
 
 async function processQuickDiff(
   nativeSongs: NativeSong[],
+  signal?: AbortSignal,
 ): Promise<QuickDiffResult> {
+  // J2-4: query bridge tidak bisa dibatalkan — cek pertama begitu query
+  // kembali, sebelum diff / tulis apa pun.
+  throwIfAborted(signal);
+
   const existingUris = LibraryScanner.getExistingUris();
   const currentUris = new Set(
     nativeSongs.map((s) => s.uri).filter(Boolean) as string[],
@@ -234,10 +257,14 @@ async function processQuickDiff(
   // setengah terisi. Sekarang satu transaction, sama seperti full diff.
   const toWrite = [...newSongs, ...updatedSongs];
   if (toWrite.length > 0) {
+    throwIfAborted(signal);
     db.execute("BEGIN TRANSACTION");
     try {
-      for (const song of toWrite) {
-        await saveBasicSongInfo(song);
+      for (let i = 0; i < toWrite.length; i++) {
+        // J2-4: cancel di tengah loop tulis — berhenti sebelum menulis
+        // lebih banyak; catch di bawah me-rollback transaction.
+        if (i % 20 === 0) throwIfAborted(signal);
+        await saveBasicSongInfo(toWrite[i]);
       }
       db.execute("COMMIT");
     } catch (err) {
@@ -247,6 +274,7 @@ async function processQuickDiff(
   }
 
   if (finalDeleted.length > 0) {
+    throwIfAborted(signal);
     await LibraryScanner.deleteSongsByUris(finalDeleted);
   }
 
@@ -266,14 +294,17 @@ async function processQuickDiff(
    ============================================= */
 
 export const ScanDiffEngine = {
-  async quickDiff(): Promise<QuickDiffResult> {
+  async quickDiff(signal?: AbortSignal): Promise<QuickDiffResult> {
     const { isAutoScanEnabled } = useLibraryStore.getState();
     if (!isAutoScanEnabled) return _emptyQuickResult();
 
     try {
       const nativeSongs = await getNativeSongs();
-      return await processQuickDiff(nativeSongs);
+      return await processQuickDiff(nativeSongs, signal);
     } catch (error) {
+      // J2-4: pembatalan bukan kegagalan — teruskan supaya pemanggil
+      // (dan guard isRunning) tahu scan berhenti karena cancel.
+      if (error instanceof ScanAbortedError) throw error;
       console.error("[ScanDiffEngine] Quick diff failed:", error);
       return _emptyQuickResult();
     }
@@ -281,9 +312,13 @@ export const ScanDiffEngine = {
 
   async runMediaStoreDiff(
     onProgress?: (c: number, t: number) => void,
+    signal?: AbortSignal,
   ): Promise<DiffResult> {
     try {
       const nativeSongs = await getNativeSongs();
+      // J2-4: query bridge tidak bisa dibatalkan — cek pertama begitu
+      // query kembali, sebelum diff / tulis / hapus apa pun.
+      throwIfAborted(signal);
       const existingUris = LibraryScanner.getExistingUris();
 
       const { newSongs, updatedSongs, deletedUris } = computeDiff(
@@ -312,6 +347,7 @@ export const ScanDiffEngine = {
       const finalDeleted = bolehHapus ? deletedUris : [];
 
       if (finalDeleted.length > 0) {
+        throwIfAborted(signal);
         await LibraryScanner.deleteSongsByUris(finalDeleted);
       }
 
@@ -320,10 +356,13 @@ export const ScanDiffEngine = {
       // 🔥 OPTIMASI: satu transaction untuk semua write, bukan commit
       // terpisah per lagu (1196 commit → 1 commit). Ini biasanya jadi
       // bottleneck utama untuk bulk insert SQLite.
+      throwIfAborted(signal);
       db.execute("BEGIN TRANSACTION");
       try {
         const PROGRESS_THROTTLE = 20; // update UI tiap 20 lagu, bukan tiap 1
         for (let i = 0; i < allChanges.length; i++) {
+          // J2-4: cancel di tengah loop tulis — berhenti + rollback.
+          if (i % PROGRESS_THROTTLE === 0) throwIfAborted(signal);
           await saveBasicSongInfo(allChanges[i]);
           if (
             (i + 1) % PROGRESS_THROTTLE === 0 ||
@@ -349,9 +388,13 @@ export const ScanDiffEngine = {
         deletedUris: finalDeleted,
       };
     } catch (error) {
+      if (error instanceof ScanAbortedError) {
+        console.log("[ScanDiffEngine] Full diff cancelled, rolled back");
+        throw error;
+      }
       console.error("[ScanDiffEngine] Full diff failed:", error);
       throw error;
     }
-  }, 
+  },
 };
   

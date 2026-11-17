@@ -28,6 +28,21 @@ class MetadataExtractor {
   }
 
   /**
+   * Extract metadata dari satu NativeSong yang SUDAH ada di memori.
+   * J2-1: dipakai enrichment batch/worker supaya N lagu = 1 query
+   * MediaStore (cache dibangun sekali per run), bukan N query penuh.
+   */
+  extractFromNative(native: NativeSong): Partial<Song> | null {
+    try {
+      if (!native?.uri) return null;
+      return this.convertNativeToSong(native);
+    } catch (error) {
+      console.error("[MetadataExtractor] Extract from native failed:", error);
+      return null;
+    }
+  }
+
+  /**
    * Extract semua lagu (Full Scan)
    */
   async extractAll(
