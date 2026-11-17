@@ -84,6 +84,52 @@ finalSessionId = sessionResult?.sessionId ?? 0;
 // Store Implementation
 // ─────────────────────────────────────────────
 
+// J1-2 (Batch JS-1): throttle apply EQ ke native (leading + trailing, 100 ms).
+// setBandGain dipanggil tiap tick drag — tanpa ini tiap tick = satu panggilan
+// native yang mengantre di JS → bridge. State store tetap di-update langsung
+// tiap tick (UI/graph responsif); hanya panggilan native yang dibatasi.
+// Leading memberi feedback suara langsung di tick pertama; trailing memastikan
+// nilai akhir selalu terkirim. Apply membaca bands TERKINI dari store, jadi
+// tidak ada band yang hilang walau beberapa band berubah dalam satu jendela.
+const EQ_APPLY_THROTTLE_MS = 100;
+let _eqApplyLastAt = 0;
+let _eqApplyTimer: ReturnType<typeof setTimeout> | null = null;
+
+const applyEqThrottled = (
+  get: () => {
+    bands: { gain: number }[];
+    isEQEnabled: boolean;
+    audioSessionId: number;
+  },
+) => {
+  const fire = () => {
+    _eqApplyLastAt = Date.now();
+    _eqApplyTimer = null;
+    const { bands, isEQEnabled, audioSessionId } = get();
+    if (
+      !isEQEnabled ||
+      audioSessionId === -1 ||
+      !NativeDSPModule?.setFullEqualizer
+    )
+      return;
+    const gains = bands.map((b) => Math.min(10, Math.max(-10, b.gain)));
+    void NativeDSPModule.setFullEqualizer(gains, audioSessionId);
+  };
+  const now = Date.now();
+  if (now - _eqApplyLastAt >= EQ_APPLY_THROTTLE_MS) {
+    if (_eqApplyTimer) {
+      clearTimeout(_eqApplyTimer);
+      _eqApplyTimer = null;
+    }
+    fire();
+  } else if (!_eqApplyTimer) {
+    _eqApplyTimer = setTimeout(
+      fire,
+      EQ_APPLY_THROTTLE_MS - (now - _eqApplyLastAt),
+    );
+  }
+};
+
 export const useEqualizerStore = create<EqualizerStore>()(
   persist(
     (set, get) => ({
@@ -216,15 +262,10 @@ export const useEqualizerStore = create<EqualizerStore>()(
   );
   set({ bands: newBands, activePresetId: "custom" });
 
-  const { isEQEnabled, audioSessionId } = get();
-  if (
-    isEQEnabled &&
-    audioSessionId !== -1 &&
-    NativeDSPModule?.setEqualizer
-  ) {
-    // Native setEqualizer sekarang menerima dB langsung
-    void NativeDSPModule.setEqualizer(index, clampedGain, audioSessionId);
-  }
+  // J1-2: jangan kirim tiap tick drag ke native — throttle (leading +
+  // trailing) via apply penuh. State sudah di-update di atas, jadi UI/graph
+  // tetap responsif; native menerima kurva terbaru max 1x/100ms + trailing.
+  applyEqThrottled(get);
 },
 
       setBandsGain: async (gains: number[]) => {
