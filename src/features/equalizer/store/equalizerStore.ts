@@ -130,6 +130,32 @@ const applyEqThrottled = (
   }
 };
 
+// Fix G: throttle update STORE di setBandGain (leading + trailing, 100 ms),
+// pola sama seperti J1-2 di atas. Tiap tick drag sebelumnya = satu set() =
+// satu re-render semua subscriber store + satu redraw grafik Skia.
+// Leading: tick pertama langsung masuk store (UI responsif). Tick dalam
+// jendela digabung: hanya snapshot bands TERBARU yang disimpan sebagai
+// pending, lalu trailing flush paling lambat 100 ms kemudian. Pending
+// dihitung dari snapshot pending (bukan get().bands) supaya perubahan band
+// lain dalam jendela yang sama tidak hilang. Throttle ini HANYA menutup
+// set() — applyEqThrottled (J1-2) tetap dipanggil tiap tick seperti semula,
+// jadi perilaku native apply tidak berubah.
+const EQ_STORE_THROTTLE_MS = 100;
+let _eqStoreLastAt = 0;
+let _eqStoreTimer: ReturnType<typeof setTimeout> | null = null;
+let _eqStorePendingBands: any[] | null = null;
+
+// Batalkan update store yang masih tertunda (pending trailing flush).
+// Dipanggil aksi yang mengganti bands secara wholesale (preset, reset,
+// setBandsGain) supaya flush basi tidak menimpa bands baru mereka.
+const cancelPendingStoreUpdate = () => {
+  if (_eqStoreTimer) {
+    clearTimeout(_eqStoreTimer);
+    _eqStoreTimer = null;
+  }
+  _eqStorePendingBands = null;
+};
+
 export const useEqualizerStore = create<EqualizerStore>()(
   persist(
     (set, get) => ({
@@ -257,18 +283,46 @@ export const useEqualizerStore = create<EqualizerStore>()(
 
       setBandGain: (index: number, gain: number) => {
   const clampedGain = Math.min(10, Math.max(-10, gain));
-  const newBands = get().bands.map((b, i) =>
+  // Fix G: jangan set() tiap tick drag — throttle store (leading +
+  // trailing, 100 ms). Snapshot dihitung dari pending bila ada, supaya
+  // perubahan band lain dalam jendela yang sama tidak tertimpa.
+  const baseBands = _eqStorePendingBands ?? get().bands;
+  const newBands = baseBands.map((b, i) =>
     i === index ? { ...b, gain: clampedGain } : b,
   );
-  set({ bands: newBands, activePresetId: "custom" });
+  const now = Date.now();
+  if (now - _eqStoreLastAt >= EQ_STORE_THROTTLE_MS) {
+    if (_eqStoreTimer) {
+      clearTimeout(_eqStoreTimer);
+      _eqStoreTimer = null;
+    }
+    _eqStorePendingBands = null;
+    _eqStoreLastAt = now;
+    set({ bands: newBands, activePresetId: "custom" });
+  } else {
+    _eqStorePendingBands = newBands;
+    if (!_eqStoreTimer) {
+      _eqStoreTimer = setTimeout(() => {
+        _eqStoreLastAt = Date.now();
+        _eqStoreTimer = null;
+        const pending = _eqStorePendingBands;
+        _eqStorePendingBands = null;
+        if (pending) set({ bands: pending, activePresetId: "custom" });
+      }, EQ_STORE_THROTTLE_MS - (now - _eqStoreLastAt));
+    }
+  }
 
   // J1-2: jangan kirim tiap tick drag ke native — throttle (leading +
-  // trailing) via apply penuh. State sudah di-update di atas, jadi UI/graph
-  // tetap responsif; native menerima kurva terbaru max 1x/100ms + trailing.
+  // trailing) via apply penuh. Dipanggil tiap tick seperti semula; apply
+  // membaca bands TERKINI dari store saat fire, jadi nilai akhir selalu
+  // terkirim walau store update-nya digabung.
   applyEqThrottled(get);
 },
 
       setBandsGain: async (gains: number[]) => {
+        // Fix G: batalkan trailing flush setBandGain yang masih tertunda —
+        // bands baru dari aksi ini yang berlaku, bukan snapshot drag basi.
+        cancelPendingStoreUpdate();
         // Clamp dipakai untuk state DAN yang dikirim ke native (dulu
         // native menerima gains mentah tanpa clamp).
         const clampedGains = gains.map((g) => Math.min(10, Math.max(-10, g)));
@@ -292,6 +346,8 @@ export const useEqualizerStore = create<EqualizerStore>()(
           ALL_PRESETS.find((p) => p.id === presetId) ||
           get().customPresets.find((p) => p.id === presetId);
         if (preset) {
+          // Fix G: batalkan trailing flush setBandGain yang masih tertunda.
+          cancelPendingStoreUpdate();
           // (B14-M-H2): jangan salin verbatim — preset lama (custom,
           // tersimpan sebelum ±10 dB) bisa membawa gain ±12.
           const newBands = clampPresetBands(preset.bands);
@@ -335,6 +391,8 @@ export const useEqualizerStore = create<EqualizerStore>()(
       },
 
       resetToDefault: async () => {
+        // Fix G: batalkan trailing flush setBandGain yang masih tertunda.
+        cancelPendingStoreUpdate();
         set({
           bands: makeBands([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
           activePresetId: "flat",
