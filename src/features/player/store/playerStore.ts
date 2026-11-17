@@ -449,6 +449,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         "change",
         (state: string) => {
           if (state === "active") {
+            console.log("[Player] AppState → active, syncFromNative()");
             void get().syncFromNative();
           }
         },
