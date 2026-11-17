@@ -1,5 +1,5 @@
 import { Theme } from "./types";
-import { BASE_SPACING, BASE_TYPOGRAPHY } from "./base";
+import { BASE_SPACING, BASE_RADIUS, BASE_TYPOGRAPHY } from "./base";
 
 export const NEON_CYBER: Theme = {
   id: "neon-cyber",
@@ -61,6 +61,7 @@ export const NEON_CYBER: Theme = {
     },
   },
   spacing: BASE_SPACING,
+  radius: BASE_RADIUS,
   typography: BASE_TYPOGRAPHY,
   shadows: BASE_SPACING as any,
 };
@@ -125,6 +126,7 @@ export const SUNSET_ORANGE: Theme = {
     },
   },
   spacing: BASE_SPACING,
+  radius: BASE_RADIUS,
   typography: BASE_TYPOGRAPHY,
   shadows: BASE_SPACING as any,
 };

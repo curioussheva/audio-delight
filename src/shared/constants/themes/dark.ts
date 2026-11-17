@@ -1,5 +1,5 @@
 import { Theme } from "./types";
-import { BASE_SPACING, BASE_TYPOGRAPHY, BASE_SHADOWS } from "./base";
+import { BASE_SPACING, BASE_RADIUS, BASE_TYPOGRAPHY, BASE_SHADOWS } from "./base";
 
 export const DEEP_NAVY: Theme = {
   id: "deep-navy",
@@ -60,6 +60,7 @@ export const DEEP_NAVY: Theme = {
     },
   },
   spacing: BASE_SPACING,
+  radius: BASE_RADIUS,
   typography: BASE_TYPOGRAPHY,
   shadows: BASE_SHADOWS,
 };
@@ -126,6 +127,7 @@ export const MIDNIGHT_BLUE: Theme = {
     },
   },
   spacing: BASE_SPACING,
+  radius: BASE_RADIUS,
   typography: BASE_TYPOGRAPHY,
   shadows: BASE_SHADOWS,
 };
@@ -190,6 +192,7 @@ export const CHARCOAL_BLACK: Theme = {
     },
   },
   spacing: BASE_SPACING,
+  radius: BASE_RADIUS,
   typography: BASE_TYPOGRAPHY,
   shadows: BASE_SHADOWS,
 };
@@ -256,6 +259,7 @@ export const EMERALD_NOIR: Theme = {
     },
   },
   spacing: BASE_SPACING,
+  radius: BASE_RADIUS,
   typography: BASE_TYPOGRAPHY,
   shadows: BASE_SHADOWS,
 };
@@ -322,6 +326,7 @@ export const COZY_METALLIC: Theme = {
     },
   },
   spacing: BASE_SPACING,
+  radius: BASE_RADIUS,
   typography: BASE_TYPOGRAPHY,
   shadows: BASE_SHADOWS,
 };
@@ -388,6 +393,7 @@ export const BLUE_JEANS: Theme = {
     },
   },
   spacing: BASE_SPACING,
+  radius: BASE_RADIUS,
   typography: BASE_TYPOGRAPHY,
   shadows: BASE_SHADOWS,
 };
@@ -454,6 +460,7 @@ export const VINYL_NOIR: Theme = {
     },
   },
   spacing: BASE_SPACING,
+  radius: BASE_RADIUS,
   typography: BASE_TYPOGRAPHY,
   shadows: BASE_SHADOWS,
 };
@@ -520,6 +527,7 @@ export const AGED_WHISKEY: Theme = {
     },
   },
   spacing: BASE_SPACING,
+  radius: BASE_RADIUS,
   typography: BASE_TYPOGRAPHY,
   shadows: BASE_SHADOWS,
 };
@@ -586,6 +594,7 @@ export const GRAPHITE_SLATE: Theme = {
     },
   },
   spacing: BASE_SPACING,
+  radius: BASE_RADIUS,
   typography: BASE_TYPOGRAPHY,
   shadows: BASE_SHADOWS,
 };

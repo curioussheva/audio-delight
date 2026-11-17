@@ -1,5 +1,5 @@
 import { Theme } from "./types";
-import { BASE_SPACING, BASE_TYPOGRAPHY } from "./base";
+import { BASE_SPACING, BASE_RADIUS, BASE_TYPOGRAPHY } from "./base";
 
 export const GOLDEN_HOUR: Theme = {
   id: "golden-hour",
@@ -59,6 +59,7 @@ export const GOLDEN_HOUR: Theme = {
     },
   },
   spacing: BASE_SPACING,
+  radius: BASE_RADIUS,
   typography: BASE_TYPOGRAPHY,
   shadows: BASE_SPACING as any, // reuse
 };
@@ -121,6 +122,7 @@ export const ROSE_GOLD: Theme = {
     },
   },
   spacing: BASE_SPACING,
+  radius: BASE_RADIUS,
   typography: BASE_TYPOGRAPHY,
   shadows: BASE_SPACING as any,
 };

@@ -20,7 +20,7 @@
 //   yang dulu menghasilkan 170 kegagalan kontras) — jadi 500 di tema terang
 //   sengaja gelap (#755C35, 5.77:1 di atas porcelain), bukan emas terangnya.
 import { Theme } from "./types";
-import { BASE_SPACING, BASE_TYPOGRAPHY, BASE_SHADOWS } from "./base";
+import { BASE_SPACING, BASE_RADIUS, BASE_TYPOGRAPHY, BASE_SHADOWS } from "./base";
 
 export const PRISTINE_NOIR: Theme = {
   id: "pristine-noir",
@@ -84,6 +84,7 @@ export const PRISTINE_NOIR: Theme = {
     },
   },
   spacing: BASE_SPACING,
+  radius: BASE_RADIUS,
   typography: BASE_TYPOGRAPHY,
   shadows: BASE_SHADOWS,
 };
@@ -150,6 +151,7 @@ export const PRISTINE_PORCELAIN: Theme = {
     },
   },
   spacing: BASE_SPACING,
+  radius: BASE_RADIUS,
   typography: BASE_TYPOGRAPHY,
   shadows: BASE_SHADOWS,
 };

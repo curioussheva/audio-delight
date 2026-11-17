@@ -1,13 +1,7 @@
 // src/shared/constants/theme.ts
-import type {
-  Theme,
-  ThemeId,
-  ThemeSpacing,
-  ThemeShadows,
-  ThemeTypography,
-} from "./themes/types";
+import type { Theme, ThemeId, ThemeShadows } from "./themes/types";
 
-import { BASE_TYPOGRAPHY } from "./themes/base";
+import { BASE_SPACING, BASE_RADIUS, BASE_TYPOGRAPHY } from "./themes/base";
 
 import { LIGHT_GRAY, PURE_WHITE } from "./themes/light";
 import {
@@ -24,43 +18,36 @@ import { FOREST_GREEN, OCEAN_WAVE } from "./themes/nature";
 import { GOLDEN_HOUR, ROSE_GOLD } from "./themes/premium";
 import { NEON_CYBER, SUNSET_ORANGE } from "./themes/cyber";
 import { PRISTINE_NOIR, PRISTINE_PORCELAIN } from "./themes/pristine";
+import { PRISTINE_EMBER, PRISTINE_HEARTH } from "./themes/warm";
 
-// Definisikan SPACING dan BASE_SHADOWS
-const SPACING: ThemeSpacing = {
-  xxs: 2,
-  xs: 4,
-  sm: 8,
-  md: 16,
-  lg: 24,
-  xl: 32,
-  xxl: 48,
-  xxxl: 64,
-};
-
+// BASE_SHADOWS lokal (bukan dari themes/base): xl-nya beda sedikit
+// (shadowRadius 20, offset height 10 — di base 24/12). Sengaja dipertahankan
+// supaya 4 tema inline di file ini tidak berubah geometri bayangannya;
+// yang diselaraskan hanya shadowColor (hangat, Fase 1).
 const BASE_SHADOWS: ThemeShadows = {
   sm: {
-    shadowColor: "#000",
+    shadowColor: "#1D130C",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
   },
   md: {
-    shadowColor: "#000",
+    shadowColor: "#1D130C",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 4,
   },
   lg: {
-    shadowColor: "#000",
+    shadowColor: "#1D130C",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
     shadowRadius: 16,
     elevation: 8,
   },
   xl: {
-    shadowColor: "#000",
+    shadowColor: "#1D130C",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.25,
     shadowRadius: 20,
@@ -112,7 +99,8 @@ const OBSIDIAN: Theme = {
       },
       border: { medium: "#404040", light: "#252525" },
     },
-    spacing: SPACING,
+    spacing: BASE_SPACING,
+    radius: BASE_RADIUS,
     shadows: BASE_SHADOWS,
     typography: BASE_TYPOGRAPHY,
 };
@@ -159,7 +147,8 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
       },
       border: { medium: "#606873", light: "#36404F" },
     },
-    spacing: SPACING,
+    spacing: BASE_SPACING,
+    radius: BASE_RADIUS,
     shadows: {
       ...BASE_SHADOWS,
       xl: { ...BASE_SHADOWS.xl!, shadowColor: "#00D4AA", shadowOpacity: 0.3 },
@@ -208,7 +197,8 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
       },
       border: { medium: "#8C8C8C", light: "#D1D1D1" },
     },
-    spacing: SPACING,
+    spacing: BASE_SPACING,
+    radius: BASE_RADIUS,
     shadows: BASE_SHADOWS,
     typography: BASE_TYPOGRAPHY,
   },
@@ -254,7 +244,8 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
       },
       border: { medium: "#8A8A8A", light: "#CDCDCD" },
     },
-    spacing: SPACING,
+    spacing: BASE_SPACING,
+    radius: BASE_RADIUS,
     shadows: BASE_SHADOWS,
     typography: BASE_TYPOGRAPHY,
   },
@@ -283,19 +274,23 @@ export const ALL_THEMES: Record<ThemeId, Theme> = {
   // ✨ TEMA PRISTINE (2026-11-11) — tema brand, jadi default
   "pristine-noir": PRISTINE_NOIR,
   "pristine-porcelain": PRISTINE_PORCELAIN,
+
+  // ✨ TEMA HANGAT (Fase 1 redesign, 2026-11-18) — default + identitas
+  "pristine-ember": PRISTINE_EMBER,
+  "pristine-hearth": PRISTINE_HEARTH,
 };
 
 export const getThemeById = (id: ThemeId): Theme =>
   // U-P2-39: dulu jatuh ke midnight-blue bila id tak dikenal, sementara
   // DEFAULT_THEME dan semua fallback ThemeContext/themeMode memakai
   // pristine-noir/pristine-porcelain. Samakan ke DEFAULT_THEME
-  // (pristine-noir) supaya hanya ada satu "default".
+  // (pristine-ember sejak Fase 1) supaya hanya ada satu "default".
   ALL_THEMES[id] || DEFAULT_THEME;
 
 export const getRandomTheme = (excludeId?: ThemeId): Theme => {
   // U-P2-35: tema yang sedang aktif dikecualikan — dulu ketukan "Acak
   // Tema" bisa memilih tema yang sama sehingga tampak tidak berbuat
-  // apa-apa. Bila pool kosong (tidak mungkin dengan 22 tema), jatuh ke
+  // apa-apa. Bila pool kosong (tidak mungkin dengan 24 tema), jatuh ke
   // semua tema supaya selalu ada hasil.
   const keys = (Object.keys(ALL_THEMES) as ThemeId[]).filter(
     (k) => k !== excludeId,
@@ -305,7 +300,11 @@ export const getRandomTheme = (excludeId?: ThemeId): Theme => {
 };
 
 export const THEMES_LIST = Object.values(ALL_THEMES);
-export const DEFAULT_THEME = ALL_THEMES["pristine-noir"]; // 2026-11-11: ganti dari emerald-noir — tema brand (navy + silver + gold)
+// Fase 1 redesign (2026-11-18): default pindah dari pristine-noir ke
+// pristine-ember — tema hangat jadi identitas aplikasi. Hanya instalasi
+// baru yang merasakan ini: ThemeContext membaca tema tersimpan dulu
+// (@pristineaudio/theme_id) dan tidak pernah menimpanya.
+export const DEFAULT_THEME = ALL_THEMES["pristine-ember"];
 
 // Kategori tema.
 //
@@ -323,6 +322,7 @@ const CATEGORY_MEMBERS: Record<string, ThemeId[]> = {
     "light-elegant",
     "light-silver",
     "pristine-porcelain",
+    "pristine-hearth",
   ],
   dark: [
     "deep-navy",
@@ -338,6 +338,7 @@ const CATEGORY_MEMBERS: Record<string, ThemeId[]> = {
     "aged-whiskey",
     "graphite-slate",
     "pristine-noir",
+    "pristine-ember",
   ],
   nature: ["forest-green", "ocean-wave"],
   premium: ["golden-hour", "rose-gold"],

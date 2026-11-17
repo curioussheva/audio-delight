@@ -30,7 +30,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const systemColorScheme = useColorScheme();
 
-  const [themeId, setThemeId] = useState<ThemeId>("pristine-noir");
+  const [themeId, setThemeId] = useState<ThemeId>(DEFAULT_THEME.id);
   const [theme, setThemeObj] = useState<Theme>(DEFAULT_THEME);
 
   useEffect(() => {
@@ -41,19 +41,24 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
         )) as ThemeId | null;
 
         if (saved && saved in ALL_THEMES) {
+          // Pilihan tersimpan TIDAK PERNAH ditimpa oleh default baru
+          // (Fase 1 redesign): user lama tetap di temanya sendiri.
           setThemeId(saved);
           setThemeObj(getThemeById(saved));
         } else {
+          // Instalasi baru (atau simpanan rusak): default = pasangan
+          // hangat (Fase 1) mengikuti mode sistem — ember gelap,
+          // hearth terang.
           const defaultId: ThemeId =
             systemColorScheme === "light"
-              ? "pristine-porcelain"
-              : "pristine-noir";
+              ? "pristine-hearth"
+              : "pristine-ember";
           setThemeId(defaultId);
           setThemeObj(getThemeById(defaultId));
         }
       } catch (error) {
         console.error("Failed to load theme:", error);
-        setThemeId("pristine-noir");
+        setThemeId(DEFAULT_THEME.id);
         setThemeObj(DEFAULT_THEME);
       }
     };
@@ -61,7 +66,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [systemColorScheme]);
 
   const setTheme = async (newThemeId: ThemeId) => {
-    const safeId = newThemeId in ALL_THEMES ? newThemeId : "pristine-noir";
+    const safeId =
+      newThemeId in ALL_THEMES ? newThemeId : DEFAULT_THEME.id;
     setThemeId(safeId);
     setThemeObj(getThemeById(safeId));
 

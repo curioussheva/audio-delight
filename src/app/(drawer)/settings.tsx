@@ -44,6 +44,7 @@ import { TuningControl } from "@/features/player/components/TuningControl";
 import { useBitPerfectStatus } from "@/features/player/hooks/useBitPerfectStatus";
 import { ThemePicker } from "@/shared/components/ui/ThemePicker";
 import type { Theme } from "@/constants/themes/types";
+import { DEFAULT_THEME } from "@/constants/theme";
 import { useSettingsStore } from "@/features/settings/store/settingsStore";
 import OnlineMetadataService from "@/features/library/services/OnlineMetadataService";
 
@@ -322,7 +323,9 @@ export default function SettingsScreen() {
             // mereset apa pun. Sekarang tiap pengaturan dikembalikan
             // ke nilai default-nya (lihat store masing-masing).
             try {
-              await setTheme("pristine-noir");
+              // Reset tema = kembali ke default aplikasi (pristine-ember
+              // sejak Fase 1), bukan tema lama yang di-hardcode.
+              await setTheme(DEFAULT_THEME.id);
               if (isAutoScanEnabled) {
                 toggleAutoScanEnabled();
                 await BackgroundScanTask.unregister().catch((err) =>

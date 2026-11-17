@@ -1,5 +1,5 @@
 import { Theme } from "./types";
-import { BASE_SPACING, BASE_TYPOGRAPHY } from "./base";
+import { BASE_SPACING, BASE_RADIUS, BASE_TYPOGRAPHY } from "./base";
 
 export const LIGHT_GRAY: Theme = {
   id: "light-gray",
@@ -61,31 +61,32 @@ export const LIGHT_GRAY: Theme = {
     },
   },
   spacing: BASE_SPACING,
+  radius: BASE_RADIUS,
   typography: BASE_TYPOGRAPHY,
   shadows: {
     sm: {
-      shadowColor: "#000",
+      shadowColor: "#1D130C",
       shadowOffset: { width: 0, height: 1 },
       shadowOpacity: 0.05,
       shadowRadius: 2,
       elevation: 1,
     },
     md: {
-      shadowColor: "#000",
+      shadowColor: "#1D130C",
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.05,
       shadowRadius: 4,
       elevation: 2,
     },
     lg: {
-      shadowColor: "#000",
+      shadowColor: "#1D130C",
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.05,
       shadowRadius: 8,
       elevation: 4,
     },
     xl: {
-      shadowColor: "#000",
+      shadowColor: "#1D130C",
       shadowOffset: { width: 0, height: 6 },
       shadowOpacity: 0.05,
       shadowRadius: 12,
@@ -154,6 +155,7 @@ export const PURE_WHITE: Theme = {
     },
   },
   spacing: BASE_SPACING,
+  radius: BASE_RADIUS,
   typography: BASE_TYPOGRAPHY,
   shadows: LIGHT_GRAY.shadows,
 };

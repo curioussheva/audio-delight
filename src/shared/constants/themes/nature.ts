@@ -1,5 +1,5 @@
 import { Theme } from "./types";
-import { BASE_SPACING, BASE_TYPOGRAPHY } from "./base";
+import { BASE_SPACING, BASE_RADIUS, BASE_TYPOGRAPHY } from "./base";
 
 export const FOREST_GREEN: Theme = {
   id: "forest-green",
@@ -59,6 +59,7 @@ export const FOREST_GREEN: Theme = {
     },
   },
   spacing: BASE_SPACING,
+  radius: BASE_RADIUS,
   typography: BASE_TYPOGRAPHY,
   shadows: BASE_SPACING as any,
 };
@@ -119,6 +120,7 @@ export const OCEAN_WAVE: Theme = {
     gradient: { primary: ["#1A4B77", "#0B1E2B"] },
   },
   spacing: BASE_SPACING,
+  radius: BASE_RADIUS,
   typography: BASE_TYPOGRAPHY,
   shadows: BASE_SPACING as any,
 };
