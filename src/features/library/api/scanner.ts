@@ -545,9 +545,20 @@ export class LibraryScanner {
         "lastEnrichedAt", // <-- tambahkan
       ];
 
+      // Nama kolom DB berbeda dari nama field Song untuk beberapa field
+      // (Song pakai camelCase, DB pakai snake_case). Tanpa pemetaan ini,
+      // UPDATE gagal dengan "no such column: lastEnrichedAt" — enrichment
+      // 0 sukses di ronde 3 emulator.
+      const columnByField: Record<string, string> = {
+        artistImageUrl: "artist_image_url",
+        artistBio: "artist_bio",
+        lastEnrichedAt: "last_enriched_at",
+      };
+
       for (const field of allowedFields) {
         if (metadata[field as keyof Song] !== undefined) {
-          fields.push(`${field} = ?`);
+          const column = columnByField[field] ?? field;
+          fields.push(`${column} = ?`);
           params.push(metadata[field as keyof Song]);
         }
       }
@@ -775,8 +786,8 @@ export class LibraryScanner {
       publisher: row.publisher || undefined,
       mood: row.mood || undefined,
       tempo: Number(row.tempo) || undefined,
-      artistImageUrl: row.artistImageUrl || undefined,
-      artistBio: row.artistBio || undefined,
+      artistImageUrl: row.artist_image_url || undefined,
+      artistBio: row.artist_bio || undefined,
 
       // ✅ Tambahan untuk PlaylistService
       playCount: Number(row.playCount) || 0,
@@ -784,7 +795,7 @@ export class LibraryScanner {
       lastPlayed: Number(row.lastPlayed) || undefined,
       dateModified: Number(row.dateModified) || undefined,
       lastSeenAt: Number(row.lastSeenAt) || Date.now(),
-      lastEnrichedAt: Number(row.lastEnrichedAt) || undefined,
+      lastEnrichedAt: Number(row.last_enriched_at) || undefined,
 
       // Timestamp
       dateAdded: Number(row.dateAdded) || Date.now(),
