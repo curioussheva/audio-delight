@@ -26,7 +26,11 @@ import { TurboModuleRegistry } from 'react-native';
 // `tsc` dan clangd sama-sama tidak bisa menangkapnya.
 
 export interface Spec extends TurboModule {
-  // Equalizer & effects
+  // Equalizer & effects.
+  // F7: `sessionId` di setter di bawah diterima demi kompatibilitas API,
+  // tapi DIABAIKAN native — engine memegang satu stream global tanpa state
+  // per-sesi. Jangan membangun logika yang mengandalkan ID berbeda =
+  // state berbeda.
   setEqualizer(band: number, level: number, sessionId: number): Promise<boolean>;
   setFullEqualizer(gains: number[], sessionId: number): Promise<boolean>;
   setBassBoost(strength: number, sessionId: number): Promise<boolean>;
@@ -34,7 +38,11 @@ export interface Spec extends TurboModule {
   setReverbPreset(preset: number, sessionId: number): Promise<boolean>;
   releaseAllFX(): Promise<boolean>;
 
-  // Audio session
+  // Audio session.
+  // F7: SATU sesi stabil untuk satu stream global. Panggilan pertama
+  // mengalokasikan ID Android baru (isNew true); panggilan berikut
+  // mengembalikan ID yang sama (isNew false). ID hanya token "native siap"
+  // — tidak ada AudioEffect yang dibuat dengannya.
   createAudioSession(): Promise<{ sessionId: number; isNew: boolean }>;
 
   // Direct controls

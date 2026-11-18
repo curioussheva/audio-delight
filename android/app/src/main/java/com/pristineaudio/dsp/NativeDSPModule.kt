@@ -2,6 +2,7 @@ package com.pristineaudio.dsp
 
 import android.content.Context
 import android.media.AudioManager
+import android.util.Log
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
 import com.pristineaudio.NativeLibrary
@@ -19,6 +20,7 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
 
     companion object {
         const val NAME = "NativeDSPModule"
+        private const val TAG = "NativeDSPModule"
 
         // 🔥 FIX (2026-10-10): batas atas bass boost dalam dB.
         //
@@ -91,6 +93,11 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     private external fun nativeIsDSPProcessingEnabled(): Boolean
 
     // ===================== REACT METHODS =====================
+    //
+    // F7: parameter `sessionId` di setter di bawah diterima demi
+    // kompatibilitas API, tapi SENGAJA DIABAIKAN — engine memegang satu
+    // stream global tanpa state per-sesi. Jangan membangun logika yang
+    // mengandalkan ID berbeda = state berbeda.
 
     @ReactMethod
     fun setEqualizer(band: Int, level: Float, sessionId: Int, promise: Promise) {
@@ -190,32 +197,53 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
         promise.resolve(true)
     }
 
+    // F7: SATU sesi untuk satu stream global. Dulu tiap panggil
+    // generateAudioSessionId() baru + isNew: true permanen — kontrak "sesi"
+    // fiktif, padahal engine tidak punya state per-sesi (parameter
+    // sessionId di setter diterima demi kompatibilitas API tapi diabaikan).
+    // Kini ID di-cache: panggilan pertama mengalokasikan dan isNew true,
+    // panggilan berikut mengembalikan ID yang sama dengan isNew false.
+    // Tidak ada pemanggil yang bergantung pada ID baru tiap panggil (ID
+    // hanya dipakai sebagai token "native siap" + diteruskan ke setter yang
+    // mengabaikannya; tidak ada AudioEffect yang dibuat dengan ID ini).
+    private var cachedAudioSessionId: Int? = null
+
     @ReactMethod
     fun createAudioSession(promise: Promise) {
         try {
-            val sessionId = generateAudioSessionId()
+            val isNew = cachedAudioSessionId == null
+            val sessionId = cachedAudioSessionId ?: generateAudioSessionId().also {
+                cachedAudioSessionId = it
+            }
             val result = Arguments.createMap()
             result.putInt("sessionId", sessionId)
-            result.putBoolean("isNew", true)
+            result.putBoolean("isNew", isNew)
             promise.resolve(result)
         } catch (e: Exception) {
             promise.reject("DSP_ERROR", e.message)
         }
     }
 
+    // F14: method void di bawah tidak bisa memberi tahu JS kalau engine
+    // tidak tersedia (tidak ada Promise untuk resolve false / reject) —
+    // tapi jangan buang diam-diam: catat di logcat supaya "efek tidak
+    // jalan" (mis. Solfeggio/retune) bisa dilacak, bukan ditebak.
     @ReactMethod
     fun setMasterGain(gain: Float) {
         if (engineAvailable) setNativeMasterGain(gain)
+        else Log.w(TAG, "setMasterGain dibuang: engine native tidak tersedia")
     }
 
     @ReactMethod
     fun setBalance(balance: Float) {
         if (engineAvailable) setNativeBalance(balance)
+        else Log.w(TAG, "setBalance dibuang: engine native tidak tersedia")
     }
 
     @ReactMethod
     fun setExclusiveMode(enabled: Boolean) {
         if (engineAvailable) toggleNativeExclusiveMode(enabled)
+        else Log.w(TAG, "setExclusiveMode dibuang: engine native tidak tersedia")
     }
 
     /**
@@ -229,6 +257,7 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     @ReactMethod
     fun setProcessingMode(mode: Int) {
         if (engineAvailable) setNativeProcessingMode(mode)
+        else Log.w(TAG, "setProcessingMode dibuang: engine native tidak tersedia")
     }
 
     // ===================== KOREKSI HEADPHONE (Fase D) =====================
@@ -299,6 +328,7 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     @ReactMethod
     fun setHeadphoneCorrectionEnabled(enabled: Boolean) {
         if (engineAvailable) setNativeHeadphoneCorrectionEnabled(enabled)
+        else Log.w(TAG, "setHeadphoneCorrectionEnabled dibuang: engine native tidak tersedia")
     }
 
     @ReactMethod
@@ -326,6 +356,7 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     @ReactMethod
     fun setDSPProcessingEnabled(enabled: Boolean) {
         if (engineAvailable) setNativeDSPProcessingEnabled(enabled)
+        else Log.w(TAG, "setDSPProcessingEnabled dibuang: engine native tidak tersedia")
     }
 
     @ReactMethod(isBlockingSynchronousMethod = true)
@@ -361,21 +392,25 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     @ReactMethod
     fun setLimiterEnabled(enabled: Boolean) {
         if (engineAvailable) setNativeLimiterEnabled(enabled)
+        else Log.w(TAG, "setLimiterEnabled dibuang: engine native tidak tersedia")
     }
 
     @ReactMethod
     fun setSolfeggioFreq(freq: Float) {
         if (engineAvailable) setNativeSolfeggioFreq(freq)
+        else Log.w(TAG, "setSolfeggioFreq dibuang: engine native tidak tersedia")
     }
 
     @ReactMethod
     fun setBrainwaveFreq(freq: Float) {
         if (engineAvailable) setNativeBrainwaveFreq(freq)
+        else Log.w(TAG, "setBrainwaveFreq dibuang: engine native tidak tersedia")
     }
 
     @ReactMethod
     fun setResonanceIntensity(intensity: Float) {
         if (engineAvailable) setNativeResonanceIntensity(intensity)
+        else Log.w(TAG, "setResonanceIntensity dibuang: engine native tidak tersedia")
     }
 
     // ===================== PRIVATE HELPER =====================
