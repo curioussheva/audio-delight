@@ -1,6 +1,6 @@
 // src/app/(drawer)/(tabs)/analyzer.tsx
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   Dimensions,
   TouchableOpacity,
-  Alert,
 } from "react-native";
 import { Image } from "expo-image";
 import Slider from "@react-native-community/slider";
@@ -22,7 +21,6 @@ import {
   Mic2,
   BarChart3,
   Music,
-  WifiOff,
 } from "lucide-react-native";
 
 // Hooks & Store
@@ -45,11 +43,8 @@ import { formatFreq } from "@/features/visualizer/api/analyzerSpectrum";
 import { cleanAnalyzerWarnings } from "@/features/visualizer/api/analyzerWarnings";
 import { formatFileSize } from "@/shared/types/audio";
 import SQLiteService from "@/shared/lib/sqlite";
-import OnlineMetadataService from "@/features/library/services/OnlineMetadataService";
 
 const { width: screenWidth } = Dimensions.get("window");
-
-type EnrichState = "idle" | "loading" | "success" | "error";
 
 export default function AnalyzerScreen() {
   const insets = useSafeAreaInsets();
@@ -88,10 +83,10 @@ export default function AnalyzerScreen() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [artistImageUrl, setArtistImageUrl] = useState<string | null>(null);
   const [artistBio, setArtistBio] = useState<string | null>(null);
-  const [enrichState, setEnrichState] = useState<EnrichState>("idle");
-  const [enrichSource, setEnrichSource] = useState<"db" | "musicbrainz" | null>(
-    null,
-  );
+  // I2-revisi: bio/foto artis HANYA dari cache lokal (kolom
+  // artist_image_url/artist_bio — diisi [id].tsx). Tidak ada fetch online
+  // di layar ini lagi.
+  const [enrichSource, setEnrichSource] = useState<"db" | null>(null);
   const [waitingForSession, setWaitingForSession] = useState(false);
 
   // E: batas atas grafik Analyzer (Hz). null = Nyquist stream penuh
@@ -137,7 +132,6 @@ export default function AnalyzerScreen() {
       setArtistImageUrl(null);
       setArtistBio(null);
       setEnrichSource(null);
-      setEnrichState("idle");
       return;
     }
 
@@ -200,54 +194,6 @@ export default function AnalyzerScreen() {
       cancelled = true;
     };
   }, [currentSong?.id]);
-
-  // ─── Handlers ──────────────────────────────────────────────────────────────
-
-  const doFetch = useCallback(async (artistName: string) => {
-    setEnrichState("loading");
-    try {
-      const enrichment =
-        await OnlineMetadataService.getArtistEnrichment(artistName);
-      if (enrichment.source === "fallback") {
-        setEnrichState("error");
-        Alert.alert(
-          "Artist Tidak Ditemukan",
-          `Tidak ada data untuk "${artistName}" di MusicBrainz.\nPeriksa ejaan nama artist di metadata lagu.`,
-        );
-        return;
-      }
-
-      setArtistImageUrl(enrichment.imageUrl);
-      setArtistBio(enrichment.bio);
-      setEnrichSource("musicbrainz");
-      setEnrichState("success");
-    } catch {
-      setEnrichState("error");
-      Alert.alert(
-        "Gagal Mengambil Data",
-        "Periksa koneksi internet dan coba lagi.",
-      );
-    }
-  }, []);
-
-  const handleFetchOnlineMetadata = useCallback(async () => {
-    if (!currentSong?.artist || enrichState === "loading") return;
-    const artistName = currentSong.artist;
-
-    if (enrichSource === "musicbrainz") {
-      Alert.alert(
-        "Perbarui Data?",
-        `Data untuk "${artistName}" sudah ada dari MusicBrainz.\nFetch ulang?`,
-        [
-          { text: "Batal", style: "cancel" },
-          { text: "Fetch Ulang", onPress: () => doFetch(artistName) },
-        ],
-      );
-      return;
-    }
-
-    await doFetch(artistName);
-  }, [currentSong?.artist, enrichState, enrichSource, doFetch]);
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -714,30 +660,12 @@ export default function AnalyzerScreen() {
             <Text style={[styles.label, { color: colors.primary[500] }]}>
               ARTIST BIOGRAPHY
             </Text>
-            {enrichSource && (
+            {enrichSource === "db" && (
               <Text style={[styles.sourceTag, { color: colors.text.disabled }]}>
-                {enrichSource === "db"
-                  ? "dari cache lokal"
-                  : "MusicBrainz + Wikipedia"}
+                dari cache lokal
               </Text>
             )}
           </View>
-          <TouchableOpacity
-            onPress={handleFetchOnlineMetadata}
-            disabled={enrichState === "loading"}
-            accessibilityRole="button"
-            accessibilityLabel="Muat ulang biografi artis"
-            style={[
-              styles.miniBtn,
-              { backgroundColor: colors.background.tertiary },
-            ]}
-          >
-            {enrichState === "loading" ? (
-              <ActivityIndicator size="small" color={colors.primary[500]} />
-            ) : (
-              <RefreshCw size={14} color={colors.primary[500]} />
-            )}
-          </TouchableOpacity>
         </View>
 
         <View style={styles.artistImageWrapper}>
@@ -764,41 +692,16 @@ export default function AnalyzerScreen() {
           )}
         </View>
 
-        {/* U-P2-25: error fetch TIDAK BOLEH menutupi bio yang sudah ada
-            dari DB. Bila bio tersedia, error tampil sebagai banner
-            kecil DI ATAS bio yang dipertahankan; tampilan error penuh
-            hanya bila memang belum ada bio sama sekali. */}
+        {/* I2-revisi: bio/foto hanya dari cache lokal ([id].tsx).
+            Tidak ada fetch online + tidak ada tampilan error fetch lagi. */}
         {artistBio ? (
-          <>
-            {enrichState === "error" && (
-              <View style={styles.errorBanner}>
-                <WifiOff size={14} color={colors.status.error} />
-                <Text
-                  style={[
-                    styles.errorBannerText,
-                    { color: colors.status.error },
-                  ]}
-                >
-                  Gagal memperbarui data online — menampilkan biografi
-                  tersimpan.
-                </Text>
-              </View>
-            )}
-            <Text style={[styles.bioText, { color: colors.text.secondary }]}>
-              {artistBio}
-            </Text>
-          </>
-        ) : enrichState === "error" ? (
-          <View style={styles.errorState}>
-            <WifiOff size={20} color={colors.status.error} />
-            <Text style={[styles.errorText, { color: colors.status.error }]}>
-              Gagal mengambil data. Cek koneksi internet.
-            </Text>
-          </View>
+          <Text style={[styles.bioText, { color: colors.text.secondary }]}>
+            {artistBio}
+          </Text>
         ) : (
           <Text style={[styles.bioText, { color: colors.text.disabled }]}>
-            Belum ada biografi. Tekan tombol refresh untuk mengambil data dari
-            MusicBrainz.
+            Belum ada biografi. Ambil foto & bio artis dari layar detail
+            lagu.
           </Text>
         )}
       </View>
@@ -909,15 +812,6 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   sourceTag: { fontSize: 10, marginTop: 2, fontStyle: "italic" },
-  // U-P2-01: padding 8 + ikon 14 lama = ±30×32px, di bawah 44dp.
-  miniBtn: {
-    padding: 8,
-    borderRadius: 10,
-    minWidth: 44,
-    minHeight: 44,
-    justifyContent: "center",
-    alignItems: "center",
-  },
   artistImageWrapper: {
     width: "100%",
     height: 220,
@@ -927,22 +821,4 @@ const styles = StyleSheet.create({
   },
   artistImage: { width: "100%", height: "100%" },
   bioText: { fontSize: 14, lineHeight: 22, textAlign: "justify" },
-  errorState: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 8,
-  },
-  errorBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    backgroundColor: "rgba(240,128,112,0.1)",
-    marginBottom: 12,
-  },
-  errorBannerText: { fontSize: 12, fontWeight: "600", flex: 1 },
-  errorText: { fontSize: 13, fontWeight: "600", flex: 1 },
 });

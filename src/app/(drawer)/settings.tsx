@@ -45,7 +45,6 @@ import { useBitPerfectStatus } from "@/features/player/hooks/useBitPerfectStatus
 import { ThemePicker } from "@/shared/components/ui/ThemePicker";
 import type { Theme } from "@/constants/themes/types";
 import { DEFAULT_THEME } from "@/constants/theme";
-import { useSettingsStore } from "@/features/settings/store/settingsStore";
 import OnlineMetadataService from "@/features/library/services/OnlineMetadataService";
 
 import { Zap, ShieldCheck, TriangleAlert } from "lucide-react-native";
@@ -216,13 +215,6 @@ export default function SettingsScreen() {
     toggleAutoScanEnabled, // Gunakan action yang sesuai di store kamu
   } = useLibraryStore();
 
-  const {
-    enableOnlineArtistImage,
-    setEnableOnlineArtistImage,
-    downloadOnlyOnWiFi,
-    setDownloadOnlyOnWiFi,
-  } = useSettingsStore();
-
   // --- 2. EXISTING STATES ---
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [showDacSettings, setShowDacSettings] = useState(false);
@@ -272,11 +264,6 @@ export default function SettingsScreen() {
   const bpStatus = useBitPerfectStatus();
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
-
-  const handleToggle = (setter: (v: boolean) => void, value: boolean) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setter(value);
-  };
 
   const handleClearCache = async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -335,8 +322,8 @@ export default function SettingsScreen() {
                   ),
                 );
               }
-              setEnableOnlineArtistImage(false);
-              setDownloadOnlyOnWiFi(true);
+              // I2-revisi: reset online/wifi tidak ada lagi — pengaturannya
+              // dihapus (online hanya di [id].tsx).
               applyPreset("flat");
               // U-P1-24: lubang fix 90181498 — applyPreset("flat") hanya
               // mereset band EQ. bassStrength/virtualizerLevel/reverbPreset
@@ -1336,58 +1323,11 @@ export default function SettingsScreen() {
             />
           </SettingRow>
 
-          {/* --- Online Artist Metadata --- */}
-          <SettingRow colors={colors} spacing={spacing}>
-            <View style={{ flex: 1, marginRight: spacing.md }}>
-              <Text style={{ color: colors.text.primary, fontWeight: "600" }}>
-                Online Artist Metadata
-              </Text>
-              <Text
-                style={{
-                  color: colors.text.tertiary,
-                  fontSize: 11,
-                  marginTop: 2,
-                }}
-              >
-                Otomatis cari foto artis via MusicBrainz.
-              </Text>
-            </View>
-            <Switch
-              value={enableOnlineArtistImage}
-              onValueChange={(v) => handleToggle(setEnableOnlineArtistImage, v)}
-              trackColor={{
-                false: colors.background.tertiary,
-                true: colors.primary[500],
-              }}
-            />
-          </SettingRow>
-
-          {/* --- Wi-Fi Only --- */}
-          <SettingRow colors={colors} spacing={spacing}>
-            <View style={{ flex: 1, marginRight: spacing.md }}>
-              <Text style={{ color: colors.text.primary, fontWeight: "600" }}>
-                Hanya lewat Wi-Fi
-              </Text>
-              <Text
-                style={{
-                  color: colors.text.tertiary,
-                  fontSize: 11,
-                  marginTop: 2,
-                }}
-              >
-                Mencegah penggunaan kuota seluler untuk mengunduh gambar.
-              </Text>
-            </View>
-            <Switch
-              value={downloadOnlyOnWiFi}
-              onValueChange={(v) => handleToggle(setDownloadOnlyOnWiFi, v)}
-              disabled={!enableOnlineArtistImage}
-              trackColor={{
-                false: colors.background.tertiary,
-                true: colors.primary[500],
-              }}
-            />
-          </SettingRow>
+          {/* I2-revisi: toggle "Online Artist Metadata" + "Hanya lewat
+              Wi-Fi" DIHAPUS — pengaturan izin internet tidak ada lagi.
+              Online (MusicBrainz + foto artis) hanya di [id].tsx, dipicu
+              tap user; tidak ada lagi yang membaca setting ini. Tombol
+              "Kosongkan Cache Gambar Artis" di bawah DIPERTAHANKAN. */}
 
           <TouchableOpacity
             style={{ padding: spacing.md, alignItems: "center" }}

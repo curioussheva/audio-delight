@@ -1,4 +1,4 @@
-import React, { memo, useState, useMemo, useEffect } from "react";
+import React, { memo, useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -6,8 +6,6 @@ import {
   FlatList,
   StyleSheet,
   Platform,
-  ActivityIndicator,
-  Alert,
 } from "react-native";
 import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
@@ -18,9 +16,7 @@ import {
   Heart,
   User,
   AudioLines,
-  RefreshCw,
   ChevronRight,
-  Info, // Import icon Info
 } from "lucide-react-native";
 
 import { useTheme } from "@/shared/context/ThemeContext";
@@ -29,44 +25,13 @@ import type { MediaTrack } from "../store/libraryStore";
 import { formatTime } from "@/shared/utils/time";
 import { DURATION_FONT_FAMILY } from "@/shared/utils/typography";
 import QualityBadge from "@/shared/components/ui/QualityBadge";
-import OnlineMetadataService from "../services/OnlineMetadataService";
-import { useSettingsStore } from "@/features/settings/store/settingsStore"; // Import store
 
 // ── Artist Row ───────────────────────────────────────────────────
-const ArtistRow = memo(({ item, onPress, colors, enableOnlineImage }: any) => {
-  const [usableUri, setUsableUri] = useState<string | null>(
-    item.artwork || null,
-  );
-  const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    let isMounted = true;
-    if (item.artwork) return;
-
-    const fetchOnlineImage = async () => {
-      // Hanya fetch jika pengaturan aktif
-      if (enableOnlineImage) {
-        setIsLoading(true);
-        try {
-          const result = await OnlineMetadataService.getArtistEnrichment(
-            item.name,
-          );
-          if (isMounted && result.imageUrl) {
-            setUsableUri(result.imageUrl);
-          }
-        } catch (e) {
-          console.warn(`[ArtistList] Image fetch failed for ${item.name}:`, e);
-        } finally {
-          if (isMounted) setIsLoading(false);
-        }
-      }
-    };
-
-    fetchOnlineImage();
-    return () => {
-      isMounted = false;
-    };
-  }, [item.name, item.artwork, enableOnlineImage]);
+// I2-revisi: TIDAK ada fetch online di sini lagi — foto artis hanya dari
+// artwork lokal (atau cache yang diterapkan lewat [id].tsx). Tanpa
+// artwork, tampil ikon User (fallback) seperti sebelumnya.
+const ArtistRow = memo(({ item, onPress, colors }: any) => {
+  const usableUri = item.artwork || null;
 
   return (
     <TouchableOpacity
@@ -75,9 +40,7 @@ const ArtistRow = memo(({ item, onPress, colors, enableOnlineImage }: any) => {
       style={styles.artistRow}
     >
       <View style={styles.avatarContainer}>
-        {isLoading ? (
-          <ActivityIndicator size="small" color={colors.primary[500]} />
-        ) : usableUri ? (
+        {usableUri ? (
           <Image
             source={{ uri: usableUri }}
             style={styles.avatarImage}
@@ -200,12 +163,12 @@ const ArtistSongRow = memo(
 );
 
 // ── Main ArtistList ──────────────────────────────────────────────────────────
-// U-P1-18 (bonus): prop `artists` dan `enableOnlineArtistImage` yang dikirim
-// library.tsx dulu diabaikan — komponen ini `React.FC<any>` dan menurunkan
-// artis dari tracks + membaca settings store sendiri. Sekarang kedua prop
-// dipakai bila diberikan (artists = hasil selectArtists, bentuknya sama
-// dengan turunan internal; enableOnlineArtistImage prop meng-override
-// store), dengan fallback ke perilaku lama bila tidak diberikan.
+// U-P1-18 (bonus): prop `artists` yang dikirim library.tsx dipakai bila
+// diberikan (artists = hasil selectArtists, bentuknya sama dengan turunan
+// internal), dengan fallback ke turunan dari tracks bila tidak diberikan.
+// I2-revisi: prop `enableOnlineArtistImage` + header "Scan Artist
+// Metadata" DIHAPUS — tidak ada fetch online di tab ini lagi; online
+// hanya di [id].tsx.
 interface ArtistListProps {
   tracks: MediaTrack[];
   artists?: Array<{
@@ -220,7 +183,6 @@ interface ArtistListProps {
   favoriteIds?: Set<string>;
   onSongPress: (track: MediaTrack, queue: MediaTrack[]) => void;
   onToggleFavorite?: (songId: string) => void | Promise<boolean>;
-  enableOnlineArtistImage?: boolean;
 }
 
 export const ArtistList: React.FC<ArtistListProps> = ({
@@ -230,10 +192,9 @@ export const ArtistList: React.FC<ArtistListProps> = ({
   favoriteIds = new Set(),
   onSongPress,
   onToggleFavorite,
-  enableOnlineArtistImage: enableOnlineArtistImageProp,
 }) => {
   const { theme } = useTheme();
-  const { colors, spacing } = theme;
+  const { colors } = theme;
 
   // Teks/ikon di atas tombol primary[500] — dipilih dari luminansi primary
   // (putih 2,24:1 di Noir, hitam 9,37:1), bukan hardcoded "#FFF".
@@ -242,37 +203,6 @@ export const ArtistList: React.FC<ArtistListProps> = ({
     "#FFFFFF";
 
   const [selectedArtist, setSelectedArtist] = useState<any>(null);
-
-  // Ambil state dari Settings Store — dipakai hanya bila pemanggil tidak
-  // mengirim prop enableOnlineArtistImage (U-P1-18 bonus).
-  const { enableOnlineArtistImage: enableOnlineArtistImageFromStore } =
-    useSettingsStore();
-  const enableOnlineArtistImage =
-    enableOnlineArtistImageProp ?? enableOnlineArtistImageFromStore;
-
-  const handleScanMetadata = () => {
-    if (!enableOnlineArtistImage) {
-      // Feedback Haptic Error jika mencoba menekan saat disabled
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert(
-        "Fitur Dinonaktifkan",
-        "Pencarian metadata online saat ini mati. Silakan aktifkan 'Online Artist Metadata' di menu Settings > Library untuk menggunakan fitur ini.",
-        [{ text: "Mengerti" }],
-      );
-      return;
-    }
-
-    // Jika Aktif: Jalankan Notifikasi & Logic
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert(
-      "Metadata Scan",
-      "Pencarian foto dan bio artis sedang diproses di latar belakang via MusicBrainz.",
-      [{ text: "OK" }],
-    );
-
-    // Logic batch scan kamu...
-    // OnlineMetadataService.enhanceMultipleArtists(enrichedArtists.map(a => a.name))
-  };
 
   const enrichedArtists = useMemo(() => {
     const unknownLast = (a: { name: string }, b: { name: string }) => {
@@ -416,61 +346,6 @@ export const ArtistList: React.FC<ArtistListProps> = ({
   // Render main list
   return (
     <View style={{ flex: 1 }}>
-      {/* Header Scan yang dinamis */}
-      <TouchableOpacity
-        activeOpacity={0.7}
-        style={[
-          styles.scanHeader,
-          {
-            backgroundColor: enableOnlineArtistImage
-              ? `${colors.primary[500]}15`
-              : colors.background.tertiary,
-            opacity: enableOnlineArtistImage ? 1 : 0.7,
-          },
-        ]}
-        onPress={handleScanMetadata}
-      >
-        <RefreshCw
-          size={16}
-          color={
-            enableOnlineArtistImage ? colors.primary[500] : colors.text.disabled
-          }
-        />
-        <Text
-          style={[
-            styles.scanText,
-            {
-              color: enableOnlineArtistImage
-                ? colors.primary[500]
-                : colors.text.disabled,
-            },
-          ]}
-        >
-          {enableOnlineArtistImage
-            ? "Scan Artist Metadata"
-            : "Metadata Scan Disabled"}
-        </Text>
-      </TouchableOpacity>
-
-      {/* Info Box jika disabled */}
-      {!enableOnlineArtistImage && (
-        <View
-          style={[
-            styles.infoBox,
-            {
-              backgroundColor: `${colors.background.tertiary}50`,
-              marginHorizontal: 16,
-            },
-          ]}
-        >
-          <Info size={14} color={colors.text.tertiary} />
-          <Text style={[styles.infoText, { color: colors.text.tertiary }]}>
-            Aktifkan "Online Artist Metadata" di pengaturan untuk mengunduh foto
-            artis secara otomatis.
-          </Text>
-        </View>
-      )}
-
       <FlatList
         data={enrichedArtists}
         keyExtractor={(item) => item.name}
@@ -480,7 +355,6 @@ export const ArtistList: React.FC<ArtistListProps> = ({
             item={item}
             onPress={setSelectedArtist}
             colors={colors}
-            enableOnlineImage={enableOnlineArtistImage}
           />
         )}
         ItemSeparatorComponent={() => (
@@ -587,26 +461,4 @@ const styles = StyleSheet.create({
     // U-P2-09: satu font durasi bersama (baris ini dulu tanpa fontFamily).
     fontFamily: DURATION_FONT_FAMILY,
   },
-  scanHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginHorizontal: 16,
-    marginTop: 16,
-    padding: 12,
-    borderRadius: 12,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: "transparent",
-  },
-  scanText: { fontWeight: "700", fontSize: 13 },
-  infoBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 10,
-    borderRadius: 8,
-    marginTop: 8,
-    gap: 8,
-  },
-  infoText: { fontSize: 11, flex: 1, lineHeight: 14 },
 });

@@ -816,7 +816,6 @@ export default function LibraryScreen() {
       favoriteIds={favoriteIdSet}
       onSongPress={handleSongPress}
       onToggleFavorite={toggleFavorite}
-      enableOnlineArtistImage={true}
     />
   );
       case "genre":
