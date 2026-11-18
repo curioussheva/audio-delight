@@ -2,22 +2,47 @@ import {
   artworkSize,
   visualizerWidth,
   lyricsVerticalPadding,
+  VISUALIZER_CANVAS_HEIGHT,
+  PLAYER_CHROME_DP,
+  PLAYER_CHIPS_DP,
+  PLAYER_ARTWORK_MIN_DP,
 } from "@/features/player/utils/playerLayout";
 
-describe("playerLayout — artworkSize", () => {
-  it("portrait: lebar layar - 100 (sama seperti sebelumnya)", () => {
-    // POCO M6: 393x873 dp.
-    expect(artworkSize(393, 873)).toBe(293);
+describe("playerLayout — artworkSize (LAYOUT-V3: anggaran vertikal)", () => {
+  it("POCO M6 360x800 muat 1 layar: 800 - 24 - 48 - 578 = 150", () => {
+    expect(artworkSize(360, 800)).toBe(150);
   });
 
-  it("landscape: dibatasi tinggi layar, tidak membesar ikut lebar", () => {
-    // Layar sama setelah rotasi: 873 lebar, 393 tinggi.
-    expect(artworkSize(873, 393)).toBe(293);
+  it("POCO M6 393x873 muat 1 layar: 873 - 24 - 48 - 578 = 223", () => {
+    expect(artworkSize(393, 873)).toBe(223);
   });
 
-  it("layar kecil: mengikuti dimensi terkecil", () => {
-    expect(artworkSize(360, 640)).toBe(260);
-    expect(artworkSize(800, 360)).toBe(260);
+  it("chip speed/tuning tampil: sampul mengecil 41dp supaya tetap muat", () => {
+    expect(artworkSize(360, 800, 24, 48, true)).toBe(109);
+    expect(artworkSize(393, 873, 24, 48, true)).toBe(182);
+  });
+
+  it("gesture nav (insets.bottom kecil): selisihnya jadi ruang sampul", () => {
+    // insets.bottom 20 (bukan 48): 800 - 24 - 20 - 578 = 178.
+    expect(artworkSize(360, 800, 24, 20)).toBe(178);
+  });
+
+  it("dibatasi lebar: tidak lebih dari lebar layar - 100", () => {
+    // Layar sangat tinggi: anggaran tinggi 750, tapi lebar 800 - 100 = 700.
+    expect(artworkSize(800, 1400)).toBe(700);
+  });
+
+  it("layar kecil/landscape: lantai 96, ScrollView jadi pengaman scroll", () => {
+    expect(artworkSize(360, 640)).toBe(96);
+    expect(artworkSize(800, 360)).toBe(96);
+    expect(artworkSize(873, 393)).toBe(96);
+  });
+
+  it("konstanta anggaran terdokumentasi (bila style berubah, ubah ini)", () => {
+    expect(PLAYER_CHROME_DP).toBe(578);
+    expect(PLAYER_CHIPS_DP).toBe(41);
+    expect(PLAYER_ARTWORK_MIN_DP).toBe(96);
+    expect(VISUALIZER_CANVAS_HEIGHT).toBe(64);
   });
 });
 
