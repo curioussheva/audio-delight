@@ -283,8 +283,6 @@ export default function PlayerScreen() {
     colors.background.secondary,
   ];
 
-  const bottomBarColor = isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)";
-
   const iconColorDefault = isDark ? textTertiary : textSecondary;
 
   return (
@@ -306,8 +304,18 @@ export default function PlayerScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* HEADER */}
-        <View style={styles.header}>
+        {/* HEADER — A3: panel solid (background.primary) di belakang
+            ikon/teks. Warna token dirancang untuk latar solid ini, bukan
+            untuk gradien — terukur lolos WCAG di Noir/Ember/Porcelain
+            (lihat player-fix-report.md). Pola yang sama dengan panel
+            solid FullLyricsView. */}
+        <View
+          style={[
+            styles.header,
+            styles.panel,
+            { backgroundColor: colors.background.primary },
+          ]}
+        >
           <TouchableOpacity
             style={styles.headerBtn}
             onPress={() => safeGoBack(router)}
@@ -447,8 +455,14 @@ export default function PlayerScreen() {
           </View>
         )}
 
-        {/* SONG INFO & LIKE BTN */}
-        <View style={styles.songInfoContainer}>
+        {/* SONG INFO & LIKE BTN — A3: panel solid (lihat HEADER). */}
+        <View
+          style={[
+            styles.songInfoContainer,
+            styles.panel,
+            { backgroundColor: colors.background.primary },
+          ]}
+        >
           <View style={styles.songTextWrapper}>
             <Text
               style={[styles.songTitle, { color: textPrimary }]}
@@ -496,8 +510,14 @@ export default function PlayerScreen() {
             (onSlidingComplete); watcher posisi native tidak boleh menarik
             balik nilai selama drag. Saat durasi 0, slider tidak dirender
             sama sekali (max=0 tidak berguna) — diganti trek statis supaya
-            layout tidak lompat. */}
-        <View style={styles.progressSection}>
+            layout tidak lompat. A3: panel solid (lihat HEADER). */}
+        <View
+          style={[
+            styles.progressSection,
+            styles.panel,
+            { backgroundColor: colors.background.primary },
+          ]}
+        >
           {duration > 0 ? (
             <Slider
               style={styles.slider}
@@ -545,8 +565,14 @@ export default function PlayerScreen() {
           </View>
         </View>
 
-        {/* Controls */}
-        <View style={styles.controlsSection}>
+        {/* Controls — A3: panel solid (lihat HEADER). */}
+        <View
+          style={[
+            styles.controlsSection,
+            styles.panel,
+            { backgroundColor: colors.background.primary },
+          ]}
+        >
           <TouchableOpacity
             onPress={toggleShuffle}
             style={styles.controlBtn}
@@ -636,10 +662,16 @@ export default function PlayerScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Audio Info — tanpa metadata jangan klaim angka mustahil
-            (U-P1-06): dulu tampil "0 kHz", "0 bit", dan codec kosong
-            diklaim "MP3". */}
-        <View style={styles.audioInfo}>
+        {/* Audio Info — A3: panel solid (lihat HEADER). Tanpa metadata
+            jangan klaim angka mustahil (U-P1-06): dulu tampil "0 kHz",
+            "0 bit", dan codec kosong diklaim "MP3". */}
+        <View
+          style={[
+            styles.audioInfo,
+            styles.panel,
+            { backgroundColor: colors.background.primary },
+          ]}
+        >
           <View style={styles.audioBadge}>
             <Mic2 size={14} color={textTertiary} strokeWidth={2} />
             <Text style={[styles.audioText, { color: textTertiary }]}>
@@ -664,11 +696,13 @@ export default function PlayerScreen() {
           </View>
         </View>
 
-        {/* BOTTOM UTILITY BAR */}
+        {/* BOTTOM UTILITY BAR — A3: latar selalu background.secondary
+            (solid). Dulu mode terang memakai rgba(0,0,0,0.03) sehingga
+            ikon duduk di atas gradien; mode gelap sudah solid. */}
         <View
           style={[
             styles.bottomUtilities,
-            { backgroundColor: isDark ? backgroundSecondary : bottomBarColor },
+            { backgroundColor: backgroundSecondary },
           ]}
         >
           <TouchableOpacity
@@ -722,6 +756,15 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 24,
+  },
+  // A3: panel solid background.primary di belakang teks/ikon (warna latar
+  // diterapkan inline karena butuh token tema). Warna token dirancang
+  // untuk latar solid ini — terukur lolos WCAG di Noir/Ember/Porcelain
+  // (lihat player-fix-report.md). Pola yang sama dengan panel solid
+  // FullLyricsView.
+  panel: {
+    borderRadius: 16,
+    padding: 12,
   },
   header: {
     flexDirection: "row",
