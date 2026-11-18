@@ -12,6 +12,7 @@ import {
   pickReadable,
   meetsAA,
   relativeLuminance,
+  compositeOver,
   AA_NORMAL,
   AA_LARGE,
 } from "@/shared/utils/contrast";
@@ -166,5 +167,28 @@ describe("kasus nyata dari layar DSP/EQ", () => {
     const card = "#0A0A0A";
     const ratio = contrastRatio(orange, card) as number;
     expect(ratio).toBeGreaterThanOrEqual(AA_LARGE);
+  });
+});
+
+describe("compositeOver", () => {
+  it("tint 20% hitam di atas putih = abu-abu #cccccc", () => {
+    expect(compositeOver("#00000033", "#FFFFFF")).toBe("#cccccc");
+  });
+
+  it("tanpa alpha = warna depan apa adanya", () => {
+    expect(compositeOver("#EF4444", "#F7F5F0")).toBe("#ef4444");
+  });
+
+  it("tint 20% merah di atas primary Porcelain", () => {
+    // Kasus yang menemukan helper ini (Fase 3 Settings): teks error
+    // yang lolos di atas permukaan bawahnya bisa gagal di atas tint —
+    // komposit inilah yang harus diukur.
+    expect(compositeOver("#F0807033", "#F7F5F0")).toBe("#f6ded6");
+  });
+
+  it("mengembalikan undefined bila warna tidak bisa dibaca", () => {
+    expect(compositeOver("bukan-warna", "#FFFFFF")).toBeUndefined();
+    expect(compositeOver("#FF000080", "bukan-warna")).toBeUndefined();
+    expect(compositeOver(undefined, "#FFFFFF")).toBeUndefined();
   });
 });
