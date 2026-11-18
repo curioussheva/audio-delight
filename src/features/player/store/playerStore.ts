@@ -828,7 +828,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // yang menimpa queue native lewat setQueue - itu membuang indeks dan
     // urutan shuffle yang sudah dihitung native, dan membuat next/prev
     // berperilaku berbeda dari tombol di notification.
-    const queueSize = NativePlaybackService.getQueueSize();
+    // N26: getQueueSize() sync bisa melempar kalau bridge belum siap —
+    // dulu di luar try, jadi lemparan itu keluar dari catch playNext
+    // (fallback repeat-all) sebagai rejection tak tertangani (pemanggil:
+    // swipe FloatingPlayer via runOnJS(playNext)()). Pola yang sama
+    // dengan probe di setIsPlaying: tangkap di sini, tolak dengan
+    // playError, jangan lempar.
+    let queueSize: number;
+    try {
+      queueSize = NativePlaybackService.getQueueSize();
+    } catch (e) {
+      console.warn("[Player] skipToIndex: getQueueSize gagal:", e);
+      set({ playError: "Tidak bisa pindah lagu." });
+      return;
+    }
     const valid = validateQueueIndex(index, queueSize);
     if (valid === null) {
       console.warn(
