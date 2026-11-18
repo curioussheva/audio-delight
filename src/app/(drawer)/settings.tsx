@@ -31,6 +31,7 @@ import {
 } from "lucide-react-native";
 import { useLibraryStore } from "@/features/library/store/libraryStore"; // Pastikan path benar
 import { BackgroundScanTask } from "@/features/library/services/BackgroundScanTask";
+import { MetadataEnricher } from "@/features/library/services/MetadataEnricher";
 import { UnifiedScanService } from "@/features/library/services/UnifiedScanService";
 import { ScanAbortedError } from "@/features/library/services/ScanDiffEngine";
 import { useRefreshStore } from "@/shared/store/refreshStore";
@@ -250,6 +251,9 @@ export default function SettingsScreen() {
   const {
     isAutoScanEnabled,
     toggleAutoScanEnabled, // Gunakan action yang sesuai di store kamu
+    // Auto Enriching: gerbang start OTOMATIS worker enrichment.
+    isAutoEnrichingEnabled,
+    toggleAutoEnrichingEnabled,
     // Rescan: kunci scan — tombol diganti spinner saat scan jalan.
     isManualScanning,
     isAutoScanning,
@@ -348,13 +352,16 @@ export default function SettingsScreen() {
       // sejak Fase 1), bukan tema lama yang di-hardcode.
       await setTheme(DEFAULT_THEME.id);
       // Reset mengembalikan Auto Discovery ke default OFF
-      // (+ batalkan background task). Initial scan tidak punya
-      // toggle — reset tidak menyentuhnya.
+      // (+ batalkan background task) dan Auto Enriching ke default ON.
+      // Initial scan tidak punya toggle — reset tidak menyentuhnya.
       if (isAutoScanEnabled) {
         toggleAutoScanEnabled();
         await BackgroundScanTask.unregister().catch((err) =>
           console.warn("[Settings] BackgroundTask unregister failed:", err),
         );
+      }
+      if (!isAutoEnrichingEnabled) {
+        toggleAutoEnrichingEnabled();
       }
       // I2-revisi: reset online/wifi tidak ada lagi — pengaturannya
       // dihapus (online hanya di [id].tsx).
@@ -383,8 +390,10 @@ export default function SettingsScreen() {
     toggleAutoScanEnabled(); // update store dulu (optimistic)
 
     if (value) {
-      // Aktifkan → daftarkan background task
-      const ok = await BackgroundScanTask.register(30).catch((err) => {
+      // Aktifkan → daftarkan background task (interval 240 menit —
+      // less aggressive: koleksi berubah jarang, resume quickDiff
+      // sudah menangkap perubahan saat app dibuka).
+      const ok = await BackgroundScanTask.register(240).catch((err) => {
         console.warn("[Settings] BackgroundTask register failed:", err);
         return false;
       });
@@ -408,6 +417,28 @@ export default function SettingsScreen() {
         console.warn("[Settings] BackgroundTask unregister failed:", err),
       );
       console.log("[Settings] Background scan unregistered");
+    }
+  };
+
+  // Auto Enriching — toggle baru (default ON). ON = kuras antrean yang
+  // terakumulasi selama OFF (worker keluar sendiri bila antrean kosong);
+  // OFF = hentikan worker background yang sedang jalan (antrean
+  // persisten — tidak hilang, terkuras lewat aksi eksplisit berikutnya:
+  // modal manual / Rescan / toggle ini di-ON-kan lagi). Tanpa efek
+  // samping lain (tanpa izin / registrasi task), jadi tidak ada
+  // rollback seperti handleToggleAutoScan.
+  const handleToggleAutoEnriching = (value: boolean) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    toggleAutoEnrichingEnabled();
+    if (value) {
+      void MetadataEnricher.startBackgroundWorker(undefined, {
+        isPlaying: () => usePlayerStore.getState().isPlaying,
+      }).catch((err) =>
+        console.warn("[Settings] Auto Enriching start failed:", err),
+      );
+    } else {
+      MetadataEnricher.stop();
+      console.log("[Settings] Auto Enriching dimatikan — worker dihentikan");
     }
   };
 
@@ -1354,11 +1385,42 @@ export default function SettingsScreen() {
         <View style={{ paddingBottom: spacing.sm }}>
           {/* Settings berbahasa user (2026-11-18): toggle "Pindai
               Awal" DIHAPUS — initial scan jalan secara default saat
-              instalasi baru, tanpa setting. Yang tersisa di seksi ini:
-              aksi Rescan (full scan manual) + toggle Auto Discovery
-              (pemindaian otomatis berkelanjutan). Struktur baris
+              instalasi baru, tanpa setting. Tiga opsi di seksi ini:
+              Auto Enriching (default ON — start otomatis worker),
+              Auto Discovery (default OFF — deteksi perubahan),
+              aksi Rescan (full scan manual). Struktur baris
               mengikuti Fase 3 Settings persis (judul token semiBold,
               deskripsi 11px secondary, 0 fontWeight). */}
+          <SettingRow colors={colors} spacing={spacing} bordered={false}>
+            <View style={{ flex: 1, marginRight: spacing.md }}>
+              <Text style={{ color: colors.text.primary, fontFamily: FONT_FAMILY.semiBold }}>
+                Auto Enriching
+              </Text>
+              <Text
+                style={{
+                  color: colors.text.secondary,
+                  fontSize: 11,
+                  marginTop: 2,
+                }}
+              >
+                Otomatis melengkapi metadata lagu di background —
+                judul, sampul, dan deteksi Hi-Res palsu. Berjalan
+                pelan supaya tidak membebani aplikasi.
+              </Text>
+            </View>
+            <Switch
+              value={isAutoEnrichingEnabled}
+              onValueChange={handleToggleAutoEnriching}
+              trackColor={{
+                false: colors.background.tertiary,
+                true: colors.primary[500],
+              }}
+              thumbColor={
+                isAutoEnrichingEnabled ? colors.text.primary : colors.text.secondary
+              }
+            />
+          </SettingRow>
+
           <SettingRow colors={colors} spacing={spacing} bordered={false}>
             <View style={{ flex: 1, marginRight: spacing.md }}>
               <Text style={{ color: colors.text.primary, fontFamily: FONT_FAMILY.semiBold }}>
@@ -1401,7 +1463,8 @@ export default function SettingsScreen() {
                   marginTop: 2,
                 }}
               >
-                Memindai ulang semua file musik di perangkat.
+                Memindai ulang seluruh library — bisa terasa berat
+                sesaat.
               </Text>
             </View>
             {isManualScanning || isAutoScanning || isRescanning ? (
