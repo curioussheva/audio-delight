@@ -106,6 +106,14 @@ class NativeAnalyzerModule(reactContext: ReactApplicationContext) :
     }
 
     override fun onCatalystInstanceDestroy() {
+        // F12: executor "AnalyzerWorker" non-daemon — tanpa shutdown, tiap
+        // reload/re-create modul meninggalkan satu thread hidup. Pola yang
+        // sama dengan MediaSessionManager.release() (shutdownNow executor
+        // artwork) dan PlaybackService.onDestroy() (quitSafely thread).
+        // shutdownNow: tugas yang masih antre dibuang; analisis yang sedang
+        // jalan di-interrupt — promise-nya tetap resolve/reject ke bridge
+        // yang mati (perilaku RN terhadap itu di luar lingkup fix ini).
+        analyzerExecutor.shutdownNow()
         Log.d(TAG, "Bridge dihancurkan")
     }
 }
