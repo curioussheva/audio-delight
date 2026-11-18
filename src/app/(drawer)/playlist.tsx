@@ -29,8 +29,14 @@ export default function PlaylistsScreen() {
   const { theme } = useTheme();
   const { colors } = theme;
 
-  const { playlists, createPlaylist, deletePlaylist, importM3UPaths } =
-    usePlaylists();
+  const {
+    playlists,
+    createPlaylist,
+    deletePlaylist,
+    importM3UPaths,
+    addToPlaylist,
+    removeFromPlaylist,
+  } = usePlaylists();
   const [selectedPlaylist, setSelectedPlaylist] = useState<PlaylistItem | null>(null);
   // B2 (ronde 9): dialog nama playlist lintas-platform — dulu
   // Alert.prompt (iOS-only, no-op di Android).
@@ -89,6 +95,20 @@ export default function PlaylistsScreen() {
     setSelectedPlaylist(null);
     setShowDeleteDialog(false);
   }, [selectedPlaylist, deletePlaylist]);
+
+  // Item CRUD playlist (Opsi A): hapus lagu dari playlist — LANGSUNG +
+  // toast, tanpa dialog konfirmasi. Lagunya tetap ada di Library, jadi
+  // ini bukan destruktif permanen (aturan Fase 2: dialog hanya untuk
+  // destruktif). "Lagu Disukai" bukan playlist DB — tidak ada hapus item
+  // di sana (onRemove tidak diteruskan, lihat renderItem).
+  const handleRemoveSong = useCallback(
+    async (song: Song) => {
+      if (!selectedPlaylist || selectedPlaylist.id === "favorites") return;
+      await removeFromPlaylist(selectedPlaylist.id, song.id);
+      showToast(`"${song.title}" dihapus dari playlist.`, "info");
+    },
+    [selectedPlaylist, removeFromPlaylist, showToast],
+  );
 
   // Playlist (dari usePlaylists) pakai field `songCount`, sementara
   // PlaylistList/PlaylistRow mengharapkan `count` — mapping di sini
@@ -245,6 +265,11 @@ export default function PlaylistsScreen() {
                 colors={colors}
                 onPress={handleSongPress}
                 onToggleFavorite={toggleFavorite}
+                onRemove={
+                  selectedPlaylist.id === "favorites"
+                    ? undefined
+                    : handleRemoveSong
+                }
               />
             )}
           />

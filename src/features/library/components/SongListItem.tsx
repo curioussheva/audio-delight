@@ -15,7 +15,7 @@ import { formatTime } from "@/shared/utils/time";
 import { DURATION_FONT_FAMILY } from "@/shared/utils/typography";
 import QualityBadge from "@/shared/components/ui/QualityBadge";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
-import { Music2, AudioLines, Heart } from "lucide-react-native";
+import { Music2, AudioLines, Heart, X } from "lucide-react-native";
 
 interface SongListItemProps {
   item: Song;
@@ -24,6 +24,9 @@ interface SongListItemProps {
   colors: any;
   onPress: (song: Song) => void;
   onToggleFavorite: (id: string) => void;
+  // Item CRUD playlist (Opsi A): bila diisi, tombol × muncul di samping
+  // hati. Tidak diisi (mis. daftar Library) → tampilan sama seperti dulu.
+  onRemove?: (song: Song) => void;
 }
 
 // ─── Artwork Thumbnail ────────────────────────────────────────────────────────
@@ -102,6 +105,7 @@ export const SongListItem = memo(
     colors,
     onPress,
     onToggleFavorite,
+    onRemove,
   }: SongListItemProps) => {
     const router = useRouter();
 
@@ -186,24 +190,38 @@ export const SongListItem = memo(
 
         {/* 3. Right Section — rata atas */}
         <View style={styles.actions}>
-          <TouchableOpacity
-            onPress={() => onToggleFavorite(item.id)}
-            style={styles.iconButton}
-            // U-P2-01: ikon 17 + padding 2 + hitSlop 8 lama = ±37dp.
-            // hitSlop 12 → 17 + 4 + 24 = 45dp.
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            accessibilityRole="button"
-            accessibilityLabel={
-              isFavorite ? "Hapus dari favorit" : "Tambah ke favorit"
-            }
-          >
-            <Heart
-              size={17}
-              color={isFavorite ? colors.status.error : colors.text.tertiary}
-              fill={isFavorite ? colors.status.error : "transparent"}
-              strokeWidth={isFavorite ? 0 : 2}
-            />
-          </TouchableOpacity>
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              onPress={() => onToggleFavorite(item.id)}
+              style={styles.iconButton}
+              // U-P2-01: ikon 17 + padding 2 + hitSlop 8 lama = ±37dp.
+              // hitSlop 12 → 17 + 4 + 24 = 45dp.
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel={
+                isFavorite ? "Hapus dari favorit" : "Tambah ke favorit"
+              }
+            >
+              <Heart
+                size={17}
+                color={isFavorite ? colors.status.error : colors.text.tertiary}
+                fill={isFavorite ? colors.status.error : "transparent"}
+                strokeWidth={isFavorite ? 0 : 2}
+              />
+            </TouchableOpacity>
+            {/* Item CRUD playlist: tombol × hanya bila onRemove diisi. */}
+            {onRemove ? (
+              <TouchableOpacity
+                onPress={() => onRemove(item)}
+                style={styles.iconButton}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityRole="button"
+                accessibilityLabel="Hapus dari playlist"
+              >
+                <X size={17} color={colors.text.tertiary} strokeWidth={2} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
           <Text style={[styles.duration, { color: colors.text.tertiary }]}>
             {formatTime(item.duration)}
           </Text>
@@ -217,6 +235,7 @@ export const SongListItem = memo(
     prev.item.artwork === next.item.artwork &&
     prev.isNowPlaying === next.isNowPlaying &&
     prev.isFavorite === next.isFavorite &&
+    prev.onRemove === next.onRemove &&
     prev.colors.primary[500] === next.colors.primary[500],
 );
 
@@ -273,6 +292,12 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     paddingTop: 2,
     gap: 6,
+  },
+  // Hati + × (bila ada) berdampingan di baris atas.
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   iconButton: {
     padding: 2,
