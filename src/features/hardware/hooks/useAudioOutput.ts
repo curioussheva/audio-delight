@@ -62,6 +62,16 @@ export const useAudioOutput = (): UseAudioOutputReturn => {
   // Cegah setState setelah unmount: refresh dipicu dari beberapa jalur.
   const mounted = useRef(true);
 
+  // N19: guard in-flight untuk syncStatus — tick interval 3 dtk tidak
+  // boleh jalan selagi sync sebelumnya belum selesai (dua bridge call +
+  // kadang getBluetoothCodec); dua sync konkuren bisa menulis
+  // currentDevice/bluetoothCodec dengan urutan terbalik. Pola yang sama
+  // dengan J1-1/J1-4. Satu poller per instance layar tetap ada
+  // (Settings + Analyzer + EQ mount bersamaan) — dedupe antar-instance
+  // butuh poller bersama di level modul, dicatat sebagai tindak lanjut,
+  // bukan di ronde ini.
+  const syncInFlightRef = useRef(false);
+
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -70,30 +80,36 @@ export const useAudioOutput = (): UseAudioOutputReturn => {
   }, []);
 
   const syncStatus = useCallback(async () => {
-    const [nextStatus, nextDevice] = await Promise.all([
-      AudioOutputService.getStatus(),
-      AudioOutputService.getCurrentDevice(),
-    ]);
-    if (!mounted.current) return;
-    setStatus(nextStatus);
-    setCurrentDevice(nextDevice);
+    if (syncInFlightRef.current) return;
+    syncInFlightRef.current = true;
+    try {
+      const [nextStatus, nextDevice] = await Promise.all([
+        AudioOutputService.getStatus(),
+        AudioOutputService.getCurrentDevice(),
+      ]);
+      if (!mounted.current) return;
+      setStatus(nextStatus);
+      setCurrentDevice(nextDevice);
 
-    // Codec hanya relevan kalau perangkat aktifnya Bluetooth. Membacanya
-    // memanggil BluetoothA2dp lewat profile proxy, dan itu tidak gratis -
-    // tidak ada alasan menempuhnya saat output ke speaker atau DAC.
-    if (nextDevice?.type === "bluetooth") {
-      const codec = await AudioOutputService.getBluetoothCodec();
-      if (mounted.current) setBluetoothCodec(codec);
-    } else if (mounted.current) {
-      setBluetoothCodec((prev) =>
-        prev.connected
-          ? {
-              connected: false,
-              deviceName: "",
-              address: "",
-            }
-          : prev,
-      );
+      // Codec hanya relevan kalau perangkat aktifnya Bluetooth. Membacanya
+      // memanggil BluetoothA2dp lewat profile proxy, dan itu tidak gratis -
+      // tidak ada alasan menempuhnya saat output ke speaker atau DAC.
+      if (nextDevice?.type === "bluetooth") {
+        const codec = await AudioOutputService.getBluetoothCodec();
+        if (mounted.current) setBluetoothCodec(codec);
+      } else if (mounted.current) {
+        setBluetoothCodec((prev) =>
+          prev.connected
+            ? {
+                connected: false,
+                deviceName: "",
+                address: "",
+              }
+            : prev,
+        );
+      }
+    } finally {
+      syncInFlightRef.current = false;
     }
   }, []);
 
