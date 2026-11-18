@@ -76,6 +76,15 @@ type LibraryState = ScanStoreState &
     isAutoScanEnabled: boolean;
     hasCompletedInitialScan: boolean; // 👈 NEW: Flag untuk scan perdana
 
+    // `isAutoEnrichingEnabled` = gerbang Auto Enriching (start OTOMATIS
+    // worker enrichment pasca scan — initial/resume/background task).
+    // Default ON (keputusan csheva 2026-11-18): enrichment tetap jalan
+    // otomatis buat instalasi lama/baru, tapi user bisa mematikannya
+    // supaya tidak ada kerja background otomatis. Aksi eksplisit
+    // (modal manual, Rescan Library, menyalakan toggle ON) TIDAK
+    // melewati gerbang ini — lihat autoEnrichingGuard.ts.
+    isAutoEnrichingEnabled: boolean;
+
     // --- Actions ---
     setTracks: (tracks: MediaTrack[]) => void;
     setActiveTab: (tab: LibraryTab) => void;
@@ -83,6 +92,7 @@ type LibraryState = ScanStoreState &
     setSelectedTracks: (ids: string[]) => void;
 
     toggleAutoScanEnabled: () => void;
+    toggleAutoEnrichingEnabled: () => void;
     setInitialScanCompleted: () => void; // 👈 NEW: Action untuk menandai scan perdana selesai
 
     updateTrack: (trackId: string, updatedData: Partial<MediaTrack>) => void;
@@ -129,6 +139,9 @@ export const useLibraryStore = create<LibraryState>()(
       // default saat fresh install — spek butir 1).
       isAutoScanEnabled: false, // 👈 FIX: Default OFF
       hasCompletedInitialScan: false, // 👈 FIX: Default belum pernah scan
+      // Auto Enriching default ON — enrichment otomatis tetap jalan
+      // (perilaku lama dipertahankan); user mematikan lewat Settings.
+      isAutoEnrichingEnabled: true,
 
       // --- 2. CORE ACTIONS ---
       setTracks: (tracks) =>
@@ -144,6 +157,11 @@ export const useLibraryStore = create<LibraryState>()(
       toggleAutoScanEnabled: () =>
         set((state) => ({
           isAutoScanEnabled: !state.isAutoScanEnabled,
+        })),
+
+      toggleAutoEnrichingEnabled: () =>
+        set((state) => ({
+          isAutoEnrichingEnabled: !state.isAutoEnrichingEnabled,
         })),
 
       setInitialScanCompleted: () => set({ hasCompletedInitialScan: true }), // 👈 NEW: Implementasi
@@ -291,6 +309,9 @@ export const useLibraryStore = create<LibraryState>()(
         lastEnrichmentAt: state.lastEnrichmentAt,
         unenrichedCount: state.unenrichedCount,
         isAutoScanEnabled: state.isAutoScanEnabled,
+        // Auto Enriching dipersist supaya pilihan OFF user tidak hilang
+        // saat restart (perilaku sama seperti toggle Auto Discovery).
+        isAutoEnrichingEnabled: state.isAutoEnrichingEnabled,
         // Kunci `isInitialScanEnabled` (scan-split) TIDAK lagi
         // dipersist: field + toggle-nya dihapus 2026-11-18. Kunci yang
         // tertinggal di storage instalasi lama tidak dibaca lagi —
