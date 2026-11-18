@@ -111,3 +111,7 @@ android/app/src/main/cpp/.cache/
 # compile_commands.json (dibuat scripts/generate_compile_commands.py).
 # Regeneratif, tidak layak masuk riwayat git.
 android/app/src/main/cpp/compile_commands.json
+
+# Python bytecode (regeneratif; scripts/__pycache__/ sempat terlacak, dihapus 2026-11-19).
+__pycache__/
+*.pyc
