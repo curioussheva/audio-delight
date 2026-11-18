@@ -422,20 +422,35 @@ export const ScanDiffEngine = {
       // yang tidak bisa dibatalkan). Kini cancel sebelum titik ini hanya
       // membatalkan tulis; penghapusan tidak pernah jalan mendahului
       // tulisan yang belum pasti.
+      // N16 (saudara di jalur manual): hapus gagal SESUDAH tulis commit
+      // dulu dilempar ke manualScan -> toast "Rescan gagal" padahal lagu
+      // baru sudah masuk DB, dan lagu itu tidak diantre enrichment
+      // (diff berikutnya tidak lagi melihatnya sebagai baru). Sama
+      // seperti processQuickDiff: laporkan lagu baru seperti biasa +
+      // deletedCount 0; penghapusan dicoba lagi di diff berikutnya.
+      let reportedDeleted: string[] = [];
       if (finalDeleted.length > 0) {
         throwIfAborted(signal);
-        await LibraryScanner.deleteSongsByUris(finalDeleted);
+        try {
+          await LibraryScanner.deleteSongsByUris(finalDeleted);
+          reportedDeleted = finalDeleted;
+        } catch (deleteErr) {
+          console.error(
+            "[ScanDiffEngine] Full diff: gagal menghapus lagu lama, ditahan untuk diff berikutnya:",
+            deleteErr,
+          );
+        }
       }
 
       return {
         newCount: newSongs.length,
-        deletedCount: finalDeleted.length,
+        deletedCount: reportedDeleted.length,
         updatedCount: updatedSongs.length,
         totalAfter: currentCount,
         totalScanned: nativeSongs.length,
         newSongs,
         updatedSongs,
-        deletedUris: finalDeleted,
+        deletedUris: reportedDeleted,
       };
     } catch (error) {
       if (error instanceof ScanAbortedError) {

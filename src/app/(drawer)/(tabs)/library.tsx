@@ -50,6 +50,7 @@ import {
 
 // Scan System
 import { useScanManager } from "@/features/library/hooks/useScanManager";
+import { ScanAlreadyRunningError } from "@/features/library/services/UnifiedScanService";
 import { createRefreshCoalescer } from "@/features/library/services/refreshCoalescer";
 import {
   isLibraryScanRunning,
@@ -363,8 +364,16 @@ export default function LibraryScreen() {
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
-      console.error("Manual scan failed:", error);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      // N27: rescan kedua yang dimulai hampir bersamaan dengan rescan
+      // dari Settings (atau tap ganda) — bukan kegagalan dan jangan diam
+      // saja (dulu hanya console.error + haptic). Rescan pertama tetap
+      // jalan; beri tahu user lewat toast info.
+      if (error instanceof ScanAlreadyRunningError) {
+        showToast("Rescan sedang berjalan.", "info");
+      } else {
+        console.error("Manual scan failed:", error);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
     } finally {
       // FASE 4: jangan refresh langsung — bump, biar subscriber yang
       // refresh lewat SATU jalur (dengan guard scan + dedup). Bump juga

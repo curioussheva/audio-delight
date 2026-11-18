@@ -32,7 +32,10 @@ import {
 import { useLibraryStore } from "@/features/library/store/libraryStore"; // Pastikan path benar
 import { BackgroundScanTask } from "@/features/library/services/BackgroundScanTask";
 import { MetadataEnricher } from "@/features/library/services/MetadataEnricher";
-import { UnifiedScanService } from "@/features/library/services/UnifiedScanService";
+import {
+  UnifiedScanService,
+  ScanAlreadyRunningError,
+} from "@/features/library/services/UnifiedScanService";
 import { ScanAbortedError } from "@/features/library/services/ScanDiffEngine";
 import { useRefreshStore } from "@/shared/store/refreshStore";
 import { formatRescanToast } from "@/features/library/utils/rescanMessage";
@@ -506,6 +509,11 @@ export default function SettingsScreen() {
         // Dibatalkan dari Library (tombol batal) saat Rescan Settings
         // sedang jalan — bukan kegagalan.
         showToast("Rescan dibatalkan.", "info");
+      } else if (error instanceof ScanAlreadyRunningError) {
+        // N27: rescan kedua yang dimulai hampir bersamaan dengan rescan
+        // dari Library (atau tap ganda) — bukan kegagalan, jangan
+        // laporkan "Rescan gagal". Rescan pertama tetap jalan.
+        showToast("Rescan sedang berjalan.", "info");
       } else {
         console.error("[Settings] Rescan failed:", error);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);

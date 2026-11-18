@@ -3,7 +3,10 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { UnifiedScanService } from "../services/UnifiedScanService";
+import {
+  UnifiedScanService,
+  ScanAlreadyRunningError,
+} from "../services/UnifiedScanService";
 import { runInitialScan } from "../services/initialScan";
 import { useLibraryStore } from "../store/libraryStore";
 import { ScanProgress } from "../types/scan";
@@ -85,9 +88,16 @@ export function useScanManager() {
       console.log("[useScanManager] - isManualScanning:", store.isManualScanning);
       console.log("[useScanManager] - isAutoScanning:", store.isAutoScanning);
 
-      if (isLocked || store.isManualScanning || store.isAutoScanning) {
+      // N27: baca flag scan dari getState() (segar), bukan hanya closure
+      // hook — dua tap cepat sebelum re-render dulu sama-sama lolos cek
+      // isLocked/store karena closure-nya basi, lalu yang kedua dilempar
+      // service sebagai "sudah jalan". Guard service (isRunning) tetap
+      // lapis terakhir; lemparan ini bertipe supaya pemanggil bisa
+      // membedakannya dari kegagalan scan beneran.
+      const live = useLibraryStore.getState();
+      if (isLocked || live.isManualScanning || live.isAutoScanning) {
         console.warn("[useScanManager] ❌ Scan locked or already running");
-        throw new Error("Scan already in progress");
+        throw new ScanAlreadyRunningError();
       }
 
       console.log("[useScanManager] ✅ Setting isLocked = true");

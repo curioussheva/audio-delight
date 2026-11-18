@@ -12,6 +12,19 @@ import { ScanResult, ScanProgress, EnrichmentLevel } from "../types/scan";
 import * as Notifications from "expo-notifications";
 const Platform = require("react-native").Platform;
 
+/**
+ * N27: galat khusus "scan sudah jalan" — bisa dibedakan pemanggil dari
+ * kegagalan scan beneran. Dulu manualScan/enrichMetadata melempar Error
+ * generik "Scan already in progress", sehingga Settings melaporkannya
+ * sebagai "Rescan gagal" dan Library diam saja (hanya console.error).
+ */
+export class ScanAlreadyRunningError extends Error {
+  constructor() {
+    super("Scan already in progress. Please wait or cancel.");
+    this.name = "ScanAlreadyRunningError";
+  }
+}
+
 export class UnifiedScanService {
   private static isRunning = false;
   private static abortController: AbortController | null = null;
@@ -24,7 +37,7 @@ export class UnifiedScanService {
     onProgress?: (progress: ScanProgress) => void,
   ): Promise<ScanResult> {
     if (this.isRunning) {
-      throw new Error("Scan already in progress. Please wait or cancel.");
+      throw new ScanAlreadyRunningError();
     }
 
     console.log("🚀 [UnifiedScan] Starting MANUAL scan...");
@@ -132,7 +145,7 @@ export class UnifiedScanService {
     // J2-3: guard yang sama seperti auto/manual — enrichment tidak boleh
     // mulai di tengah scan, dan sebaliknya (isRunning satu lock bersama).
     if (this.isRunning) {
-      throw new Error("Scan already in progress. Please wait or cancel.");
+      throw new ScanAlreadyRunningError();
     }
 
     const store = useLibraryStore.getState();
