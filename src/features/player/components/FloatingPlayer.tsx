@@ -27,6 +27,7 @@ import { usePlayerStore } from "@/features/player/store/playerStore";
 import { progressPercent } from "@/shared/utils/queueNavigation";
 import { isHiRes } from "@/shared/utils/audioQuality";
 import { pickReadable, parseHex, AA_NORMAL } from "@/shared/utils/contrast";
+import { FONT_FAMILY } from "@/shared/constants/themes/base";
 import { useTheme } from "@/shared/context/ThemeContext";
 
 const PLACEHOLDER = require("../../../../assets/images/icon.png");
@@ -368,7 +369,12 @@ const s = StyleSheet.create({
   },
   title: {
     fontSize: 13,
-    fontWeight: "700",
+    // FASE 3 additional: judul pill = Inter bold, BUKAN Playfair seperti
+    // judul Player. 13px satu baris adalah teks UI (keputusan desain:
+    // Playfair untuk display/heading, Inter untuk body/UI); Playfair di
+    // ukuran ini kehilangan keanggunan + lebih sulit dibaca saat judul
+    // terpotong ellipsis.
+    fontFamily: FONT_FAMILY.bold,
     letterSpacing: -0.2,
   },
   metaRow: {
@@ -379,6 +385,7 @@ const s = StyleSheet.create({
   },
   artist: {
     fontSize: 12,
+    fontFamily: FONT_FAMILY.regular,
     flexShrink: 1,
   },
   hiResBadge: {
@@ -389,7 +396,7 @@ const s = StyleSheet.create({
   },
   hiResText: {
     fontSize: 7,
-    fontWeight: "900",
+    fontFamily: FONT_FAMILY.bold,
     letterSpacing: 0.5,
   },
   controls: {
@@ -444,7 +451,7 @@ const s = StyleSheet.create({
   },
   repeatOneBadgeText: {
     fontSize: 8,
-    fontWeight: "800",
+    fontFamily: FONT_FAMILY.bold,
     textAlign: "center",
   },
 });
