@@ -13,17 +13,10 @@ describe("shouldRunInitialScan — S1", () => {
     hasCompletedInitialScan: false,
     isManualScanning: false,
     isAutoScanning: false,
-    isInitialScanEnabled: true,
   };
 
   it("library kosong + belum pernah scan + idle -> jalan", () => {
     expect(shouldRunInitialScan(base)).toBe(true);
-  });
-
-  it("Scan-split: Pindai Awal OFF -> skip walau library kosong + belum pernah scan", () => {
-    expect(
-      shouldRunInitialScan({ ...base, isInitialScanEnabled: false }),
-    ).toBe(false);
   });
 
   it("library tidak kosong -> skip", () => {

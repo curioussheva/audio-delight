@@ -64,21 +64,16 @@ type LibraryState = ScanStoreState &
     searchQuery: string;
 
     // Properti Baru
-    // Scan-split: SATU toggle lama `isAutoScanEnabled` mencampur dua
-    // siklus hidup — scan perdana (sekali) vs pemindaian otomatis
-    // berkelanjutan. Kini dipisah:
-    // - `isAutoScanEnabled` = gerbang Pindai Idle (resume quickDiff,
-    //   autoScan, background task). Kunci persist DIPAKAI ULANG dengan
-    //   sengaja: bagi instalasi lama nilainya selalu berarti pilihan
-    //   soal pemindaian otomatis berkelanjutan (scan perdana tidak
-    //   pernah menghormatinya — lewat bypass), jadi tidak ada migrasi
-    //   dan tidak ada risiko nilai tersimpan hilang.
-    // - `isInitialScanEnabled` = gerbang Pindai Awal (sekali, fresh
-    //   install). Kunci baru, default ON; instalasi lama yang belum
-    //   punya kunci ini mendapat ON — tidak berdampak karena
-    //   `hasCompletedInitialScan` mereka sudah true.
+    // `isAutoScanEnabled` = gerbang Auto Discovery (resume quickDiff,
+    // autoScan, background task). Kunci persist DIPAKAI ULANG dengan
+    // sengaja: bagi instalasi lama nilainya selalu berarti pilihan
+    // soal pemindaian otomatis berkelanjutan, jadi tidak ada migrasi
+    // dan tidak ada risiko nilai tersimpan hilang.
+    // (Riwayat: scan-split 2026-11-18 sempat menambah
+    // `isInitialScanEnabled` sebagai gerbang scan perdana; toggle itu
+    // DIHAPUS 2026-11-18 — initial scan jalan secara default saat
+    // fresh install, tanpa setting.)
     isAutoScanEnabled: boolean;
-    isInitialScanEnabled: boolean;
     hasCompletedInitialScan: boolean; // 👈 NEW: Flag untuk scan perdana
 
     // --- Actions ---
@@ -88,7 +83,6 @@ type LibraryState = ScanStoreState &
     setSelectedTracks: (ids: string[]) => void;
 
     toggleAutoScanEnabled: () => void;
-    toggleInitialScanEnabled: () => void;
     setInitialScanCompleted: () => void; // 👈 NEW: Action untuk menandai scan perdana selesai
 
     updateTrack: (trackId: string, updatedData: Partial<MediaTrack>) => void;
@@ -130,12 +124,10 @@ export const useLibraryStore = create<LibraryState>()(
       pendingArtistImages: 0,
 
       // Default Value
-      // Scan-split: `isAutoScanEnabled` kini eksplisit gerbang Pindai
-      // Idle (default OFF — dipertahankan); `isInitialScanEnabled`
-      // gerbang Pindai Awal (default ON — spek butir 1: fresh install
-      // wajib quickscan).
+      // `isAutoScanEnabled` = gerbang Auto Discovery (default OFF —
+      // dipertahankan). Initial scan tidak punya toggle (jalan secara
+      // default saat fresh install — spek butir 1).
       isAutoScanEnabled: false, // 👈 FIX: Default OFF
-      isInitialScanEnabled: true, // 👈 Scan-split: Pindai Awal default ON
       hasCompletedInitialScan: false, // 👈 FIX: Default belum pernah scan
 
       // --- 2. CORE ACTIONS ---
@@ -152,11 +144,6 @@ export const useLibraryStore = create<LibraryState>()(
       toggleAutoScanEnabled: () =>
         set((state) => ({
           isAutoScanEnabled: !state.isAutoScanEnabled,
-        })),
-
-      toggleInitialScanEnabled: () =>
-        set((state) => ({
-          isInitialScanEnabled: !state.isInitialScanEnabled,
         })),
 
       setInitialScanCompleted: () => set({ hasCompletedInitialScan: true }), // 👈 NEW: Implementasi
@@ -304,12 +291,11 @@ export const useLibraryStore = create<LibraryState>()(
         lastEnrichmentAt: state.lastEnrichmentAt,
         unenrichedCount: state.unenrichedCount,
         isAutoScanEnabled: state.isAutoScanEnabled,
-        // Scan-split: kunci baru Pindai Awal. Instalasi lama yang
-        // belum punya kunci ini direhidrasi tanpa kunci → zustand
-        // memakai default store (ON). Tidak ada fungsi migrasi:
-        // kunci lama dipakai ulang untuk idle (lihat komentar di
-        // LibraryState), kunci baru aditif.
-        isInitialScanEnabled: state.isInitialScanEnabled,
+        // Kunci `isInitialScanEnabled` (scan-split) TIDAK lagi
+        // dipersist: field + toggle-nya dihapus 2026-11-18. Kunci yang
+        // tertinggal di storage instalasi lama tidak dibaca lagi —
+        // tidak berbahaya; hilang sendiri saat persist berikutnya
+        // ditulis tanpa kunci itu.
         hasCompletedInitialScan: state.hasCompletedInitialScan, // 👈 NEW: Wajib ada agar disimpan di memori HP
       }),
     },

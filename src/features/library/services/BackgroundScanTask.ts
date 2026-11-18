@@ -25,7 +25,7 @@ TaskManager.defineTask(TASK_NAME, async () => {
   // Guard 1: Jangan double run
   if (isTaskRunning) return BackgroundTask.BackgroundTaskResult.Success;
 
-  // Guard 2: Cek apakah user mengizinkan Pindai Idle di store
+  // Guard 2: Cek apakah user mengizinkan Auto Discovery di store
   // (scan-split: `isAutoScanEnabled` kini eksplisit gerbang idle —
   // resume quickDiff, autoScan, dan task ini).
   const { isAutoScanEnabled } = useLibraryStore.getState();

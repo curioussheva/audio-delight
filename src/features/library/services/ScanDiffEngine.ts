@@ -295,23 +295,24 @@ async function processQuickDiff(
 
 export const ScanDiffEngine = {
   /**
-   * Scan-split: `bypassAutoScanGate` — lewati gerbang Pindai Idle
+   * `bypassAutoScanGate` — lewati gerbang Auto Discovery
    * (`isAutoScanEnabled`) untuk scan perdana fresh install. Gerbang
-   * quickDiff kini milik idle (resume, autoScan, background task);
-   * scan perdana punya gerbang SENDIRI (`isInitialScanEnabled`,
-   * diperiksa `shouldRunInitialScan` di useScanManager SEBELUM
-   * runInitialScan dipanggil). Opsi ini BUKAN lagi jalan pintas
-   * karena satu toggle mencampur dua hal — melainkan pernyataan
-   * "gerbang sudah diperiksa pemanggil", supaya satu engine tidak
-   * perlu tahu dua kebijakan. Semua pemanggil lain tetap digerbangi
-   * idle seperti dulu bila opsi ini tidak diisi.
+   * quickDiff milik Auto Discovery (resume, autoScan, background task);
+   * scan perdana TIDAK punya toggle — jalan secara default saat fresh
+   * install (keputusan csheva 2026-11-18), gerbangnya sudah diperiksa
+   * pemanggil (`shouldRunInitialScan` di useScanManager SEBELUM
+   * runInitialScan dipanggil). Opsi ini BUKAN jalan pintas — melainkan
+   * pernyataan "gerbang sudah diperiksa pemanggil", supaya satu engine
+   * tidak perlu tahu kebijakan scan perdana. Semua pemanggil lain
+   * tetap digerbangi Auto Discovery seperti dulu bila opsi ini tidak
+   * diisi.
    */
   async quickDiff(
     signal?: AbortSignal,
     options?: { bypassAutoScanGate?: boolean },
   ): Promise<QuickDiffResult> {
-    // Gerbang Pindai Idle: resume quickDiff, autoScan, dan pemanggil
-    // tanpa bypass hanya jalan bila idle ON (default OFF).
+    // Gerbang Auto Discovery: resume quickDiff, autoScan, dan pemanggil
+    // tanpa bypass hanya jalan bila Auto Discovery ON (default OFF).
     const { isAutoScanEnabled } = useLibraryStore.getState();
     if (!isAutoScanEnabled && !options?.bypassAutoScanGate)
       return _emptyQuickResult();
