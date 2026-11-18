@@ -9,7 +9,6 @@
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   ScrollView,
   StyleSheet,
@@ -20,6 +19,9 @@ import {
 } from "react-native";
 
 import { useTheme } from "@/shared/context/ThemeContext";
+import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
+import { ConfirmDialog } from "@/shared/components/ui/ConfirmDialog";
+import { useToastStore } from "@/shared/store/toastStore";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import {
   BUILTIN_HEADPHONE_PRESETS,
@@ -64,6 +66,15 @@ export const HeadphoneSection: React.FC<Props> = ({ accent, disabled }) => {
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
 
+  // FASE 3 EQ — hapus profil kini ConfirmDialog (bukan Alert.alert);
+  // penolakan pasang preset/profil kini toast error (bukan Alert),
+  // mengikuti migrasi impor M3U di Library. Pesan TIDAK berubah.
+  const [deleteProfileTarget, setDeleteProfileTarget] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const showToast = useToastStore((s) => s.showToast);
+
   // Picker preset bawaan — cari berdasarkan nama, bukan dropdown panjang.
   const [builtinQuery, setBuiltinQuery] = useState("");
   const [loadingBuiltinId, setLoadingBuiltinId] = useState<string | null>(
@@ -89,9 +100,9 @@ export const HeadphoneSection: React.FC<Props> = ({ accent, disabled }) => {
       if (!id) {
         const result = await importPreset(displayName, preset.presetText);
         if (!result.ok || !result.profileId) {
-          Alert.alert(
-            "Preset gagal dipasang",
+          showToast(
             `Preset "${displayName}" ditolak. Coba preset lain atau impor manual.`,
+            "error",
           );
           return;
         }
@@ -99,9 +110,9 @@ export const HeadphoneSection: React.FC<Props> = ({ accent, disabled }) => {
       }
       const ok = await activate(id);
       if (!ok) {
-        Alert.alert(
-          "Profil gagal dipasang",
+        showToast(
           `Profil "${displayName}" ditolak. Coba profil lain atau impor ulang presetnya.`,
+          "error",
         );
       }
     } finally {
@@ -112,14 +123,7 @@ export const HeadphoneSection: React.FC<Props> = ({ accent, disabled }) => {
   // Hapus profil lewat long-press — seperti hapus preset EQ, minta
   // konfirmasi dulu supaya profil tidak hilang karena sentuhan tak sengaja.
   const handleRemoveProfile = (id: string, name: string) => {
-    Alert.alert("Hapus profil", `Hapus profil "${name}"?`, [
-      { text: "Batal", style: "cancel" },
-      {
-        text: "Hapus",
-        style: "destructive",
-        onPress: () => remove(id),
-      },
-    ]);
+    setDeleteProfileTarget({ id, name });
   };
 
   const handleImport = async () => {
@@ -228,9 +232,9 @@ export const HeadphoneSection: React.FC<Props> = ({ accent, disabled }) => {
                     // apa pun. Sekarang penolakan disampaikan ke user.
                     const ok = await activate(p.id);
                     if (!ok) {
-                      Alert.alert(
-                        "Profil gagal dipasang",
+                      showToast(
                         `Profil "${p.name}" ditolak. Coba profil lain atau impor ulang presetnya.`,
+                        "error",
                       );
                     }
                   }
@@ -250,7 +254,9 @@ export const HeadphoneSection: React.FC<Props> = ({ accent, disabled }) => {
                     styles.cardTitle,
                     {
                       color: colors.text.primary,
-                      fontWeight: isActive ? "700" : "600",
+                      fontFamily: isActive
+                        ? FONT_FAMILY.bold
+                        : FONT_FAMILY.semiBold,
                     },
                   ]}
                 >
@@ -522,7 +528,14 @@ export const HeadphoneSection: React.FC<Props> = ({ accent, disabled }) => {
                 }}
                 style={[styles.modalBtn, { borderColor: colors.border.medium }]}
               >
-                <Text style={{ color: colors.text.primary }}>Batal</Text>
+                <Text
+                  style={{
+                    color: colors.text.primary,
+                    fontFamily: FONT_FAMILY.regular,
+                  }}
+                >
+                  Batal
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -553,7 +566,7 @@ export const HeadphoneSection: React.FC<Props> = ({ accent, disabled }) => {
                         tint,
                         AA_NORMAL,
                       ),
-                      fontWeight: "600",
+                      fontFamily: FONT_FAMILY.semiBold,
                     }}
                   >
                     Simpan
@@ -564,6 +577,23 @@ export const HeadphoneSection: React.FC<Props> = ({ accent, disabled }) => {
           </View>
         </View>
       </Modal>
+
+      {/* FASE 3 EQ — dialog hapus profil (satu pola, bukan Alert.alert). */}
+      <ConfirmDialog
+        visible={deleteProfileTarget !== null}
+        title="Hapus profil"
+        message={
+          deleteProfileTarget
+            ? `Hapus profil "${deleteProfileTarget.name}"?`
+            : undefined
+        }
+        confirmLabel="Hapus"
+        onConfirm={() => {
+          if (deleteProfileTarget) remove(deleteProfileTarget.id);
+          setDeleteProfileTarget(null);
+        }}
+        onCancel={() => setDeleteProfileTarget(null)}
+      />
     </View>
   );
 };
@@ -579,18 +609,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  title: { fontSize: 16, fontWeight: "600" },
+  title: { fontSize: 16, fontFamily: FONT_FAMILY.semiBold },
   pill: {
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: BASE_RADIUS.md,
     paddingHorizontal: 10,
     paddingVertical: 3,
   },
-  pillText: { fontSize: 12 },
-  device: { fontSize: 12, marginTop: 4 },
-  bound: { fontSize: 12, marginTop: 2, fontWeight: "500" },
-  empty: { fontSize: 13, marginTop: 10 },
-  hint: { fontSize: 11, marginTop: 8 },
+  pillText: { fontSize: 12, fontFamily: FONT_FAMILY.regular },
+  device: { fontSize: 12, fontFamily: FONT_FAMILY.regular, marginTop: 4 },
+  bound: {
+    fontSize: 12,
+    fontFamily: FONT_FAMILY.medium,
+    marginTop: 2,
+  },
+  empty: { fontSize: 13, fontFamily: FONT_FAMILY.regular, marginTop: 10 },
+  hint: { fontSize: 11, fontFamily: FONT_FAMILY.regular, marginTop: 8 },
   list: { marginTop: 10 },
   listContent: {},
 
@@ -601,15 +635,24 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     minWidth: 120,
   },
-  cardTitle: { fontSize: 13, fontWeight: "600" },
-  cardMeta: { fontSize: 11, marginTop: 2 },
+  cardTitle: { fontSize: 13, fontFamily: FONT_FAMILY.semiBold },
+  cardMeta: {
+    fontSize: 11,
+    fontFamily: FONT_FAMILY.regular,
+    marginTop: 2,
+  },
   actions: { flexDirection: "row", marginTop: 12 },
 
   // Picker preset bawaan (pencarian, bukan dropdown panjang). Daftar hasil
   // dibatasi tingginya supaya 24 model tidak mendorong layar ke bawah.
-  builtinTitle: { fontSize: 14, fontWeight: "600" },
+  builtinTitle: { fontSize: 14, fontFamily: FONT_FAMILY.semiBold },
   builtinSearch: { marginTop: 8, marginBottom: 0 },
-  builtinNote: { fontSize: 11, marginTop: 8, lineHeight: 15 },
+  builtinNote: {
+    fontSize: 11,
+    fontFamily: FONT_FAMILY.regular,
+    marginTop: 8,
+    lineHeight: 15,
+  },
   builtinList: {
     marginTop: 8,
     maxHeight: 240,
@@ -624,36 +667,53 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   builtinRowText: { flex: 1 },
-  builtinRowTitle: { fontSize: 13, fontWeight: "600" },
-  builtinRowMeta: { fontSize: 11, marginTop: 2 },
-  builtinRowState: { fontSize: 12, fontWeight: "600", marginLeft: 8 },
+  builtinRowTitle: { fontSize: 13, fontFamily: FONT_FAMILY.semiBold },
+  builtinRowMeta: {
+    fontSize: 11,
+    fontFamily: FONT_FAMILY.regular,
+    marginTop: 2,
+  },
+  builtinRowState: {
+    fontSize: 12,
+    fontFamily: FONT_FAMILY.semiBold,
+    marginLeft: 8,
+  },
 
   action: {
     flex: 1,
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: BASE_RADIUS.sm,
     paddingVertical: 9,
     alignItems: "center",
   },
-  actionText: { fontSize: 13, fontWeight: "500" },
+  actionText: { fontSize: 13, fontFamily: FONT_FAMILY.medium },
   modalBackdrop: { flex: 1, justifyContent: "center" },
   modal: { borderRadius: 14, padding: 16 },
-  modalTitle: { fontSize: 16, fontWeight: "600", marginBottom: 12 },
+  modalTitle: {
+    fontSize: 16,
+    fontFamily: FONT_FAMILY.semiBold,
+    marginBottom: 12,
+  },
   input: {
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: BASE_RADIUS.sm,
     paddingHorizontal: 10,
     paddingVertical: 8,
     fontSize: 13,
+    fontFamily: FONT_FAMILY.regular,
     marginBottom: 10,
   },
   inputMulti: { minHeight: 110, textAlignVertical: "top" },
-  error: { fontSize: 12, marginBottom: 8 },
+  error: {
+    fontSize: 12,
+    fontFamily: FONT_FAMILY.regular,
+    marginBottom: 8,
+  },
   modalActions: { flexDirection: "row", gap: 8, marginTop: 4 },
   modalBtn: {
     flex: 1,
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: BASE_RADIUS.sm,
     paddingVertical: 10,
     alignItems: "center",
   },

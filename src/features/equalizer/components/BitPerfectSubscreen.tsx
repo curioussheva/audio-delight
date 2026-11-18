@@ -1,6 +1,8 @@
 import React from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { useTheme } from "@/shared/context/ThemeContext";
+import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
+import { accentOn } from "@/shared/utils/contrast";
 import { MODE_INFO } from "@/features/equalizer/api/modeInfo";
 import { useBitPerfectStatus } from "@/features/player/hooks/useBitPerfectStatus";
 import { useAudioOutput } from "@/features/hardware/hooks/useAudioOutput";
@@ -40,12 +42,23 @@ export function BitPerfectSubscreen() {
   const setAudioMode = usePlayerStore((s) => s.setAudioMode);
 
   const verdict = describeBitPerfectPath(status);
+  // FASE 3 EQ: warna tone mentah (hijau/oranye aksen) gagal AA di tema
+  // terang (terukur 4,15–4,51). Pola Equalizer: aksen dipakai selama
+  // terbaca di atas permukaan kartu, jatuh ke teks bila tidak.
   const toneColor = (tone: BitPerfectPathTone): string => {
     switch (tone) {
       case "active":
-        return colors.accent.green;
+        return accentOn(
+          [colors.accent.green],
+          colors.background.secondary,
+          [colors.text.primary, colors.text.secondary],
+        );
       case "fallback":
-        return colors.accent.orange;
+        return accentOn(
+          [colors.accent.orange],
+          colors.background.secondary,
+          [colors.text.primary, colors.text.secondary],
+        );
       case "stale":
       case "not-ready":
       case "idle":
@@ -204,15 +217,16 @@ const styles = StyleSheet.create({
   },
   description: {
     fontSize: 13,
+    fontFamily: FONT_FAMILY.regular,
     lineHeight: 19,
   },
   card: {
-    borderRadius: 20,
+    borderRadius: BASE_RADIUS.xl,
     borderWidth: 1,
   },
   cardTitle: {
     fontSize: 14,
-    fontWeight: "700",
+    fontFamily: FONT_FAMILY.bold,
     marginBottom: 12,
   },
   row: {
@@ -227,26 +241,28 @@ const styles = StyleSheet.create({
   },
   rowLabel: {
     fontSize: 13,
+    fontFamily: FONT_FAMILY.regular,
     flexShrink: 0,
   },
   rowValue: {
     fontSize: 13,
-    fontWeight: "600",
+    fontFamily: FONT_FAMILY.semiBold,
     flex: 1,
     flexWrap: "wrap",
   },
   rowNote: {
     fontSize: 11,
+    fontFamily: FONT_FAMILY.regular,
     lineHeight: 16,
     marginTop: 2,
   },
   button: {
-    borderRadius: 12,
+    borderRadius: BASE_RADIUS.md,
     paddingVertical: 12,
     alignItems: "center",
   },
   buttonText: {
     fontSize: 14,
-    fontWeight: "700",
+    fontFamily: FONT_FAMILY.bold,
   },
 });

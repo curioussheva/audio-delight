@@ -24,6 +24,7 @@ import { GestureDetector, Gesture } from "react-native-gesture-handler";
 
 import { EqualizerBand } from "@/features/equalizer/types";
 import { useTheme } from "@/shared/context/ThemeContext";
+import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
 import { accentOn } from "@/shared/utils/contrast";
 import { bandPoint, pointToBand } from "@/features/equalizer/api/graphDragMath";
 import {
@@ -291,7 +292,17 @@ export const FrequencyGraph: React.FC<Props> = ({
     <View
       style={[
         styles.container,
-        { width, height: height + HZ_STRIP, opacity: disabled ? 0.4 : 1 },
+        {
+          width,
+          height: height + HZ_STRIP,
+          opacity: disabled ? 0.4 : 1,
+          // FASE 3 EQ: latar inset dari token (dulu rgba(0,0,0,0.05)
+          // mentah — di tema gelap nyaris tak terlihat, di tema terang
+          // menggelap sembarangan). background.primary memberi kontras
+          // inset yang halus di kedua arah.
+          backgroundColor: theme.colors.background.primary,
+          borderRadius: BASE_RADIUS.sm,
+        },
       ]}
     >
       {/* 0dB Reference Line */}
@@ -427,8 +438,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginVertical: 10,
-    backgroundColor: "rgba(0,0,0,0.05)",
-    borderRadius: 8,
+    // Latar + radius kini inline dari token (lihat render di atas).
   },
   zeroLine: {
     position: "absolute",
@@ -448,7 +458,8 @@ const styles = StyleSheet.create({
   },
   debugText: {
     fontSize: 11,
-    fontFamily: "monospace",
+    fontFamily: FONT_FAMILY.regular,
+    fontVariant: ["tabular-nums"],
   },
   hzLabel: {
     position: "absolute",
@@ -456,19 +467,25 @@ const styles = StyleSheet.create({
     width: 36,
     textAlign: "center",
     fontSize: 11,
+    fontFamily: FONT_FAMILY.regular,
   },
   warnPill: {
     position: "absolute",
     right: 8,
     // Di atas strip label Hz (16px) supaya tidak menabrak label 16k.
     bottom: 20,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    // FASE 3 EQ — pill 45% hitam DULU: teks kuning/merah di atasnya
+    // hanya 1,02–2,03 di tema terang (terukur 2026-11-18) — praktis
+    // tak terbaca. 90% hitam membuat keduanya lolos AA di keempat tema
+    // (kuning 9,27–10,76; merah 4,72–5,48); 85% masih gagal merah
+    // (4,13–4,17). Pill jadi lencana hampir-hitam — disengaja.
+    backgroundColor: "rgba(0,0,0,0.9)",
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,
   },
   warnText: {
     fontSize: 11,
-    fontWeight: "700",
+    fontFamily: FONT_FAMILY.bold,
   },
 });

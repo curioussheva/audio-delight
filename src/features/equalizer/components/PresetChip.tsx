@@ -1,6 +1,7 @@
 import React from "react";
 import { TouchableOpacity, Text, StyleSheet } from "react-native";
 import { useTheme } from "@/shared/context/ThemeContext";
+import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 
 interface PresetChipProps {
@@ -84,7 +85,8 @@ export const PresetChip: React.FC<PresetChipProps> = ({
         style={[
           styles.text,
           { color: textColor },
-          isActive && !disabled && { fontWeight: "900" },
+          isActive &&
+            !disabled && { fontFamily: FONT_FAMILY.bold },
         ]}
         numberOfLines={1}
       >
@@ -98,7 +100,7 @@ const styles = StyleSheet.create({
   chip: {
     paddingHorizontal: 18,
     paddingVertical: 8,
-    borderRadius: 12,
+    borderRadius: BASE_RADIUS.md,
     marginRight: 10,
     // U-P2-01: minHeight 40 lama, di bawah 44dp.
     minHeight: 44,
@@ -107,6 +109,7 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 11,
+    fontFamily: FONT_FAMILY.semiBold,
     letterSpacing: 1.2,
   },
 });

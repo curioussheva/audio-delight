@@ -8,7 +8,6 @@ import {
   Pressable,
   Dimensions,
   ScrollView,
-  Alert,
   LayoutAnimation,
   UIManager,
 } from "react-native";
@@ -25,6 +24,8 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { useTheme } from "@/shared/context/ThemeContext";
+import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
+import { ConfirmDialog } from "@/shared/components/ui/ConfirmDialog";
 import { ScreenHeader } from "@/shared/components/ui/ScreenHeader";
 import { ScreenList } from "@/shared/components/ui/ScreenList";
 import { useEqualizer } from "@/features/equalizer/hooks/useEqualizer";
@@ -185,13 +186,16 @@ const SectionToggle = ({
     >
       <Icon
         size={12}
-        color={shown ? colors.text.primary : colors.text.tertiary}
+        // FASE 3 EQ: keadaan mati DULU tertiary di atas tombol tertiary
+        // (terukur 3,94–4,34 — di bawah AA di 3 dari 4 tema). Secondary
+        // tetap redup tapi lolos di semua tema.
+        color={shown ? colors.text.primary : colors.text.secondary}
       />
       <Text
         style={[
           styles.viewBtnText,
           {
-            color: shown ? colors.text.primary : colors.text.tertiary,
+            color: shown ? colors.text.primary : colors.text.secondary,
           },
         ]}
       >
@@ -223,6 +227,17 @@ export default function EqualizerScreen() {
   const bpVerdict = describeBitPerfectPath(bpStatus);
 
   const [isModalVisible, setModalVisible] = useState(false);
+
+  // FASE 3 EQ — tiga konfirmasi Alert.alert diganti ConfirmDialog
+  // (satu pola dialog, mengikuti Library): reset DSP, hapus preset
+  // custom, dan pindah ke Bit-Perfect. Redaksi pesan TIDAK berubah.
+  const [resetDialogVisible, setResetDialogVisible] = useState(false);
+  const [deletePresetTarget, setDeletePresetTarget] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [bitPerfectDialogVisible, setBitPerfectDialogVisible] =
+    useState(false);
 
   const [visibleSections, setVisibleSections] =
     useState<VisibleSections>(DEFAULT_VISIBLE_SECTIONS);
@@ -261,14 +276,7 @@ export default function EqualizerScreen() {
   };
 
   const handleReset = () => {
-    Alert.alert("Reset DSP", "Kembalikan ke pengaturan netral?", [
-      { text: "Batal", style: "cancel" },
-      {
-        text: "Reset",
-        style: "destructive",
-        onPress: () => eq.resetToDefault(),
-      },
-    ]);
+    setResetDialogVisible(true);
   };
 
   // Preset custom bisa DISIMPAN tapi dulu tidak bisa DIHAPUS dari UI - aksi
@@ -280,14 +288,7 @@ export default function EqualizerScreen() {
   ) => {
     if (!isCustom) return;
 
-    Alert.alert("Hapus preset", `Hapus "${name}"?`, [
-      { text: "Batal", style: "cancel" },
-      {
-        text: "Hapus",
-        style: "destructive",
-        onPress: () => eq.deletePreset(id),
-      },
-    ]);
+    setDeletePresetTarget({ id, name });
   };
 
   const modeLabel =
@@ -323,17 +324,10 @@ export default function EqualizerScreen() {
     if (mode === audioMode) return;
 
     if (mode === "bit-perfect") {
-      Alert.alert(
-        "Aktifkan Bit-Perfect?",
-        "Mode ini menonaktifkan semua DSP (EQ, Bass, Reverb) — hanya fade anti-klik yang tetap jalan. Pemutaran tetap berjalan walau device tidak mendukung jalur langsung; saat itu audio lewat mixer Android.",
-        [
-          { text: "Batal", style: "cancel" },
-          {
-            text: "Aktifkan",
-            onPress: () => void setAudioMode("bit-perfect"),
-          },
-        ],
-      );
+      // FASE 3 EQ: konfirmasi pindah mode kini ConfirmDialog (bukan
+      // Alert.alert) — redaksi pesan sama persis; bukan destruktif
+      // (ganti mode), jadi tombol konfirmasi bukan merah.
+      setBitPerfectDialogVisible(true);
       return;
     }
 
@@ -507,7 +501,11 @@ export default function EqualizerScreen() {
                               bg,
                               AA_NORMAL,
                             )
-                          : colors.text.tertiary,
+                          : // FASE 3 EQ: hint nonaktif DULU tertiary di
+                            // atas tombol tertiary (terukur 3,94–4,34 —
+                            // di bawah AA di 3 dari 4 tema). Secondary
+                            // tetap redup tapi lolos di semua tema.
+                            colors.text.secondary,
                       },
                     ]}
                   >
@@ -964,6 +962,43 @@ export default function EqualizerScreen() {
         }}
         onClose={() => setModalVisible(false)}
       />
+      {/* FASE 3 EQ — dialog konfirmasi (satu pola, bukan Alert.alert). */}
+      <ConfirmDialog
+        visible={resetDialogVisible}
+        title="Reset DSP"
+        message="Kembalikan ke pengaturan netral?"
+        confirmLabel="Reset"
+        onConfirm={() => {
+          setResetDialogVisible(false);
+          eq.resetToDefault();
+        }}
+        onCancel={() => setResetDialogVisible(false)}
+      />
+      <ConfirmDialog
+        visible={deletePresetTarget !== null}
+        title="Hapus preset"
+        message={
+          deletePresetTarget ? `Hapus "${deletePresetTarget.name}"?` : undefined
+        }
+        confirmLabel="Hapus"
+        onConfirm={() => {
+          if (deletePresetTarget) eq.deletePreset(deletePresetTarget.id);
+          setDeletePresetTarget(null);
+        }}
+        onCancel={() => setDeletePresetTarget(null)}
+      />
+      <ConfirmDialog
+        visible={bitPerfectDialogVisible}
+        title="Aktifkan Bit-Perfect?"
+        message="Mode ini menonaktifkan semua DSP (EQ, Bass, Reverb) — hanya fade anti-klik yang tetap jalan. Pemutaran tetap berjalan walau device tidak mendukung jalur langsung; saat itu audio lewat mixer Android."
+        confirmLabel="Aktifkan"
+        destructive={false}
+        onConfirm={() => {
+          setBitPerfectDialogVisible(false);
+          void setAudioMode("bit-perfect");
+        }}
+        onCancel={() => setBitPerfectDialogVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -988,16 +1023,18 @@ const styles = StyleSheet.create({
   },
   modeLabel: {
     fontSize: 13,
-    fontWeight: "700",
+    fontFamily: FONT_FAMILY.bold,
   },
   modeHint: {
     fontSize: 11,
+    fontFamily: FONT_FAMILY.regular,
     marginTop: 2,
     textAlign: "center",
   },
   // Deskripsi satu kalimat mode aktif di bawah sakelar mode (B5).
   modeDescription: {
     fontSize: 12,
+    fontFamily: FONT_FAMILY.regular,
     lineHeight: 17,
   },
 
@@ -1010,7 +1047,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: BASE_RADIUS.md,
   },
   // U-P2-01: minHeight 36 lama, di bawah 44dp.
   viewBtn: {
@@ -1019,13 +1056,17 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 20,
+    borderRadius: BASE_RADIUS.xl,
     minHeight: 44,
   },
-  viewBtnText: { fontSize: 10, fontWeight: "900", letterSpacing: 1 },
+  viewBtnText: {
+    fontSize: 10,
+    fontFamily: FONT_FAMILY.bold,
+    letterSpacing: 1,
+  },
   resetBtn: { alignItems: "center", justifyContent: "center" },
   card: {
-    borderRadius: 16,
+    borderRadius: BASE_RADIUS.lg,
     borderWidth: 1,
   },
   rowBetween: {
@@ -1033,18 +1074,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  cardTitle: { fontSize: 14, fontWeight: "800" },
-  cardHint: { fontSize: 11, lineHeight: 16, marginTop: 2 },
-  warningCard: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    borderRadius: 16,
-    borderWidth: 1,
+  cardTitle: { fontSize: 14, fontFamily: FONT_FAMILY.bold },
+  cardHint: {
+    fontSize: 11,
+    fontFamily: FONT_FAMILY.regular,
+    lineHeight: 16,
+    marginTop: 2,
   },
-  warningText: { flex: 1, fontSize: 12, lineHeight: 17 },
   graphCard: {
     minHeight: 160,
-    borderRadius: 20,
+    borderRadius: BASE_RADIUS.xl,
     borderWidth: 1,
     justifyContent: "center",
     alignItems: "center",
@@ -1058,6 +1097,7 @@ const styles = StyleSheet.create({
   // Keterangan kurva di bawah grafik.
   graphCaption: {
     fontSize: 11,
+    fontFamily: FONT_FAMILY.regular,
     lineHeight: 16,
     textAlign: "center",
     marginTop: 4,
@@ -1072,14 +1112,14 @@ const styles = StyleSheet.create({
   },
   detailBandTitle: {
     fontSize: 11,
-    fontWeight: "900",
+    fontFamily: FONT_FAMILY.bold,
     letterSpacing: 1.5,
     marginBottom: 4,
     textAlign: "center",
   },
   effectsSection: { gap: 12 },
   effectItem: {
-    borderRadius: 20,
+    borderRadius: BASE_RADIUS.xl,
     borderWidth: 1,
   },
   miniSwitchContainer: {
@@ -1116,20 +1156,28 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  miniSwitchLabel: { fontSize: 11, fontWeight: "900", letterSpacing: 1.5 },
+  miniSwitchLabel: {
+    fontSize: 11,
+    fontFamily: FONT_FAMILY.bold,
+    letterSpacing: 1.5,
+  },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     minHeight: 32,
   },
-  sectionTitle: { fontSize: 11, fontWeight: "900", letterSpacing: 1.5 },
-  presetHint: { fontSize: 11 },
+  sectionTitle: {
+    fontSize: 11,
+    fontFamily: FONT_FAMILY.bold,
+    letterSpacing: 1.5,
+  },
+  presetHint: { fontSize: 11, fontFamily: FONT_FAMILY.regular },
   // F3: caption "kenapa nonaktif" di tempat kontrolnya.
-  disabledCaption: { fontSize: 11 },
+  disabledCaption: { fontSize: 11, fontFamily: FONT_FAMILY.regular },
   bypassLabel: {
     fontSize: 11,
-    fontWeight: "600",
+    fontFamily: FONT_FAMILY.semiBold,
     marginTop: 4,
     textAlign: "center",
   },
@@ -1144,7 +1192,7 @@ const styles = StyleSheet.create({
   },
   saveBtnText: {
     fontSize: 12,
-    fontWeight: "600",
+    fontFamily: FONT_FAMILY.semiBold,
   },
   presetScroll: { flexGrow: 0 },
 });

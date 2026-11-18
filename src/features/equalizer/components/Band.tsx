@@ -12,6 +12,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { useTheme } from "@/shared/context/ThemeContext";
+import { FONT_FAMILY } from "@/shared/constants/themes/base";
 import {
   accentOn,
   pickReadable,
@@ -155,7 +156,7 @@ const styles = StyleSheet.create({
   },
   gainText: {
     fontSize: 12,
-    fontWeight: "900",
+    fontFamily: FONT_FAMILY.bold,
     marginBottom: 8,
     fontVariant: ["tabular-nums"],
   },
@@ -208,6 +209,6 @@ const styles = StyleSheet.create({
   freqText: {
     marginTop: 12,
     fontSize: 12,
-    fontWeight: "bold",
+    fontFamily: FONT_FAMILY.bold,
   },
 });

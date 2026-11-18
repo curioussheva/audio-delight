@@ -26,6 +26,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { useTheme } from "@/shared/context/ThemeContext";
+import { FONT_FAMILY } from "@/shared/constants/themes/base";
 import { DrawerMenuButton } from "@/shared/components/ui/DrawerMenuButton";
 
 export interface ScreenHeaderProps {
@@ -87,13 +88,14 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 20,
-    fontWeight: "700",
+    fontFamily: FONT_FAMILY.displayBold,
   },
   titleLarge: {
     fontSize: 32,
   },
   subtitle: {
     fontSize: 13,
+    fontFamily: FONT_FAMILY.regular,
     marginTop: 2,
   },
   actions: {

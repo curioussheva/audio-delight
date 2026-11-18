@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "@/shared/context/ThemeContext";
+import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
 import { pickReadable, accentOn, AA_NORMAL } from "@/shared/utils/contrast";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import {
@@ -177,11 +178,11 @@ const styles = StyleSheet.create({
   preset: {
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: BASE_RADIUS.sm,
   },
   presetLabel: {
     fontSize: 13,
-    fontWeight: "700",
+    fontFamily: FONT_FAMILY.bold,
   },
   stepper: {
     flexDirection: "row",
@@ -192,7 +193,7 @@ const styles = StyleSheet.create({
     // U-P2-01: 32×32 lama, di bawah 44dp.
     width: 44,
     height: 44,
-    borderRadius: 8,
+    borderRadius: BASE_RADIUS.sm,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -206,10 +207,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   frequency: {
-    fontWeight: "800",
+    fontFamily: FONT_FAMILY.bold,
     fontSize: 13,
   },
   cents: {
     fontSize: 11,
+    fontFamily: FONT_FAMILY.regular,
   },
 });

@@ -2,6 +2,7 @@ import React from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import Slider from "@react-native-community/slider";
 import { useTheme } from "@/shared/context/ThemeContext";
+import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
 import { accentOn } from "@/shared/utils/contrast";
 import { MODE_INFO } from "@/features/equalizer/api/modeInfo";
 import {
@@ -117,7 +118,9 @@ export function SolfeggioSubscreen() {
                     styles.chipName,
                     {
                       color: colors.text.primary,
-                      fontWeight: active ? "800" : "700",
+                      fontFamily: active
+                        ? FONT_FAMILY.bold
+                        : FONT_FAMILY.semiBold,
                     },
                   ]}
                 >
@@ -259,18 +262,20 @@ const styles = StyleSheet.create({
   },
   description: {
     fontSize: 13,
+    fontFamily: FONT_FAMILY.regular,
     lineHeight: 19,
   },
   card: {
-    borderRadius: 20,
+    borderRadius: BASE_RADIUS.xl,
     borderWidth: 1,
   },
   cardTitle: {
     fontSize: 14,
-    fontWeight: "700",
+    fontFamily: FONT_FAMILY.bold,
   },
   cardHint: {
     fontSize: 11,
+    fontFamily: FONT_FAMILY.regular,
     lineHeight: 16,
     marginTop: 4,
   },
@@ -281,7 +286,7 @@ const styles = StyleSheet.create({
   },
   value: {
     fontSize: 14,
-    fontWeight: "800",
+    fontFamily: FONT_FAMILY.bold,
   },
   slider: {
     width: "100%",
@@ -295,21 +300,23 @@ const styles = StyleSheet.create({
   chip: {
     flexGrow: 1,
     flexBasis: "30%",
-    borderRadius: 12,
+    borderRadius: BASE_RADIUS.md,
     paddingVertical: 8,
     paddingHorizontal: 10,
     alignItems: "center",
   },
   chipName: {
     fontSize: 13,
-    fontWeight: "700",
+    fontFamily: FONT_FAMILY.bold,
   },
   chipFreq: {
     fontSize: 11,
+    fontFamily: FONT_FAMILY.regular,
     marginTop: 2,
   },
   note: {
     fontSize: 12,
+    fontFamily: FONT_FAMILY.regular,
     lineHeight: 17,
   },
 });

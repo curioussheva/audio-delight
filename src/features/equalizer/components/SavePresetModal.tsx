@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { useTheme } from "@/shared/context/ThemeContext";
+import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 
 interface Props {
@@ -152,15 +153,17 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 20,
-    fontWeight: "800",
+    fontFamily: FONT_FAMILY.displayBold,
     marginBottom: 20,
     letterSpacing: 0.5,
+    lineHeight: 28,
   },
   input: {
     padding: 14,
-    borderRadius: 12,
+    borderRadius: BASE_RADIUS.md,
     marginBottom: 24,
     fontSize: 15,
+    fontFamily: FONT_FAMILY.regular,
     borderWidth: 1,
   },
   actions: {
@@ -174,11 +177,11 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   btnText: {
-    fontWeight: "600",
+    fontFamily: FONT_FAMILY.semiBold,
     fontSize: 15,
   },
   saveBtn: {
-    borderRadius: 12,
+    borderRadius: BASE_RADIUS.md,
     paddingVertical: 12,
     paddingHorizontal: 24,
     shadowColor: "#000",
@@ -188,7 +191,7 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   saveBtnText: {
-    fontWeight: "800",
+    fontFamily: FONT_FAMILY.bold,
     fontSize: 15,
   },
 });
