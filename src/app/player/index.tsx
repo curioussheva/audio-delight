@@ -25,6 +25,7 @@ import { SleepTimerModal } from "@/features/player/components/SleepTimerModal";
 import { QueueManager } from "@/features/player/components/QueueManager";
 import { FullLyricsView } from "@/features/player/components/FullLyricsView";
 import { useTheme } from "@/shared/context/ThemeContext";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSafePadding } from "@/shared/hooks/useSafePadding";
 
 // ✅ Parametric bar visualizer (biru→merah mengikuti dB) — ganti
@@ -71,6 +72,18 @@ export default function PlayerScreen() {
   const { theme } = useTheme();
   const { colors, isDark } = theme;
   const safePadding = useSafePadding();
+  // Follow-up P2-7: padding bawah lokal TANPA reservasi +110
+  // FloatingPlayer. useSafePadding() memberi insets.bottom + 110 saat ada
+  // lagu (ruang untuk FloatingPlayer) — tapi layar ini TIDAK merender
+  // FloatingPlayer (hanya layout tab yang merendernya,
+  // (tabs)/_layout.tsx:102), jadi +110 itu dead space di bawah bar
+  // utilitas + mencuri 110dp dari viewport tengah. Hook bersama TIDAK
+  // diubah (tidak ada pemakai lain saat ini, tapi cadangannya tetap benar
+  // untuk layar tab). Dipakai fixedBottom + wadah modal antrean; empty
+  // state dan fixedTop tetap pakai safePadding (tanpa +110 saat tak ada
+  // lagu / hanya paddingTop).
+  const insets = useSafeAreaInsets();
+  const playerBottomPadding = insets.bottom + 20;
   // P2-7: dimensi REAKTIF terhadap rotasi (dulu `Dimensions.get("window")`
   // di level modul — dibekukan saat import). Hook HARUS di atas return
   // kondisional, jangan dipindah ke bawah (U-P0-4: Rules of Hooks).
@@ -610,16 +623,15 @@ export default function PlayerScreen() {
 
       {/* P2-7: kontrol utama + bar utilitas FIXED di bawah (bukan bagian
           ScrollView) — progress, kontrol, info audio, chip, bar utilitas.
-          Urutan/jarak sama seperti sebelumnya. paddingBottom = safe-area
-          + 20 seperti padding konten ScrollView sebelumnya (termasuk
-          reservasi +110 FloatingPlayer dari useSafePadding — layar Player
-          tidak merender FloatingPlayer, tapi jarak dipertahankan supaya
-          posisi visual di layar normal tidak berubah; calon bersih-bersih
-          lanjutan, bukan bagian P2-7 ini). */}
+          Urutan/jarak sama seperti sebelumnya. paddingBottom =
+          playerBottomPadding (safe-area + 20) — TANPA reservasi +110
+          FloatingPlayer dari useSafePadding: layar Player tidak merender
+          FloatingPlayer, jadi +110 itu dead space + mencuri 110dp dari
+          viewport tengah (follow-up P2-7). */}
       <View
         style={[
           styles.fixedBottom,
-          { paddingBottom: safePadding.paddingBottom + 20 },
+          { paddingBottom: playerBottomPadding },
         ]}
       >
         {/* Progress Section — U-P2-11: selama drag, slider menampilkan
@@ -956,7 +968,9 @@ export default function PlayerScreen() {
             {
               backgroundColor: colors.background.primary,
               paddingTop: safePadding.paddingTop,
-              paddingBottom: safePadding.paddingBottom,
+              // Follow-up P2-7: sama seperti fixedBottom — tanpa reservasi
+              // +110 FloatingPlayer (modal ini bagian dari layar Player).
+              paddingBottom: playerBottomPadding,
             },
           ]}
         >
