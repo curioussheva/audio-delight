@@ -12,7 +12,6 @@ import {
 import { LibraryScanner } from "../api/scanner";
 import { useLibraryStore } from "../store/libraryStore";
 import { analyzeBitDepth } from "../../audio/api/BitDepthVerifier";
-import OnlineMetadataService from "./OnlineMetadataService";
 import type { QueueItem, EnrichmentLevel } from "../types/scan";
 import { Song } from "@/shared/types/audio";
 import { isHiRes } from "@/shared/utils/audioQuality";
@@ -115,7 +114,9 @@ export class MetadataEnricher {
   }
 
   /**
-   * INTI PROSES: Level 2 (Tags) -> Level 3 (Audio Analysis) -> Level 4 (Artist Images) -> DB
+   * INTI PROSES (lokal saja): Level 1 & 2 (Tags) -> Level 3 (verifikasi
+   * fake Hi-Res) -> DB. Tidak ada fetch online — online (MusicBrainz +
+   * foto artis) hanya di [id].tsx, dipicu tap user.
    */
   private static async processItem(item: QueueItem): Promise<void> {
     const store = useLibraryStore.getState();
@@ -175,25 +176,11 @@ export class MetadataEnricher {
           last_enriched_at: Date.now(),
         });
 
-        // === LEVEL 4: Online Enrichment (MusicBrainz) ===
-        // Eksekusi secara non-blocking agar antrian lagu selanjutnya tidak tertahan
-        if (metadata.artist && metadata.artist !== "Unknown Artist") {
-          OnlineMetadataService.getArtistEnrichment(metadata.artist)
-            .then((artistData) => {
-              if (artistData.imageUrl) {
-                // Opsional: Kamu bisa buat action di store `store.updateArtistImage(name, url)`
-                console.log(
-                  `[Level 4] Downloaded image for: ${metadata.artist}`,
-                );
-              }
-            })
-            .catch((e) =>
-              console.warn(
-                `[Level 4] Error fetching artist ${metadata.artist}`,
-                e,
-              ),
-            );
-        }
+        // I2-revisi: TIDAK ada Level 4 online di sini lagi — enrichment
+        // hanya lokal (tag + deteksi fake hi-res). Dulu blok ini memanggil
+        // OnlineMetadataService.getArtistEnrichment per lagu (badai 503
+        // di log 2026-11-18) padahal toggle online OFF. Online hanya di
+        // [id].tsx, dipicu tap user.
       }
     } catch (error) {
       console.error(
