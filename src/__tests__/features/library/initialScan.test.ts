@@ -18,16 +18,21 @@ jest.mock("../../../features/library/api/scanner", () => ({
 jest.mock("../../../features/library/services/resumeEnrichment", () => ({
   handleResumeDiffResult: jest.fn(),
 }));
+jest.mock("../../../features/library/services/MetadataEnricher", () => ({
+  MetadataEnricher: { queueSongs: jest.fn() },
+}));
 
 import { runInitialScan } from "../../../features/library/services/initialScan";
 import type { InitialScanStore } from "../../../features/library/services/initialScan";
 import { ScanDiffEngine } from "../../../features/library/services/ScanDiffEngine";
 import { LibraryScanner } from "../../../features/library/api/scanner";
+import { MetadataEnricher } from "../../../features/library/services/MetadataEnricher";
 import { handleResumeDiffResult } from "../../../features/library/services/resumeEnrichment";
 import type { QuickDiffResult } from "../../../features/library/services/ScanDiffEngine";
 
 const quickDiff = ScanDiffEngine.quickDiff as jest.Mock;
 const getLibrarySongs = LibraryScanner.getLibrarySongs as jest.Mock;
+const queueSongs = MetadataEnricher.queueSongs as jest.Mock;
 const handleDiff = handleResumeDiffResult as jest.Mock;
 
 const diff = (over: Partial<QuickDiffResult>): QuickDiffResult => ({
@@ -60,6 +65,7 @@ describe("runInitialScan — S1 + S2-enqueue fix", () => {
     jest.clearAllMocks();
     store = fakeStore();
     getLibrarySongs.mockResolvedValue([{ id: "1" }, { id: "2" }]);
+    queueSongs.mockResolvedValue(2);
     handleDiff.mockResolvedValue(undefined);
   });
 
@@ -124,7 +130,51 @@ describe("runInitialScan — S1 + S2-enqueue fix", () => {
 
     expect(store.setInitialScanCompleted).toHaveBeenCalledTimes(1);
     expect(store.setTracks).not.toHaveBeenCalled();
+    expect(queueSongs).not.toHaveBeenCalled();
     expect(handleDiff).toHaveBeenCalledTimes(1);
     expect(handleDiff).toHaveBeenCalledWith(diffResult);
+  });
+
+  it("N32: setInitialScanCompleted dipanggil SETELAH rantai pasca-diff (bukan sebelumnya)", async () => {
+    const diffResult = diff({ newCount: 1, totalScanned: 1 });
+    quickDiff.mockResolvedValue(diffResult);
+
+    await runInitialScan(store);
+
+    expect(store.setInitialScanCompleted).toHaveBeenCalledTimes(1);
+    expect(handleDiff.mock.invocationCallOrder[0]).toBeLessThan(
+      store.setInitialScanCompleted.mock.invocationCallOrder[0],
+    );
+    expect(queueSongs.mock.invocationCallOrder[0]).toBeLessThan(
+      store.setInitialScanCompleted.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("N32: lagu unenriched dari DB ikut diantre walau diff melaporkan 0 baru (retry sesudah mati di tengah enqueue)", async () => {
+    // quickDiff: lagu sudah ada di DB (bukan baru) — retry sesudah proses
+    // mati di tengah enqueue tidak melihat mereka sebagai baru lagi.
+    const diffResult = diff({ newCount: 0, totalScanned: 2 });
+    quickDiff.mockResolvedValue(diffResult);
+    getLibrarySongs.mockResolvedValue([
+      { id: "1", uri: "content://a", isEnriched: false },
+      { id: "2", uri: "content://b", isEnriched: true },
+    ]);
+
+    await runInitialScan(store);
+
+    expect(queueSongs).toHaveBeenCalledWith([
+      { id: "1", uri: "content://a" },
+    ]);
+    expect(store.setInitialScanCompleted).toHaveBeenCalledTimes(1);
+  });
+
+  it("N32: rantai pasca-diff gagal -> setInitialScanCompleted TIDAK dipanggil (scan perdana diulang lain kali)", async () => {
+    const diffResult = diff({ newCount: 1, totalScanned: 1 });
+    quickDiff.mockResolvedValue(diffResult);
+    handleDiff.mockRejectedValue(new Error("queue penuh"));
+
+    await expect(runInitialScan(store)).rejects.toThrow("queue penuh");
+
+    expect(store.setInitialScanCompleted).not.toHaveBeenCalled();
   });
 });

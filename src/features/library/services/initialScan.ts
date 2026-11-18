@@ -17,6 +17,7 @@
  */
 import { ScanDiffEngine } from "./ScanDiffEngine";
 import { LibraryScanner } from "../api/scanner";
+import { MetadataEnricher } from "./MetadataEnricher";
 import { handleResumeDiffResult } from "./resumeEnrichment";
 
 /**
@@ -35,22 +36,42 @@ export async function runInitialScan(store: InitialScanStore): Promise<void> {
   const diffResult = await ScanDiffEngine.quickDiff(undefined, {
     bypassAutoScanGate: true,
   });
-  store.setInitialScanCompleted();
   // quickDiff menulis DB saja — cerminkan ke store supaya daftar
   // di UI langsung terisi tanpa menunggu foreground refresh.
   // N3: getLibrarySongs kini melempar saat query gagal (bukan [] lagi).
   // Galat sesaat di sini tidak boleh mengosongkan daftar (jangan
   // setTracks) dan tidak boleh menggagalkan rantai pasca-diff — lewati
   // setTracks, lagu baru tetap diantre + worker tetap jalan di bawah.
+  let freshSongs: { id: string; uri: string; isEnriched?: boolean }[] = [];
   try {
-    const freshSongs = await LibraryScanner.getLibrarySongs();
+    freshSongs = await LibraryScanner.getLibrarySongs();
     store.setTracks(freshSongs);
   } catch (error) {
     console.warn("[initialScan] getLibrarySongs gagal, daftar lama dipertahankan:", error);
+  }
+  // N32: antre enrichment dari keadaan DB (lagu unenriched di daftar
+  // segar), bukan hanya dari diff. Bila proses mati / rantai pasca-diff
+  // gagal sesudah quickDiff menulis DB, retry scan perdana tidak lagi
+  // melihat lagu itu sebagai "baru" (sudah ada di DB) sehingga tidak
+  // pernah masuk ScanQueue. Dedupe ScanQueue membuat antrean ganda
+  // tidak berbahaya (lagu yang sama dari diff + daftar segar hanya
+  // masuk sekali). Gagal antre di sini menggagalkan runInitialScan —
+  // flag di bawah tidak ditandai, jadi scan perdana diulang lain kali.
+  const unenriched = freshSongs.filter((s) => !s?.isEnriched);
+  if (unenriched.length > 0) {
+    await MetadataEnricher.queueSongs(
+      unenriched.map((s) => ({ id: s.id, uri: s.uri })),
+    );
   }
   // S2-enqueue fix: teruskan hasil diff ke rantai pasca-diff yang
   // sama dengan resume quickDiff — antre lagu baru + jalankan worker.
   // Tanpa ini, lagu hasil quickscan awal tidak pernah masuk antrean
   // dan enrichment tidak pernah jalan dari fresh install.
   await handleResumeDiffResult(diffResult);
+  // N32: tandai scan perdana selesai HANYA sesudah antrean enrichment
+  // dibuat. Dulu setInitialScanCompleted() jalan sebelum getLibrarySongs
+  // + handleResumeDiffResult — bila proses mati / rantai gagal di antara
+  // keduanya, flag sudah persist true, scan perdana tidak pernah diulang,
+  // dan lagu di DB tidak pernah masuk ScanQueue.
+  store.setInitialScanCompleted();
 }
