@@ -284,7 +284,11 @@ export default function LibraryScreen() {
         if (showRefreshIndicator) setRefreshing(true);
 
         try {
-          const freshSongs = (await LibraryScanner.getLibrarySongs()) ?? [];
+          // N3: getLibrarySongs kini MELEMPAR saat query gagal (bukan []
+          // lagi) — catch di bawah mengembalikan false TANPA setTracks,
+          // jadi satu galat DB sesaat tidak lagi mengosongkan tampilan
+          // library. `?? []` lama dihapus: null tidak pernah dikembalikan.
+          const freshSongs = await LibraryScanner.getLibrarySongs();
           setTracks(freshSongs as any);
           await reload();
           return true;

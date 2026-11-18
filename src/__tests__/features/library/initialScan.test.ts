@@ -114,4 +114,17 @@ describe("runInitialScan — S1 + S2-enqueue fix", () => {
     expect(store.setTracks).not.toHaveBeenCalled();
     expect(handleDiff).not.toHaveBeenCalled();
   });
+
+  it("N3: getLibrarySongs gagal -> setTracks dilewat (daftar lama dipertahankan), rantai pasca-diff tetap jalan", async () => {
+    const diffResult = diff({ newCount: 1, totalScanned: 1 });
+    quickDiff.mockResolvedValue(diffResult);
+    getLibrarySongs.mockRejectedValue(new Error("db locked"));
+
+    await runInitialScan(store);
+
+    expect(store.setInitialScanCompleted).toHaveBeenCalledTimes(1);
+    expect(store.setTracks).not.toHaveBeenCalled();
+    expect(handleDiff).toHaveBeenCalledTimes(1);
+    expect(handleDiff).toHaveBeenCalledWith(diffResult);
+  });
 });

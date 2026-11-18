@@ -386,8 +386,13 @@ export class LibraryScanner {
 
       return rows.map((row: any) => this.dbRowToSong(row));
     } catch (error: any) {
+      // N3: JANGAN kembalikan [] saat query gagal — [] berarti "library
+      // kosong" bagi pemanggil, dan refreshLibrary/[id].tsx/initialScan
+      // menimpa tracks dengan [] sampai refresh berikutnya berhasil.
+      // Galat dilempar supaya pemanggil bisa membedakan "gagal" dari
+      // "kosong" dan membiarkan daftar lama tetap tampil.
       console.error("[LibraryScanner] Query error:", error.message);
-      return [];
+      throw error;
     }
   }
 

@@ -38,8 +38,16 @@ export async function runInitialScan(store: InitialScanStore): Promise<void> {
   store.setInitialScanCompleted();
   // quickDiff menulis DB saja — cerminkan ke store supaya daftar
   // di UI langsung terisi tanpa menunggu foreground refresh.
-  const freshSongs = (await LibraryScanner.getLibrarySongs()) ?? [];
-  store.setTracks(freshSongs);
+  // N3: getLibrarySongs kini melempar saat query gagal (bukan [] lagi).
+  // Galat sesaat di sini tidak boleh mengosongkan daftar (jangan
+  // setTracks) dan tidak boleh menggagalkan rantai pasca-diff — lewati
+  // setTracks, lagu baru tetap diantre + worker tetap jalan di bawah.
+  try {
+    const freshSongs = await LibraryScanner.getLibrarySongs();
+    store.setTracks(freshSongs);
+  } catch (error) {
+    console.warn("[initialScan] getLibrarySongs gagal, daftar lama dipertahankan:", error);
+  }
   // S2-enqueue fix: teruskan hasil diff ke rantai pasca-diff yang
   // sama dengan resume quickDiff — antre lagu baru + jalankan worker.
   // Tanpa ini, lagu hasil quickscan awal tidak pernah masuk antrean
