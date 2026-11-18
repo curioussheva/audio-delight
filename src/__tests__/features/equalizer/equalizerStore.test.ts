@@ -23,6 +23,12 @@ jest.mock("@/features/equalizer/api/nativeInterface", () => ({
   __esModule: true,
   NativeDSPModule: {
     setFullEqualizer: jest.fn(async () => true),
+    // N4: mock ketiga setter efek — applyAllEffectsToNative kini
+    // memanggil keempatnya saat EQ dinyalakan / session berganti.
+    setBassBoost: jest.fn(async () => true),
+    setVirtualizer: jest.fn(async () => true),
+    setReverbPreset: jest.fn(async () => true),
+    releaseAllFX: jest.fn(async () => true),
     createAudioSession: jest.fn(async () => ({ sessionId: -1, isNew: false })),
   },
 }));
@@ -106,5 +112,72 @@ describe("setBandGain store throttle (Fix G)", () => {
     jest.advanceTimersByTime(500);
     expect(gainAt(store, 0)).toBe(0); // tetap flat, bukan 9
     expect(store.getState().activePresetId).toBe("flat");
+  });
+});
+
+describe("N4 — applyAllEffectsToNative mengirim keempat efek", () => {
+  const native = () =>
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("@/features/equalizer/api/nativeInterface").NativeDSPModule as {
+      setFullEqualizer: jest.Mock;
+      setBassBoost: jest.Mock;
+      setVirtualizer: jest.Mock;
+      setReverbPreset: jest.Mock;
+    };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("EQ dinyalakan lagi -> bass/widener/reverb ikut terkirim dengan nilai store", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    await store.getState().setBassBoost(500);
+    await store.getState().setVirtualizer(300);
+    await store.getState().setReverb(2);
+    jest.clearAllMocks();
+
+    await store.getState().setEQEnabled(true);
+
+    const n = native();
+    expect(n.setFullEqualizer).toHaveBeenCalledWith(
+      expect.arrayContaining([0]),
+      7,
+    );
+    expect(n.setBassBoost).toHaveBeenCalledWith(500, 7);
+    expect(n.setVirtualizer).toHaveBeenCalledWith(300, 7);
+    expect(n.setReverbPreset).toHaveBeenCalledWith(2, 7);
+  });
+
+  it("sakelar efek OFF -> efek itu dikirim 0, yang lain tetap nilainya", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    await store.getState().setBassBoost(500);
+    await store.getState().setVirtualizer(300);
+    await store.getState().setBassEnabled(false);
+    jest.clearAllMocks();
+
+    await store.getState().setEQEnabled(true);
+
+    const n = native();
+    expect(n.setBassBoost).toHaveBeenCalledWith(0, 7);
+    expect(n.setVirtualizer).toHaveBeenCalledWith(300, 7);
+  });
+
+  it("satu efek gagal -> efek lain tetap terkirim", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    await store.getState().setBassBoost(500);
+    await store.getState().setVirtualizer(300);
+    const n = native();
+    jest.clearAllMocks();
+    n.setVirtualizer.mockRejectedValueOnce(new Error("bridge down"));
+
+    await store.getState().setEQEnabled(true);
+
+    expect(n.setFullEqualizer).toHaveBeenCalled();
+    expect(n.setBassBoost).toHaveBeenCalledWith(500, 7);
+    expect(n.setVirtualizer).toHaveBeenCalledWith(300, 7);
+    expect(n.setReverbPreset).toHaveBeenCalled();
   });
 });

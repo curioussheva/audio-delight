@@ -49,8 +49,29 @@ const getCurrentSessionId = async (): Promise<number> => {
 };
 
 // Helper untuk apply semua efek ke native dengan individual try-catch
+// N4: fungsi ini bernama "AllEffects" tapi dulu HANYA mengirim gain 10
+// band — matikan EQ lalu nyalakan lagi (atau ganti session): store masih
+// menyimpan bassStrength/virtualizerLevel/reverbPreset > 0 dan UI
+// menampilkannya aktif, tapi native tidak pernah menerima ketiganya.
+// Sekarang keempat efek dikirim (EQ + bass + virtualizer + reverb),
+// masing-masing try/catch sendiri supaya satu efek yang gagal tidak
+// membatalkan yang lain. Nilai 0 dikirim bila sakelar efeknya OFF.
+// (service.ts lama yang berisi applyAllSettings SUDAH DIHAPUS atas
+// putusan csheva — logika restore-nya ditulis ulang di sini, file itu
+// tidak dikembalikan. Jeda 300 ms dari applyAllSettings lama TIDAK
+// ikut dibawa: jalur live ini tidak pernah memilikinya.)
 const applyAllEffectsToNative = async (state: any) => {
-  const { bands, isEQEnabled, audioSessionId } = state;
+  const {
+    bands,
+    isEQEnabled,
+    isBassEnabled,
+    isVirtualizerEnabled,
+    isReverbEnabled,
+    bassStrength,
+    virtualizerLevel,
+    reverbPreset,
+    audioSessionId,
+  } = state;
 
   if (!NativeDSPModule || !isEQEnabled) return false;
 
@@ -66,18 +87,45 @@ finalSessionId = sessionResult?.sessionId ?? 0;
 
   if (finalSessionId <= 0) return false;
 
-  try {
-    // Ingat: Di Java, gains ini harus dikali 100
-    // (B14-M-H2): clamp di corong ke native — state seharusnya sudah
-    // ter-clamp (applyPreset/migrate), ini pertahanan terakhir supaya
-    // tidak ada jalur yang mengirim gain di luar ±10.
-    const gains = bands.map((b: any) => clampBandGain(b.gain));
-    await NativeDSPModule.setFullEqualizer(gains, finalSessionId);
-    console.log(`[DSP] Applied to Session: ${finalSessionId}`);
-  } catch (e) {
-    console.error("[EQ Store] Failed to apply:", e);
-  }
-  return true;
+  // Ingat: Di Java, gains ini harus dikali 100
+  // (B14-M-H2): clamp di corong ke native — state seharusnya sudah
+  // ter-clamp (applyPreset/migrate), ini pertahanan terakhir supaya
+  // tidak ada jalur yang mengirim gain di luar ±10.
+  const gains = bands.map((b: any) => clampBandGain(b.gain));
+  // Clamp efek juga di corong (state lama bisa membawa nilai di luar
+  // rentang setter): bass/virtualizer 0..1000, reverb 0..6.
+  const bass = isBassEnabled
+    ? Math.min(1000, Math.max(0, bassStrength ?? 0))
+    : 0;
+  const virtualizer = isVirtualizerEnabled
+    ? Math.min(1000, Math.max(0, virtualizerLevel ?? 0))
+    : 0;
+  const reverb = isReverbEnabled
+    ? Math.min(6, Math.max(0, reverbPreset ?? 0))
+    : 0;
+
+  const effects: Array<[string, () => Promise<unknown>]> = [
+    ["setFullEqualizer", () => NativeDSPModule.setFullEqualizer(gains, finalSessionId)],
+    ["setBassBoost", () => NativeDSPModule.setBassBoost(bass, finalSessionId)],
+    ["setVirtualizer", () => NativeDSPModule.setVirtualizer(virtualizer, finalSessionId)],
+    // Reverb tetap dikirim walau native-nya stub (keputusan csheva
+    // 2026-11-14: stub resolve false, tidak mengubah suara) — supaya
+    // saat engine reverb beneran ada, restore ini langsung bekerja.
+    ["setReverbPreset", () => NativeDSPModule.setReverbPreset(reverb, finalSessionId)],
+  ];
+  const results = await Promise.all(
+    effects.map(async ([name, apply]) => {
+      try {
+        await apply();
+        return true;
+      } catch (e) {
+        console.error(`[EQ Store] Failed to apply ${name}:`, e);
+        return false;
+      }
+    }),
+  );
+  console.log(`[DSP] Applied to Session: ${finalSessionId}`);
+  return results.every(Boolean);
 };
 
 // ─────────────────────────────────────────────
