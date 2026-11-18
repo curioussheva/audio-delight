@@ -44,3 +44,28 @@ describe("ScanStatusBar — banner notif hijau dimatikan", () => {
     expect(code).toContain("in background...");
   });
 });
+
+describe("ScanStatusBar — banner duduk di bawah status bar", () => {
+  it("memakai inset safe-area atas (bukan y=0)", () => {
+    expect(code).toContain("useSafeAreaInsets");
+    expect(code).toContain("react-native-safe-area-context");
+    // Definisi paddingTop dari inset (bukan angka hardcoded).
+    expect(code).toMatch(/paddingTop:\s*insets\.top/);
+  });
+
+  it("ketiga cabang progres memakai paddingTop inset yang sama", () => {
+    // safeTop didefinisikan sekali (paddingTop: insets.top + 12,
+    // mempertahankan paddingVertical container 12) lalu dipakai
+    // di ketiga style array cabang: 1 definisi + 3 pemakaian.
+    const hits = code.match(/safeTop/g) ?? [];
+    expect(hits.length).toBe(4);
+  });
+
+  it("isi dan warna banner tidak berubah", () => {
+    // Tidak ada yang dimatikan/diubah selain posisi: ketiga cabang
+    // tetap ada (diuji di atas) dan backgroundColor tiap cabang utuh.
+    expect(code).toContain("colors.primary[500]");
+    expect(code).toContain("colors.status.success");
+    expect(code).toContain('colors.status.success + "dd"');
+  });
+});

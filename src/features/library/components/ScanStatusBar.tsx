@@ -2,6 +2,7 @@
 
 import React from "react";
 import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useScanManager } from "../hooks/useScanManager";
 import { Sparkles, Loader2 } from "lucide-react-native"; // ➕ Gunakan icon yang berputar
 import { useTheme } from "@/shared/context/ThemeContext";
@@ -9,6 +10,13 @@ import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 
 export function ScanStatusBar() {
   const { colors } = useTheme().theme;
+
+  // Banner duduk di bawah status bar (keputusan csheva 2026-11-18:
+  // "pindah saja dulu") — ikuti pola header Library (library.tsx:
+  // paddingTop: insets.top + 8). +12 mempertahankan paddingVertical
+  // container (12) yang sudah ada, jadi isi banner tidak berubah.
+  const insets = useSafeAreaInsets();
+  const safeTop = { paddingTop: insets.top + 12 };
 
   // Teks/ikon di atas bar primary[500] dan status.success — dipilih dari
   // luminansi latar (putih 2,24:1 / 2,48:1 di Noir, hitam 9,37:1 / 8,45:1),
@@ -32,7 +40,11 @@ export function ScanStatusBar() {
   if (isAutoScanning) {
     return (
       <View
-        style={[styles.container, { backgroundColor: colors.primary[500] }]}
+        style={[
+          styles.container,
+          safeTop,
+          { backgroundColor: colors.primary[500] },
+        ]}
       >
         <ActivityIndicator size="small" color={onPrimary} />
         <Text style={[styles.text, { color: onPrimary }]} numberOfLines={1}>
@@ -49,7 +61,11 @@ export function ScanStatusBar() {
     const { current, total, currentSong } = enrichmentProgress;
     return (
       <View
-        style={[styles.container, { backgroundColor: colors.status.success }]}
+        style={[
+          styles.container,
+          safeTop,
+          { backgroundColor: colors.status.success },
+        ]}
       >
         <ActivityIndicator size="small" color={onSuccess} />
         <View style={styles.textContainer}>
@@ -78,6 +94,7 @@ export function ScanStatusBar() {
       <View
         style={[
           styles.container,
+          safeTop,
           { backgroundColor: colors.status.success + "dd" },
         ]}
       >
