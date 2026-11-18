@@ -17,8 +17,14 @@ export interface VisibleSections {
 export const DEFAULT_VISIBLE_SECTIONS: VisibleSections = {
   graph: true,
   effects: true,
-  mixer: true,
-  headphone: true,
+  // Declutter 2026-11-18: koreksi headphone + detail band default
+  // tertutup — koreksi di-set sekali per perangkat (jarang diubah), dan
+  // band bisa diedit langsung dari grafik (drag). Toggle tetap ada;
+  // pilihan tersimpan pengguna tidak ditimpa (parse: stored false tetap
+  // sembunyi, stored true tetap tampil — hanya instalasi/pengguna tanpa
+  // nilai tersimpan yang kena default baru).
+  mixer: false,
+  headphone: false,
   preset: true,
 };
 

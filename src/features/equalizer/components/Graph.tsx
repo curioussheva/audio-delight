@@ -6,6 +6,7 @@ import {
   Canvas,
   Path,
   Circle,
+  DashPathEffect,
   LinearGradient,
   vec,
   BlurMask,
@@ -38,6 +39,14 @@ import {
 
 interface Props {
   bands: SharedValue<EqualizerBand[]> | EqualizerBand[]; // Terima dua-duanya agar fleksibel
+  /**
+   * Gain gabungan (koreksi headphone + EQ manual) per titik band, dalam dB
+   * — dihitung pemanggil dari `combinedCurveGains`. null = tidak ada
+   * koreksi yang bisa digambar. Kurva gabungan read-only (garis
+   * putus-putus) dan juga dipakai untuk peringatan clip — itulah yang
+   * jujur (yang didengar), bukan kurva EQ saja.
+   */
+  combinedGains?: readonly number[] | null;
   width?: number;
   height?: number;
   /** Bekukan tampilan saat DSP bypass (B3): graph meredup. */
@@ -55,6 +64,7 @@ const HZ_STRIP = 16;
 
 export const FrequencyGraph: React.FC<Props> = ({
   bands,
+  combinedGains,
   width = 340,
   height = 120,
   disabled,
@@ -128,12 +138,17 @@ export const FrequencyGraph: React.FC<Props> = ({
   //   antar band), jadi overlay menempel persis di kurva.
   // - maxGain: gain band terbesar, untuk teks peringatan (dicerminkan ke
   //   React state lewat useAnimatedReaction di bawah).
+  // - combinedCurve: kurva gabungan (koreksi + EQ) sebagai polyline dari
+  //   sampel kurva halus yang sama — digambar putus-putus, read-only.
+  //   Bila kurva gabungan ada, overlay + maxGain memakai gain GABUNGAN
+  //   (displayGains), bukan kurva EQ saja — itulah yang didengar.
   const paths = useDerivedValue(() => {
     const empty = {
       curve: Skia.Path.Make(),
       fill: Skia.Path.Make(),
       aboveWarn: Skia.Path.Make(),
       aboveClip: Skia.Path.Make(),
+      combinedCurve: Skia.Path.Make(),
       maxGain: 0,
     };
     // PROTEKSI: Cek apakah bands ada
@@ -170,10 +185,19 @@ export const FrequencyGraph: React.FC<Props> = ({
 
     // Potongan kurva di atas 0 dB — sampel kurva yang sama, lalu pisah
     // per zona warna. Satu run = satu subpath (moveTo di titik pertama).
+    // Gain yang dipakai = gabungan bila ada (yang didengar), EQ saja bila
+    // tidak. Kurva gabungan bisa melewati batas ±10 dB tampilan (mis.
+    // Kunten +10 dB di 9 kHz + boost EQ) — Skia memotong gambar ke
+    // batas Canvas, jadi layout tetap rapi.
     const gains = currentBands.map((b) => b.gain);
-    const maxGain = Math.max(...gains);
+    const hasCombined =
+      !!combinedGains && combinedGains.length === gains.length;
+    const displayGains: readonly number[] = hasCombined
+      ? (combinedGains as readonly number[])
+      : gains;
+    const maxGain = Math.max(...displayGains);
     const runs = splitAboveZero(
-      sampleSmoothCurve(gains, width, midY, verticalScale),
+      sampleSmoothCurve(displayGains, width, midY, verticalScale),
     );
     const toPath = (polylines: { x: number; y: number }[][]) => {
       const p = Skia.Path.Make();
@@ -186,11 +210,27 @@ export const FrequencyGraph: React.FC<Props> = ({
       return p;
     };
 
+    // Path kurva gabungan dari sampel yang sama (polyline halus).
+    const combinedCurve = Skia.Path.Make();
+    if (hasCombined) {
+      const samples = sampleSmoothCurve(
+        displayGains,
+        width,
+        midY,
+        verticalScale,
+      );
+      samples.forEach((pt, j) => {
+        if (j === 0) combinedCurve.moveTo(pt.x, pt.y);
+        else combinedCurve.lineTo(pt.x, pt.y);
+      });
+    }
+
     return {
       curve: skPath,
       fill: fillPath,
       aboveWarn: toPath(runs.warn),
       aboveClip: toPath(runs.clip),
+      combinedCurve,
       maxGain,
     };
   });
@@ -202,6 +242,7 @@ export const FrequencyGraph: React.FC<Props> = ({
   const curvePath = useDerivedValue(() => paths.value.curve);
   const aboveWarnPath = useDerivedValue(() => paths.value.aboveWarn);
   const aboveClipPath = useDerivedValue(() => paths.value.aboveClip);
+  const combinedCurvePath = useDerivedValue(() => paths.value.combinedCurve);
 
   // Gain maksimum dicerminkan ke React state (hanya saat berubah) untuk
   // teks peringatan — pola yang sama dengan frekuensi dominan di
@@ -220,6 +261,9 @@ export const FrequencyGraph: React.FC<Props> = ({
     () => ({
       primary: theme.colors.primary[500],
       accent: accentOn([theme.colors.accent.blue], theme.colors.background.secondary, [theme.colors.text.primary]),
+      // Kurva gabungan: oranye (beda dari gradien biru kurva EQ) + garis
+      // putus-putus, supaya keduanya bisa dibedakan walau warnanya dekat.
+      combined: accentOn([theme.colors.accent.orange], theme.colors.background.secondary, [theme.colors.text.primary]),
       fillGradient: [
         `${theme.colors.primary[500]}44`,
         "transparent",
@@ -289,8 +333,23 @@ export const FrequencyGraph: React.FC<Props> = ({
               <BlurMask blur={3} style="solid" />
             </Path>
 
+            {/* Kurva gabungan (koreksi + EQ) — garis putus-putus,
+                read-only. Path kosong bila tidak ada koreksi yang
+                bisa digambar (tidak merender apa pun). */}
+            <Path
+              path={combinedCurvePath}
+              style="stroke"
+              strokeWidth={2}
+              strokeJoin="round"
+              strokeCap="round"
+              color={colors.combined}
+            >
+              <DashPathEffect intervals={[8, 6]} phase={0} />
+            </Path>
+
             {/* Potongan kurva di atas 0 dB — overlay tanpa blur supaya warna
-            peringatan terbaca jelas: kuning 0..+6 dB, merah > +6 dB. */}
+            peringatan terbaca jelas: kuning 0..+6 dB, merah > +6 dB.
+            Mengikuti gain gabungan bila kurva gabungan tampil. */}
             <Path
               path={aboveWarnPath}
               color={GRAPH_CLIP_YELLOW}

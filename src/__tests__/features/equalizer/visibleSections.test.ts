@@ -4,6 +4,16 @@ import {
 } from "@/features/equalizer/utils/visibleSections";
 
 describe("parseVisibleSections", () => {
+  it("default baru (declutter 2026-11-18): headphone + mixer tertutup", () => {
+    expect(DEFAULT_VISIBLE_SECTIONS).toEqual({
+      graph: true,
+      effects: true,
+      mixer: false,
+      headphone: false,
+      preset: true,
+    });
+  });
+
   it("mengembalikan default bila tidak ada nilai tersimpan", () => {
     expect(parseVisibleSections(null)).toEqual(DEFAULT_VISIBLE_SECTIONS);
     expect(parseVisibleSections("")).toEqual(DEFAULT_VISIBLE_SECTIONS);

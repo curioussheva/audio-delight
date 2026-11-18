@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -19,8 +19,6 @@ import {
   RotateCcw,
   Eye,
   EyeOff,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react-native";
 
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -45,6 +43,11 @@ import { ControlKnob } from "@/features/equalizer/components/ControlKnob";
 import { PresetChip } from "@/features/equalizer/components/PresetChip";
 import { SavePresetModal } from "@/features/equalizer/components/SavePresetModal";
 import { HeadphoneSection } from "@/features/headphone/components/HeadphoneSection";
+import { useHeadphoneCorrection } from "@/features/headphone/hooks/useHeadphoneCorrection";
+import {
+  combinedCurveGains,
+  parseCorrectionPresetText,
+} from "@/features/equalizer/api/correctionResponse";
 import { MODE_INFO } from "@/features/equalizer/api/modeInfo";
 import { SolfeggioSubscreen } from "@/features/equalizer/components/SolfeggioSubscreen";
 import { BitPerfectSubscreen } from "@/features/equalizer/components/BitPerfectSubscreen";
@@ -66,17 +69,6 @@ if (
 }
 
 const { width } = Dimensions.get("window");
-// D2: label reverb Bahasa Indonesia (dulu Inggris di tengah UI Indonesia).
-// "Plate" tetap — itu nama jenis reverb, bukan ukuran ruang.
-const REVERB_LABELS = [
-  "Tanpa Reverb",
-  "Ruang Kecil",
-  "Ruang Sedang",
-  "Ruang Besar",
-  "Aula Sedang",
-  "Aula Besar",
-  "Plate",
-];
 
 /** Label mode yang jujur - dibaca dari state, bukan dikarang di UI. */
 const MODE_LABELS: Record<string, string> = {
@@ -351,6 +343,59 @@ export default function EqualizerScreen() {
   // Mode apa pun selain `dsp` membekukan kontrol di layar ini.
   const isDSPFrozen = audioMode !== "dsp";
 
+  // Koreksi headphone — dipasang di level layar (bukan hanya di
+  // HeadphoneSection) supaya sinkronisasi perangkat tetap jalan walau
+  // seksi Headphone tertutup, dan supaya layar ini bisa menggambar kurva
+  // gabungan (koreksi + EQ). Dua pemakai hook yang sama tidak masalah:
+  // efeknya idempotent dan membaca store yang sama.
+  const { activeProfile, enabled: correctionEnabled } =
+    useHeadphoneCorrection();
+
+  // Kurva gabungan (koreksi + EQ) — dihitung dari teks preset profil
+  // aktif. `HeadphoneProfile.filters` selalu kosong (importPreset
+  // menyimpannya tanpa rincian), jadi parse dari presetText di sini;
+  // gagal parse -> null -> kurva gabungan disembunyikan, bukan ditebak.
+  // Profil yang filternya sudah terisi (di masa depan) dipakai langsung.
+  const correctionForCurve = useMemo(() => {
+    if (!activeProfile) return null;
+    if (activeProfile.filters.length > 0) {
+      return {
+        filters: activeProfile.filters,
+        preampDb: activeProfile.preampDb,
+      };
+    }
+    const parsed = parseCorrectionPresetText(activeProfile.presetText);
+    return parsed && parsed.filters.length > 0 ? parsed : null;
+  }, [activeProfile]);
+
+  // Koreksi benar-benar memproses hanya bila mode DSP + sakelar master
+  // menyala + koreksi aktif + ada profil. Di luar itu kurva gabungan
+  // disembunyikan (tidak menduplikasi kurva EQ).
+  const correctionProcessing =
+    audioMode === "dsp" &&
+    eq.isEQEnabled &&
+    correctionEnabled &&
+    activeProfile !== null;
+  const showCombinedCurve =
+    correctionProcessing && correctionForCurve !== null;
+  const combinedGains = useMemo(
+    () =>
+      showCombinedCurve && correctionForCurve
+        ? combinedCurveGains(eq.currentBands, correctionForCurve)
+        : null,
+    [showCombinedCurve, correctionForCurve, eq.currentBands],
+  );
+
+  // Keterangan di bawah grafik — menyebut apa yang ditampilkan, bukan
+  // menebak. Cabang tengah: koreksi aktif tapi teks presetnya tidak bisa
+  // di-parse (kurva gabungan tidak tersedia, bukan salah tampil).
+  const graphCaption =
+    showCombinedCurve && activeProfile
+      ? `Garis utuh: EQ manual · Garis putus-putus: koreksi ${activeProfile.name} + EQ (yang kamu dengar)`
+      : correctionProcessing && activeProfile
+        ? `Koreksi ${activeProfile.name} aktif — kurva gabungan tidak tersedia (profil tanpa rincian filter)`
+        : "Kurva EQ manual — koreksi headphone tidak aktif";
+
   // Warna aksen dipilih lewat pengukuran terhadap permukaan tempat ia dipakai.
   //
   // Rantai lama (`accent?.orange ?? status.warning ?? primary[500]`) gagal
@@ -369,11 +414,6 @@ export default function EqualizerScreen() {
   );
   const widthColor = accentOn(
     [colors.accent.blue],
-    onCard,
-    accentTextFallback,
-  );
-  const reverbColor = accentOn(
-    [colors.accent.purple],
     onCard,
     accentTextFallback,
   );
@@ -632,9 +672,11 @@ export default function EqualizerScreen() {
             <HeadphoneSection disabled={eq.isDSPDisabled} />
           )}
 
-          {/* 2. GRAPH SECTION — B3: saat DSP bypass (mode non-DSP atau
-              sakelar master mati), graph meredup + label BYPASS supaya
-              kurva tidak terlihat seolah memproses. */}
+          {/* 2. KARTU GRAFIK — satu unit edit EQ (declutter 2026-11-18):
+              preset + grafik + detail band. Preset langsung mengubah
+              grafik, jadi chip-nya di dalam kartu yang sama, bukan seksi
+              terpisah. Grafik bisa diseret (edit utama); slider band
+              tinggal di "DETAIL BAND" yang bisa dilipat. */}
           {visibleSections.graph && (
             <View
               style={[
@@ -648,8 +690,92 @@ export default function EqualizerScreen() {
                 },
               ]}
             >
+              {/* Preset — di atas grafik (kontrol dulu, baru hasilnya). */}
+              {visibleSections.preset && (
+                <View style={styles.graphPreset}>
+                  <View
+                    style={[
+                      styles.sectionHeader,
+                      { marginBottom: spacing.sm },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.sectionTitle,
+                        { color: colors.text.secondary },
+                      ]}
+                    >
+                      PROFIL SUARA
+                    </Text>
+                    {/* D5: tombol simpan berteks, bukan ikon saja. */}
+                    <TouchableOpacity
+                      onPress={() => setModalVisible(true)}
+                      disabled={eq.isDSPDisabled}
+                      accessibilityRole="button"
+                      accessibilityLabel="Simpan profil saat ini"
+                      style={[
+                        styles.iconBtn,
+                        eq.isDSPDisabled && { opacity: 0.4 },
+                      ]}
+                    >
+                      <Save size={18} color={colors.text.primary} />
+                      <Text
+                        style={[
+                          styles.saveBtnText,
+                          { color: colors.text.primary },
+                        ]}
+                      >
+                        Simpan
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  {/* U-P2-45: hapus preset custom lewat long-press DULU
+                      tanpa petunjuk apa pun — user tidak bisa tahu
+                      aksinya ada. (Penghapusannya sendiri sudah benar:
+                      Alert konfirmasi + hanya untuk preset custom.) */}
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.presetScroll}
+                    contentContainerStyle={{ paddingRight: spacing.sm }}
+                  >
+                    {eq.allPresets.map((p) => (
+                      <PresetChip
+                        key={p.id}
+                        label={p.name}
+                        isActive={eq.activePresetId === p.id}
+                        onPress={() => eq.applyPreset(p.id)}
+                        onLongPress={() =>
+                          handlePresetLongPress(p.id, p.name, p.isCustom)
+                        }
+                        accessibilityHint={
+                          p.isCustom
+                            ? "Tekan lama untuk menghapus"
+                            : undefined
+                        }
+                        disabled={eq.isDSPDisabled}
+                      />
+                    ))}
+                  </ScrollView>
+                  <Text
+                    style={[
+                      styles.presetHint,
+                      {
+                        color: colors.text.tertiary,
+                        marginTop: spacing.xs,
+                      },
+                    ]}
+                  >
+                    Tekan lama untuk menghapus.
+                  </Text>
+                </View>
+              )}
+              {/* GRAPH SECTION — B3: saat DSP bypass (mode non-DSP atau
+                  sakelar master mati), graph meredup + label BYPASS supaya
+                  kurva tidak terlihat seolah memproses. */}
               <FrequencyGraph
                 bands={eq.currentBands}
+                combinedGains={combinedGains}
                 width={width - spacing.md * 2 - spacing.sm * 2 - 2}
                 height={140}
                 disabled={isDSPFrozen || !eq.isEQEnabled}
@@ -667,151 +793,58 @@ export default function EqualizerScreen() {
                   BYPASS — kurva tidak memproses
                 </Text>
               )}
-            </View>
-          )}
-
-          {/* 3. MIXER SECTION */}
-          {visibleSections.mixer && (
-            <View
-              style={[
-                styles.mixerBoard,
-                {
-                  backgroundColor: colors.background.secondary,
-                  borderColor: colors.border.medium,
-                  marginHorizontal: spacing.md,
-                  paddingVertical: spacing.md,
-                  marginBottom: spacing.xl,
-                },
-              ]}
-            >
-              {/* F3: penjelasan di tempat kontrolnya, bukan cuma di banner
-                  atas yang bisa ter-scroll menjauh. */}
-              {eq.isDSPDisabled && (
-                <Text
+              {/* Keterangan kurva (lihat graphCaption di atas). */}
+              <Text
+                style={[
+                  styles.graphCaption,
+                  { color: colors.text.tertiary },
+                ]}
+              >
+                {graphCaption}
+              </Text>
+              {/* DETAIL BAND — slider band sebagai sub-bagian yang bisa
+                  dilipat (toggle MIXER). Grafik drag tetap edit utama;
+                  slider untuk presisi per band. */}
+              {visibleSections.mixer && (
+                <View
                   style={[
-                    styles.disabledCaption,
-                    {
-                      color: colors.text.tertiary,
-                      paddingHorizontal: spacing.md,
-                      marginBottom: spacing.sm,
-                    },
+                    styles.bandDetail,
+                    { borderTopColor: colors.border.medium },
                   ]}
                 >
-                  Nonaktif di mode ini — pindah ke DSP untuk menyetel.
-                </Text>
-              )}
-              {/* U-P2-53: daftar band lewat pola daftar bersama. Jalur yang
-                  dipilih tetap FlatList (horizontal + bersarang di
-                  ScrollView — lihat chooseListKind); `directionalLockEnabled`
-                  dipertahankan supaya tidak bentrok dengan scroll utama. */}
-              <ScreenList
-                horizontal
-                nestedInScrollView
-                showsHorizontalScrollIndicator={false}
-                data={eq.currentBands}
-                keyExtractor={(item) => item.frequency.toString()}
-                renderItem={({ item, index }) => (
-                  <EqualizerBand
-                    frequency={item.frequency}
-                    gain={item.gain}
-                    onValueChange={(v) => eq.updateBandGain(index, v)}
-                    disabled={!eq.isEQEnabled || eq.isDSPDisabled}
+                  <Text
+                    style={[
+                      styles.detailBandTitle,
+                      { color: colors.text.secondary },
+                    ]}
+                  >
+                    DETAIL BAND
+                  </Text>
+                  {/* U-P2-53: daftar band lewat pola daftar bersama.
+                      Jalur yang dipilih tetap FlatList (horizontal +
+                      bersarang di ScrollView — lihat chooseListKind);
+                      `directionalLockEnabled` dipertahankan supaya tidak
+                      bentrok dengan scroll utama. */}
+                  <ScreenList
+                    horizontal
+                    nestedInScrollView
+                    showsHorizontalScrollIndicator={false}
+                    data={eq.currentBands}
+                    keyExtractor={(item) => item.frequency.toString()}
+                    renderItem={({ item, index }) => (
+                      <EqualizerBand
+                        frequency={item.frequency}
+                        gain={item.gain}
+                        onValueChange={(v) => eq.updateBandGain(index, v)}
+                        disabled={!eq.isEQEnabled || eq.isDSPDisabled}
+                      />
+                    )}
+                    contentContainerStyle={{ paddingHorizontal: spacing.sm }}
+                    directionalLockEnabled={true}
                   />
-                )}
-                contentContainerStyle={{ paddingHorizontal: spacing.sm }}
-                directionalLockEnabled={true}
-              />
+                </View>
+              )}
             </View>
-          )}
-          {visibleSections.preset && (
-            <>
-          {/* 4. PRESETS */}
-          <View
-            style={[
-              styles.sectionHeader,
-              { paddingHorizontal: spacing.md, marginBottom: spacing.sm },
-            ]}
-          >
-            <Text style={[styles.sectionTitle, { color: colors.text.secondary }]}>
-              PROFIL SUARA
-            </Text>
-            {/* D5: tombol simpan berteks, bukan ikon saja. */}
-            <TouchableOpacity
-              onPress={() => setModalVisible(true)}
-              disabled={eq.isDSPDisabled}
-              accessibilityRole="button"
-              accessibilityLabel="Simpan profil saat ini"
-              style={[
-                styles.iconBtn,
-                eq.isDSPDisabled && { opacity: 0.4 },
-              ]}
-            >
-              <Save size={18} color={colors.text.primary} />
-              <Text
-                style={[styles.saveBtnText, { color: colors.text.primary }]}
-              >
-                Simpan
-              </Text>
-            </TouchableOpacity>
-          </View>
-          {/* F3: penjelasan di tempat kontrolnya, bukan cuma di banner
-              atas yang bisa ter-scroll menjauh. */}
-          {eq.isDSPDisabled && (
-            <Text
-              style={[
-                styles.disabledCaption,
-                {
-                  color: colors.text.tertiary,
-                  paddingHorizontal: spacing.md,
-                  marginBottom: spacing.sm,
-                },
-              ]}
-            >
-              Nonaktif di mode ini — pindah ke DSP untuk menyetel.
-            </Text>
-          )}
-          {/* U-P2-45: hapus preset custom lewat long-press DULU tanpa
-              petunjuk apa pun — user tidak bisa tahu aksinya ada.
-              (Penghapusannya sendiri sudah benar: Alert konfirmasi +
-              hanya untuk preset custom.) */}
-          <Text
-            style={[
-              styles.presetHint,
-              {
-                color: colors.text.tertiary,
-                paddingHorizontal: spacing.md,
-                marginBottom: spacing.sm,
-              },
-            ]}
-          >
-            Tekan lama untuk menghapus.
-          </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={[
-              styles.presetScroll,
-              { paddingLeft: spacing.md, marginBottom: spacing.lg },
-            ]}
-            contentContainerStyle={{ paddingRight: spacing.md }}
-          >
-            {eq.allPresets.map((p) => (
-              <PresetChip
-                key={p.id}
-                label={p.name}
-                isActive={eq.activePresetId === p.id}
-                onPress={() => eq.applyPreset(p.id)}
-                onLongPress={() =>
-                  handlePresetLongPress(p.id, p.name, p.isCustom)
-                }
-                accessibilityHint={
-                  p.isCustom ? "Tekan lama untuk menghapus" : undefined
-                }
-                disabled={eq.isDSPDisabled}
-              />
-            ))}
-          </ScrollView>
-            </>
           )}
 
           {/* 5. EFFECTS SECTION (SLIDERS & REVERB) */}
@@ -897,100 +930,14 @@ export default function EqualizerScreen() {
                 </View>
               </View>
 
-              {/* REVERB PRESET SELECTOR */}
-              <View
-                style={[
-                  styles.effectItem,
-                  {
-                    backgroundColor: colors.background.secondary,
-                    borderColor: colors.border.medium,
-                    paddingVertical: spacing.md,
-                  },
-                ]}
-              >
-                <MiniSwitch
-                  label="REVERB LINGKUNGAN"
-                  value={eq.isReverbEnabled}
-                  onValueChange={eq.setReverbEnabled}
-                  disabled={eq.isDSPDisabled}
-                  color={reverbColor}
-                />
-                {/* U-P2-40: kontrol reverb DULU hanya bisa maju — satu tombol
-                    dengan ChevronRight menyiratkan membuka daftar, padahal
-                    ketukan hanya memajukan preset (sampai 6 ketukan untuk
-                    kembali). Sekarang ada tombol mundur eksplisit di kiri;
-                    ChevronRight di kanan jujur berarti "berikutnya". */}
-                <View
-                  style={[
-                    styles.reverbRow,
-                    { marginHorizontal: spacing.md, marginTop: spacing.sm },
-                  ]}
-                >
-                  <TouchableOpacity
-                    onPress={() => {
-                      const prev =
-                        (eq.reverbPreset - 1 + REVERB_LABELS.length) %
-                        REVERB_LABELS.length;
-                      eq.setReverb(prev);
-                    }}
-                    disabled={!eq.isReverbEnabled || eq.isDSPDisabled}
-                    style={[
-                      styles.reverbStepBtn,
-                      {
-                        backgroundColor: colors.background.tertiary,
-                        borderColor: colors.border.medium,
-                      },
-                      (!eq.isReverbEnabled || eq.isDSPDisabled) && {
-                        opacity: 0.4,
-                      },
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Preset reverb sebelumnya: ${REVERB_LABELS[(eq.reverbPreset - 1 + REVERB_LABELS.length) % REVERB_LABELS.length]}`}
-                  >
-                    <ChevronLeft size={16} color={colors.text.secondary} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.reverbBox,
-                      {
-                        backgroundColor: colors.background.tertiary,
-                        borderColor: colors.border.medium,
-                        padding: spacing.md,
-                        minHeight: 44,
-                        flex: 1,
-                      },
-                      (!eq.isReverbEnabled || eq.isDSPDisabled) && {
-                        opacity: 0.4,
-                      },
-                    ]}
-                    disabled={!eq.isReverbEnabled || eq.isDSPDisabled}
-                    onPress={() => {
-                      const next =
-                        (eq.reverbPreset + 1) % REVERB_LABELS.length;
-                      eq.setReverb(next);
-                    }}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Reverb: ${REVERB_LABELS[eq.reverbPreset]}. Ketuk untuk preset berikutnya, tombol kiri untuk sebelumnya.`}
-                  >
-                    <Text
-                      style={[
-                        styles.reverbLabel,
-                        { color: colors.text.secondary },
-                      ]}
-                    >
-                      LINGKUNGAN
-                    </Text>
-                    <View style={styles.reverbValueRow}>
-                      <Text
-                        style={[styles.reverbValue, { color: reverbColor }]}
-                      >
-                        {REVERB_LABELS[eq.reverbPreset]}
-                      </Text>
-                      <ChevronRight size={16} color={colors.text.secondary} />
-                    </View>
-                  </TouchableOpacity>
-                </View>
-              </View>
+              {/* REVERB — DISEMBUNYIKAN 2026-11-18 (declutter layar EQ).
+                  Engine reverb masih STUB (keputusan 2026-11-14):
+                  `setReverbPreset` native tidak memproses apa pun, jadi
+                  kontrolnya tidak ditampilkan supaya tidak terlihat
+                  seperti kontrol hidup. Kembalikan blok ini saat engine
+                  reverb beneran ada di C++. State reverb di store tetap
+                  dipertahankan karena preset menyimpannya sebagai bagian
+                  profil penuh (applyPreset/saveCustomPreset). */}
             </View>
           )}
 
@@ -1096,6 +1043,34 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  // Preset di dalam kartu grafik — melebar penuh (kartu memakai
+  // alignItems center, jadi perlu alignSelf stretch).
+  graphPreset: {
+    alignSelf: "stretch",
+    marginBottom: 4,
+  },
+  // Keterangan kurva di bawah grafik.
+  graphCaption: {
+    fontSize: 11,
+    lineHeight: 16,
+    textAlign: "center",
+    marginTop: 4,
+    paddingHorizontal: 8,
+  },
+  // Detail band di dalam kartu grafik — dipisah garis atas.
+  bandDetail: {
+    alignSelf: "stretch",
+    borderTopWidth: 1,
+    marginTop: 8,
+    paddingTop: 8,
+  },
+  detailBandTitle: {
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    marginBottom: 4,
+    textAlign: "center",
+  },
   effectsSection: { gap: 12 },
   effectItem: {
     borderRadius: 20,
@@ -1136,29 +1111,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   miniSwitchLabel: { fontSize: 11, fontWeight: "900", letterSpacing: 1.5 },
-  reverbRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  reverbStepBtn: {
-    minWidth: 44,
-    minHeight: 44,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  reverbBox: {
-    borderRadius: 12,
-    borderWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  reverbLabel: { fontSize: 10, fontWeight: "bold", letterSpacing: 1 },
-  reverbValueRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  reverbValue: { fontSize: 13, fontWeight: "900" },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1189,8 +1141,4 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   presetScroll: { flexGrow: 0 },
-  mixerBoard: {
-    borderRadius: 20,
-    borderWidth: 1,
-  },
 });
