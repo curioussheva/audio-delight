@@ -178,24 +178,38 @@ export function parametricDbColor(db: number): string {
 }
 
 /**
- * Peak hold (main player): laju jatuh puncak per tick reaksi (~10 Hz,
- * mengikuti poll VisualizerService 100 ms). 0.03/tick ≈ 0.3 amp/detik
- * ≈ 24 dB/detik — puncak turun pelan, ~3 detik dari 0 dB ke lantai.
+ * Peak hold (main player): laju jatuh puncak, AMP/DETIK — berbasis
+ * WAKTU, bukan per tick. 0.3 amp/detik ≈ 24 dB/detik — puncak turun
+ * pelan, ~3 detik dari 0 dB ke lantai, pada tick rate berapa pun.
+ * (Dulu 0.03/tick dengan asumsi reaction ~10 Hz; reaction ternyata
+ * jalan di frame rate karena feedback prevData → cap hilang ~0,5 dtk.
+ * Ronde 12. Sekarang dtMs dihitung pemanggil dari Date.now().)
  */
-export const PEAK_HOLD_DECAY = 0.03;
+export const PEAK_HOLD_DECAY_RATE_PER_SEC = 0.3;
 /** Lantai peak hold — sama dengan lantai bar diam (0.05). */
 export const PEAK_HOLD_FLOOR = 0.05;
+/** dtMs maksimum per tick — mengunci lompatan setelah background/jeda. */
+export const PEAK_HOLD_MAX_DT_MS = 1000;
 
 /**
  * Langkah peak hold berikutnya: naik INSTAN ke nilai saat ini, turun
- * pelan (PEAK_HOLD_DECAY) bila nilai saat ini di bawah puncak, tidak
- * pernah di bawah lantai. Murni, bisa diuji jest; dipanggil dari
- * useAnimatedReaction di ParametricSpectrumView (UI thread).
+ * pelan (PEAK_HOLD_DECAY_RATE_PER_SEC × dtMs) bila nilai saat ini di
+ * bawah puncak, tidak pernah di bawah lantai. Murni, bisa diuji jest;
+ * dipanggil dari useAnimatedReaction di ParametricSpectrumView
+ * (UI thread). dtMs default 100 (nominal poll 10 Hz — perilaku lama).
  */
-export function nextPeakHold(peak: number, current: number): number {
+export function nextPeakHold(
+  peak: number,
+  current: number,
+  dtMs: number = 100,
+): number {
   "worklet";
   if (current >= peak) return current;
-  return Math.max(PEAK_HOLD_FLOOR, peak - PEAK_HOLD_DECAY);
+  const dt = Math.min(PEAK_HOLD_MAX_DT_MS, Math.max(0, dtMs)) / 1000;
+  return Math.max(
+    PEAK_HOLD_FLOOR,
+    peak - PEAK_HOLD_DECAY_RATE_PER_SEC * dt,
+  );
 }
 
 /**

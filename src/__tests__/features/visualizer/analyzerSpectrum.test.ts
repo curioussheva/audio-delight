@@ -20,6 +20,7 @@ import {
   nextPeakHold,
   parametricDbColor,
   parametricDbZone,
+  PEAK_HOLD_FLOOR,
   valueToDb,
 } from "@/features/visualizer/api/analyzerSpectrum";
 
@@ -217,23 +218,62 @@ describe("parametricDbColor — gradient MULUS (bukan zona terpisah)", () => {
   });
 });
 
-describe("nextPeakHold (peak hold main player)", () => {
+describe("nextPeakHold (peak hold main player, BERBASIS WAKTU)", () => {
   it("naik instan ke nilai saat ini", () => {
     expect(nextPeakHold(0.5, 0.8)).toBe(0.8);
     expect(nextPeakHold(0.05, 0.9)).toBe(0.9);
+    expect(nextPeakHold(0.5, 0.8, 1000)).toBe(0.8);
   });
 
   it("tetap bila nilai sama dengan puncak", () => {
     expect(nextPeakHold(0.5, 0.5)).toBe(0.5);
+    expect(nextPeakHold(0.5, 0.5, 1000)).toBe(0.5);
   });
 
-  it("turun pelan (PEAK_HOLD_DECAY) bila nilai di bawah puncak", () => {
-    expect(nextPeakHold(0.8, 0.5)).toBeCloseTo(0.77, 10);
-    expect(nextPeakHold(0.5, 0.1)).toBeCloseTo(0.47, 10);
+  it("turun sebanding dtMs (0.3 amp/detik)", () => {
+    // Nominal poll 10 Hz: 100 ms → 0.03 (perilaku lama dipertahankan).
+    expect(nextPeakHold(0.8, 0.5, 100)).toBeCloseTo(0.77, 10);
+    expect(nextPeakHold(0.5, 0.1, 100)).toBeCloseTo(0.47, 10);
+    // 1 detik → 0.3 penuh.
+    expect(nextPeakHold(0.8, 0.5, 1000)).toBeCloseTo(0.5, 10);
+    // Frame rate ~60 Hz: 16 ms → ~0.005 saja.
+    expect(nextPeakHold(0.8, 0.5, 16)).toBeCloseTo(0.7952, 10);
+  });
+
+  it("laju jatuh SAMA pada tick rate berapa pun (~3 detik 0 dB→lantai)", () => {
+    // Ronde 12: decay per-tick membuat cap hilang ~0,5 dtk di frame
+    // rate. Berbasis waktu, 3 detik berlalu = 0.9 amp turun, apa pun
+    // tick-nya: 30 tick × 100 ms (10 Hz) vs 180 tick × 16.7 ms (60 Hz).
+    const run = (ticks: number, dtMs: number) => {
+      let peak = 1.0;
+      for (let i = 0; i < ticks; i++) {
+        peak = nextPeakHold(peak, 0.05, dtMs);
+      }
+      return peak;
+    };
+    expect(run(30, 100)).toBeCloseTo(0.1, 6);
+    expect(run(180, 1000 / 60)).toBeCloseTo(0.1, 6);
+    // Dari 1.0 ke lantai 0.05 butuh 0.95/0.3 ≈ 3,17 detik — bukan 0,5.
+    let peak = 1.0;
+    let elapsedMs = 0;
+    while (peak > PEAK_HOLD_FLOOR && elapsedMs < 10000) {
+      peak = nextPeakHold(peak, 0.05, 16);
+      elapsedMs += 16;
+    }
+    expect(elapsedMs).toBeGreaterThan(2500);
+    expect(elapsedMs).toBeLessThan(4000);
+  });
+
+  it("dtMs di-clamp: negatif → 0, raksasa → 1000 ms", () => {
+    expect(nextPeakHold(0.8, 0.5, -50)).toBe(0.8);
+    expect(nextPeakHold(0.8, 0.5, 0)).toBe(0.8);
+    // 10 detik dijepit ke 1 detik → turun maks 0.3 per tick.
+    expect(nextPeakHold(0.8, 0.5, 10000)).toBeCloseTo(0.5, 10);
   });
 
   it("tidak pernah di bawah lantai 0.05", () => {
-    expect(nextPeakHold(0.06, 0.05)).toBe(0.05);
-    expect(nextPeakHold(0.05, 0.05)).toBe(0.05);
+    expect(nextPeakHold(0.06, 0.05, 100)).toBe(0.05);
+    expect(nextPeakHold(0.05, 0.05, 1000)).toBe(0.05);
+    expect(nextPeakHold(0.3, 0.05, 1000)).toBe(0.05);
   });
 });

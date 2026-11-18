@@ -100,10 +100,15 @@ export const ParametricSpectrumView: React.FC<
   const freqData = useSharedValue<number[]>(Array(MAX_BAR_COUNT).fill(0.1));
   const prevData = useSharedValue<number[]>(Array(barCount).fill(0.1));
   // Puncak terakhir tiap bar (peak hold) — naik instan, turun pelan
-  // lewat nextPeakHold di useAnimatedReaction di bawah.
+  // lewat nextPeakHold BERBASIS WAKTU di useAnimatedReaction di bawah.
   const peaks = useSharedValue<number[]>(
     Array(barCount).fill(PEAK_HOLD_FLOOR),
   );
+  // Jam terakhir update peak hold (ms, Date.now di worklet) — untuk
+  // dtMs decay berbasis waktu. 0 = belum pernah (tick pertama pakai
+  // 100 ms nominal). Di-reset saat stop supaya timestamp basi tidak
+  // terpakai setelah jeda panjang (dtMs di-clamp 1000 ms juga).
+  const lastPeakMs = useSharedValue(0);
 
   // FIX: hasRealData dan isPlayingSV sebagai SharedValue agar bisa dibaca worklet
   const hasRealData = useSharedValue(false);
@@ -201,6 +206,7 @@ export const ParametricSpectrumView: React.FC<
           freqData.value = Array(MAX_BAR_COUNT).fill(0.1);
           prevData.value = Array(barCount).fill(0.1);
           peaks.value = Array(barCount).fill(PEAK_HOLD_FLOOR);
+          lastPeakMs.value = 0;
           hasRealData.value = false;
         })();
         setHasRealDataState(false);
@@ -263,14 +269,24 @@ export const ParametricSpectrumView: React.FC<
     () => processedData.value,
     (current) => {
       prevData.value = [...current];
-      // Peak hold: naik instan ke nilai saat ini, turun pelan bila
-      // nilainya di bawah puncak (nextPeakHold, ~10 Hz dari poll).
+      // Peak hold BERBASIS WAKTU: naik instan ke nilai saat ini, turun
+      // pelan (PEAK_HOLD_DECAY_RATE_PER_SEC × dtMs) bila nilainya di
+      // bawah puncak. dtMs dari Date.now() — reaction jalan di frame
+      // rate (~60 Hz, feedback prevData), bukan ~10 Hz seperti asumsi
+      // desain awal; decay per-tick dulu membuat cap hilang ~0,5 dtk
+      // (ronde 12). Dengan dtMs, laju jatuh tetap ~24 dB/detik pada
+      // tick rate berapa pun. Tick pertama pakai 100 ms (nominal poll).
+      const now = Date.now();
+      const last = lastPeakMs.value;
+      const dtMs = last === 0 ? 100 : now - last;
+      lastPeakMs.value = now;
       const p = peaks.value;
       const next = new Array(barCount);
       for (let i = 0; i < barCount; i++) {
         next[i] = nextPeakHold(
           p[i] ?? PEAK_HOLD_FLOOR,
           current[i] ?? PEAK_HOLD_FLOOR,
+          dtMs,
         );
       }
       peaks.value = next;
