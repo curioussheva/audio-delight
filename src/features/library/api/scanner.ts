@@ -504,6 +504,34 @@ export class LibraryScanner {
   }
 
   /**
+   * J2-2: SATU query untuk semua ukuran file (uri -> fileSize), dipakai
+   * computeDiff. Dulu callback `(uri) => getSongByUri(uri)?.fileSize`
+   * menjalankan satu SELECT * sinkron per lagu yang sudah ada (285 lagu
+   * = sampai 285 query per diff, di dua jalur: quickDiff tiap resume +
+   * runMediaStoreDiff tiap manual scan). Hanya entri dengan fileSize
+   * > 0 yang dimasukkan — selaras dengan dbRowToSong (`Number(...) ||
+   * undefined`): lagu yang ukuran filenya tidak tercatat tetap
+   * "tidak diketahui" (bukan 0), supaya tidak ditandai berubah.
+   */
+  static getFileSizeByUri(): Map<string, number> {
+    try {
+      const result = db.execute("SELECT uri, fileSize FROM songs");
+      const rows = result.rows?._array ?? [];
+      const map = new Map<string, number>();
+      for (const r of rows) {
+        const size = Number(r?.fileSize);
+        if (r?.uri && Number.isFinite(size) && size > 0) {
+          map.set(r.uri, size);
+        }
+      }
+      return map;
+    } catch (error) {
+      console.error("[LibraryScanner] Get file sizes failed:", error);
+      return new Map();
+    }
+  }
+
+  /**
    * Delete songs by URIs
    */
   static async deleteSongsByUris(uris: string[]): Promise<void> {

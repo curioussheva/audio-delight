@@ -231,10 +231,13 @@ async function processQuickDiff(
     nativeSongs.map((s) => s.uri).filter(Boolean) as string[],
   );
 
+  // J2-2: SATU query ukuran file untuk seluruh diff (bukan satu
+  // getSongByUri per lagu yang sudah ada).
+  const fileSizeByUri = LibraryScanner.getFileSizeByUri();
   const { newSongs, updatedSongs, deletedUris } = computeDiff(
     nativeSongs,
     existingUris,
-    (uri) => LibraryScanner.getSongByUri(uri)?.fileSize,
+    (uri) => fileSizeByUri.get(uri),
   );
 
   // Pengaman: jangan pernah percaya buta pada daftar hapus.
@@ -364,10 +367,13 @@ export const ScanDiffEngine = {
       throwIfAborted(signal);
       const existingUris = LibraryScanner.getExistingUris();
 
+      // J2-2: SATU query ukuran file untuk seluruh diff (bukan satu
+      // getSongByUri per lagu yang sudah ada).
+      const fileSizeByUri = LibraryScanner.getFileSizeByUri();
       const { newSongs, updatedSongs, deletedUris } = computeDiff(
         nativeSongs,
         existingUris,
-        (uri) => LibraryScanner.getSongByUri(uri)?.fileSize,
+        (uri) => fileSizeByUri.get(uri),
       );
 
       const currentCount = new Set(
