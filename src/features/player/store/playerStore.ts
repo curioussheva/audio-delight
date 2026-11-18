@@ -604,10 +604,18 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // id dilepas. Kalau tidak, tap lagu yang sedang pause dalam 20 detik
     // diabaikan diam-diam oleh gate Layer 1. Timeout 20 detik di atas
     // tetap dipertahankan sebagai backstop kedua.
+    // N12: _lastPlayRequest dicatat SEBELUM try — bila play gagal, tap
+    // ulang <1 dtk mengembalikan `true` palsu dan pemanggil menavigasi
+    // ke Player seolah sukses. Tandai keberhasilan per panggilan;
+    // finally di bawah menghapus catatan itu bila play gagal, supaya
+    // tap ulang bisa retry. Sukses tetap tercatat (dedupe tap ganda
+    // pada lagu yang sudah jalan dipertahankan).
+    let playSucceeded = false;
     try {
       const state = get();
       if (state.currentSong?.id === song.id && state.isPlaying) {
         console.log("[PERF] playSong: already playing same track, skip");
+        playSucceeded = true;
         return true;
       }
 
@@ -790,6 +798,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         const totalMs = Date.now() - t0;
         console.log(`[PERF] playSong TOTAL: ${totalMs}ms`);
 
+        playSucceeded = true;
         return true;
       } catch (error: any) {
         const totalMs = Date.now() - t0;
@@ -798,6 +807,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         return false;
       }
     } finally {
+      // N12: play gagal → hapus catatan dedupe untuk lagu ini, supaya
+      // tap ulang <1 dtk tidak mengembalikan `true` palsu. Hanya hapus
+      // bila catatannya masih milik panggilan ini (panggilan baru untuk
+      // lagu yang sama sudah menimpanya — jangan hapus milik orang lain).
+      if (!playSucceeded && _lastPlayRequest?.songId === song.id) {
+        _lastPlayRequest = null;
+      }
       // C4.2 (Batch 18): batalkan timer backstop 20 dtk panggilan ini,
       // supaya timer lama tidak menghapus id in-flight panggilan baru
       // (tap ulang lagu sama < 20 dtk). clearTimeout(undefined) aman.
