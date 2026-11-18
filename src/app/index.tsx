@@ -22,16 +22,9 @@ export default function Index() {
       console.log("[BOOT] 1. Index mount started");
       
       // Ambil data secara paralel untuk mempercepat booting
-      const [onboardedValue, needsMigration] = await Promise.all([
-        AsyncStorage.getItem("has_onboarded"),
-        AsyncStorage.getItem("needs_migration")
-      ]);
+      const onboardedValue = await AsyncStorage.getItem("has_onboarded");
 
-      console.log("[BOOT] 2. Status:", { onboardedValue, needsMigration });
-
-      if (needsMigration === "true") {
-        // Jalankan logika migrasi jika diperlukan
-      }
+      console.log("[BOOT] 2. Status:", { onboardedValue });
 
       setHasOnboarded(onboardedValue === "true");
       setIsReady(true);

@@ -429,7 +429,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   headerTitle: { fontSize: 26, fontFamily: FONT_FAMILY.displayBold, lineHeight: 32, textAlign: "center" },
-  headerMeta: { fontSize: 13, fontFamily: FONT_FAMILY.regular, marginTop: 6, letterSpacing: 1 },
   actionRow: { marginTop: 25, width: "100%", paddingHorizontal: 20 },
   playBtn: {
     height: 52,

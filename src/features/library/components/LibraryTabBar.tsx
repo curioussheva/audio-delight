@@ -303,7 +303,6 @@ const styles = StyleSheet.create({
     alignItems: "stretch",
     gap: 8,
   },
-  scanInfo: { flexDirection: "row", alignItems: "center", gap: 8 },
   scanText: {
     fontSize: 11,
     fontFamily: FONT_FAMILY.bold,

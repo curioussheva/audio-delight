@@ -1,9 +1,5 @@
 // Equalizer Feature Exports
 
-// api
-export * from "./api/presets";
-export * from "./api/service";
-
 // components
 export * from "./components/Band";
 export * from "./components/Graph";

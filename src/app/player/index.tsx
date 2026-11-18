@@ -1235,13 +1235,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginTop: 4,
   },
-  // ✅ Style untuk spectogram
-  spectogramWrapper: {
-    alignItems: "center",
-    marginBottom: 24,
-    borderRadius: 12,
-    overflow: "hidden",
-  },
   slider: {
     width: "100%",
     height: 40,

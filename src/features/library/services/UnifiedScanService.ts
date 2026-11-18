@@ -8,7 +8,6 @@ import { ScanDiffEngine, ScanAbortedError } from "./ScanDiffEngine";
 import { MetadataEnricher } from "./MetadataEnricher";
 import { useLibraryStore } from "../store/libraryStore";
 import { usePlayerStore } from "@/features/player/store/playerStore";
-import { shouldAutoStartEnrichmentWorker } from "./autoEnrichingGuard";
 import { ScanResult, ScanProgress, EnrichmentLevel } from "../types/scan";
 import * as Notifications from "expo-notifications";
 const Platform = require("react-native").Platform;
@@ -17,108 +16,6 @@ export class UnifiedScanService {
   private static isRunning = false;
   private static abortController: AbortController | null = null;
   private static currentMode: "auto" | "manual" | null = null;
-
-  /**
-   * AUTO SCAN - Lightweight scan for background/app launch (Level 1)
-   */
-  static async autoScan(): Promise<ScanResult> {
-    if (this.isRunning) {
-      console.log("[UnifiedScan] Auto scan already running, skipping");
-      return this.emptyResult();
-    }
-
-    console.log("🚀 [UnifiedScan] Starting AUTO scan...");
-    this.isRunning = true;
-    this.currentMode = "auto";
-    this.abortController = new AbortController();
-
-    const store = useLibraryStore.getState();
-    const startTime = Date.now();
-
-    try {
-      if (Platform.OS === "android") {
-        await this.setupNotificationChannel();
-        await this.showScanNotification("Scanning library...", 0, 100);
-      }
-
-      store.startAutoScan();
-
-      // ✅ ScanDiffEngine.quickDiff() — bukan quickDiff() langsung
-      // J2-4: sinyal diteruskan supaya cancel menghentikan diff di
-      // checkpoint-nya (sebelum transaction / per 20 lagu di loop tulis).
-      const diffResult = await ScanDiffEngine.quickDiff(
-        this.abortController.signal,
-      );
-
-      if (Platform.OS === "android") {
-        await this.showScanNotification(
-          `Found ${diffResult.newCount} new, ${diffResult.deletedCount} deleted`,
-          100,
-          100,
-        );
-      }
-
-      store.finishAutoScan();
-
-      if (diffResult.newSongs?.length > 0) {
-        await MetadataEnricher.queueSongs(
-          diffResult.newSongs.map((s) => ({
-            id: s.id,
-            uri: s.uri,
-            priority: 0,
-            level: 2 as EnrichmentLevel,
-          })),
-        );
-        // Auto Enriching: autoScan adalah jalur OTOMATIS (saat ini tidak
-        // ada pemanggil live) — worker hanya di-start bila toggle ON.
-        if (
-          shouldAutoStartEnrichmentWorker({
-            isAutoEnrichingEnabled: store.isAutoEnrichingEnabled,
-          })
-        ) {
-          this.startBackgroundEnrichment();
-        } else {
-          console.log(
-            "[UnifiedScan] Auto Enriching OFF — worker tidak di-start, antrean menunggu aksi manual",
-          );
-        }
-      }
-
-      const unenriched = store.getUnenrichedSongs?.() || [];
-      store.setUnenrichedCount(unenriched.length);
-
-      if (Platform.OS === "android") {
-        setTimeout(
-          () => Notifications.dismissAllNotificationsAsync().catch(() => {}),
-          1500,
-        );
-      }
-
-      const result: ScanResult = {
-        mode: "quick",
-        level: 1,
-        discovered: diffResult.totalScanned,
-        added: diffResult.newCount,
-        removed: diffResult.deletedCount,
-        updated: diffResult.updatedCount || 0,
-        enrichmentQueued: diffResult.newCount,
-        duration: Date.now() - startTime,
-        errors: [],
-      };
-
-      console.log(`✅ [UnifiedScan] Auto scan completed`, result);
-      return result;
-    } catch (error) {
-      if (error instanceof ScanAbortedError) {
-        console.log("[UnifiedScan] Auto scan cancelled");
-        throw error;
-      }
-      console.error("[UnifiedScan] Auto scan failed:", error);
-      throw error;
-    } finally {
-      this.cleanup();
-    }
-  }
 
   /**
    * MANUAL SCAN - Full scan with progress feedback (Level 2)
@@ -380,19 +277,5 @@ export class UnifiedScanService {
     } catch {
       // Silent fail
     }
-  }
-
-  private static emptyResult(): ScanResult {
-    return {
-      mode: "quick",
-      level: 1,
-      discovered: 0,
-      added: 0,
-      removed: 0,
-      updated: 0,
-      enrichmentQueued: 0,
-      duration: 0,
-      errors: [],
-    };
   }
 }
