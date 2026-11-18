@@ -910,7 +910,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       // indeks: saat shuffle aktif, indeks di store tidak sama dengan indeks
       // native, jadi mencocokkan lewat indeks menampilkan lagu yang salah.
       const song = findSongByUri(get().queue, uri);
-      if (song) patch.currentSong = song;
+      if (song) {
+        patch.currentSong = song;
+      } else if (uri) {
+        // N13: native memutar trek yang TIDAK ADA di queue JS (mis. queue
+        // diganti / library di-rescan) — jangan biarkan currentSong lama
+        // dipakai untuk updateMetadata notifikasi + guard playCount di
+        // bawah. Uri kosong sengaja TIDAK dibersihkan: native yang belum
+        // siap mengembalikan "" (bukan bukti trek basi), dan membersihkan
+        // saat itu akan menghapus lagu hasil restore.
+        console.warn(
+          "[Player] syncFromNative: trek native tidak ada di queue, bersihkan currentSong basi:",
+          uri,
+        );
+        patch.currentSong = null;
+      }
 
       // Indeks native juga disimpan supaya indicator "sedang diputar" di
       // daftar bisa mengikuti urutan native saat shuffle aktif. Native
