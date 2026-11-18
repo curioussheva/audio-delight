@@ -273,19 +273,37 @@ async function processQuickDiff(
     }
   }
 
+  // N16: hapus gagal SESUDAH tulis commit — jangan buang hasil diff.
+  // Lagu baru sudah masuk DB; bila galat ini dilempar, quickDiff
+  // melaporkannya sebagai "0 baru" dan lagu itu tidak pernah diantre
+  // enrichment (diff berikutnya tidak lagi melihatnya sebagai baru).
+  // Laporkan lagu baru seperti biasa + deletedCount 0; penghapusan
+  // dicoba lagi di diff berikutnya (lagu masih di DB, tidak ada di
+  // MediaStore).
+  let reportedDeletedCount = 0;
+  let reportedDeletedUris: string[] = [];
   if (finalDeleted.length > 0) {
     throwIfAborted(signal);
-    await LibraryScanner.deleteSongsByUris(finalDeleted);
+    try {
+      await LibraryScanner.deleteSongsByUris(finalDeleted);
+      reportedDeletedCount = finalDeleted.length;
+      reportedDeletedUris = finalDeleted;
+    } catch (deleteErr) {
+      console.error(
+        "[ScanDiffEngine] Quick diff: gagal menghapus lagu lama, ditahan untuk diff berikutnya:",
+        deleteErr,
+      );
+    }
   }
 
   return {
     newCount: newSongs.length,
-    deletedCount: finalDeleted.length,
+    deletedCount: reportedDeletedCount,
     updatedCount: updatedSongs.length,
     totalScanned: nativeSongs.length,
     newSongs,
     updatedSongs,
-    deletedUris: finalDeleted,
+    deletedUris: reportedDeletedUris,
   };
 }
 
@@ -324,8 +342,14 @@ export const ScanDiffEngine = {
       // J2-4: pembatalan bukan kegagalan — teruskan supaya pemanggil
       // (dan guard isRunning) tahu scan berhenti karena cancel.
       if (error instanceof ScanAbortedError) throw error;
+      // N16: galat non-abort (query MediaStore / tulis DB) DILEMPAR,
+      // bukan hasil kosong. Sebelumnya ditelan jadi "0 perubahan":
+      // koordinator me-bump refreshKey dan men-start worker atas
+      // antrean sisa, seolah tidak ada yang berubah. Kedua pemanggil
+      // live sudah menangani lemparan (koordinator: catch → false;
+      // initial scan: try/catch useScanManager).
       console.error("[ScanDiffEngine] Quick diff failed:", error);
-      return _emptyQuickResult();
+      throw error;
     }
   },
 

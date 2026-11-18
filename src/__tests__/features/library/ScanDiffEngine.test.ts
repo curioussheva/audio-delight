@@ -199,6 +199,33 @@ describe("quickDiff — J3-1: tidak bisa menggantikan refresh library", () => {
       deletedUris: [],
     });
   });
+
+  it("N16: galat query MediaStore DILEMPAR, bukan hasil kosong (\"0 perubahan\" palsu)", async () => {
+    getState.mockReturnValue({ isAutoScanEnabled: true });
+    queryAudioFiles.mockRejectedValue(new Error("provider error"));
+
+    await expect(ScanDiffEngine.quickDiff()).rejects.toThrow(
+      "provider error",
+    );
+  });
+
+  it("N16: hapus gagal sesudah tulis commit -> lagu baru tetap dilaporkan (deletedCount 0), supaya diantre enrichment", async () => {
+    getState.mockReturnValue({ isAutoScanEnabled: true });
+    const deleteSongsByUris = LibraryScanner.deleteSongsByUris as jest.Mock;
+    const saveToDatabase = LibraryScanner.saveToDatabase as jest.Mock;
+    deleteSongsByUris.mockRejectedValue(new Error("delete gagal"));
+    saveToDatabase.mockResolvedValue(undefined);
+    queryAudioFiles.mockResolvedValue([song("baru"), song("lama")]);
+    getExistingUris.mockReturnValue(new Set(["lama", "hapus"]));
+
+    const result = await ScanDiffEngine.quickDiff();
+
+    expect(result.newCount).toBe(1);
+    expect(result.newSongs.map((s) => s.uri)).toEqual(["baru"]);
+    expect(result.deletedCount).toBe(0);
+    expect(result.deletedUris).toEqual([]);
+    expect(deleteSongsByUris).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("runMediaStoreDiff — N6: hapus sesudah tulis commit", () => {
