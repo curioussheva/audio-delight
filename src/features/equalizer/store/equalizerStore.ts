@@ -203,6 +203,9 @@ let _eqStoreLastAt = 0;
 let _eqStoreTimer: ReturnType<typeof setTimeout> | null = null;
 let _eqStorePendingBands: any[] | null = null;
 
+// N29: counter penambah keunikan id preset custom (lihat saveCustomPreset).
+let _customPresetSeq = 0;
+
 // Batalkan update store yang masih tertunda (pending trailing flush).
 // Dipanggil aksi yang mengganti bands secara wholesale (preset, reset,
 // setBandsGain) supaya flush basi tidak menimpa bands baru mereka.
@@ -455,8 +458,17 @@ export const useEqualizerStore = create<EqualizerStore>()(
       },
 
       saveCustomPreset: (name: string) => {
+        // N29: id dulu `custom_${Date.now()}` — dua save dalam 1 ms
+        // menghasilkan ID identik; deleteCustomPreset (filter by id)
+        // menghapus keduanya sekaligus dan applyPreset menemukan yang
+        // pertama saja. Tambah counter proses + cek tabrakan dengan id
+        // yang sudah ada (pengaman bila jam mundur / id lama tersimpan).
+        let id = `custom_${Date.now()}_${++_customPresetSeq}`;
+        while (get().customPresets.some((p) => p.id === id)) {
+          id = `custom_${Date.now()}_${++_customPresetSeq}`;
+        }
         const newPreset: Preset = {
-          id: `custom_${Date.now()}`,
+          id,
           name,
           isCustom: true,
           bands: JSON.parse(JSON.stringify(get().bands)),
