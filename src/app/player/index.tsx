@@ -916,6 +916,17 @@ export default function PlayerScreen() {
                 </View>
               </>
             )}
+            {/* LAYOUT-V2 (2): label teks supaya fungsi tombol jelas —
+                kata sama dengan accessibilityLabel ("Timer Tidur"). */}
+            <Text
+              style={[
+                styles.utilityLabel,
+                { color: sleepActive ? primaryColor : textSecondary },
+              ]}
+              numberOfLines={1}
+            >
+              Timer Tidur
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -929,6 +940,16 @@ export default function PlayerScreen() {
               size={20}
               color={showLyrics ? primaryColor : iconColorDefault}
             />
+            {/* LAYOUT-V2 (2): label teks "Lirik". */}
+            <Text
+              style={[
+                styles.utilityLabel,
+                { color: showLyrics ? primaryColor : textSecondary },
+              ]}
+              numberOfLines={1}
+            >
+              Lirik
+            </Text>
           </TouchableOpacity>
 
           {/* A5: antrean — lihat + ketuk untuk lompat (tanpa reorder/hapus). */}
@@ -939,6 +960,13 @@ export default function PlayerScreen() {
             accessibilityLabel="Antrean"
           >
             <ListMusic size={20} color={iconColorDefault} />
+            {/* LAYOUT-V2 (2): label teks "Antrean". */}
+            <Text
+              style={[styles.utilityLabel, { color: textSecondary }]}
+              numberOfLines={1}
+            >
+              Antrean
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -948,6 +976,13 @@ export default function PlayerScreen() {
             accessibilityLabel="Buka analyzer"
           >
             <AudioWaveform size={20} color={iconColorDefault} />
+            {/* LAYOUT-V2 (2): label teks "Analyzer". */}
+            <Text
+              style={[styles.utilityLabel, { color: textSecondary }]}
+              numberOfLines={1}
+            >
+              Analyzer
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1238,8 +1273,19 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   // Target sentuh >= 44dp (U-P1-38): ikon 20px + padding 12 di tiap sisi.
+  // LAYOUT-V2 (2): kolom (ikon di atas, label di bawah) — alignItems
+  // center supaya label rata tengah di bawah ikon.
   utilityBtn: {
     padding: 12,
+    alignItems: "center",
+  },
+  // LAYOUT-V2 (2): label teks 4 item bar utilitas. Warna textSecondary
+  // (bukan tertiary) supaya kontras teks 4.5:1 di atas
+  // background.secondary terjamin — dikunci playerContrast.test.ts.
+  utilityLabel: {
+    fontSize: 10,
+    fontWeight: "600",
+    marginTop: 2,
   },
   // A4: pembungkus relatif supaya dot + badge sisa waktu bisa diposisikan
   // absolut (pola yang sama dengan repeatBtn Repeat One).

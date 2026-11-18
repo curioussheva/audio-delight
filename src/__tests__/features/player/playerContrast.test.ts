@@ -93,4 +93,33 @@ describe("Player A3 — kontras panel solid", () => {
       contrastRatio(noir.colors.text.primary, noir.colors.background.primary),
     ).toBeGreaterThanOrEqual(4.5);
   });
+
+  // LAYOUT-V2 (2): label teks 4 item bar utilitas (teks secondary di
+  // atas background.secondary) lolos 4.5:1 — label adalah teks 10px,
+  // bukan ikon, jadi barnya 4.5:1 (bukan 3:1 seperti ikon).
+  it.each(BRAND_THEMES)(
+    "$name: label bar utilitas lolos 4.5:1",
+    (theme) => {
+      expect(
+        contrastRatio(
+          theme.colors.text.secondary,
+          theme.colors.background.secondary,
+        ),
+      ).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  // LAYOUT-V2 (2): label AKTIF (primary[500], ikut warna ikon aktif)
+  // di atas background.secondary juga harus lolos 4.5:1.
+  it.each(BRAND_THEMES)(
+    "$name: label aktif primary[500] di atas background.secondary lolos 4.5:1",
+    (theme) => {
+      expect(
+        contrastRatio(
+          theme.colors.primary[500],
+          theme.colors.background.secondary,
+        ),
+      ).toBeGreaterThanOrEqual(4.5);
+    },
+  );
 });
