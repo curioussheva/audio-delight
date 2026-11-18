@@ -1,15 +1,24 @@
 import React, { useEffect, useRef } from "react";
-import { View, Text, StyleSheet, FlatList, Dimensions } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  useWindowDimensions,
+} from "react-native";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { accentOn } from "@/shared/utils/contrast";
 import { findActiveLyricIndex } from "@/shared/utils/LrcParser";
-
-const { height } = Dimensions.get("window");
+import { lyricsVerticalPadding } from "@/features/player/utils/playerLayout";
 
 export const FullLyricsView = () => {
   const { lyrics, position: progress } = usePlayerStore();
   const { colors } = useTheme().theme;
+  // P2-7: tinggi layar REAKTIF terhadap rotasi (dulu `Dimensions.get(
+  // "window")` di level modul — dibekukan saat import, padding tengah
+  // lirik tidak ikut rotasi).
+  const { height: windowHeight } = useWindowDimensions();
 
   // Warna lirik dari token tema, diukur di atas background.primary.
   //
@@ -100,7 +109,10 @@ export const FullLyricsView = () => {
         // timestamp. Index ditambahkan supaya key selalu unik.
         keyExtractor={(item, index) => `${item.time}-${index}`}
         renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingVertical: lyricsVerticalPadding(windowHeight) },
+        ]}
         showsVerticalScrollIndicator={false}
         // U-P2-18: dulu kegagalan scroll dibungkam (() => {}) — lirik
         // aktif bisa tidak pernah digulir ke tengah. Fallback ke
@@ -121,7 +133,8 @@ const styles = StyleSheet.create({
   // Panel solid senada kotak artwork (lihat komentar di atas soal gradien).
   container: { flex: 1, borderRadius: 16, overflow: "hidden" },
   listContent: {
-    paddingVertical: height / 2.5, // Ruang kosong agar lirik awal bisa di tengah
+    // paddingVertical diberikan inline (reaktif rotasi) — ruang kosong
+    // agar lirik awal bisa di tengah.
     paddingHorizontal: 30,
   },
   lineWrapper: {

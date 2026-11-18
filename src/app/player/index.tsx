@@ -4,7 +4,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Dimensions,
+  useWindowDimensions,
   Modal,
   Pressable,
   Animated,
@@ -38,6 +38,10 @@ import {
   formatSpeedChip,
   formatTuningChip,
 } from "@/features/player/utils/playbackStatus";
+import {
+  artworkSize,
+  visualizerWidth,
+} from "@/features/player/utils/playerLayout";
 
 // Lucide Icons
 import {
@@ -63,12 +67,16 @@ import {
   X,
 } from "lucide-react-native";
 
-const { width } = Dimensions.get("window");
-
 export default function PlayerScreen() {
   const { theme } = useTheme();
   const { colors, isDark } = theme;
   const safePadding = useSafePadding();
+  // P2-7: dimensi REAKTIF terhadap rotasi (dulu `Dimensions.get("window")`
+  // di level modul — dibekukan saat import). Hook HARUS di atas return
+  // kondisional, jangan dipindah ke bawah (U-P0-4: Rules of Hooks).
+  const { width: windowWidth, height: windowHeight } =
+    useWindowDimensions();
+  const artSize = artworkSize(windowWidth, windowHeight);
   const router = useRouter();
 
   const [showLyrics, setShowLyrics] = useState(false);
@@ -325,16 +333,13 @@ export default function PlayerScreen() {
         style={StyleSheet.absoluteFill}
       />
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          {
-            paddingTop: safePadding.paddingTop,
-            paddingBottom: safePadding.paddingBottom + 20,
-          },
-        ]}
-        showsVerticalScrollIndicator={false}
+      {/* P2-7: header + banner error FIXED di atas (bukan bagian
+          ScrollView) supaya tombol tutup + pesan error tidak pernah
+          tergeser keluar layar di layar kecil. Posisi/jarak sama seperti
+          sebelumnya: paddingTop safe-area + margin header seperti saat
+          masih di dalam ScrollView. */}
+      <View
+        style={[styles.fixedTop, { paddingTop: safePadding.paddingTop }]}
       >
         {/* HEADER — A3: panel solid (background.primary) di belakang
             ikon/teks. Warna token dirancang untuk latar solid ini, bukan
@@ -449,12 +454,28 @@ export default function PlayerScreen() {
             </TouchableOpacity>
           </View>
         ) : null}
+      </View>
 
+      {/* P2-7: hanya konten TENGAH yang boleh di-scroll (sampul/lirik,
+          info lagu, visualizer). Kontrol + bar utilitas ada di fixed
+          bottom di bawah ScrollView supaya tidak pernah tergeser keluar. */}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* ARTWORK SECTION — ketuk artwork / tombol lirik untuk beralih
             ke tampilan lirik (FullLyricsView). Sebelumnya showLyrics hanya
             mengubah warna ikon Mic — lirik tidak pernah dirender. */}
         {showLyrics ? (
-          <View style={[styles.artworkSection, styles.lyricsSection]}>
+          // Kotak lirik sama besar dengan artwork (artSize) supaya layout
+          // tidak lompat saat beralih (FullLyricsView flex:1 mengisinya).
+          <View
+            style={[
+              styles.artworkSection,
+              { width: artSize, height: artSize },
+            ]}
+          >
             <FullLyricsView />
           </View>
         ) : (
@@ -468,6 +489,7 @@ export default function PlayerScreen() {
               <Animated.View
                 style={[
                   styles.artworkContainer,
+                  { width: artSize, height: artSize },
                   { transform: [{ scale: artworkScale }] },
                   theme.shadows.xl,
                 ]}
@@ -575,7 +597,7 @@ export default function PlayerScreen() {
             </Text>
           </View>
           <ParametricSpectrumView
-            width={width - 108}
+            width={visualizerWidth(windowWidth)}
             height={120}
             isPlaying={isPlaying}
             audioSessionId={audioSessionId}
@@ -584,6 +606,22 @@ export default function PlayerScreen() {
           />
         </View>
 
+      </ScrollView>
+
+      {/* P2-7: kontrol utama + bar utilitas FIXED di bawah (bukan bagian
+          ScrollView) — progress, kontrol, info audio, chip, bar utilitas.
+          Urutan/jarak sama seperti sebelumnya. paddingBottom = safe-area
+          + 20 seperti padding konten ScrollView sebelumnya (termasuk
+          reservasi +110 FloatingPlayer dari useSafePadding — layar Player
+          tidak merender FloatingPlayer, tapi jarak dipertahankan supaya
+          posisi visual di layar normal tidak berubah; calon bersih-bersih
+          lanjutan, bukan bagian P2-7 ini). */}
+      <View
+        style={[
+          styles.fixedBottom,
+          { paddingBottom: safePadding.paddingBottom + 20 },
+        ]}
+      >
         {/* Progress Section — U-P2-11: selama drag, slider menampilkan
             nilai lokal (onValueChange) dan baru commit seek saat dilepas
             (onSlidingComplete); watcher posisi native tidak boleh menarik
@@ -898,7 +936,7 @@ export default function PlayerScreen() {
             <AudioWaveform size={20} color={iconColorDefault} />
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </View>
 
       {/* Sleep Timer Modal */}
       <SleepTimerModal
@@ -940,6 +978,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    paddingHorizontal: 24,
+  },
+  // P2-7: header (atas) dan kontrol+bar utilitas (bawah) FIXED — bukan
+  // bagian ScrollView — supaya tidak pernah tergeser keluar layar di
+  // layar kecil. paddingHorizontal sama dengan konten ScrollView (24)
+  // supaya posisi horizontal tidak berubah; paddingTop/paddingBottom
+  // safe-area diberikan inline (butuh nilai useSafePadding).
+  fixedTop: {
+    paddingHorizontal: 24,
+  },
+  fixedBottom: {
     paddingHorizontal: 24,
   },
   // A3: panel solid background.primary di belakang teks/ikon (warna latar
@@ -989,16 +1038,8 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   artworkContainer: {
-    width: width - 100,
-    height: width - 100,
     borderRadius: 16,
     overflow: "hidden",
-  },
-  // Tampilan lirik menempati kotak yang sama dengan artwork supaya layout
-  // tidak lompat saat beralih (FullLyricsView flex:1 mengisi kotak ini).
-  lyricsSection: {
-    width: width - 100,
-    height: width - 100,
   },
   artwork: {
     width: "100%",
