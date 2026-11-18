@@ -22,6 +22,7 @@ import { accentOn } from "@/shared/utils/contrast";
 import { loadAppFonts } from "@/shared/utils/fonts";
 import LoadingScreen from "@/shared/components/ui/LoadingScreen";
 import { AudioPropertyToast } from "@/features/player/components/AudioPropertyToast";
+import { GlobalToast } from "@/shared/components/ui/GlobalToast";
 
 import { audioEngine } from "@/features/player/api/engine";
 import { usePlayerStore } from "@/features/player/store/playerStore";
@@ -152,6 +153,7 @@ function ThemedStack({ contentOpacity }: { contentOpacity: Animated.Value }) {
           />
         </Stack>
         <AudioPropertyToast />
+        <GlobalToast />
       </Animated.View>
     </SafeAreaProvider>
   );
