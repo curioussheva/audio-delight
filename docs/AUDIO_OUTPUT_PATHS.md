@@ -2,7 +2,7 @@
 
 **Tanggal:** 2026-10-07
 **Scope:** setiap jalur keluaran audio dari PCM engine ke perangkat keras — speaker internal, jack, USB DAC, HDMI, Bluetooth/A2DP, cast, dan jalur lain.
-**Kaitan:** [`RATE_CHAIN_AUDIT.md`](./RATE_CHAIN_AUDIT.md) (laju), [`NATIVE_MODULES_CONSISTENCY.md`](./NATIVE_MODULES_CONSISTENCY.md) (konsistensi modul).
+**Kaitan:** [`RATE_CHAIN_AUDIT.md`](./RATE_CHAIN_AUDIT.md) (laju), [`NATIVE_MODULES_CONSISTENCY.md`](./archive/NATIVE_MODULES_CONSISTENCY.md) (konsistensi modul).
 
 ---
 

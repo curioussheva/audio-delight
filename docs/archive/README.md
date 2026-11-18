@@ -1,6 +1,6 @@
 # Arsip Dokumentasi PristineAudio
 
-**Jangan pakai folder ini sebagai rujukan.** Isinya 11 dokumen perencanaan lama (31 Agustus - 20 September 2026) yang sudah digantikan `../README.md` dan dokumen di `../`.
+**Jangan pakai folder ini sebagai rujukan.** Isinya 11 dokumen perencanaan lama (31 Agustus - 20 September 2026) yang sudah digantikan `../README.md` dan dokumen di `../`, ditambah 10 dokumen audit/analisis Okt–Nov 2026 yang diarsipkan 2026-11-19 (lihat § Tambahan arsip 2026-11-19 di bawah) — total kini 21 dokumen.
 
 ## Kenapa diarsipkan - Dokumen-dokumen ini mengandung masalah yang membuatnya tidak bisa dipakai:
 
@@ -104,3 +104,19 @@ Implikasi penghapusan: kalau nanti Immersive mau dikerjakan, `AudioPipeline.cpp`
 - **`NativeDSPModule.setExclusiveMode` tidak dipanggil engine.ts** — chain lengkap sampai Kotlin tapi ujung JS-nya diam.
 
 Kalau arsip bertentangan dengan dokumen aktif, **dokumen aktif yang berlaku.**
+
+## Tambahan arsip 2026-11-19
+
+10 dokumen audit/analisis Okt–Nov 2026 yang temuannya sudah berubah status atau duplikat — dipindah dari `../` apa adanya (bukan dihapus):
+
+| Dokumen | Alasan arsip |
+|---|---|
+| `AUDIT_SUMMARY.md` | Ringkasan audit ronde 1–17 (per 2026-11-16); status dead code/bridge sudah lewat (kelas (a)/K2/K6 dihapus, KT F2–F15) |
+| `LOGCAT_2026-10-04.md`, `LOGCAT_2026-10-04_12-18.md` | Log mentah + analisis Okt 2026; bukan rujukan aktif |
+| `NATIVE_MODULES_CONSISTENCY.md` | Analisis 2026-10-07; semua temuan berubah status (setProcessingMode tersambung, addListener ada, K5 pending) |
+| `NOTIFICATION_AND_KEEPALIVE.md` | Notifikasi + keepalive Okt 2026; aksi Stop (F3) sudah dicatat di `../CHANGELOG.md` |
+| `PLAYBACK_CONSISTENCY_ANALYSIS.md` | Duplikat `NATIVE_MODULES_CONSISTENCY.md`; bukti mengutip `useAudioPlayer.ts` (dihapus) |
+| `PLAYBACK_CONTROLS.md` | Desain migrasi queue Okt 2026; catatan `useAudioPlayer`/`Controls.tsx` basi (dihapus 2026-11-18) |
+| `VERIFY-content-uri-fix.md` | Verifikasi fix content-uri (Okt 2026); sudah tertutup, bukan rujukan aktif |
+| `VISUALIZER_AUDIT.md` | Diagnosis rantai visualizer lama; komponen yang didiagnosis dihapus 2026-11-18 |
+| `VISUALIZER_CARA_KERJA.md` | Duplikat `VISUALIZER_AUDIT.md`; peta file menunjuk komponen yang dihapus |

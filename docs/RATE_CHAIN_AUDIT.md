@@ -2,7 +2,7 @@
 
 **Tanggal:** 2026-10-07
 **Scope:** bagaimana sample rate mengalir dari file → decoder → stream → DAC, dan di mana rantainya putus.
-**Kaitan:** melengkapi [`DECODER_RESAMPLER_ANALYSIS.md`](./DECODER_RESAMPLER_ANALYSIS.md) (bug domain posisi) dan [`PLAYBACK_CONSISTENCY_ANALYSIS.md`](./PLAYBACK_CONSISTENCY_ANALYSIS.md) (konsistensi JNI).
+**Kaitan:** melengkapi [`DECODER_RESAMPLER_ANALYSIS.md`](./DECODER_RESAMPLER_ANALYSIS.md) (bug domain posisi) dan [`PLAYBACK_CONSISTENCY_ANALYSIS.md`](./archive/PLAYBACK_CONSISTENCY_ANALYSIS.md) (konsistensi JNI).
 
 ---
 
