@@ -1,15 +1,8 @@
 // Tambahkan animasi atau indicator yang lebih jelas
 
 import React from "react";
-import {
-  View,
-  Text,
-  ActivityIndicator,
-  TouchableOpacity,
-  StyleSheet,
-} from "react-native";
+import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
 import { useScanManager } from "../hooks/useScanManager";
-import { useRouter } from "expo-router";
 import { Sparkles, Loader2 } from "lucide-react-native"; // ➕ Gunakan icon yang berputar
 import { useTheme } from "@/shared/context/ThemeContext";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
@@ -32,11 +25,8 @@ export function ScanStatusBar() {
     isEnriching,
     enrichmentProgress,
     enrichmentQueueSize,
-    unenrichedCount,
     isBackgroundEnriching,
   } = useScanManager();
-
-  const router = useRouter();
 
   // Auto scan - PRIORITY TINGGI, selalu tampil
   if (isAutoScanning) {
@@ -99,28 +89,12 @@ export function ScanStatusBar() {
     );
   }
 
-  // Pending enrichment
-  if (unenrichedCount > 0) {
-    return (
-      <TouchableOpacity
-        style={[
-          styles.container,
-          { backgroundColor: colors.status.success + "20" },
-        ]}
-        onPress={() => router.push("/(drawer)/settings")}
-        activeOpacity={0.8}
-      >
-        <Sparkles size={16} color={colors.status.success} />
-        <Text
-          style={[styles.actionText, { color: colors.status.success }]}
-          numberOfLines={1}
-        >
-          ✨ {unenrichedCount} songs ready for metadata enhancement
-        </Text>
-        <Text style={[styles.arrow, { color: colors.status.success }]}>→</Text>
-      </TouchableOpacity>
-    );
-  }
+  // Banner "N songs ready for metadata enhancement" (unenrichedCount)
+  // DINONAKTIFKAN 2026-11-18 (keputusan csheva): banner hijau di atas
+  // ini menabrak SafeAreaView/status bar dan tampil terpotong. Bukan
+  // di-reposisi/di-restyling — dimatikan. Cabang progres di atas
+  // (auto scan / enriching / background) tetap utuh; pintu masuk
+  // enrichment tetap ada di badge header Library (library.tsx).
 
   return null;
 }
@@ -144,14 +118,5 @@ const styles = StyleSheet.create({
   subtext: {
     fontSize: 12,
     marginTop: 2,
-  },
-  actionText: {
-    fontSize: 13,
-    fontWeight: "500",
-    flex: 1,
-  },
-  arrow: {
-    fontSize: 14,
-    fontWeight: "600",
   },
 });

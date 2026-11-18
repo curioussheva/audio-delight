@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { UnifiedScanService } from "../services/UnifiedScanService";
 import { ScanDiffEngine } from "../services/ScanDiffEngine";
-import { LibraryScanner } from "../api/scanner";
+import { runInitialScan } from "../services/initialScan";
 import { useLibraryStore } from "../store/libraryStore";
 import { ScanProgress } from "../types/scan";
 import { shouldRunInitialScan } from "../services/initialScanGuard";
@@ -47,8 +47,10 @@ export function useScanManager() {
   // supaya EmptyLibrary menampilkan "Memindai..." selama quickDiff jalan
   // (quickDiff sendiri tidak melaporkan progres — lihat S4) dan supaya
   // resume quickDiff lain tidak tumpang tindih selama scan perdana jalan.
-  // setTracks sesudah diff: quickDiff hanya menulis DB, TIDAK pernah
-  // setTracks (J3-1) — tanpa ini daftar di UI tetap kosong.
+  // Rantai lengkapnya ada di services/initialScan.ts (runInitialScan):
+  // quickDiff → setTracks → handleResumeDiffResult (antre lagu baru +
+  // jalankan worker enrichment). Dipisah supaya rantai itu bisa diuji
+  // tanpa me-render hook.
   useEffect(() => {
     if (hasInitialized.current) return;
     hasInitialized.current = true;
@@ -72,15 +74,7 @@ export function useScanManager() {
       );
       setIsLocked(true);
       try {
-        currentStore.startAutoScan();
-        await ScanDiffEngine.quickDiff(undefined, {
-          bypassAutoScanGate: true,
-        });
-        currentStore.setInitialScanCompleted();
-        // quickDiff menulis DB saja — cerminkan ke store supaya daftar
-        // di UI langsung terisi tanpa menunggu foreground refresh.
-        const freshSongs = (await LibraryScanner.getLibrarySongs()) ?? [];
-        currentStore.setTracks(freshSongs as any);
+        await runInitialScan(currentStore);
       } catch (err) {
         console.warn("[useScanManager] Initial scan error:", err);
       } finally {
