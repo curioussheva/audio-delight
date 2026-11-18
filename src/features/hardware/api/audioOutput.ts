@@ -13,6 +13,7 @@
 // (nativeSetActiveDevice -> EngineManager::setRequestedDeviceId -> stream
 // dibuka ulang di perangkat itu). Lihat docs/AUDIO_OUTPUT_PATHS.md.
 
+import { NativeEventEmitter } from "react-native";
 import NativeDeviceModule from "@/specs/NativeDeviceModule";
 import type {
   ActiveDeviceStatus,
@@ -21,6 +22,18 @@ import type {
 } from "@/specs/NativeDeviceModule";
 
 export type { ActiveDeviceStatus, AudioDeviceDescriptor, BluetoothA2dpStatusInfo };
+
+// F4: satu emitter bersama untuk event "PristineDeviceChange" (pola
+// playerStore — satu NativeEventEmitter global, bukan satu per listener).
+// Dibuat malas supaya impor modul tidak menyentuh bridge sebelum dipakai.
+let deviceChangeEmitter: NativeEventEmitter | null = null;
+
+const getDeviceChangeEmitter = (): NativeEventEmitter => {
+  if (!deviceChangeEmitter) {
+    deviceChangeEmitter = new NativeEventEmitter(NativeDeviceModule);
+  }
+  return deviceChangeEmitter;
+};
 
 /**
  * Jalur output secara arsitektur.
@@ -156,6 +169,20 @@ export const AudioOutputService = {
         address: "",
       };
     }
+  },
+
+  /**
+   * F4: langganan perubahan daftar perangkat. Native meng-emit
+   * "PristineDeviceChange" dari AudioDeviceCallback saat perangkat
+   * dicolok/dicabut. Mengembalikan unsubscribe — pemanggil WAJIB melepasnya
+   * saat unmount. Payload event null; listener cukup memanggil refresh().
+   */
+  subscribeDeviceChanges: (listener: () => void): (() => void) => {
+    const subscription = getDeviceChangeEmitter().addListener(
+      "PristineDeviceChange",
+      listener,
+    );
+    return () => subscription.remove();
   },
 };
 

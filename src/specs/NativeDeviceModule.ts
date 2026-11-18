@@ -88,6 +88,12 @@ export interface Spec extends TurboModule {
    * Codec tidak bisa dibaca dari app biasa - jangan dikarang.
    */
   getBluetoothCodec(): Promise<BluetoothA2dpStatusInfo>;
+
+  // F4: wajib untuk NativeEventEmitter ("PristineDeviceChange" — daftar
+  // perangkat berubah saat DAC dicolok/dicabut). Method kosong di Kotlin
+  // (pola NativePlaybackService); event mengalir lewat RCTDeviceEventEmitter.
+  addListener(eventName: string): void;
+  removeListeners(count: number): void;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('NativeDeviceModule');

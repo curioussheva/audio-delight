@@ -338,4 +338,15 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
             promise.reject("BLUETOOTH_STATUS_FAILED", e)
         }
     }
+
+    // F4: wajib untuk NativeEventEmitter supaya tidak warning di JS.
+    // Event "PristineDeviceChange" di-emit dari AudioDeviceCallback
+    // (emitDeviceListChanged) saat perangkat dicolok/dicabut; tanpa dua
+    // method ini RN mencatat warning tiap kali JS mendaftarkan listener.
+    // Method kosong — event tetap mengalir lewat RCTDeviceEventEmitter.
+    @ReactMethod
+    fun addListener(eventName: String) {}
+
+    @ReactMethod
+    fun removeListeners(count: Int) {}
 }

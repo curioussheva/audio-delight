@@ -165,12 +165,23 @@ export const useAudioOutput = (): UseAudioOutputReturn => {
   useEffect(() => {
     refresh();
 
+    // F4: daftar perangkat disegarkan saat native mengabarkan perubahan
+    // (DAC dicolok/dicabut) — sebelumnya `devices` hanya dibaca sekali
+    // saat mount dan basi sampai refresh manual.
+    const unsubscribeDeviceChanges =
+      AudioOutputService.subscribeDeviceChanges(() => {
+        refresh();
+      });
+
     // Device bisa dicolok/dicabut saat app berjalan. Statusnya dipoll pelan
     // karena endpoint-nya murah (baca state native, tanpa JNI ke AudioManager)
     // dan pemilihan perangkat dari luar app (mis. Android memindahkan rute)
     // tidak mengirim event apa pun ke kita.
     const interval = setInterval(syncStatus, 3000);
-    return () => clearInterval(interval);
+    return () => {
+      unsubscribeDeviceChanges();
+      clearInterval(interval);
+    };
     // refresh stabil (useCallback tanpa dependensi yang berubah).
   }, [refresh, syncStatus]);
 
