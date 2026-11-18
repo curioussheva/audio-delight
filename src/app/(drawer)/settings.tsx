@@ -397,9 +397,14 @@ export default function SettingsScreen() {
       await resetToDefault();
       await setEQEnabled(false);
       await resetHeadphoneAll();
-      setPlaybackSpeed(1.0);
-      setTuningCents(0);
-      setAudioMode("dsp");
+      // N22: ketiganya async — dulu dipanggil tanpa await di dalam
+      // try/catch, jadi rejection (setAudioMode meneruskan
+      // toggleExclusiveMode tanpa try/catch di playerStore) lolos dari
+      // try/catch sebagai unhandled rejection SEMENTARA toast sukses
+      // sudah tampil. Sekarang di-await: gagal reset -> toast error.
+      await setPlaybackSpeed(1.0);
+      await setTuningCents(0);
+      await setAudioMode("dsp");
       showToast("Semua pengaturan telah direset", "success");
     } catch (e) {
       console.warn("[Settings] Reset All gagal:", e);
