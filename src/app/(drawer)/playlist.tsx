@@ -95,10 +95,14 @@ export default function PlaylistsScreen() {
 
   const handleConfirmDeletePlaylist = useCallback(async () => {
     if (!selectedPlaylist) return;
+    // FASE 4: hapus tetap lewat ConfirmDialog — toast ini hanya umpan
+    // balik SESUDAH konfirmasi.
+    const name = selectedPlaylist.name;
     await deletePlaylist(selectedPlaylist.id);
     setSelectedPlaylist(null);
     setShowDeleteDialog(false);
-  }, [selectedPlaylist, deletePlaylist]);
+    showToast(`Playlist "${name}" dihapus.`, "info");
+  }, [selectedPlaylist, deletePlaylist, showToast]);
 
   // Item CRUD playlist (Opsi A): hapus lagu dari playlist — LANGSUNG +
   // toast, tanpa dialog konfirmasi. Lagunya tetap ada di Library, jadi
@@ -150,10 +154,18 @@ export default function PlaylistsScreen() {
 
   const handleCreatePlaylistSubmit = useCallback(
     async (name: string) => {
-      await createPlaylist({ name, songIds: [] });
-      setShowCreateModal(false);
+      // FASE 4: "Playlist dibuat" kini punya rumah — toast sukses.
+      // Gagal buat tetap di modal supaya user bisa perbaiki namanya.
+      try {
+        await createPlaylist({ name, songIds: [] });
+        setShowCreateModal(false);
+        showToast(`Playlist "${name}" dibuat.`, "success");
+      } catch (error) {
+        console.error("[Playlist] Gagal membuat playlist:", error);
+        showToast("Gagal membuat playlist. Coba lagi.", "error");
+      }
     },
-    [createPlaylist],
+    [createPlaylist, showToast],
   );
 
   // ── Handler: Import File M3U / M3U8 ──────────────────────────────────────

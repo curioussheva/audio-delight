@@ -29,6 +29,7 @@ import { ConfirmDialog } from "@/shared/components/ui/ConfirmDialog";
 import { ScreenHeader } from "@/shared/components/ui/ScreenHeader";
 import { ScreenList } from "@/shared/components/ui/ScreenList";
 import { useEqualizer } from "@/features/equalizer/hooks/useEqualizer";
+import { useToastStore } from "@/shared/store/toastStore";
 import {
   accentOn,
   pickReadable,
@@ -217,6 +218,10 @@ export default function EqualizerScreen() {
 
   const eq = useEqualizer();
   const { audioMode, setAudioMode } = usePlayerStore();
+  // FASE 4: umpan balik sukses preset ("Preset diterapkan" dst.) kini
+  // memakai toast global — sebelumnya tap preset tanpa umpan balik apa
+  // pun selain perubahan suara/kurva.
+  const showToast = useToastStore((s) => s.showToast);
 
   // Status tanpa-MMAP di tab mode (keputusan 2026-11-16 19:07): tampilkan
   // di sini, bukan notifikasi sekali — persisten, terlihat di semua mode
@@ -277,6 +282,15 @@ export default function EqualizerScreen() {
 
   const handleReset = () => {
     setResetDialogVisible(true);
+  };
+
+  // FASE 4: terapkan preset + toast sukses. Guard sama dengan
+  // handleApplyPreset (DSP mati → diam, tanpa toast): chip juga
+  // disabled saat itu, jadi toast tidak pernah berbohong.
+  const handleApplyPresetWithToast = (id: string, name: string) => {
+    if (eq.isDSPDisabled) return;
+    eq.applyPreset(id);
+    showToast(`Preset "${name}" diterapkan.`, "success");
   };
 
   // Preset custom bisa DISIMPAN tapi dulu tidak bisa DIHAPUS dari UI - aksi
@@ -742,7 +756,7 @@ export default function EqualizerScreen() {
                         key={p.id}
                         label={p.name}
                         isActive={eq.activePresetId === p.id}
-                        onPress={() => eq.applyPreset(p.id)}
+                        onPress={() => handleApplyPresetWithToast(p.id, p.name)}
                         onLongPress={() =>
                           handlePresetLongPress(p.id, p.name, p.isCustom)
                         }
@@ -959,6 +973,8 @@ export default function EqualizerScreen() {
         onSave={(n) => {
           eq.savePreset(n);
           setModalVisible(false);
+          // FASE 4: simpan preset kini ber-toast (dulu diam).
+          showToast(`Preset "${n}" disimpan.`, "success");
         }}
         onClose={() => setModalVisible(false)}
       />
@@ -971,6 +987,9 @@ export default function EqualizerScreen() {
         onConfirm={() => {
           setResetDialogVisible(false);
           eq.resetToDefault();
+          // FASE 4: reset tetap lewat ConfirmDialog — toast ini hanya
+          // umpan balik SESUDAH konfirmasi.
+          showToast("DSP direset ke pengaturan netral.", "info");
         }}
         onCancel={() => setResetDialogVisible(false)}
       />
@@ -982,8 +1001,12 @@ export default function EqualizerScreen() {
         }
         confirmLabel="Hapus"
         onConfirm={() => {
+          // FASE 4: hapus tetap lewat ConfirmDialog — toast ini hanya
+          // umpan balik SESUDAH konfirmasi.
+          const name = deletePresetTarget?.name;
           if (deletePresetTarget) eq.deletePreset(deletePresetTarget.id);
           setDeletePresetTarget(null);
+          if (name) showToast(`Preset "${name}" dihapus.`, "info");
         }}
         onCancel={() => setDeletePresetTarget(null)}
       />

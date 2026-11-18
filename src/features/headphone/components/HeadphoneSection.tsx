@@ -114,6 +114,10 @@ export const HeadphoneSection: React.FC<Props> = ({ accent, disabled }) => {
           `Profil "${displayName}" ditolak. Coba profil lain atau impor ulang presetnya.`,
           "error",
         );
+      } else {
+        // FASE 4: profil diterapkan kini ber-toast sukses (dulu hanya
+        // penolakan yang ber-toast; berhasil diam).
+        showToast(`Profil "${displayName}" diterapkan.`, "success");
       }
     } finally {
       setLoadingBuiltinId(null);
@@ -236,6 +240,9 @@ export const HeadphoneSection: React.FC<Props> = ({ accent, disabled }) => {
                         `Profil "${p.name}" ditolak. Coba profil lain atau impor ulang presetnya.`,
                         "error",
                       );
+                    } else {
+                      // FASE 4: profil diterapkan kini ber-toast sukses.
+                      showToast(`Profil "${p.name}" diterapkan.`, "success");
                     }
                   }
                 }}

@@ -385,10 +385,19 @@ export default function LibraryScreen() {
 
   const handleCreatePlaylistSubmit = useCallback(
     async (name: string) => {
-      await createPlaylist({ name, songIds: [] });
-      setShowCreateModal(false);
+      // FASE 4: "Playlist dibuat" kini punya rumah — toast sukses.
+      // Gagal buat (mis. nama duplikat di service) tetap di modal
+      // supaya user bisa perbaiki namanya, bukan ditutup diam-diam.
+      try {
+        await createPlaylist({ name, songIds: [] });
+        setShowCreateModal(false);
+        showToast(`Playlist "${name}" dibuat.`, "success");
+      } catch (error) {
+        console.error("[Library] Gagal membuat playlist:", error);
+        showToast("Gagal membuat playlist. Coba lagi.", "error");
+      }
     },
-    [createPlaylist],
+    [createPlaylist, showToast],
   );
 
   const handleImportM3U = useCallback(async () => {
@@ -455,10 +464,14 @@ export default function LibraryScreen() {
 
   const handleConfirmDeletePlaylist = useCallback(async () => {
     if (!selectedPlaylist) return;
+    // FASE 4: hapus tetap lewat ConfirmDialog (destruktif tidak boleh
+    // toast saja) — toast ini hanya umpan balik SESUDAH konfirmasi.
+    const name = selectedPlaylist.name;
     await deletePlaylist(selectedPlaylist.id);
     setSelectedPlaylist(null);
     setShowDeleteDialog(false);
-  }, [selectedPlaylist, deletePlaylist]);
+    showToast(`Playlist "${name}" dihapus.`, "info");
+  }, [selectedPlaylist, deletePlaylist, showToast]);
 
   const toggleSearch = () => {
     if (showSearch) {

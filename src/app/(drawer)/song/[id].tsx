@@ -373,6 +373,9 @@ export default function SongDetailScreen() {
 
       setSyncModalVisible(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // FASE 4: lengkapi dari MusicBrainz kini ber-toast sukses (dulu
+      // hanya haptic + modal tertutup).
+      showToast("Metadata dilengkapi dari MusicBrainz.", "success");
     } catch (error) {
       console.error("[SongDetail] Failed to apply metadata:", error);
       showToast("Terjadi kesalahan saat menyimpan metadata.", "error");
@@ -411,6 +414,9 @@ export default function SongDetailScreen() {
 
       setIsEditMode(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // FASE 4: simpan edit metadata kini ber-toast sukses (dulu hanya
+      // haptic + keluar mode edit).
+      showToast("Metadata disimpan.", "success");
     } catch (error) {
       showToast("Terjadi kesalahan saat menyimpan metadata.", "error");
     } finally {
@@ -492,7 +498,11 @@ export default function SongDetailScreen() {
       { lyrics: parsed.lyrics, lyricsSynced: parsed.lyricsSynced },
       parsed.lines,
     );
-    if (ok) setLyricsEditorVisible(false);
+    if (ok) {
+      setLyricsEditorVisible(false);
+      // FASE 4: simpan lirik kini ber-toast sukses (dulu hanya haptic).
+      showToast("Lirik disimpan.", "success");
+    }
   };
 
   const handleImportLrc = async () => {
@@ -522,10 +532,12 @@ export default function SongDetailScreen() {
         );
         return;
       }
-      await applyLyricsChange(
+      const ok = await applyLyricsChange(
         { lyrics: "", lyricsSynced: parsed.lyricsSynced },
         parsed.lines,
       );
+      // FASE 4: impor .lrc kini ber-toast sukses (dulu hanya haptic).
+      if (ok) showToast("Lirik dari file .lrc disimpan.", "success");
     } catch (error) {
       console.error("[SongDetail] Failed to import .lrc:", error);
       showToast("File .lrc tidak bisa dibaca.", "error");
@@ -537,7 +549,12 @@ export default function SongDetailScreen() {
     // updateMetadata, bukan dilewati) + ditandai edited, jadi proses
     // otomatis tidak menghidupkan lagi lirik lagu ini.
     const ok = await applyLyricsChange({ lyrics: "", lyricsSynced: "" }, []);
-    if (ok) setDeleteLyricsVisible(false);
+    if (ok) {
+      setDeleteLyricsVisible(false);
+      // FASE 4: hapus lirik tetap lewat ConfirmDialog — toast ini hanya
+      // umpan balik SESUDAH konfirmasi.
+      showToast("Lirik dihapus.", "info");
+    }
   };
 
   const getReadablePath = (path?: string): string => {
