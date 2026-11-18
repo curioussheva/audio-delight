@@ -42,6 +42,7 @@ import {
 import {
   artworkSize,
   visualizerWidth,
+  VISUALIZER_CANVAS_HEIGHT,
 } from "@/features/player/utils/playerLayout";
 
 // Lucide Icons
@@ -57,10 +58,7 @@ import {
   Heart,
   ListMusic,
   Mic2,
-  Volume2,
-  AudioLines,
   AudioWaveform,
-  FileMusic,
   Sparkles,
   Info,
   TriangleAlert,
@@ -82,14 +80,18 @@ export default function PlayerScreen() {
   // untuk layar tab). Dipakai fixedBottom + wadah modal antrean; empty
   // state dan fixedTop tetap pakai safePadding (tanpa +110 saat tak ada
   // lagu / hanya paddingTop).
+  // LAYOUT-V3: +20 → +12 — bagian dari anggaran vertikal supaya semua
+  // muat 1 layar (lihat PLAYER_CHROME_DP di playerLayout.ts).
   const insets = useSafeAreaInsets();
-  const playerBottomPadding = insets.bottom + 20;
+  const playerBottomPadding = insets.bottom + 12;
   // P2-7: dimensi REAKTIF terhadap rotasi (dulu `Dimensions.get("window")`
   // di level modul — dibekukan saat import). Hook HARUS di atas return
   // kondisional, jangan dipindah ke bawah (U-P0-4: Rules of Hooks).
   const { width: windowWidth, height: windowHeight } =
     useWindowDimensions();
-  const artSize = artworkSize(windowWidth, windowHeight);
+  // LAYOUT-V3: artSize dihitung dari anggaran vertikal (playerLayout.ts)
+  // — didefinisikan di bawah, sesudah speedChip/tuningChip, karena
+  // ukurannya ikut mengecil bila chip tampil.
   const router = useRouter();
 
   const [showLyrics, setShowLyrics] = useState(false);
@@ -338,6 +340,30 @@ export default function PlayerScreen() {
   const speedChip = formatSpeedChip(playbackSpeed);
   const tuningChip = formatTuningChip(tuningCents);
 
+  // LAYOUT-V3: info file menyatu ke blok judul (dulu panel terpisah di
+  // fixed bottom — dihapus di bawah). Tanpa metadata jangan klaim angka
+  // mustahil (U-P1-06): bagian yang tidak ada tampil "-".
+  const fileInfoText = [
+    currentSong.sampleRate
+      ? `${(currentSong.sampleRate / 1000).toFixed(0)} kHz`
+      : "-",
+    currentSong.bitDepth ? `${currentSong.bitDepth} bit` : "-",
+    currentSong.codec?.toUpperCase() || "-",
+  ].join(" · ");
+
+  // LAYOUT-V3: ukuran sampul dari anggaran vertikal (playerLayout.ts) —
+  // tinggi layar − insets − chrome tetap 578 (−41 bila chip tampil),
+  // supaya header + judul + sampul + visualizer + kontrol + utilitas
+  // muat 1 layar tanpa scroll di portrait POCO M6 (360×800: 150,
+  // 393×873: 223). Dibatasi lebar (layar − 100) dan lantai 96.
+  const artSize = artworkSize(
+    windowWidth,
+    windowHeight,
+    insets.top,
+    insets.bottom,
+    !!(speedChip || tuningChip),
+  );
+
   return (
     <View style={[styles.container, { backgroundColor }]}>
       <LinearGradient
@@ -479,11 +505,16 @@ export default function PlayerScreen() {
       >
         {/* LAYOUT-V2 (1): info lagu PINDAH ke atas artwork supaya judul
             selalu terlihat tanpa scroll. Dulu di bawah artwork (di tepi
-            bawah viewport tengah). Panel solid + Like ikut pindah. */}
+            bawah viewport tengah). Panel solid + Like ikut pindah.
+            LAYOUT-V3: judul diperkecil (20px) + info file menyatu di sini
+            (satu baris kecil di bawah artis; dulu panel terpisah di fixed
+            bottom). Urutan style dibalik — panel dulu, songInfoContainer
+            sesudahnya — supaya padding 8 judul menang atas padding 12
+            panel. */}
         <View
           style={[
-            styles.songInfoContainer,
             styles.panel,
+            styles.songInfoContainer,
             { backgroundColor: colors.background.primary },
           ]}
         >
@@ -499,6 +530,12 @@ export default function PlayerScreen() {
               numberOfLines={1}
             >
               {currentSong.artist}
+            </Text>
+            <Text
+              style={[styles.songFileInfo, { color: textTertiary }]}
+              numberOfLines={1}
+            >
+              {fileInfoText}
             </Text>
           </View>
           <TouchableOpacity
@@ -613,7 +650,7 @@ export default function PlayerScreen() {
           </View>
           <ParametricSpectrumView
             width={visualizerWidth(windowWidth)}
-            height={120}
+            height={VISUALIZER_CANVAS_HEIGHT}
             isPlaying={isPlaying}
             audioSessionId={audioSessionId}
             barCount={48}
@@ -624,9 +661,10 @@ export default function PlayerScreen() {
       </ScrollView>
 
       {/* P2-7: kontrol utama + bar utilitas FIXED di bawah (bukan bagian
-          ScrollView) — progress, kontrol, info audio, chip, bar utilitas.
+          ScrollView) — kontrol, chip, bar utilitas. LAYOUT-V3: panel info
+          audio sudah tidak di sini (isinya menyatu ke blok judul).
           Urutan/jarak sama seperti sebelumnya. paddingBottom =
-          playerBottomPadding (safe-area + 20) — TANPA reservasi +110
+          playerBottomPadding (safe-area + 12) — TANPA reservasi +110
           FloatingPlayer dari useSafePadding: layar Player tidak merender
           FloatingPlayer, jadi +110 itu dead space + mencuri 110dp dari
           viewport tengah (follow-up P2-7). */}
@@ -804,39 +842,8 @@ export default function PlayerScreen() {
           </View>
         </View>
 
-        {/* Audio Info — A3: panel solid (lihat HEADER). Tanpa metadata
-            jangan klaim angka mustahil (U-P1-06): dulu tampil "0 kHz",
-            "0 bit", dan codec kosong diklaim "MP3". */}
-        <View
-          style={[
-            styles.audioInfo,
-            styles.panel,
-            { backgroundColor: colors.background.primary },
-          ]}
-        >
-          <View style={styles.audioBadge}>
-            <AudioLines size={14} color={textTertiary} strokeWidth={2} />
-            <Text style={[styles.audioText, { color: textTertiary }]}>
-              {currentSong.sampleRate
-                ? `${(currentSong.sampleRate / 1000).toFixed(0)} kHz`
-                : "-"}
-            </Text>
-          </View>
-          <View style={[styles.audioDot, { backgroundColor: borderColor }]} />
-          <View style={styles.audioBadge}>
-            <Volume2 size={14} color={textTertiary} strokeWidth={2} />
-            <Text style={[styles.audioText, { color: textTertiary }]}>
-              {currentSong.bitDepth ? `${currentSong.bitDepth} bit` : "-"}
-            </Text>
-          </View>
-          <View style={[styles.audioDot, { backgroundColor: borderColor }]} />
-          <View style={styles.audioBadge}>
-            <FileMusic size={14} color={textTertiary} strokeWidth={2} />
-            <Text style={[styles.audioText, { color: textTertiary }]}>
-              {currentSong.codec?.toUpperCase() || "-"}
-            </Text>
-          </View>
-        </View>
+        {/* LAYOUT-V3: panel info audio DIHAPUS — isinya pindah menyatu ke
+            blok judul (fileInfoText di atas). Jangan duplikat. */}
 
         {/* P2: chip status speed/tuning — hanya bila bukan default. */}
         {(speedChip || tuningChip) && (
@@ -1066,7 +1073,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 20,
+    // LAYOUT-V3: marginBottom 20 → 12 — bagian dari anggaran vertikal
+    // (isi header tidak berubah, hanya jarak ke panel judul).
+    marginBottom: 12,
     paddingTop: 8,
   },
   headerBtn: {
@@ -1099,8 +1108,9 @@ const styles = StyleSheet.create({
     // LAYOUT-V2 (1): marginTop 20 → 0 — jarak dari header kini diberikan
     // songInfoContainer (marginTop 20); jarak info→sampul tetap 20
     // dari marginBottom songInfoContainer.
+    // LAYOUT-V3: marginBottom 30 → 12 — bagian dari anggaran vertikal.
     marginTop: 0,
-    marginBottom: 30,
+    marginBottom: 12,
   },
   artworkContainer: {
     borderRadius: 16,
@@ -1128,17 +1138,20 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   // P2: panel visualizer — skala dBFS di kiri (kolom 28px, tinggi sama
-  // dengan kanvas 120px; 0 di atas = 0 dB, −80 di bawah = lantai).
+  // dengan kanvas; 0 di atas = 0 dB, −80 di bawah = lantai).
+  // LAYOUT-V3: kanvas 120 → VISUALIZER_CANVAS_HEIGHT (64) + marginBottom
+  // 20 → 12 — visualizer mendapat ruang TETAP yang dihitung dalam
+  // anggaran vertikal (bukan lagi konten yang jatuh di bawah lipatan).
   visualizerPanel: {
     flexDirection: "row",
     alignItems: "center",
     borderRadius: 16,
     padding: 12,
-    marginBottom: 20,
+    marginBottom: 12,
   },
   visualizerScale: {
     width: 28,
-    height: 120,
+    height: VISUALIZER_CANVAS_HEIGHT,
     justifyContent: "space-between",
     alignItems: "center",
     marginRight: 8,
@@ -1163,14 +1176,23 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
   },
+  // LAYOUT-V3: judul 24 → 20 (tetap maks 2 baris), artis 16 → 14,
+  // + baris info file 11px di bawah artis (dulu panel terpisah di fixed
+  // bottom). Warna textTertiary di atas background.primary sudah dikunci
+  // playerContrast.test.ts (pasangan yang sama dengan teks waktu).
   songTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: "700",
-    marginBottom: 8,
+    marginBottom: 6,
   },
   artistName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "500",
+  },
+  songFileInfo: {
+    fontSize: 11,
+    fontWeight: "500",
+    marginTop: 4,
   },
   // ✅ Style untuk spectogram
   spectogramWrapper: {
@@ -1251,33 +1273,14 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     textAlign: "center",
   },
+  // LAYOUT-V3: 64 → 56 — bagian dari anggaran vertikal; tetap di atas
+  // target sentuh 44dp.
   playBtn: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: "center",
     alignItems: "center",
-  },
-  audioInfo: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 30,
-    gap: 12,
-  },
-  audioBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  audioText: {
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  audioDot: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
   },
   songInfoContainer: {
     flexDirection: "row",
@@ -1286,8 +1289,13 @@ const styles = StyleSheet.create({
     // LAYOUT-V2 (1): panel info kini anak pertama ScrollView — marginTop
     // 20 menggantikan marginTop artworkSection yang dulu memberi jarak
     // dari header fixed.
-    marginTop: 20,
-    marginBottom: 20,
+    // LAYOUT-V3: margin 20/20 → 10/10, padding 8 (menang atas padding 12
+    // panel karena urutan style dibalik di JSX) — bagian dari anggaran
+    // vertikal. Panel: pad 16 + isi 88 (judul 2 baris 48 + mb 6 + artis
+    // 17 + info file 17) = 104; total blok 124.
+    marginTop: 10,
+    marginBottom: 10,
+    padding: 8,
     width: "100%",
   },
   songTextWrapper: {
@@ -1297,19 +1305,24 @@ const styles = StyleSheet.create({
   likeBtn: {
     padding: 10,
   },
+  // LAYOUT-V3: marginTop 10 → 8, paddingVertical 15 → 12 — bar utilitas
+  // tetap elemen TERAKHIR di paling bawah; jarak ke panel kontrol tetap
+  // lega (marginBottom 30 kontrol + marginTop 8 = 38dp). Total blok 86.
   bottomUtilities: {
     flexDirection: "row",
     justifyContent: "space-around",
     alignItems: "center",
-    marginTop: 10,
-    paddingVertical: 15,
+    marginTop: 8,
+    paddingVertical: 12,
     borderRadius: 20,
   },
-  // Target sentuh >= 44dp (U-P1-38): ikon 20px + padding 12 di tiap sisi.
+  // Target sentuh >= 44dp (U-P1-38): ikon 20px + padding 10 di tiap sisi
+  // + label = 54 — tetap di atas 44.
   // LAYOUT-V2 (2): kolom (ikon di atas, label di bawah) — alignItems
   // center supaya label rata tengah di bawah ikon.
+  // LAYOUT-V3: padding 12 → 10 — bagian dari anggaran vertikal.
   utilityBtn: {
-    padding: 12,
+    padding: 10,
     alignItems: "center",
   },
   // LAYOUT-V2 (2): label teks 4 item bar utilitas. Warna textSecondary
