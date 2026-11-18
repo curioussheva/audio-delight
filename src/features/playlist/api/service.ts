@@ -151,9 +151,12 @@ class PlaylistService {
         );
       });
 
+      // songCount dihitung ulang dari isi sebenarnya — INSERT OR IGNORE
+      // tidak menambah baris untuk lagu duplikat, jadi `songCount +
+      // songIds.length` membuat hitungan drift di atas isi playlist.
       tx.execute(
-        "UPDATE playlists SET songCount = songCount + ?, updatedAt = ? WHERE id = ?",
-        [songIds.length, now, playlistId],
+        "UPDATE playlists SET songCount = (SELECT COUNT(*) FROM playlist_songs WHERE playlist_id = ?), updatedAt = ? WHERE id = ?",
+        [playlistId, now, playlistId],
       );
     });
   }
@@ -167,9 +170,11 @@ class PlaylistService {
         "DELETE FROM playlist_songs WHERE playlist_id = ? AND song_id = ?",
         [playlistId, songId],
       );
+      // Hitung ulang dari isi sebenarnya — DELETE 0 baris (lagu memang
+      // tidak ada di playlist) tidak boleh menurunkan songCount.
       tx.execute(
-        "UPDATE playlists SET songCount = songCount - 1, updatedAt = ? WHERE id = ?",
-        [Date.now(), playlistId],
+        "UPDATE playlists SET songCount = (SELECT COUNT(*) FROM playlist_songs WHERE playlist_id = ?), updatedAt = ? WHERE id = ?",
+        [playlistId, Date.now(), playlistId],
       );
     });
   }
