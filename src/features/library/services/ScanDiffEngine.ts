@@ -365,11 +365,6 @@ export const ScanDiffEngine = {
       }
       const finalDeleted = bolehHapus ? deletedUris : [];
 
-      if (finalDeleted.length > 0) {
-        throwIfAborted(signal);
-        await LibraryScanner.deleteSongsByUris(finalDeleted);
-      }
-
       const allChanges = [...newSongs, ...updatedSongs];
 
       // 🔥 OPTIMASI: satu transaction untuk semua write, bukan commit
@@ -394,6 +389,18 @@ export const ScanDiffEngine = {
       } catch (err) {
         db.execute("ROLLBACK");
         throw err;
+      }
+
+      // N6: hapus SESUDAH tulis commit — seperti processQuickDiff.
+      // Sebelumnya deleteSongsByUris jalan SEBELUM transaction tulis,
+      // jadi cancel di tengah diff meninggalkan penghapusan yang sudah
+      // commit sementara tulisannya di-rollback (diff setengah jalan
+      // yang tidak bisa dibatalkan). Kini cancel sebelum titik ini hanya
+      // membatalkan tulis; penghapusan tidak pernah jalan mendahului
+      // tulisan yang belum pasti.
+      if (finalDeleted.length > 0) {
+        throwIfAborted(signal);
+        await LibraryScanner.deleteSongsByUris(finalDeleted);
       }
 
       return {

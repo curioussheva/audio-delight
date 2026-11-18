@@ -25,6 +25,7 @@ jest.mock("@/shared/lib/sqlite", () => ({
 import {
   computeDiff,
   isDeletionPlausible,
+  ScanAbortedError,
   ScanDiffEngine,
   SAFE_DELETE_RATIO,
   SAFE_DELETE_MIN_COUNT,
@@ -33,6 +34,7 @@ import type { NativeSong } from "@/features/library/native/MediaStoreModule";
 import { MediaStore } from "@/features/library/native/MediaStoreModule";
 import { LibraryScanner } from "@/features/library/api/scanner";
 import { useLibraryStore } from "@/features/library/store/libraryStore";
+import { db } from "@/shared/lib/sqlite";
 
 const song = (uri: string, fileSize = 1000): NativeSong =>
   ({ id: uri, uri, fileSize }) as NativeSong;
@@ -196,5 +198,56 @@ describe("quickDiff — J3-1: tidak bisa menggantikan refresh library", () => {
       updatedSongs: [],
       deletedUris: [],
     });
+  });
+});
+
+describe("runMediaStoreDiff — N6: hapus sesudah tulis commit", () => {
+  const queryAudioFiles = MediaStore.queryAudioFiles as jest.Mock;
+  const getExistingUris = LibraryScanner.getExistingUris as jest.Mock;
+  const getSongByUri = LibraryScanner.getSongByUri as jest.Mock;
+  const deleteSongsByUris = LibraryScanner.deleteSongsByUris as jest.Mock;
+  const saveToDatabase = LibraryScanner.saveToDatabase as jest.Mock;
+  const dbExecute = db.execute as jest.Mock;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    getSongByUri.mockReturnValue(undefined);
+  });
+
+  it("REGRESI: deleteSongsByUris jalan SESUDAH COMMIT transaksi tulis", async () => {
+    const order: string[] = [];
+    dbExecute.mockImplementation((sql: string) => {
+      order.push(sql);
+    });
+    deleteSongsByUris.mockImplementation(async () => {
+      order.push("DELETE");
+    });
+    queryAudioFiles.mockResolvedValue([song("baru"), song("lama")]);
+    getExistingUris.mockReturnValue(new Set(["lama", "hapus"]));
+
+    const result = await ScanDiffEngine.runMediaStoreDiff();
+
+    expect(result.newCount).toBe(1);
+    expect(result.deletedCount).toBe(1);
+    expect(order).toContain("COMMIT");
+    expect(order).toContain("DELETE");
+    expect(order.indexOf("COMMIT")).toBeLessThan(order.indexOf("DELETE"));
+  });
+
+  it("REGRESI: cancel di tengah tulis — tulisan tetap commit, hapus tidak jalan", async () => {
+    const controller = new AbortController();
+    saveToDatabase.mockImplementation(async () => {
+      controller.abort();
+    });
+    queryAudioFiles.mockResolvedValue([song("baru"), song("lama")]);
+    getExistingUris.mockReturnValue(new Set(["lama", "hapus"]));
+
+    await expect(
+      ScanDiffEngine.runMediaStoreDiff(undefined, controller.signal),
+    ).rejects.toBeInstanceOf(ScanAbortedError);
+    // Tulis sudah commit sebelum checkpoint hapus; penghapusan tidak
+    // pernah jalan mendahului tulisan yang belum pasti (N6).
+    expect(dbExecute).toHaveBeenCalledWith("COMMIT");
+    expect(deleteSongsByUris).not.toHaveBeenCalled();
   });
 });
