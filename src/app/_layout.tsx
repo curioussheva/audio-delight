@@ -33,6 +33,7 @@ import {
 } from "@/features/player/api/externalAudioUrl";
 import type { Song } from "@/shared/types/audio";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
+import { useForegroundRefreshCoordinator } from "@/features/library/hooks/useForegroundRefreshCoordinator";
 import { requestAudioPermissions } from "@/shared/utils/permissions";
 import { startJsLagMonitor } from "@/shared/utils/jsLagMonitor";
 
@@ -124,6 +125,11 @@ function ErrorScreen({
 
 function ThemedStack({ contentOpacity }: { contentOpacity: Animated.Value }) {
   const { colors } = useTheme().theme;
+
+  // FASE 4: SATU pemicu refresh foreground (quickDiff + bump refreshKey)
+  // — ter-mount sekali di sini, hidup selama app ready. Pengganti dua
+  // listener AppState di library.tsx + useScanManager.
+  useForegroundRefreshCoordinator();
 
   return (
     <SafeAreaProvider>

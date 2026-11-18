@@ -3,33 +3,15 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState } from "react-native";
 import { UnifiedScanService } from "../services/UnifiedScanService";
-import { ScanDiffEngine } from "../services/ScanDiffEngine";
 import { runInitialScan } from "../services/initialScan";
 import { useLibraryStore } from "../store/libraryStore";
 import { ScanProgress } from "../types/scan";
 import { shouldRunInitialScan } from "../services/initialScanGuard";
-import { handleResumeDiffResult } from "../services/resumeEnrichment";
-import {
-  MIN_BACKGROUND_MS,
-  RESUME_SCAN_COOLDOWN_MS,
-  shouldRunResumeRefresh,
-} from "../services/resumeRefreshGuard";
-
-// Diekspor ulang supaya pemicu refresh foreground lain (library.tsx)
-// tetap bisa mengimpor dari sini; definisi tinggal di resumeRefreshGuard.
-export { MIN_BACKGROUND_MS, RESUME_SCAN_COOLDOWN_MS };
-
-// 🔥 FIX Bug #4: module-level state (survive across hook remount)
-let _globalLastResumeScan = 0;
-let _globalBackgroundedAt = 0;
-let _globalLastResumeLog = 0;
 
 export function useScanManager() {
   const store = useLibraryStore();
   const hasInitialized = useRef(false);
-  const isQuickDiffRunning = useRef(false);
   const [isLocked, setIsLocked] = useState(false);
 
   // ── Initial Scan hanya jika library kosong ──────────────────────────────────
@@ -86,75 +68,11 @@ export function useScanManager() {
     return () => clearTimeout(timer);
   }, []);
 
-  // ── Quick Diff saat App Resume ──────────────────────────────────────────────
-  useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
-
-    const subscription = AppState.addEventListener("change", (nextState) => {
-      // ✅ param = nextState
-      // 🔥 FIX Bug #4: track background duration (skip audio focus false positive)
-      if (nextState === "background" || nextState === "inactive") {
-        _globalBackgroundedAt = Date.now();
-        return;
-      }
-      if (nextState !== "active") return;
-      if (isQuickDiffRunning.current) return;
-
-      const now = Date.now();
-
-      // J3-1: predikat penjaga bersama library.tsx (resumeRefreshGuard).
-      const resumeDecision = shouldRunResumeRefresh({
-        backgroundedAt: _globalBackgroundedAt,
-        lastRunAt: _globalLastResumeScan,
-        now,
-      });
-      if (resumeDecision !== "ok") {
-        if (
-          resumeDecision === "cooldown" &&
-          now - _globalLastResumeLog > 10_000
-        ) {
-          console.log("[useScanManager] Resume cooldown active (global), skip");
-          _globalLastResumeLog = now;
-        }
-        return;
-      }
-
-      clearTimeout(timeoutId);
-      // Debounce 800ms — jika user cepat kembali ke background lagi, tidak jalan
-      timeoutId = setTimeout(async () => {
-        const currentStore = useLibraryStore.getState();
-
-        if (currentStore.isManualScanning || currentStore.isAutoScanning) {
-          console.log("[useScanManager] Scan is running, skip quick diff");
-          return;
-        }
-
-        isQuickDiffRunning.current = true;
-        _globalLastResumeScan = Date.now(); // ✅ update timestamp sebelum jalan
-        console.log("[useScanManager] App resumed → Running quick diff...");
-
-        try {
-          const diffResult = await ScanDiffEngine.quickDiff();
-
-          // S2: antre lagu baru + jalankan worker enrichment
-          // (resumeEnrichment.ts) — sebelum S2 antrean hanya diisi,
-          // tidak pernah diproses dari jalur live.
-          await handleResumeDiffResult(diffResult);
-        } catch (err) {
-          console.warn("[useScanManager] Quick diff on resume failed:", err);
-        } finally {
-          isQuickDiffRunning.current = false;
-        }
-      }, 800);
-    });
-
-    return () => {
-      subscription.remove();
-      clearTimeout(timeoutId);
-    };
-  }, []);
-
   // ── Manual Rescan ───────────────────────────────────────────────────────────
+  // FASE 4: efek AppState quick-diff resume SUDAH PINDAH ke
+  // useForegroundRefreshCoordinator (ter-mount sekali di root _layout) —
+  // satu listener, satu penjaga J3-1, urutan diff-dulu-baru-bump. Hook ini
+  // tinggal memegang initial scan + aksi manual (rescan/enrich/cancel).
   const manualRescan = useCallback(
     async (onProgress?: (progress: ScanProgress) => void) => {
       console.log("[useScanManager] manualRescan called");

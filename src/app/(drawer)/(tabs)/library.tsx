@@ -13,7 +13,6 @@ import {
   ActivityIndicator,
   Platform,
   Keyboard,
-  AppState,
   RefreshControl,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
@@ -51,7 +50,12 @@ import {
 
 // Scan System
 import { useScanManager } from "@/features/library/hooks/useScanManager";
-import { shouldRunResumeRefresh } from "@/features/library/services/resumeRefreshGuard";
+import { createRefreshCoalescer } from "@/features/library/services/refreshCoalescer";
+import {
+  isLibraryScanRunning,
+  shouldRefreshLibraryOnBump,
+} from "@/features/library/services/refreshPolicy";
+import { useRefreshStore } from "@/shared/store/refreshStore";
 import { EnrichMetadataModal } from "@/features/library/components/EnrichMetadataModal";
 
 // Components
@@ -84,14 +88,11 @@ import {
   FLOATING_PLAYER_HEIGHT,
 } from "@/features/player/layout";
 
-// Debounce helper
-const debounce = (func: Function, delay: number) => {
-  let timeout: NodeJS.Timeout;
-  return (...args: any[]) => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), delay);
-  };
-};
+// Fase 4: satu pekerjaan refresh yang sedang jalan tidak diduplikasi —
+// pemicu kedua (bump kedua, atau pull saat subscriber jalan) mendapat
+// promise yang sama. Instans level modul: selamat dari remount tab
+// (pola yang sama dengan globalLoadingPromise di useLibrary).
+const libraryRefreshCoalescer = createRefreshCoalescer();
 
 // Fase 3 Library: helper yang sama seperti Player (disc ON/OFF) —
 // parseHex mengembalikan null untuk hex yang tidak terbaca → fallback
@@ -135,15 +136,10 @@ export default function LibraryScreen() {
 
   // (Fase 3 Library: ref input pencarian dihapus — fokus ditangani
   // SearchInput lewat autoFocus saat baris pencarian tampil.)
-  // J3-1: penjaga refresh foreground — cooldown + durasi background yang
-  // SAMA seperti quickDiff di useScanManager. quickDiff TIDAK bisa
-  // menggantikan refresh ini: ia return kosong saat auto-scan mati
-  // (default OFF, libraryStore.ts) dan tidak pernah setTracks, jadi tanpa
-  // refresh ini UI tidak menampilkan lagu baru/hilang. Yang diperbaiki di
-  // sini hanya penjaganya: dulu tiap kembali foreground = refresh penuh
-  // tanpa cooldown dan tanpa cek durasi background.
-  const lastForegroundRefreshRef = useRef(0);
-  const backgroundedAtRef = useRef(0);
+  // FASE 4: penjaga refresh foreground (cooldown + durasi background
+  // J3-1) SUDAH PINDAH ke useForegroundRefreshCoordinator di root —
+  // listener AppState ganda di sini dihapus; efek ini hanya berlangganan
+  // refreshKey (lihat efek subscriber di bawah).
   const BOTTOM_COMPENSATION = Platform.OS === "ios" ? insets.bottom + 20 : 30;
 
   const { playSong, currentSong, isPlaying } = usePlayerStore();
@@ -279,57 +275,60 @@ export default function LibraryScreen() {
   // ── Lifecycle & Sync ───────────────────────────────────────────────────────
   // U-P2-06: kembalikan boolean supaya pemanggil tahu refresh berhasil
   // atau gagal — LibraryTabBar menembak haptic sukses hanya bila true.
+  // FASE 4: dibungkus coalescer — pemanggil kedua saat refresh jalan
+  // mendapat promise yang sama (bukan pekerjaan ganda). Indikator
+  // spinner tetap per panggilan pertama (pull-to-refresh).
   const refreshLibrary = useCallback(
     async (showRefreshIndicator = false): Promise<boolean> => {
-      if (showRefreshIndicator) setRefreshing(true);
+      return libraryRefreshCoalescer.run(async () => {
+        if (showRefreshIndicator) setRefreshing(true);
 
-      try {
-        const freshSongs = (await LibraryScanner.getLibrarySongs()) ?? [];
-        setTracks(freshSongs as any);
-        await reload();
-        return true;
-      } catch (err) {
-        console.error("Refresh Error:", err);
-        return false;
-      } finally {
-        if (showRefreshIndicator) setRefreshing(false);
-      }
+        try {
+          const freshSongs = (await LibraryScanner.getLibrarySongs()) ?? [];
+          setTracks(freshSongs as any);
+          await reload();
+          return true;
+        } catch (err) {
+          console.error("Refresh Error:", err);
+          return false;
+        } finally {
+          if (showRefreshIndicator) setRefreshing(false);
+        }
+      });
     },
     [setTracks, reload],
   );
 
-  const debouncedRefresh = useCallback(
-    debounce(() => refreshLibrary(false), 500),
-    [refreshLibrary],
-  );
-
-  // J3-1: SATU predikat penjaga bersama quickDiff (useScanManager) —
-  // resumeRefreshGuard.shouldRunResumeRefresh: skip kalau baru <3 dtk di
-  // background, cooldown 60 dtk antar refresh foreground. syncFromNative
-  // (J1-3 fix 1, playerStore) punya listener AppState sendiri dan tidak
-  // disentuh di sini.
+  // FASE 4 — refreshKey global: SATU jalur refresh terkoordinasi.
+  // Dulu: listener AppState di sini (debounce 500ms) + quickDiff di
+  // useScanManager (debounce 800ms) jalan sendiri-sendiri — refresh
+  // Library bisa baca DB SEBELUM diff ditulis (UI ketinggalan satu
+  // resume), dan bisa baca DI TENGAH scan (daftar sebagian/kosong).
+  // Sekarang koordinator foreground (ter-mount di root) menjalankan
+  // diff DULU lalu bump; efek ini hanya menjalankan refreshLibrary.
+  // Refresh ini tetap dibutuhkan walau diff sudah jalan: quickDiff
+  // TIDAK PERNAH setTracks (return kosong saat auto-scan mati, default
+  // OFF) — tanpa refresh ini UI tidak menampilkan lagu baru/hilang.
+  // - dilewat bila alasan bump bukan untuk daftar lagu (mis.
+  //   "playlist-change" — lagu tidak berubah);
+  // - dilewat bila scan sedang jalan — bump penutup scan yang akan
+  //   me-refresh (baca DB saat tulis diff berjalan = daftar sebagian).
+  // Ref dipakai supaya efek hanya bergantung pada refreshKey: identitas
+  // refreshLibrary berubah saat reload berubah (offset useLibrary),
+  // dan efek tidak boleh jalan ulang hanya karena itu.
+  const refreshLibraryRef = useRef(refreshLibrary);
+  refreshLibraryRef.current = refreshLibrary;
+  const refreshKey = useRefreshStore((s) => s.refreshKey);
   useEffect(() => {
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "background" || state === "inactive") {
-        backgroundedAtRef.current = Date.now();
-        return;
-      }
-      if (state !== "active") return;
-      const now = Date.now();
-      if (
-        shouldRunResumeRefresh({
-          backgroundedAt: backgroundedAtRef.current,
-          lastRunAt: lastForegroundRefreshRef.current,
-          now,
-        }) !== "ok"
-      ) {
-        return;
-      }
-      lastForegroundRefreshRef.current = now;
-      debouncedRefresh();
-    });
-    return () => subscription.remove();
-  }, [debouncedRefresh]);
+    if (refreshKey === 0) return;
+    const { lastReason } = useRefreshStore.getState();
+    if (!shouldRefreshLibraryOnBump(lastReason)) return;
+    if (isLibraryScanRunning(useLibraryStore.getState())) {
+      console.log("[Library] Refresh dilewat: scan sedang berjalan");
+      return;
+    }
+    void refreshLibraryRef.current(false);
+  }, [refreshKey]);
 
   // Close search when tab changes
   useEffect(() => {
@@ -352,11 +351,18 @@ export default function LibraryScreen() {
         useLibraryStore.getState().updateManualScanProgress(progress);
       });
 
-      await refreshLibrary(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       console.error("Manual scan failed:", error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      // FASE 4: jangan refresh langsung — bump, biar subscriber yang
+      // refresh lewat SATU jalur (dengan guard scan + dedup). Bump juga
+      // saat scan GAGAL: DB bisa tertulis sebagian, UI harus menampilkan
+      // keadaan sebenarnya, bukan daftar lama. finishManualScan sudah
+      // jalan di finally UnifiedScanService.manualScan, jadi guard scan
+      // di subscriber tidak akan melewatkan bump ini.
+      useRefreshStore.getState().bumpRefreshKey("manual-scan", "library");
     }
   }; 
 
