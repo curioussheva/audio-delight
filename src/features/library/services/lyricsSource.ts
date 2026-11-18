@@ -34,6 +34,9 @@ import {
   parsePlainLyrics,
   type LirikLine,
 } from "@/shared/utils/LrcParser";
+// L2: jangan hidupkan lagi lirik yang diatur manual user (dihapus /
+// diganti lewat menu Lirik di [id].tsx) — penanda I3 di `edited_fields`.
+import { isLyricsManuallySet } from "@/features/library/utils/lyricsEdit";
 import { LibraryScanner } from "@/features/library/api/scanner";
 import { useLibraryStore } from "@/features/library/store/libraryStore";
 import type { Song } from "@/shared/types/audio";
@@ -123,6 +126,10 @@ export async function loadLyricsForSong(
   try {
     // DB sudah punya — pemanggil sudah menampilkannya; jangan baca file.
     if (song.lyricsSynced?.trim() || song.lyrics?.trim()) return null;
+
+    // L2: lirik diatur manual user (dihapus / diganti lewat menu Lirik)
+    // — jangan baca .lrc lagi, sekalipun file-nya masih ada di disk.
+    if (isLyricsManuallySet(song)) return null;
 
     const lrcText = await readSidecarLrc(song.uri);
     if (!lrcText) return null;

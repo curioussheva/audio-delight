@@ -102,6 +102,42 @@ describe("I3 — updateMetadata menandai field yang diedit", () => {
     // Hanya "title" yang ditandai — label tidak ditimpa scan.
     expect(params).toContain(JSON.stringify(["title"]));
   });
+
+  it("L2: markEdited menandai lirik (lyrics/lyricsSynced) — lindungi dari backfill otomatis", async () => {
+    existingRow = rowFor({});
+
+    await LibraryScanner.updateMetadata(
+      "1",
+      { lyrics: "polos", lyricsSynced: "[00:01.00]x" },
+      { markEdited: true },
+    );
+
+    const update = lastUpdate();
+    expect(update).toBeDefined();
+    const [sql, params] = update as [string, any[]];
+    expect(sql).toContain("lyrics = ?");
+    expect(sql).toContain("lyrics_synced = ?");
+    expect(params).toContain(JSON.stringify(["lyrics", "lyricsSynced"]));
+  });
+
+  it("L2: hapus lirik (string kosong TERTULIS) + ditandai edited", async () => {
+    existingRow = rowFor({});
+
+    await LibraryScanner.updateMetadata(
+      "1",
+      { lyrics: "", lyricsSynced: "" },
+      { markEdited: true },
+    );
+
+    const update = lastUpdate();
+    expect(update).toBeDefined();
+    const [sql, params] = update as [string, any[]];
+    // "" bukan undefined — kolom benar-benar dikosongkan, bukan dilewati.
+    expect(sql).toContain("lyrics = ?");
+    expect(sql).toContain("lyrics_synced = ?");
+    expect(params).toContain("");
+    expect(params).toContain(JSON.stringify(["lyrics", "lyricsSynced"]));
+  });
 });
 
 describe("I3 — updateExistingSong melewati field yang ditandai", () => {

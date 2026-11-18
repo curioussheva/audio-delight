@@ -13,11 +13,17 @@ import {
 } from "@/features/library/native/MediaStoreModule";
 
 /**
- * I3 (G2): field yang DITIMPA rescan (updateExistingSong) DAN bisa diedit
- * user di [id].tsx. Hanya field inilah yang dilindungi penanda
- * `edited_fields` — composer/label/publisher tidak ditimpa scan, jadi
- * tidak perlu ditandai; field teknis (durasi, codec, ukuran, ...) tidak
- * pernah diedit user, jadi selalu ter-update.
+ * I3 (G2): field yang DITIMPA proses otomatis DAN bisa diedit user di
+ * [id].tsx. Hanya field inilah yang dilindungi penanda `edited_fields`
+ * — composer/label/publisher tidak ditimpa scan, jadi tidak perlu
+ * ditandai; field teknis (durasi, codec, ukuran, ...) tidak pernah
+ * diedit user, jadi selalu ter-update.
+ *
+ * L2: `lyrics` / `lyricsSynced` tidak ditimpa `updateExistingSong`, tapi
+ * DITIMPA dua jalur otomatis lain — enrichment backfill `.lrc`
+ * (MetadataEnricher) dan lazy-load saat diputar (`loadLyricsForSong`).
+ * Keduanya mengecek penanda ini (lihat `isLyricsManuallySet`), jadi
+ * lirik yang dihapus / diganti manual user tidak dihidupkan lagi.
  */
 const SCAN_OVERWRITABLE_USER_FIELDS: readonly string[] = [
   "title",
@@ -28,6 +34,9 @@ const SCAN_OVERWRITABLE_USER_FIELDS: readonly string[] = [
   "year",
   "trackNumber",
   "discNumber",
+  // L2: lirik (lihat komentar di atas).
+  "lyrics",
+  "lyricsSynced",
 ];
 
 /** Parse kolom `edited_fields` (JSON array nama field) — rusak/kosong = tidak ada. */

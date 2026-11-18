@@ -46,6 +46,10 @@ export interface MediaTrack {
   // L1: lirik lokal (lihat Song).
   lyrics?: string;
   lyricsSynced?: string;
+  // L2: penanda I3 (`edited_fields`) — store perlu membawanya supaya
+  // guard lirik di enrichment backfill + lazy-load bisa membaca dari
+  // track store (dbRowToSong sudah memetakannya dari DB).
+  editedFields?: string[];
 }
 
 /**

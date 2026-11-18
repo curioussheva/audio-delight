@@ -180,4 +180,19 @@ describe("loadLyricsForSong", () => {
     await expect(loadLyricsForSong(song)).resolves.toBeNull();
     expect(updateMetadataMock).not.toHaveBeenCalled();
   });
+
+  it("L2: ditandai manual (editedFields) → null, .lrc tidak dibaca lagi", async () => {
+    // File .lrc masih ada di disk — tapi user sudah menghapus / mengganti
+    // lirik lewat menu Lirik, jadi lazy-load tidak boleh menghidupkannya.
+    getInfoMock.mockResolvedValue({ exists: true, isDirectory: false });
+    readMock.mockResolvedValue(LRC_TEXT);
+    const song: any = {
+      id: "1",
+      uri: AUDIO_URI,
+      editedFields: ["lyricsSynced"],
+    };
+    await expect(loadLyricsForSong(song)).resolves.toBeNull();
+    expect(readMock).not.toHaveBeenCalled();
+    expect(updateMetadataMock).not.toHaveBeenCalled();
+  });
 });

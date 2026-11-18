@@ -120,4 +120,35 @@ describe("I2-revisi (a) — enrichment lokal saja", () => {
     );
     expect(getArtistEnrichmentMock).not.toHaveBeenCalled();
   });
+
+  it("L2: lirik yang dihapus manual tidak dihidupkan lagi oleh worker", async () => {
+    // Track ditandai edited (user menghapus lirik di [id].tsx) dan file
+    // .lrc masih ada di disk — worker TIDAK BOLEH membaca / mengisinya.
+    (useLibraryStore.getState as jest.Mock).mockReturnValue({
+      tracks: [
+        {
+          id: "1",
+          uri: "content://media/external/audio/media/1",
+          editedFields: ["lyricsSynced"],
+        },
+      ],
+      markAsEnriched: jest.fn(),
+      setEnrichmentQueueSize: jest.fn(),
+      finishEnrichment: jest.fn(),
+    });
+    getAssetMock.mockResolvedValueOnce({
+      localUri: "file:///storage/emulated/0/Music/song.mp3",
+      uri: "content://media/external/audio/media/1",
+    });
+    getInfoMock.mockResolvedValueOnce({ exists: true, isDirectory: false });
+    readMock.mockResolvedValueOnce("[00:01.00]la");
+
+    await MetadataEnricher.startBackgroundWorker();
+
+    expect(readMock).not.toHaveBeenCalled();
+    const calls = updateMetadataMock.mock.calls.filter(
+      ([, payload]: [string, any]) => "lyricsSynced" in (payload ?? {}),
+    );
+    expect(calls).toEqual([]);
+  });
 });

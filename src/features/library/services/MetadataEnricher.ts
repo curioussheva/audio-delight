@@ -13,6 +13,8 @@ import { LibraryScanner } from "../api/scanner";
 import { useLibraryStore } from "../store/libraryStore";
 import { analyzeBitDepth } from "../../audio/api/BitDepthVerifier";
 import { readSidecarLrc } from "./lyricsSource";
+// L2: jangan hidupkan lagi lirik yang diatur manual user (penanda I3).
+import { isLyricsManuallySet } from "../utils/lyricsEdit";
 import type { QueueItem, EnrichmentLevel } from "../types/scan";
 import { Song } from "@/shared/types/audio";
 import { isHiRes } from "@/shared/utils/audioQuality";
@@ -163,11 +165,13 @@ export class MetadataEnricher {
         }
 
         // L1: lirik .lrc berdampingan (synced) — lokal saja, opsional.
-        // Dilewati bila store sudah punya lirik synced untuk lagu ini.
+        // Dilewati bila store sudah punya lirik synced untuk lagu ini,
+        // DAN bila lirik lagu ini diatur manual user (L2: dihapus /
+        // diganti lewat menu Lirik — penanda I3 di `editedFields`).
         // Gagal baca (tidak ada file / scoped storage menolak) = lanjut
         // tanpa lirik, bukan error. Embedded USLT belum tersedia (lihat
         // lyricsSource.ts) — kolom `lyrics` tetap kosong dari jalur ini.
-        if (!existingTrack?.lyricsSynced) {
+        if (!existingTrack?.lyricsSynced && !isLyricsManuallySet(existingTrack ?? {})) {
           const lrcText = await readSidecarLrc(uri);
           if (lrcText) metadata.lyricsSynced = lrcText;
         }

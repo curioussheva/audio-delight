@@ -14,6 +14,9 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system/legacy";
+import { ConfirmDialog } from "@/shared/components/ui/ConfirmDialog";
 import { safeGoBack } from "@/shared/utils/navigation";
 import {
   ArrowLeft,
@@ -47,6 +50,16 @@ import {
   FILLABLE_FIELD_LABELS,
   type FillableField,
 } from "@/features/library/utils/metadataCompleteness";
+// L2: menu Lirik — logika murni status/parse/penanda manual + baris
+// lirik dari DB untuk pratinjau & player store.
+import {
+  getLyricsKind,
+  lyricsLineCount,
+  parsePastedLyrics,
+  lyricsToDisplayText,
+  mergeEditedFields,
+} from "@/features/library/utils/lyricsEdit";
+import { songLyricsToLines } from "@/features/library/services/lyricsSource";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -181,8 +194,17 @@ export default function SongDetailScreen() {
   const updateTrackInStore = useLibraryStore((state) => state.updateTrack);
   const toggleFavoriteStore = useLibraryStore((state) => state.toggleFavorite);
   const playSong = usePlayerStore((state) => state.playSong);
+  // L2: bila lagu yang diedit liriknya sedang diputar, player store ikut
+  // di-update supaya FullLyricsView langsung menampilkan lirik baru.
+  const currentSong = usePlayerStore((state) => state.currentSong);
+  const setPlayerLyrics = usePlayerStore((state) => state.setLyrics);
 
   const [syncModalVisible, setSyncModalVisible] = useState(false);
+  // L2: menu Lirik — editor tempel + dialog hapus.
+  const [lyricsEditorVisible, setLyricsEditorVisible] = useState(false);
+  const [lyricsDraft, setLyricsDraft] = useState("");
+  const [isLyricsBusy, setIsLyricsBusy] = useState(false);
+  const [deleteLyricsVisible, setDeleteLyricsVisible] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -206,6 +228,28 @@ export default function SongDetailScreen() {
   const missingLabels = missingFields
     .map((f) => FILLABLE_FIELD_LABELS[f])
     .join(", ");
+
+  // L2: status lirik dari DB — synced (.lrc) menang atas polos, sama
+  // seperti player (songLyricsToLines). Dipakai seksi LIRIK.
+  const lyricsKind = useMemo(
+    () => (song ? getLyricsKind(song) : "none"),
+    [song],
+  );
+  const lyricLines = useMemo(
+    () => (song ? songLyricsToLines(song) : []),
+    [song],
+  );
+  const lyricsCount = useMemo(
+    () => (song ? lyricsLineCount(song) : 0),
+    [song],
+  );
+  const lyricsStatusText =
+    lyricsKind === "synced"
+      ? `Lirik tersinkron (.lrc) · ${lyricsCount} baris`
+      : lyricsKind === "plain"
+        ? `Lirik polos · ${lyricsCount} baris`
+        : "Belum ada lirik";
+  const lyricPreview = lyricLines.slice(0, 3).map((l) => l.text);
 
   const [editForm, setEditForm] = useState<EditFormData>({
     title: "",
@@ -381,6 +425,110 @@ export default function SongDetailScreen() {
       });
     }
     setIsEditMode(false);
+  };
+
+  // ─── L2: menu Lirik (manual, lokal saja) ─────────────────────────────
+  //
+  // Satu jalur simpan untuk ketiga aksi (tempel / impor / hapus): tulis
+  // ke DB via updateMetadata + markEdited (pola I3 — lirik yang diatur
+  // manual tidak dihidupkan lagi enrichment/lazy-load), update store,
+  // dan update player store bila lagu ini sedang diputar supaya
+  // FullLyricsView langsung menampilkan lirik baru. `payload` selalu
+  // memuat KEDUA field supaya yang tidak dipakai ikut dibersihkan
+  // (tempel polos menghapus synced lama, dan sebaliknya).
+
+  const applyLyricsChange = async (
+    payload: { lyrics: string; lyricsSynced: string },
+    lines: { time: number; text: string }[],
+  ): Promise<boolean> => {
+    if (!song || isLyricsBusy) return false;
+    setIsLyricsBusy(true);
+    try {
+      await LibraryScanner.updateMetadata(song.id, payload, {
+        markEdited: true,
+      });
+      updateTrackInStore(song.id, {
+        ...payload,
+        editedFields: mergeEditedFields(
+          song.editedFields,
+          "lyrics",
+          "lyricsSynced",
+        ),
+      });
+      if (currentSong?.id === song.id) setPlayerLyrics(lines);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      return true;
+    } catch (error) {
+      console.error("[SongDetail] Failed to save lyrics:", error);
+      Alert.alert("Gagal", "Terjadi kesalahan saat menyimpan lirik.");
+      return false;
+    } finally {
+      setIsLyricsBusy(false);
+    }
+  };
+
+  const handleOpenLyricsEditor = () => {
+    if (!song) return;
+    setLyricsDraft(lyricsToDisplayText(song));
+    setLyricsEditorVisible(true);
+  };
+
+  const handleSaveLyricsDraft = async () => {
+    const parsed = parsePastedLyrics(lyricsDraft);
+    if (!parsed) {
+      Alert.alert("Lirik kosong", "Tulis atau tempel lirik dulu.");
+      return;
+    }
+    const ok = await applyLyricsChange(
+      { lyrics: parsed.lyrics, lyricsSynced: parsed.lyricsSynced },
+      parsed.lines,
+    );
+    if (ok) setLyricsEditorVisible(false);
+  };
+
+  const handleImportLrc = async () => {
+    if (!song || isLyricsBusy) return;
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        // .lrc tidak punya MIME terdaftar — tampilkan semua file, lalu
+        // validasi ekstensi + isi (pola yang sama dengan import M3U di
+        // library.tsx: copyToCacheDirectory + file.name asli).
+        type: "*/*",
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        return;
+      }
+      const file = result.assets[0];
+      if (!/\.lrc$/i.test(file.name ?? "")) {
+        Alert.alert("Bukan file .lrc", "Pilih file dengan ekstensi .lrc.");
+        return;
+      }
+      const text = await FileSystem.readAsStringAsync(file.uri);
+      const parsed = parsePastedLyrics(text);
+      if (!parsed || parsed.kind !== "synced") {
+        Alert.alert(
+          "File bukan LRC yang valid",
+          "File .lrc tidak berisi baris ber-timestamp [mm:ss.xx].",
+        );
+        return;
+      }
+      await applyLyricsChange(
+        { lyrics: "", lyricsSynced: parsed.lyricsSynced },
+        parsed.lines,
+      );
+    } catch (error) {
+      console.error("[SongDetail] Failed to import .lrc:", error);
+      Alert.alert("Gagal", "File .lrc tidak bisa dibaca.");
+    }
+  };
+
+  const handleConfirmDeleteLyrics = async () => {
+    // Hapus = kedua kolom dikosongkan (string "" TERTULIS oleh
+    // updateMetadata, bukan dilewati) + ditandai edited, jadi proses
+    // otomatis tidak menghidupkan lagi lirik lagu ini.
+    const ok = await applyLyricsChange({ lyrics: "", lyricsSynced: "" }, []);
+    if (ok) setDeleteLyricsVisible(false);
   };
 
   const getReadablePath = (path?: string): string => {
@@ -886,6 +1034,170 @@ export default function SongDetailScreen() {
               )}
             </View>
 
+            {/* L2: seksi Lirik — status dari DB + aksi manual lokal untuk
+                lagu tanpa file .lrc. Tulis/tempel menerima teks polos
+                atau LRC; impor membaca file .lrc pilihan user; hapus
+                memakai ConfirmDialog (data user). */}
+            <View
+              style={[
+                styles.sectionCard,
+                { backgroundColor: colors.background.secondary },
+              ]}
+            >
+              <View style={styles.sectionHeader}>
+                <Music size={16} color={colors.primary[500]} />
+                <Text
+                  style={[styles.sectionTitle, { color: colors.primary[500] }]}
+                >
+                  LIRIK
+                </Text>
+              </View>
+              <DetailRow
+                label="Status"
+                value={lyricsStatusText}
+                colors={colors}
+              />
+              {lyricPreview.length > 0 && (
+                <Text
+                  style={[
+                    styles.lyricsPreview,
+                    { color: colors.text.secondary },
+                  ]}
+                  numberOfLines={3}
+                >
+                  {lyricPreview.join("\n")}
+                </Text>
+              )}
+              <View style={styles.lyricsActions}>
+                <TouchableOpacity
+                  style={[
+                    styles.lyricsActionBtn,
+                    { borderColor: colors.border.light },
+                  ]}
+                  onPress={handleOpenLyricsEditor}
+                  accessibilityRole="button"
+                  accessibilityLabel="Tulis atau tempel lirik"
+                >
+                  <Text
+                    style={[
+                      styles.lyricsActionBtnText,
+                      { color: colors.text.primary },
+                    ]}
+                  >
+                    Tulis / Tempel
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.lyricsActionBtn,
+                    { borderColor: colors.border.light },
+                  ]}
+                  onPress={handleImportLrc}
+                  accessibilityRole="button"
+                  accessibilityLabel="Impor file .lrc"
+                >
+                  <Text
+                    style={[
+                      styles.lyricsActionBtnText,
+                      { color: colors.text.primary },
+                    ]}
+                  >
+                    Impor .lrc
+                  </Text>
+                </TouchableOpacity>
+                {lyricsKind !== "none" && (
+                  <TouchableOpacity
+                    style={[
+                      styles.lyricsActionBtn,
+                      { borderColor: colors.border.light },
+                    ]}
+                    onPress={() => setDeleteLyricsVisible(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Hapus lirik"
+                  >
+                    <Text
+                      style={[
+                        styles.lyricsActionBtnText,
+                        { color: colors.status.error },
+                      ]}
+                    >
+                      Hapus
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              {lyricsEditorVisible && (
+                <View style={styles.lyricsEditor}>
+                  <TextInput
+                    style={[
+                      styles.lyricsEditorInput,
+                      {
+                        color: colors.text.primary,
+                        backgroundColor: colors.background.tertiary,
+                        borderColor: colors.border.light,
+                      },
+                    ]}
+                    value={lyricsDraft}
+                    onChangeText={setLyricsDraft}
+                    multiline
+                    numberOfLines={8}
+                    textAlignVertical="top"
+                    placeholder="Tempel lirik di sini — teks polos atau format LRC [mm:ss.xx]…"
+                    placeholderTextColor={colors.text.disabled}
+                    accessibilityLabel="Editor lirik"
+                  />
+                  <Text
+                    style={[
+                      styles.lyricsEditorHint,
+                      { color: colors.text.tertiary },
+                    ]}
+                  >
+                    Baris ber-timestamp [mm:ss.xx] disimpan sebagai lirik
+                    tersinkron; teks polos disimpan sebagai lirik biasa.
+                  </Text>
+                  <View style={styles.lyricsActions}>
+                    <TouchableOpacity
+                      style={[
+                        styles.lyricsSaveBtn,
+                        { backgroundColor: colors.primary[500] },
+                      ]}
+                      onPress={handleSaveLyricsDraft}
+                      disabled={isLyricsBusy}
+                      accessibilityRole="button"
+                      accessibilityLabel="Simpan lirik"
+                    >
+                      <Text
+                        style={[
+                          styles.lyricsActionBtnText,
+                          { color: onPrimary },
+                        ]}
+                      >
+                        {isLyricsBusy ? "Menyimpan…" : "Simpan lirik"}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.lyricsActionBtn,
+                        { borderColor: colors.border.light },
+                      ]}
+                      onPress={() => setLyricsEditorVisible(false)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Batalkan tulis lirik"
+                    >
+                      <Text
+                        style={[
+                          styles.lyricsActionBtnText,
+                          { color: colors.text.primary },
+                        ]}
+                      >
+                        Batal
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            </View>
+
             <View
               style={[
                 styles.sectionCard,
@@ -963,11 +1275,22 @@ export default function SongDetailScreen() {
         <View style={{ height: insets.bottom + 100 }} />
       </ScrollView>
 
-      {(isUpdating || isSaving) && (
+      {(isUpdating || isSaving || isLyricsBusy) && (
         <View style={styles.overlay}>
           <ActivityIndicator size="large" color={colors.primary[500]} />
         </View>
       )}
+
+      {/* L2: hapus lirik = hapus data user → ConfirmDialog (Fase 2).
+          File .lrc di penyimpanan TIDAK ikut dihapus. */}
+      <ConfirmDialog
+        visible={deleteLyricsVisible}
+        title="Hapus lirik?"
+        message="Lirik lagu ini akan dihapus dari database dan tidak akan dimunculkan lagi oleh scan. File .lrc di penyimpanan tidak dihapus."
+        confirmLabel="Hapus"
+        onConfirm={handleConfirmDeleteLyrics}
+        onCancel={() => setDeleteLyricsVisible(false)}
+      />
 
       <MetadataSyncModal
         visible={syncModalVisible}
@@ -1072,6 +1395,35 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   artistBio: { fontSize: 14, lineHeight: 20 },
+  // L2: seksi Lirik — pratinjau, deret aksi, editor tempel.
+  lyricsPreview: { fontSize: 14, lineHeight: 20, marginTop: 4 },
+  lyricsActions: { flexDirection: "row", gap: 8, marginTop: 12 },
+  lyricsActionBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  lyricsActionBtnText: { fontSize: 13, fontWeight: "700" },
+  lyricsEditor: { marginTop: 12 },
+  lyricsEditorInput: {
+    minHeight: 160,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  lyricsEditorHint: { fontSize: 12, lineHeight: 16, marginTop: 8 },
+  lyricsSaveBtn: {
+    flex: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   sectionCard: {
     marginHorizontal: 20,
     padding: 20,
