@@ -477,6 +477,45 @@ export default function PlayerScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* LAYOUT-V2 (1): info lagu PINDAH ke atas artwork supaya judul
+            selalu terlihat tanpa scroll. Dulu di bawah artwork (di tepi
+            bawah viewport tengah). Panel solid + Like ikut pindah. */}
+        <View
+          style={[
+            styles.songInfoContainer,
+            styles.panel,
+            { backgroundColor: colors.background.primary },
+          ]}
+        >
+          <View style={styles.songTextWrapper}>
+            <Text
+              style={[styles.songTitle, { color: textPrimary }]}
+              numberOfLines={2}
+            >
+              {currentSong.title}
+            </Text>
+            <Text
+              style={[styles.artistName, { color: textSecondary }]}
+              numberOfLines={1}
+            >
+              {currentSong.artist}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={handleLike}
+            style={styles.likeBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Suka"
+            accessibilityState={{ selected: isLiked }}
+          >
+            <Heart
+              size={28}
+              color={isLiked ? errorColor : textTertiary}
+              fill={isLiked ? errorColor : "transparent"}
+            />
+          </TouchableOpacity>
+        </View>
+
         {/* ARTWORK SECTION — ketuk artwork / tombol lirik untuk beralih
             ke tampilan lirik (FullLyricsView). Sebelumnya showLyrics hanya
             mengubah warna ikon Mic — lirik tidak pernah dirender. */}
@@ -539,43 +578,6 @@ export default function PlayerScreen() {
             </Pressable>
           </View>
         )}
-
-        {/* SONG INFO & LIKE BTN — A3: panel solid (lihat HEADER). */}
-        <View
-          style={[
-            styles.songInfoContainer,
-            styles.panel,
-            { backgroundColor: colors.background.primary },
-          ]}
-        >
-          <View style={styles.songTextWrapper}>
-            <Text
-              style={[styles.songTitle, { color: textPrimary }]}
-              numberOfLines={2}
-            >
-              {currentSong.title}
-            </Text>
-            <Text
-              style={[styles.artistName, { color: textSecondary }]}
-              numberOfLines={1}
-            >
-              {currentSong.artist}
-            </Text>
-          </View>
-          <TouchableOpacity
-            onPress={handleLike}
-            style={styles.likeBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Suka"
-            accessibilityState={{ selected: isLiked }}
-          >
-            <Heart
-              size={28}
-              color={isLiked ? errorColor : textTertiary}
-              fill={isLiked ? errorColor : "transparent"}
-            />
-          </TouchableOpacity>
-        </View>
 
         {/* ✅ PARAMETRIC SPECTRUM VIEW (bar biru→merah mengikuti dB) —
             ganti SpectogramView (waterfall) sejak 2026-11-17.
@@ -1048,7 +1050,10 @@ const styles = StyleSheet.create({
   },
   artworkSection: {
     alignItems: "center",
-    marginTop: 20,
+    // LAYOUT-V2 (1): marginTop 20 → 0 — jarak dari header kini diberikan
+    // songInfoContainer (marginTop 20); jarak info→sampul tetap 20
+    // dari marginBottom songInfoContainer.
+    marginTop: 0,
     marginBottom: 30,
   },
   artworkContainer: {
@@ -1210,6 +1215,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    // LAYOUT-V2 (1): panel info kini anak pertama ScrollView — marginTop
+    // 20 menggantikan marginTop artworkSection yang dulu memberi jarak
+    // dari header fixed.
+    marginTop: 20,
     marginBottom: 20,
     width: "100%",
   },
