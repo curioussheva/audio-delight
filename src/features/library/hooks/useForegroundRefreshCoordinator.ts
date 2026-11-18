@@ -78,14 +78,15 @@ async function runResumeQuickDiff(): Promise<boolean> {
   if (_isQuickDiffRunning) return false;
 
   _isQuickDiffRunning = true;
-  // Timestamp dicatat SEBELUM jalan (pola lama): cooldown 60 dtk dihitung
-  // dari pekerjaan terakhir yang dimulai, bukan yang selesai.
-  _lastResumeRunAt = Date.now();
   console.log("[ForegroundRefresh] App resumed → Running quick diff...");
   try {
     const diffResult = await ScanDiffEngine.quickDiff();
     // S2: antre lagu baru + jalankan worker enrichment.
     await handleResumeDiffResult(diffResult);
+    // N14: cooldown 60 dtk dicatat HANYA bila diff sukses. Sebelumnya
+    // dicatat SEBELUM jalan — diff yang gagal/terbatal ikut mengonsumsi
+    // cooldown dan resume berikutnya (yang bisa sukses) dilewat 60 dtk.
+    _lastResumeRunAt = Date.now();
     return true;
   } catch (err) {
     console.warn("[ForegroundRefresh] Quick diff on resume failed:", err);
@@ -102,6 +103,12 @@ export function useForegroundRefreshCoordinator(): void {
       // false positive) — pola lama useScanManager, dipindah ke sini.
       if (nextState === "background" || nextState === "inactive") {
         _backgroundedAt = Date.now();
+        // N14: batalkan debounce yang tertunda — diff tidak boleh tetap
+        // jalan sesudah app kembali di-background-kan.
+        if (_debounceTimer) {
+          clearTimeout(_debounceTimer);
+          _debounceTimer = null;
+        }
         return;
       }
       if (nextState !== "active") return;
@@ -130,6 +137,7 @@ export function useForegroundRefreshCoordinator(): void {
 
       if (_debounceTimer) clearTimeout(_debounceTimer);
       _debounceTimer = setTimeout(() => {
+        _debounceTimer = null;
         void runResumeQuickDiff().then((ran) => {
           // URUTAN YANG DIPERBAIKI: bump hanya sesudah diff selesai —
           // subscriber Library membaca DB yang sudah berisi diff.
