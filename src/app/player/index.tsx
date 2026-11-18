@@ -31,6 +31,7 @@ import { useSafePadding } from "@/shared/hooks/useSafePadding";
 import { ParametricSpectrumView } from "@/features/visualizer/components/ParametricSpectrumView";
 import { accentOn, pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import { safeGoBack } from "@/shared/utils/navigation";
+import { sleepRemainingMinutes } from "@/features/player/utils/playbackStatus";
 
 // Lucide Icons
 import {
@@ -87,6 +88,7 @@ export default function PlayerScreen() {
     toggleRepeat,
     audioMode,
     audioSessionId, // ✅ Diperlukan untuk SpectogramView
+    sleepTimerEnd,
   } = usePlayerStore();
 
   // U-P1-19: hati memakai state favorit asli (libraryStore, dicerminkan
@@ -115,6 +117,15 @@ export default function PlayerScreen() {
   useEffect(() => {
     setDragPosition(null);
   }, [currentSong?.id]);
+
+  // A4: jam untuk indikator sleep timer — detak tiap detik hanya saat
+  // timer aktif, supaya sisa menit tidak basi (pola SleepTimerModal).
+  const [sleepNow, setSleepNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (sleepTimerEnd === null) return;
+    const id = setInterval(() => setSleepNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [sleepTimerEnd]);
 
   const handlePlayPause = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -284,6 +295,10 @@ export default function PlayerScreen() {
   ];
 
   const iconColorDefault = isDark ? textTertiary : textSecondary;
+
+  // A4: indikator sleep timer — null bila timer mati, 0 saat baru habis.
+  const sleepRemainingMin = sleepRemainingMinutes(sleepTimerEnd, sleepNow);
+  const sleepActive = sleepRemainingMin !== null && sleepRemainingMin > 0;
 
   return (
     <View style={[styles.container, { backgroundColor }]}>
@@ -707,11 +722,44 @@ export default function PlayerScreen() {
         >
           <TouchableOpacity
             onPress={() => setIsTimerVisible(true)}
-            style={styles.utilityBtn}
+            style={[styles.utilityBtn, styles.sleepBtn]}
             accessibilityRole="button"
-            accessibilityLabel="Sleep timer"
+            accessibilityLabel={
+              sleepActive
+                ? `Sleep timer aktif, sisa ${sleepRemainingMin} menit`
+                : "Sleep timer"
+            }
+            accessibilityState={{ selected: sleepActive }}
           >
-            <Clock size={20} color={iconColorDefault} />
+            <Clock
+              size={20}
+              color={sleepActive ? primaryColor : iconColorDefault}
+            />
+            {sleepActive && (
+              <>
+                <View
+                  style={[
+                    styles.repeatOneDot,
+                    { backgroundColor: primaryColor },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.sleepBadge,
+                    { backgroundColor: primaryColor },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.sleepBadgeText,
+                      { color: playIconColor },
+                    ]}
+                  >
+                    {`${sleepRemainingMin} mnt`}
+                  </Text>
+                </View>
+              </>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -938,6 +986,23 @@ const styles = StyleSheet.create({
   // Target sentuh >= 44dp (U-P1-38): ikon 20px + padding 12 di tiap sisi.
   utilityBtn: {
     padding: 12,
+  },
+  // A4: pembungkus relatif supaya dot + badge sisa waktu bisa diposisikan
+  // absolut (pola yang sama dengan repeatBtn Repeat One).
+  sleepBtn: {
+    position: "relative",
+  },
+  sleepBadge: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    borderRadius: 999,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  sleepBadgeText: {
+    fontSize: 9,
+    fontWeight: "800",
   },
   // U-P1-20: empty/error state — bukan layar hitam.
   emptyContainer: {
