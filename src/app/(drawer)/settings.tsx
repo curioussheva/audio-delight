@@ -31,6 +31,10 @@ import {
 } from "lucide-react-native";
 import { useLibraryStore } from "@/features/library/store/libraryStore"; // Pastikan path benar
 import { BackgroundScanTask } from "@/features/library/services/BackgroundScanTask";
+import { UnifiedScanService } from "@/features/library/services/UnifiedScanService";
+import { ScanAbortedError } from "@/features/library/services/ScanDiffEngine";
+import { useRefreshStore } from "@/shared/store/refreshStore";
+import { formatRescanToast } from "@/features/library/utils/rescanMessage";
 
 import * as Haptics from "expo-haptics";
 
@@ -38,6 +42,7 @@ import { useTheme } from "@/shared/context/ThemeContext";
 import { ScreenHeader } from "@/shared/components/ui/ScreenHeader";
 import { SectionCard } from "@/shared/components/ui/SectionCard";
 import { ConfirmDialog } from "@/shared/components/ui/ConfirmDialog";
+import { PristineButton } from "@/shared/components/ui/PristineButton";
 import { useToastStore } from "@/shared/store/toastStore";
 import { FONT_FAMILY } from "@/shared/constants/themes/base";
 import { pickReadable, accentOn, compositeOver, AA_NORMAL } from "@/shared/utils/contrast";
@@ -245,6 +250,9 @@ export default function SettingsScreen() {
   const {
     isAutoScanEnabled,
     toggleAutoScanEnabled, // Gunakan action yang sesuai di store kamu
+    // Rescan: kunci scan — tombol diganti spinner saat scan jalan.
+    isManualScanning,
+    isAutoScanning,
   } = useLibraryStore();
 
   // --- 2. EXISTING STATES ---
@@ -254,6 +262,9 @@ export default function SettingsScreen() {
   const [showAbout, setShowAbout] = useState(false);
   const [showLibrarySettings, setShowLibrarySettings] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+  // Rescan (full scan manual) dari Settings — spinner lokal +
+  // kunci store (lihat handleRescan).
+  const [isRescanning, setIsRescanning] = useState(false);
   // FASE 3 Settings: konfirmasi destruktif/berdampak lewat ConfirmDialog
   // (bukan dialog sistem) — pola Fase 3 Library/EQ.
   const [showClearCacheConfirm, setShowClearCacheConfirm] = useState(false);
@@ -397,6 +408,46 @@ export default function SettingsScreen() {
         console.warn("[Settings] BackgroundTask unregister failed:", err),
       );
       console.log("[Settings] Background scan unregistered");
+    }
+  };
+
+  // Rescan Library — full scan manual dari Settings. Memakai
+  // UnifiedScanService.manualScan yang SAMA dengan manual rescan
+  // Library (bukan jalur scan kedua): full diff MediaStore. Kunci
+  // scan dihormati dua lapis — tombol diganti spinner saat scan jalan
+  // (store flag) + handler memeriksa ulang via getState (balapan tap)
+  // — tanpa error mentah ke user. Feedback selesai/gagal lewat toast
+  // (pola Fase 4).
+  const handleRescan = async () => {
+    const { isManualScanning: manualRunning, isAutoScanning: autoRunning } =
+      useLibraryStore.getState();
+    if (isRescanning || manualRunning || autoRunning) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setIsRescanning(true);
+    try {
+      const result = await UnifiedScanService.manualScan((progress) => {
+        useLibraryStore.getState().updateManualScanProgress(progress);
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast(formatRescanToast(result), "success");
+    } catch (error) {
+      if (error instanceof ScanAbortedError) {
+        // Dibatalkan dari Library (tombol batal) saat Rescan Settings
+        // sedang jalan — bukan kegagalan.
+        showToast("Rescan dibatalkan.", "info");
+      } else {
+        console.error("[Settings] Rescan failed:", error);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        showToast("Rescan gagal. Coba lagi.", "error");
+      }
+    } finally {
+      setIsRescanning(false);
+      // FASE 4: jangan refresh langsung — bump, biar subscriber yang
+      // refresh lewat SATU jalur (dengan guard scan + dedup). Bump juga
+      // saat scan GAGAL: DB bisa tertulis sebagian, UI harus menampilkan
+      // keadaan sebenarnya. (Pola yang sama dengan handleManualRescan
+      // di Library; asal di sini "settings".)
+      useRefreshStore.getState().bumpRefreshKey("manual-scan", "settings");
     }
   };
 
@@ -1336,6 +1387,33 @@ export default function SettingsScreen() {
                 isAutoScanEnabled ? colors.text.primary : colors.text.secondary
               }
             />
+          </SettingRow>
+
+          <SettingRow colors={colors} spacing={spacing} bordered={false}>
+            <View style={{ flex: 1, marginRight: spacing.md }}>
+              <Text style={{ color: colors.text.primary, fontFamily: FONT_FAMILY.semiBold }}>
+                Rescan Library
+              </Text>
+              <Text
+                style={{
+                  color: colors.text.secondary,
+                  fontSize: 11,
+                  marginTop: 2,
+                }}
+              >
+                Memindai ulang semua file musik di perangkat.
+              </Text>
+            </View>
+            {isManualScanning || isAutoScanning || isRescanning ? (
+              <ActivityIndicator size="small" color={accentOnSecondary} />
+            ) : (
+              <PristineButton
+                label="Pindai"
+                onPress={handleRescan}
+                variant="secondary"
+                surface={colors.background.secondary}
+              />
+            )}
           </SettingRow>
 
           {/* I2-revisi: toggle "Online Artist Metadata" + "Hanya lewat
