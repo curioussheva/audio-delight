@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Dimensions,
+  Modal,
   Pressable,
   Animated,
   ScrollView,
@@ -21,6 +22,7 @@ import { useFavorites } from "@/features/favorites/hooks/useFavorites";
 import { formatTime } from "@/shared/utils/time";
 import Slider from "@react-native-community/slider";
 import { SleepTimerModal } from "@/features/player/components/SleepTimerModal";
+import { QueueManager } from "@/features/player/components/QueueManager";
 import { FullLyricsView } from "@/features/player/components/FullLyricsView";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { useSafePadding } from "@/shared/hooks/useSafePadding";
@@ -64,6 +66,7 @@ export default function PlayerScreen() {
 
   const [showLyrics, setShowLyrics] = useState(false);
   const [isTimerVisible, setIsTimerVisible] = useState(false);
+  const [isQueueVisible, setIsQueueVisible] = useState(false);
 
   // U-P2-11: posisi lokal selama jari menggeser slider. Nilai slider
   // terikat ke store yang di-overwrite tiap 500ms oleh watcher posisi
@@ -775,6 +778,16 @@ export default function PlayerScreen() {
             />
           </TouchableOpacity>
 
+          {/* A5: antrean — lihat + ketuk untuk lompat (tanpa reorder/hapus). */}
+          <TouchableOpacity
+            onPress={() => setIsQueueVisible(true)}
+            style={styles.utilityBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Antrean"
+          >
+            <ListMusic size={20} color={iconColorDefault} />
+          </TouchableOpacity>
+
           <TouchableOpacity
             onPress={() => router.push("/(drawer)/analyzer")}
             style={styles.utilityBtn}
@@ -791,6 +804,29 @@ export default function PlayerScreen() {
         visible={isTimerVisible}
         onClose={() => setIsTimerVisible(false)}
       />
+
+      {/* Antrean — A5: modal daftar + ketuk untuk lompat. */}
+      <Modal
+        visible={isQueueVisible}
+        animationType="slide"
+        onRequestClose={() => setIsQueueVisible(false)}
+      >
+        <View
+          style={[
+            styles.queueModalContainer,
+            {
+              backgroundColor: colors.background.primary,
+              paddingTop: safePadding.paddingTop,
+              paddingBottom: safePadding.paddingBottom,
+            },
+          ]}
+        >
+          <QueueManager
+            visible={isQueueVisible}
+            onClose={() => setIsQueueVisible(false)}
+          />
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1003,6 +1039,10 @@ const styles = StyleSheet.create({
   sleepBadgeText: {
     fontSize: 9,
     fontWeight: "800",
+  },
+  // A5: wadah modal antrean (QueueManager mengisi sisanya).
+  queueModalContainer: {
+    flex: 1,
   },
   // U-P1-20: empty/error state — bukan layar hitam.
   emptyContainer: {

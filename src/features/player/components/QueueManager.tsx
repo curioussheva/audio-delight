@@ -1,7 +1,25 @@
-// Di src/components/audio/QueueManager.tsx
-import React, { useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
-import DraggableFlatList from "react-native-draggable-flatlist";
+// src/features/player/components/QueueManager.tsx
+//
+// Antrean pemutaran — LIHAT + KETUK UNTUK LOMPAT SAJA (A5, 2026-11-18).
+//
+// KENAPA TANPA REORDER/HAPUS: queue yang benar-benar diputar dipegang
+// NATIVE (NativePlaybackService.setQueue hanya full-replace, tanpa API
+// reorder/remove; playNext/playPrevious/auto-advance memanggil native
+// next()/previous()). Store setQueue HANYA mengubah state JS — reorder
+// di sini akan menampilkan satu urutan dan memutar urutan lain, lalu
+// handleTrackChanged menyinkronkan ulang dari native. Jadi daftar ini
+// hanya menampilkan + ketuk untuk lompat (playSong, jalur lompat standar
+// yang me-sync ulang native). Reorder penuh butuh API native reorder /
+// store applyQueueOrder yang me-sync ulang native + menjaga posisi —
+// ronde lanjutan, perlu verifikasi device (lihat player-fix-report.md).
+import React from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  FlatList,
+  StyleSheet,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { usePlayerStore } from "@/features/player/store/playerStore";
@@ -14,27 +32,16 @@ interface QueueManagerProps {
 }
 
 export const QueueManager: React.FC<QueueManagerProps> = ({
-  onClose: _onClose,
+  onClose,
   visible,
 }) => {
   const { theme } = useTheme();
   const { colors, spacing } = theme;
-  const { queue, currentSong, setQueue } = usePlayerStore();
-  const [expanded, setExpanded] = useState(false);
+  const { queue, currentSong, playSong } = usePlayerStore();
 
   if (!visible) return null;
 
-  const handleReorder = (data: Song[]) => {
-    setQueue(data);
-  };
-
-  const handleRemove = (index: number) => {
-    const newQueue = [...queue];
-    newQueue.splice(index, 1);
-    setQueue(newQueue);
-  };
-
-  const renderQueueItem = ({ item, index, drag, isActive }: any) => {
+  const renderQueueItem = ({ item }: { item: Song }) => {
     const isCurrent = currentSong?.id === item.id;
 
     return (
@@ -42,18 +49,21 @@ export const QueueManager: React.FC<QueueManagerProps> = ({
         style={[
           styles.queueItem,
           {
-            backgroundColor: isActive
-              ? colors.background.tertiary
-              : isCurrent
-                ? colors.primary[500] + "20"
-                : "transparent",
+            backgroundColor: isCurrent
+              ? colors.primary[500] + "20"
+              : "transparent",
             padding: spacing.sm,
             borderRadius: 8,
             marginBottom: spacing.xs,
           },
         ]}
-        onLongPress={drag}
-        disabled={isActive}
+        // A5: lompat lewat playSong (jalur standar — me-sync ulang native).
+        // Bukan skipToIndex: indeks JS bisa bergeser dari indeks native
+        // bila ada lagu tanpa URI yang terbuang filter di playSong.
+        onPress={() => void playSong(item, queue)}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.title} — ${item.artist}`}
+        accessibilityState={{ selected: isCurrent }}
       >
         <View
           style={[
@@ -100,19 +110,6 @@ export const QueueManager: React.FC<QueueManagerProps> = ({
           <Text style={[styles.queueDuration, { color: colors.text.tertiary }]}>
             {formatTime(item.duration)}
           </Text>
-
-          <TouchableOpacity
-            onPress={() => handleRemove(index)}
-            style={{ marginLeft: spacing.sm }}
-          >
-            <Ionicons name="close" size={20} color={colors.text.secondary} />
-          </TouchableOpacity>
-
-          <Ionicons
-            name="reorder-three"
-            size={20}
-            color={colors.text.secondary}
-          />
         </View>
       </TouchableOpacity>
     );
@@ -122,10 +119,10 @@ export const QueueManager: React.FC<QueueManagerProps> = ({
     <View
       style={[
         styles.container,
-        { backgroundColor: colors.background.secondary },
+        { backgroundColor: colors.background.primary, flex: 1 },
       ]}
     >
-      <TouchableOpacity
+      <View
         style={[
           styles.header,
           {
@@ -135,27 +132,27 @@ export const QueueManager: React.FC<QueueManagerProps> = ({
             padding: spacing.md,
           },
         ]}
-        onPress={() => setExpanded(!expanded)}
       >
         <Text style={[styles.title, { color: colors.text.primary }]}>
-          Up Next ({queue.length})
+          Berikutnya ({queue.length})
         </Text>
-        <Ionicons
-          name={expanded ? "chevron-down" : "chevron-up"}
-          size={20}
-          color={colors.text.secondary}
-        />
-      </TouchableOpacity>
+        <TouchableOpacity
+          onPress={onClose}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Tutup antrean"
+        >
+          <Ionicons name="close" size={20} color={colors.text.secondary} />
+        </TouchableOpacity>
+      </View>
 
-      {expanded && (
-        <DraggableFlatList
-          data={queue}
-          keyExtractor={(item) => item.id}
-          renderItem={renderQueueItem}
-          onDragEnd={({ data }) => handleReorder(data)}
-          contentContainerStyle={{ padding: spacing.md }}
-        />
-      )}
+      <FlatList
+        data={queue}
+        keyExtractor={(item) => item.id}
+        renderItem={renderQueueItem}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: spacing.md, paddingTop: 0 }}
+      />
     </View>
   );
 };
