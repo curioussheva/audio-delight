@@ -1,5 +1,5 @@
 // src/app/(drawer)/song/[id].tsx
-import React, { useMemo, useState, useEffect, useCallback } from "react";
+import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -276,22 +276,33 @@ export default function SongDetailScreen() {
     label: "",
   });
 
+  // N8: id lagu yang terakhir dipakai mengisi form edit. Tanpa ini,
+  // setiap update store (toggle favorit, enrichment markAsEnriched,
+  // refresh) membuat objek `song` baru dan efek di bawah me-reset
+  // ketikan user yang belum disimpan.
+  const editFormSongIdRef = useRef<string | undefined>(undefined);
+
   useEffect(() => {
-    if (song) {
-      setEditForm({
-        title: song.title || "",
-        artist: song.artist || "",
-        album: song.album || "",
-        genre: song.genre || "",
-        year: song.year?.toString() || "",
-        trackNumber: song.trackNumber?.toString() || "",
-        discNumber: song.discNumber?.toString() || "",
-        composer: song.composer || "",
-        publisher: song.publisher || "",
-        label: song.label || "",
-      });
-    }
-  }, [song]);
+    if (!song) return;
+    // N8: isi ulang form hanya bila lagu berganti ATAU saat tidak sedang
+    // mengedit. Selagi mengedit lagu yang sama, update store apa pun
+    // tidak boleh menyentuh ketikan user; keluar mode edit (simpan /
+    // batal) mengisi ulang dari data lagu terkini.
+    if (isEditMode && song.id === editFormSongIdRef.current) return;
+    editFormSongIdRef.current = song.id;
+    setEditForm({
+      title: song.title || "",
+      artist: song.artist || "",
+      album: song.album || "",
+      genre: song.genre || "",
+      year: song.year?.toString() || "",
+      trackNumber: song.trackNumber?.toString() || "",
+      discNumber: song.discNumber?.toString() || "",
+      composer: song.composer || "",
+      publisher: song.publisher || "",
+      label: song.label || "",
+    });
+  }, [song, isEditMode]);
 
   const handlePlay = async () => {
     if (!song) return;
