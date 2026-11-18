@@ -17,10 +17,12 @@ import { useTheme } from "@/shared/context/ThemeContext";
 import {
   ALL_THEMES,
   THEME_CATEGORIES,
+  WARM_DEFAULT_THEME_IDS,
   sortThemeCategoryKeys,
   themeCategoryLabel,
 } from "@/shared/constants/theme";
 import type { Theme } from "@/shared/constants/themes/types";
+import { FONT_FAMILY } from "@/shared/constants/themes/base";
 import { accentOn, pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 
 const { width } = Dimensions.get("window");
@@ -63,6 +65,9 @@ export const ThemePicker: React.FC<{
   // Render satu kartu tema
   const renderThemeCard = (t: Theme) => {
     const isSelected = t.id === themeId;
+    // FASE 3 Settings: tema hangat (pasangan bawaan instalasi baru)
+    // ditandai "Bawaan" di bawah namanya.
+    const isDefaultTheme = WARM_DEFAULT_THEME_IDS.includes(t.id);
 
     // Centang di atas badge primary[500] tema kartu ini — dipilih dari
     // luminansi primary kartu itu (putih 2,24:1 di Noir, hitam 9,37:1),
@@ -164,6 +169,18 @@ export const ThemePicker: React.FC<{
         >
           {t.name}
         </Text>
+
+        {/* Slot 14px tetap ada di semua kartu supaya tinggi grid
+            seragam — hanya kartu bawaan yang menampilkan label. */}
+        <View style={styles.defaultBadgeSlot}>
+          {isDefaultTheme && (
+            <Text
+              style={[styles.defaultBadgeText, { color: accentOnPrimary }]}
+            >
+              Bawaan
+            </Text>
+          )}
+        </View>
       </TouchableOpacity>
     );
   };
@@ -305,7 +322,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 20,
-    fontWeight: "700",
+    fontFamily: FONT_FAMILY.displayBold,
     letterSpacing: -0.5,
   },
   closeButton: {
@@ -322,7 +339,7 @@ const styles = StyleSheet.create({
   },
   categoryTitle: {
     fontSize: 13,
-    fontWeight: "600",
+    fontFamily: FONT_FAMILY.semiBold,
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginTop: 20,
@@ -378,9 +395,21 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 12,
-    fontWeight: "500",
+    fontFamily: FONT_FAMILY.medium,
     textAlign: "center",
     width: "100%",
+  },
+  defaultBadgeSlot: {
+    height: 14,
+    marginTop: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  defaultBadgeText: {
+    fontSize: 10,
+    fontFamily: FONT_FAMILY.bold,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
   },
   footer: {
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -395,6 +424,6 @@ const styles = StyleSheet.create({
   },
   randomText: {
     fontSize: 15,
-    fontWeight: "600",
+    fontFamily: FONT_FAMILY.semiBold,
   },
 });

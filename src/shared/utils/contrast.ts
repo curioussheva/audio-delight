@@ -96,6 +96,35 @@ export const AA_NORMAL = 4.5;
 export const AA_LARGE = 3.0;
 
 /**
+ * Komposit warna ber-alpha ("#RRGGBBAA", mis. tint `error + "20"`) di
+ * atas latar solid — warna akhir yang benar-benar dirender.
+ *
+ * Kenapa ini ada: pickReadable terhadap permukaan DI BAWAH tint bisa
+ * memilih warna yang gagal di atas kompositnya (ditemukan Fase 3
+ * Settings: status.error lolos di atas background.primary Porcelain
+ * tapi hanya 3,92 di atas tint error 20% yang sama). Teks di atas tint
+ * harus diukur terhadap kompositnya, bukan terhadap permukaan bawahnya.
+ *
+ * Mengembalikan undefined kalau salah satu warna tidak bisa dibaca.
+ */
+export const compositeOver = (
+  foreground: string | undefined | null,
+  background: string | undefined | null,
+): string | undefined => {
+  if (!foreground || typeof foreground !== "string") return undefined;
+  const raw = foreground.trim().replace(/^#/, "");
+  const fg = parseHex(foreground);
+  const bg = parseHex(background);
+  if (!fg || !bg) return undefined;
+  // Alpha dari digit ke-7/8 ("#RRGGBBAA"); tanpa alpha = opaque.
+  const alpha = raw.length === 8 ? parseInt(raw.slice(6, 8), 16) / 255 : 1;
+  const mix = (f: number, b: number) =>
+    Math.round(f * alpha + b * (1 - alpha));
+  const toHex = (n: number) => n.toString(16).padStart(2, "0");
+  return `#${toHex(mix(fg.r, bg.r))}${toHex(mix(fg.g, bg.g))}${toHex(mix(fg.b, bg.b))}`;
+};
+
+/**
  * Pilih kandidat pertama yang mencapai `minRatio` terhadap `background`.
  *
  * Kandidat diperiksa BERURUTAN, jadi urutannya adalah preferensi: letakkan

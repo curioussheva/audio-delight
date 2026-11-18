@@ -306,6 +306,15 @@ export const THEMES_LIST = Object.values(ALL_THEMES);
 // (@pristineaudio/theme_id) dan tidak pernah menimpanya.
 export const DEFAULT_THEME = ALL_THEMES["pristine-ember"];
 
+// Pasangan tema hangat yang dipakai sebagai bawaan instalasi baru
+// (ThemeContext: sistem terang → hearth, gelap → ember). Dipakai
+// ThemePicker untuk menandai kartu "Bawaan" — bukan mengubah perilaku
+// pemilihan (pilihan tersimpan tidak pernah ditimpa).
+export const WARM_DEFAULT_THEME_IDS: readonly ThemeId[] = [
+  "pristine-ember",
+  "pristine-hearth",
+];
+
 // Kategori tema.
 //
 // DITURUNKAN dari ALL_THEMES, bukan ditulis tangan.

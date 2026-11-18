@@ -6,10 +6,10 @@ import {
   Switch,
   TouchableOpacity,
   ScrollView,
-  Alert,
   ActivityIndicator,
   Modal,
   FlatList,
+  type ViewStyle,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -36,7 +36,11 @@ import * as Haptics from "expo-haptics";
 
 import { useTheme } from "@/shared/context/ThemeContext";
 import { ScreenHeader } from "@/shared/components/ui/ScreenHeader";
-import { pickReadable, accentOn, AA_NORMAL } from "@/shared/utils/contrast";
+import { SectionCard } from "@/shared/components/ui/SectionCard";
+import { ConfirmDialog } from "@/shared/components/ui/ConfirmDialog";
+import { useToastStore } from "@/shared/store/toastStore";
+import { FONT_FAMILY } from "@/shared/constants/themes/base";
+import { pickReadable, accentOn, compositeOver, AA_NORMAL } from "@/shared/utils/contrast";
 import { useAudioOutput } from "@/features/hardware/hooks/useAudioOutput";
 import { useDSPProcessingGate } from "@/features/hardware/hooks/useDSPProcessingGate";
 import { usePlayerStore } from "@/features/player/store/playerStore";
@@ -61,26 +65,6 @@ const APP_VERSION =
   "-";
 
 // ─── Reusable Sub Components ────────────────────────────────────────────────
-
-type SectionProps = {
-  colors: Theme["colors"];
-  spacing: Theme["spacing"];
-  children: React.ReactNode;
-};
-
-const Section: React.FC<SectionProps> = ({ colors, spacing, children }) => (
-  <View
-    style={[
-      styles.section,
-      {
-        backgroundColor: colors.background.secondary,
-        marginBottom: spacing.md,
-      },
-    ]}
-  >
-    {children}
-  </View>
-);
 
 type SectionHeaderProps = {
   icon: React.ReactNode;
@@ -210,6 +194,54 @@ export default function SettingsScreen() {
       AA_NORMAL,
     ) ?? colors.background.primary;
 
+  // FASE 3 Settings: seksi memakai SectionCard (Fase 2) — permukaan
+  // elevated + radius md + bayangan md + hairline border dari token.
+  // padding 0: header/baris di dalam sudah mengatur paddingnya sendiri
+  // (SectionHeader padding md, SettingRow padding sm/md); padding kartu
+  // akan menggandakannya. marginBottom tetap seperti Section lokal dulu.
+  const sectionCardStyle: ViewStyle = {
+    marginBottom: spacing.md,
+    padding: 0,
+    overflow: "hidden",
+  };
+
+  // FASE 3 Settings: teks status yang terbaca — status.error/warning
+  // mentah gagal AA (4,5) sebagai teks di tema terang (diukur dulu:
+  // error 3,57–4,33, warning 3,69–4,27 di Porcelain/Hearth).
+  // pickReadable mempertahankan hue (merah/kuning) dengan jatuh ke
+  // varian gelap (#B91C1C / #92400E) hanya di tema terang; di tema
+  // gelap warna status asli tetap dipakai.
+  const errorOnSecondary =
+    pickReadable(
+      [colors.status.error, "#B91C1C", "#991B1B"],
+      colors.background.secondary,
+      AA_NORMAL,
+    ) ?? colors.status.error;
+  // Tombol reset: teks di atas tint error 20% — diukur terhadap KOMPOSIT
+  // tint di atas primary (compositeOver), bukan terhadap primary di
+  // bawahnya: status.error lolos di atas primary Porcelain tapi hanya
+  // 3,92 di atas kompositnya (diukur).
+  const errorOnResetBg =
+    pickReadable(
+      [colors.status.error, "#B91C1C", "#991B1B"],
+      compositeOver(colors.status.error + "20", colors.background.primary),
+      AA_NORMAL,
+    ) ?? colors.status.error;
+  const warnOnSecondary =
+    pickReadable(
+      [colors.status.warning, "#92400E", "#78350F"],
+      colors.background.secondary,
+      AA_NORMAL,
+    ) ?? colors.status.warning;
+  const warnOnTertiary =
+    pickReadable(
+      [colors.status.warning, "#92400E", "#78350F"],
+      colors.background.tertiary,
+      AA_NORMAL,
+    ) ?? colors.status.warning;
+
+  const showToast = useToastStore((s) => s.showToast);
+
   const {
     isAutoScanEnabled,
     toggleAutoScanEnabled, // Gunakan action yang sesuai di store kamu
@@ -222,6 +254,11 @@ export default function SettingsScreen() {
   const [showAbout, setShowAbout] = useState(false);
   const [showLibrarySettings, setShowLibrarySettings] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+  // FASE 3 Settings: konfirmasi destruktif/berdampak lewat ConfirmDialog
+  // (bukan dialog sistem) — pola Fase 3 Library/EQ.
+  const [showClearCacheConfirm, setShowClearCacheConfirm] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showBitPerfectConfirm, setShowBitPerfectConfirm] = useState(false);
 
   // Jalur output audio yang sebenarnya: SEMUA perangkat (speaker, jack, USB
   // DAC, Bluetooth, HDMI). Modul lama yang hanya melihat USB DAC
@@ -267,88 +304,64 @@ export default function SettingsScreen() {
 
   const handleClearCache = async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    Alert.alert(
-      "Bersihkan Cache",
-      "Foto artis yang sudah diunduh akan dihapus. Lanjutkan?",
-      [
-        { text: "Batal", style: "cancel" },
-        {
-          text: "Bersihkan",
-          style: "destructive",
-          onPress: async () => {
-            setIsClearing(true);
-            const success = await OnlineMetadataService.clearArtistCache();
-            setIsClearing(false);
-            if (success) {
-              Haptics.notificationAsync(
-                Haptics.NotificationFeedbackType.Success,
-              );
-              Alert.alert("Sukses", "Cache telah dibersihkan.");
-            } else {
-              // U-P2-47: dulu gagal diam-diam — tidak ada alert/error
-              // apa pun bila clearArtistCache() mengembalikan false.
-              // Samakan dengan handleResetAll yang punya alert "Gagal".
-              Alert.alert("Gagal", "Cache gagal dibersihkan. Coba lagi.");
-            }
-          },
-        },
-      ],
-    );
+    setShowClearCacheConfirm(true);
+  };
+
+  const doClearCache = async () => {
+    setShowClearCacheConfirm(false);
+    setIsClearing(true);
+    const success = await OnlineMetadataService.clearArtistCache();
+    setIsClearing(false);
+    if (success) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast("Cache telah dibersihkan.", "success");
+    } else {
+      // U-P2-47: dulu gagal diam-diam — tidak ada umpan balik
+      // apa pun bila clearArtistCache() mengembalikan false.
+      // Samakan dengan handleResetAll yang punya umpan balik "Gagal".
+      showToast("Cache gagal dibersihkan. Coba lagi.", "error");
+    }
   };
 
   const handleResetAll = () => {
-    Alert.alert(
-      "Reset Settings",
-      "Yakin ingin mereset semua pengaturan ke default?",
-      [
-        { text: "Batal", style: "cancel" },
-        {
-          text: "Reset",
-          style: "destructive",
-          onPress: async () => {
-            // Dulu tombol ini palsu: langsung tampil "Sukses" tanpa
-            // mereset apa pun. Sekarang tiap pengaturan dikembalikan
-            // ke nilai default-nya (lihat store masing-masing).
-            try {
-              // Reset tema = kembali ke default aplikasi (pristine-ember
-              // sejak Fase 1), bukan tema lama yang di-hardcode.
-              await setTheme(DEFAULT_THEME.id);
-              if (isAutoScanEnabled) {
-                toggleAutoScanEnabled();
-                await BackgroundScanTask.unregister().catch((err) =>
-                  console.warn(
-                    "[Settings] BackgroundTask unregister failed:",
-                    err,
-                  ),
-                );
-              }
-              // I2-revisi: reset online/wifi tidak ada lagi — pengaturannya
-              // dihapus (online hanya di [id].tsx).
-              applyPreset("flat");
-              // U-P1-24: lubang fix 90181498 — applyPreset("flat") hanya
-              // mereset band EQ. bassStrength/virtualizerLevel/reverbPreset
-              // tetap tersimpan dan kembali saat EQ dinyalakan. resetToDefault
-              // (equalizerStore) mengembalikan ketiganya ke 0 (netral).
-              // Dipanggil SEBELUM setEQEnabled(false) supaya nilai netral
-              // sempat didorong ke native selagi EQ masih aktif.
-              await resetToDefault();
-              await setEQEnabled(false);
-              await resetHeadphoneAll();
-              setPlaybackSpeed(1.0);
-              setTuningCents(0);
-              setAudioMode("dsp");
-              Alert.alert("Sukses", "Semua pengaturan telah direset");
-            } catch (e) {
-              console.warn("[Settings] Reset All gagal:", e);
-              Alert.alert(
-                "Gagal",
-                "Sebagian pengaturan gagal direset. Coba lagi.",
-              );
-            }
-          },
-        },
-      ],
-    );
+    setShowResetConfirm(true);
+  };
+
+  const doResetAll = async () => {
+    setShowResetConfirm(false);
+    // Dulu tombol ini palsu: langsung tampil "Sukses" tanpa
+    // mereset apa pun. Sekarang tiap pengaturan dikembalikan
+    // ke nilai default-nya (lihat store masing-masing).
+    try {
+      // Reset tema = kembali ke default aplikasi (pristine-ember
+      // sejak Fase 1), bukan tema lama yang di-hardcode.
+      await setTheme(DEFAULT_THEME.id);
+      if (isAutoScanEnabled) {
+        toggleAutoScanEnabled();
+        await BackgroundScanTask.unregister().catch((err) =>
+          console.warn("[Settings] BackgroundTask unregister failed:", err),
+        );
+      }
+      // I2-revisi: reset online/wifi tidak ada lagi — pengaturannya
+      // dihapus (online hanya di [id].tsx).
+      applyPreset("flat");
+      // U-P1-24: lubang fix 90181498 — applyPreset("flat") hanya
+      // mereset band EQ. bassStrength/virtualizerLevel/reverbPreset
+      // tetap tersimpan dan kembali saat EQ dinyalakan. resetToDefault
+      // (equalizerStore) mengembalikan ketiganya ke 0 (netral).
+      // Dipanggil SEBELUM setEQEnabled(false) supaya nilai netral
+      // sempat didorong ke native selagi EQ masih aktif.
+      await resetToDefault();
+      await setEQEnabled(false);
+      await resetHeadphoneAll();
+      setPlaybackSpeed(1.0);
+      setTuningCents(0);
+      setAudioMode("dsp");
+      showToast("Semua pengaturan telah direset", "success");
+    } catch (e) {
+      console.warn("[Settings] Reset All gagal:", e);
+      showToast("Sebagian pengaturan gagal direset. Coba lagi.", "error");
+    }
   };
 
   const handleToggleAutoScan = async (value: boolean) => {
@@ -370,9 +383,9 @@ export default function SettingsScreen() {
         // dan beri tahu user; dulu toggle dibiarkan ON padahal tidak ada
         // scan yang jalan.
         toggleAutoScanEnabled();
-        Alert.alert(
-          "Auto Scan gagal diaktifkan",
-          "Pemindaian latar tidak bisa didaftarkan. Periksa izin media & notifikasi, lalu coba lagi.",
+        showToast(
+          "Auto Scan gagal diaktifkan. Pemindaian latar tidak bisa didaftarkan. Periksa izin media & notifikasi, lalu coba lagi.",
+          "error",
         );
       }
     } else {
@@ -440,17 +453,7 @@ export default function SettingsScreen() {
     // Bit-perfect perlu penjelasan karena efeknya paling terasa: DSP mati.
     // Mode lain langsung jalan - audio tidak pernah diblokir.
     if (mode === "bit-perfect") {
-      Alert.alert(
-        "Aktifkan Bit-Perfect?",
-        "Mode ini menonaktifkan semua DSP (EQ, Bass, Reverb) — hanya fade anti-klik yang tetap jalan. Pemutaran tetap berjalan walau device tidak mendukung jalur langsung; saat itu audio lewat mixer Android.",
-        [
-          { text: "Batal", style: "cancel" },
-          {
-            text: "Aktifkan",
-            onPress: () => setAudioMode("bit-perfect"),
-          },
-        ],
-      );
+      setShowBitPerfectConfirm(true);
       return;
     }
 
@@ -460,7 +463,7 @@ export default function SettingsScreen() {
   // ─── Sections ─────────────────────────────────────────────
 
   const renderTampilan = () => (
-    <Section colors={colors} spacing={spacing}>
+    <SectionCard style={sectionCardStyle}>
       <SectionHeader
         icon={
           <Palette size={24} color={accentOnSecondary} strokeWidth={2.2} />
@@ -536,7 +539,7 @@ export default function SettingsScreen() {
           thumbColor={isDarkMode ? colors.text.primary : colors.text.secondary}
         />
       </View>
-    </Section>
+    </SectionCard>
   );
 
   // ─── renderAudioOutput ────────────────────────────────────────────────────────
@@ -566,7 +569,7 @@ export default function SettingsScreen() {
               : "belum diketahui";
 
     return (
-      <Section colors={colors} spacing={spacing}>
+      <SectionCard style={sectionCardStyle}>
         <SectionHeader
           icon={
             <Cpu size={24} color={accentOnSecondary} strokeWidth={2.2} />
@@ -605,7 +608,7 @@ export default function SettingsScreen() {
                   },
                 ]}
               >
-                <Text style={{ color: colors.status.error, fontSize: 12 }}>
+                <Text style={{ color: errorOnSecondary, fontSize: 12 }}>
                   Error: {outputError}
                 </Text>
               </View>
@@ -625,7 +628,7 @@ export default function SettingsScreen() {
             >
               <Text
                 style={{
-                  color: colors.text.tertiary,
+                  color: colors.text.secondary,
                   fontSize: 10,
                   letterSpacing: 0.6,
                 }}
@@ -635,7 +638,7 @@ export default function SettingsScreen() {
               <Text
                 style={{
                   color: colors.text.primary,
-                  fontWeight: "600",
+                  fontFamily: FONT_FAMILY.semiBold,
                   marginTop: 2,
                 }}
               >
@@ -647,7 +650,7 @@ export default function SettingsScreen() {
                 style={{
                   color: outputStatus?.honored
                     ? colors.text.secondary
-                    : colors.status.warning,
+                    : warnOnTertiary,
                   fontSize: 11,
                   marginTop: 2,
                 }}
@@ -679,7 +682,7 @@ export default function SettingsScreen() {
               {outputStatus && outputStatus.requested > 0 && !outputStatus.honored && (
                 <Text
                   style={{
-                    color: colors.status.warning,
+                    color: warnOnSecondary,
                     fontSize: 11,
                     marginTop: spacing.xs,
                     lineHeight: 15,
@@ -695,7 +698,7 @@ export default function SettingsScreen() {
               {outputStatus && outputStatus.actual > 0 && !outputStatus.rateHonored && (
                 <Text
                   style={{
-                    color: colors.text.tertiary,
+                    color: colors.text.secondary,
                     fontSize: 11,
                     marginTop: spacing.xs,
                     lineHeight: 15,
@@ -755,7 +758,7 @@ export default function SettingsScreen() {
                         <Text
                           style={{
                             color: colors.text.primary,
-                            fontWeight: "600",
+                            fontFamily: FONT_FAMILY.semiBold,
                           }}
                         >
                           {device.name}
@@ -784,7 +787,7 @@ export default function SettingsScreen() {
             {outputDevices.length === 0 && !outputLoading && (
               <Text
                 style={{
-                  color: colors.text.tertiary,
+                  color: colors.text.secondary,
                   fontSize: 12,
                   marginBottom: spacing.md,
                 }}
@@ -801,7 +804,7 @@ export default function SettingsScreen() {
                 </Text>
                 <Text
                   style={{
-                    color: colors.text.tertiary,
+                    color: colors.text.secondary,
                     fontSize: 11,
                     marginTop: 2,
                     lineHeight: 15,
@@ -840,7 +843,7 @@ export default function SettingsScreen() {
             </SettingRow>
           </View>
         )}
-      </Section>
+      </SectionCard>
     );
   };
 
@@ -848,7 +851,7 @@ export default function SettingsScreen() {
   // ─── renderAudio ──────────────────────────────────────────────────────────────
 
   const renderAudio = () => (
-    <Section colors={colors} spacing={spacing}>
+    <SectionCard style={sectionCardStyle}>
       <SectionHeader
         icon={<Music size={24} color={accentOnSecondary} strokeWidth={2.2} />}
         title="Audio"
@@ -904,13 +907,13 @@ export default function SettingsScreen() {
                     />
                     <View style={{ flex: 1 }}>
                       <Text
-                        style={{ color: colors.text.primary, fontWeight: "600" }}
+                        style={{ color: colors.text.primary, fontFamily: FONT_FAMILY.semiBold }}
                       >
                         {isFallback ? `${m.label} (Fallback)` : m.label}
                       </Text>
                       <Text
                         style={{
-                          color: colors.text.tertiary,
+                          color: colors.text.secondary,
                           fontSize: 11,
                           marginTop: 2,
                           lineHeight: 15,
@@ -934,7 +937,7 @@ export default function SettingsScreen() {
                   {m.id === "bit-perfect" && isActive && !isFallback && (
                     <Text
                       style={{
-                        color: colors.text.tertiary,
+                        color: colors.text.secondary,
                         fontSize: 10,
                         marginTop: 6,
                         marginLeft: 24,
@@ -956,12 +959,12 @@ export default function SettingsScreen() {
           {!dspGate.unavailable && (
             <SettingRow colors={colors} spacing={spacing}>
               <View style={{ flex: 1, marginRight: spacing.md }}>
-                <Text style={{ color: colors.text.primary, fontWeight: "600" }}>
+                <Text style={{ color: colors.text.primary, fontFamily: FONT_FAMILY.semiBold }}>
                   Proses DSP di Jalur Audio
                 </Text>
                 <Text
                   style={{
-                    color: colors.text.tertiary,
+                    color: colors.text.secondary,
                     fontSize: 11,
                     marginTop: 2,
                     lineHeight: 15,
@@ -973,7 +976,7 @@ export default function SettingsScreen() {
                 </Text>
                 <Text
                   style={{
-                    color: colors.text.tertiary,
+                    color: colors.text.secondary,
                     fontSize: 10,
                     marginTop: 4,
                   }}
@@ -999,12 +1002,12 @@ export default function SettingsScreen() {
           {/* ── 2. Preset EQ Aktif ─────────────────────────────────────── */}
           <SettingRow colors={colors} spacing={spacing}>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.text.primary, fontWeight: "600" }}>
+              <Text style={{ color: colors.text.primary, fontFamily: FONT_FAMILY.semiBold }}>
                 Preset EQ Aktif
               </Text>
               <Text
                 style={{
-                  color: colors.text.tertiary,
+                  color: colors.text.secondary,
                   fontSize: 11,
                   marginTop: 2,
                 }}
@@ -1033,7 +1036,7 @@ export default function SettingsScreen() {
               <Text
                 style={{
                   color: accentOnTertiary,
-                  fontWeight: "700",
+                  fontFamily: FONT_FAMILY.bold,
                   fontSize: 13,
                 }}
               >
@@ -1051,12 +1054,12 @@ export default function SettingsScreen() {
           {/* ── 3. Playback Speed ────────────────────────────────────────── */}
           <SettingRow colors={colors} spacing={spacing}>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.text.primary, fontWeight: "600" }}>
+              <Text style={{ color: colors.text.primary, fontFamily: FONT_FAMILY.semiBold }}>
                 Playback Speed
               </Text>
               <Text
                 style={{
-                  color: colors.text.tertiary,
+                  color: colors.text.secondary,
                   fontSize: 11,
                   marginTop: 2,
                 }}
@@ -1104,7 +1107,7 @@ export default function SettingsScreen() {
                 <Text
                   style={{
                     color: accentOnSecondary,
-                    fontWeight: "800",
+                    fontFamily: FONT_FAMILY.bold,
                     fontSize: 15,
                   }}
                 >
@@ -1146,12 +1149,12 @@ export default function SettingsScreen() {
       {/* ── 3b. Tuning (Retune) — FASE R ─────────────────────────────────── */}
       <SettingRow colors={colors} spacing={spacing}>
         <View style={{ flex: 1 }}>
-          <Text style={{ color: colors.text.primary, fontWeight: "600" }}>
+          <Text style={{ color: colors.text.primary, fontFamily: FONT_FAMILY.semiBold }}>
             Tuning (Nada Dasar)
           </Text>
           <Text
             style={{
-              color: colors.text.tertiary,
+              color: colors.text.secondary,
               fontSize: 11,
               marginTop: 2,
             }}
@@ -1204,7 +1207,7 @@ export default function SettingsScreen() {
               style={{
                 color: colors.text.primary,
                 fontSize: 16,
-                fontWeight: "800",
+                fontFamily: FONT_FAMILY.bold,
                 paddingHorizontal: 20,
                 marginBottom: 8,
               }}
@@ -1239,11 +1242,13 @@ export default function SettingsScreen() {
                   <View>
                     <Text
                       style={{
-                        color:
-                          activePresetId === item.id
-                            ? accentOnSecondary
-                            : colors.text.primary,
-                        fontWeight: activePresetId === item.id ? "700" : "500",
+                        // FASE 3 Settings: nama preset aktif memakai
+                        // text.primary, bukan accentOnSecondary —
+                        // aksen di atas tint primary 18% gagal AA
+                        // (4,15 Ember / 4,47 Hearth, diukur). Keadaan
+                        // aktif tetap ditandai tint + ikon centang.
+                        color: colors.text.primary,
+                        fontFamily: activePresetId === item.id ? FONT_FAMILY.bold : FONT_FAMILY.medium,
                         fontSize: 14,
                       }}
                     >
@@ -1252,7 +1257,7 @@ export default function SettingsScreen() {
                     {item.description && (
                       <Text
                         style={{
-                          color: colors.text.tertiary,
+                          color: colors.text.secondary,
                           fontSize: 11,
                           marginTop: 2,
                         }}
@@ -1274,11 +1279,11 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
-    </Section>
+    </SectionCard>
   );
 
   const renderLibrary = () => (
-    <Section colors={colors} spacing={spacing}>
+    <SectionCard style={sectionCardStyle}>
       <SectionHeader
         icon={
           <Database size={24} color={accentOnSecondary} strokeWidth={2.2} />
@@ -1296,12 +1301,12 @@ export default function SettingsScreen() {
           {/* --- NEW: Auto Scan Library Toggle --- */}
           <SettingRow colors={colors} spacing={spacing} bordered={false}>
             <View style={{ flex: 1, marginRight: spacing.md }}>
-              <Text style={{ color: colors.text.primary, fontWeight: "600" }}>
+              <Text style={{ color: colors.text.primary, fontFamily: FONT_FAMILY.semiBold }}>
                 Auto Scan Library
               </Text>
               <Text
                 style={{
-                  color: colors.text.tertiary,
+                  color: colors.text.secondary,
                   fontSize: 11,
                   marginTop: 2,
                 }}
@@ -1339,9 +1344,9 @@ export default function SettingsScreen() {
             ) : (
               <Text
                 style={{
-                  color: colors.status.error,
+                  color: errorOnSecondary,
                   fontSize: 13,
-                  fontWeight: "700",
+                  fontFamily: FONT_FAMILY.bold,
                 }}
               >
                 Kosongkan Cache Gambar Artis
@@ -1350,11 +1355,11 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
       )}
-    </Section>
+    </SectionCard>
   );
 
   const renderAbout = () => (
-    <Section colors={colors} spacing={spacing}>
+    <SectionCard style={sectionCardStyle}>
       <SectionHeader
         icon={<Info size={24} color={accentOnSecondary} strokeWidth={2.2} />}
         title="Tentang"
@@ -1400,7 +1405,7 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
       )}
-    </Section>
+    </SectionCard>
   );
 
   // ─── Main Render ─────────────────────────────────────────────────────────────
@@ -1443,16 +1448,48 @@ export default function SettingsScreen() {
       >
         <RefreshCw
           size={20}
-          color={colors.status.error}
+          color={errorOnResetBg}
           strokeWidth={2.5}
           style={{ marginRight: 8 }}
         />
-        <Text style={{ color: colors.status.error }}>Reset All Settings</Text>
+        <Text style={{ color: errorOnResetBg }}>Reset All Settings</Text>
       </TouchableOpacity>
 
       <ThemePicker
         visible={showThemePicker}
         onClose={() => setShowThemePicker(false)}
+      />
+
+      {/* FASE 3 Settings: konfirmasi destruktif/berdampak lewat
+          ConfirmDialog — redaksi pesan sama persis dengan dialog
+          sistem sebelumnya; umpan balik sukses/gagal lewat toast. */}
+      <ConfirmDialog
+        visible={showClearCacheConfirm}
+        title="Bersihkan Cache"
+        message="Foto artis yang sudah diunduh akan dihapus. Lanjutkan?"
+        confirmLabel="Bersihkan"
+        onConfirm={() => void doClearCache()}
+        onCancel={() => setShowClearCacheConfirm(false)}
+      />
+      <ConfirmDialog
+        visible={showResetConfirm}
+        title="Reset Settings"
+        message="Yakin ingin mereset semua pengaturan ke default?"
+        confirmLabel="Reset"
+        onConfirm={() => void doResetAll()}
+        onCancel={() => setShowResetConfirm(false)}
+      />
+      <ConfirmDialog
+        visible={showBitPerfectConfirm}
+        title="Aktifkan Bit-Perfect?"
+        message="Mode ini menonaktifkan semua DSP (EQ, Bass, Reverb) — hanya fade anti-klik yang tetap jalan. Pemutaran tetap berjalan walau device tidak mendukung jalur langsung; saat itu audio lewat mixer Android."
+        confirmLabel="Aktifkan"
+        destructive={false}
+        onConfirm={() => {
+          setShowBitPerfectConfirm(false);
+          setAudioMode("bit-perfect");
+        }}
+        onCancel={() => setShowBitPerfectConfirm(false)}
       />
     </ScrollView>
   </SafeAreaView>
@@ -1463,14 +1500,13 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  section: { borderRadius: 16, overflow: "hidden" },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     borderBottomWidth: 1,
   },
-  sectionTitle: { fontSize: 18, fontWeight: "600" },
+  sectionTitle: { fontSize: 18, fontFamily: FONT_FAMILY.bold },
   settingRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1488,7 +1524,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
   },
-  appName: { fontSize: 28, fontWeight: "700", marginBottom: 4 },
+  appName: {
+    fontSize: 28,
+    fontFamily: FONT_FAMILY.displayBold,
+    marginBottom: 4,
+  },
   // Tambahkan di StyleSheet:
   alertBox: {
     padding: 12,
