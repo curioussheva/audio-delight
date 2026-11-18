@@ -381,6 +381,7 @@ export function buildSearchInputStyles(theme: Theme): SearchInputStyles {
 
 export interface StateStyles {
   container: ViewStyle;
+  icon: ViewStyle;
   title: TextStyle;
   message: TextStyle;
 }
@@ -408,6 +409,9 @@ export function buildStateStyles(theme: Theme): StateStyles {
       justifyContent: "center",
       padding: spacing.lg,
       gap: spacing.s12 ?? 12,
+    },
+    icon: {
+      alignItems: "center",
     },
     title: {
       fontSize: body1.fontSize,

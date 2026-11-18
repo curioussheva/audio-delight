@@ -15,17 +15,21 @@
 // progress — komponen khusus, bukan sekadar pesan), placeholder kartu
 // Analyzer ("Putar lagu untuk melihat spektrum" — teks di dalam kartu,
 // bukan empty state layar), dan state error (punya tombol retry sendiri).
-import React, { type ReactNode } from "react";
+//
+// Fase 2 redesign: gaya dari builder murni buildStateStyles (token
+// Fase 1) dan aksi memakai PristineButton — satu rupa keadaan kosong
+// di semua layar. API tidak berubah, jadi pemakai lama tidak disentuh.
+import React, { useCallback, type ReactNode } from "react";
 import {
   View,
   Text,
-  StyleSheet,
-  TouchableOpacity,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { useTheme } from "@/shared/context/ThemeContext";
-import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+import { useThemedStyles } from "@/shared/hooks/useThemedStyles";
+import { buildStateStyles } from "@/shared/utils/uiStyles";
+import { PristineButton } from "@/shared/components/ui/PristineButton";
+import type { Theme } from "@/shared/constants/themes/types";
 
 export interface EmptyStateProps {
   /** Judul — wajib, ditulis per layar supaya tidak berbohong. */
@@ -45,65 +49,23 @@ export const EmptyState = ({
   onActionPress,
   style,
 }: EmptyStateProps) => {
-  const { theme } = useTheme();
-  const { colors } = theme;
-  const onPrimary =
-    pickReadable(["#FFFFFF", "#000000"], colors.primary[500], AA_NORMAL) ??
-    "#FFFFFF";
+  const styles = useThemedStyles(
+    useCallback((t: Theme) => buildStateStyles(t), []),
+  );
 
   return (
     <View style={[styles.container, style]}>
       {icon ? <View style={styles.icon}>{icon}</View> : null}
-      <Text style={[styles.title, { color: colors.text.primary }]}>
-        {title}
-      </Text>
-      {message ? (
-        <Text style={[styles.message, { color: colors.text.secondary }]}>
-          {message}
-        </Text>
-      ) : null}
+      <Text style={styles.title}>{title}</Text>
+      {message ? <Text style={styles.message}>{message}</Text> : null}
       {actionLabel && onActionPress ? (
-        <TouchableOpacity
-          style={[styles.action, { backgroundColor: colors.primary[500] }]}
+        <PristineButton
+          label={actionLabel}
           onPress={onActionPress}
-          accessibilityRole="button"
+          variant="primary"
           accessibilityLabel={actionLabel}
-        >
-          <Text style={[styles.actionText, { color: onPrimary }]}>
-            {actionLabel}
-          </Text>
-        </TouchableOpacity>
+        />
       ) : null}
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-    gap: 12,
-  },
-  icon: {
-    alignItems: "center",
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  message: {
-    fontSize: 14,
-    textAlign: "center",
-  },
-  action: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 4,
-  },
-  actionText: {
-    fontWeight: "600",
-  },
-});
