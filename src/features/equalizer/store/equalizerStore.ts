@@ -267,14 +267,23 @@ export const useEqualizerStore = create<EqualizerStore>()(
 
       // --- Individual Switch Actions ---
 
+      // N23: panggilan native dibungkus try/catch — setter ini dipanggil
+      // fire-and-forget dari useEqualizer/slider, jadi rejection bridge
+      // (session belum siap, modul belum load) dulu jadi unhandled
+      // rejection. State tetap disimpan (niat user); yang gagal hanya
+      // dorongan ke native, dicatat di log.
       setBassEnabled: async (enabled: boolean) => {
         set({ isBassEnabled: enabled });
         const { isEQEnabled, audioSessionId, bassStrength } = get();
         if (isEQEnabled && audioSessionId !== -1) {
-          await NativeDSPModule.setBassBoost(
-            enabled ? bassStrength : 0,
-            audioSessionId,
-          );
+          try {
+            await NativeDSPModule.setBassBoost(
+              enabled ? bassStrength : 0,
+              audioSessionId,
+            );
+          } catch (e) {
+            console.error("[EQ Store] setBassBoost gagal:", e);
+          }
         }
       },
 
@@ -282,10 +291,14 @@ export const useEqualizerStore = create<EqualizerStore>()(
         set({ isVirtualizerEnabled: enabled });
         const { isEQEnabled, audioSessionId, virtualizerLevel } = get();
         if (isEQEnabled && audioSessionId !== -1) {
-          await NativeDSPModule.setVirtualizer(
-            enabled ? virtualizerLevel : 0,
-            audioSessionId,
-          );
+          try {
+            await NativeDSPModule.setVirtualizer(
+              enabled ? virtualizerLevel : 0,
+              audioSessionId,
+            );
+          } catch (e) {
+            console.error("[EQ Store] setVirtualizer gagal:", e);
+          }
         }
       },
 
@@ -293,10 +306,14 @@ export const useEqualizerStore = create<EqualizerStore>()(
         set({ isReverbEnabled: enabled });
         const { isEQEnabled, audioSessionId, reverbPreset } = get();
         if (isEQEnabled && audioSessionId !== -1) {
-          await NativeDSPModule.setReverbPreset(
-            enabled ? reverbPreset : 0,
-            audioSessionId,
-          );
+          try {
+            await NativeDSPModule.setReverbPreset(
+              enabled ? reverbPreset : 0,
+              audioSessionId,
+            );
+          } catch (e) {
+            console.error("[EQ Store] setReverbPreset gagal:", e);
+          }
         }
       },
 
@@ -307,7 +324,11 @@ export const useEqualizerStore = create<EqualizerStore>()(
         set({ bassStrength: clamped });
         const { isEQEnabled, isBassEnabled, audioSessionId } = get();
         if (isEQEnabled && isBassEnabled && audioSessionId !== -1) {
-          await NativeDSPModule.setBassBoost(clamped, audioSessionId);
+          try {
+            await NativeDSPModule.setBassBoost(clamped, audioSessionId);
+          } catch (e) {
+            console.error("[EQ Store] setBassBoost gagal:", e);
+          }
         }
       },
 
@@ -316,7 +337,11 @@ export const useEqualizerStore = create<EqualizerStore>()(
         set({ virtualizerLevel: clamped });
         const { isEQEnabled, isVirtualizerEnabled, audioSessionId } = get();
         if (isEQEnabled && isVirtualizerEnabled && audioSessionId !== -1) {
-          await NativeDSPModule.setVirtualizer(clamped, audioSessionId);
+          try {
+            await NativeDSPModule.setVirtualizer(clamped, audioSessionId);
+          } catch (e) {
+            console.error("[EQ Store] setVirtualizer gagal:", e);
+          }
         }
       },
 
@@ -325,7 +350,11 @@ export const useEqualizerStore = create<EqualizerStore>()(
         set({ reverbPreset: clamped });
         const { isEQEnabled, isReverbEnabled, audioSessionId } = get();
         if (isEQEnabled && isReverbEnabled && audioSessionId !== -1) {
-          await NativeDSPModule.setReverbPreset(clamped, audioSessionId);
+          try {
+            await NativeDSPModule.setReverbPreset(clamped, audioSessionId);
+          } catch (e) {
+            console.error("[EQ Store] setReverbPreset gagal:", e);
+          }
         }
       },
 
