@@ -77,6 +77,14 @@ export interface Spec extends TurboModule {
   updateRepeatMode(mode: number): Promise<void>;
 
   clearCache(): Promise<number>;
+
+  // F5: wajib untuk NativeEventEmitter (playerStore mendaftarkan 4
+  // listener: onPlaybackTrackEnded, onPlaybackStateChanged,
+  // onPlaybackTrackChanged, onPlaybackRepeatShuffleChanged). Method kosong
+  // sudah ada di Kotlin (NativePlaybackService.kt:447-450); spec-lah yang
+  // tidak mendeklarasikannya.
+  addListener(eventName: string): void;
+  removeListeners(count: number): void;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('NativePlaybackService');
