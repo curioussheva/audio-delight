@@ -55,7 +55,6 @@ import {
 // Scan System
 import { useScanManager } from "@/features/library/hooks/useScanManager";
 import { shouldRunResumeRefresh } from "@/features/library/services/resumeRefreshGuard";
-import { ScanStatusBar } from "@/features/library/components/ScanStatusBar";
 import { EnrichMetadataModal } from "@/features/library/components/EnrichMetadataModal";
 
 // Components
@@ -878,8 +877,6 @@ export default function LibraryScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: colors.background.primary }]}>
-      <ScanStatusBar /> 
-
       {/* Header */}
       <View
         style={[

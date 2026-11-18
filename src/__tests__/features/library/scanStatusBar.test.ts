@@ -1,17 +1,28 @@
 /**
- * ScanStatusBar — banner "N songs ready for metadata enhancement"
- * DINONAKTIFKAN (keputusan csheva 2026-11-18: banner hijau menabrak
- * SafeAreaView/status bar, tampil terpotong).
+ * ScanStatusBar — chip status scan di atas pill FloatingPlayer.
  *
- * Test ini sengaja berbasis sumber, bukan render komponen: repo ini
- * tidak punya testing-library dan jest hanya menjalankan `.test.ts`,
- * jadi komponen .tsx tidak bisa di-render di test. Test ini mengunci
- * penghapusan — bila banner ditambahkan lagi, test gagal — sekaligus
- * mengunci bahwa cabang progres scan (yang harus tetap utuh) tidak
- * ikut terhapus.
+ * Bentuk lama (banner full-width hijau terang di atas Library) dipindah
+ * 2026-11-18 (keputusan csheva: "taruh di atas pill, jangan terlalu
+ * mencolok"). Chip: background surface tema, teks kecil muted, satu baris
+ * + indikator progres tipis bila total diketahui; non-interaktif.
+ *
+ * Sebagian test ini sengaja berbasis sumber, bukan render komponen: repo
+ * ini tidak punya testing-library dan jest hanya menjalankan `.test.ts`,
+ * jadi komponen .tsx tidak bisa di-render di test. Predikat visibilitas
+ * (logika murni) diuji lewat impor langsung dari utils/scanStatus.ts.
+ * Pasangan warna chip diuji dengan token tema asli (pola
+ * playerContrast.test.ts).
  */
 import * as fs from "fs";
 import * as path from "path";
+import { contrastRatio } from "@/shared/utils/contrast";
+import { PRISTINE_NOIR, PRISTINE_PORCELAIN } from "@/shared/constants/themes/pristine";
+import { PRISTINE_EMBER } from "@/shared/constants/themes/warm";
+import type { Theme } from "@/shared/constants/themes/types";
+import {
+  isScanStatusVisible,
+  type ScanStatusState,
+} from "@/features/library/utils/scanStatus";
 
 const source = fs.readFileSync(
   path.resolve(
@@ -38,34 +49,120 @@ describe("ScanStatusBar — banner notif hijau dimatikan", () => {
   it("cabang progres scan tetap utuh (bukan seluruh komponen yang dimatikan)", () => {
     // Auto scan
     expect(code).toContain("Scanning library...");
-    // Manual enrichment (isEnriching + enrichmentProgress)
-    expect(code).toContain("Enhancing {current}/{total} songs...");
+    // Manual enrichment (isEnriching + enrichmentProgress) — sejak jadi
+    // chip, teks dirakit template literal (dulu interpolasi JSX).
+    expect(code).toContain("Enhancing ${current}/${total} songs...");
     // Background enrichment
     expect(code).toContain("in background...");
   });
 });
 
-describe("ScanStatusBar — banner duduk di bawah status bar", () => {
-  it("memakai inset safe-area atas (bukan y=0)", () => {
-    expect(code).toContain("useSafeAreaInsets");
-    expect(code).toContain("react-native-safe-area-context");
-    // Definisi paddingTop dari inset (bukan angka hardcoded).
-    expect(code).toMatch(/paddingTop:\s*insets\.top/);
+describe("ScanStatusBar — chip di atas pill FloatingPlayer (bukan banner atas)", () => {
+  it("tidak lagi memakai inset safe-area atas / posisi banner lama", () => {
+    expect(code).not.toContain("useSafeAreaInsets");
+    expect(code).not.toContain("safeTop");
+    expect(code).not.toMatch(/paddingTop:\s*insets\.top/);
   });
 
-  it("ketiga cabang progres memakai paddingTop inset yang sama", () => {
-    // safeTop didefinisikan sekali (paddingTop: insets.top + 12,
-    // mempertahankan paddingVertical container 12) lalu dipakai
-    // di ketiga style array cabang: 1 definisi + 3 pemakaian.
-    const hits = code.match(/safeTop/g) ?? [];
-    expect(hits.length).toBe(4);
+  it("chip: background surface tema + sudut pill + teks kecil", () => {
+    expect(code).toContain("colors.background.secondary");
+    expect(code).toContain("borderRadius: 999");
+    expect(code).toContain("fontSize: 12");
   });
 
-  it("isi dan warna banner tidak berubah", () => {
-    // Tidak ada yang dimatikan/diubah selain posisi: ketiga cabang
-    // tetap ada (diuji di atas) dan backgroundColor tiap cabang utuh.
-    expect(code).toContain("colors.primary[500]");
-    expect(code).toContain("colors.status.success");
-    expect(code).toContain('colors.status.success + "dd"');
+  it("chip: tidak ada lagi background hijau terang / primary full-width", () => {
+    expect(code).not.toContain("colors.status.success");
+    expect(code).not.toContain("colors.primary[500]");
   });
+
+  it("chip non-interaktif (tap tembus ke daftar di bawahnya)", () => {
+    expect(code).toContain('pointerEvents="none"');
+  });
+
+  it("indikator progres tipis hanya bila total diketahui", () => {
+    expect(code).toContain("progress != null");
+    expect(code).toContain("Math.round(progress * 100)");
+  });
+});
+
+describe("isScanStatusVisible — predikat visibilitas chip", () => {
+  const base: ScanStatusState = {
+    isAutoScanning: false,
+    isEnriching: false,
+    enrichmentProgress: null,
+    isBackgroundEnriching: false,
+    enrichmentQueueSize: 0,
+  };
+
+  it("sembunyi bila tidak ada yang berjalan", () => {
+    expect(isScanStatusVisible(base)).toBe(false);
+  });
+
+  it("tampil saat auto scan berjalan", () => {
+    expect(isScanStatusVisible({ ...base, isAutoScanning: true })).toBe(true);
+  });
+
+  it("tampil saat enriching manual dengan progress", () => {
+    expect(
+      isScanStatusVisible({
+        ...base,
+        isEnriching: true,
+        enrichmentProgress: { current: 3, total: 200 },
+      }),
+    ).toBe(true);
+  });
+
+  it("sembunyi saat enriching tanpa progress", () => {
+    expect(
+      isScanStatusVisible({ ...base, isEnriching: true }),
+    ).toBe(false);
+  });
+
+  it("tampil saat background enrichment antrean > 0", () => {
+    expect(
+      isScanStatusVisible({
+        ...base,
+        isBackgroundEnriching: true,
+        enrichmentQueueSize: 200,
+      }),
+    ).toBe(true);
+  });
+
+  it("sembunyi saat background enrichment antrean 0", () => {
+    expect(
+      isScanStatusVisible({
+        ...base,
+        isBackgroundEnriching: true,
+        enrichmentQueueSize: 0,
+      }),
+    ).toBe(false);
+  });
+});
+
+const BRAND_THEMES: Theme[] = [PRISTINE_NOIR, PRISTINE_EMBER, PRISTINE_PORCELAIN];
+
+describe("ScanStatusBar — kontras chip", () => {
+  it.each(BRAND_THEMES)(
+    "$name: teks chip (text.secondary) di atas background.secondary lolos 4.5:1",
+    (theme) => {
+      expect(
+        contrastRatio(
+          theme.colors.text.secondary,
+          theme.colors.background.secondary,
+        ),
+      ).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it.each(BRAND_THEMES)(
+    "$name: isi bar progres tipis (text.primary) di atas background.tertiary lolos 4.5:1",
+    (theme) => {
+      expect(
+        contrastRatio(
+          theme.colors.text.primary,
+          theme.colors.background.tertiary,
+        ),
+      ).toBeGreaterThanOrEqual(4.5);
+    },
+  );
 });

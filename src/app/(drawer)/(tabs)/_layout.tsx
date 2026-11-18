@@ -4,6 +4,10 @@ import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import FloatingPlayer from "@/features/player/components/FloatingPlayer";
+import {
+  ScanStatusBar,
+  useScanStatusVisible,
+} from "@/features/library/components/ScanStatusBar";
 import { tabBarHeight } from "@/features/player/tabBarHeight";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
@@ -26,6 +30,11 @@ export default function TabsLayout() {
   // device dengan inset bawah besar.
   const insets = useSafeAreaInsets();
   const currentSong = usePlayerStore((s) => s.currentSong);
+  const statusVisible = useScanStatusVisible();
+  // Chip status scan (ScanStatusBar) duduk tepat di atas pill FloatingPlayer
+  // dan mengikutinya di semua tab. Bila tidak ada lagu (pill tidak tampil)
+  // chip tetap di atas tab bar, bukan menabraknya — jadi offset bawah
+  // memakai tinggi tab bar bila pill ATAU chip tampil.
 
   // Warna tab bar dari tema aktif — pola yang sama dengan drawer
   // ((drawer)/_layout.tsx). Sebelumnya hardcoded hitam (#0A0A0A) + emerald
@@ -87,18 +96,30 @@ export default function TabsLayout() {
       </Tabs>
 
       {/* 🔥 Floating Player — posisi absolute di atas tab bar.
-          bottom = tinggi tab bar sebenarnya (safe-area aware), bukan 70. */}
+          bottom = tinggi tab bar sebenarnya (safe-area aware), bukan 70.
+          Chip status scan (ScanStatusBar) dirender tepat di atas pill dan
+          mengikutinya di semua tab; pointerEvents none pada pembungkus
+          chip supaya tap tembus ke daftar di bawahnya. */}
       <View
         style={{
           position: "absolute",
           left: 8,
           right: 8,
-          bottom: currentSong ? tabBarHeight(insets.bottom) : 0,
+          bottom:
+            currentSong || statusVisible ? tabBarHeight(insets.bottom) : 0,
           zIndex: 100,
           elevation: 10, // Android shadow
         }}
         pointerEvents="box-none"
       >
+        {statusVisible && (
+          <View
+            pointerEvents="none"
+            style={{ alignItems: "center", marginBottom: 8 }}
+          >
+            <ScanStatusBar />
+          </View>
+        )}
         <FloatingPlayer />
       </View>
     </View>
