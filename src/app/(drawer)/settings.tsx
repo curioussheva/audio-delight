@@ -58,8 +58,8 @@ import { DEFAULT_THEME } from "@/constants/theme";
 import OnlineMetadataService from "@/features/library/services/OnlineMetadataService";
 
 import { Zap, ShieldCheck, TriangleAlert } from "lucide-react-native";
-import { ALL_PRESETS } from "@/features/equalizer/constants/presets";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
+import { useEqualizer } from "@/features/equalizer/hooks/useEqualizer";
 import { useHeadphoneStore } from "@/features/headphone/store/headphoneStore";
 import Constants from "expo-constants";
 
@@ -299,6 +299,17 @@ export default function SettingsScreen() {
 
   const { activePresetId, applyPreset, setEQEnabled, resetToDefault } =
     useEqualizerStore();
+
+  // N9: picker preset lewat guard DSP (useEqualizer), bukan store mentah:
+  // di mode bit-perfect/immersive preset tidak boleh mengubah bands di
+  // store, dan daftar memakai allPresets (bawaan + custom user).
+  // applyPreset mentah di atas tetap dipakai doResetAll (reset ke netral,
+  // bukan pilihan preset user).
+  const {
+    applyPreset: applyPresetGuarded,
+    allPresets,
+    isDSPDisabled,
+  } = useEqualizer();
 
   const { resetAll: resetHeadphoneAll } = useHeadphoneStore();
 
@@ -1125,7 +1136,7 @@ export default function SettingsScreen() {
                   fontSize: 13,
                 }}
               >
-                {ALL_PRESETS.find((p) => p.id === activePresetId)?.name ??
+                {allPresets.find((p) => p.id === activePresetId)?.name ??
                   "Flat"}
               </Text>
               <ChevronRight
@@ -1301,13 +1312,23 @@ export default function SettingsScreen() {
             </Text>
 
             <FlatList
-              data={ALL_PRESETS}
+              data={allPresets}
               keyExtractor={(p) => p.id}
               renderItem={({ item }) => (
                 <TouchableOpacity
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    applyPreset(item.id);
+                    // N9: guard DSP — di mode bit-perfect/immersive jangan
+                    // ubah bands di store (dan jangan tutup picker diam-diam:
+                    // beri tahu kenapa preset tidak diterapkan).
+                    if (isDSPDisabled) {
+                      showToast(
+                        "Preset EQ tidak aktif di mode Bit-Perfect/Solfeggio — DSP sedang dimatikan.",
+                        "info",
+                      );
+                      return;
+                    }
+                    applyPresetGuarded(item.id);
                     setShowEQPicker(false);
                   }}
                   style={{
