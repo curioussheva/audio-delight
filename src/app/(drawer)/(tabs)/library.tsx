@@ -276,14 +276,20 @@ export default function LibraryScreen() {
   // U-P2-06: kembalikan boolean supaya pemanggil tahu refresh berhasil
   // atau gagal — LibraryTabBar menembak haptic sukses hanya bila true.
   // FASE 4: dibungkus coalescer — pemanggil kedua saat refresh jalan
-  // mendapat promise yang sama (bukan pekerjaan ganda). Indikator
-  // spinner tetap per panggilan pertama (pull-to-refresh).
+  // mendapat promise yang sama (bukan pekerjaan ganda).
+  // N25: spinner milik PEMANGGIL, bukan pekerjaan coalescer — dulu
+  // setRefreshing(true) ada di DALAM task, jadi pull-to-refresh yang
+  // "nebeng" refresh subscriber (refreshKey) mendapat promise yang sama
+  // tanpa pernah menjalankan task-nya dan spinner tidak tampil. Sekarang
+  // tiap pemanggil dengan showRefreshIndicator menyalakan spinnernya
+  // sendiri selama menunggu promise itu (penunggu yang sama-sama
+  // menunggu pekerjaan yang sama selesai di saat yang sama, jadi tidak
+  // ada spinner yang mati prematur).
   const refreshLibrary = useCallback(
     async (showRefreshIndicator = false): Promise<boolean> => {
-      return libraryRefreshCoalescer.run(async () => {
-        if (showRefreshIndicator) setRefreshing(true);
-
-        try {
+      if (showRefreshIndicator) setRefreshing(true);
+      try {
+        return await libraryRefreshCoalescer.run(async () => {
           // N3: getLibrarySongs kini MELEMPAR saat query gagal (bukan []
           // lagi) — catch di bawah mengembalikan false TANPA setTracks,
           // jadi satu galat DB sesaat tidak lagi mengosongkan tampilan
@@ -292,13 +298,13 @@ export default function LibraryScreen() {
           setTracks(freshSongs as any);
           await reload();
           return true;
-        } catch (err) {
-          console.error("Refresh Error:", err);
-          return false;
-        } finally {
-          if (showRefreshIndicator) setRefreshing(false);
-        }
-      });
+        });
+      } catch (err) {
+        console.error("Refresh Error:", err);
+        return false;
+      } finally {
+        if (showRefreshIndicator) setRefreshing(false);
+      }
     },
     [setTracks, reload],
   );
