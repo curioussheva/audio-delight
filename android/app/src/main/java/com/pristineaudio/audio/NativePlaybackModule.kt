@@ -57,25 +57,47 @@ class NativePlaybackModule(
     private var emitterRegistered = false
 
     /**
-     * Pastikan library native termuat + event emitter terdaftar.
-     * Dipanggil di awal setiap method yang menyentuh JNI. Setelah berhasil
-     * sekali, panggilan berikutnya hanya cek flag (murah).
+     * Gerbang transport: pastikan library native termuat.
+     *
+     * F10: fungsi ini DULU juga mendaftarkan event emitter di dalamnya dan
+     * tetap return true saat registrasi itu gagal — transport jalan normal
+     * sementara event onNativeTrackEnded/onPlaybackTrackChanged hilang
+     * diam-diam. Degradasi itu sendiri BENAR (emitter hanya untuk event
+     * native→JS; play/pause/seek tidak membutuhkannya — mengembalikan
+     * false di sini justru mematikan SELURUH playback lewat
+     * playFromService), tapi kontraknya bohong: return true mengklaim
+     * "native siap" termasuk emitter. Kini dipisah: gerbang ini hanya
+     * menjawab "library termuat" (transport); registrasi emitter jalan
+     * best-effort di ensureEmitterRegistered() dan kegagalannya dicatat di
+     * log — event hilang tetap mungkin bila penyebabnya persisten, tapi
+     * tidak lagi disamarkan sebagai "siap".
      */
     private fun ensureNativeReady(): Boolean {
         if (!NativeLibrary.ensureLoaded()) return false
-        if (!emitterRegistered) {
-            synchronized(this) {
-                if (!emitterRegistered) {
-                    try {
-                        nativeInitEventEmitter()
-                        emitterRegistered = true
-                    } catch (e: Throwable) {
-                        android.util.Log.e("NativePlaybackModule", "registrasi event emitter gagal", e)
-                    }
-                }
+        ensureEmitterRegistered()
+        return true
+    }
+
+    /**
+     * Best-effort: daftarkan emitter event native→JS (sekali; dicoba ulang
+     * tiap panggilan bila gagal — mis. JNI belum siap saat cold start).
+     * Kegagalan TIDAK menggagalkan transport: play/pause/seek tetap jalan,
+     * hanya event track-ended/track-changed yang hilang sampai registrasi
+     * berhasil. Setiap kegagalan di-log (error) supaya kondisi persisten
+     * (mis. nativeInitEventEmitter hilang dari .so) terlihat di logcat,
+     * bukan ditebak dari "auto-advance tidak jalan".
+     */
+    private fun ensureEmitterRegistered() {
+        if (emitterRegistered) return
+        synchronized(this) {
+            if (emitterRegistered) return
+            try {
+                nativeInitEventEmitter()
+                emitterRegistered = true
+            } catch (e: Throwable) {
+                android.util.Log.e("NativePlaybackModule", "registrasi event emitter gagal", e)
             }
         }
-        return true
     }
 
     // Native methods
