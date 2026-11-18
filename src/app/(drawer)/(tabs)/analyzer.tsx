@@ -214,7 +214,29 @@ export default function AnalyzerScreen() {
     return () => {
       cancelled = true;
     };
-  }, [currentSong?.id]);
+    // N33: dulu deps hanya [currentSong?.id] — lagu yang sama diputar
+    // ulang sesudah metadata-nya berubah (edit di [id].tsx / rescan /
+    // enrichment memperbarui bitDepth/sampleRate/fileSize lewat antrean
+    // baru) tidak memicu analisis ulang, dan verdict "STUDIO MASTER" /
+    // "CD QUALITY" tetap menampilkan hasil versi lama. Deps kini semua
+    // field lagu yang dibaca analisis (analyzeBitDepth + analyzeSong:
+    // uri/filename untuk file-nya, bitDepth/sampleRate/bitrate/codec/
+    // fileSize sebagai klaim file, title untuk label hasil). Batas yang
+    // dicatat: edit di [id].tsx hanya mengubah salinan libraryStore —
+    // playerStore.currentSong tidak ikut berubah sampai lagu itu
+    // diputar/diantre ulang — jadi analisis segar tampil sesudah lagu
+    // diputar ulang, bukan seketika saat disimpan.
+  }, [
+    currentSong?.id,
+    currentSong?.uri,
+    currentSong?.filename,
+    currentSong?.title,
+    currentSong?.bitDepth,
+    currentSong?.sampleRate,
+    currentSong?.bitrate,
+    currentSong?.codec,
+    currentSong?.fileSize,
+  ]);
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
 
