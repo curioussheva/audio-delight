@@ -11,9 +11,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Platform,
-  TextInput,
   Keyboard,
   AppState,
   RefreshControl,
@@ -29,7 +27,6 @@ import {
   ChevronLeft,
   Music2,
   Trash2,
-  X,
   Search,
   ScanText,
   SearchX,
@@ -61,6 +58,12 @@ import { EnrichMetadataModal } from "@/features/library/components/EnrichMetadat
 import { DrawerMenuButton } from "@/shared/components/ui/DrawerMenuButton";
 import { ScreenLoading } from "@/shared/components/ui/ScreenLoading";
 import { EmptyState } from "@/shared/components/ui/EmptyState";
+import { ErrorState } from "@/shared/components/ui/ErrorState";
+import { SearchInput } from "@/shared/components/ui/SearchInput";
+import { ConfirmDialog } from "@/shared/components/ui/ConfirmDialog";
+import { useToastStore } from "@/shared/store/toastStore";
+import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
+import { parseHex } from "@/shared/utils/contrast";
 import { SongListItem } from "@/features/library/components/SongListItem";
 import { EmptyLibrary } from "@/features/library/components/EmptyLibrary";
 import { LibraryScanner } from "@/features/library/api/scanner";
@@ -88,6 +91,15 @@ const debounce = (func: Function, delay: number) => {
     clearTimeout(timeout);
     timeout = setTimeout(() => func(...args), delay);
   };
+};
+
+// Fase 3 Library: helper yang sama seperti Player (disc ON/OFF) —
+// parseHex mengembalikan null untuk hex yang tidak terbaca → fallback
+// ke warna asli, bukan hitam buta.
+const hexToRGBA = (hex: string, opacity: number): string => {
+  const rgb = parseHex(hex);
+  if (!rgb) return hex;
+  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity})`;
 };
 
 export default function LibraryScreen() {
@@ -121,7 +133,8 @@ export default function LibraryScreen() {
     "all",
   );
 
-  const searchInputRef = useRef<TextInput>(null);
+  // (Fase 3 Library: ref input pencarian dihapus — fokus ditangani
+  // SearchInput lewat autoFocus saat baris pencarian tampil.)
   // J3-1: penjaga refresh foreground — cooldown + durasi background yang
   // SAMA seperti quickDiff di useScanManager. quickDiff TIDAK bisa
   // menggantikan refresh ini: ia return kosong saat auto-scan mati
@@ -134,6 +147,7 @@ export default function LibraryScreen() {
   const BOTTOM_COMPENSATION = Platform.OS === "ios" ? insets.bottom + 20 : 30;
 
   const { playSong, currentSong, isPlaying } = usePlayerStore();
+  const showToast = useToastStore((s) => s.showToast);
 
   // 🔥 FIX: list harus punya ruang untuk FloatingPlayer + tab bar.
   // Sebelumnya padding bawah cuma 30 (Android), tapi FloatingPlayer sendiri
@@ -169,6 +183,9 @@ export default function LibraryScreen() {
   // B2 (ronde 9): dialog nama playlist lintas-platform — dulu
   // Alert.prompt (iOS-only, no-op di Android).
   const [showCreateModal, setShowCreateModal] = useState(false);
+  // Fase 3 Library: hapus playlist lewat ConfirmDialog (satu-satunya
+  // mekanisme konfirmasi), bukan Alert.alert.
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   // U-P1-18: detail view (Album/Artist/Genre/Folder/Format) menerima
   // favoriteIds sebagai Set — dulu tidak pernah dioper, jadi semua hati
@@ -404,23 +421,22 @@ export default function LibraryScreen() {
         const matchedCount = newPlaylist.songIds.length;
         const skippedCount = parsedData.paths.length - matchedCount;
 
-        Alert.alert(
-          "Import Berhasil",
+        // Fase 3 Library: umpan balik sukses lewat toast global,
+        // bukan Alert.alert (pola yang sama dengan layar Playlist).
+        showToast(
           skippedCount > 0
             ? `Playlist "${originalName}" ditambahkan (${matchedCount} track cocok, ${skippedCount} track dilewati karena tidak ditemukan di library).`
             : `Playlist "${originalName}" berhasil ditambahkan (${matchedCount} track).`,
+          "success",
         );
       } else {
-        Alert.alert(
-          "Import Gagal",
-          "File M3U/M3U8 kosong atau format tidak valid.",
-        );
+        showToast("File M3U/M3U8 kosong atau format tidak valid.", "error");
       }
     } catch (error) {
       console.error("[M3U Import Error]:", error);
-      Alert.alert("Error", "Gagal membaca file M3U/M3U8.");
+      showToast("Gagal membaca file M3U/M3U8.", "error");
     }
-  }, [importM3UPaths]);
+  }, [importM3UPaths, showToast]);
 
   const handlePlaylistPress = useCallback((playlist: PlaylistItem) => {
     setSelectedPlaylist(playlist);
@@ -428,21 +444,14 @@ export default function LibraryScreen() {
 
   const handleDeletePlaylist = useCallback(() => {
     if (!selectedPlaylist || selectedPlaylist.id === "favorites") return;
-    Alert.alert(
-      "Hapus Playlist",
-      `Hapus playlist "${selectedPlaylist.name}"?`,
-      [
-        { text: "Batal", style: "cancel" },
-        {
-          text: "Hapus",
-          style: "destructive",
-          onPress: async () => {
-            await deletePlaylist(selectedPlaylist.id);
-            setSelectedPlaylist(null);
-          },
-        },
-      ],
-    );
+    setShowDeleteDialog(true);
+  }, [selectedPlaylist]);
+
+  const handleConfirmDeletePlaylist = useCallback(async () => {
+    if (!selectedPlaylist) return;
+    await deletePlaylist(selectedPlaylist.id);
+    setSelectedPlaylist(null);
+    setShowDeleteDialog(false);
   }, [selectedPlaylist, deletePlaylist]);
 
   const toggleSearch = () => {
@@ -451,15 +460,11 @@ export default function LibraryScreen() {
       setShowSearch(false);
       Keyboard.dismiss();
     } else {
+      // Fase 3 Library: fokus ditangani SearchInput (autoFocus saat
+      // baris pencarian tampil), bukan ref + setTimeout.
       setShowSearch(true);
-      setTimeout(() => searchInputRef.current?.focus(), 100);
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
-
-  const clearSearch = () => {
-    setSearchQuery("");
-    searchInputRef.current?.focus();
   };
 
   const onRefresh = useCallback(() => {
@@ -484,34 +489,15 @@ export default function LibraryScreen() {
           >
             <ArrowLeft size={24} color={colors.text.primary} />
           </TouchableOpacity>
-          <View
-            style={[
-              s.searchBar,
-              { backgroundColor: colors.background.secondary },
-            ]}
-          >
-            <Search size={18} color={colors.primary[500]} />
-            <TextInput
-              ref={searchInputRef}
-              style={[s.searchInput, { color: colors.text.primary }]}
-              placeholder="Search Artist, Album, Format..."
-              placeholderTextColor={colors.text.disabled}
+          {/* Fase 3 Library: bar pencarian bersama (SearchInput) —
+              ikon search + tombol hapus sudah di dalamnya. */}
+          <View style={{ flex: 1 }}>
+            <SearchInput
               value={searchQuery}
               onChangeText={setSearchQuery}
-              returnKeyType="search"
-              autoCapitalize="none"
+              placeholder="Search Artist, Album, Format..."
+              autoFocus
             />
-            {searchQuery !== "" && (
-              <TouchableOpacity
-                onPress={clearSearch}
-                hitSlop={12}
-                style={s.headerIconBtn}
-                accessibilityRole="button"
-                accessibilityLabel="Hapus pencarian"
-              >
-                <X size={18} color={colors.text.tertiary} />
-              </TouchableOpacity>
-            )}
           </View>
         </View>
       );
@@ -560,6 +546,10 @@ export default function LibraryScreen() {
             </TouchableOpacity>
           )}
 
+          {/* Fase 3 Library: tombol filter memakai mekanisme ON/OFF
+              yang sama dengan shuffle/repeat Player (d0ddf23d) — ON =
+              disc tint primary 15% + stroke 2.5, OFF = polos. Dulu
+              bedanya hanya warna ikon. */}
           <TouchableOpacity
             onPress={() =>
               setFilterType((f) =>
@@ -567,9 +557,16 @@ export default function LibraryScreen() {
               )
             }
             hitSlop={12}
-            style={s.headerIconBtn}
+            style={[
+              s.headerIconBtn,
+              filterType !== "all" && {
+                backgroundColor: hexToRGBA(colors.primary[500], 0.15),
+                borderRadius: 22,
+              },
+            ]}
             accessibilityRole="button"
             accessibilityLabel="Filter lagu"
+            accessibilityState={{ selected: filterType !== "all" }}
             disabled={isScanning}
           >
             <Filter
@@ -579,7 +576,7 @@ export default function LibraryScreen() {
                   ? colors.primary[500]
                   : colors.text.secondary
               }
-              strokeWidth={2}
+              strokeWidth={filterType !== "all" ? 2.5 : 2}
             />
           </TouchableOpacity>
 
@@ -706,24 +703,14 @@ export default function LibraryScreen() {
     if (libraryError && tracks.length === 0) {
       return (
         <View style={s.center}>
-          <Text style={[s.emptyTitle, { color: colors.text.primary }]}>
-            Gagal memuat library
-          </Text>
-          <Text style={[s.emptySub, { color: colors.text.tertiary }]}>
-            {libraryError}
-          </Text>
-          <TouchableOpacity
-            onPress={onRefresh}
-            style={[s.retryBtn, { borderColor: colors.primary[500] }]}
-            accessibilityRole="button"
-            accessibilityLabel="Coba lagi memuat library"
-          >
-            <Text
-              style={[s.retryBtnText, { color: colors.primary[500] }]}
-            >
-              Coba lagi
-            </Text>
-          </TouchableOpacity>
+          {/* Fase 3 Library: keadaan galat bersama (ErrorState),
+              bukan cabang inline dengan tombol retry sendiri. */}
+          <ErrorState
+            title="Gagal memuat library"
+            message={libraryError}
+            actionLabel="Coba lagi"
+            onActionPress={onRefresh}
+          />
         </View>
       );
     }
@@ -961,6 +948,20 @@ export default function LibraryScreen() {
         onClose={() => setShowCreateModal(false)}
         onSubmit={handleCreatePlaylistSubmit}
       />
+
+      {/* Fase 3 Library: hapus playlist lewat ConfirmDialog. */}
+      <ConfirmDialog
+        visible={showDeleteDialog}
+        title="Hapus Playlist"
+        message={
+          selectedPlaylist
+            ? `Hapus playlist "${selectedPlaylist.name}"?`
+            : undefined
+        }
+        confirmLabel="Hapus"
+        onConfirm={handleConfirmDeletePlaylist}
+        onCancel={() => setShowDeleteDialog(false)}
+      />
     </View>
   );
 }
@@ -979,14 +980,16 @@ const createStyles = (colors: any) =>
       alignItems: "center",
     },
     headerTitle: {
-      fontSize: 14,
-      fontWeight: "800",
-      letterSpacing: 4,
+      fontSize: 16,
+      // FASE 3 (1): judul layar Playfair Display lewat token (seperti
+      // judul lagu Player) — keluarga Bold sudah membawa bobotnya.
+      fontFamily: FONT_FAMILY.displayBold,
+      letterSpacing: 3,
       textTransform: "uppercase",
     },
     headerStats: {
       fontSize: 10,
-      fontWeight: "500",
+      fontFamily: FONT_FAMILY.medium,
       marginTop: 2,
     },
     headerActions: {
@@ -1005,7 +1008,7 @@ const createStyles = (colors: any) =>
     },
     scanButton: {
       padding: 4,
-      borderRadius: 8,
+      borderRadius: BASE_RADIUS.sm,
     },
     scanButtonActive: {
       flexDirection: "row",
@@ -1021,7 +1024,7 @@ const createStyles = (colors: any) =>
     },
     scanningText: {
       fontSize: 10,
-      fontWeight: "700",
+      fontFamily: FONT_FAMILY.bold,
       color: colors.primary[500],
     },
     enhanceBadge: {
@@ -1029,45 +1032,33 @@ const createStyles = (colors: any) =>
       alignItems: "center",
       paddingHorizontal: 8,
       paddingVertical: 4,
-      borderRadius: 12,
+      borderRadius: BASE_RADIUS.md,
       gap: 4,
       backgroundColor: colors.status.success + "20",
     },
     enhanceBadgeText: {
       fontSize: 12,
-      fontWeight: "700",
+      fontFamily: FONT_FAMILY.bold,
       color: colors.status.success,
     },
+    // (Fase 3 Library: searchBar/searchInput dihapus — SearchInput
+    // bersama yang dipakai, gayanya dari buildSearchInputStyles.)
     searchRow: {
       flexDirection: "row",
       alignItems: "center",
       flex: 1,
       gap: 12,
     },
-    searchBar: {
-      flex: 1,
-      flexDirection: "row",
-      alignItems: "center",
-      height: 44,
-      borderRadius: 22,
-      paddingHorizontal: 16,
-      gap: 10,
-    },
-    searchInput: {
-      flex: 1,
-      fontSize: 15,
-      fontWeight: "600",
-    },
     filterBadge: {
       alignSelf: "center",
       paddingHorizontal: 12,
       paddingVertical: 4,
-      borderRadius: 12,
+      borderRadius: BASE_RADIUS.md,
       marginBottom: 8,
     },
     filterBadgeText: {
       fontSize: 10,
-      fontWeight: "700",
+      fontFamily: FONT_FAMILY.bold,
     },
     content: {
       flex: 1,
@@ -1084,17 +1075,8 @@ const createStyles = (colors: any) =>
       alignItems: "center",
       padding: 40,
     },
-    emptyTitle: {
-      fontSize: 18,
-      fontWeight: "800",
-      marginTop: 16,
-    },
-    emptySub: {
-      fontSize: 14,
-      textAlign: "center",
-      marginTop: 8,
-      opacity: 0.6,
-    },
+    // (Fase 3 Library: emptyTitle/emptySub/retryBtn dihapus —
+    // cabang galat kini memakai ErrorState bersama.)
     errorBanner: {
       flexDirection: "row",
       alignItems: "center",
@@ -1104,23 +1086,16 @@ const createStyles = (colors: any) =>
       marginBottom: 8,
       paddingHorizontal: 12,
       paddingVertical: 10,
-      borderRadius: 10,
+      borderRadius: BASE_RADIUS.md,
     },
     errorBannerText: {
       flex: 1,
       fontSize: 13,
-      fontWeight: "500",
-    },
-    retryBtn: {
-      borderWidth: 1,
-      borderRadius: 8,
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-      marginTop: 8,
+      fontFamily: FONT_FAMILY.medium,
     },
     retryBtnText: {
       fontSize: 14,
-      fontWeight: "700",
+      fontFamily: FONT_FAMILY.bold,
     },
     // F: header detail playlist (pola yang sama dengan layar drawer
     // Playlist) — tombol kembali + judul + hapus.
@@ -1140,10 +1115,14 @@ const createStyles = (colors: any) =>
     },
     detailTitle: {
       fontSize: 20,
-      fontWeight: "800",
+      // FASE 3 (1): judul detail playlist = heading display (Playfair),
+      // peran h4 (20/28).
+      fontFamily: FONT_FAMILY.displayBold,
+      lineHeight: 28,
     },
     detailSubtitle: {
       fontSize: 13,
+      fontFamily: FONT_FAMILY.regular,
       marginTop: 2,
     },
   }); 
