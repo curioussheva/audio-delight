@@ -25,10 +25,13 @@ jest.mock("@/shared/lib/sqlite", () => ({
 import {
   computeDiff,
   isDeletionPlausible,
+  ScanDiffEngine,
   SAFE_DELETE_RATIO,
   SAFE_DELETE_MIN_COUNT,
 } from "../../../features/library/services/ScanDiffEngine";
 import type { NativeSong } from "@/features/library/native/MediaStoreModule";
+import { MediaStore } from "@/features/library/native/MediaStoreModule";
+import { useLibraryStore } from "@/features/library/store/libraryStore";
 
 const song = (uri: string, fileSize = 1000): NativeSong =>
   ({ id: uri, uri, fileSize }) as NativeSong;
@@ -132,5 +135,30 @@ describe("computeDiff", () => {
   it("tidak ada perubahan sama sekali", () => {
     const r = computeDiff([song("a")], new Set(["a"]), () => 1000);
     expect(r).toEqual({ newSongs: [], updatedSongs: [], deletedUris: [] });
+  });
+});
+
+describe("quickDiff — J3-1: tidak bisa menggantikan refresh library", () => {
+  const getState = useLibraryStore.getState as jest.Mock;
+  const queryAudioFiles = MediaStore.queryAudioFiles as jest.Mock;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("REGRESI: auto-scan mati (default OFF) -> hasil kosong TANPA menyentuh MediaStore", async () => {
+    getState.mockReturnValue({ isAutoScanEnabled: false });
+    const result = await ScanDiffEngine.quickDiff();
+    expect(result).toEqual({
+      newCount: 0,
+      deletedCount: 0,
+      updatedCount: 0,
+      totalScanned: 0,
+      newSongs: [],
+      updatedSongs: [],
+      deletedUris: [],
+    });
+    // Bukti early-return sebelum getNativeSongs(): tidak ada query sama sekali.
+    expect(queryAudioFiles).not.toHaveBeenCalled();
   });
 });

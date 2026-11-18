@@ -9,11 +9,15 @@ import { ScanDiffEngine } from "../services/ScanDiffEngine";
 import { useLibraryStore } from "../store/libraryStore";
 import { ScanProgress } from "../types/scan";
 import { MetadataEnricher } from "../services/MetadataEnricher";
+import {
+  MIN_BACKGROUND_MS,
+  RESUME_SCAN_COOLDOWN_MS,
+  shouldRunResumeRefresh,
+} from "../services/resumeRefreshGuard";
 
-// Minimum interval antara resume scan — diekspor supaya pemicu refresh
-// foreground lain (library.tsx) memakai cooldown yang SAMA (J3-1).
-export const RESUME_SCAN_COOLDOWN_MS = 60_000;  // 🔥 FIX Bug #4: 60s
-export const MIN_BACKGROUND_MS = 3_000;          // 🔥 FIX Bug #4: skip resume <3s di bg
+// Diekspor ulang supaya pemicu refresh foreground lain (library.tsx)
+// tetap bisa mengimpor dari sini; definisi tinggal di resumeRefreshGuard.
+export { MIN_BACKGROUND_MS, RESUME_SCAN_COOLDOWN_MS };
 
 // 🔥 FIX Bug #4: module-level state (survive across hook remount)
 let _globalLastResumeScan = 0;
@@ -84,14 +88,17 @@ useEffect(() => {
 
       const now = Date.now();
 
-      // Skip kalau baru <3s di background
-      if (_globalBackgroundedAt > 0 && now - _globalBackgroundedAt < MIN_BACKGROUND_MS) {
-        return;
-      }
-
-      // Cooldown GLOBAL (bukan useRef)
-      if (now - _globalLastResumeScan < RESUME_SCAN_COOLDOWN_MS) {
-        if (now - _globalLastResumeLog > 10_000) {
+      // J3-1: predikat penjaga bersama library.tsx (resumeRefreshGuard).
+      const resumeDecision = shouldRunResumeRefresh({
+        backgroundedAt: _globalBackgroundedAt,
+        lastRunAt: _globalLastResumeScan,
+        now,
+      });
+      if (resumeDecision !== "ok") {
+        if (
+          resumeDecision === "cooldown" &&
+          now - _globalLastResumeLog > 10_000
+        ) {
           console.log("[useScanManager] Resume cooldown active (global), skip");
           _globalLastResumeLog = now;
         }

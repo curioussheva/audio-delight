@@ -54,10 +54,7 @@ import {
 
 // Scan System
 import { useScanManager } from "@/features/library/hooks/useScanManager";
-import {
-  RESUME_SCAN_COOLDOWN_MS,
-  MIN_BACKGROUND_MS,
-} from "@/features/library/hooks/useScanManager";
+import { shouldRunResumeRefresh } from "@/features/library/services/resumeRefreshGuard";
 import { ScanStatusBar } from "@/features/library/components/ScanStatusBar";
 import { EnrichMetadataModal } from "@/features/library/components/EnrichMetadataModal";
 
@@ -290,10 +287,11 @@ export default function LibraryScreen() {
     [refreshLibrary],
   );
 
-  // J3-1: SATU penjaga bersama quickDiff (useScanManager) — skip kalau
-  // baru <3 dtk di background, cooldown 60 dtk antar refresh foreground.
-  // syncFromNative (J1-3 fix 1, playerStore) punya listener AppState
-  // sendiri dan tidak disentuh di sini.
+  // J3-1: SATU predikat penjaga bersama quickDiff (useScanManager) —
+  // resumeRefreshGuard.shouldRunResumeRefresh: skip kalau baru <3 dtk di
+  // background, cooldown 60 dtk antar refresh foreground. syncFromNative
+  // (J1-3 fix 1, playerStore) punya listener AppState sendiri dan tidak
+  // disentuh di sini.
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "background" || state === "inactive") {
@@ -303,12 +301,12 @@ export default function LibraryScreen() {
       if (state !== "active") return;
       const now = Date.now();
       if (
-        backgroundedAtRef.current > 0 &&
-        now - backgroundedAtRef.current < MIN_BACKGROUND_MS
+        shouldRunResumeRefresh({
+          backgroundedAt: backgroundedAtRef.current,
+          lastRunAt: lastForegroundRefreshRef.current,
+          now,
+        }) !== "ok"
       ) {
-        return;
-      }
-      if (now - lastForegroundRefreshRef.current < RESUME_SCAN_COOLDOWN_MS) {
         return;
       }
       lastForegroundRefreshRef.current = now;
