@@ -3,12 +3,13 @@ import {
   ANALYZER_BIN_COUNT,
   ANALYZER_DB_CEIL,
   ANALYZER_DB_FLOOR,
-  PARAMETRIC_COLOR_BLUE,
-  PARAMETRIC_COLOR_CYAN,
-  PARAMETRIC_COLOR_GREEN,
+  PARAMETRIC_COLOR_AMBER,
+  PARAMETRIC_COLOR_BROWN,
+  PARAMETRIC_COLOR_GOLD,
   PARAMETRIC_COLOR_ORANGE,
   PARAMETRIC_COLOR_RED,
   PARAMETRIC_COLOR_YELLOW,
+  PARAMETRIC_GRADIENT_STOPS,
   binCenterFreq,
   dbColor,
   dbToValue,
@@ -169,14 +170,14 @@ describe("dominantBin", () => {
   });
 });
 
-describe("parametricDbZone / parametricDbColor (biru→merah, main player)", () => {
-  it("zona mengikuti ambang dB: biru < -60, cyan -60..-40, hijau -40..-20, kuning -20..-12, oranye -12..-3, merah >= -3", () => {
-    expect(parametricDbZone(-80)).toBe("blue");
-    expect(parametricDbZone(-61)).toBe("blue");
-    expect(parametricDbZone(-60)).toBe("cyan");
-    expect(parametricDbZone(-41)).toBe("cyan");
-    expect(parametricDbZone(-40)).toBe("green");
-    expect(parametricDbZone(-21)).toBe("green");
+describe("parametricDbZone / parametricDbColor (ramp hangat, main player)", () => {
+  it("zona mengikuti ambang dB: cokelat < -60, amber -60..-40, emas -40..-20, kuning -20..-12, oranye -12..-3, merah >= -3", () => {
+    expect(parametricDbZone(-80)).toBe("brown");
+    expect(parametricDbZone(-61)).toBe("brown");
+    expect(parametricDbZone(-60)).toBe("amber");
+    expect(parametricDbZone(-41)).toBe("amber");
+    expect(parametricDbZone(-40)).toBe("gold");
+    expect(parametricDbZone(-21)).toBe("gold");
     expect(parametricDbZone(-20)).toBe("yellow");
     expect(parametricDbZone(-13)).toBe("yellow");
     expect(parametricDbZone(-12)).toBe("orange");
@@ -184,36 +185,51 @@ describe("parametricDbZone / parametricDbColor (biru→merah, main player)", () 
     expect(parametricDbZone(-3)).toBe("red");
     expect(parametricDbZone(0)).toBe("red");
   });
+
+  it("semua jangkar hangat (R >= G >= B) dan terurut naik menurut dB", () => {
+    const rgb = (hex: string): [number, number, number] => [
+      parseInt(hex.slice(1, 3), 16),
+      parseInt(hex.slice(3, 5), 16),
+      parseInt(hex.slice(5, 7), 16),
+    ];
+    for (const stop of PARAMETRIC_GRADIENT_STOPS) {
+      const [r, g, b] = rgb(stop.color);
+      expect(r).toBeGreaterThanOrEqual(g);
+      expect(g).toBeGreaterThanOrEqual(b);
+    }
+    const dbs = PARAMETRIC_GRADIENT_STOPS.map((s) => s.db);
+    expect([...dbs].sort((a, b) => a - b)).toEqual(dbs);
+  });
 });
 
 describe("parametricDbColor — gradient MULUS (bukan zona terpisah)", () => {
-  it("ujung: -80 dB = biru, 0 dB = merah", () => {
-    expect(parametricDbColor(-80)).toBe(PARAMETRIC_COLOR_BLUE);
+  it("ujung: -80 dB = cokelat-amber gelap, 0 dB = merah", () => {
+    expect(parametricDbColor(-80)).toBe(PARAMETRIC_COLOR_BROWN);
     expect(parametricDbColor(0)).toBe(PARAMETRIC_COLOR_RED);
   });
 
-  it("jangkar tepat sama dengan warna zona lama", () => {
-    expect(parametricDbColor(-60)).toBe(PARAMETRIC_COLOR_CYAN);
-    expect(parametricDbColor(-40)).toBe(PARAMETRIC_COLOR_GREEN);
+  it("jangkar tepat sama dengan warna zona", () => {
+    expect(parametricDbColor(-60)).toBe(PARAMETRIC_COLOR_AMBER);
+    expect(parametricDbColor(-40)).toBe(PARAMETRIC_COLOR_GOLD);
     expect(parametricDbColor(-20)).toBe(PARAMETRIC_COLOR_YELLOW);
     expect(parametricDbColor(-12)).toBe(PARAMETRIC_COLOR_ORANGE);
   });
 
   it("tengah segmen = lerp RGB antar jangkar (bukan warna zona)", () => {
-    // -70: tengah biru #2563EB ↔ cyan #06B6D4.
-    expect(parametricDbColor(-70)).toBe("#168DE0");
-    // -50: tengah cyan #06B6D4 ↔ hijau #22C55E.
-    expect(parametricDbColor(-50)).toBe("#14BE99");
+    // -70: tengah cokelat-amber gelap #5C3D16 ↔ amber #B7791F.
+    expect(parametricDbColor(-70)).toBe("#8A5B1B");
+    // -50: tengah amber #B7791F ↔ emas #D9A441.
+    expect(parametricDbColor(-50)).toBe("#C88F30");
     // Bukan warna zona mana pun.
-    expect(parametricDbColor(-70)).not.toBe(PARAMETRIC_COLOR_BLUE);
-    expect(parametricDbColor(-70)).not.toBe(PARAMETRIC_COLOR_CYAN);
-    expect(parametricDbColor(-50)).not.toBe(PARAMETRIC_COLOR_CYAN);
-    expect(parametricDbColor(-50)).not.toBe(PARAMETRIC_COLOR_GREEN);
+    expect(parametricDbColor(-70)).not.toBe(PARAMETRIC_COLOR_BROWN);
+    expect(parametricDbColor(-70)).not.toBe(PARAMETRIC_COLOR_AMBER);
+    expect(parametricDbColor(-50)).not.toBe(PARAMETRIC_COLOR_AMBER);
+    expect(parametricDbColor(-50)).not.toBe(PARAMETRIC_COLOR_GOLD);
   });
 
   it("di luar rentang di-clamp ke ujung", () => {
-    expect(parametricDbColor(-100)).toBe(PARAMETRIC_COLOR_BLUE);
-    expect(parametricDbColor(-1000)).toBe(PARAMETRIC_COLOR_BLUE);
+    expect(parametricDbColor(-100)).toBe(PARAMETRIC_COLOR_BROWN);
+    expect(parametricDbColor(-1000)).toBe(PARAMETRIC_COLOR_BROWN);
     expect(parametricDbColor(10)).toBe(PARAMETRIC_COLOR_RED);
   });
 });

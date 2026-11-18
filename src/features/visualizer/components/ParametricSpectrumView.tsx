@@ -4,11 +4,12 @@
 // (waterfall) di sana sejak 2026-11-17. Beda dengan tab Analyzer:
 // - Tanpa sumbu/grid/label dB, tanpa pill CLIP, tanpa scroll — tampilan
 //   minimal yang muat di ruang 120px main player.
-// - Warna bar GRADIENT MULUS biru→merah mengikuti dB (sejak 2026-11-18,
-//   atas permintaan csheva: "-80 biru sampai 0 dB merah" + sedikit efek):
-//   SATU gradient vertikal (biru bawah → merah atas) untuk semua bar —
-//   ujung atas tiap bar = warna dB-nya karena tinggi bar ∝ dB. Bukan
-//   satu warna solid per bar, bukan zona yang patah.
+// - Warna bar GRADIENT MULUS ramp hangat mengikuti dB (sejak 2026-11-18
+//   sore, pilihan csheva di Fase 3 — menggantikan biru→merah pagi itu;
+//   merah di 0 dB dipertahankan):
+//   SATU gradient vertikal (cokelat-amber gelap bawah → merah atas)
+//   untuk semua bar — ujung atas tiap bar = warna dB-nya karena tinggi
+//   bar ∝ dB. Bukan satu warna solid per bar, bukan zona yang patah.
 // - PEAK HOLD: topi kecil di puncak terakhir tiap bar, naik instan,
 //   turun pelan (~3 detik dari 0 dB ke lantai).
 // - GLOW murah: halo (bar yang sama, sedikit lebih lebar, opacity
@@ -63,8 +64,9 @@ const MIN_BAR_COUNT = 16;
 // Bar digambar setinggi maks 85% area (sama seperti AnalyzerSpectrum) —
 const BAR_HEIGHT_FACTOR = 0.85;
 
-// Gradient vertikal SATU shader untuk halo + bar + topi peak: biru di
-// bawah (amp 0 = -80 dB) → merah di atas (amp 1 = 0 dB). Posisi jangkar
+// Gradient vertikal SATU shader untuk halo + bar + topi peak:
+// cokelat-amber gelap di bawah (amp 0 = -80 dB) → merah di atas
+// (amp 1 = 0 dB). Posisi jangkar
 // = dbToValue(dB) — ujung atas bar setinggi amp tepat menyentuh warna
 // dB-nya. Start/end gradient dihitung per render (butuh `height`).
 const GRADIENT_COLORS = PARAMETRIC_GRADIENT_STOPS.map((s) => s.color);
@@ -316,7 +318,7 @@ export const ParametricSpectrumView: React.FC<
   );
 
   // SATU Path untuk semua bar — warna dari SATU gradient vertikal
-  // (biru bawah → merah atas, jangkar PARAMETRIC_GRADIENT_STOPS):
+  // (cokelat-amber gelap bawah → merah atas, jangkar PARAMETRIC_GRADIENT_STOPS):
   // ujung atas bar setinggi amp menyentuh warna dB-nya karena tinggi
   // bar ∝ dB. 1 path + 1 shader, bukan 48 path berwarna sendiri-sendiri.
   const barsPath = useDerivedValue(() => {
@@ -385,7 +387,7 @@ export const ParametricSpectrumView: React.FC<
               positions={GRADIENT_POSITIONS}
             />
           </Path>
-          {/* Bar utama — gradient mulus biru (-80 dB) → merah (0 dB). */}
+          {/* Bar utama — gradient mulus cokelat-amber gelap (-80 dB) → merah (0 dB). */}
           <Path
             path={barsPath}
             style="fill"

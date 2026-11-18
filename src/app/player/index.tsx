@@ -29,7 +29,7 @@ import { useTheme } from "@/shared/context/ThemeContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSafePadding } from "@/shared/hooks/useSafePadding";
 
-// ✅ Parametric bar visualizer (biru→merah mengikuti dB) — ganti
+// ✅ Parametric bar visualizer (ramp hangat mengikuti dB) — ganti
 // SpectogramView (waterfall) di main player sejak 2026-11-17.
 // BUKAN SpectrumAnalyzer (dead code, jangan dipakai).
 import { ParametricSpectrumView } from "@/features/visualizer/components/ParametricSpectrumView";
@@ -638,7 +638,7 @@ export default function PlayerScreen() {
           </View>
         )}
 
-        {/* ✅ PARAMETRIC SPECTRUM VIEW (bar biru→merah mengikuti dB) —
+        {/* ✅ PARAMETRIC SPECTRUM VIEW (bar ramp hangat mengikuti dB) —
             ganti SpectogramView (waterfall) sejak 2026-11-17.
             Single-channel (mono FFT); dual-channel L/R butuh FFT native
             per channel (follow-up). P2: panel solid + skala dBFS di kiri

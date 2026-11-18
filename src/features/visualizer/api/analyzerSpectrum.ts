@@ -66,27 +66,33 @@ export function dbColor(db: number): string {
 }
 
 /**
- * Skala warna parametrik biru→merah untuk main player
+ * Skala warna parametrik RAMP HANGAT untuk main player
  * (ParametricSpectrumView) — gradasi mengikuti dB.
  *
- * Sejak 2026-11-18 (atas permintaan csheva: "-80 biru sampai 0 dB merah"
- * + sedikit efek): interpolasi KONTINU antar jangkar, bukan zona terpisah.
- * Jangkarnya sama dengan zona lama supaya "keras" dan "clip" dibaca sama
- * seperti Analyzer; yang berubah hanya transisinya: mulus, bukan patah.
- * dB -80 biru, -60 cyan, -40 hijau, -20 kuning, -12 oranye, 0 merah.
+ * Riwayat: 2026-11-18 pagi csheva minta "-80 biru sampai 0 dB merah"
+ * (biru→merah, dikunci test); 2026-11-18 sore, di Fase 3, dia memilih
+ * ramp hangat ("visualizer sekalian dimodifikasi") — palet diganti,
+ * merah di 0 dB dipertahankan sesuai permintaan awalnya.
+ * Interpolasi KONTINU antar jangkar, bukan zona terpisah.
+ * dB -80 cokelat-amber gelap, -60 amber, -40 emas, -20 kuning-emas,
+ * -12 oranye, 0 merah. Ambang oranye/merah (-12/-3) tetap sama dengan
+ * ambang warn/clip Analyzer supaya "keras" dan "clip" dibaca sama.
  * SINGLE-CHANNEL (mono): warna dihitung dari satu array FFT campuran
  * (getFFTData), BUKAN per-channel L/R — dual-channel butuh FFT native
  * per channel (follow-up, bukan di sini).
  */
-export const PARAMETRIC_DB_CYAN = -60;
-export const PARAMETRIC_DB_GREEN = -40;
+export const PARAMETRIC_DB_AMBER = -60;
+export const PARAMETRIC_DB_GOLD = -40;
 export const PARAMETRIC_DB_YELLOW = -20;
 export const PARAMETRIC_DB_ORANGE = -12;
 export const PARAMETRIC_DB_RED = -3;
 
-export const PARAMETRIC_COLOR_BLUE = "#2563EB";
-export const PARAMETRIC_COLOR_CYAN = "#06B6D4";
-export const PARAMETRIC_COLOR_GREEN = ANALYZER_COLOR_LOW;
+/** -80: cokelat-amber gelap (stop gradient Ember — tema hangat). */
+export const PARAMETRIC_COLOR_BROWN = "#5C3D16";
+/** -60: amber (aksen hangat #B7791F). */
+export const PARAMETRIC_COLOR_AMBER = "#B7791F";
+/** -40: emas. */
+export const PARAMETRIC_COLOR_GOLD = "#D9A441";
 export const PARAMETRIC_COLOR_YELLOW = ANALYZER_COLOR_WARN;
 export const PARAMETRIC_COLOR_ORANGE = "#F97316";
 export const PARAMETRIC_COLOR_RED = ANALYZER_COLOR_CLIP;
@@ -98,31 +104,31 @@ export const PARAMETRIC_GRADIENT_STOPS: readonly {
   db: number;
   color: string;
 }[] = [
-  { db: ANALYZER_DB_FLOOR, color: PARAMETRIC_COLOR_BLUE },
-  { db: PARAMETRIC_DB_CYAN, color: PARAMETRIC_COLOR_CYAN },
-  { db: PARAMETRIC_DB_GREEN, color: PARAMETRIC_COLOR_GREEN },
+  { db: ANALYZER_DB_FLOOR, color: PARAMETRIC_COLOR_BROWN },
+  { db: PARAMETRIC_DB_AMBER, color: PARAMETRIC_COLOR_AMBER },
+  { db: PARAMETRIC_DB_GOLD, color: PARAMETRIC_COLOR_GOLD },
   { db: PARAMETRIC_DB_YELLOW, color: PARAMETRIC_COLOR_YELLOW },
   { db: PARAMETRIC_DB_ORANGE, color: PARAMETRIC_COLOR_ORANGE },
   { db: ANALYZER_DB_CEIL, color: PARAMETRIC_COLOR_RED },
 ];
 
 export type ParametricDbZone =
-  | "blue"
-  | "cyan"
-  | "green"
+  | "brown"
+  | "amber"
+  | "gold"
   | "yellow"
   | "orange"
   | "red";
 
-/** Zona warna parametrik (biru→merah) untuk satu nilai dB. */
+/** Zona warna parametrik (ramp hangat) untuk satu nilai dB. */
 export function parametricDbZone(db: number): ParametricDbZone {
   "worklet"; // dipanggil dari barsPath (useDerivedValue, UI thread)
   if (db >= PARAMETRIC_DB_RED) return "red";
   if (db >= PARAMETRIC_DB_ORANGE) return "orange";
   if (db >= PARAMETRIC_DB_YELLOW) return "yellow";
-  if (db >= PARAMETRIC_DB_GREEN) return "green";
-  if (db >= PARAMETRIC_DB_CYAN) return "cyan";
-  return "blue";
+  if (db >= PARAMETRIC_DB_GOLD) return "gold";
+  if (db >= PARAMETRIC_DB_AMBER) return "amber";
+  return "brown";
 }
 
 /** "#RRGGBB" -> [r, g, b] 0..255. Murni, worklet-safe. */
@@ -147,11 +153,12 @@ function rgbToHex(r: number, g: number, b: number): string {
 }
 
 /**
- * Warna parametrik (biru→merah) untuk satu nilai dB — interpolasi
+ * Warna parametrik (ramp hangat) untuk satu nilai dB — interpolasi
  * KONTINU (lerp RGB) antar jangkar PARAMETRIC_GRADIENT_STOPS, bukan
- * warna zona yang patah. -80 dB = biru, 0 dB = merah; di luar rentang
- * di-clamp ke ujung. Dipakai test + spesifikasi gradient; gambar bar
- * sendiri memakai shader LinearGradient dengan jangkar yang sama.
+ * warna zona yang patah. -80 dB = cokelat-amber gelap, 0 dB = merah;
+ * di luar rentang di-clamp ke ujung. Dipakai test + spesifikasi
+ * gradient; gambar bar sendiri memakai shader LinearGradient dengan
+ * jangkar yang sama.
  */
 export function parametricDbColor(db: number): string {
   "worklet";
