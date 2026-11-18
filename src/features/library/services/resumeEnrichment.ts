@@ -19,9 +19,18 @@
  * tidak boleh menahan `isQuickDiffRunning` di pemanggil — karena itu
  * promise-nya tidak di-await, hanya ditangkap `.catch` supaya kegagalan
  * tidak jadi unhandled rejection.
+ *
+ * Auto Enriching (2026-11-18): start OTOMATIS worker di sini digerbang
+ * toggle Auto Enriching (default ON) — lihat autoEnrichingGuard.ts.
+ * OFF = lagu baru tetap diantre (persisten), worker tidak di-start;
+ * antrean terkuras lewat aksi eksplisit (modal manual / Rescan Library /
+ * toggle ON di Settings). Worker yang di-start di sini juga jeda saat
+ * lagu diputar (predikat dari playerStore).
  */
 import { MetadataEnricher } from "./MetadataEnricher";
 import { useLibraryStore } from "../store/libraryStore";
+import { usePlayerStore } from "@/features/player/store/playerStore";
+import { shouldAutoStartEnrichmentWorker } from "./autoEnrichingGuard";
 import type { QuickDiffResult } from "./ScanDiffEngine";
 
 export async function handleResumeDiffResult(
@@ -46,7 +55,21 @@ export async function handleResumeDiffResult(
   }
 
   // S2: jalankan worker enrichment — antrean benar-benar diproses.
-  void MetadataEnricher.startBackgroundWorker().catch((err) =>
-    console.warn("[resumeEnrichment] Background worker failed:", err),
-  );
+  // Auto Enriching: start OTOMATIS hanya bila toggle ON. OFF = antrean
+  // tetap tersimpan (persisten) untuk aksi manual berikutnya.
+  if (
+    shouldAutoStartEnrichmentWorker({
+      isAutoEnrichingEnabled: store.isAutoEnrichingEnabled,
+    })
+  ) {
+    void MetadataEnricher.startBackgroundWorker(undefined, {
+      isPlaying: () => usePlayerStore.getState().isPlaying,
+    }).catch((err) =>
+      console.warn("[resumeEnrichment] Background worker failed:", err),
+    );
+  } else {
+    console.log(
+      "[resumeEnrichment] Auto Enriching OFF — worker tidak di-start, antrean menunggu aksi manual",
+    );
+  }
 }

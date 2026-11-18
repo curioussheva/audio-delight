@@ -15,6 +15,11 @@ import { analyzeBitDepth } from "../../audio/api/BitDepthVerifier";
 import { readSidecarLrc } from "./lyricsSource";
 // L2: jangan hidupkan lagi lirik yang diatur manual user (penanda I3).
 import { isLyricsManuallySet } from "../utils/lyricsEdit";
+import {
+  ENRICHMENT_INTER_ITEM_DELAY_MS,
+  ENRICHMENT_PLAYBACK_POLL_MS,
+  waitWhilePlaying,
+} from "./enrichmentPacing";
 import type { QueueItem, EnrichmentLevel } from "../types/scan";
 import { Song } from "@/shared/types/audio";
 import { isHiRes } from "@/shared/utils/audioQuality";
@@ -56,7 +61,18 @@ export class MetadataEnricher {
   }
 
   /**
-   * Menjalankan worker di background untuk memproses antrian secara perlahan
+   * Menjalankan worker di background untuk memproses antrian secara perlahan.
+   *
+   * Less aggressive (keputusan csheva 2026-11-18 — log HP: 289 item ×
+   * 350ms, [JSLag] sampai 4200ms saat Auto Discovery OFF):
+   * - jeda antar item ENRICHMENT_INTER_ITEM_DELAY_MS (1000ms, dulu 350);
+   * - jeda saat lagu diputar: sebelum tiap item, worker menunggu sampai
+   *   playback berhenti (`options.isPlaying`, poll 2 dtk, abort-aware).
+   *   Tanpa predikat, worker jalan seperti dulu (tidak menunggu).
+   * Start OTOMATIS worker digerbang toggle Auto Enriching di pemanggil
+   * (lihat autoEnrichingGuard.ts) — fungsi ini sendiri tidak memeriksa
+   * toggle, supaya aksi eksplisit (Rescan, toggle ON) bisa memanggilnya
+   * langsung.
    */
   static async startBackgroundWorker(
     onProgress?: (
@@ -64,12 +80,14 @@ export class MetadataEnricher {
       remaining: number,
       currentSong?: string,
     ) => void,
+    options?: { isPlaying?: () => boolean },
   ): Promise<void> {
     if (this.isRunning) return;
 
     this.isRunning = true;
     this.abortController = new AbortController();
     this.processedCount = 0;
+    const isPlaying = options?.isPlaying ?? (() => false);
 
     // J2-1: satu query MediaStore untuk seluruh worker-run.
     await this.warmNativeSongCache();
@@ -80,6 +98,16 @@ export class MetadataEnricher {
     while (this.isRunning && !this.abortController?.signal.aborted) {
       const item = await ScanQueue.shift();
       if (!item) break;
+
+      // Jeda saat lagu diputar — jangan ganggu playback. Keluar dari
+      // wait bila worker di-stop (sinyal abort); cek lagi di bawah
+      // supaya item tidak diproses setelah stop.
+      await waitWhilePlaying(
+        isPlaying,
+        this.abortController?.signal ?? undefined,
+        ENRICHMENT_PLAYBACK_POLL_MS,
+      );
+      if (!this.isRunning || this.abortController?.signal.aborted) break;
 
       try {
         await this.processItem(item);
@@ -95,8 +123,12 @@ export class MetadataEnricher {
         await ScanQueue.retry(item);
       }
 
-      // Gentle delay (350ms) agar I/O storage tidak bottleneck dan UI tetap smooth
-      await new Promise((r) => setTimeout(r, 350));
+      // Jeda antar item (1000ms, dulu 350ms) agar I/O storage tidak
+      // bottleneck dan UI tetap smooth — satu detik jeda buat thread JS
+      // di antara dua round-trip bridge/DB.
+      await new Promise((r) =>
+        setTimeout(r, ENRICHMENT_INTER_ITEM_DELAY_MS),
+      );
     }
 
     this.nativeSongCache = null;

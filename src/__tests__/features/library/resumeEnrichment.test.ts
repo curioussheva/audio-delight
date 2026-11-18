@@ -4,6 +4,10 @@
  *
  * Modul yang diuji mengimpor MetadataEnricher + store — keduanya di-mock
  * di sini mengikuti pola ScanDiffEngine.test.ts.
+ *
+ * Auto Enriching (2026-11-18): start OTOMATIS worker digerbang toggle
+ * Auto Enriching (default ON). OFF = lagu baru tetap diantre, worker
+ * tidak di-start.
  */
 jest.mock("../../../features/library/services/MetadataEnricher", () => ({
   MetadataEnricher: {
@@ -13,6 +17,11 @@ jest.mock("../../../features/library/services/MetadataEnricher", () => ({
 }));
 jest.mock("@/features/library/store/libraryStore", () => ({
   useLibraryStore: { getState: jest.fn() },
+}));
+// Predikat jeda-saat-putar dibaca dari playerStore — mock di sini supaya
+// test tidak menyeret store player (audioEngine + modul native).
+jest.mock("@/features/player/store/playerStore", () => ({
+  usePlayerStore: { getState: jest.fn(() => ({ isPlaying: false })) },
 }));
 
 import { handleResumeDiffResult } from "../../../features/library/services/resumeEnrichment";
@@ -42,7 +51,10 @@ describe("handleResumeDiffResult — S2", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     finishAutoScan = jest.fn();
-    getState.mockReturnValue({ finishAutoScan });
+    getState.mockReturnValue({
+      finishAutoScan,
+      isAutoEnrichingEnabled: true,
+    });
     queueSongs.mockResolvedValue(2);
     startBackgroundWorker.mockResolvedValue(undefined);
   });
@@ -63,10 +75,43 @@ describe("handleResumeDiffResult — S2", () => {
       { id: "2", uri: "content://b" },
     ]);
     expect(startBackgroundWorker).toHaveBeenCalledTimes(1);
+    // Predikat jeda-saat-putar diteruskan ke worker.
+    expect(startBackgroundWorker).toHaveBeenCalledWith(undefined, {
+      isPlaying: expect.any(Function),
+    });
     // Bukti urutan: antre dulu, worker kemudian.
     expect(queueSongs.mock.invocationCallOrder[0]).toBeLessThan(
       startBackgroundWorker.mock.invocationCallOrder[0],
     );
+  });
+
+  it("Auto Enriching OFF -> lagu baru tetap diantre, worker TIDAK di-start", async () => {
+    getState.mockReturnValue({
+      finishAutoScan,
+      isAutoEnrichingEnabled: false,
+    });
+    const newSongs = [
+      { id: "1", uri: "content://a" },
+    ] as unknown as QuickDiffResult["newSongs"];
+
+    await handleResumeDiffResult(
+      diff({ newCount: 1, totalScanned: 1, newSongs }),
+    );
+
+    expect(queueSongs).toHaveBeenCalledTimes(1);
+    expect(startBackgroundWorker).not.toHaveBeenCalled();
+  });
+
+  it("Auto Enriching OFF + tidak ada perubahan -> worker TIDAK di-start", async () => {
+    getState.mockReturnValue({
+      finishAutoScan,
+      isAutoEnrichingEnabled: false,
+    });
+
+    await handleResumeDiffResult(diff({ totalScanned: 3 }));
+
+    expect(queueSongs).not.toHaveBeenCalled();
+    expect(startBackgroundWorker).not.toHaveBeenCalled();
   });
 
   it("tidak ada perubahan -> queueSongs tidak dipanggil, worker tetap jalan (sisa antrean sesi lalu)", async () => {

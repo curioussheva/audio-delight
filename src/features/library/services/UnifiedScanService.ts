@@ -7,6 +7,8 @@
 import { ScanDiffEngine, ScanAbortedError } from "./ScanDiffEngine";
 import { MetadataEnricher } from "./MetadataEnricher";
 import { useLibraryStore } from "../store/libraryStore";
+import { usePlayerStore } from "@/features/player/store/playerStore";
+import { shouldAutoStartEnrichmentWorker } from "./autoEnrichingGuard";
 import { ScanResult, ScanProgress, EnrichmentLevel } from "../types/scan";
 import * as Notifications from "expo-notifications";
 const Platform = require("react-native").Platform;
@@ -67,7 +69,19 @@ export class UnifiedScanService {
             level: 2 as EnrichmentLevel,
           })),
         );
-        this.startBackgroundEnrichment();
+        // Auto Enriching: autoScan adalah jalur OTOMATIS (saat ini tidak
+        // ada pemanggil live) — worker hanya di-start bila toggle ON.
+        if (
+          shouldAutoStartEnrichmentWorker({
+            isAutoEnrichingEnabled: store.isAutoEnrichingEnabled,
+          })
+        ) {
+          this.startBackgroundEnrichment();
+        } else {
+          console.log(
+            "[UnifiedScan] Auto Enriching OFF — worker tidak di-start, antrean menunggu aksi manual",
+          );
+        }
       }
 
       const unenriched = store.getUnenrichedSongs?.() || [];
@@ -160,6 +174,31 @@ export class UnifiedScanService {
         duration: Date.now() - startTime,
         errors: [],
       };
+
+      // Aksi EKSPLISIT (Rescan manual dari Settings/Library) — worker
+      // TETAP jalan walau Auto Enriching OFF: user yang meminta
+      // pekerjaan itu. Lagu baru diantre (dedupe di ScanQueue) lalu
+      // worker di-start; jeda saat putar + throttle tetap berlaku.
+      // Ekor enrichment ini best-effort: gagal antre/start tidak boleh
+      // menggagalkan hasil scan (lagu sudah masuk DB).
+      if (diffResult.newCount > 0 && diffResult.newSongs?.length > 0) {
+        try {
+          const queued = await MetadataEnricher.queueSongs(
+            diffResult.newSongs.map((s) => ({
+              id: s.id,
+              uri: s.uri,
+              priority: 0,
+            })),
+          );
+          result.enrichmentQueued = queued;
+          this.startBackgroundEnrichment();
+        } catch (enrichErr) {
+          console.warn(
+            "[UnifiedScan] Manual scan: gagal antre/start enrichment (scan tetap sukses):",
+            enrichErr,
+          );
+        }
+      }
 
       console.log(`✅ [UnifiedScan] Manual scan completed`, result);
       return result;
@@ -290,10 +329,13 @@ export class UnifiedScanService {
 
   private static async startBackgroundEnrichment(): Promise<void> {
     try {
-      await MetadataEnricher.startBackgroundWorker((processed, remaining) => {
-        const store = useLibraryStore.getState();
-        store.setEnrichmentQueueSize(remaining);
-      });
+      await MetadataEnricher.startBackgroundWorker(
+        (processed, remaining) => {
+          const store = useLibraryStore.getState();
+          store.setEnrichmentQueueSize(remaining);
+        },
+        { isPlaying: () => usePlayerStore.getState().isPlaying },
+      );
     } catch (err) {
       console.error("[UnifiedScan] Background enrichment failed:", err);
     }

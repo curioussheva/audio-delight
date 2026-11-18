@@ -9,6 +9,8 @@ const Platform = require("react-native").Platform;
 import { ScanDiffEngine } from "./ScanDiffEngine";
 import { MetadataEnricher } from "./MetadataEnricher"; // ✅ Import MetadataEnricher
 import { useLibraryStore } from "../store/libraryStore";
+import { usePlayerStore } from "@/features/player/store/playerStore";
+import { shouldAutoStartEnrichmentWorker } from "./autoEnrichingGuard";
 
 const TASK_NAME = "PRISTINE_BACKGROUND_SCAN";
 const NOTIF_CHANNEL = "media-scanner";
@@ -66,13 +68,29 @@ TaskManager.defineTask(TASK_NAME, async () => {
         })),
       );
 
-      // Jalankan worker di background (jangan ditunggu/await agar task tidak timeout)
-      MetadataEnricher.startBackgroundWorker().catch((err) => {
-        console.warn(
-          "[BackgroundTask] Background worker encountered an error:",
-          err,
+      // Jalankan worker di background (jangan ditunggu/await agar task tidak timeout).
+      // Auto Enriching: start OTOMATIS hanya bila toggle ON — task ini
+      // sendiri sudah digerbang Auto Discovery di atas. OFF = lagu baru
+      // tetap diantre (persisten) untuk aksi manual berikutnya.
+      if (
+        shouldAutoStartEnrichmentWorker({
+          isAutoEnrichingEnabled:
+            useLibraryStore.getState().isAutoEnrichingEnabled,
+        })
+      ) {
+        MetadataEnricher.startBackgroundWorker(undefined, {
+          isPlaying: () => usePlayerStore.getState().isPlaying,
+        }).catch((err) => {
+          console.warn(
+            "[BackgroundTask] Background worker encountered an error:",
+            err,
+          );
+        });
+      } else {
+        console.log(
+          "[BackgroundTask] Auto Enriching OFF — worker tidak di-start, antrean menunggu aksi manual",
         );
-      });
+      }
     }
 
     // 3. Beritahu user jika ada perubahan koleksi
@@ -93,9 +111,15 @@ TaskManager.defineTask(TASK_NAME, async () => {
 // ── Public API ─────────────────────────────────────────────────
 export const BackgroundScanTask = {
   /**
-   * Mendaftarkan task ke Android System
+   * Mendaftarkan task ke Android System.
+   *
+   * Less aggressive (2026-11-18): interval default 240 menit (4 jam,
+   * dulu 60). Koleksi musik berubah jarang; resume quickDiff sudah
+   * menangkap perubahan saat app dibuka, jadi cadence background 4 jam
+   * tetap menemukan lagu baru di hari yang sama dengan wakeup 4x lebih
+   * jarang (8x dari 30 menit yang dipakai Settings sebelumnya).
    */
-  async register(intervalMinutes = 60): Promise<boolean> {
+  async register(intervalMinutes = 240): Promise<boolean> {
     if (Platform.OS !== "android") return false;
 
     const { isAutoScanEnabled } = useLibraryStore.getState();
