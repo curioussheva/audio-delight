@@ -285,7 +285,11 @@ export default function SongDetailScreen() {
         );
       }
 
-      await LibraryScanner.updateMetadata(song.id, updatedData);
+      await LibraryScanner.updateMetadata(song.id, updatedData, {
+        // I3 (G2): tandai field yang diterapkan dari MusicBrainz —
+        // rescan tidak boleh menimpanya.
+        markEdited: true,
+      });
       updateTrackInStore(song.id, updatedData);
 
       setSyncModalVisible(false);
@@ -319,7 +323,11 @@ export default function SongDetailScreen() {
         label: editForm.label.trim() || song.label,
       };
 
-      await LibraryScanner.updateMetadata(song.id, updatedData);
+      await LibraryScanner.updateMetadata(song.id, updatedData, {
+        // I3 (G2): tandai field yang diedit manual — rescan tidak boleh
+        // menimpanya.
+        markEdited: true,
+      });
       updateTrackInStore(song.id, updatedData);
 
       setIsEditMode(false);

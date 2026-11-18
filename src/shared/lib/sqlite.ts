@@ -68,6 +68,9 @@ const SQLiteService = {
           isEnriched          INTEGER DEFAULT 0,
           last_enriched_at    INTEGER DEFAULT 0,
           lastSeenAt          INTEGER DEFAULT 0,
+          -- I3 (G2): penanda field yang pernah diedit user (JSON array
+          -- nama field) — rescan tidak boleh menimpa field yang ditandai.
+          edited_fields       TEXT,
           
           -- Additional
           compilation         INTEGER DEFAULT 0,
@@ -226,6 +229,9 @@ const runMigrations = () => {
     // `playlists` tetap satu sumber kebenaran.
     `ALTER TABLE playlists ADD COLUMN description TEXT;`,
     `ALTER TABLE playlists ADD COLUMN updatedAt INTEGER DEFAULT 0;`,
+
+    // v6: I3 (G2) — penanda field yang pernah diedit user di [id].tsx.
+    `ALTER TABLE songs ADD COLUMN edited_fields TEXT;`,
   ];
 
   for (const sql of migrations) {

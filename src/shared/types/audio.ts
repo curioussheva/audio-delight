@@ -58,6 +58,10 @@ export interface Song {
   tempo?: number;
   artistImageUrl?: string;
   artistBio?: string;
+  // I3 (G2): field metadata yang pernah diedit user di [id].tsx
+  // (edit manual + terapkan MusicBrainz) — disimpan sebagai JSON array
+  // di kolom DB `edited_fields`; rescan tidak boleh menimpa field ini.
+  editedFields?: string[];
 
   // Timestamp
   dateAdded?: number;

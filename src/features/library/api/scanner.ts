@@ -12,6 +12,37 @@ import {
   NativeSong,
 } from "@/features/library/native/MediaStoreModule";
 
+/**
+ * I3 (G2): field yang DITIMPA rescan (updateExistingSong) DAN bisa diedit
+ * user di [id].tsx. Hanya field inilah yang dilindungi penanda
+ * `edited_fields` — composer/label/publisher tidak ditimpa scan, jadi
+ * tidak perlu ditandai; field teknis (durasi, codec, ukuran, ...) tidak
+ * pernah diedit user, jadi selalu ter-update.
+ */
+const SCAN_OVERWRITABLE_USER_FIELDS: readonly string[] = [
+  "title",
+  "artist",
+  "album",
+  "genre",
+  "artwork",
+  "year",
+  "trackNumber",
+  "discNumber",
+];
+
+/** Parse kolom `edited_fields` (JSON array nama field) — rusak/kosong = tidak ada. */
+function parseEditedFields(value: unknown): string[] | undefined {
+  if (typeof value !== "string" || value.length === 0) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return undefined;
+    const fields = parsed.filter((f): f is string => typeof f === "string");
+    return fields.length > 0 ? fields : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface ScanProgress {
   current: number;
   total: number;
@@ -198,6 +229,12 @@ export class LibraryScanner {
 
   /**
    * UPDATE existing song - PRESERVE user data
+   *
+   * I3 (G2): komentar di atas dulu menyesatkan — yang dipertahankan
+   * hanya isFavorite/playCount/dll, BUKAN field yang diedit user.
+   * Sekarang field yang ditandai di `edited_fields` (diisi updateMetadata
+   * saat dipanggil dari [id].tsx) DILEWATI; field lain + lastSeenAt tetap
+   * ter-update dari scan seperti sebelumnya.
    */
   private static async updateExistingSong(
     song: Partial<Song> | NativeSong,
@@ -207,38 +244,36 @@ export class LibraryScanner {
 
     const now = Date.now();
 
-    const sql = `
-      UPDATE songs SET
-        title = ?, artist = ?, album = ?, genre = ?, folder = ?, filename = ?,
-        uri = ?, originalUri = ?, artwork = ?, duration = ?, sampleRate = ?,
-        bitDepth = ?, codec = ?, bitrate = ?, fileSize = ?, channels = ?,
-        year = ?, trackNumber = ?, discNumber = ?, lastSeenAt = ?
-      WHERE id = ?
-    `;
+    const edited = new Set(this.getSongById(id)?.editedFields ?? []);
 
-    const params = [
-      song.title || "Unknown Title",
-      song.artist || "Unknown Artist",
-      song.album || "Unknown Album",
-      song.genre || "Unknown Genre",
-      (song as any).folder || "Music",
-      (song as any).filename || "Unknown File",
-      song.uri || `content://media/external/audio/media/${id}`,
-      (song as any).originalUri || song.uri,
-      song.artwork || null, // ← Artwork di-update
-      song.duration || 0,
-      song.sampleRate || 0,
-      song.bitDepth || 0,
-      song.codec || "UNKNOWN",
-      song.bitrate || 0,
-      song.fileSize || 0,
-      (song as any).channels || 2,
-      (song as any).year || 0,
-      (song as any).trackNumber || 0,
-      (song as any).discNumber || 0,
-      now,
-      id,
+    const assignments: Array<[string, any]> = [
+      ["title", song.title || "Unknown Title"],
+      ["artist", song.artist || "Unknown Artist"],
+      ["album", song.album || "Unknown Album"],
+      ["genre", song.genre || "Unknown Genre"],
+      ["folder", (song as any).folder || "Music"],
+      ["filename", (song as any).filename || "Unknown File"],
+      ["uri", song.uri || `content://media/external/audio/media/${id}`],
+      ["originalUri", (song as any).originalUri || song.uri],
+      ["artwork", song.artwork || null],
+      ["duration", song.duration || 0],
+      ["sampleRate", song.sampleRate || 0],
+      ["bitDepth", song.bitDepth || 0],
+      ["codec", song.codec || "UNKNOWN"],
+      ["bitrate", song.bitrate || 0],
+      ["fileSize", song.fileSize || 0],
+      ["channels", (song as any).channels || 2],
+      ["year", (song as any).year || 0],
+      ["trackNumber", (song as any).trackNumber || 0],
+      ["discNumber", (song as any).discNumber || 0],
     ];
+
+    const kept = assignments.filter(([field]) => !edited.has(field));
+    const setClauses = kept.map(([field]) => `${field} = ?`);
+    setClauses.push("lastSeenAt = ?");
+
+    const sql = `UPDATE songs SET ${setClauses.join(", ")} WHERE id = ?`;
+    const params = [...kept.map(([, value]) => value), now, id];
 
     db.execute(sql, params);
   }
@@ -517,6 +552,10 @@ export class LibraryScanner {
   static async updateMetadata(
     songId: string,
     metadata: Partial<Song>,
+    // I3 (G2): `markEdited` hanya diisi pemanggil dari [id].tsx (edit
+    // manual + terapkan MusicBrainz). Enrichment tidak menandai — field
+    // hasil enrichment tetap boleh diperbarui scan berikutnya.
+    options?: { markEdited?: boolean },
   ): Promise<void> {
     try {
       const fields: string[] = [];
@@ -566,6 +605,27 @@ export class LibraryScanner {
           const column = columnByField[field] ?? field;
           fields.push(`${column} = ?`);
           params.push(metadata[field as keyof Song]);
+        }
+      }
+
+      // I3 (G2): tandai field yang diedit user supaya rescan tidak
+      // menimpanya (dibaca updateExistingSong). Gabung dengan penanda
+      // yang sudah ada — editan bersifat kumulatif.
+      if (options?.markEdited) {
+        const marked = new Set<string>(
+          this.getSongById(songId)?.editedFields ?? [],
+        );
+        for (const field of allowedFields) {
+          if (
+            metadata[field as keyof Song] !== undefined &&
+            SCAN_OVERWRITABLE_USER_FIELDS.includes(field)
+          ) {
+            marked.add(field);
+          }
+        }
+        if (marked.size > 0) {
+          fields.push("edited_fields = ?");
+          params.push(JSON.stringify([...marked].sort()));
         }
       }
 
@@ -802,6 +862,8 @@ export class LibraryScanner {
       dateModified: Number(row.dateModified) || undefined,
       lastSeenAt: Number(row.lastSeenAt) || Date.now(),
       lastEnrichedAt: Number(row.last_enriched_at) || undefined,
+      // I3 (G2): penanda field yang pernah diedit user.
+      editedFields: parseEditedFields(row.edited_fields),
 
       // Timestamp
       dateAdded: Number(row.dateAdded) || Date.now(),
