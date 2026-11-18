@@ -23,6 +23,19 @@ import type { Theme } from "@/shared/constants/themes/types";
 
 const BRAND_THEMES: Theme[] = [PRISTINE_NOIR, PRISTINE_EMBER, PRISTINE_PORCELAIN];
 
+// Komposit tint alpha di atas background (rumus yang sama dengan
+// hexToRGBA(color, alpha) di komponen). Dipakai blok A3 dan blok pill.
+const tintOver = (fg: string, bg: string, alpha: number): string => {
+  const f = parseHex(fg);
+  const b = parseHex(bg);
+  if (!f || !b) throw new Error("hex tidak terbaca");
+  const mix = (x: number, y: number) =>
+    Math.round(x * alpha + y * (1 - alpha));
+  return `#${[mix(f.r, b.r), mix(f.g, b.g), mix(f.b, b.b)]
+    .map((v) => v.toString(16).padStart(2, "0"))
+    .join("")}`;
+};
+
 describe("Player A3 — kontras panel solid", () => {
   it.each(BRAND_THEMES)(
     "$name: teks di atas background.primary lolos 4.5:1",
@@ -154,17 +167,6 @@ describe("Player A3 — kontras panel solid", () => {
   // terukur 1.20–1.29; disc memang tint LEMBUT, bukan solid — yang
   // membuat ON tidak tertukar adalah disc + warna ikon + stroke 2.5
   // bersama-sama, bukan disc sendirian).
-  const tintOver = (fg: string, bg: string, alpha: number): string => {
-    const f = parseHex(fg);
-    const b = parseHex(bg);
-    if (!f || !b) throw new Error("hex tidak terbaca");
-    const mix = (x: number, y: number) =>
-      Math.round(x * alpha + y * (1 - alpha));
-    return `#${[mix(f.r, b.r), mix(f.g, b.g), mix(f.b, b.b)]
-      .map((v) => v.toString(16).padStart(2, "0"))
-      .join("")}`;
-  };
-
   it.each(BRAND_THEMES)(
     "$name: ikon ON primary[500] di atas disc tint 15% lolos 3:1",
     (theme) => {
@@ -194,6 +196,59 @@ describe("Player A3 — kontras panel solid", () => {
       const panel = theme.colors.background.primary;
       const disc = tintOver(theme.colors.primary[500], panel, 0.15);
       expect(contrastRatio(disc, panel)).toBeGreaterThanOrEqual(1.15);
+    },
+  );
+});
+
+// FloatingPlayer (miniplayer) — ON/OFF Shuffle/Repeat di pill memakai
+// mekanisme yang SAMA dengan layar Player (d0ddf23d): ON = ikon
+// primary[500] + disc tint 15% + stroke 2.5; OFF = ikon text.tertiary
+// polos + stroke 2. Latarnya background.elevated (bukan primary).
+// Kunci yang sama, diukur dari token tema ASLI:
+// (a) ikon ON di atas disc lolos 3:1 (bar ikon);
+// (b) ikon OFF di atas elevated lolos 3:1;
+// (c) disc terlihat beda dari elevated (komposit vs elevated ≥ 1.15);
+// (d) teks badge "1" (pickReadable putih/hitam) di atas primary[500]
+// lolos 4.5:1 (bar teks — sama dengan badge Player).
+describe("FloatingPlayer — kontras ON/OFF Shuffle/Repeat di pill", () => {
+  it.each(BRAND_THEMES)(
+    "$name: ikon ON primary[500] di atas disc tint 15% lolos 3:1",
+    (theme) => {
+      const pill = theme.colors.background.elevated;
+      const disc = tintOver(theme.colors.primary[500], pill, 0.15);
+      expect(
+        contrastRatio(theme.colors.primary[500], disc),
+      ).toBeGreaterThanOrEqual(3);
+    },
+  );
+
+  it.each(BRAND_THEMES)(
+    "$name: ikon OFF text.tertiary di atas elevated lolos 3:1",
+    (theme) => {
+      const pill = theme.colors.background.elevated;
+      expect(
+        contrastRatio(theme.colors.text.tertiary, pill),
+      ).toBeGreaterThanOrEqual(3);
+    },
+  );
+
+  it.each(BRAND_THEMES)(
+    "$name: disc ON terlihat beda dari elevated (komposit vs elevated ≥ 1.15)",
+    (theme) => {
+      const pill = theme.colors.background.elevated;
+      const disc = tintOver(theme.colors.primary[500], pill, 0.15);
+      expect(contrastRatio(disc, pill)).toBeGreaterThanOrEqual(1.15);
+    },
+  );
+
+  it.each(BRAND_THEMES)(
+    "$name: teks badge '1' di atas primary[500] lolos 4.5:1",
+    (theme) => {
+      const primary = theme.colors.primary[500];
+      const badgeText =
+        pickReadable(["#FFFFFF", "#000000"], primary, AA_NORMAL) ??
+        "#FFFFFF";
+      expect(contrastRatio(badgeText, primary)).toBeGreaterThanOrEqual(4.5);
     },
   );
 });
