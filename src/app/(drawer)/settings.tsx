@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -325,6 +325,17 @@ export default function SettingsScreen() {
   // menolak exclusive → fallback shared diam-diam. Tanpa ini UI bilang
   // "Bit-Perfect Mode" padahal mixer masih menyentuh sampel.
   const bpStatus = useBitPerfectStatus();
+
+  // N10: ingat mode terakhir SEBELUM bit-perfect, supaya Switch OFF
+  // kembali ke mode itu (dsp/immersive) — bukan selalu jatuh ke "dsp".
+  // Default "dsp" = perilaku lama bila app dibuka langsung dalam
+  // bit-perfect (persist) tanpa riwayat mode lain.
+  const prevNonBitPerfectModeRef = useRef<"dsp" | "immersive">("dsp");
+  useEffect(() => {
+    if (audioMode !== "bit-perfect") {
+      prevNonBitPerfectModeRef.current = audioMode;
+    }
+  }, [audioMode]);
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
 
@@ -923,8 +934,15 @@ export default function SettingsScreen() {
               <Switch
                 value={audioMode === "bit-perfect"}
                 onValueChange={(value) => {
-                  // Zustand store yang meneruskan ke engine.
-                  setAudioMode(value ? "bit-perfect" : "dsp");
+                  // N10: sama seperti pilih mode di daftar (handleSelectMode)
+                  // — masuk bit-perfect WAJIB lewat ConfirmDialog, bukan
+                  // langsung setAudioMode. OFF kembali ke mode sebelum
+                  // bit-perfect (ref di atas), bukan selalu "dsp".
+                  if (value) {
+                    setShowBitPerfectConfirm(true);
+                  } else {
+                    setAudioMode(prevNonBitPerfectModeRef.current);
+                  }
                 }}
                 trackColor={{
                   false: colors.background.tertiary,
