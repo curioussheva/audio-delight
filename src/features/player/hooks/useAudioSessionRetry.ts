@@ -15,8 +15,9 @@
 // kedua store supaya SpectrumAnalyzer men-start visualizerService;
 // start() dipanggil juga langsung supaya tidak menunggu re-render.
 // Bila tidak ada sesi yang bisa dipulihkan, kembalikan false —
-// tidak ada klaim sukses palsu.
-import { useCallback, useState } from "react";
+// tidak ada klaim sukses palsu. N20: begitu juga bila visualizer
+// gagal start — sebelumnya selalu `true` walau start gagal.
+import { useCallback, useRef, useState } from "react";
 
 import { audioEngine } from "@/features/player/api/engine";
 import { usePlayerStore } from "@/features/player/store/playerStore";
@@ -27,9 +28,14 @@ import { visualizerService } from "@/features/visualizer/services/VisualizerServ
 export function useAudioSessionRetry() {
   const [isRetrying, setIsRetrying] = useState(false);
   const setAudioSessionId = usePlayerStore((s) => s.setAudioSessionId);
+  // N20: guard tap ganda pakai ref, bukan state di closure — dua tap
+  // sebelum re-render lolos bersamaan bila hanya mengandalkan
+  // `isRetrying` (state lama di closure useCallback).
+  const retryingRef = useRef(false);
 
   const retryAudioSession = useCallback(async (): Promise<boolean> => {
-    if (isRetrying) return false;
+    if (retryingRef.current) return false;
+    retryingRef.current = true;
     setIsRetrying(true);
     try {
       let id = audioEngine.getSessionId();
@@ -51,16 +57,19 @@ export function useAudioSessionRetry() {
             id,
           );
         }
-        return true;
+        // N20: kembalikan hasil visualizer — sebelumnya selalu `true`
+        // walau start gagal, padahal tanpa visualizer sesi belum pulih.
+        return ok;
       }
       console.warn(
         "[useAudioSessionRetry] tidak ada audio session yang bisa dipulihkan",
       );
       return false;
     } finally {
+      retryingRef.current = false;
       setIsRetrying(false);
     }
-  }, [isRetrying, setAudioSessionId]);
+  }, [setAudioSessionId]);
 
   return { isRetrying, retryAudioSession };
 }

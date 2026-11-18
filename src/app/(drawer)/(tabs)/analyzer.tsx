@@ -1,6 +1,6 @@
 // src/app/(drawer)/(tabs)/analyzer.tsx
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -35,6 +35,7 @@ import {
 import { accentOn } from "@/shared/utils/contrast";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useAudioSessionRetry } from "@/features/player/hooks/useAudioSessionRetry";
+import { useToastStore } from "@/shared/store/toastStore";
 import { FLOATING_PLAYER_CLEARANCE } from "@/features/player/layout";
 import { useAudioOutput } from "@/features/hardware/hooks/useAudioOutput";
 import { useBitPerfectStatus } from "@/features/player/hooks/useBitPerfectStatus";
@@ -118,6 +119,19 @@ export default function AnalyzerScreen() {
   // memulihkan sesi (hook yang sama). Sebelumnya Analyzer cuma
   // menunggu tanpa tombol aksi.
   const { isRetrying, retryAudioSession } = useAudioSessionRetry();
+  const showToast = useToastStore((s) => s.showToast);
+
+  // N20: nilai kembali retry JANGAN dibuang — gagal pulih harus
+  // dikabarkan ke user (toast), bukan diam.
+  const handleRetrySession = useCallback(async () => {
+    const ok = await retryAudioSession();
+    if (!ok) {
+      showToast(
+        "Audio session gagal dipulihkan. Coba restart lagu.",
+        "error",
+      );
+    }
+  }, [retryAudioSession, showToast]);
 
   // ─── Effects ──────────────────────────────────────────────────────────────
 
@@ -419,7 +433,7 @@ export default function AnalyzerScreen() {
                         supaya warna aksen diukur di atas kartu. */}
                     <PristineButton
                       label="Coba lagi"
-                      onPress={retryAudioSession}
+                      onPress={handleRetrySession}
                       disabled={isRetrying}
                       variant="secondary"
                       icon={<RefreshCw size={16} color={retryIconColor} />}
