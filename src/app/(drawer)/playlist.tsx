@@ -4,7 +4,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Alert,
   TouchableOpacity,
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
@@ -14,6 +13,8 @@ import { useTheme } from "@/shared/context/ThemeContext";
 import { ScreenHeader } from "@/shared/components/ui/ScreenHeader";
 import { EmptyState } from "@/shared/components/ui/EmptyState";
 import { ScreenList } from "@/shared/components/ui/ScreenList";
+import { ConfirmDialog } from "@/shared/components/ui/ConfirmDialog";
+import { useToastStore } from "@/shared/store/toastStore";
 import { usePlaylists } from "@/features/playlist/hooks/usePlaylists";
 import { CreatePlaylistModal } from "@/features/playlist/components/CreatePlaylistModal";
 import { PlaylistList, PlaylistItem } from "@/features/library/components/PlaylistList";
@@ -36,6 +37,11 @@ export default function PlaylistsScreen() {
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   const { playSong, currentSong } = usePlayerStore();
+  const showToast = useToastStore((s) => s.showToast);
+
+  // Fase 2 redesign: hapus playlist lewat ConfirmDialog (satu-satunya
+  // mekanisme konfirmasi), bukan Alert.alert.
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   // Playlist lengkap (dengan `songs`) untuk detail view — dicari di sini
   // (top-level) supaya hook di bawah tidak dipanggil kondisional.
@@ -74,21 +80,14 @@ export default function PlaylistsScreen() {
     // Ronde 9 (fix 3): "Lagu Disukai" bukan playlist DB — tidak bisa
     // dihapus; tombol hapusnya juga disembunyikan (lihat detail view).
     if (!selectedPlaylist || selectedPlaylist.id === "favorites") return;
-    Alert.alert(
-      "Hapus Playlist",
-      `Hapus playlist "${selectedPlaylist.name}"?`,
-      [
-        { text: "Batal", style: "cancel" },
-        {
-          text: "Hapus",
-          style: "destructive",
-          onPress: async () => {
-            await deletePlaylist(selectedPlaylist.id);
-            setSelectedPlaylist(null);
-          },
-        },
-      ],
-    );
+    setShowDeleteDialog(true);
+  }, [selectedPlaylist]);
+
+  const handleConfirmDeletePlaylist = useCallback(async () => {
+    if (!selectedPlaylist) return;
+    await deletePlaylist(selectedPlaylist.id);
+    setSelectedPlaylist(null);
+    setShowDeleteDialog(false);
   }, [selectedPlaylist, deletePlaylist]);
 
   // Playlist (dari usePlaylists) pakai field `songCount`, sementara
@@ -155,20 +154,22 @@ export default function PlaylistsScreen() {
         const matchedCount = newPlaylist.songIds.length;
         const skippedCount = parsedData.paths.length - matchedCount;
 
-        Alert.alert(
-          "Import Berhasil",
+        // Fase 2 redesign: umpan balik sukses lewat toast global,
+        // bukan Alert.alert.
+        showToast(
           skippedCount > 0
             ? `Playlist "${originalName}" ditambahkan (${matchedCount} track cocok, ${skippedCount} track dilewati karena tidak ditemukan di library).`
-            : `Playlist "${originalName}" berhasil ditambahkan (${matchedCount} track).`
+            : `Playlist "${originalName}" berhasil ditambahkan (${matchedCount} track).`,
+          "success",
         );
       } else {
-        Alert.alert("Import Gagal", "File M3U/M3U8 kosong atau format tidak valid.");
+        showToast("File M3U/M3U8 kosong atau format tidak valid.", "error");
       }
     } catch (error) {
       console.error("[M3U Import Error]:", error);
-      Alert.alert("Error", "Gagal membaca file M3U/M3U8.");
+      showToast("Gagal membaca file M3U/M3U8.", "error");
     }
-  }, [importM3UPaths]);
+  }, [importM3UPaths, showToast]);
 
   // ── Handler: Klik Row Playlist ───────────────────────────────────────────
   const handlePlaylistPress = useCallback((playlist: PlaylistItem) => {
@@ -248,6 +249,16 @@ export default function PlaylistsScreen() {
             )}
           />
         )}
+
+        {/* Fase 2 redesign: hapus playlist lewat ConfirmDialog. */}
+        <ConfirmDialog
+          visible={showDeleteDialog}
+          title="Hapus Playlist"
+          message={`Hapus playlist "${selectedPlaylist.name}"?`}
+          confirmLabel="Hapus"
+          onConfirm={() => void handleConfirmDeletePlaylist()}
+          onCancel={() => setShowDeleteDialog(false)}
+        />
       </View>
     );
   }

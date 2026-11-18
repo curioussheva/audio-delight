@@ -6,18 +6,21 @@
 // dulu memakai `Alert.prompt`, yang iOS-only (`@platform ios` di
 // react-native Alert.js); di Android no-op tanpa warning. Modal ini
 // jalan di Android + iOS dengan komponen RN biasa (Modal + TextInput).
-import React, { useEffect, useState } from "react";
-import {
-  Modal,
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-} from "react-native";
+//
+// Fase 2 redesign: kartu = SectionCard (radius lg seperti
+// ConfirmDialog), input = PristineTextInput, tombol = PristineButton
+// (batal = teks, buat = primer). Judul + aksi mengikuti gaya dialog
+// yang sama dengan ConfirmDialog.
+import React, { useCallback, useEffect, useState } from "react";
+import { Modal, View, Text } from "react-native";
 
 import { useTheme } from "@/shared/context/ThemeContext";
-import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+import { useThemedStyles } from "@/shared/hooks/useThemedStyles";
+import { buildDialogStyles } from "@/shared/utils/uiStyles";
+import { SectionCard } from "@/shared/components/ui/SectionCard";
+import { PristineButton } from "@/shared/components/ui/PristineButton";
+import { PristineTextInput } from "@/shared/components/ui/PristineTextInput";
+import type { Theme } from "@/shared/constants/themes/types";
 
 interface CreatePlaylistModalProps {
   visible: boolean;
@@ -31,7 +34,9 @@ export const CreatePlaylistModal: React.FC<CreatePlaylistModalProps> = ({
   onSubmit,
 }) => {
   const { theme } = useTheme();
-  const { colors } = theme;
+  const dialogStyles = useThemedStyles(
+    useCallback((t: Theme) => buildDialogStyles(t), []),
+  );
 
   const [name, setName] = useState("");
 
@@ -40,12 +45,6 @@ export const CreatePlaylistModal: React.FC<CreatePlaylistModalProps> = ({
   useEffect(() => {
     if (visible) setName("");
   }, [visible]);
-
-  // Teks di atas tombol primary[500] — dipilih dari luminansi primary
-  // (pola yang sama dengan PlaylistList), bukan hardcoded "#fff".
-  const onPrimary =
-    pickReadable(["#FFFFFF", "#000000"], colors.primary[500], AA_NORMAL) ??
-    "#FFFFFF";
 
   const trimmed = name.trim();
   const canSubmit = trimmed.length > 0;
@@ -63,28 +62,17 @@ export const CreatePlaylistModal: React.FC<CreatePlaylistModalProps> = ({
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <View style={styles.overlay}>
-        <View
-          style={[
-            styles.card,
-            { backgroundColor: colors.background.primary },
-          ]}
+      <View style={dialogStyles.overlay}>
+        <SectionCard
+          style={{
+            borderRadius: theme.radius.lg,
+            gap: theme.spacing.md,
+          }}
         >
-          <Text style={[styles.title, { color: colors.text.primary }]}>
-            Buat Playlist Baru
-          </Text>
+          <Text style={dialogStyles.title}>Buat Playlist Baru</Text>
 
-          <TextInput
-            style={[
-              styles.input,
-              {
-                color: colors.text.primary,
-                backgroundColor: colors.background.secondary,
-                borderColor: colors.background.tertiary,
-              },
-            ]}
+          <PristineTextInput
             placeholder="Masukkan nama playlist"
-            placeholderTextColor={colors.text.disabled}
             value={name}
             onChangeText={setName}
             onSubmitEditing={handleSubmit}
@@ -95,95 +83,21 @@ export const CreatePlaylistModal: React.FC<CreatePlaylistModalProps> = ({
             accessibilityLabel="Nama playlist baru"
           />
 
-          <View style={styles.actions}>
-            <TouchableOpacity
+          <View style={dialogStyles.actions}>
+            <PristineButton
+              label="Batal"
+              variant="text"
               onPress={onClose}
-              style={[
-                styles.button,
-                styles.cancelButton,
-                { borderColor: colors.background.tertiary },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Batal"
-            >
-              <Text
-                style={[
-                  styles.buttonText,
-                  { color: colors.text.secondary },
-                ]}
-              >
-                Batal
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
+              surface={theme.colors.background.elevated}
+            />
+            <PristineButton
+              label="Buat"
               onPress={handleSubmit}
               disabled={!canSubmit}
-              style={[
-                styles.button,
-                styles.submitButton,
-                {
-                  backgroundColor: colors.primary[500],
-                  opacity: canSubmit ? 1 : 0.5,
-                },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Buat playlist"
-            >
-              <Text style={[styles.buttonText, { color: onPrimary }]}>
-                Buat
-              </Text>
-            </TouchableOpacity>
+            />
           </View>
-        </View>
+        </SectionCard>
       </View>
     </Modal>
   );
 };
-
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: 24,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-  },
-  card: {
-    borderRadius: 16,
-    padding: 20,
-    gap: 16,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: "800",
-  },
-  input: {
-    height: 48,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    fontSize: 15,
-    fontWeight: "500",
-  },
-  actions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 12,
-  },
-  button: {
-    minWidth: 88,
-    minHeight: 44,
-    justifyContent: "center",
-    alignItems: "center",
-    borderRadius: 22,
-    paddingHorizontal: 20,
-  },
-  cancelButton: {
-    borderWidth: 1,
-  },
-  submitButton: {},
-  buttonText: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
-});

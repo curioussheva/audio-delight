@@ -20,7 +20,8 @@ import {
 
 import { useTheme } from "@/shared/context/ThemeContext";
 import { ScreenList } from "@/shared/components/ui/ScreenList";
-import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+import { PristineButton } from "@/shared/components/ui/PristineButton";
+import { buildButtonStyles } from "@/shared/utils/uiStyles";
 
 // ── Types Definition ────────────────────────────────────────────────────────
 export interface PlaylistItem {
@@ -113,11 +114,14 @@ export const PlaylistList: React.FC<PlaylistListProps> = ({
   const { theme } = useTheme();
   const { colors } = theme;
 
-  // Teks/ikon di atas tombol primary[500] — dipilih dari luminansi primary
-  // (putih 2,24:1 di Noir, hitam 9,37:1), bukan hardcoded "#fff".
-  const onPrimary =
-    pickReadable(["#FFFFFF", "#000000"], colors.primary[500], AA_NORMAL) ??
-    "#FFFFFF";
+  // Warna ikon = warna label dari builder tombol yang sama — terukur
+  // di semua tema (Fase 2), bukan ditebak per layar.
+  const primaryLabelColor = buildButtonStyles(theme, {
+    variant: "primary",
+  }).label.color as string;
+  const secondaryLabelColor = buildButtonStyles(theme, {
+    variant: "secondary",
+  }).label.color as string;
 
   const handleCreate = useCallback(() => {
     if (Platform.OS !== "web") {
@@ -170,39 +174,29 @@ export const PlaylistList: React.FC<PlaylistListProps> = ({
           Simpan lagu favorit, buat playlist, atau import file M3U/M3U8 lokal.
         </Text>
 
+        {/* Fase 2 redesign: tombol bersama (primer + sekunder). */}
         <View style={styles.emptyActionGroup}>
-          <TouchableOpacity
-            style={[styles.createBtn, { backgroundColor: colors.primary[500] }]}
+          <PristineButton
+            label="Buat Playlist Baru"
+            icon={<Plus size={20} color={primaryLabelColor} strokeWidth={3} />}
             onPress={handleCreate}
-          >
-            <Plus size={20} color={onPrimary} strokeWidth={3} />
-            <Text style={[styles.createBtnText, { color: onPrimary }]}>
-              Buat Playlist Baru
-            </Text>
-          </TouchableOpacity>
+            fullWidth
+          />
 
           {onImportM3U && (
-            <TouchableOpacity
-              style={[
-                styles.importBtn,
-                {
-                  borderColor: colors.primary[500],
-                  backgroundColor: `${colors.primary[500]}10`,
-                },
-              ]}
+            <PristineButton
+              label="Import M3U / M3U8"
+              variant="secondary"
+              icon={
+                <FileDown
+                  size={18}
+                  color={secondaryLabelColor}
+                  strokeWidth={2.5}
+                />
+              }
               onPress={handleImport}
-            >
-              <FileDown
-                size={18}
-                color={colors.primary[500]}
-                strokeWidth={2.5}
-              />
-              <Text
-                style={[styles.importBtnText, { color: colors.primary[500] }]}
-              >
-                Import M3U / M3U8
-              </Text>
-            </TouchableOpacity>
+              fullWidth
+            />
           )}
         </View>
       </View>
@@ -387,43 +381,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     width: "100%",
-  },
-  createBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 28,
-    gap: 10,
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    width: "100%",
-  },
-  createBtnText: {
-    // U-P2-04: tanpa `color` — warna teks di-overide inline dengan
-    // onPrimary (pickReadable atas primary[500]) di pemakaian style ini.
-    fontWeight: "800",
-    fontSize: 15,
-    letterSpacing: 0.5,
-  },
-  importBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 28,
-    borderWidth: 1.5,
-    gap: 8,
-    width: "100%",
-  },
-  importBtnText: {
-    fontWeight: "700",
-    fontSize: 14,
   },
 });
  
