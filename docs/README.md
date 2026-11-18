@@ -11,8 +11,6 @@
 | [`TROUBLESHOOTING.md`](./TROUBLESHOOTING.md) | Build error yang sudah pernah ketemu & fix-nya - cek dulu sebelum debug dari nol |
 | [`VISUAL_HEALTH.md`](./VISUAL_HEALTH.md) | Utang visual terukur: kontras & spacing |
 | [`DECODER_RESAMPLER_ANALYSIS.md`](./DECODER_RESAMPLER_ANALYSIS.md) | Analisis konsistensi decoder/resampler: bug timing, dead code, semantic mismatch (2026-10-07) |
-| [`PLAYBACK_CONSISTENCY_ANALYSIS.md`](./PLAYBACK_CONSISTENCY_ANALYSIS.md) | Analisis konsistensi playback cpp→JNI→Kotlin→JS: dead spec, missing methods (2026-10-07) |
-| [`NATIVE_MODULES_CONSISTENCY.md`](./NATIVE_MODULES_CONSISTENCY.md) | Analisis konsistensi semua native modules: 1 bug, 3 clean, dead code inventory (2026-10-07) |
 | [`RATE_CHAIN_AUDIT.md`](./RATE_CHAIN_AUDIT.md) | Alur sample rate hulu→hilir: autodetect device/DAC status, di mana rantai putus, jalan ke bit-perfect (2026-10-07) |
 | [`AUDIT_2026-11-10.md`](./AUDIT_2026-11-10.md) | Audit hulu→hilir 2026-11-10: initiation→playback, tiga mode, visualizer session, UI — semua temuan + aksi perbaikan (graphify 5.291 node, spot-check grep) |
 | [`NATIVE_CPP_MAP.md`](./NATIVE_CPP_MAP.md) | Peta 178 file C++ dalam 12 section + urutan audit (manager+core dulu) — 2026-11-10 |
@@ -28,8 +26,13 @@
 | [`AUDIT_NATIVE_CPP_VISUALIZER_2026-11-11.md`](./AUDIT_NATIVE_CPP_VISUALIZER_2026-11-11.md) | Deep audit native C++ visualizer 2026-11-11: 0 blocker + 2 major laten (visualizer terima data pra-sanitasi — NaN/Inf lolos ke FFT/JS; write(frames<0) mundurkan mWritePos) + 4 minor (tearing lap-around terbukti 0,004% tapi minor; 2048 di 3 tempat tanpa static_assert; mBufferB/mWriteBuffer mati) + 2 dugaan — yang mudah diperbaiki 2026-11-11 (V-M1 f9e42a27, V-M2 79e15e35, V-m4 c4c7ac99, V-m3 bb2c1e12); tes repo 9/9 PASS (0c0a93bf), build menyusul |
 | [`AUDIT_NATIVE_CPP_UTILS_2026-11-11.md`](./AUDIT_NATIVE_CPP_UTILS_2026-11-11.md) | Deep audit native C++ utils 2026-11-11: 0 blocker + 6 major (5 dari 6 header mati & tak pernah dikompilasi; Logger.h mati sementara 6 file duplikasi makro LOG* lokal; SIMD vs DecoderUtils::applyGain duplikat, keduanya 0 caller; ScopedTrace tidak RT-safe; AlignedBuffer langgar prakondisi aligned_alloc; DenormalFix threshold 1e-15f salah — live code pakai 1e-30f) + 9 minor + 4 dugaan — 3 header mati dihapus 2026-11-11 (ddf49d25) + trivia (ccec8d39); keputusan hapus-vs-hidupkan Logger/SIMD/AudioMath ditampung |
 | [`ANALYZER_FFT_2026-11-11.md`](./ANALYZER_FFT_2026-11-11.md) | Analisis spektral offline tab Analyzer 2026-11-11: patch pnpm @missingcore/audio-metadata ke expo-file-system/legacy (patch-package tidak dukung pnpm) + fallback metadata + jangan default AUTHENTIC saat gagal + FFT native (FFmpegDecoder laju asli + FFTPlan 8192, cutoff -60 dB, rasio LSB-16) + verdict upsample/lossy-source/padding — harness C++ 14/14, tsc 0, jest 200/200; kompilasi JNI + device belum diverifikasi |
-| [`VISUALIZER_CARA_KERJA.md`](./VISUALIZER_CARA_KERJA.md) | Deep-dive visualizer: cara kerja langkah demi langkah + cara app dibangun (5 lapis), peta file, kenapa jalur ini mati (2026-11-10) |
 | [`AUDIO_OUTPUT_PATHS.md`](./AUDIO_OUTPUT_PATHS.md) | Audit jalur output audio: speaker/jack/USB DAC/HDMI/Bluetooth-A2DP/cast, mana yang bisa bit-perfect (2026-10-07) |
+| [`COMPETITIVE_LANDSCAPE.md`](./COMPETITIVE_LANDSCAPE.md) | Analisis posisi PristineAudio terhadap pemutar audio Android yang mapan (Poweramp, UAPP, Neutron) — per Oktober 2026 |
+| [`DSP_CHAIN_AUDIT.md`](./DSP_CHAIN_AUDIT.md) | Audit rantai DSP hulu→hilir: wiring, EQ, bass boost, bug laten (2026-10-10) |
+| [`HEADPHONE_CORRECTION.md`](./HEADPHONE_CORRECTION.md) | Koreksi headphone & impor preset EQ (AutoEQ/Squiglink) — status rancangan |
+| [`RENCANA_SOLFEGGIO_2026-11-11.md`](./RENCANA_SOLFEGGIO_2026-11-11.md) | Rencana mode Solfeggio: template 396–963 Hz, wiring DSP (2026-11-11) |
+| [`SOLFEGGIO_CHECKLIST.md`](./SOLFEGGIO_CHECKLIST.md) | Checklist strategi mode Solfeggio — living doc (2026-11-11) |
+| [`WORKFLOW.md`](./WORKFLOW.md) | Alur kerja target vs kondisi sekarang: mode bit-perfect, 6 syarat, status per tahap (2026-10-06) |
 | [`adr/0001-tiga-mode-satu-sumber-kebenaran.md`](./adr/0001-tiga-mode-satu-sumber-kebenaran.md) | ADR: di mana logika tiga mode hidup, dan mengapa `AudioPipeline` (2026-10-07) |
 | [`adr/0002-komparasi-modes.md`](./adr/0002-komparasi-modes.md) | Komparasi teknis nasib `cpp/modes/*`: port-lalu-hapus vs hidupkan kembali (2026-10-07) |
 | [`BOILERPLATE_AND_STUBS.md`](./BOILERPLATE_AND_STUBS.md) | Aturan penulisan stub & node penghubung: kosong boleh, bohong tidak (2026-10-07) |
@@ -37,6 +40,8 @@
 | [`THREAT_MODEL.md`](./THREAT_MODEL.md) | Aset yang dilindungi, skenario ancaman, status mitigasi |
 | [`PRIVACY.md`](./PRIVACY.md) | Data apa yang diproses lokal vs keluar device, izin yang diminta |
 | [`ACCEPTABLE_USE.md`](./ACCEPTABLE_USE.md) | Batas penggunaan yang sah |
+
+> **Dokumen `AUDIT_*` dan `AUDIT_NATIVE_CPP_*` bertanggal adalah rekaman saat audit ditulis, bukan status kini.** Kalau isinya bertentangan dengan dokumen di atas atau dengan kode HEAD, yang berlaku adalah kode HEAD. Perubahan pasca-audit yang sudah terverifikasi: penghapusan dead code 2026-11-18, perbaikan bridge F2–F15, dan sistem scan 3 opsi (lihat `CHANGELOG.md` [Unreleased]).
 
 > **Catatan 2026-10-03.** Sebelum ini `docs/` berisi 11 dokumen bergaya roadmap/todolist/plan yang saling tumpang tindih (`roadmap.md` 101 KB, `plan-consolidation-debugging.md` 71 KB, `build-fix-changelog.md` 141 KB, ...), tanpa satu pun indeks, tanpa frontmatter, dan tanpa tanggal revisi. Dokumen-dokumen itu mengandung **10 blok "FASE 0" berulang di satu file** dan **`TL;DR` sampai 5x** - status tidak bisa dipercaya karena tidak ada cara menentukan bagian mana yang berlaku. Semuanya dipindahkan ke [`archive/`](./archive/) apa adanya, dan isinya diserap ke dokumen di tabel ini. **`archive/` bukan rujukan aktif** - kalau ada selisih antara arsip dan dokumen di atas, yang di atas yang berlaku.
 

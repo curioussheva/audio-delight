@@ -15,7 +15,7 @@ Sumber: halaman Play Store resmi tiap aplikasi, situs produk, diskusi Head-Fi/Au
 **Jangan posisikan PristineAudio sebagai "pemutar musik".** Pasar itu sudah penuh dan matang. Yang membedakan PristineAudio secara arsitektur adalah kombinasi:
 
 1. **BitPerfect sebagai default, bukan opsi.** DSP dilewati kecuali pengguna memintanya. Kompetitor cenderung DSP-aktif secara default.
-2. **20 tema** - jauh di atas kompetitor (Poweramp punya beberapa skin; UAPP dan Neutron praktis satu tampilan).
+2. **24 tema** - jauh di atas kompetitor (Poweramp punya beberapa skin; UAPP dan Neutron praktis satu tampilan).
 3. **Dikembangkan penuh dari nol** - engine audio C++ sendiri (193 file), bukan pembungkus Android MediaPlayer atau ExoPlayer.
 
 Dua yang pertama adalah keunggulan nyata. Yang ketiga menarik secara teknis, tapi **belum terbukti** dan itu penting untuk ditulis apa adanya.
@@ -41,7 +41,7 @@ Dua yang pertama adalah keunggulan nyata. Yang ketiga menarik secara teknis, tap
 | **MediaSession & lock screen** | Semua | **ADA** - commit `feat: sync MediaSession metadata & playback state dari JS` |
 | **Visualizer / spektrum** | Poweramp, Neutron | **ADA** - `cpp/fft/` (11 file) + `features/visualizer/` (15 file), render Skia |
 | **Dukungan format** | Neutron (semua + DSD), UAPP (PCM 384k, DSD512, MQA) | **SEBAGIAN** - `FFmpegDecoder` + `PCMDecoder`; **DSD dan MQA belum diverifikasi** apakah didukung |
-| **Jumlah tema** | Poweramp: beberapa skin | **UNGGUL** - 20 tema tanpa tema yatim |
+| **Jumlah tema** | Poweramp: beberapa skin | **UNGGUL** - 24 tema tanpa tema yatim |
 
 ## 4. Tertinggal jauh
 
@@ -127,7 +127,7 @@ Diurutkan berdasarkan **nilai per satuan usaha**, dengan syarat bagian 6 dipenuh
 PristineAudio **tidak akan pernah** menjadi "Neutron dengan UI bagus" - itu mengejar pemimpin pasar di bidang kekuatan mereka. Yang bisa dipertahankan:
 
 - **BitPerfect sebagai default, dengan bukti terukur** - bukan sebagai mode yang harus dinyalakan
-- **20 tema** - tidak ada kompetitor yang mendekati ini
+- **24 tema** - tidak ada kompetitor yang mendekati ini
 - **Pemutar lokal yang tidak menyentuh jaringan** - privasi sebagai fitur, bukan kekurangan
 
 Pernyataan jujur tentang posisi sekarang: **mesin audio yang ambisius dengan 193 file C++, UI yang matang, dan nol bukti bahwa ada yang berjalan.** Gap terbesar bukan fitur yang hilang - ia adalah jarak antara "kodenya ada" dan "sudah dibuktikan".

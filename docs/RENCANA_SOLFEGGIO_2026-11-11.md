@@ -54,8 +54,8 @@ Layar Equalizer secara eksplisit bilang kontrolnya tidak berlaku di Solfeggio
 `setBrainwaveFreq` / `setResonanceIntensity` (`src/specs/NativeDSPModule.ts:57-59`)
 dan wrapper Kotlin-nya ada (`NativeDSPModule.kt:351-361`) — **0 pemanggil TS**
 (DSP-M5). Rantai JNI→EngineManager→AudioEngine→AudioState lengkap dan bekerja;
-yang hilang hanya pemanggilnya. Persistensi mode/EQ memakai AsyncStorage
-(`audio_mode_preference`, `audioConfig.ts:329-345`) — parameter immersive bisa
+yang hilang hanya pemanggilnya. Koreksi 2026-11-19: setSolfeggioFreq/setResonanceIntensity kini punya pemanggil TS (SolfeggioSubscreen via playerStore); 7 template Solfeggio (396–963 Hz) diterapkan 2026-11-15. Persistensi mode/EQ memakai AsyncStorage
+(`audio_mode_preference`, kunci MODE di `playerStore.ts:64`) — parameter immersive bisa
 mengikuti pola yang sama.
 
 **Satu knob mengendalikan segalanya (filosofi sekarang):** `resonanceIntensity`

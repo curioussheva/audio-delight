@@ -1,4 +1,4 @@
-## graphify - This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships. Built 2026-10-03: **11620 nodes, 22031 edges, 532 communities** (AST extraction, includes `android/app/src/main/cpp/**`).
+## graphify - This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships. Built 2026-11-19: **6367 nodes, 14078 edges, 352 communities** (AST extraction, includes `android/app/src/main/cpp/**`). CLI: `~/.venvs/graphify/bin/graphify` v0.9.105 (paket PyPI `graphifyy`); `graphify-out/` gitignored + untracked (bukan di-commit).
 
 When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
 
@@ -10,7 +10,7 @@ Rules:
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
 
 ## Notes for this repo:
-- The graph is above the 5000-node threshold, so `graph.html` is an *aggregated* community view (532 nodes), and query results are truncated at a token budget. Narrow the query or raise `--budget` when the answer is not in the first ~59 nodes.
+- The graph is above the 5000-node threshold, so `graph.html` is an *aggregated* community view (352 nodes), and query results are truncated at a token budget. Narrow the query or raise `--budget` when the answer is not in the first ~59 nodes.
 - ~110 files are partially extracted (syntax errors the extractor can't parse - `build.gradle`, some `.h` globals). Absence from a query result is not proof of absence in the code.
 - `android/app/src/main/cpp/oboe/**` is a vendored dependency and is excluded from `scripts/check.sh`; it does contribute nodes to the graph.
 
@@ -31,8 +31,7 @@ Rules:
   hasil iterasi debugging audio. Hampir semua fixnya sudah terapply ke source,
   tapi banyak yang **tidak idempotent** — kalau dijalankan lagi, double-apply /
   revert fix yang lebih baru (ini benar terjadi: `PlaybackController.cpp`
-  buffer `1<<21`→`1<<19` saat mass-run). Yang tersisa **7 file**, semua masih
-  dipakai CI/clangd. Kalau butuh patch native baru, ikuti pola
+  buffer `1<<21`→`1<<19` saat mass-run). Yang tersisa **2 file** (`patch-foojay.py`, `patch_audio_fixes.py`). Kalau butuh patch native baru, ikuti pola
   `patch_audio_fixes.py` (anchor-count validation + `--dry-run` + skip-amankan)
   — jangan tulis script str-replace tanpa guard.
 - **A patch script can break silently.** `patch-foojay.py` is invoked by the
@@ -44,3 +43,7 @@ Rules:
   bun, kotlinc, gradle, watchman, scrcpy, valgrind, heaptrack, frida,
   react-devtools (needs Electron/X11). Debug C++ with **AddressSanitizer**
   (`-fsanitize=address`).
+
+## Learned
+
+- 2026-11-19 (HEAD 5c2aa50a): dead code terhapus — kelas (a) 4.538 hapus/2 tambah (net −4.536, 41 file) + K2 audioConfig 582 baris + K6 barrel 302 baris (48 file); ronde KT F2–F15 selesai + preview build 44346225820 sukses; graphify: CLI sudah ada di ~/.venvs/graphify/bin/graphify v0.9.105 (paket PyPI graphifyy), `graphify update .` jalan 2026-11-19 → 6.367 node / 14.078 edge / 352 community, graphify-out/ gitignored + untracked (bukan di-commit). Pembersihan docs+scripts malam ini: 10 dokumen obsolete diarsip ke docs/archive/, 4 scripts tak terpakai dihapus, script `patch` di package.json dihapus (scripts/patch-pristine.sh sudah tidak ada).

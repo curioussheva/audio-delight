@@ -1,6 +1,6 @@
 # PristineAudio
 
-**Bit-perfect audio player untuk Android** (React Native + Expo, prebuild hybrid dengan native C++/Kotlin). Pemutar musik hi-res dengan DSP chain, USB DAC, equalizer, dan 20 tema.
+**Bit-perfect audio player untuk Android** (React Native + Expo, prebuild hybrid dengan native C++/Kotlin). Pemutar musik hi-res dengan DSP chain, USB DAC, equalizer, dan 24 tema.
 
 Dokumen perencanaan ada di `docs/` - mulai dari `docs/README.md`.
 
@@ -15,7 +15,7 @@ Dokumen perencanaan ada di `docs/` - mulai dari `docs/README.md`.
 3. **Library** - scan MediaStore, tampilan Album/Artist/Folder/FileType (39 file di `src/features/library/`)
 4. **Equalizer** - 20 file, store + API + komponen
 5. **Visualizer** - 15 file, jembatan native `NativeVisualizerBridge`
-6. **20 tema** - skala warna, `isDark` per tema, kategorisasi light/dark/nature/premium
+6. **24 tema** - skala warna, `isDark` per tema, kategorisasi light/dark/nature/premium
 7. **Onboarding + drawer/tabs navigation** - expo-router
 
 **Yang belum, dan berlaku apa adanya:**

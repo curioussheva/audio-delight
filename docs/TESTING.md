@@ -2,7 +2,7 @@
 
 Strategi verifikasi, disesuaikan dengan constraint: **tidak ada Gradle lokal, tidak ada Android SDK/NDK, tidak ada emulator.** Build native hanya lewat CI atau EAS.
 
-> **Status 2026-10-03 (diperbarui): proyek ini punya 98 test Jest di 6 suite, semuanya untuk logika murni TS.** Sebelumnya nol. Ini baru lapisan pertama; **C++ masih tanpa test sama sekali** (193 file, bagian terbesar risiko). Lihat bagian 5 untuk batasnya.
+> **Status 2026-10-03 (diperbarui 2026-11-19): proyek ini punya 921 test Jest di 77 suite (HEAD 5c2aa50a, 2026-11-18), semuanya untuk logika murni TS.** Sebelumnya nol. Ini baru lapisan pertama; **C++ kini punya 28 harness di scripts/test_*.cpp (logika murni host-side); race/underrun tetap butuh device.** Lihat bagian 5 untuk batasnya.
 
 ---
 
@@ -10,7 +10,7 @@ Strategi verifikasi, disesuaikan dengan constraint: **tidak ada Gradle lokal, ti
 
 ```bash
 # Test unit logika murni (Jest + ts-jest, ~25 detik)
-pnpm test                    # jest, semua suite (98 test, ~25 detik)
+pnpm test                    # jest, semua suite (921 test)
 pnpm test:watch              # jest --watch
 pnpm test:coverage           # jest --coverage
 
@@ -61,9 +61,11 @@ Kelas kegagalan yang lolos typecheck **dan** lolos build native:
 
 Persona memakai pola yang tepat untuk kelas ini: modul murni dikompilasi apa adanya lalu dijalankan di Node, dan dibandingkan dengan **implementasi independen** (mis. PBKDF2 JS vs `hashlib.pbkdf2_hmac`). PristineAudio belum punya padanannya.
 
-## 4. Manual QA (belum dijalankan - ini yang dibutuhkan)
+## 4. Manual QA (sebagian besar sudah dijalankan di HP, Nov 2026 — perbarui tabel dengan tanggal + bukti per baris)
 
 Karena tidak ada test otomatis dan tidak ada verifikasi device, checklist berikut adalah **satu-satunya** cara membuktikan aplikasi berjalan. Belum pernah dijalankan.
+
+> Koreksi 2026-11-19: paragraf di atas kedaluwarsa — butir 1–8, 10, 12, 14–16 sudah dilewati di pengujian HP Okt–Nov 2026; butir 9 (bandingkan BitPerfect vs DSP), 11 (visualizer bergerak — kini AnalyzerSpectrum), 13 (24 tema berturut-turut), 17 (scan library besar + pacing baru) perlu diuji ulang terhadap HEAD kini. Jangan tandai selesai tanpa bukti per baris.
 
 ```bash
 pnpm build:dev          # atau trigger build-dev.yml di GitHub Actions
@@ -85,7 +87,7 @@ adb logcat -s PristineAudio ReactNativeJS
 | 10 | Equalizer mengubah suara | geser band, dengar perubahannya |
 | 11 | Visualizer bergerak | spektrum bergerak mengikuti audio |
 | 12 | Ganti tema | seluruh UI ikut berubah, tidak ada elemen tertinggal |
-| 13 | 20 tema berturut-turut | tidak ada crash, tidak ada warna tak terbaca |
+| 13 | 24 tema berturut-turut | tidak ada crash, tidak ada warna tak terbaca |
 | 14 | MediaSession | kontrol dari lock screen bekerja |
 | 15 | Foreground service | app bertahan 10+ menit di background |
 | 16 | USB DAC | terdeteksi di output settings, audio keluar dari DAC |
@@ -95,7 +97,7 @@ adb logcat -s PristineAudio ReactNativeJS
 
 ## 5. Test yang sudah ada (dibuat 2026-10-03)
 
-98 test, 6 suite. Empat suite pertama murni tanpa mock; dua terakhir memakai `jest.mock` untuk modul yang menyeret kode native. Semua berjalan di `testEnvironment: node`.
+921 test, 77 suite (HEAD 5c2aa50a, 2026-11-18). Empat suite pertama murni tanpa mock; dua terakhir memakai `jest.mock` untuk modul yang menyeret kode native. Semua berjalan di `testEnvironment: node`.
 
 | Suite | Test | Yang dijaga |
 |---|---|---|
@@ -105,6 +107,8 @@ adb logcat -s PristineAudio ReactNativeJS
 | `shared/types/dac.test.ts` | 13 | `canDoBitPerfect`, `isHiResCapable`, `recommendDSDMode` |
 | `features/audio/BitDepthVerifier.test.ts` | 23 | Heuristik deteksi bit depth palsu & upsample |
 | `features/library/ScanDiffEngine.test.ts` | 17 | Logika diff scan + pengaman anti-hapus-library |
+
+Sejak 2026-10-03 ditambah 71 suite (total 77): guard auto-enriching, pacing enrichment, resumeEnrichment, kontras tema, dsb. — lihat laporan ronde 2026-11-18.
 
 Dua suite terakhir butuh `jest.mock` untuk modul yang menyeret native (`audioAnalyzer`, `MediaStore`, `LibraryScanner`, `db`) - bukan karena RN, tapi karena fungsi murni yang diuji tinggal serumah dengan kode native.
 
@@ -130,6 +134,8 @@ Diperbaiki berlapis:
 
 Uji regresinya ada di `ScanDiffEngine.test.ts`: 1196 lagu di database dengan MediaStore melaporkan 0 file **harus** ditolak.
 
+(Koreksi 2026-11-18, F2: penolakan cursor-null dengan MEDIASTORE_ERROR + executor MediaStoreScan — inilah yang benar-benar menutup lubang ini di Kotlin.)
+
 ### Test C++ pertama: `scripts/test_domain_96k.cpp` (2026-10-06)
 
 Test C++ standalone pertama di repo ini. Modelkan logika `getPositionSeconds`/`onSeek`/guard magnitudo/throughput decoder untuk tiga rasio sample rate, lalu jalankan di host dengan `clang++`:
@@ -153,12 +159,12 @@ clang++ -O2 -std=c++17 -o "$TMPDIR/domain_test2" scripts/test_domain_96k.cpp && 
 2. ~~**`ScanDiffEngine`**~~ - **selesai** (17 test, termasuk pengaman anti-hapus-library).
 3. ~~**`BitDepthVerifier.analyzeBitDepth`**~~ - **selesai** (23 test).
 4. **`selectors.ts`** - pengelompokan album/artis. Mengimpor tipe dari `libraryStore.ts` yang menyeret zustand + AsyncStorage; butuh `jest.mock` atau pemisahan tipe. Pola mock-nya sudah ada di `ScanDiffEngine.test.ts`.
-4. **Test kontras 20 tema** - port pola `check_contrast.ts` persona. Angka awalnya ada di `VISUAL_HEALTH.md` (16 gagal); jadikan gerbang setelah diperbaiki.
+4. **Test kontras 24 tema** - port pola `check_contrast.ts` persona. Angka awalnya ada di `VISUAL_HEALTH.md` (16 gagal); jadikan gerbang setelah diperbaiki.
 5. **`check_layout.ts` sebagai gerbang CI** - cegah literal spacing **baru** (519 existing, anggap baseline).
 6. **Job `verify` terpisah sebelum `build`** - pola persona: kegagalan JS muncul ~2 menit, bukan setelah 16 menit `assembleDebug`.
 7. **`scripts/check.sh` di CI** - menangkap error C++ tanpa perlu `assembleDebug`.
 
-**C++ tidak lagi nol test, tapi masih jauh.** `scripts/test_domain_96k.cpp` (2026-10-06) hanya menguji logika murni domain posisi/seek — 193 file dan bagian terbesar risiko tetap tak tersentuh. Jest juga tidak menyentuhnya. Padanan yang benar adalah pola persona: kompilasi modul murni lalu jalankan di host, dan bandingkan dengan implementasi independen.
+**C++ kini punya 28 harness di scripts/test_*.cpp (logika murni host-side); race/underrun tetap butuh device.** Padanan yang benar adalah pola persona: kompilasi modul murni lalu jalankan di host, dan bandingkan dengan implementasi independen.
 
 ## 7. Batas yang tidak bisa dilewati dari lingkungan ini
 

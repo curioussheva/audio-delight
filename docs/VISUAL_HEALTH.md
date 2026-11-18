@@ -11,7 +11,7 @@
 
 ## Kontras
 
-**0 pasangan gagal dari 240 diperiksa.** (Sebelumnya: 16 gagal di lingkup border, lalu 7 gagal di lingkup teks.)
+**0 pasangan gagal dari 240 diperiksa.** (240 pasangan = set 20 tema; kini 24 tema — hitung ulang bila checker dijalankan lagi.) (Sebelumnya: 16 gagal di lingkup border, lalu 7 gagal di lingkup teks.)
 
 ### Putaran kedua (2026-10-10) - lingkup diperluas ke seluruh peran teks
 
@@ -101,7 +101,7 @@ aspek (mis. rasio thumb fader), bukan ritme spacing - belum ditokenkan dan
 
 ### Akar masalahnya: `SPACING` tidak punya padanan
 
-`SPACING` di `theme.ts` berisi **8 token**: `xxs:2 | xs:4 | sm:8 | md:16 | lg:24 | xl:32 | xxl:48 | xxxl:64`.
+`BASE_SPACING` di `themes/base.ts` berisi **11 token**: `xxs:2 | xs:4 | sm:8 | s10:10 | s12:12 | md:16 | s20:20 | lg:24 | xl:32 | xxl:48 | xxxl:64`.
 
 Tapi literal yang paling sering muncul adalah **20 (74x), 12 (68x), 10 (43x), 15 (19x), 6 (18x), 30 (14x), 40 (12x)** - **tidak satu pun** dari nilai itu punya token. Artinya skala spacing ini tidak dibangun dari pemakaian nyata; ia ditulis lebih dulu, lalu kode ditulis tanpa memakainya.
 

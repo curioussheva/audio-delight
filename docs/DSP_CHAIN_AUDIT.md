@@ -423,6 +423,8 @@ berjalan 0..1000 (persen), tapi Kotlin meneruskannya apa adanya ke
 Laten selama `AudioEngine::setBassBoost()` bodi kosong; terbangun begitu jalur
 disambungkan. Sekarang dipetakan ke 0..+12 dB (sejajar rentang band EQ UI).
 
+(Koreksi 2026-11-19: `HorizontalSlider` dihapus 2026-11-18; pemetaan 0..+12 dB kini hidup di slider vertikal — `features/equalizer/api/verticalSliderMath.ts`. Isi audit ini tetap berlaku sebagai rekaman bug.)
+
 **Stereo widener tidak pernah melebarkan.** `setVirtualizer` mengirim
 `strength/1000` → 0.0..1.0, sedangkan `StereoWidener` memakai skala 0.0 = mono,
 1.0 = stereo asli, 2.0 = ultra wide. Jadi slider "WIDTH" hanya bisa dari mono

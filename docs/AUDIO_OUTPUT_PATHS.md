@@ -55,7 +55,7 @@ percobaan. Itu konsisten.
 
 ## 2. Deteksi perangkat: BENAR dan LENGKAP
 
-`AudioDeviceManager::refreshDevices()` (`devices/AudioDeviceManager.cpp:116`)
+`AudioDeviceManager::refreshDevices()` (`devices/AudioDeviceManager.cpp:148`)
 membaca `AudioManager.getDevices(GET_DEVICES_OUTPUTS)` lewat JNI dan memetakan
 semua tipe Android:
 
@@ -74,16 +74,20 @@ disortir + dedup) dan `getProductName()`. Dan penentuan "bisa jalur langsung"
 sudah **jujur**:
 
 ```cpp
-// AudioDeviceManager.cpp:244
-d.supportsExclusive = (d.type == DeviceType::USB_AUDIO || d.type == DeviceType::HDMI);
+// AudioDeviceManager.cpp:351-356
+d.supportsExclusive = (d.type == DeviceType::USB_AUDIO ||
+                       d.type == DeviceType::HDMI ||
+                       d.type == DeviceType::BUILTIN_SPEAKER ||
+                       d.type == DeviceType::BUILTIN_EARPIECE ||
+                       d.type == DeviceType::WIRED_HEADSET ||
+                       d.type == DeviceType::LINE_OUT);
 ```
 
-Speaker dan headphone built-in tidak pernah ditandai bisa bit-perfect — benar,
-mereka selalu lewat AudioFlinger.
+Koreksi F1 (2026-11-16): klaim lama "speaker/headphone built-in selalu lewat mixer" SALAH — exclusive AAudio justru hanya mungkin lewat jalur internal di HP ber-MMAP (bukti logcat #23/#24 POCO M6); false hanya untuk Bluetooth/A2DP, panggilan, dan tipe tidak dikenal.
 
 Hot-plug juga **jalan nyata**: `NativeDeviceModule.kt` mendaftarkan
 `AudioDeviceCallback` saat `initialize()`, meneruskan ke
-`nativeOnDeviceAdded/Removed`, yang memicu `refreshDevices()` + callback. Jadi
+`nativeOnDeviceAdded/Removed`, yang memicu `refreshDevices()` + callback (+ sejak F4: event `PristineDeviceChange` ke JS; daftar disegarkan saat colok/cabut). Jadi
 DAC yang dicolok saat app berjalan terdeteksi.
 
 **Kesimpulan §2: infrastruktur deteksi sudah selesai dan benar.**
@@ -322,10 +326,10 @@ Status per **2026-10-07** (setelah sambungan di ÃÂ§9).
 | 2 | Komentar header mengklaim `setDeviceId()` "yang dipakai" | Menyesatkan pembaca berikutnya | `AudioDeviceManager.h:30` | Ã¢ÂÂ SELESAI |
 | 3 | `NativeDeviceModule` tidak dikonsumsi JS | Daftar perangkat nyata tidak sampai ke UI | 0 import | Ã¢ÂÂ SELESAI |
 | 4 | UI pakai `USBDACModule` yang filter USB saja | Speaker/jack/BT/HDMI tidak muncul di UI | `USBDACModule.kt:78` `isUsbDevice()` | Ã¢ÂÂ SELESAI |
-| 5 | `USBDACModule.setSampleRate`/`setExclusiveMode` stub | Slider laju & tombol exclusive tidak berefek | nol JNI di file itu | Ã¢ÂÂ¡Ã¯Â¸Â tak lagi dipakai UI |
+| 5 | `USBDACModule.setSampleRate`/`setExclusiveMode` stub | Slider laju & tombol exclusive tidak berefek | nol JNI di file itu | modul dihapus 2026-10-03 (lihat CHANGELOG) |
 | 6 | `isBitPerfectFor()` tidak mengecualikan Bluetooth | **Badge bit-perfect menyala di A2DP** (lossy) | `DeviceRateDetector.cpp:292` | Ã¢ÂÂ SELESAI |
-| 7 | 4 kelas USB C++ mati + izin USB diminta tanpa dipakai | Jalur bit-perfect terpendek tidak tersambung | 0 referensi; manifest punya intent-filter | Ã¢ÂÂª terbuka |
-| 8 | `AudioRouteManager` stub total | Nama menjanjikan routing, tidak ada isi | `AudioRouteManager.cpp` semua stub | Ã¢ÂÂª masih stub |
+| 7 | 4 kelas USB C++ mati + izin USB diminta tanpa dipakai | Jalur bit-perfect terpendek tidak tersambung | 0 referensi; manifest punya intent-filter | ✅ SELESAI (dihapus 2026-10-07) |
+| 8 | `AudioRouteManager` stub total | Nama menjanjikan routing, tidak ada isi | `AudioRouteManager.cpp` semua stub | ✅ SELESAI (dihapus 2026-10-07) |
 | 9 | Chromecast/DLNA/AirPlay tidak ada | Fitur belum ada (bukan bug) | grep NIHIL | Ã¢ÂÂª fitur |
 
 ---

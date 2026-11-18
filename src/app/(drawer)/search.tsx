@@ -39,10 +39,10 @@ export default function SearchScreen() {
   // library masih memuat, dan gagal muat sunyi total.
   const { songs, loading, error, reload } = useLibrary();
   // U-P1-16: putar lewat playerStore.playSong — sama seperti Library —
-  // bukan setQueue + loadSong langsung. playSong memberi dedupe tap-cepat,
-  // bookkeeping queue/index store, isPlaying store, dan play count;
-  // loadSong (useAudioPlayer) melewati semuanya dan hanya menyetel
-  // currentSong + isPlaying lokal hook.
+  // bukan setQueue langsung. playSong memberi dedupe tap-cepat,
+  // bookkeeping queue/index store, isPlaying store, dan play count.
+  // (Koreksi 2026-11-19: `useAudioPlayer` + `loadSong` dihapus 2026-11-18 —
+  // tidak ada lagi jalur hook lokal.)
   const { playSong } = usePlayerStore();
 
   const [query, setQuery] = useState("");

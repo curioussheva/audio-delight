@@ -156,6 +156,8 @@ dipanggil.
 **Yang membuka jalan.** Ganti sumbernya ke `useAudioOutput()` (status jujur
 dari `EngineManager`) â pekerjaan kecil, aman, tinggal dikerjakan.
 
+**SELESAI** — analyzer.tsx kini memakai useAudioOutput (data nyata, :39/:71); useUSBDAC sudah dihapus (CHANGELOG 2026-10-03).
+
 ---
 
 ## Menunggu kondisi teknis

@@ -4,6 +4,8 @@
 > App berjalan di 3 mode (`BitPerfect` / `DSP` / `Immersive`), tapi hanya 2 yang
 > punya jalur nyata, dan hanya 1 yang benar-benar bersih.
 
+> **Koreksi 2026-11-19:** baris §2 "Exclusive mode ke native ❌" dan "`isExclusive()` tidak pernah sampai JS" sudah kedaluwarsa — keduanya SELESAI 2026-10-06 (commit `db8327cd7`, `0a19cbb78`, per §3/§4 dokumen ini). "DSP pipeline di jalur playback ❌" juga kedaluwarsa — wiring tersambung 2026-10-09/10 (`AudioPipeline::applyDSPConfig()`, `test_dsp_wiring.cpp` 9/9; lihat ROADMAP Fase 1). `modes/ImmersivePipeline` yang disebut di §2 sudah dihapus (ADR-0001). Yang masih berlaku dari §2: "Laju stream per-track" (stream dibuka sekali, bukan per trek) dan §3 syarat 3–4 (sebagian, batas hardware).
+
 ---
 
 ## 1. Alur target (yang seharusnya terjadi)
@@ -129,7 +131,7 @@
 
 | Tahap | Masalah | Dampak |
 |---|---|---|
-| **Exclusive mode ke native** | `toggleExclusiveMode(true)` di `engine.ts` **hanya** `releaseAllFX()` (Android DSP session). Tidak pernah panggil `NativeDSPModule.setExclusiveMode()`. | **Bit-perfect saat ini TIDAK memakai Oboe exclusive.** Stream selalu SharedMode → sampel lewat AudioFlinger mixer → konversi tambahan. Padahal chain C++-nya lengkap: `NativeDSPModule.cpp:166` → `EngineManager::setExclusiveMode()` → stop/start stream. |
+| **Exclusive mode ke native** | `toggleExclusiveMode(true)` di `engine.ts` **hanya** `releaseAllFX()` (keadaan sebelum fix db8327cd7 — lihat §3) (Android DSP session). Tidak pernah panggil `NativeDSPModule.setExclusiveMode()`. | **Bit-perfect saat ini TIDAK memakai Oboe exclusive.** Stream selalu SharedMode → sampel lewat AudioFlinger mixer → konversi tambahan. Padahal chain C++-nya lengkap: `NativeDSPModule.cpp:166` → `EngineManager::setExclusiveMode()` → stop/start stream. |
 | **DSP pipeline di jalur playback** | `AudioCallback::onAudioReady()` `return` segera setelah `render()`. `mPipeline.process()` hanya di jalur fallback (`AudioBufferController`), yang tidak dipakai saat playback. | **Mode DSP tidak ada efek saat memutar lagu.** EQ/bass/visualizer (DSP level Android session) mungkin masih jalan, tapi `DSPChain` C++ tidak pernah disentuh PCM playback. |
 | **Mode Immersive** | `AudioMode` di JS hanya `"bit-perfect" \| "dsp"`. Enum C++ `ProcessingMode::Immersive=2` tak tercapai. `AudioPipeline::processImmersive` isinya base DSP + komentar "FUTURE". `modes/ImmersivePipeline` + `dsp/immersive/*` tidak punya pemanggil (0 call edge masuk di graphify). | Fitur belum jadi. |
 | **ProcessingMode switch** | `setProcessingMode` chain C++ lengkap (JNI + AudioConfig + AudioEngine), tapi `AudioPipeline::process()` tidak dipanggil di jalur playback (lihat di atas). | Switch mode tidak ada efek ke PCM. |

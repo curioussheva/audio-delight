@@ -66,29 +66,31 @@ pristine/
 +-- .gitlab-ci.yml              # satu-satunya CI ber-trigger otomatis
 ```
 
+> **Koreksi 2026-11-19 (HEAD 5c2aa50a):** `src/` 189 file TS/TSX, `cpp/` 160 file sumber (`.cpp`/`.h`, tanpa `oboe/`), 13 subdir tingkat atas, Kotlin 17 file; `player` 21 file, `library` 42, `visualizer` 10; `scripts/` 45 file (bukan 58 .py + 3 .sh).
+
 **Layout fitur** konsisten: `<fitur>/{api, components, hooks, store}` (bukan semua punya keempatnya). `library` paling lengkap: `api | components | hooks | native | services | store | types | utils`.
 
-**7 TurboModule spec** di `src/specs/`: `MediaStoreModule` | `NativeDSPModule` | `NativeDeviceModule` | `NativePlaybackModule` | `NativePlaybackService` | `NativeVisualizerBridge` | `USBDACModule`. (`NativePristineAudio` dihapus 2026-11-13, B12-NPA: modul dormant, 7 `external fun` tanpa JNI — JNI C++-nya sudah dihapus di ronde 1, J-M4.)
+**7 TurboModule spec** di `src/specs/`: `MediaStoreModule` | `NativeAnalyzerModule` | `NativeDSPModule` | `NativeDeviceModule` | `NativePlaybackModule` | `NativePlaybackService` | `NativeVisualizerBridge`. (`USBDACModule` dihapus 2026-10-03; `NativeAnalyzerModule` ditambahkan sesudahnya.)
 
 ---
 
 ## 3. Alur Audio Native
 
-17 subdirektori di `cpp/`. Yang membentuk alur utama:
+13 subdirektori tingkat atas di `cpp/` (tanpa `oboe/` yang vendored). Yang membentuk alur utama:
 
 ```
 decoder/  (16 file)   AudioDecoder | DecoderFactory | DecoderWorker | FFmpegDecoder | PCMDecoder | StreamResampler
     |
-playback/ (20 file)   DecodedAudioQueue | PCMQueue | PrebufferManager | PlaybackController | PlaybackClock | FadeEngine
+playback/ (19 file)   DecodedAudioQueue | PCMQueue | PrebufferManager | PlaybackController | PlaybackClock | FadeEngine
     |
-modes/    (6 file)    BitPerfectPipeline | DSPPipeline | ImmersivePipeline   <- tiga mode, tiga kelas
-    |
-dsp/      (56 file)   DSPChain | BiquadFilter | EQProcessor | Limiter | OutputStage
-    |                 + subdir: convolution | dynamics | filters | graph | headphone | immersive | spatial | tone
-core/     (21 file)   AudioEngine | AudioStreamController | AudioCallback | AudioBufferController
+core/     (23 file)   AudioEngine | AudioStreamController | AudioCallback | AudioBufferController
     |                 + RingBuffer | AudioMetrics | AudioModeManager
-usb/       (8 file)   USBDeviceManager | USBStreamSession | USBClockSync | USBDACCapabilities
-jni/      (12 file)   JSIInstaller | NativeAudioFeed | OnLoad + jembatan per-modul
+    |                 AudioPipeline — satu pipeline, tiga mode (ADR-0001); `cpp/modes/` dihapus 2026-10-07.
+    |
+dsp/      (62 file)   DSPChain | BiquadFilter | EQProcessor | Limiter | OutputStage
+    |                 + subdir: convolution | dynamics | filters | graph | headphone | immersive | spatial | tone
+usb/      — dihapus 2026-10-07 (jalur utama lewat `devices/AudioDeviceManager`)
+jni/      (9 file)    JSIInstaller | NativeAudioFeed | OnLoad + jembatan per-modul
 ```
 
 `manager/` hanya 2 file (`EngineManager`) - satu titik masuk. `fft/` (11 file) dipakai visualizer. `resampler/` (8) dan `realtime/` (4) melayani jalur decode/render.
@@ -97,9 +99,9 @@ jni/      (12 file)   JSIInstaller | NativeAudioFeed | OnLoad + jembatan per-mod
 
 | Mode | Kelas | Perilaku |
 |---|---|---|
-| `BitPerfect` | `BitPerfectPipeline` | DSP dilewati - **default** |
-| `DSP` | `DSPPipeline` | DSP chain aktif |
-| `Immersive` | `ImmersivePipeline` | DSP + spatial/headphone |
+| `BitPerfect` | `AudioPipeline::processBitPerfect` | DSP dilewati - **default** |
+| `DSP` | `AudioPipeline::processDSP` | DSP chain aktif |
+| `Immersive` | `AudioPipeline::processImmersive` | DSP + spatial/headphone |
 
 **PENTING - kelas-kelas di atas TIDAK tersambung ke jalur audio.** Diverifikasi 2026-10-05: `BitPerfectPipeline` hanya didefinisikan (nol pemakai), dan `AudioPipeline::processBitPerfect()` body-nya kosong. `AudioCallback::onAudioReady()` `return` sebelum `mPipeline.process()` sempat dipanggil, karena jalur yang benar-benar berbunyi adalah:
 
@@ -151,6 +153,8 @@ Mengembalikan laju file saat device **tidak** mendukungnya sengaja dihindari: st
 
 `AudioDeviceCallback` terdaftar lewat `NativeDeviceModule`, jadi DAC yang dicolok **saat app berjalan** terdeteksi dan laju ter-refresh. Tanpa itu, bit-perfect gagal diam-diam ketika user mencolok DAC di tengah pemutaran.
 
+> Sejak 2026-11-18 (F4): event `PristineDeviceChange` dari `NativeDeviceModule.kt` didengar JS lewat `audioOutput.ts` (`subscribeDeviceChanges()` di `useAudioOutput`); daftar perangkat disegarkan saat DAC dicolok/dicabut. Poll 3 detik tetap ada sebagai cadangan.
+
 **Batas kemampuan Android:** tidak ada API publik untuk "paksa output ke device ini". Yang tersedia: `AudioTrack.setPreferredDevice()` (preferensi, bisa diabaikan sistem) dan `Oboe setDeviceId()` (diterapkan saat stream dibuka). `AudioDeviceManager::setActiveDevice()` mencatat pilihan dan memvalidasinya — mengembalikan `false` kalau id tidak ada, bukan `true` buta.
 
 **Koreksi 2026-10-06 ("96kHz masih cacat")** — tiga hal yang ternyata **menghianati** ketiga syarat di atas meski tabelnya bertanda terpenuhi:
@@ -177,20 +181,20 @@ Diekstrak dari kode dan riwayat commit. Nomor diberikan saat dokumen ini dibuat.
 
 ### ADR-3 - 20 tema, tapi hanya 4 didefinisi inline
 
-`ALL_THEMES` (`src/shared/constants/theme.ts`) berisi 20 entri: **4 inline** (`deep-navy`, `obsidian`, `light-elegant`, `light-silver`) dan **16 diimpor** dari `themes/{light,dark,nature,premium,cyber}.ts`. `ThemeId` juga 20, dan **kedua himpunan cocok persis** - tidak ada tema yatim. `themes/index.ts` **kosong** (hanya komentar) - barrel file yang tidak dipakai siapa pun.
+`ALL_THEMES` (`src/shared/constants/theme.ts`) berisi 20 entri: **4 inline** (`deep-navy`, `obsidian`, `light-elegant`, `light-silver`) dan **16 diimpor** dari `themes/{light,dark,nature,premium,cyber}.ts`. `ThemeId` juga 20, dan **kedua himpunan cocok persis** - tidak ada tema yatim. `themes/index.ts` **dihapus 2026-11-18** (K6, penghapusan barrel mati).
 
-### ADR-4 - Tema default `emerald-noir`, tapi `getThemeById` jatuh-balik ke `midnight-blue`
+### ADR-4 - Tema default `pristine-ember`, fallback = default (diperbaiki Fase 1)
 
 ```ts
-export const DEFAULT_THEME = ALL_THEMES["emerald-noir"];   // default = emerald-noir
-export const getThemeById = (id) => ALL_THEMES[id] || ALL_THEMES["midnight-blue"];  // fallback = midnight-blue
+export const DEFAULT_THEME = ALL_THEMES["pristine-ember"];   // default = pristine-ember
+export const getThemeById = (id) => ALL_THEMES[id] || DEFAULT_THEME;  // fallback = default
 ```
 
-Jatuh-balik yang tidak konsisten: id yang tidak dikenal menghasilkan `midnight-blue`, bukan default. `ThemeContext` menambahkan lapis ketiga - `setTheme` memaksa ke `emerald-noir` untuk id yang tidak valid. **Tiga perilaku berbeda untuk satu kasus.**
+Instalasi baru mengikuti mode sistem — terang `pristine-hearth`, gelap `pristine-ember` (`ThemeContext.tsx:52-56`); `getThemeById` jatuh-balik ke `DEFAULT_THEME` (`theme.ts:288`), bukan `midnight-blue`.
 
-### ADR-5 - `SPACING` dan `BASE_SHADOWS` didefinisi di `theme.ts`, bukan `themes/base.ts`
+### ADR-5 - `BASE_SPACING` dan `BASE_TYPOGRAPHY` didefinisi di `themes/base.ts`
 
-`themes/base.ts` (1371 byte) hanya mengekspor `BASE_TYPOGRAPHY`. `SPACING` dan `BASE_SHADOWS` ada di `theme.ts`. Setiap tema di file terpisah mewarisi keduanya dengan referensi yang sama (`spacing: SPACING`), jadi spacing identik di 20 tema - **tidak ada tema yang bisa menggeser skala spacingnya sendiri.**
+`BASE_SPACING` (11 token, termasuk `s10/s12/s20`) didefinisi di `themes/base.ts:23`, diimpor `theme.ts:4`; `BASE_TYPOGRAPHY` tetap di `themes/base.ts`. Berlaku untuk 24 tema.
 
 ### ADR-6 - Perubahan native C++ lewat `scripts/patch-*.py`, bukan edit langsung
 

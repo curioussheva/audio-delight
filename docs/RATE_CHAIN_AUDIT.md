@@ -135,10 +135,7 @@ Tidak ada efek ke stream audio. UI memberi kesan bisa memilih laju, padahal tida
 
 ### 2.5 `NativeDeviceModule` tidak dikonsumsi JS
 
-`src/specs/NativeDeviceModule.ts` ada, tapi tidak ada hook/consumer yang
-memakainya (hanya referensi komentar di `shared/types/dac.ts`). Kotlin
-`NativeDeviceModule.kt:159` bahkan mengembalikan `48000` sebagai fallback
-hardcode saat `info.sampleRate` gagal dibaca.
+Koreksi 2026-11-18 (F4/F8/F9): NativeDeviceModule kini dikonsumsi JS — audioOutput.ts mengimpor spec-nya dan mendengar PristineDeviceChange; fallback fabrikasi dihapus, default honored 1→0.
 
 ---
 

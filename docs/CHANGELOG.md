@@ -8,6 +8,25 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/). Versi mengikut
 
 ---
 
+## [Unreleased] - 2026-11-18
+
+### Added
+- Sistem scan 3 opsi di Settings: Auto Enriching (default ON), Auto Discovery (default OFF, interval background task 240 mnt), Rescan Library (full scan manual). Pacing worker enrichment 1000 ms/item + jeda saat lagu diputar.
+- Listener `PristineDeviceChange`: daftar perangkat disegarkan saat DAC dicolok/dicabut (poll 3 dtk tetap).
+- Aksi Stop di notifikasi playback (tampilan diperluas; tanpa `stopService()` otomatis dari JS).
+- Redesign Fase 0–4: tema hangat `pristine-ember`/`pristine-hearth` default instalasi baru (total 24 tema), font Playfair Display + Inter, komponen ui bersama, toast global 3500 ms.
+- Lirik: seksi LIRIK di `song/[id].tsx` (tulis/tempel/impor .lrc/hapus); `.lrc` berdampingan dibaca worker; kolom `edited_fields` (migrasi v6) — editan bertahan dari rescan.
+
+### Fixed
+- Bridge KT F2–F15: `queryAudioFiles` di executor latar `MediaStoreScan`, cursor null kini reject `MEDIASTORE_ERROR` (bukan `[]` palsu); `addListener`/`removeListeners` di spec PlaybackService; `addListener` fiktif dihapus dari spec Visualizer; `createAudioSession` 1 ID stabil; method DSP void `Log.w` saat engine tak tersedia; `refreshDevices` + fallback fabrikasi `getDevices` dihapus; emitter best-effort; retry load `.so` (throttle 10 dtk); executor Analyzer shutdown saat bridge mati; bitmap artwork di-recycle; type-error `setQueue` di-log.
+- `setProcessingMode` kini tersambung (Kotlin + spec TS).
+
+### Removed
+- Dead code kelas (a) (4.538 baris dihapus / 2 ditambah, net −4.536, 41 file: UI player lama, ControlKnob/knobMath, SpectogramView, API visualizer lama, filter Library lama, dsb.), `audioConfig` (582 baris, K2), barrel `index.ts` fitur + penopang tipe mati (48 file, K6), method `autoScan()` di `UnifiedScanService`, `equalizer/api/service.ts` + `presets.ts`.
+- Tab Visualizer (2026-11-13); `SpectrumAnalyzer.tsx` + `SpectogramView.tsx` diganti `AnalyzerSpectrum.tsx` + `ParametricSpectrumView.tsx`.
+
+---
+
 ## [Unreleased] - 2026-10-03
 
 ### Fixed
@@ -57,7 +76,7 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/). Versi mengikut
   Konfigurasi di `src/__tests__/` (bukan di samping modul - lihat `TESTING.md`
   bagian 5 untuk alasannya).
 - **`v1.0.37`** - git tag pertama repo ini, titik acuan sebelum standarisasi dokumentasi.
-- **Dokumentasi terindeks** - 13 file di `docs/` + README root + AGENTS.md, menggantikan
+- **Dokumentasi terindeks** - 47 file di `docs/` (2026-11-19) + README root + AGENTS.md, menggantikan
   11 dokumen roadmap/todolist yang tumpang tindih (533 KB). Lihat commit dokumentasi.
 - `computeDiff()` dan `isDeletionPlausible()` di `ScanDiffEngine` - logika diff
   diekstrak jadi fungsi murni yang bisa diuji dan dipakai kedua jalur scan.
@@ -82,6 +101,7 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/). Versi mengikut
   Pemicunya hal biasa: izin dicabut, MediaStore sibuk, OOM.
   Diperbaiki: query melempar error, `isDeletionPlausible()` menahan penghapusan
   massal, dan `processQuickDiff` kini memakai transaction untuk penulisan.
+  Koreksi: klaim ini baru benar-benar tertutup 2026-11-18 (F2: cursor null reject MEDIASTORE_ERROR + executor MediaStoreScan).
 - **Deteksi "FLAC palsu" salah skala.** `estimateRealBitDepth` membandingkan
   `(DR - 1.76) / 6.02` - sudah bernilai satuan bit - dengan ambang `18`/`26`.
   Ambang 18 menuntut DR >= 110 dB untuk diakui 24-bit, sehingga file 24/96 asli

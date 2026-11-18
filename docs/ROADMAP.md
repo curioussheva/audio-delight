@@ -22,11 +22,11 @@ Semua status diverifikasi 2026-10-03 langsung ke kode.
 ## Fase 0 - Fondasi (selesai)
 
 - [x] Struktur `src/features/<fitur>/{api,components,hooks,store}` - 9 fitur
-- [x] Mesin audio native - `cpp/` 193 file, 17 subdirektori
-- [x] Tiga mode pemrosesan (`BitPerfect` | `DSP` | `Immersive`) di `cpp/modes/`
+- [x] Mesin audio native - `cpp/` 160 file sumber, 13 subdirektori tingkat atas
+- [x] Tiga mode pemrosesan (`BitPerfect` | `DSP` | `Immersive`) di `core/AudioPipeline.cpp` (`cpp/modes/` dihapus 2026-10-07, ADR-0001)
 - [x] BitPerfect sebagai default - `patch_default_bypass_dsp.py`
-- [x] 20 tema tanpa tema yatim (`ALL_THEMES` cocok persis dengan `ThemeId`)
-- [x] expo-router: drawer + 4 tab + player + onboarding
+- [x] 24 tema tanpa tema yatim (`ALL_THEMES` cocok persis dengan `ThemeId`)
+- [x] expo-router: drawer + 3 tab + player + onboarding
 - [x] Migrasi lepas dari `react-native-track-player` - dependensinya **sudah tidak ada** di `package.json`
 
 ## Fase 0 - Fondasi Bit-Perfect (dibangun 2026-10-05, BELUM teruji device)
@@ -36,14 +36,14 @@ Semua status diverifikasi 2026-10-03 langsung ke kode.
 - [x] Rantai laju sampai ke decoder (`setStreamSampleRate` -> `DecodeConfig`)
 - [x] Baca daftar device nyata + kapabilitas laju (`devices/AudioDeviceManager`)
 - [x] Deteksi DAC dicolok saat app berjalan (`AudioDeviceCallback`)
-- [x] `getDevices()` Kotlin benar-benar memanggil JNI (sebelumnya array kosong)
+- [x] `getDevices()` Kotlin benar-benar memanggil JNI (sebelumnya array kosong) (F8/F9, 2026-11-18: fallback fabrikasi dihapus, default honored 1→0.)
 - [ ] Terapkan device pilihan ke stream (`Oboe setDeviceId()`)
 - [ ] Verifikasi di device: file 96 kHz harus `input_rate == output_rate`
 - [ ] **Sambungkan `BitPerfectPipeline` ke jalur render** - sekarang dead code, bit-perfect hanya "kebetulan" karena DSP tidak disentuh
 
 ## Fase 1 - Verifikasi device (PRIORITAS TERTINGGI)
 
-**Kenapa ini nomor satu:** 193 file C++ dan 33 file Kotlin tidak pernah dibuktikan berjalan. Semua klaim "berfungsi" di `FEATURES.md` adalah klaim statis. Selama ini belum ditutup, menambah fitur baru hanya menumpuk klaim yang belum dibuktikan - persis pola yang sudah menimpa persona (`persona/docs/COMPETITIVE_LANDSCAPE.md` bagian 4).
+**Kenapa ini nomor satu:** 160 file C++ dan 17 file Kotlin tidak pernah dibuktikan berjalan. Semua klaim "berfungsi" di `FEATURES.md` adalah klaim statis. Selama ini belum ditutup, menambah fitur baru hanya menumpuk klaim yang belum dibuktikan - persis pola yang sudah menimpa persona (`persona/docs/COMPETITIVE_LANDSCAPE.md` bagian 4).
 
 - [~] Build APK dan pasang di device - `pnpm build:dev` atau trigger `build-dev.yml`
   - **2026-10-09**: CI `37915049714` sukses, APK 214 MB terdownload ke Termux
@@ -91,23 +91,23 @@ Item ini **terverifikasi terbuka**, bukan diwarisi dari dokumen lama:
   - [ ] Verifikasi bahwa `PlaybackController` hidup selama app berjalan dan bisa diambil dari `EngineManager`.
 - [ ] Audit kapabilitas native yang "mentok" - daftar lengkap `JNIEXPORT` -> Kotlin `external fun` -> TS spec -> pemakaian di `features/`
 - [ ] `NativeAudioFeed.cpp` - apa yang mengonsumsinya? Belum jelas.
-- [ ] `audioConfig.ts` (`features/player/config/`) - orphan? Tidak ada pemanggil.
+- [x] `audioConfig.ts` — DIHAPUS 2026-11-18 (K2, 582 baris).
 - [ ] `ScanDiffEngine.ts` masih memakai `BEGIN TRANSACTION` mentah yang pernah terbukti menyebabkan hang
-- [ ] Hapus `src/app/_layout.tsx (2)` - file duplikat sampah di route tree
+- [x] Hapus `src/app/_layout.tsx (2)` — sudah dihapus 2026-10-03.
 - [ ] Perbaiki komentar header salah: `api/scanner.ts` menyebut `services/LibraryScanner.ts`
 
 ## Fase 3 - Test otomatis (celah terbesar)
 
-Test otomatis baru ada di lapisan tipis: **98 test Jest di 6 suite** (`LrcParser`, dsp, audio, dac, `BitDepthVerifier`, `ScanDiffEngine`), dibuat 2026-10-03. **C++ tetap nol test** - dan itu 193 file, bagian terbesar risiko. Ini yang membuat Fase 1 mahal: tidak ada cara mendeteksi regresi native selain build ulang lalu uji manual di device.
+Test otomatis baru ada di lapisan tipis: **921 test Jest di 77 suite** (`LrcParser`, dsp, audio, dac, `BitDepthVerifier`, `ScanDiffEngine`), dibuat 2026-10-03. **C++ 28 harness di scripts/test_*.cpp** - dan itu 160 file, bagian terbesar risiko. Ini yang membuat Fase 1 mahal: tidak ada cara mendeteksi regresi native selain build ulang lalu uji manual di device.
 
 - [x] **Konfigurasi Jest** - `jest.config.cjs` + `ts-jest` (bukan `jest-expo`, lihat catatan), script `pnpm test` / `test:watch` / `test:coverage`
 - [x] Test logika murni: `LrcParser` (11), dsp (19), audio (15), dac (13) - **58 test**
 - [x] `BitDepthVerifier` (23 test) + `ScanDiffEngine` (17 test) - **98 test total, semua lulus**
 - [ ] Test lanjutan: `selectors.ts`, seleksi tema, `getThemeById` fallback
-- [ ] Test warna: kontras semua pasangan di **20 tema** - port pola `check_contrast.ts` persona
+- [ ] Test warna: kontras semua pasangan di **24 tema** - port pola `check_contrast.ts` persona
 - [ ] Test spacing: cegah literal baru (checker `check_layout.ts` sudah jalan, tinggal dijadikan gerbang)
 - [ ] Angkat typecheck + `pnpm test` ke CI sebagai job terpisah yang lebih dulu jalan (pola `verify` -> `build` persona: kegagalan JS muncul dalam 2 menit, bukan setelah 16 menit build)
-- [ ] Test C++ - **masih nol**. Padanan pola persona: kompilasi modul murni lalu jalankan di host, bandingkan dengan implementasi independen
+- [ ] Test C++ - **28 harness host-side (logika murni); race/underrun tetap butuh device**. Padanan pola persona: kompilasi modul murni lalu jalankan di host, bandingkan dengan implementasi independen
   - **2026-10-09**: celah terukur. Bug satuan sample/frame
     (`advanceFrames(readSamples)` vs `readSamples/channels`) lolos dari
     semua tool yang ada — clangd lulus, CI sukses, crash hanya terlihat di
@@ -119,8 +119,8 @@ Test otomatis baru ada di lapisan tipis: **98 test Jest di 6 suite** (`LrcParser
 
 Angka riil 2026-10-03. Lihat `VISUAL_HEALTH.md`.
 
-- [ ] **16 pasangan kontras gagal 3:1** - semuanya `border.medium on background.primary`, terjadi di 16 dari 20 tema. Garis pemisah praktis tak terlihat.
-- [ ] **519 literal spacing di 52 file** - `SPACING` sudah ada (8 token: 2/4/8/16/24/32/48/64) tapi tidak dipakai
+- [ ] **0 pasangan kontras gagal 3:1** (diperbaiki 2026-10-04 + 2026-10-10) - dulu 16 gagal, semuanya `border.medium on background.primary`, terjadi di 16 dari 20 tema. Garis pemisah praktis tak terlihat.
+- [ ] **521 literal spacing (2026-10-03, ukur ulang)** - `BASE_SPACING` kini 11 token (tambah s10/s12/s20) tapi tidak dipakai
 - [ ] Perbaiki di **primitif**, bukan per layar: `CustomDrawer.tsx` (11), `ThemePicker.tsx` (9), `FileTypeList.tsx` (14), `LoadingScreen.tsx` (7)
 - [ ] Perbaiki `SPACING` dulu - skala 2/4/8/16/24/32/48/64 tidak punya nilai untuk literal yang paling sering muncul (20x74, 12x68, 10x43, 15x19). Selama token tidak punya padanannya, literal ini **tidak bisa** dihilangkan tanpa menambah token.
 
@@ -141,7 +141,6 @@ Angka riil 2026-10-03. Lihat `VISUAL_HEALTH.md`.
 - [ ] Audio focus (interupsi telepon, ducking) - di luar metadata MediaSession
 - [ ] Immersive/spatial tuning lebih dalam - `dsp/{spatial,headphone,convolution,immersive}/` ada, tingkat kematangan belum diukur
 - [ ] Update mandiri dalam app
-- [ ] UI `audioConfig` (buffer size, latency mode)
 
 ---
 

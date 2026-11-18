@@ -48,6 +48,7 @@ fun setExclusiveMode(dacId: String, enable: Boolean, promise: Promise) {
     promise.reject("NOT_IMPLEMENTED",
         "setExclusiveMode belum tersambung ke engine. Pakai NativeDSPModule.setExclusiveMode.")
 }
+// (Per 2026-11-19 saran ini sudah terwujud — `NativeDSPModule.setExclusiveMode` tersambung; contoh tetap valid sebagai pola.)
 
 // SALAH
 @ReactMethod
@@ -99,8 +100,8 @@ Bukan: filenya ada. Bukan: terkompilasi. Bukan: ada referensi nama di file lain
 ```
 
 Contoh yang menipu: `BitPerfectPipeline` dan `DSPPipeline` muncul di grep, tapi
-hanya sebagai **komentar** di `FFmpegDecoder.cpp`. `DSPPipeline` juga muncul di
-TS ÃÂ¢ÃÂÃÂ itu kelas JS yang berbeda, bukan C++-nya. Grep mentah tidak cukup.
+hanya sebagai **komentar** di `FFmpegDecoder.cpp`. (Koreksi 2026-11-19: kelas TS
+`DSPPipeline` sudah dihapus; `cpp/modes/` juga dihapus 2026-10-07 — contoh ini kini historis, bukan pola yang masih bisa ditemui.)
 
 ---
 
@@ -144,7 +145,7 @@ menentukan mana yang berlaku** kecuali membaca keduanya.
 Termasuk kasus yang lebih halus: `modes/DSPPipeline` punya `DSPChain` sendiri
 sementara `AudioPipeline` juga punya. Kalau keduanya dipakai, ada dua instans
 state EQ ÃÂ¢ÃÂÃÂ EQ yang diset satu jalur dibaca jalur lain, muncul sebagai
-*"EQ kadang tidak berefek"*.
+*"EQ kadang tidak berefek"*. (Kasus historis — `cpp/modes/` dihapus 2026-10-07, ADR-0001.)
 
 **Pelajaran:** satu konsep, satu pemilik. Kalau butuh dua bentuk (mis. jalur
 pull vs push), yang kedua jadi **konsumen** yang pertama, bukan pemilik kedua.

@@ -132,6 +132,8 @@ if (deletedCount / existingCount > 0.5) tolak;        // mayoritas library hilan
 (`[]`, `{}`, `null`, `0`, `false`) untuk fungsi yang hasilnya dipakai sebagai
 dasar keputusan destruktif.
 
+Penutup 2026-11-18 (F2): lubang konkret yang memicu aturan ini — cursor null di queryAudioFiles — kini reject MEDIASTORE_ERROR dari executor MediaStoreScan, bukan [] palsu.
+
 ## Error build spesifik
 
 ### `target_compile_reactnative_options` unknown CMake command
