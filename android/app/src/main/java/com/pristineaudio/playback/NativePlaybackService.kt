@@ -258,13 +258,13 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
 
             PlaybackNativeBridge.setQueue(
                 list.toTypedArray(),
-                buildRateArray(sampleRates, rateIndexes, list.size),
+                buildRateArray(sampleRates, rateIndexes, list.size, "sampleRates"),
                 startInList,
-                buildStringArray(titles, rateIndexes, list.size),
-                buildStringArray(artists, rateIndexes, list.size),
-                buildStringArray(albums, rateIndexes, list.size),
-                buildStringArray(artworkUris, rateIndexes, list.size),
-                buildRateArray(durationsMs, rateIndexes, list.size),
+                buildStringArray(titles, rateIndexes, list.size, "titles"),
+                buildStringArray(artists, rateIndexes, list.size, "artists"),
+                buildStringArray(albums, rateIndexes, list.size, "albums"),
+                buildStringArray(artworkUris, rateIndexes, list.size, "artworkUris"),
+                buildRateArray(durationsMs, rateIndexes, list.size, "durationsMs"),
             )
             promise.resolve(null)
         } catch (e: Throwable) {
@@ -277,44 +277,76 @@ class NativePlaybackService(reactContext: ReactApplicationContext) :
     // resolve. Pola sama seperti buildRateArray: entry yang dilewati
     // (`continue`) tidak punya pasangan. Array null / lebih pendek /
     // berisi null / tipe salah → "" (bukan crash, bukan geser indeks).
+    //
+    // F15: "" di sini = "tidak diketahui" (kontrak C++ nativeSetQueue —
+    // elemen hilang/pendek = "" / 0, tidak pernah crash). Yang dulu
+    // ditelan diam-diam hanyalah *kesalahan tipe* per item (mis. null di
+    // getInt/getString): kini dihitung dan di-log supaya bisa dilacak,
+    // perilakunya tetap "" (bukan reject — satu entri metadata cacat
+    // tidak boleh menggagalkan seluruh antrean).
     private fun buildStringArray(
         source: ReadableArray?,
         sourceIndexes: List<Int>,
         expectedSize: Int,
+        field: String,
     ): Array<String> {
         val out = Array(expectedSize) { "" }
         if (source == null) return out
+        var badEntries = 0
         for (i in 0 until minOf(sourceIndexes.size, expectedSize)) {
             val src = sourceIndexes[i]
             if (src < source.size()) {
                 out[i] = try {
                     source.getString(src) ?: ""
                 } catch (e: Exception) {
+                    badEntries++
                     ""
                 }
             }
+        }
+        if (badEntries > 0) {
+            android.util.Log.w(
+                LOG_TAG,
+                "buildStringArray($field): $badEntries entri bertipe salah -> \"\"",
+            )
         }
         return out
     }
 
     // Petakan laju file ke posisi yang benar di queue hasil resolve.
     // Entry yang dilewati (`continue`) tidak punya pasangan laju.
+    //
+    // F15: 0 = "laju tidak diketahui" — C++ (nativeSetQueue) memvalidasi
+    // rentang 8000..768000 dan membiarkan 0 supaya engine mendeteksi
+    // sendiri laju track itu; jadi "semua rate 0" AMAN (tiap track
+    // self-detect), bukan kerusakan — caveat audit kini terverifikasi dari
+    // kode C++. Sama seperti buildStringArray: hanya kesalahan tipe per
+    // item yang di-log, perilaku tetap 0 (bukan reject).
     private fun buildRateArray(
         sampleRates: ReadableArray?,
         sourceIndexes: List<Int>,
         expectedSize: Int,
+        field: String,
     ): IntArray {
         val rates = IntArray(expectedSize)
         if (sampleRates == null) return rates
+        var badEntries = 0
         for (i in 0 until minOf(sourceIndexes.size, expectedSize)) {
             val src = sourceIndexes[i]
             if (src < sampleRates.size()) {
                 rates[i] = try {
                     sampleRates.getInt(src)
                 } catch (e: Exception) {
+                    badEntries++
                     0
                 }
             }
+        }
+        if (badEntries > 0) {
+            android.util.Log.w(
+                LOG_TAG,
+                "buildRateArray($field): $badEntries entri bertipe salah -> 0",
+            )
         }
         return rates
     }
