@@ -19,6 +19,7 @@ import {
 } from "lucide-react-native";
 
 import { useTheme } from "@/shared/context/ThemeContext";
+import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
 import { ScreenList } from "@/shared/components/ui/ScreenList";
 import { PristineButton } from "@/shared/components/ui/PristineButton";
 import { buildButtonStyles } from "@/shared/utils/uiStyles";
@@ -306,13 +307,13 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 54,
     height: 54,
-    borderRadius: 16,
+    borderRadius: BASE_RADIUS.lg,
     justifyContent: "center",
     alignItems: "center",
   },
   playlistInfo: { flex: 1, marginLeft: 16 },
-  playlistName: { fontSize: 16, fontWeight: "700" },
-  playlistMeta: { fontSize: 12, marginTop: 2 },
+  playlistName: { fontSize: 16, fontFamily: FONT_FAMILY.bold },
+  playlistMeta: { fontSize: 12, fontFamily: FONT_FAMILY.regular, marginTop: 2 },
 
   sectionDivider: {
     height: 1,
@@ -330,7 +331,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   sectionTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  sectionTitle: { fontSize: 18, fontWeight: "800" },
+  sectionTitle: { fontSize: 18, fontFamily: FONT_FAMILY.displayBold, lineHeight: 24 },
 
   actionHeaderGroup: {
     flexDirection: "row",
@@ -340,7 +341,7 @@ const styles = StyleSheet.create({
   smallAddBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: BASE_RADIUS.pill,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -351,6 +352,7 @@ const styles = StyleSheet.create({
   },
   userListEmptyText: {
     fontSize: 13,
+    fontFamily: FONT_FAMILY.regular,
     fontStyle: "italic",
   },
 
@@ -364,14 +366,15 @@ const styles = StyleSheet.create({
   emptyIconCircle: {
     width: 90,
     height: 90,
-    borderRadius: 45,
+    borderRadius: BASE_RADIUS.pill,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 20,
   },
-  emptyTitle: { fontSize: 20, fontWeight: "800", marginBottom: 8 },
+  emptyTitle: { fontSize: 20, fontFamily: FONT_FAMILY.displayBold, lineHeight: 28, marginBottom: 8 },
   emptySubtitle: {
     fontSize: 14,
+    fontFamily: FONT_FAMILY.regular,
     textAlign: "center",
     lineHeight: 20,
     marginBottom: 28,

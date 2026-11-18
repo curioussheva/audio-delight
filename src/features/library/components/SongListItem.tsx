@@ -15,6 +15,7 @@ import { formatTime } from "@/shared/utils/time";
 import { DURATION_FONT_FAMILY } from "@/shared/utils/typography";
 import QualityBadge from "@/shared/components/ui/QualityBadge";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
 import { Music2, AudioLines, Heart, X } from "lucide-react-native";
 
 interface SongListItemProps {
@@ -245,7 +246,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-start", // ← seluruh row rata atas
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 12,
+    borderRadius: BASE_RADIUS.md,
     marginVertical: 2,
   },
 
@@ -253,7 +254,7 @@ const styles = StyleSheet.create({
   artworkContainer: {
     width: 48,
     height: 48,
-    borderRadius: 8,
+    borderRadius: BASE_RADIUS.sm,
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
@@ -273,15 +274,17 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 15,
-    fontWeight: "600",
+    fontFamily: FONT_FAMILY.semiBold,
     flexShrink: 1,
     marginRight: 6,
   },
   subText: {
     fontSize: 12,
+    fontFamily: FONT_FAMILY.regular,
   },
   techInfo: {
     fontSize: 10,
+    fontFamily: FONT_FAMILY.regular,
     letterSpacing: 0.2,
   },
 

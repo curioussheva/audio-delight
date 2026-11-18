@@ -13,6 +13,7 @@ import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
 import type { MediaTrack } from "../store/libraryStore";
 import { formatTime } from "@/shared/utils/time";
 import { DURATION_FONT_FAMILY } from "@/shared/utils/typography";
@@ -488,43 +489,43 @@ const styles = StyleSheet.create({
   iconBox: {
     width: 46,
     height: 46,
-    borderRadius: 12,
+    borderRadius: BASE_RADIUS.md,
     justifyContent: "center",
     alignItems: "center",
     flexShrink: 0,
   },
   info: { flex: 1 },
-  name: { fontSize: 15, fontWeight: "600", marginBottom: 2 },
-  meta: { fontSize: 12 },
+  name: { fontSize: 15, fontFamily: FONT_FAMILY.semiBold, marginBottom: 2 },
+  meta: { fontSize: 12, fontFamily: FONT_FAMILY.regular },
   separator: { height: StyleSheet.hairlineWidth },
   empty: { flex: 1, justifyContent: "center", alignItems: "center", gap: 8 },
-  emptyText: { fontSize: 16, fontWeight: "600" },
-  emptySubText: { fontSize: 13 },
+  emptyText: { fontSize: 16, fontFamily: FONT_FAMILY.semiBold },
+  emptySubText: { fontSize: 13, fontFamily: FONT_FAMILY.regular },
   backRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  backLabel: { fontSize: 14, fontWeight: "600" },
+  backLabel: { fontSize: 14, fontFamily: FONT_FAMILY.semiBold },
   detailHeader: { flexDirection: "row", gap: 16, alignItems: "center" },
   detailIconBox: {
     width: 88,
     height: 88,
-    borderRadius: 20,
+    borderRadius: BASE_RADIUS.xl,
     justifyContent: "center",
     alignItems: "center",
     flexShrink: 0,
   },
   detailInfo: { flex: 1, gap: 6 },
-  detailName: { fontSize: 20, fontWeight: "700", lineHeight: 24 },
-  detailMeta: { fontSize: 13 },
+  detailName: { fontSize: 20, fontFamily: FONT_FAMILY.displayBold, lineHeight: 28 },
+  detailMeta: { fontSize: 13, fontFamily: FONT_FAMILY.regular },
   playAllBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: BASE_RADIUS.sm,
   },
   // U-P2-04: tanpa `color` — warna teks selalu di-overide inline dengan
   // onPrimary (pickReadable atas primary[500]) di pemakaian style ini.
-  playAllLabel: { fontWeight: "700", fontSize: 14 },
+  playAllLabel: { fontFamily: FONT_FAMILY.bold, fontSize: 14 },
   divider: { height: 1 },
   songRow: {
     flexDirection: "row",
@@ -535,7 +536,7 @@ const styles = StyleSheet.create({
   songIcon: {
     width: 40,
     height: 40,
-    borderRadius: 8,
+    borderRadius: BASE_RADIUS.sm,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -545,8 +546,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  songTitle: { fontSize: 15, fontWeight: "600", flex: 1, marginRight: 4 },
-  songSub: { fontSize: 12, marginTop: 1 },
+  songTitle: { fontSize: 15, fontFamily: FONT_FAMILY.semiBold, flex: 1, marginRight: 4 },
+  songSub: { fontSize: 12, fontFamily: FONT_FAMILY.regular, marginTop: 1 },
   rightActions: { alignItems: "flex-end", gap: 4 },
   duration: { fontSize: 10 },
 });

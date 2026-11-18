@@ -22,6 +22,7 @@ import {
 } from "lucide-react-native";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
 import type { MediaTrack } from "../store/libraryStore";
 import { formatTime } from "@/shared/utils/time";
 import { DURATION_FONT_FAMILY } from "@/shared/utils/typography";
@@ -315,15 +316,15 @@ const styles = StyleSheet.create({
   folderIconContainer: {
     width: 48,
     height: 48,
-    borderRadius: 12,
+    borderRadius: BASE_RADIUS.md,
     justifyContent: "center",
     alignItems: "center",
   },
   folderInfo: { flex: 1, marginLeft: 16, marginRight: 8 },
-  folderName: { fontSize: 15, fontWeight: "600" },
-  folderPath: { fontSize: 11, marginTop: 4, opacity: 0.6 },
+  folderName: { fontSize: 15, fontFamily: FONT_FAMILY.semiBold },
+  folderPath: { fontSize: 11, fontFamily: FONT_FAMILY.regular, marginTop: 4, opacity: 0.6 },
   folderRight: { flexDirection: "row", alignItems: "center", gap: 8 },
-  countText: { fontSize: 11, fontWeight: "500" },
+  countText: { fontSize: 11, fontFamily: FONT_FAMILY.medium },
   separator: { height: 1, marginHorizontal: 20, opacity: 0.3 },
 
   header: {
@@ -336,7 +337,7 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === "ios" ? 50 : 10,
   },
   backBtn: { flexDirection: "row", alignItems: "center", padding: 8 },
-  backText: { fontSize: 16, fontWeight: "600", marginLeft: 4 },
+  backText: { fontSize: 16, fontFamily: FONT_FAMILY.semiBold, marginLeft: 4 },
 
   folderHero: {
     flexDirection: "row",
@@ -348,13 +349,13 @@ const styles = StyleSheet.create({
   heroIconContainer: {
     width: 80,
     height: 80,
-    borderRadius: 20,
+    borderRadius: BASE_RADIUS.xl,
     justifyContent: "center",
     alignItems: "center",
   },
   heroContent: { flex: 1 },
-  heroTitle: { fontSize: 22, fontWeight: "800" },
-  heroPath: { fontSize: 12, marginTop: 6, lineHeight: 18, opacity: 0.8 },
+  heroTitle: { fontSize: 22, fontFamily: FONT_FAMILY.displayBold, lineHeight: 28 },
+  heroPath: { fontSize: 12, fontFamily: FONT_FAMILY.regular, marginTop: 6, lineHeight: 18, opacity: 0.8 },
 
   playAllBtn: {
     flexDirection: "row",
@@ -368,7 +369,7 @@ const styles = StyleSheet.create({
   },
   // U-P2-04: tanpa `color` — warna teks selalu di-overide inline dengan
   // onPrimary (pickReadable atas primary[500]) di pemakaian style ini.
-  playAllText: { fontWeight: "700", fontSize: 15 },
+  playAllText: { fontFamily: FONT_FAMILY.bold, fontSize: 15 },
 
   songRow: {
     flexDirection: "row",
@@ -379,8 +380,8 @@ const styles = StyleSheet.create({
   songLeading: { width: 32 },
   songMain: { flex: 1, paddingRight: 10 },
   songTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  songTitle: { fontSize: 14, fontWeight: "600", flexShrink: 1 },
-  songSub: { fontSize: 11, marginTop: 2 },
+  songTitle: { fontSize: 14, fontFamily: FONT_FAMILY.semiBold, flexShrink: 1 },
+  songSub: { fontSize: 11, fontFamily: FONT_FAMILY.regular, marginTop: 2 },
   songTrailing: { alignItems: "flex-end", gap: 4 },
   duration: {
     fontSize: 10,

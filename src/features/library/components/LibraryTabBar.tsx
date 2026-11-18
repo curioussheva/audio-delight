@@ -23,6 +23,7 @@ import {
 import { useTheme } from "@/shared/context/ThemeContext";
 import type { LibraryTab } from "../types/scan";
 import { accentOn, pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
 
 // ── Tab Configuration ────────────────────────────────────────────────────────
 export const TABS: { id: LibraryTab; label: string; icon: any }[] = [
@@ -102,7 +103,7 @@ export const LibraryTabBar = ({
 
   return (
     <View
-      style={[styles.container, { backgroundColor: colors.background.primary }]}
+      style={[styles.container, { backgroundColor: colors.background.primary, borderBottomColor: colors.border.light }]}
     >
       {/* Scan Status Pill (Hanya muncul saat scanning) */}
       {(isScanning || isEnriching) && (
@@ -110,6 +111,9 @@ export const LibraryTabBar = ({
           style={[
             styles.scanOverlay,
             { backgroundColor: colors.background.secondary },
+            // Fase 3 Library: bayangan hangat token (dulu shadow
+            // hitam mentah per platform).
+            theme.shadows.sm,
           ]}
         >
           {/* Scan progress */}
@@ -277,7 +281,6 @@ const styles = StyleSheet.create({
   container: {
     paddingTop: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(0,0,0,0.05)",
   },
   scrollContent: {
     paddingHorizontal: 20,
@@ -295,24 +298,15 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 12,
+    borderRadius: BASE_RADIUS.md,
     flexDirection: "column",
     alignItems: "stretch",
     gap: 8,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 5,
-      },
-      android: { elevation: 2 },
-    }),
   },
   scanInfo: { flexDirection: "row", alignItems: "center", gap: 8 },
   scanText: {
     fontSize: 11,
-    fontWeight: "700",
+    fontFamily: FONT_FAMILY.bold,
     letterSpacing: 0.2,
     flexShrink: 1,
   },
@@ -334,20 +328,20 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 20,
+    borderRadius: BASE_RADIUS.xl,
     borderWidth: 1,
     gap: 8,
   },
   tabLabel: {
     fontSize: 13,
-    fontWeight: "700",
+    fontFamily: FONT_FAMILY.bold,
     letterSpacing: -0.2,
   },
   // U-P2-01: 42×42 lama, di bawah 44dp.
   refreshBtn: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: BASE_RADIUS.pill,
     justifyContent: "center",
     alignItems: "center",
     marginLeft: 4,
@@ -361,7 +355,7 @@ const styles = StyleSheet.create({
   },
   pctText: {
     fontSize: 11,
-    fontWeight: "800",
+    fontFamily: FONT_FAMILY.bold,
     marginLeft: "auto",
   },
 });

@@ -1,7 +1,9 @@
 // components/library/EmptyLibrary.tsx
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { PristineButton } from "@/shared/components/ui/PristineButton";
+import { FONT_FAMILY } from "@/shared/constants/themes/base";
 
 interface EmptyLibraryProps {
   colors: any;
@@ -76,21 +78,14 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({
           <Text style={[styles.subtitle, { color: colors.text.tertiary }]}>
             Pindai folder musik untuk menemukan lagu-lagu Anda
           </Text>
-          <TouchableOpacity
-            style={[
-              styles.scanBtn,
-              {
-                borderColor: colors.primary[500],
-                backgroundColor: `${colors.primary[500]}10`,
-              },
-            ]}
+          {/* Fase 3 Library: tombol bersama (sekunder) — dulu
+              TouchableOpacity + gaya lokal. */}
+          <PristineButton
+            label="SCAN PERANGKAT"
             onPress={onScan}
-            activeOpacity={0.8}
-          >
-            <Text style={{ color: colors.primary[500], fontWeight: "700" }}>
-              SCAN PERANGKAT
-            </Text>
-          </TouchableOpacity>
+            variant="secondary"
+            style={{ marginTop: 24 }}
+          />
         </>
       )}
     </View>
@@ -107,22 +102,17 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontWeight: "600",
+    fontFamily: FONT_FAMILY.displayBold,
+    lineHeight: 24,
     marginTop: 20,
     textAlign: "center",
   },
   subtitle: {
     fontSize: 14,
+    fontFamily: FONT_FAMILY.regular,
     marginTop: 8,
     textAlign: "center",
     lineHeight: 20,
-  },
-  scanBtn: {
-    borderWidth: 1.5,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-    marginTop: 24,
   },
   scanStatus: {
     marginTop: 24,
@@ -137,7 +127,7 @@ const styles = StyleSheet.create({
   },
   scanText: {
     fontSize: 13,
-    fontWeight: "600",
+    fontFamily: FONT_FAMILY.semiBold,
   },
   progressTrack: {
     height: 6,
@@ -151,7 +141,7 @@ const styles = StyleSheet.create({
   },
   pctText: {
     fontSize: 12,
-    fontWeight: "800",
+    fontFamily: FONT_FAMILY.bold,
     marginTop: 6,
   },
 }); 

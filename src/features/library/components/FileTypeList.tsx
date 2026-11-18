@@ -21,6 +21,7 @@ import {
 } from "lucide-react-native";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
 import type { MediaTrack } from "../store/libraryStore";
 import { formatTime } from "@/shared/utils/time";
 import { DURATION_FONT_FAMILY } from "@/shared/utils/typography";
@@ -314,16 +315,16 @@ const styles = StyleSheet.create({
   codecBadge: {
     width: 64,
     height: 48,
-    borderRadius: 12,
+    borderRadius: BASE_RADIUS.md,
     borderWidth: 1,
     justifyContent: "center",
     alignItems: "center",
     gap: 2,
   },
-  codecLabel: { fontSize: 14, fontWeight: "900", letterSpacing: 0.5 },
+  codecLabel: { fontSize: 14, fontFamily: FONT_FAMILY.bold, letterSpacing: 0.5 },
   formatInfo: { flex: 1, marginLeft: 16 },
-  formatTitle: { fontSize: 15, fontWeight: "600" },
-  formatMeta: { fontSize: 11, marginTop: 4, fontWeight: "500" },
+  formatTitle: { fontSize: 15, fontFamily: FONT_FAMILY.semiBold },
+  formatMeta: { fontSize: 11, marginTop: 4, fontFamily: FONT_FAMILY.medium },
 
   header: {
     paddingBottom: 24,
@@ -336,7 +337,7 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingTop: Platform.OS === "ios" ? 50 : 16,
   },
-  backText: { fontSize: 16, fontWeight: "600", marginLeft: 4 },
+  backText: { fontSize: 16, fontFamily: FONT_FAMILY.semiBold, marginLeft: 4 },
   hero: {
     flexDirection: "row",
     alignItems: "center",
@@ -352,8 +353,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   heroContent: { flex: 1 },
-  heroTitle: { fontSize: 24, fontWeight: "800" },
-  heroSub: { fontSize: 12, marginTop: 6, lineHeight: 18 },
+  heroTitle: { fontSize: 24, fontFamily: FONT_FAMILY.displayBold, lineHeight: 32 },
+  heroSub: { fontSize: 12, fontFamily: FONT_FAMILY.regular, marginTop: 6, lineHeight: 18 },
   playAllBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -361,12 +362,12 @@ const styles = StyleSheet.create({
     marginHorizontal: 24,
     marginTop: 24,
     height: 52,
-    borderRadius: 16,
+    borderRadius: BASE_RADIUS.lg,
     gap: 8,
   },
   // U-P2-04: tanpa `color` — warna teks selalu di-overide inline dengan
   // onPrimary (pickReadable atas primary[500]) di pemakaian style ini.
-  playAllText: { fontWeight: "700", fontSize: 15 },
+  playAllText: { fontFamily: FONT_FAMILY.bold, fontSize: 15 },
 
   songRow: {
     flexDirection: "row",
@@ -377,8 +378,8 @@ const styles = StyleSheet.create({
   songLeading: { width: 32 },
   songMain: { flex: 1, paddingRight: 10 },
   songTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  songTitle: { fontSize: 15, fontWeight: "600", flexShrink: 1 },
-  songSub: { fontSize: 11, marginTop: 2 },
+  songTitle: { fontSize: 15, fontFamily: FONT_FAMILY.semiBold, flexShrink: 1 },
+  songSub: { fontSize: 11, fontFamily: FONT_FAMILY.regular, marginTop: 2 },
   songTrailing: { alignItems: "flex-end", gap: 4 },
   duration: {
     fontSize: 10,

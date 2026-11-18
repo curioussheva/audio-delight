@@ -1,7 +1,9 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { useTheme } from "@/shared/context/ThemeContext";
+import { accentOn } from "@/shared/utils/contrast";
 import { isLosslessCodec, isHiRes } from "@/shared/utils/audioQuality";
+import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
 
 export interface QualityBadgeProps {
   sampleRate?: number;
@@ -29,8 +31,19 @@ export default function QualityBadge({
 
   if (!isLossless && !isActuallyHiRes) return null;
 
-  // Warna dinamis berdasarkan kualitas
-  const accentColor = isActuallyHiRes ? "#D4AF37" : theme.colors.primary[500];
+  // Warna dinamis berdasarkan kualitas. HI-RES memakai emas — tapi
+  // emas terang #D4AF37 hanya terbaca di tema gelap (1,93:1 di
+  // Porcelain, 2,00:1 di Hearth, diukur 2026-11-18). accentOn memilih
+  // emas gelap #7A5C14 di tema terang (5,72/5,94:1) dan mempertahankan
+  // emas terang di tema gelap (8,62/8,68:1) — identitas emas tetap,
+  // teks lolos AA di semua tema.
+  const accentColor = isActuallyHiRes
+    ? accentOn(
+        ["#D4AF37", "#7A5C14"],
+        theme.colors.background.primary,
+        [theme.colors.text.primary],
+      )
+    : theme.colors.primary[500];
 
   return (
     <View
@@ -61,7 +74,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: BASE_RADIUS.sm,
     gap: 4,
     backgroundColor: "rgba(255,255,255,0.03)",
   },
@@ -74,11 +87,11 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 9,
-    fontWeight: "900",
+    fontFamily: FONT_FAMILY.bold,
     letterSpacing: 0.5,
   },
   infoText: {
     fontSize: 8,
-    fontWeight: "600",
+    fontFamily: FONT_FAMILY.semiBold,
   },
 });

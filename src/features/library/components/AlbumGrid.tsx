@@ -23,6 +23,7 @@ import {
 
 import { useTheme } from "@/shared/context/ThemeContext";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
 import type { MediaTrack } from "../store/libraryStore";
 import { formatTime } from "@/shared/utils/time";
 import { DURATION_FONT_FAMILY } from "@/shared/utils/typography";
@@ -123,7 +124,11 @@ const AlbumTile = memo(
         <View
           style={[
             styles.artworkContainer,
-            { backgroundColor: colors.background.secondary },
+            {
+              backgroundColor: colors.background.secondary,
+              // Fase 3 Library: hairline dari token (dulu putih 0.05).
+              borderColor: colors.border.light,
+            },
           ]}
         >
           {showImage ? (
@@ -517,12 +522,11 @@ const styles = StyleSheet.create({
   artworkContainer: {
     width: TILE_SIZE,
     height: TILE_SIZE,
-    borderRadius: 12,
+    borderRadius: BASE_RADIUS.md,
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
   },
   countBadge: {
     position: "absolute",
@@ -530,12 +534,12 @@ const styles = StyleSheet.create({
     right: 8,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: BASE_RADIUS.sm,
   },
-  countText: { fontSize: 10, fontWeight: "800" },
+  countText: { fontSize: 10, fontFamily: FONT_FAMILY.bold },
   tileMeta: { marginTop: 8, paddingHorizontal: 2 },
-  tileName: { fontSize: 14, fontWeight: "700" },
-  tileArtist: { fontSize: 12, marginTop: 2, opacity: 0.7 },
+  tileName: { fontSize: 14, fontFamily: FONT_FAMILY.bold },
+  tileArtist: { fontSize: 12, fontFamily: FONT_FAMILY.regular, marginTop: 2, opacity: 0.7 },
 
   // Empty state
   emptyContainer: {
@@ -545,8 +549,8 @@ const styles = StyleSheet.create({
     paddingTop: 80,
     gap: 8,
   },
-  emptyText: { fontSize: 16, fontWeight: "600" },
-  emptySubText: { fontSize: 12, opacity: 0.6 },
+  emptyText: { fontSize: 16, fontFamily: FONT_FAMILY.semiBold },
+  emptySubText: { fontSize: 12, fontFamily: FONT_FAMILY.regular, opacity: 0.6 },
 
   // Detail container
   detailContainer: { flex: 1 },
@@ -557,7 +561,7 @@ const styles = StyleSheet.create({
     height: 44,
     justifyContent: "flex-start",
   },
-  backLabel: { fontSize: 16, fontWeight: "600", marginLeft: 4 },
+  backLabel: { fontSize: 16, fontFamily: FONT_FAMILY.semiBold, marginLeft: 4 },
 
   // Hero header
   headerHero: {
@@ -568,21 +572,24 @@ const styles = StyleSheet.create({
   largeArtwork: {
     width: 180,
     height: 180,
-    borderRadius: 20,
+    borderRadius: BASE_RADIUS.xl,
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden",
     elevation: 10,
+    // Fase 3 Library: bayangan memakai warna hangat Fase 1.
+    shadowColor: "#1D130C",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.3,
     shadowRadius: 15,
     marginBottom: 20,
   },
   headerTextContent: { alignItems: "center", marginBottom: 20 },
-  headerTitle: { fontSize: 22, fontWeight: "800", textAlign: "center" },
-  headerArtist: { fontSize: 16, fontWeight: "600", marginTop: 4 },
+  headerTitle: { fontSize: 22, fontFamily: FONT_FAMILY.displayBold, lineHeight: 28, textAlign: "center" },
+  headerArtist: { fontSize: 16, fontFamily: FONT_FAMILY.semiBold, marginTop: 4 },
   headerMeta: {
     fontSize: 12,
+    fontFamily: FONT_FAMILY.regular,
     marginTop: 8,
     letterSpacing: 1,
     textTransform: "uppercase",
@@ -593,7 +600,7 @@ const styles = StyleSheet.create({
   mainBtn: {
     flex: 1,
     height: 48,
-    borderRadius: 12,
+    borderRadius: BASE_RADIUS.md,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
@@ -601,11 +608,11 @@ const styles = StyleSheet.create({
   },
   // U-P2-04: tanpa `color` — warna teks selalu di-overide inline dengan
   // onPrimary (pickReadable atas primary[500]) di pemakaian style ini.
-  mainBtnText: { fontWeight: "700", fontSize: 16 },
+  mainBtnText: { fontFamily: FONT_FAMILY.bold, fontSize: 16 },
   secondaryBtn: {
     width: 48,
     height: 48,
-    borderRadius: 12,
+    borderRadius: BASE_RADIUS.md,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -618,11 +625,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   songLeading: { width: 30, alignItems: "flex-start" },
-  trackNum: { fontSize: 12, fontWeight: "600" },
+  trackNum: { fontSize: 12, fontFamily: FONT_FAMILY.semiBold },
   songMain: { flex: 1, paddingRight: 10 },
   songTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  songTitle: { fontSize: 15, fontWeight: "600", flexShrink: 1 },
-  songSub: { fontSize: 11, marginTop: 2, fontWeight: "500" },
+  songTitle: { fontSize: 15, fontFamily: FONT_FAMILY.semiBold, flexShrink: 1 },
+  songSub: { fontSize: 11, marginTop: 2, fontFamily: FONT_FAMILY.medium },
   songTrailing: { alignItems: "flex-end", gap: 4 },
   favBtn: { padding: 4 },
   duration: {

@@ -21,6 +21,7 @@ import {
 
 import { useTheme } from "@/shared/context/ThemeContext";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
 import type { MediaTrack } from "../store/libraryStore";
 import { formatTime } from "@/shared/utils/time";
 import { DURATION_FONT_FAMILY } from "@/shared/utils/typography";
@@ -380,7 +381,7 @@ const styles = StyleSheet.create({
   avatarContainer: {
     width: 50,
     height: 50,
-    borderRadius: 25,
+    borderRadius: BASE_RADIUS.pill,
     overflow: "hidden",
     justifyContent: "center",
     alignItems: "center",
@@ -393,8 +394,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   artistInfo: { flex: 1, marginLeft: 16 },
-  artistName: { fontSize: 16, fontWeight: "700" },
-  artistMeta: { fontSize: 12, marginTop: 2 },
+  artistName: { fontSize: 16, fontFamily: FONT_FAMILY.bold },
+  artistMeta: { fontSize: 12, fontFamily: FONT_FAMILY.regular, marginTop: 2 },
   separator: { height: 1, marginLeft: 66 },
   detailContainer: { flex: 1 },
   navBar: { paddingHorizontal: 8, zIndex: 10 },
@@ -405,16 +406,17 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
     paddingHorizontal: 8,
   },
-  backLabel: { fontSize: 16, fontWeight: "600", marginLeft: 4 },
+  backLabel: { fontSize: 16, fontFamily: FONT_FAMILY.semiBold, marginLeft: 4 },
   headerHero: { alignItems: "center", padding: 20 },
   avatarLargeContainer: {
     width: 160,
     height: 160,
-    borderRadius: 80,
+    borderRadius: BASE_RADIUS.pill,
     overflow: "hidden",
     marginBottom: 20,
     elevation: 10,
-    shadowColor: "#000",
+    // Fase 3 Library: bayangan memakai warna hangat Fase 1.
+    shadowColor: "#1D130C",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 5,
@@ -426,12 +428,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  headerTitle: { fontSize: 26, fontWeight: "800", textAlign: "center" },
-  headerMeta: { fontSize: 13, marginTop: 6, letterSpacing: 1 },
+  headerTitle: { fontSize: 26, fontFamily: FONT_FAMILY.displayBold, lineHeight: 32, textAlign: "center" },
+  headerMeta: { fontSize: 13, fontFamily: FONT_FAMILY.regular, marginTop: 6, letterSpacing: 1 },
   actionRow: { marginTop: 25, width: "100%", paddingHorizontal: 20 },
   playBtn: {
     height: 52,
-    borderRadius: 26,
+    borderRadius: BASE_RADIUS.pill,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
@@ -439,7 +441,7 @@ const styles = StyleSheet.create({
   },
   // U-P2-04: tanpa `color` — warna teks selalu di-overide inline dengan
   // onPrimary (pickReadable atas primary[500]) di pemakaian style ini.
-  playBtnText: { fontWeight: "800", letterSpacing: 1 },
+  playBtnText: { fontFamily: FONT_FAMILY.bold, letterSpacing: 1 },
 
   songRow: {
     flexDirection: "row",
@@ -450,8 +452,8 @@ const styles = StyleSheet.create({
   songLeading: { width: 30 },
   songMain: { flex: 1, marginLeft: 10, marginRight: 10 },
   songTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  songTitle: { fontSize: 15, fontWeight: "600", flex: 1 },
-  songAlbum: { fontSize: 12, marginTop: 4 },
+  songTitle: { fontSize: 15, fontFamily: FONT_FAMILY.semiBold, flex: 1 },
+  songAlbum: { fontSize: 12, fontFamily: FONT_FAMILY.regular, marginTop: 4 },
   songTrailing: { alignItems: "flex-end" },
   favBtn: { padding: 5 },
   duration: {
