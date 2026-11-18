@@ -147,6 +147,21 @@ const EditField = ({
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
+// N30: parse angka ketat untuk form edit — dulu `parseInt(editForm.year)
+// || song.year` tanpa radix/validasi: "2024abc" diam-diam jadi 2024,
+// "0" kembali ke nilai lama, dan field yang sengaja dikosongkan user
+// tidak bisa dikosongkan (""/NaN/0 falsy). Sekarang: kosong = bersihkan
+// field (null), angka bulat valid = dipakai apa adanya (termasuk 0),
+// sisanya = tidak valid.
+const parseOptionalInt = (
+  raw: string,
+): { ok: true; value: number | null } | { ok: false } => {
+  const trimmed = raw.trim();
+  if (trimmed === "") return { ok: true, value: null };
+  if (/^\d+$/.test(trimmed)) return { ok: true, value: parseInt(trimmed, 10) };
+  return { ok: false };
+};
+
 // FASE 3 additional: geometri kartu seksi dipertahankan (margin luar 20/16)
 // — SectionCard sendiri yang memberi permukaan elevated + radius md +
 // bayangan md dari token (dulu kartu lokal: permukaan secondary, radius 28,
@@ -403,24 +418,64 @@ export default function SongDetailScreen() {
     setIsSaving(true);
 
     try {
+      // N30: angka diparse ketat dulu — nilai tak valid ("2024abc")
+      // membatalkan simpan dengan toast (dulu diam-diam jadi 2024),
+      // dan field yang dikosongkan benar-benar dibersihkan (dulu
+      // `|| song.year` mengembalikannya ke nilai lama).
+      const year = parseOptionalInt(editForm.year);
+      const trackNumber = parseOptionalInt(editForm.trackNumber);
+      const discNumber = parseOptionalInt(editForm.discNumber);
+      if (!year.ok || !trackNumber.ok || !discNumber.ok) {
+        const bad = [
+          !year.ok ? "Tahun" : null,
+          !trackNumber.ok ? "Nomor trek" : null,
+          !discNumber.ok ? "Nomor disc" : null,
+        ]
+          .filter(Boolean)
+          .join(", ");
+        showToast(`${bad} harus berupa angka. Periksa lagi.`, "error");
+        return;
+      }
+
+      // Dua bentuk payload: DB memakai null untuk field yang dibersihkan
+      // (updateMetadata menulis NULL — dbRowToSong memetakannya kembali
+      // ke undefined saat dibaca); store memakai undefined untuk field
+      // yang sama (spread { ...track, year: undefined } menimpa ke
+      // undefined, konsisten dengan isi DB sesudah reload).
+      const numericDb = {
+        year: year.value,
+        trackNumber: trackNumber.value,
+        discNumber: discNumber.value,
+      };
+      const numericStore = {
+        year: year.value ?? undefined,
+        trackNumber: trackNumber.value ?? undefined,
+        discNumber: discNumber.value ?? undefined,
+      };
+
       const updatedData: Partial<Song> = {
         title: editForm.title.trim() || song.title,
         artist: editForm.artist.trim() || song.artist,
         album: editForm.album.trim() || song.album,
         genre: editForm.genre.trim() || song.genre,
-        year: parseInt(editForm.year) || song.year,
-        trackNumber: parseInt(editForm.trackNumber) || song.trackNumber,
-        discNumber: parseInt(editForm.discNumber) || song.discNumber,
+        ...numericStore,
         composer: (editForm.composer as any) || (song as any).composer,
         publisher: editForm.publisher.trim() || song.publisher,
         label: editForm.label.trim() || song.label,
       };
 
-      await LibraryScanner.updateMetadata(song.id, updatedData, {
-        // I3 (G2): tandai field yang diedit manual — rescan tidak boleh
-        // menimpanya.
-        markEdited: true,
-      });
+      await LibraryScanner.updateMetadata(
+        song.id,
+        // Cast: Partial<Song> tidak bisa mengekspresikan null, tapi
+        // updateMetadata memang menulis null sebagai SQL NULL (hanya
+        // undefined yang dilewat).
+        { ...updatedData, ...numericDb } as Partial<Song>,
+        {
+          // I3 (G2): tandai field yang diedit manual — rescan tidak boleh
+          // menimpanya.
+          markEdited: true,
+        },
+      );
       updateTrackInStore(song.id, updatedData);
 
       setIsEditMode(false);
