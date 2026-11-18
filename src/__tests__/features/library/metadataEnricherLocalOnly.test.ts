@@ -39,6 +39,15 @@ jest.mock("@/features/library/services/OnlineMetadataService", () => ({
   __esModule: true,
   default: { getArtistEnrichment: jest.fn() },
 }));
+// L1: worker membaca .lrc berdampingan lewat lyricsSource — modul expo
+// di-mock (default: tidak ada file), test sidecar menimpa per-test.
+jest.mock("expo-file-system/legacy", () => ({
+  getInfoAsync: jest.fn(),
+  readAsStringAsync: jest.fn(),
+}));
+jest.mock("expo-media-library", () => ({
+  getAssetInfoAsync: jest.fn(),
+}));
 
 import { MetadataEnricher } from "@/features/library/services/MetadataEnricher";
 import { ScanQueue } from "@/features/library/services/ScanQueue";
@@ -46,6 +55,12 @@ import MetadataExtractor from "@/features/library/api/metadata";
 import { LibraryScanner } from "@/features/library/api/scanner";
 import { useLibraryStore } from "@/features/library/store/libraryStore";
 import OnlineMetadataService from "@/features/library/services/OnlineMetadataService";
+import * as FileSystem from "expo-file-system/legacy";
+import * as MediaLibrary from "expo-media-library";
+
+const getInfoMock = FileSystem.getInfoAsync as jest.Mock;
+const readMock = FileSystem.readAsStringAsync as jest.Mock;
+const getAssetMock = MediaLibrary.getAssetInfoAsync as jest.Mock;
 
 const shiftMock = ScanQueue.shift as jest.Mock;
 const extractMock = (MetadataExtractor as any).extract as jest.Mock;
@@ -77,12 +92,32 @@ describe("I2-revisi (a) — enrichment lokal saja", () => {
         retryCount: 0,
       })
       .mockResolvedValue(null);
+    // L1 default: tidak ada file .lrc berdampingan.
+    getAssetMock.mockResolvedValue({ localUri: null, uri: null });
+    getInfoMock.mockResolvedValue({ exists: false });
   });
 
   it("worker memproses lagu berartis nyata TANPA memanggil online", async () => {
     await MetadataEnricher.startBackgroundWorker();
 
     expect(updateMetadataMock).toHaveBeenCalled();
+    expect(getArtistEnrichmentMock).not.toHaveBeenCalled();
+  });
+
+  it("L1: .lrc berdampingan masuk ke lyrics_synced (tanpa online)", async () => {
+    getAssetMock.mockResolvedValueOnce({
+      localUri: "file:///storage/emulated/0/Music/song.mp3",
+      uri: "content://media/external/audio/media/1",
+    });
+    getInfoMock.mockResolvedValueOnce({ exists: true, isDirectory: false });
+    readMock.mockResolvedValueOnce("[00:01.00]la");
+
+    await MetadataEnricher.startBackgroundWorker();
+
+    expect(updateMetadataMock).toHaveBeenCalledWith(
+      "1",
+      expect.objectContaining({ lyricsSynced: "[00:01.00]la" }),
+    );
     expect(getArtistEnrichmentMock).not.toHaveBeenCalled();
   });
 });

@@ -58,6 +58,12 @@ export interface Song {
   tempo?: number;
   artistImageUrl?: string;
   artistBio?: string;
+  // L1: lirik lokal — `lyrics` = teks polos (satu baris per baris),
+  // `lyricsSynced` = teks LRC (`[mm:ss.xx]`, dari file .lrc berdampingan).
+  // Kolom DB `lyrics` / `lyrics_synced` sudah ada; diisi enrichment
+  // (.lrc) / lazy-load saat diputar — TIDAK PERNAH dari online.
+  lyrics?: string;
+  lyricsSynced?: string;
   // I3 (G2): field metadata yang pernah diedit user di [id].tsx
   // (edit manual + terapkan MusicBrainz) — disimpan sebagai JSON array
   // di kolom DB `edited_fields`; rescan tidak boleh menimpa field ini.

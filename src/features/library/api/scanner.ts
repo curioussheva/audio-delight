@@ -578,6 +578,11 @@ export class LibraryScanner {
         "discNumber",
         "composer",
         "lyricist",
+        // L1: lirik lokal — `lyrics` (polos) + `lyrics_synced` (teks LRC).
+        // Kolom DB sudah ada; diisi enrichment (.lrc) / lazy-load saat
+        // diputar. Pola sama seperti G1 (dulu tidak ada di daftar ini).
+        "lyrics",
+        "lyricsSynced",
         // I1 (G1): label & publisher ada di form edit [id].tsx dan dikirim
         // handleSaveEdit/handleApplyMetadata, tapi dulu dibuang diam-diam
         // karena tidak ada di daftar ini. Kolom DB-nya sudah ada
@@ -598,6 +603,8 @@ export class LibraryScanner {
         artistImageUrl: "artist_image_url",
         artistBio: "artist_bio",
         lastEnrichedAt: "last_enriched_at",
+        // L1: nama kolom DB berbeda (snake_case).
+        lyricsSynced: "lyrics_synced",
       };
 
       for (const field of allowedFields) {
@@ -864,6 +871,9 @@ export class LibraryScanner {
       lastEnrichedAt: Number(row.last_enriched_at) || undefined,
       // I3 (G2): penanda field yang pernah diedit user.
       editedFields: parseEditedFields(row.edited_fields),
+      // L1: lirik lokal (kosong = belum ada sumbernya).
+      lyrics: row.lyrics || undefined,
+      lyricsSynced: row.lyrics_synced || undefined,
 
       // Timestamp
       dateAdded: Number(row.dateAdded) || Date.now(),

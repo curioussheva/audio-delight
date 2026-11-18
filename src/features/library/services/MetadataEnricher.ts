@@ -12,6 +12,7 @@ import {
 import { LibraryScanner } from "../api/scanner";
 import { useLibraryStore } from "../store/libraryStore";
 import { analyzeBitDepth } from "../../audio/api/BitDepthVerifier";
+import { readSidecarLrc } from "./lyricsSource";
 import type { QueueItem, EnrichmentLevel } from "../types/scan";
 import { Song } from "@/shared/types/audio";
 import { isHiRes } from "@/shared/utils/audioQuality";
@@ -159,6 +160,16 @@ export class MetadataEnricher {
               `[MetadataEnricher] ⚠️ Fake Hi-Res detected: ${metadata.title} (Actual: ${analysis.realDepth}-bit)`,
             );
           }
+        }
+
+        // L1: lirik .lrc berdampingan (synced) — lokal saja, opsional.
+        // Dilewati bila store sudah punya lirik synced untuk lagu ini.
+        // Gagal baca (tidak ada file / scoped storage menolak) = lanjut
+        // tanpa lirik, bukan error. Embedded USLT belum tersedia (lihat
+        // lyricsSource.ts) — kolom `lyrics` tetap kosong dari jalur ini.
+        if (!existingTrack?.lyricsSynced) {
+          const lrcText = await readSidecarLrc(uri);
+          if (lrcText) metadata.lyricsSynced = lrcText;
         }
 
         // === PERSISTENCE ===

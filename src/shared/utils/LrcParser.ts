@@ -48,3 +48,23 @@ export const parseLRC = (lrcText: string): LirikLine[] => {
 
   return result.sort((a, b) => a.time - b.time);
 };
+
+/**
+ * Waktu untuk baris lirik TANPA timestamp (lirik polos, mis. kolom DB
+ * `lyrics` dari USLT). `findActiveLyricIndex` tidak pernah memilihnya
+ * (positionMs selalu < nilai ini), jadi daftar tampil statis tanpa
+ * highlight / auto-scroll — dan nilainya tetap aman bila ikut
+ * ter-persist (angka hingga, bukan Infinity yang jadi null di JSON).
+ */
+export const UNSYNCED_LYRIC_TIME = Number.MAX_SAFE_INTEGER;
+
+/**
+ * Lirik polos (tanpa `[mm:ss.xx]`) → satu baris per baris teks, semuanya
+ * UNSYNCED_LYRIC_TIME. Baris kosong dibuang.
+ */
+export const parsePlainLyrics = (text: string): LirikLine[] =>
+  text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => ({ time: UNSYNCED_LYRIC_TIME, text: line }));

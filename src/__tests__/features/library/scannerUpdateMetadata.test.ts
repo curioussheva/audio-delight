@@ -77,3 +77,43 @@ describe("I1 — updateMetadata menyimpan label & publisher", () => {
     expect(song.publisher).toBe("Sony Music");
   });
 });
+
+describe("L1 — updateMetadata menyimpan lyrics & lyrics_synced", () => {
+  beforeEach(() => {
+    executeMock.mockClear();
+    executeMock.mockImplementation(() => ({ rows: { _array: [] } }));
+  });
+
+  it("lyrics + lyricsSynced ikut tertulis di UPDATE (lyricsSynced → lyrics_synced)", async () => {
+    await LibraryScanner.updateMetadata("1", {
+      lyrics: "baris satu\nbaris dua",
+      lyricsSynced: "[00:01.00]la",
+    });
+
+    const updateCall = executeMock.mock.calls.find(([sql]: [string]) =>
+      sql.startsWith("UPDATE songs SET"),
+    );
+    expect(updateCall).toBeDefined();
+    const [sql, params] = updateCall as [string, any[]];
+    expect(sql).toContain("lyrics = ?");
+    expect(sql).toContain("lyrics_synced = ?");
+    expect(params).toContain("baris satu\nbaris dua");
+    expect(params).toContain("[00:01.00]la");
+    expect(params[params.length - 1]).toBe("1");
+  });
+
+  it("round-trip baca: dbRowToSong memetakan lyrics & lyricsSynced", () => {
+    const song = LibraryScanner.dbRowToSong({
+      id: "1",
+      uri: "content://media/external/audio/media/1",
+      title: "t",
+      artist: "a",
+      album: "al",
+      duration: 1,
+      lyrics: "polos",
+      lyrics_synced: "[00:01.00]sync",
+    });
+    expect(song.lyrics).toBe("polos");
+    expect(song.lyricsSynced).toBe("[00:01.00]sync");
+  });
+});

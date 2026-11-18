@@ -5,6 +5,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { audioEngine } from "@/features/player/api/engine";
 import { Song } from "@/shared/types/audio";
 import { LibraryScanner } from "@/features/library/api/scanner";
+import {
+  songLyricsToLines,
+  loadLyricsForSong,
+} from "@/features/library/services/lyricsSource";
 import { SongQueries, db } from "@/shared/lib/sqlite";
 import NativePlaybackService from "@/specs/NativePlaybackService";
 import NativeDSPModule from "@/features/equalizer/api/nativeInterface";
@@ -711,7 +715,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           isPlaying: true,
           position: resumePosition,
           playError: null,
+          // L1: lirik dari DB bila ada (synced diutamakan, lalu polos);
+          // kosong → FullLyricsView menampilkan "Instrumental or No
+          // Lyrics Found" sampai lazy-load di bawah menemukan .lrc.
+          lyrics: songLyricsToLines(playableSong),
         });
+
+        // L1: bila DB belum punya lirik, coba .lrc berdampingan (lazy
+        // backfill untuk library lama) — jangan blokir playback; hanya
+        // terapkan bila lagu ini masih yang sedang diputar.
+        safeFireAndForget(async () => {
+          const loaded = await loadLyricsForSong(playableSong);
+          if (loaded && get().currentSong?.id === playableSong.id) {
+            get().setLyrics(loaded.lines);
+          }
+        }, "loadLyrics");
 
         // 🔥 Seek ke restored position (setelah decoder siap)
         if (resumePosition > 0) {

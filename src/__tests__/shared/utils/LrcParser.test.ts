@@ -1,4 +1,9 @@
-import { parseLRC, findActiveLyricIndex } from "../../../shared/utils/LrcParser";
+import {
+  parseLRC,
+  parsePlainLyrics,
+  UNSYNCED_LYRIC_TIME,
+  findActiveLyricIndex,
+} from "../../../shared/utils/LrcParser";
 
 describe("parseLRC", () => {
   it("parse satu timestamp per baris", () => {
@@ -63,6 +68,34 @@ describe("parseLRC", () => {
     const b = parseLRC("[00:03.00]c\n[00:04.00]d");
     expect(a.map((l) => l.time)).toEqual([1000, 2000]);
     expect(b.map((l) => l.time)).toEqual([3000, 4000]);
+  });
+});
+
+describe("parsePlainLyrics (L1)", () => {
+  it("satu baris per baris teks, semuanya UNSYNCED_LYRIC_TIME", () => {
+    const out = parsePlainLyrics("baris satu\nbaris dua");
+    expect(out).toEqual([
+      { time: UNSYNCED_LYRIC_TIME, text: "baris satu" },
+      { time: UNSYNCED_LYRIC_TIME, text: "baris dua" },
+    ]);
+  });
+
+  it("baris kosong + spasi dibuang, CRLF ditangani", () => {
+    const out = parsePlainLyrics("a\r\n\r\n  \r\nb\r\n");
+    expect(out.map((l) => l.text)).toEqual(["a", "b"]);
+  });
+
+  it("teks kosong menghasilkan array kosong", () => {
+    expect(parsePlainLyrics("")).toEqual([]);
+    expect(parsePlainLyrics("  \n\n ")).toEqual([]);
+  });
+
+  it("UNSYNCED_LYRIC_TIME tidak pernah jadi baris aktif", () => {
+    // findActiveLyricIndex: positionMs selalu < MAX_SAFE_INTEGER → -1,
+    // jadi FullLyricsView menampilkan daftar statis tanpa highlight.
+    const lines = parsePlainLyrics("a\nb");
+    expect(findActiveLyricIndex(lines, 0)).toBe(-1);
+    expect(findActiveLyricIndex(lines, 9999)).toBe(-1);
   });
 });
 

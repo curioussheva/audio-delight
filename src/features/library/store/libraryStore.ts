@@ -43,6 +43,9 @@ export interface MediaTrack {
   last_enriched_at?: number;
   artist_bio?: string;
   artist_image_url?: string;
+  // L1: lirik lokal (lihat Song).
+  lyrics?: string;
+  lyricsSynced?: string;
 }
 
 /**
