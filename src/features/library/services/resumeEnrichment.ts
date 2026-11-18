@@ -43,8 +43,11 @@ export async function handleResumeDiffResult(
       `[useScanManager] Changes detected! New: ${diffResult.newCount}, Deleted: ${diffResult.deletedCount}`,
     );
 
-    store.finishAutoScan?.();
-
+    // N15: JANGAN panggil finishAutoScan di sini — resume quickDiff
+    // BUKAN auto-scan: tidak ada auto-scan yang berjalan untuk
+    // dimatikan, dan lastScanAt ("terakhir dipindai") jadi menyesatkan.
+    // finishAutoScan hanya milik jalur auto-scan yang memulainya
+    // (initial scan: useScanManager finally; autoScan: pemanggilnya).
     if (diffResult.newSongs?.length > 0) {
       await MetadataEnricher.queueSongs(
         diffResult.newSongs.map((s) => ({ id: s.id, uri: s.uri })),

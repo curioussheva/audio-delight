@@ -69,7 +69,7 @@ describe("handleResumeDiffResult — S2", () => {
       diff({ newCount: 2, totalScanned: 2, newSongs }),
     );
 
-    expect(finishAutoScan).toHaveBeenCalledTimes(1);
+    expect(finishAutoScan).not.toHaveBeenCalled();
     expect(queueSongs).toHaveBeenCalledWith([
       { id: "1", uri: "content://a" },
       { id: "2", uri: "content://b" },
@@ -122,12 +122,12 @@ describe("handleResumeDiffResult — S2", () => {
     expect(startBackgroundWorker).toHaveBeenCalledTimes(1);
   });
 
-  it("hanya hapus -> finishAutoScan jalan, queueSongs tidak, worker jalan", async () => {
+  it("hanya hapus -> finishAutoScan TIDAK jalan (N15: resume bukan auto-scan), queueSongs tidak, worker jalan", async () => {
     await handleResumeDiffResult(
       diff({ deletedCount: 1, totalScanned: 2, deletedUris: ["x"] }),
     );
 
-    expect(finishAutoScan).toHaveBeenCalledTimes(1);
+    expect(finishAutoScan).not.toHaveBeenCalled();
     expect(queueSongs).not.toHaveBeenCalled();
     expect(startBackgroundWorker).toHaveBeenCalledTimes(1);
   });
