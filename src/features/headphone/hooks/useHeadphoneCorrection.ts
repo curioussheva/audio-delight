@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { useAudioOutput } from "@/features/hardware/hooks/useAudioOutput";
 import { useHeadphoneStore, validatePreset } from "../store/headphoneStore";
+import { shouldAutoDisableCorrection } from "../autoDisableCorrection";
 import type { HeadphoneProfile } from "../types";
 
 export interface UseHeadphoneCorrectionReturn {
@@ -81,6 +82,30 @@ export const useHeadphoneCorrection =
       if (!deviceId) return;
       void syncForDevice(deviceId);
     }, [deviceId, syncForDevice]);
+
+    // Auto-OFF koreksi saat perangkat kabel dicabut (keputusan
+    // 2026-11-18): rute berpindah dari kabel (jack/DAC) ke bukan kabel
+    // — koreksi per-device itu tidak berlaku lagi. `deactivate` hanya
+    // mematikan sakelar (profil + ikatan tetap tersimpan), dan tidak
+    // ada auto-ON saat dicolok lagi (user menyalakan manual; pindah ke
+    // perangkat kabel lain yang terikat tetap mengaktifkan profilnya
+    // lewat syncForDevice di atas). Latensi sampai ~3 detik (poll).
+    // Hanya jalan selama hook terpasang (layar EQ); cabut yang terjadi
+    // saat layar lain terbuka baru ketahuan saat layar EQ dibuka lagi —
+    // itu tindak lanjut (pasang hook di root / buat daftar devices
+    // hidup), bukan ronde ini.
+    const prevDeviceTypeRef = useRef<string | null>(null);
+    useEffect(() => {
+      const prevType = prevDeviceTypeRef.current;
+      const nextType = currentDevice ? currentDevice.type : null;
+      prevDeviceTypeRef.current = nextType;
+      if (
+        shouldAutoDisableCorrection(prevType, nextType, enabled) &&
+        activeProfileId !== null
+      ) {
+        void deactivateStore();
+      }
+    }, [currentDevice, enabled, activeProfileId, deactivateStore]);
 
     const activeProfile = useMemo(
       () => profiles.find((p) => p.id === activeProfileId) ?? null,
