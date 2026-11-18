@@ -470,8 +470,16 @@ export default function LibraryScreen() {
     if (!selectedPlaylist) return;
     // FASE 4: hapus tetap lewat ConfirmDialog (destruktif tidak boleh
     // toast saja) — toast ini hanya umpan balik SESUDAH konfirmasi.
+    // N7: deletePlaylist kini melempar bila tulis DB gagal — jangan tutup
+    // detail + jangan toast "dihapus" saat playlist sebenarnya masih ada.
     const name = selectedPlaylist.name;
-    await deletePlaylist(selectedPlaylist.id);
+    try {
+      await deletePlaylist(selectedPlaylist.id);
+    } catch (error) {
+      console.error("[Library] Gagal menghapus playlist:", error);
+      showToast("Gagal menghapus playlist. Coba lagi.", "error");
+      return;
+    }
     setSelectedPlaylist(null);
     setShowDeleteDialog(false);
     showToast(`Playlist "${name}" dihapus.`, "info");

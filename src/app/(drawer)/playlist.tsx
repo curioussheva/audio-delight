@@ -97,8 +97,16 @@ export default function PlaylistsScreen() {
     if (!selectedPlaylist) return;
     // FASE 4: hapus tetap lewat ConfirmDialog — toast ini hanya umpan
     // balik SESUDAH konfirmasi.
+    // N7: deletePlaylist kini melempar bila tulis DB gagal — jangan tutup
+    // detail + jangan toast "dihapus" saat playlist sebenarnya masih ada.
     const name = selectedPlaylist.name;
-    await deletePlaylist(selectedPlaylist.id);
+    try {
+      await deletePlaylist(selectedPlaylist.id);
+    } catch (error) {
+      console.error("[Playlist] Gagal menghapus playlist:", error);
+      showToast("Gagal menghapus playlist. Coba lagi.", "error");
+      return;
+    }
     setSelectedPlaylist(null);
     setShowDeleteDialog(false);
     showToast(`Playlist "${name}" dihapus.`, "info");
@@ -112,7 +120,14 @@ export default function PlaylistsScreen() {
   const handleRemoveSong = useCallback(
     async (song: Song) => {
       if (!selectedPlaylist || selectedPlaylist.id === "favorites") return;
-      await removeFromPlaylist(selectedPlaylist.id, song.id);
+      // N7: removeFromPlaylist kini melempar bila tulis DB gagal.
+      try {
+        await removeFromPlaylist(selectedPlaylist.id, song.id);
+      } catch (error) {
+        console.error("[Playlist] Gagal menghapus lagu dari playlist:", error);
+        showToast("Gagal menghapus lagu dari playlist.", "error");
+        return;
+      }
       showToast(`"${song.title}" dihapus dari playlist.`, "info");
     },
     [selectedPlaylist, removeFromPlaylist, showToast],
@@ -125,7 +140,14 @@ export default function PlaylistsScreen() {
   const handleAddSong = useCallback(
     async (song: Song) => {
       if (!selectedPlaylist || selectedPlaylist.id === "favorites") return;
-      await addToPlaylist(selectedPlaylist.id, [song]);
+      // N7: addToPlaylist kini melempar bila tulis DB gagal.
+      try {
+        await addToPlaylist(selectedPlaylist.id, [song]);
+      } catch (error) {
+        console.error("[Playlist] Gagal menambah lagu ke playlist:", error);
+        showToast("Gagal menambah lagu ke playlist.", "error");
+        return;
+      }
       showToast(`"${song.title}" ditambahkan ke playlist.`, "success");
     },
     [selectedPlaylist, addToPlaylist, showToast],

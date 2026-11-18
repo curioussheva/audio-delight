@@ -65,6 +65,9 @@ export const usePlaylists = () => {
           .bumpRefreshKey("playlist-change", instanceId);
       } catch (err: any) {
         setError(err.message);
+        // N7: lempar ulang seperti createPlaylist — pemanggil harus tahu
+        // tulis gagal supaya tidak toast sukses / menutup layar.
+        throw err;
       }
     },
     [loadPlaylists, instanceId],
@@ -80,6 +83,8 @@ export const usePlaylists = () => {
           .bumpRefreshKey("playlist-change", instanceId);
       } catch (err: any) {
         setError(err.message);
+        // N7: lempar ulang — lihat addToPlaylist.
+        throw err;
       }
     },
     [loadPlaylists, instanceId],
@@ -94,6 +99,8 @@ export const usePlaylists = () => {
         .bumpRefreshKey("playlist-change", instanceId);
     } catch (err: any) {
       setError(err.message);
+      // N7: lempar ulang — lihat addToPlaylist.
+      throw err;
     }
   }, [instanceId]);
 
