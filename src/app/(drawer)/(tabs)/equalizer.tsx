@@ -39,7 +39,7 @@ import {
 } from "@/features/player/store/playerStore";
 import { FrequencyGraph } from "@/features/equalizer/components/Graph";
 import { EqualizerBand } from "@/features/equalizer/components/Band";
-import { ControlKnob } from "@/features/equalizer/components/ControlKnob";
+import { VerticalSlider } from "@/features/equalizer/components/VerticalSlider";
 import { PresetChip } from "@/features/equalizer/components/PresetChip";
 import { SavePresetModal } from "@/features/equalizer/components/SavePresetModal";
 import { HeadphoneSection } from "@/features/headphone/components/HeadphoneSection";
@@ -871,13 +871,19 @@ export default function EqualizerScreen() {
                   Nonaktif di mode ini — pindah ke DSP untuk menyetel.
                 </Text>
               )}
-              {/* KNOB BASS + PELEBAR STEREO — dua knob bersebelahan
-                  dalam satu baris, menggantikan HorizontalSlider.
-                  Rentang knob 0..1000 sama persis dengan slider lama dan
-                  dengan yang diterima Kotlin (bass 0..+12 dB, widener
-                  width 1.0..2.0), jadi tanpa konversi. Tiap knob punya
-                  MiniSwitch enable sendiri di atasnya (tanpa label teks —
-                  nama efek sudah di label knob). */}
+              {/* SLIDER VERTIKAL BASS + PELEBAR STEREO — opsi B Fase 3
+                  (keputusan csheva 2026-11-18 08:08): dua knob diganti
+                  fader vertikal ala slider GAIN kanan Neutron, bahasa
+                  visual yang sama dengan fader band (track 160px, tick,
+                  fill, thumb kotak). Rentang nilai 0..1000 sama persis
+                  dengan knob lama dan dengan yang diterima Kotlin (bass
+                  0..+12 dB, widener width 1.0..2.0), jadi tanpa konversi.
+                  Tiap slider punya MiniSwitch enable sendiri di atasnya
+                  (tanpa label teks — nama efek sudah di label slider).
+                  Main gain TIDAK ada di layar ini: `setMasterGain` hanya
+                  ada di antarmuka native + spec, nol pemanggil di `src/`
+                  (tidak ada kontrol gain master di store/hook) — opsi B
+                  hanya mencakup dua kontrol yang memang ada. */}
               <View
                 style={[
                   styles.effectItem,
@@ -888,8 +894,8 @@ export default function EqualizerScreen() {
                   },
                 ]}
               >
-                <View style={styles.knobRow}>
-                  <View style={styles.knobCol}>
+                <View style={styles.sliderRow}>
+                  <View style={styles.sliderCol}>
                     <MiniSwitch
                       label="BASS BOOST"
                       value={eq.isBassEnabled}
@@ -899,7 +905,7 @@ export default function EqualizerScreen() {
                       stacked
                       hideLabel
                     />
-                    <ControlKnob
+                    <VerticalSlider
                       label="BASS BOOST"
                       value={eq.bassStrength}
                       onChange={eq.setBassBoost}
@@ -907,7 +913,7 @@ export default function EqualizerScreen() {
                       disabled={!eq.isBassEnabled || eq.isDSPDisabled}
                     />
                   </View>
-                  <View style={styles.knobCol}>
+                  <View style={styles.sliderCol}>
                     <MiniSwitch
                       label="PELEBAR STEREO"
                       value={eq.isVirtualizerEnabled}
@@ -917,7 +923,7 @@ export default function EqualizerScreen() {
                       stacked
                       hideLabel
                     />
-                    <ControlKnob
+                    <VerticalSlider
                       label="PELEBAR STEREO"
                       value={eq.virtualizerLevel}
                       onChange={eq.setVirtualizer}
@@ -1093,13 +1099,13 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 0,
   },
-  knobRow: {
+  sliderRow: {
     flexDirection: "row",
     justifyContent: "space-around",
     alignItems: "flex-start",
     paddingHorizontal: 8,
   },
-  knobCol: {
+  sliderCol: {
     flex: 1,
     alignItems: "center",
   },
