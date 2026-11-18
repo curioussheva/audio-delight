@@ -131,7 +131,13 @@ export function useScanManager() {
 
   const cancelScan = useCallback(() => {
     UnifiedScanService.cancel?.();
-    setIsLocked(false);
+    // N21: JANGAN setIsLocked(false) di sini. Cancel hanya meng-abort
+    // (J2-4: isRunning sengaja tetap true sampai operasi mendeteksi abort
+    // di checkpoint-nya); kunci ini dilepas oleh finally operasi yang
+    // sedang jalan (enrichMetadata/manualRescan/initial scan). Dulu
+    // cancel membuka kunci secara sinkron sementara abort masih merambat
+    // — mulai lagi langsung melempar "Scan already in progress" dari
+    // guard UnifiedScanService.isRunning.
   }, []);
 
   // ── Derived values ──────────────────────────────────────────────────────────

@@ -37,13 +37,35 @@ export function EnrichMetadataModal({ visible, onClose }: Props) {
     failed: number;
   } | null>(null);
 
+  // N21: handleStart dulu tanpa try/catch — enrichMetadata melempar bila
+  // scan/enrichment sedang jalan (guard UnifiedScanService.isRunning) atau
+  // kunci useScanManager masih tertahan sesudah cancel, dan promise-nya
+  // reject tanpa penanganan (modal diam). Sekarang galat ditangkap dan
+  // ditampilkan di modal, bukan unhandled rejection.
+  const [error, setError] = useState<string | null>(null);
+
   const handleStart = useCallback(async () => {
     setResult(null);
-    const res = await enrichMetadata({
-      limit: 100, // Batch size per session
-      onProgress: () => {}, // Progress di-handle oleh store
-    });
-    setResult(res);
+    setError(null);
+    try {
+      const res = await enrichMetadata({
+        limit: 100, // Batch size per session
+        onProgress: () => {}, // Progress di-handle oleh store
+      });
+      setResult(res);
+    } catch (err: any) {
+      const msg = err?.message ?? "";
+      if (
+        msg.includes("already in progress") ||
+        msg.includes("Operation in progress")
+      ) {
+        setError(
+          "Masih ada pemindaian/enrichment yang berjalan. Tunggu sampai selesai, lalu coba lagi.",
+        );
+      } else {
+        setError(`Gagal memulai enhancement: ${msg || "error tidak diketahui"}`);
+      }
+    }
   }, [enrichMetadata]);
 
   const handleClose = useCallback(() => {
@@ -51,6 +73,7 @@ export function EnrichMetadataModal({ visible, onClose }: Props) {
       cancelScan();
     }
     setResult(null);
+    setError(null);
     onClose();
   }, [isEnriching, cancelScan, onClose]);
 
@@ -122,6 +145,18 @@ export function EnrichMetadataModal({ visible, onClose }: Props) {
                     : "All Songs Enriched ✓"}
                 </Text>
               </TouchableOpacity>
+
+              {/* N21: galat start (mis. scan sedang jalan) tampil di sini. */}
+              {error && (
+                <Text
+                  style={[
+                    styles.errorText,
+                    { color: colors.status.error },
+                  ]}
+                >
+                  {error}
+                </Text>
+              )}
             </>
           )}
 
@@ -334,6 +369,11 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "600",
     fontSize: 16,
+  },
+  errorText: {
+    fontSize: 13,
+    textAlign: "center",
+    marginTop: 12,
   },
   progressContainer: {
     width: "100%",
