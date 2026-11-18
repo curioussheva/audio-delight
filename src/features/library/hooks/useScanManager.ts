@@ -19,8 +19,12 @@ export function useScanManager() {
   // query MediaStore via quickDiff), lalu tandai selesai.
   // BUKAN deep scan: kode lama yang dikomen memanggil
   // UnifiedScanService.manualScan() (full diff) — sengaja TIDAK dipulihkan.
-  // quickDiff dipanggil dengan bypassAutoScanGate karena toggle auto-scan
-  // default OFF; scan perdana jalan terlepas dari toggle itu.
+  // Scan-split: quickDiff dipanggil dengan bypassAutoScanGate karena
+  // gerbang quickDiff kini milik Pindai Idle — dan scan perdana punya
+  // gerbang SENDIRI (`isInitialScanEnabled`, diperiksa
+  // shouldRunInitialScan di bawah). Bypass di sini bukan lagi jalan
+  // pintas atas satu toggle yang mencampur dua hal, melainkan
+  // pernyataan "gerbang sudah diperiksa pemanggil".
   // Delay 1 dtk dipertahankan dari kode lama: memberi waktu rehydrate
   // zustand-persist (tracks dari AsyncStorage) + izin media dari
   // performInitialization, supaya tracks.length tidak dibaca saat store
@@ -46,6 +50,9 @@ export function useScanManager() {
           hasCompletedInitialScan: currentStore.hasCompletedInitialScan,
           isManualScanning: currentStore.isManualScanning,
           isAutoScanning: currentStore.isAutoScanning,
+          // Scan-split: Pindai Awal OFF → initial scan tidak jalan
+          // sama sekali (walau library kosong + belum pernah scan).
+          isInitialScanEnabled: currentStore.isInitialScanEnabled,
         })
       ) {
         return;

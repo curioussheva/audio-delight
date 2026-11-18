@@ -148,7 +148,7 @@ describe("quickDiff — J3-1: tidak bisa menggantikan refresh library", () => {
     jest.clearAllMocks();
   });
 
-  it("REGRESI: auto-scan mati (default OFF) -> hasil kosong TANPA menyentuh MediaStore", async () => {
+  it("REGRESI: Pindai Idle mati (default OFF) -> hasil kosong TANPA menyentuh MediaStore", async () => {
     getState.mockReturnValue({ isAutoScanEnabled: false });
     const result = await ScanDiffEngine.quickDiff();
     expect(result).toEqual({
@@ -164,7 +164,7 @@ describe("quickDiff — J3-1: tidak bisa menggantikan refresh library", () => {
     expect(queryAudioFiles).not.toHaveBeenCalled();
   });
 
-  it("S1: bypassAutoScanGate=true -> jalan walau auto-scan OFF (scan perdana)", async () => {
+  it("S1 + scan-split: bypassAutoScanGate=true -> jalan walau idle OFF (scan perdana; gerbang awal diperiksa pemanggil, bukan quickDiff)", async () => {
     getState.mockReturnValue({ isAutoScanEnabled: false });
     queryAudioFiles.mockResolvedValue([song("a")]);
     getExistingUris.mockReturnValue(new Set<string>());
@@ -179,7 +179,7 @@ describe("quickDiff — J3-1: tidak bisa menggantikan refresh library", () => {
     expect(result.newSongs.map((s) => s.uri)).toEqual(["a"]);
   });
 
-  it("auto-scan ON -> jalan tanpa bypass (jalur resume/autoScan tidak berubah)", async () => {
+  it("Pindai Idle ON -> jalan tanpa bypass (jalur resume/autoScan tidak berubah)", async () => {
     getState.mockReturnValue({ isAutoScanEnabled: true });
     queryAudioFiles.mockResolvedValue([]);
     getExistingUris.mockReturnValue(new Set<string>());
