@@ -336,6 +336,47 @@ export function buildTextInputStyles(
   };
 }
 
+// ── Input pencarian ────────────────────────────────────────────────────────
+
+export interface SearchInputStyles {
+  container: ViewStyle;
+  input: TextStyle;
+}
+
+/**
+ * Bar pencarian: satu baris (ikon + input + tombol hapus), radius kecil
+ * (sm, seperti bar pencarian yang sudah ada di Search), latar secondary,
+ * tinggi 48. Tanpa border — pembeda dari input form.
+ */
+export function buildSearchInputStyles(theme: Theme): SearchInputStyles {
+  const { colors, radius, spacing, typography } = theme;
+  const body1 = typography.body1 ?? {
+    fontSize: 16,
+    fontWeight: "400",
+    lineHeight: 24,
+  };
+  return {
+    container: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.sm,
+      minHeight: 48,
+      backgroundColor: colors.background.secondary,
+      borderRadius: radius.sm,
+      paddingHorizontal: spacing.md,
+    },
+    input: {
+      flex: 1,
+      fontSize: body1.fontSize,
+      fontWeight: body1.fontWeight as TextStyle["fontWeight"],
+      fontFamily: weightToFamily(theme, "400"),
+      lineHeight: body1.lineHeight,
+      color: colors.text.primary,
+      paddingVertical: spacing.sm,
+    },
+  };
+}
+
 // ── Keadaan (empty / error / loading) ──────────────────────────────────────
 
 export interface StateStyles {

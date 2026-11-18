@@ -9,6 +9,7 @@ import {
   buildCardStyles,
   buildDialogStyles,
   buildTextInputStyles,
+  buildSearchInputStyles,
   buildStateStyles,
   buildToastStyles,
   contrastRatio,
@@ -138,6 +139,19 @@ describe("PristineTextInput", () => {
     const error = buildTextInputStyles(ember, { error: true });
     expect(error.container.borderColor).toBe(ember.colors.status.error);
     expect(error.errorText.color).toBe(ember.colors.status.error);
+  });
+});
+
+describe("SearchInput", () => {
+  it("bar pencarian dari token: tinggi 48, radius sm, latar secondary", () => {
+    for (const t of themes) {
+      const s = buildSearchInputStyles(t);
+      expect(s.container.minHeight).toBe(48);
+      expect(s.container.borderRadius).toBe(t.radius.sm);
+      expect(s.container.backgroundColor).toBe(t.colors.background.secondary);
+      expect(s.input.fontSize).toBe(t.typography.body1?.fontSize ?? 16);
+      expect(s.input.color).toBe(t.colors.text.primary);
+    }
   });
 });
 
