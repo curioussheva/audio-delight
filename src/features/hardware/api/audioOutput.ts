@@ -13,7 +13,7 @@
 // (nativeSetActiveDevice -> EngineManager::setRequestedDeviceId -> stream
 // dibuka ulang di perangkat itu). Lihat docs/AUDIO_OUTPUT_PATHS.md.
 
-import { NativeEventEmitter } from "react-native";
+import type { NativeEventEmitter } from "react-native";
 import NativeDeviceModule from "@/specs/NativeDeviceModule";
 import type {
   ActiveDeviceStatus,
@@ -30,7 +30,12 @@ let deviceChangeEmitter: NativeEventEmitter | null = null;
 
 const getDeviceChangeEmitter = (): NativeEventEmitter => {
   if (!deviceChangeEmitter) {
-    deviceChangeEmitter = new NativeEventEmitter(NativeDeviceModule);
+    // Lazy require (bukan import nilai top-level): jest repo ini sengaja
+    // tidak memakai babel-preset-expo, jadi import nilai dari
+    // "react-native" di top-level membuat suite yang mengimpor file ini
+    // gagal parse (pola yang sama dengan playerStore).
+    const { NativeEventEmitter: Emitter } = require("react-native");
+    deviceChangeEmitter = new Emitter(NativeDeviceModule);
   }
   return deviceChangeEmitter;
 };
