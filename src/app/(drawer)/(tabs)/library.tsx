@@ -142,7 +142,7 @@ export default function LibraryScreen() {
   // refreshKey (lihat efek subscriber di bawah).
   const BOTTOM_COMPENSATION = Platform.OS === "ios" ? insets.bottom + 20 : 30;
 
-  const { playSong, currentSong, isPlaying } = usePlayerStore();
+  const { playSong, currentSong } = usePlayerStore();
   const showToast = useToastStore((s) => s.showToast);
 
   // 🔥 FIX: list harus punya ruang untuk FloatingPlayer + tab bar.
@@ -705,7 +705,7 @@ export default function LibraryScreen() {
               renderItem={({ item }) => (
                 <SongListItem
                   item={item as any}
-                  isNowPlaying={currentSong?.id === item.id && isPlaying}
+                  isNowPlaying={currentSong?.id === item.id}
                   isFavorite={isFavorite(item.id)}
                   colors={colors}
                   onPress={() => {
@@ -792,7 +792,7 @@ export default function LibraryScreen() {
             renderItem={({ item }) => (
               <SongListItem
                 item={item as any}
-                isNowPlaying={currentSong?.id === item.id && isPlaying}
+                isNowPlaying={currentSong?.id === item.id}
                 isFavorite={isFavorite(item.id)}
                 colors={colors}
                 // Gunakan handleSongPress agar konsisten
