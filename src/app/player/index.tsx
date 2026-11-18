@@ -401,7 +401,7 @@ export default function PlayerScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               onPress={clearPlayError}
-              hitSlop={8}
+              hitSlop={13}
               accessibilityRole="button"
               accessibilityLabel="Tutup pesan error"
             >
@@ -731,8 +731,8 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   headerBtn: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -824,8 +824,10 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     paddingHorizontal: 10,
   },
+  // Target sentuh >= 44dp: Shuffle/Repeat (ikon 22 + padding 11x2 = 44).
+  // Skip (ikon 32) jadi 54 — tidak masalah, tetap dalam bar kontrol.
   controlBtn: {
-    padding: 8,
+    padding: 11,
   },
   // U-P2-10: pembungkus relatif supaya dot Repeat One bisa diposisikan
   // absolut di bawah ikon (pola yang sama dengan FloatingPlayer).
