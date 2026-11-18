@@ -13,12 +13,20 @@ import { Globe, X, Check, Database } from "lucide-react-native";
 import { Image } from "expo-image";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import OnlineMetadataService from "../services/OnlineMetadataService";
+import {
+  previewOnlineFill,
+  FILLABLE_FIELD_LABELS,
+  type FillableField,
+} from "../utils/metadataCompleteness";
 
 export const MetadataSyncModal = ({
   visible,
   onClose,
   initialTitle,
   initialArtist,
+  // U1: field lokal yang masih kosong — untuk menandai tiap hasil
+  // "akan diisi" vs "sudah ada — tidak diubah".
+  missingFields = [],
   onSelect,
   colors,
 }: any) => {
@@ -202,42 +210,129 @@ export const MetadataSyncModal = ({
             <FlatList
               data={results}
               keyExtractor={(item: any) => item.mbid}
-              renderItem={({ item }: any) => (
-                <TouchableOpacity
-                  style={[
-                    styles.resultCard,
-                    { borderColor: colors.border.light },
-                  ]}
-                  onPress={() => onSelect(item)}
-                >
-                  <Image
-                    source={{
-                      uri: OnlineMetadataService.getCoverArtUrl(item.releaseId),
-                    }}
-                    style={styles.resultArt}
-                  />
-                  <View style={{ flex: 1, marginLeft: 12 }}>
-                    <Text
-                      style={{ color: colors.text.primary, fontWeight: "700" }}
-                    >
-                      {item.title}
-                    </Text>
-                    <Text style={{ color: colors.text.tertiary, fontSize: 12 }}>
-                      {item.album} • {item.year}
-                    </Text>
-                    <Text
-                      style={{
-                        color: colors.primary[500],
-                        fontSize: 11,
-                        marginTop: 4,
+              renderItem={({ item }: any) => {
+                // U1: pratinjau sapu bersih per hasil — field mana yang
+                // akan diisi (lokal kosong) vs sudah ada (tidak diubah).
+                // Cover dihitung ada bila hasil punya releaseId.
+                const preview = previewOnlineFill(
+                  (missingFields ?? []) as FillableField[],
+                  {
+                    title: item.title,
+                    artist: item.artist,
+                    album: item.album,
+                    year: item.year,
+                    label: item.label,
+                    artwork: item.releaseId
+                      ? OnlineMetadataService.getCoverArtUrl(item.releaseId)
+                      : undefined,
+                  },
+                );
+                // Info artis (foto/bio) diambil terpisah sesudah pilih —
+                // modal hanya bisa menjanjikan "bila tersedia".
+                const artistInfoMissing = (
+                  (missingFields ?? []) as FillableField[]
+                ).filter(
+                  (f) => f === "artistImageUrl" || f === "artistBio",
+                );
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.resultCard,
+                      { borderColor: colors.border.light },
+                    ]}
+                    onPress={() => onSelect(item)}
+                  >
+                    <Image
+                      source={{
+                        uri: OnlineMetadataService.getCoverArtUrl(
+                          item.releaseId,
+                        ),
                       }}
-                    >
-                      {item.label}
-                    </Text>
-                  </View>
-                  <Check size={18} color={colors.primary[500]} />
-                </TouchableOpacity>
-              )}
+                      style={styles.resultArt}
+                    />
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <Text
+                        style={{
+                          color: colors.text.primary,
+                          fontWeight: "700",
+                        }}
+                      >
+                        {item.title}
+                      </Text>
+                      <Text
+                        style={{ color: colors.text.tertiary, fontSize: 12 }}
+                      >
+                        {item.album} • {item.year}
+                      </Text>
+                      <Text
+                        style={{
+                          color: colors.primary[500],
+                          fontSize: 11,
+                          marginTop: 4,
+                        }}
+                      >
+                        {item.label}
+                      </Text>
+                      {preview.toFill.length > 0 && (
+                        <Text
+                          style={{
+                            color: colors.status.success,
+                            fontSize: 11,
+                            marginTop: 4,
+                          }}
+                        >
+                          Akan diisi:{" "}
+                          {preview.toFill
+                            .map((f) => FILLABLE_FIELD_LABELS[f])
+                            .join(", ")}
+                        </Text>
+                      )}
+                      {preview.kept.length > 0 && (
+                        <Text
+                          style={{
+                            color: colors.text.tertiary,
+                            fontSize: 11,
+                            marginTop: 2,
+                          }}
+                        >
+                          Sudah ada — tidak diubah:{" "}
+                          {preview.kept
+                            .map((f) => FILLABLE_FIELD_LABELS[f])
+                            .join(", ")}
+                        </Text>
+                      )}
+                      {preview.toFill.length === 0 &&
+                        preview.kept.length === 0 && (
+                          <Text
+                            style={{
+                              color: colors.text.tertiary,
+                              fontSize: 11,
+                              marginTop: 4,
+                            }}
+                          >
+                            Tidak ada field baru dari hasil ini
+                          </Text>
+                        )}
+                      {artistInfoMissing.length > 0 && (
+                        <Text
+                          style={{
+                            color: colors.text.tertiary,
+                            fontSize: 11,
+                            marginTop: 2,
+                          }}
+                        >
+                          Info artis (
+                          {artistInfoMissing
+                            .map((f) => FILLABLE_FIELD_LABELS[f])
+                            .join(" + ")}
+                          ): akan diisi bila tersedia
+                        </Text>
+                      )}
+                    </View>
+                    <Check size={18} color={colors.primary[500]} />
+                  </TouchableOpacity>
+                );
+              }}
             />
           )}
         </View>
