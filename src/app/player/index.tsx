@@ -311,6 +311,8 @@ export default function PlayerScreen() {
           <TouchableOpacity
             style={styles.headerBtn}
             onPress={() => safeGoBack(router)}
+            accessibilityRole="button"
+            accessibilityLabel="Tutup player"
           >
             <ChevronDown size={28} color={textPrimary} />
           </TouchableOpacity>
@@ -360,7 +362,12 @@ export default function PlayerScreen() {
             </View>
           </View>
 
-          <TouchableOpacity style={styles.headerBtn} onPress={handleOpenDetail}>
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={handleOpenDetail}
+            accessibilityRole="button"
+            accessibilityLabel="Lihat detail lagu"
+          >
             <Info size={24} color={textPrimary} strokeWidth={2} />
           </TouchableOpacity>
         </View>
@@ -392,7 +399,12 @@ export default function PlayerScreen() {
                 Coba lagi
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={clearPlayError} hitSlop={8}>
+            <TouchableOpacity
+              onPress={clearPlayError}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Tutup pesan error"
+            >
               <X size={18} color={textTertiary} />
             </TouchableOpacity>
           </View>
@@ -407,7 +419,12 @@ export default function PlayerScreen() {
           </View>
         ) : (
           <View style={styles.artworkSection}>
-            <Pressable onPress={() => setShowLyrics(!showLyrics)}>
+            <Pressable
+              onPress={() => setShowLyrics(!showLyrics)}
+              accessibilityRole="button"
+              accessibilityLabel="Tampilkan lirik"
+              accessibilityHint="Ketuk untuk melihat lirik lagu"
+            >
               <Animated.View
                 style={[
                   styles.artworkContainer,
@@ -446,7 +463,13 @@ export default function PlayerScreen() {
               {currentSong.artist}
             </Text>
           </View>
-          <TouchableOpacity onPress={handleLike} style={styles.likeBtn}>
+          <TouchableOpacity
+            onPress={handleLike}
+            style={styles.likeBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Suka"
+            accessibilityState={{ selected: isLiked }}
+          >
             <Heart
               size={28}
               color={isLiked ? errorColor : textTertiary}
@@ -481,6 +504,13 @@ export default function PlayerScreen() {
               minimumValue={0}
               maximumValue={duration}
               value={dragPosition ?? position}
+              accessibilityRole="adjustable"
+              accessibilityLabel="Posisi pemutaran"
+              accessibilityValue={{
+                min: 0,
+                max: Math.round(duration),
+                now: Math.round(dragPosition ?? position),
+              }}
               onSlidingStart={(value) => setDragPosition(value)}
               onValueChange={(value) => setDragPosition(value)}
               onSlidingComplete={(value) => {
@@ -517,7 +547,13 @@ export default function PlayerScreen() {
 
         {/* Controls */}
         <View style={styles.controlsSection}>
-          <TouchableOpacity onPress={toggleShuffle} style={styles.controlBtn}>
+          <TouchableOpacity
+            onPress={toggleShuffle}
+            style={styles.controlBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Acak"
+            accessibilityState={{ selected: shuffle }}
+          >
             <Shuffle
               size={22}
               color={shuffle ? primaryColor : iconColorDefault}
@@ -528,6 +564,8 @@ export default function PlayerScreen() {
           <TouchableOpacity
             onPress={() => handleSkip(playPrevious)}
             style={styles.controlBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Lagu sebelumnya"
           >
             <SkipBack size={32} color={textPrimary} strokeWidth={2} />
           </TouchableOpacity>
@@ -535,6 +573,8 @@ export default function PlayerScreen() {
           <TouchableOpacity
             style={[styles.playBtn, { backgroundColor: primaryColor }]}
             onPress={handlePlayPause}
+            accessibilityRole="button"
+            accessibilityLabel={isPlaying ? "Jeda" : "Putar"}
           >
             {isPlaying ? (
               <Pause
@@ -555,6 +595,8 @@ export default function PlayerScreen() {
           <TouchableOpacity
             onPress={() => handleSkip(playNext)}
             style={styles.controlBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Lagu berikutnya"
           >
             <SkipForward size={32} color={textPrimary} strokeWidth={2} />
           </TouchableOpacity>
@@ -643,6 +685,7 @@ export default function PlayerScreen() {
             style={styles.utilityBtn}
             accessibilityRole="button"
             accessibilityLabel="Lirik"
+            accessibilityState={{ selected: showLyrics }}
           >
             <Mic2
               size={20}
