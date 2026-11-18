@@ -12,6 +12,32 @@ const MAX_RETRIES = 3;
 
 export class ScanQueue {
   /**
+   * N5: kunci rantai-promise untuk operasi baca–ubah–tulis (add/shift/
+   * retry/remove/clear). Tanpa ini, worker (shift) dan penambah antrean
+   * (add) yang jalan bersamaan bisa membaca snapshot yang sama lalu
+   * saling menimpa hasil tulisnya di AsyncStorage — item hilang atau
+   * duplikat. Baca murni (getQueue/getSize/peek/contains) tidak dikunci:
+   * AsyncStorage getItem atomik per key, jadi baca hanya melihat nilai
+   * lama atau baru, tidak pernah setengah tulis.
+   */
+  private static queueLock: Promise<void> = Promise.resolve();
+
+  private static async withQueueLock<T>(fn: () => Promise<T>): Promise<T> {
+    let release!: () => void;
+    const willLock = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const previous = this.queueLock;
+    this.queueLock = previous.then(() => willLock);
+    await previous;
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  }
+
+  /**
    * Get current queue dari AsyncStorage
    */
   static async getQueue(): Promise<QueueItem[]> {
@@ -34,58 +60,64 @@ export class ScanQueue {
   ): Promise<number> {
     if (items.length === 0) return 0;
 
-    try {
-      const existing = await this.getQueue();
-      const existingIds = new Set(existing.map((i) => i.songId));
+    // N5: baca–ubah–tulis di dalam kunci antrean.
+    return this.withQueueLock(async () => {
+      try {
+        const existing = await this.getQueue();
+        const existingIds = new Set(existing.map((i) => i.songId));
 
-      // Filter duplikat dan buat items baru
-      const newItems: QueueItem[] = items
-        .filter((item) => !existingIds.has(item.songId))
-        .map((item) => ({
-          ...item,
-          addedAt: Date.now(),
-          retryCount: 0,
-        }));
+        // Filter duplikat dan buat items baru
+        const newItems: QueueItem[] = items
+          .filter((item) => !existingIds.has(item.songId))
+          .map((item) => ({
+            ...item,
+            addedAt: Date.now(),
+            retryCount: 0,
+          }));
 
-      if (newItems.length === 0) {
-        console.log("[ScanQueue] All items already in queue");
+        if (newItems.length === 0) {
+          console.log("[ScanQueue] All items already in queue");
+          return 0;
+        }
+
+        // Merge, sort by priority (desc), then by addedAt (asc)
+        const merged = [...existing, ...newItems];
+        merged.sort((a, b) => {
+          if (b.priority !== a.priority) return b.priority - a.priority;
+          return a.addedAt - b.addedAt;
+        });
+
+        await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(merged));
+        console.log(
+          `[ScanQueue] Added ${newItems.length} items (${merged.length} total)`,
+        );
+
+        return newItems.length;
+      } catch (error) {
+        console.error("[ScanQueue] Failed to add items:", error);
         return 0;
       }
-
-      // Merge, sort by priority (desc), then by addedAt (asc)
-      const merged = [...existing, ...newItems];
-      merged.sort((a, b) => {
-        if (b.priority !== a.priority) return b.priority - a.priority;
-        return a.addedAt - b.addedAt;
-      });
-
-      await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(merged));
-      console.log(
-        `[ScanQueue] Added ${newItems.length} items (${merged.length} total)`,
-      );
-
-      return newItems.length;
-    } catch (error) {
-      console.error("[ScanQueue] Failed to add items:", error);
-      return 0;
-    }
+    });
   }
 
   /**
    * Ambil dan hapus item pertama dari queue (FIFO dengan priority)
    */
   static async shift(): Promise<QueueItem | null> {
-    try {
-      const queue = await this.getQueue();
-      if (queue.length === 0) return null;
+    // N5: baca–ubah–tulis di dalam kunci antrean.
+    return this.withQueueLock(async () => {
+      try {
+        const queue = await this.getQueue();
+        if (queue.length === 0) return null;
 
-      const item = queue.shift()!;
-      await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
-      return item;
-    } catch (error) {
-      console.error("[ScanQueue] Failed to shift:", error);
-      return null;
-    }
+        const item = queue.shift()!;
+        await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+        return item;
+      } catch (error) {
+        console.error("[ScanQueue] Failed to shift:", error);
+        return null;
+      }
+    });
   }
 
   /**
@@ -100,46 +132,56 @@ export class ScanQueue {
       return false;
     }
 
-    try {
-      const queue = await this.getQueue();
-      queue.push({
-        ...item,
-        retryCount: item.retryCount + 1,
-      });
-      await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
-      console.log(
-        `[ScanQueue] Retrying ${item.songId} (attempt ${item.retryCount + 1})`,
-      );
-      return true;
-    } catch (error) {
-      console.error("[ScanQueue] Failed to retry:", error);
-      return false;
-    }
+    // N5: baca–ubah–tulis di dalam kunci antrean.
+    return this.withQueueLock(async () => {
+      try {
+        const queue = await this.getQueue();
+        queue.push({
+          ...item,
+          retryCount: item.retryCount + 1,
+        });
+        await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+        console.log(
+          `[ScanQueue] Retrying ${item.songId} (attempt ${item.retryCount + 1})`,
+        );
+        return true;
+      } catch (error) {
+        console.error("[ScanQueue] Failed to retry:", error);
+        return false;
+      }
+    });
   }
 
   /**
    * Remove specific item dari queue
    */
   static async remove(songId: string): Promise<void> {
-    try {
-      const queue = await this.getQueue();
-      const filtered = queue.filter((item) => item.songId !== songId);
-      await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(filtered));
-    } catch (error) {
-      console.error("[ScanQueue] Failed to remove:", error);
-    }
+    // N5: baca–ubah–tulis di dalam kunci antrean.
+    await this.withQueueLock(async () => {
+      try {
+        const queue = await this.getQueue();
+        const filtered = queue.filter((item) => item.songId !== songId);
+        await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(filtered));
+      } catch (error) {
+        console.error("[ScanQueue] Failed to remove:", error);
+      }
+    });
   }
 
   /**
    * Clear entire queue
    */
   static async clear(): Promise<void> {
-    try {
-      await AsyncStorage.removeItem(QUEUE_KEY);
-      console.log("[ScanQueue] Queue cleared");
-    } catch (error) {
-      console.error("[ScanQueue] Failed to clear:", error);
-    }
+    // N5: tulis di dalam kunci antrean (supaya tidak menimpa add/shift
+    // yang sedang berjalan).
+    await this.withQueueLock(async () => {
+      try {
+        await AsyncStorage.removeItem(QUEUE_KEY);
+        console.log("[ScanQueue] Queue cleared");
+      } catch (error) {
+        console.error("[ScanQueue] Failed to clear:", error);
+      }
+    });
   }
 
   /**

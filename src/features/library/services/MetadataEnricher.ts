@@ -36,6 +36,54 @@ export class MetadataEnricher {
   private static nativeSongCache: Map<string, NativeSong> | null = null;
 
   /**
+   * N5: satu kunci bersama worker (`startBackgroundWorker`) dan batch
+   * manual (`enrichBatch`). Sebelumnya keduanya bisa jalan bersamaan dan
+   * berbagi `nativeSongCache` statis (yang selesai duluan men-null-kan
+   * cache di tengah jalan pihak lain) serta sama-sama memanggil
+   * `store.finishEnrichment`. Kunci ini rantai promise: yang datang kedua
+   * MENUNGGU giliran, bukan gagal — baik worker maupun batch pada akhirnya
+   * mengerjakan bagiannya, hanya tidak bersamaan.
+   *
+   * `signal` (batch): bila dibatalkan selagi menunggu giliran, kembalikan
+   * null dan lepas slot antrean supaya rantai tidak macet; pemanggil lalu
+   * melaporkan semua lagu sebagai skipped, seperti batal di tengah loop.
+   */
+  private static enrichmentLock: Promise<void> = Promise.resolve();
+
+  private static async acquireEnrichmentLock(
+    signal?: AbortSignal,
+  ): Promise<(() => void) | null> {
+    let release!: () => void;
+    const willLock = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const previous = this.enrichmentLock;
+    this.enrichmentLock = previous.then(() => willLock);
+    if (signal?.aborted) {
+      release();
+      return null;
+    }
+    if (!signal) {
+      await previous;
+      return release;
+    }
+    const aborted = await Promise.race([
+      previous.then(() => false),
+      new Promise<true>((resolve) => {
+        signal.addEventListener("abort", () => resolve(true), {
+          once: true,
+        });
+      }),
+    ]);
+    if (aborted) {
+      // Lepas slot antrean: rantai tetap jalan untuk penunggu berikutnya.
+      release();
+      return null;
+    }
+    return release;
+  }
+
+  /**
    * J2-1: satu query MediaStore untuk seluruh run. Gagal -> cache tetap
    * null dan tiap item fallback ke extract(uri); enrichment tetap jalan,
    * hanya tanpa hemat query.
@@ -85,59 +133,69 @@ export class MetadataEnricher {
     if (this.isRunning) return;
 
     this.isRunning = true;
-    this.abortController = new AbortController();
-    this.processedCount = 0;
     const isPlaying = options?.isPlaying ?? (() => false);
-
-    // J2-1: satu query MediaStore untuk seluruh worker-run.
-    await this.warmNativeSongCache();
-
-    console.log("[MetadataEnricher] Background worker started");
     const store = useLibraryStore.getState();
 
-    while (this.isRunning && !this.abortController?.signal.aborted) {
-      const item = await ScanQueue.shift();
-      if (!item) break;
+    // N5: tunggu giliran kunci bersama batch manual. abortController +
+    // processedCount dibuat SESUDAH kunci didapat, supaya stop() yang
+    // datang selagi menunggu tidak meninggalkan controller basi.
+    const release = await this.acquireEnrichmentLock();
+    try {
+      this.abortController = new AbortController();
+      this.processedCount = 0;
 
-      // Jeda saat lagu diputar — jangan ganggu playback. Keluar dari
-      // wait bila worker di-stop (sinyal abort); cek lagi di bawah
-      // supaya item tidak diproses setelah stop.
-      await waitWhilePlaying(
-        isPlaying,
-        this.abortController?.signal ?? undefined,
-        ENRICHMENT_PLAYBACK_POLL_MS,
-      );
-      if (!this.isRunning || this.abortController?.signal.aborted) break;
+      // J2-1: satu query MediaStore untuk seluruh worker-run.
+      await this.warmNativeSongCache();
 
-      try {
-        await this.processItem(item);
-        this.processedCount++;
+      console.log("[MetadataEnricher] Background worker started");
 
-        const remaining = await ScanQueue.getSize();
-        onProgress?.(this.processedCount, remaining, item.songId);
+      while (this.isRunning && !this.abortController?.signal.aborted) {
+        const item = await ScanQueue.shift();
+        if (!item) break;
 
-        // Update size antrian di store untuk UI (ScanStatusBar)
-        store.setEnrichmentQueueSize(remaining);
-      } catch (error) {
-        console.warn(`[MetadataEnricher] Failed ${item.songId}:`, error);
-        await ScanQueue.retry(item);
+        // Jeda saat lagu diputar — jangan ganggu playback. Keluar dari
+        // wait bila worker di-stop (sinyal abort); cek lagi di bawah
+        // supaya item tidak diproses setelah stop.
+        await waitWhilePlaying(
+          isPlaying,
+          this.abortController?.signal ?? undefined,
+          ENRICHMENT_PLAYBACK_POLL_MS,
+        );
+        if (!this.isRunning || this.abortController?.signal.aborted) break;
+
+        try {
+          await this.processItem(item);
+          this.processedCount++;
+
+          const remaining = await ScanQueue.getSize();
+          onProgress?.(this.processedCount, remaining, item.songId);
+
+          // Update size antrian di store untuk UI (ScanStatusBar)
+          store.setEnrichmentQueueSize(remaining);
+        } catch (error) {
+          console.warn(`[MetadataEnricher] Failed ${item.songId}:`, error);
+          await ScanQueue.retry(item);
+        }
+
+        // Jeda antar item (1000ms, dulu 350ms) agar I/O storage tidak
+        // bottleneck dan UI tetap smooth — satu detik jeda buat thread JS
+        // di antara dua round-trip bridge/DB.
+        await new Promise((r) =>
+          setTimeout(r, ENRICHMENT_INTER_ITEM_DELAY_MS),
+        );
       }
+    } finally {
+      this.nativeSongCache = null;
+      this.isRunning = false;
+      this.abortController = null;
 
-      // Jeda antar item (1000ms, dulu 350ms) agar I/O storage tidak
-      // bottleneck dan UI tetap smooth — satu detik jeda buat thread JS
-      // di antara dua round-trip bridge/DB.
-      await new Promise((r) =>
-        setTimeout(r, ENRICHMENT_INTER_ITEM_DELAY_MS),
-      );
+      // Memberitahu store bahwa proses enrichment selesai
+      store.finishEnrichment({ success: this.processedCount, failed: 0 });
+      console.log("[MetadataEnricher] Background worker finished");
+      // N5: selalu lepas kunci, termasuk bila worker di-stop selagi
+      // menunggu giliran (loop langsung keluar, kunci tetap dilepas).
+      release();
     }
-
-    this.nativeSongCache = null;
-    this.isRunning = false;
-    this.abortController = null;
-
-    // Memberitahu store bahwa proses enrichment selesai
-    store.finishEnrichment({ success: this.processedCount, failed: 0 });
-    console.log("[MetadataEnricher] Background worker finished");
   }
 
   /**
@@ -257,60 +315,72 @@ export class MetadataEnricher {
       `[MetadataEnricher] enrichBatch started with ${songIds.length} songs`,
     );
 
-    // J2-1: satu query MediaStore untuk seluruh batch.
-    await this.warmNativeSongCache();
-
-    let success = 0,
-      failed = 0,
-      skipped = 0;
-    const store = useLibraryStore.getState();
-
-    for (let i = 0; i < songIds.length; i++) {
-      // J2-3: batalkan batch — sisa lagu yang belum diproses dihitung
-      // skipped supaya success + failed + skipped = total.
-      if (signal?.aborted) {
-        console.log(
-          `[MetadataEnricher] enrichBatch cancelled after ${success + failed} of ${songIds.length} songs`,
-        );
-        skipped += songIds.length - i;
-        break;
-      }
-
-      const songId = songIds[i];
-      const song = store.tracks?.find((t) => t.id === songId);
-
-      if (!song?.uri) {
-        skipped++;
-        continue;
-      }
-
-      try {
-        await this.processItem({
-          songId,
-          uri: song.uri,
-          priority: 0,
-          level: 2 as EnrichmentLevel,
-          addedAt: Date.now(),
-          retryCount: 0,
-        });
-
-        success++;
-        onProgress?.(i + 1, songIds.length, {
-          title: song.title,
-          artist: song.artist,
-        });
-      } catch (error) {
-        failed++;
-        console.warn(`[MetadataEnricher] Batch failed ${songId}:`, error);
-      }
-
-      // Delay minimal saat batch manual agar UI tidak membeku (freeze)
-      if (i % 5 === 0) await new Promise((r) => setTimeout(r, 10));
+    // N5: kunci bersama worker — tunggu giliran. Bila dibatalkan selagi
+    // menunggu, laporkan semua lagu sebagai skipped (sama seperti batal
+    // di tengah loop) tanpa menyentuh cache/store.
+    const release = await this.acquireEnrichmentLock(signal);
+    if (!release) {
+      return { success: 0, failed: 0, skipped: songIds.length };
     }
 
-    this.nativeSongCache = null;
-    store.finishEnrichment({ success, failed });
-    return { success, failed, skipped };
+    try {
+      // J2-1: satu query MediaStore untuk seluruh batch.
+      await this.warmNativeSongCache();
+
+      let success = 0,
+        failed = 0,
+        skipped = 0;
+      const store = useLibraryStore.getState();
+
+      for (let i = 0; i < songIds.length; i++) {
+        // J2-3: batalkan batch — sisa lagu yang belum diproses dihitung
+        // skipped supaya success + failed + skipped = total.
+        if (signal?.aborted) {
+          console.log(
+            `[MetadataEnricher] enrichBatch cancelled after ${success + failed} of ${songIds.length} songs`,
+          );
+          skipped += songIds.length - i;
+          break;
+        }
+
+        const songId = songIds[i];
+        const song = store.tracks?.find((t) => t.id === songId);
+
+        if (!song?.uri) {
+          skipped++;
+          continue;
+        }
+
+        try {
+          await this.processItem({
+            songId,
+            uri: song.uri,
+            priority: 0,
+            level: 2 as EnrichmentLevel,
+            addedAt: Date.now(),
+            retryCount: 0,
+          });
+
+          success++;
+          onProgress?.(i + 1, songIds.length, {
+            title: song.title,
+            artist: song.artist,
+          });
+        } catch (error) {
+          failed++;
+          console.warn(`[MetadataEnricher] Batch failed ${songId}:`, error);
+        }
+
+        // Delay minimal saat batch manual agar UI tidak membeku (freeze)
+        if (i % 5 === 0) await new Promise((r) => setTimeout(r, 10));
+      }
+
+      this.nativeSongCache = null;
+      store.finishEnrichment({ success, failed });
+      return { success, failed, skipped };
+    } finally {
+      release();
+    }
   }
 
   /**
