@@ -587,6 +587,20 @@ class MediaSessionManager(private val service: PlaybackService) {
             pendingIntentForAction(PlaybackService.ACTION_NEXT)
         )
 
+        // F3: aksi STOP — satu-satunya jalan keluar service dari notifikasi.
+        // Sebelumnya notifikasi hanya prev/play-pause/next + setOngoing(true)
+        // (tidak bisa di-swipe): buka app tanpa pernah memutar = service +
+        // notifikasi + wake lock sampai timeout 60 mnt. ACTION_STOP sudah ada
+        // dan benar (PlaybackService: stop sinkron + lepas wake lock +
+        // stopForeground REMOVE + stopSelf); yang hilang hanya pemicunya.
+        // Sengaja TIDAK masuk setShowActionsInCompactView(0, 1, 2): compact
+        // view tetap prev/play/next, Stop hanya di notifikasi yang diperluas.
+        builder.addAction(
+            android.R.drawable.ic_menu_close_clear_cancel,
+            "Stop",
+            pendingIntentForAction(PlaybackService.ACTION_STOP)
+        )
+
         return builder.build()
     }
 
