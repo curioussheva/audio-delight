@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
-import { ChevronLeft, Trash2, Music2 } from "lucide-react-native";
+import { ChevronLeft, Trash2, Music2, Plus } from "lucide-react-native";
 
 import { useTheme } from "@/shared/context/ThemeContext";
 import { ScreenHeader } from "@/shared/components/ui/ScreenHeader";
@@ -17,6 +17,7 @@ import { ConfirmDialog } from "@/shared/components/ui/ConfirmDialog";
 import { useToastStore } from "@/shared/store/toastStore";
 import { usePlaylists } from "@/features/playlist/hooks/usePlaylists";
 import { CreatePlaylistModal } from "@/features/playlist/components/CreatePlaylistModal";
+import { AddSongsModal } from "@/features/playlist/components/AddSongsModal";
 import { PlaylistList, PlaylistItem } from "@/features/library/components/PlaylistList";
 import { SongListItem } from "@/features/library/components/SongListItem";
 import { usePlayerStore } from "@/features/player/store/playerStore";
@@ -48,6 +49,9 @@ export default function PlaylistsScreen() {
   // Fase 2 redesign: hapus playlist lewat ConfirmDialog (satu-satunya
   // mekanisme konfirmasi), bukan Alert.alert.
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+  // Item CRUD playlist (entry B1): modal pilih lagu dari Library.
+  const [showAddModal, setShowAddModal] = useState(false);
 
   // Playlist lengkap (dengan `songs`) untuk detail view — dicari di sini
   // (top-level) supaya hook di bawah tidak dipanggil kondisional.
@@ -108,6 +112,19 @@ export default function PlaylistsScreen() {
       showToast(`"${song.title}" dihapus dari playlist.`, "info");
     },
     [selectedPlaylist, removeFromPlaylist, showToast],
+  );
+
+  // Item CRUD playlist (entry B1): tiap lagu yang ditekan di modal
+  // langsung ditambahkan + toast; modal tetap terbuka sampai "Selesai"
+  // supaya bisa tambah beberapa lagu sekaligus. Hook me-reload daftar
+  // setelah tulis, jadi barisnya langsung berubah jadi centang.
+  const handleAddSong = useCallback(
+    async (song: Song) => {
+      if (!selectedPlaylist || selectedPlaylist.id === "favorites") return;
+      await addToPlaylist(selectedPlaylist.id, [song]);
+      showToast(`"${song.title}" ditambahkan ke playlist.`, "success");
+    },
+    [selectedPlaylist, addToPlaylist, showToast],
   );
 
   // Playlist (dari usePlaylists) pakai field `songCount`, sementara
@@ -231,15 +248,28 @@ export default function PlaylistsScreen() {
             </Text>
           </View>
           {/* Ronde 9 (fix 3): sembunyikan tombol hapus untuk
-              "Lagu Disukai" — pola yang sama dengan tab library. */}
+              "Lagu Disukai" — pola yang sama dengan tab library.
+              Tombol "+" (tambah lagu, entry B1) ikut disembunyikan:
+              "Lagu Disukai" bukan playlist DB. */}
           {selectedPlaylist.id !== "favorites" && (
-            <TouchableOpacity
-              onPress={handleDeletePlaylist}
-              style={styles.backBtn}
-              hitSlop={8}
-            >
-              <Trash2 size={20} color={colors.status.error} />
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity
+                onPress={() => setShowAddModal(true)}
+                style={styles.backBtn}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Tambah lagu ke playlist"
+              >
+                <Plus size={22} color={colors.text.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleDeletePlaylist}
+                style={styles.backBtn}
+                hitSlop={8}
+              >
+                <Trash2 size={20} color={colors.status.error} />
+              </TouchableOpacity>
+            </>
           )}
         </View>
 
@@ -283,6 +313,15 @@ export default function PlaylistsScreen() {
           confirmLabel="Hapus"
           onConfirm={() => void handleConfirmDeletePlaylist()}
           onCancel={() => setShowDeleteDialog(false)}
+        />
+
+        {/* Item CRUD playlist (entry B1): modal pilih lagu dari Library. */}
+        <AddSongsModal
+          visible={showAddModal}
+          playlistName={selectedPlaylist.name}
+          existingSongIds={selectedFull?.songIds ?? []}
+          onAdd={(song) => void handleAddSong(song)}
+          onClose={() => setShowAddModal(false)}
         />
       </View>
     );
