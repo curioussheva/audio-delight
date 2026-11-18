@@ -7,7 +7,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   TextInput,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -17,6 +16,10 @@ import * as Haptics from "expo-haptics";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { ConfirmDialog } from "@/shared/components/ui/ConfirmDialog";
+import { SectionCard } from "@/shared/components/ui/SectionCard";
+import { PristineTextInput } from "@/shared/components/ui/PristineTextInput";
+import { useToastStore } from "@/shared/store/toastStore";
+import { FONT_FAMILY } from "@/shared/constants/themes/base";
 import { safeGoBack } from "@/shared/utils/navigation";
 import {
   ArrowLeft,
@@ -35,7 +38,7 @@ import {
 } from "lucide-react-native";
 
 import { useTheme } from "@/shared/context/ThemeContext";
-import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+import { pickReadable, accentOn, AA_NORMAL } from "@/shared/utils/contrast";
 import { useLibraryStore } from "@/features/library/store/libraryStore";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { LibraryScanner } from "@/features/library/api/scanner";
@@ -95,7 +98,7 @@ interface DetailRowProps {
 
 const DetailRow = ({ label, value, colors }: DetailRowProps) => (
   <View style={[styles.detailRow, { borderBottomColor: colors.border.light }]}>
-    <Text style={[styles.detailLabel, { color: colors.text.tertiary }]}>
+    <Text style={[styles.detailLabel, { color: colors.text.secondary }]}>
       {label}
     </Text>
     <Text
@@ -112,7 +115,6 @@ interface EditFieldProps {
   label: string;
   value: string;
   onChangeText: (text: string) => void;
-  colors: any;
   keyboardType?: "default" | "numeric";
   style?: any;
   // U-P2-05: placeholder wajib diisi pemanggil — dulu placeholderTextColor
@@ -121,38 +123,35 @@ interface EditFieldProps {
   placeholder: string;
 }
 
+// FASE 3 additional: form edit memakai PristineTextInput (Fase 2) — label
+// + input + fokus/error dari token yang sama dengan form lain. Warna label
+// mengikuti builder (text.secondary); tinggi 48 + radius md sama seperti
+// sebelumnya, latar container secondary (dulu tertiary) + border medium.
 const EditField = ({
   label,
   value,
   onChangeText,
-  colors,
   keyboardType = "default",
   style,
   placeholder,
 }: EditFieldProps) => (
-  <View style={[styles.editFieldContainer, style]}>
-    <Text style={[styles.editLabel, { color: colors.text.tertiary }]}>
-      {label}
-    </Text>
-    <TextInput
-      style={[
-        styles.editInput,
-        {
-          color: colors.text.primary,
-          backgroundColor: colors.background.tertiary,
-          borderColor: colors.border.light,
-        },
-      ]}
-      value={value}
-      onChangeText={onChangeText}
-      keyboardType={keyboardType}
-      placeholder={placeholder}
-      placeholderTextColor={colors.text.disabled}
-    />
-  </View>
+  <PristineTextInput
+    label={label}
+    value={value}
+    onChangeText={onChangeText}
+    keyboardType={keyboardType}
+    placeholder={placeholder}
+    style={[styles.editFieldContainer, style]}
+  />
 );
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
+
+// FASE 3 additional: geometri kartu seksi dipertahankan (margin luar 20/16)
+// — SectionCard sendiri yang memberi permukaan elevated + radius md +
+// bayangan md dari token (dulu kartu lokal: permukaan secondary, radius 28,
+// padding 20).
+const sectionCardStyle = { marginHorizontal: 20, marginBottom: 16 };
 
 export default function SongDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -166,6 +165,16 @@ export default function SongDetailScreen() {
   const onPrimary =
     pickReadable(["#FFFFFF", "#000000"], colors.primary[500], AA_NORMAL) ??
     "#FFFFFF";
+
+  // FASE 3 additional: judul seksi (teks + ikon) di atas kartu SectionCard
+  // (elevated) — primary[500] mentah hanya 3,78 di Ember (diukur dulu),
+  // jadi pakai accentOn: amber dipertahankan di mana lolos, jatuh ke
+  // accent.orange (6,68 di Ember) bila tidak.
+  const accentOnElevated = accentOn(
+    [colors.primary[500], colors.accent.orange],
+    colors.background.elevated,
+    [colors.text.primary, colors.text.secondary],
+  );
 
   // U-P2-50: tombol "Kembali" harus selalu punya tujuan — masuk via
   // deep link tidak ada history untuk router.back(), jadi fallback ke
@@ -198,6 +207,9 @@ export default function SongDetailScreen() {
   // di-update supaya FullLyricsView langsung menampilkan lirik baru.
   const currentSong = usePlayerStore((state) => state.currentSong);
   const setPlayerLyrics = usePlayerStore((state) => state.setLyrics);
+  // FASE 3 additional: umpan balik gagal/validasi lewat toast error
+  // (Fase 2) — menggantikan Alert.alert di layar ini.
+  const showToast = useToastStore((s) => s.showToast);
 
   const [syncModalVisible, setSyncModalVisible] = useState(false);
   // L2: menu Lirik — editor tempel + dialog hapus.
@@ -289,10 +301,7 @@ export default function SongDetailScreen() {
     // mengembalikan false + mengisi playError saat native menolak.
     const ok = await playSong(song, tracks);
     if (!ok) {
-      Alert.alert(
-        "Gagal memutar",
-        "Lagu ini tidak bisa diputar. Coba lagu lain.",
-      );
+      showToast("Lagu ini tidak bisa diputar. Coba lagu lain.", "error");
       return;
     }
     router.push("/player");
@@ -366,7 +375,7 @@ export default function SongDetailScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       console.error("[SongDetail] Failed to apply metadata:", error);
-      Alert.alert("Gagal", "Terjadi kesalahan saat menyimpan metadata.");
+      showToast("Terjadi kesalahan saat menyimpan metadata.", "error");
     } finally {
       setIsUpdating(false);
     }
@@ -403,7 +412,7 @@ export default function SongDetailScreen() {
       setIsEditMode(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
-      Alert.alert("Gagal", "Terjadi kesalahan saat menyimpan metadata.");
+      showToast("Terjadi kesalahan saat menyimpan metadata.", "error");
     } finally {
       setIsSaving(false);
     }
@@ -460,7 +469,7 @@ export default function SongDetailScreen() {
       return true;
     } catch (error) {
       console.error("[SongDetail] Failed to save lyrics:", error);
-      Alert.alert("Gagal", "Terjadi kesalahan saat menyimpan lirik.");
+      showToast("Terjadi kesalahan saat menyimpan lirik.", "error");
       return false;
     } finally {
       setIsLyricsBusy(false);
@@ -476,7 +485,7 @@ export default function SongDetailScreen() {
   const handleSaveLyricsDraft = async () => {
     const parsed = parsePastedLyrics(lyricsDraft);
     if (!parsed) {
-      Alert.alert("Lirik kosong", "Tulis atau tempel lirik dulu.");
+      showToast("Tulis atau tempel lirik dulu.", "error");
       return;
     }
     const ok = await applyLyricsChange(
@@ -501,15 +510,15 @@ export default function SongDetailScreen() {
       }
       const file = result.assets[0];
       if (!/\.lrc$/i.test(file.name ?? "")) {
-        Alert.alert("Bukan file .lrc", "Pilih file dengan ekstensi .lrc.");
+        showToast("Pilih file dengan ekstensi .lrc.", "error");
         return;
       }
       const text = await FileSystem.readAsStringAsync(file.uri);
       const parsed = parsePastedLyrics(text);
       if (!parsed || parsed.kind !== "synced") {
-        Alert.alert(
-          "File bukan LRC yang valid",
+        showToast(
           "File .lrc tidak berisi baris ber-timestamp [mm:ss.xx].",
+          "error",
         );
         return;
       }
@@ -519,7 +528,7 @@ export default function SongDetailScreen() {
       );
     } catch (error) {
       console.error("[SongDetail] Failed to import .lrc:", error);
-      Alert.alert("Gagal", "File .lrc tidak bisa dibaca.");
+      showToast("File .lrc tidak bisa dibaca.", "error");
     }
   };
 
@@ -591,7 +600,7 @@ export default function SongDetailScreen() {
             onPress={handleRetryLoad}
             disabled={isRetrying}
           >
-            <Text style={{ color: onPrimary, fontWeight: "600" }}>
+            <Text style={{ color: onPrimary, fontFamily: FONT_FAMILY.semiBold }}>
               {isRetrying ? "Memuat…" : "Muat ulang"}
             </Text>
           </TouchableOpacity>
@@ -602,7 +611,7 @@ export default function SongDetailScreen() {
             ]}
             onPress={handleBack}
           >
-            <Text style={{ color: colors.primary[500], fontWeight: "600" }}>
+            <Text style={{ color: colors.primary[500], fontFamily: FONT_FAMILY.semiBold }}>
               Kembali
             </Text>
           </TouchableOpacity>
@@ -629,7 +638,7 @@ export default function SongDetailScreen() {
           onPress={handleRetryLoad}
           disabled={isRetrying}
         >
-          <Text style={{ color: onPrimary, fontWeight: "600" }}>
+          <Text style={{ color: onPrimary, fontFamily: FONT_FAMILY.semiBold }}>
             {isRetrying ? "Memuat…" : "Coba lagi"}
           </Text>
         </TouchableOpacity>
@@ -640,7 +649,7 @@ export default function SongDetailScreen() {
           ]}
           onPress={handleBack}
         >
-          <Text style={{ color: colors.primary[500], fontWeight: "600" }}>
+          <Text style={{ color: colors.primary[500], fontFamily: FONT_FAMILY.semiBold }}>
             Kembali
           </Text>
         </TouchableOpacity>
@@ -649,15 +658,10 @@ export default function SongDetailScreen() {
   }
 
   const renderEditForm = () => (
-    <View
-      style={[
-        styles.sectionCard,
-        { backgroundColor: colors.background.secondary },
-      ]}
-    >
+    <SectionCard style={sectionCardStyle}>
       <View style={styles.sectionHeader}>
-        <Edit3 size={16} color={colors.primary[500]} />
-        <Text style={[styles.sectionTitle, { color: colors.primary[500] }]}>
+        <Edit3 size={16} color={accentOnElevated} />
+        <Text style={[styles.sectionTitle, { color: accentOnElevated }]}>
           EDIT METADATA
         </Text>
         <View style={{ flex: 1 }} />
@@ -683,28 +687,24 @@ export default function SongDetailScreen() {
         label="Judul"
         value={editForm.title}
         onChangeText={(text) => setEditForm({ ...editForm, title: text })}
-        colors={colors}
         placeholder="Judul lagu"
       />
       <EditField
         label="Artis"
         value={editForm.artist}
         onChangeText={(text) => setEditForm({ ...editForm, artist: text })}
-        colors={colors}
         placeholder="Nama artis"
       />
       <EditField
         label="Album"
         value={editForm.album}
         onChangeText={(text) => setEditForm({ ...editForm, album: text })}
-        colors={colors}
         placeholder="Nama album"
       />
       <EditField
         label="Genre"
         value={editForm.genre}
         onChangeText={(text) => setEditForm({ ...editForm, genre: text })}
-        colors={colors}
         placeholder="Genre"
       />
       <View style={styles.rowFields}>
@@ -712,7 +712,6 @@ export default function SongDetailScreen() {
           label="Tahun"
           value={editForm.year}
           onChangeText={(text) => setEditForm({ ...editForm, year: text })}
-          colors={colors}
           keyboardType="numeric"
           style={{ flex: 1, marginRight: 8 }}
           placeholder="2024"
@@ -723,7 +722,6 @@ export default function SongDetailScreen() {
           onChangeText={(text) =>
             setEditForm({ ...editForm, trackNumber: text })
           }
-          colors={colors}
           keyboardType="numeric"
           style={{ flex: 1 }}
           placeholder="1"
@@ -735,7 +733,6 @@ export default function SongDetailScreen() {
         label="Disc No."
         value={editForm.discNumber}
         onChangeText={(text) => setEditForm({ ...editForm, discNumber: text })}
-        colors={colors}
         keyboardType="numeric"
         placeholder="1"
       />
@@ -743,24 +740,21 @@ export default function SongDetailScreen() {
         label="Label"
         value={editForm.label}
         onChangeText={(text) => setEditForm({ ...editForm, label: text })}
-        colors={colors}
         placeholder="Label rekaman"
       />
       <EditField
         label="Publisher"
         value={editForm.publisher}
         onChangeText={(text) => setEditForm({ ...editForm, publisher: text })}
-        colors={colors}
         placeholder="Publisher"
       />
       <EditField
         label="Komposer"
         value={editForm.composer}
         onChangeText={(text) => setEditForm({ ...editForm, composer: text })}
-        colors={colors}
         placeholder="Nama komposer"
       />
-    </View>
+    </SectionCard>
   );
 
   return (
@@ -839,7 +833,7 @@ export default function SongDetailScreen() {
                 },
               ]}
             >
-              <Music size={80} color={colors.text.disabled} />
+              <Music size={80} color={colors.text.secondary} />
             </View>
             <Image
               source={song.artwork ? { uri: song.artwork } : null}
@@ -871,7 +865,11 @@ export default function SongDetailScreen() {
         </View>
 
         <TouchableOpacity
-          style={[styles.playButton, { backgroundColor: colors.primary[500] }]}
+          style={[
+            styles.playButton,
+            { backgroundColor: colors.primary[500] },
+            theme.shadows.lg,
+          ]}
           onPress={handlePlay}
         >
           <Play size={22} color={onPrimary} fill={onPrimary} />
@@ -959,16 +957,11 @@ export default function SongDetailScreen() {
               )}
             </TouchableOpacity>
 
-            <View
-              style={[
-                styles.sectionCard,
-                { backgroundColor: colors.background.secondary },
-              ]}
-            >
+            <SectionCard style={sectionCardStyle}>
               <View style={styles.sectionHeader}>
-                <Disc size={16} color={colors.primary[500]} />
+                <Disc size={16} color={accentOnElevated} />
                 <Text
-                  style={[styles.sectionTitle, { color: colors.primary[500] }]}
+                  style={[styles.sectionTitle, { color: accentOnElevated }]}
                 >
                   METADATA ALBUM
                 </Text>
@@ -993,22 +986,17 @@ export default function SongDetailScreen() {
                 value={song.publisher || "-"}
                 colors={colors}
               />
-            </View>
+            </SectionCard>
 
             {/* U1 (Koreksi 2): bio & foto artis dari DB — sebelumnya hanya
                 ditulis ke DB (handleApplyMetadata) tapi tidak pernah
                 ditampilkan di layar ini. Kosong → "-" (konsisten dengan
                 baris detail lain). */}
-            <View
-              style={[
-                styles.sectionCard,
-                { backgroundColor: colors.background.secondary },
-              ]}
-            >
+            <SectionCard style={sectionCardStyle}>
               <View style={styles.sectionHeader}>
-                <User size={16} color={colors.primary[500]} />
+                <User size={16} color={accentOnElevated} />
                 <Text
-                  style={[styles.sectionTitle, { color: colors.primary[500] }]}
+                  style={[styles.sectionTitle, { color: accentOnElevated }]}
                 >
                   TENTANG ARTIS
                 </Text>
@@ -1032,22 +1020,17 @@ export default function SongDetailScreen() {
               ) : (
                 <DetailRow label="Bio" value="-" colors={colors} />
               )}
-            </View>
+            </SectionCard>
 
             {/* L2: seksi Lirik — status dari DB + aksi manual lokal untuk
                 lagu tanpa file .lrc. Tulis/tempel menerima teks polos
                 atau LRC; impor membaca file .lrc pilihan user; hapus
                 memakai ConfirmDialog (data user). */}
-            <View
-              style={[
-                styles.sectionCard,
-                { backgroundColor: colors.background.secondary },
-              ]}
-            >
+            <SectionCard style={sectionCardStyle}>
               <View style={styles.sectionHeader}>
-                <Music size={16} color={colors.primary[500]} />
+                <Music size={16} color={accentOnElevated} />
                 <Text
-                  style={[styles.sectionTitle, { color: colors.primary[500] }]}
+                  style={[styles.sectionTitle, { color: accentOnElevated }]}
                 >
                   LIRIK
                 </Text>
@@ -1149,7 +1132,7 @@ export default function SongDetailScreen() {
                   <Text
                     style={[
                       styles.lyricsEditorHint,
-                      { color: colors.text.tertiary },
+                      { color: colors.text.secondary },
                     ]}
                   >
                     Baris ber-timestamp [mm:ss.xx] disimpan sebagai lirik
@@ -1196,18 +1179,13 @@ export default function SongDetailScreen() {
                   </View>
                 </View>
               )}
-            </View>
+            </SectionCard>
 
-            <View
-              style={[
-                styles.sectionCard,
-                { backgroundColor: colors.background.secondary },
-              ]}
-            >
+            <SectionCard style={sectionCardStyle}>
               <View style={styles.sectionHeader}>
-                <Info size={16} color={colors.primary[500]} />
+                <Info size={16} color={accentOnElevated} />
                 <Text
-                  style={[styles.sectionTitle, { color: colors.primary[500] }]}
+                  style={[styles.sectionTitle, { color: accentOnElevated }]}
                 >
                   SPESIFIKASI AUDIO
                 </Text>
@@ -1237,18 +1215,13 @@ export default function SongDetailScreen() {
                 value={formatDuration(song.duration)}
                 colors={colors}
               />
-            </View>
+            </SectionCard>
 
-            <View
-              style={[
-                styles.sectionCard,
-                { backgroundColor: colors.background.secondary },
-              ]}
-            >
+            <SectionCard style={sectionCardStyle}>
               <View style={styles.sectionHeader}>
-                <Folder size={16} color={colors.primary[500]} />
+                <Folder size={16} color={accentOnElevated} />
                 <Text
-                  style={[styles.sectionTitle, { color: colors.primary[500] }]}
+                  style={[styles.sectionTitle, { color: accentOnElevated }]}
                 >
                   LOKASI FILE
                 </Text>
@@ -1268,7 +1241,7 @@ export default function SongDetailScreen() {
                 value={song.filename}
                 colors={colors}
               />
-            </View>
+            </SectionCard>
           </>
         )}
 
@@ -1321,7 +1294,7 @@ const styles = StyleSheet.create({
   iconBtn: { padding: 12, borderRadius: 15 },
   // U-P2-09: tombol back berlabel (dipakai navBar layar utama).
   backBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
-  backLabel: { fontSize: 16, fontWeight: "600" },
+  backLabel: { fontSize: 16, fontFamily: FONT_FAMILY.semiBold },
   // U-P2-01: padding 8 + ikon 20 lama = 36dp, di bawah 44dp.
   // padding 12 → 44dp.
   iconBtnSmall: { padding: 12, marginLeft: 4 },
@@ -1331,17 +1304,16 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     overflow: "hidden",
     marginBottom: 24,
-    backgroundColor: "#111",
   },
   artwork: { width: "100%", height: "100%" },
   title: {
     fontSize: 26,
-    fontWeight: "800",
+    fontFamily: FONT_FAMILY.displayBold,
     textAlign: "center",
     marginBottom: 6,
     paddingHorizontal: 10,
   },
-  artist: { fontSize: 18, textAlign: "center", opacity: 0.7 },
+  artist: { fontSize: 18, fontFamily: FONT_FAMILY.regular, textAlign: "center" },
   badgeContainer: { marginTop: 16 },
   playButton: {
     flexDirection: "row",
@@ -1352,14 +1324,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 12,
     marginBottom: 32,
-    elevation: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
   },
   playButtonText: {
     fontSize: 16,
-    fontWeight: "800",
+    fontFamily: FONT_FAMILY.bold,
     // U-P2-04: tanpa `color` — warna teks di-overide inline dengan
     // onPrimary (pickReadable atas primary[500]) di pemakaian style ini.
     letterSpacing: 1,
@@ -1376,9 +1344,9 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 16,
   },
-  syncButtonText: { fontSize: 15, fontWeight: "700" },
+  syncButtonText: { fontSize: 15, fontFamily: FONT_FAMILY.bold },
   syncBadge: { borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2 },
-  syncBadgeText: { fontSize: 12, fontWeight: "800" },
+  syncBadgeText: { fontSize: 12, fontFamily: FONT_FAMILY.bold },
   incompleteNotice: {
     flexDirection: "row",
     alignItems: "center",
@@ -1386,7 +1354,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 24,
     marginBottom: 12,
   },
-  incompleteNoticeText: { fontSize: 13, fontWeight: "600", flex: 1 },
+  incompleteNoticeText: { fontSize: 13, fontFamily: FONT_FAMILY.semiBold, flex: 1 },
   artistImage: {
     width: 120,
     height: 120,
@@ -1406,7 +1374,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  lyricsActionBtnText: { fontSize: 13, fontWeight: "700" },
+  lyricsActionBtnText: { fontSize: 13, fontFamily: FONT_FAMILY.bold },
   lyricsEditor: { marginTop: 12 },
   lyricsEditorInput: {
     minHeight: 160,
@@ -1414,6 +1382,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     fontSize: 14,
+    fontFamily: FONT_FAMILY.regular,
     lineHeight: 20,
   },
   lyricsEditorHint: { fontSize: 12, lineHeight: 16, marginTop: 8 },
@@ -1424,19 +1393,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  sectionCard: {
-    marginHorizontal: 20,
-    padding: 20,
-    borderRadius: 28,
-    marginBottom: 16,
-  },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     marginBottom: 16,
   },
-  sectionTitle: { fontSize: 11, fontWeight: "900", letterSpacing: 1.5 },
+  sectionTitle: { fontSize: 11, fontFamily: FONT_FAMILY.bold, letterSpacing: 1.5 },
   detailRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1446,14 +1409,14 @@ const styles = StyleSheet.create({
   detailLabel: { fontSize: 13, flex: 0.4 },
   detailValue: {
     fontSize: 14,
-    fontWeight: "700",
+    fontFamily: FONT_FAMILY.bold,
     flex: 0.6,
     textAlign: "right",
   },
-  errorText: { fontSize: 18, fontWeight: "700", marginTop: 20 },
+  errorText: { fontSize: 18, fontFamily: FONT_FAMILY.bold, marginTop: 20 },
   loadingSubtext: {
     fontSize: 14,
-    fontWeight: "500",
+    fontFamily: FONT_FAMILY.medium,
     marginTop: 8,
     textAlign: "center",
   },
@@ -1471,19 +1434,5 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   editFieldContainer: { marginBottom: 16 },
-  editLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: 6,
-    letterSpacing: 0.5,
-  },
-  editInput: {
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    fontSize: 15,
-    fontWeight: "500",
-  },
   rowFields: { flexDirection: "row", gap: 8 },
 });
