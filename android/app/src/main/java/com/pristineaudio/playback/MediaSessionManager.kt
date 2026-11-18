@@ -39,6 +39,17 @@ class MediaSessionManager(private val service: PlaybackService) {
     // buildNotification(). Dibersihkan bersama lastArtwork.
     private var lastArtworkIcon: android.graphics.Bitmap? = null
 
+    // F13: kunci untuk bitmap artwork. buildNotification() membaca
+    // lastArtworkIcon di thread pemanggil refreshNotification()/
+    // startForeground() (bridge / command / main), sementara
+    // updateMetadata()/loadArtwork() mengganti + me-recycle bitmap itu dari
+    // thread lain. Tanpa kunci, recycle bisa terjadi di antara baca dan
+    // parcel notify()/startForeground() -> crash "recycled bitmap".
+    // Kunci dipegang selama build+parcel dan selama ganti+recycle; IPC-nya
+    // singkat, dan kunci ini tidak pernah diambil bersarang (tidak ada
+    // deadlock).
+    private val artworkLock = Any()
+
     // Executor untuk decode artwork (IO + bitmap decode butuh background thread).
     // Single-threaded: decode artwork tidak butuh paralel, dan urutan tetap.
     private val artworkExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
@@ -213,18 +224,24 @@ class MediaSessionManager(private val service: PlaybackService) {
 
     fun startForeground() {
         createNotificationChannel()
-        val notification = buildNotification()
-        // Android 14+ (API 34) mewajibkan type eksplisit saat startForeground.
-        // Tanpa type, sistem melempar MissingForegroundServiceTypeException
-        // dan service langsung dimatikan - notification tidak pernah muncul.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            service.startForeground(
-                NOTIFICATION_ID,
-                notification,
-                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
-            )
-        } else {
-            service.startForeground(NOTIFICATION_ID, notification)
+        // F13: build+startForeground di bawah kunci artwork (alasan sama
+        // dengan refreshNotification; di titik ini icon selalu null karena
+        // service baru jalan, tapi bungkus tetap supaya tidak ada jalur
+        // parcel bitmap di luar kunci).
+        synchronized(artworkLock) {
+            val notification = buildNotification()
+            // Android 14+ (API 34) mewajibkan type eksplisit saat startForeground.
+            // Tanpa type, sistem melempar MissingForegroundServiceTypeException
+            // dan service langsung dimatikan - notification tidak pernah muncul.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                service.startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                )
+            } else {
+                service.startForeground(NOTIFICATION_ID, notification)
+            }
         }
 
         // Aktifkan MediaSession supaya sistem mengenali ini sesi media.
@@ -244,6 +261,31 @@ class MediaSessionManager(private val service: PlaybackService) {
         // tiap siklus service. shutdownNow aman dipanggil ulang, tapi
         // guard released di atas sudah membuat release() kedua jadi no-op.
         artworkExecutor.shutdownNow()
+        // F13: recycle bitmap artwork terakhir (tidak ada lagi yang
+        // membangun notifikasi/metadata dari bitmap ini setelah release).
+        clearArtwork()
+    }
+
+    // F13: keluarkan bitmap lama dari field lalu recycle. Dipanggil saat
+    // track berganti (updateMetadata) dan saat service mati (release).
+    // Dulu field hanya di-null-kan: bitmap ≤1024px tiap ganti trek dibuang
+    // ke GC finalizer (churn memori native yang tidak perlu).
+    // Guard alias: lastArtworkIcon bisa JADI lastArtwork yang sama
+    // (downscaleToMaxDim mengembalikan src bila sudah <= 256px) — recycle
+    // sekali saja. Recycle di luar kunci: field sudah null di dalam kunci,
+    // dan pemegang referensi lama sudah selesai parcel (refreshNotification/
+    // startForeground memegang kunci selama build+parcel).
+    private fun clearArtwork() {
+        val toRecycle = synchronized(artworkLock) {
+            val oldArt = lastArtwork
+            val oldIcon = lastArtworkIcon
+            lastArtwork = null
+            lastArtworkIcon = null
+            listOfNotNull(oldArt, oldIcon.takeIf { it !== oldArt })
+        }
+        toRecycle.forEach { bmp ->
+            if (!bmp.isRecycled) bmp.recycle()
+        }
     }
 
     // 🔥 NEW: update metadata (judul, artist, durasi) + refresh notifikasi
@@ -263,9 +305,9 @@ class MediaSessionManager(private val service: PlaybackService) {
         // supaya tidak tampil di notifikasi/lock screen track ini. Metadata
         // yang dibangun di bawah tidak membawa bitmap, dan buildNotification()
         // sudah skip setLargeIcon saat lastArtwork null.
-        // Ikon 256px dibersihkan bersama bitmap metadata-nya.
-        lastArtwork = null
-        lastArtworkIcon = null
+        // Ikon 256px dibersihkan bersama bitmap metadata-nya (di-recycle,
+        // lihat clearArtwork).
+        clearArtwork()
 
         // Naikkan id permintaan; task decode membawa id ini + nilai
         // title/artist/album/duration yang DITANGKAP saat submit (parameter
@@ -369,9 +411,14 @@ class MediaSessionManager(private val service: PlaybackService) {
     // internal, bukan private: PlaybackService memakainya untuk menyegarkan
     // notifikasi saat service di-start ulang oleh sistem (START_STICKY).
     fun refreshNotification() {
-        val notification = buildNotification()
-        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(NOTIFICATION_ID, notification)
+        // F13: build+notify di bawah kunci artwork — lihat komentar di
+        // artworkLock: tanpa ini, clearArtwork() bisa me-recycle bitmap
+        // yang sedang diparcel ke NotificationManager.
+        synchronized(artworkLock) {
+            val notification = buildNotification()
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.notify(NOTIFICATION_ID, notification)
+        }
     }
 
     // ============================================================
@@ -406,22 +453,28 @@ class MediaSessionManager(private val service: PlaybackService) {
                     bmp.recycle()
                     return
                 }
-                lastArtwork = bmp
-                lastArtworkIcon = downscaleToMaxDim(bmp, ARTWORK_LARGE_ICON_MAX_DIM)
+                // F13: publikasi bitmap + setMetadata di bawah kunci yang
+                // sama dengan clearArtwork()/refreshNotification(): tanpa
+                // ini, updateMetadata() bisa me-recycle bmp di antara
+                // penugasan field dan parcel setMetadata().
+                synchronized(artworkLock) {
+                    lastArtwork = bmp
+                    lastArtworkIcon = downscaleToMaxDim(bmp, ARTWORK_LARGE_ICON_MAX_DIM)
 
-                // Update metadata dengan artwork. putBitmap butuh ukuran
-                // yang wajar — biarkan sistem menangani scaling.
-                // Metadata dibangun dari nilai yang ditangkap saat submit,
-                // bukan dari field mutable atau metadata lama.
-                val metadata = MediaMetadataCompat.Builder()
-                    .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
-                    .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
-                    .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album)
-                    .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationMs)
-                    .putBitmap(MediaMetadataCompat.METADATA_KEY_ART, bmp)
-                    .build()
+                    // Update metadata dengan artwork. putBitmap butuh ukuran
+                    // yang wajar — biarkan sistem menangani scaling.
+                    // Metadata dibangun dari nilai yang ditangkap saat submit,
+                    // bukan dari field mutable atau metadata lama.
+                    val metadata = MediaMetadataCompat.Builder()
+                        .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
+                        .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
+                        .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album)
+                        .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationMs)
+                        .putBitmap(MediaMetadataCompat.METADATA_KEY_ART, bmp)
+                        .build()
 
-                mediaSession.setMetadata(metadata)
+                    mediaSession.setMetadata(metadata)
+                }
 
                 // Refresh notifikasi di main thread (notifikasi + UI lockscreen).
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
