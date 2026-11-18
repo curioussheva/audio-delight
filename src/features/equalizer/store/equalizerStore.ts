@@ -153,7 +153,17 @@ const applyEqThrottled = (
   const fire = () => {
     _eqApplyLastAt = Date.now();
     _eqApplyTimer = null;
-    const { bands, isEQEnabled, audioSessionId } = get();
+    // N24: apply membaca snapshot PENDING store bila ada, bukan hanya
+    // get().bands. Dua throttle (store + apply, masing-masing ~100 ms)
+    // dihitung dari lastAt yang berbeda dan bisa meleset beberapa ms —
+    // bila timer apply menang dari timer flush store, get().bands masih
+    // berisi bands pra-drag dan tidak ada apply susulan (apply hanya
+    // dipicu tick drag). Pending adalah snapshot bands TERBARU dari
+    // setBandGain, jadi nilai akhir selalu terkirim walau flush store
+    // belum jalan. (Flush store yang datang sesudahnya menulis bands
+    // yang sama persis, jadi tidak ada apply yang hilang.)
+    const { bands: storedBands, isEQEnabled, audioSessionId } = get();
+    const bands = _eqStorePendingBands ?? storedBands;
     if (
       !isEQEnabled ||
       audioSessionId === -1 ||
@@ -391,8 +401,8 @@ export const useEqualizerStore = create<EqualizerStore>()(
 
   // J1-2: jangan kirim tiap tick drag ke native — throttle (leading +
   // trailing) via apply penuh. Dipanggil tiap tick seperti semula; apply
-  // membaca bands TERKINI dari store saat fire, jadi nilai akhir selalu
-  // terkirim walau store update-nya digabung.
+  // membaca snapshot PENDING store bila ada (N24), jadi nilai akhir
+  // selalu terkirim walau flush store belum jalan saat timer apply fire.
   applyEqThrottled(get);
 },
 
