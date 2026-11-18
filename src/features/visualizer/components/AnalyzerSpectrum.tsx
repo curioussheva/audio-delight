@@ -59,6 +59,12 @@ import {
 } from "react-native-reanimated";
 
 import { visualizerService } from "@/features/visualizer/services/VisualizerService";
+import { useTheme } from "@/shared/context/ThemeContext";
+import {
+  FONT_FAMILY,
+  BASE_RADIUS,
+} from "@/shared/constants/themes/base";
+import { pickReadable } from "@/shared/utils/contrast";
 import {
   ANALYZER_COLOR_CLIP,
   ANALYZER_COLOR_LOW,
@@ -109,6 +115,19 @@ const MIN_BAR_COUNT = 16;
 const DB_GUTTER = 64;
 const FREQ_STRIP = 18;
 
+// Latar pill gelap (petunjuk scroll, frekuensi dominan, menunggu data):
+// 65% hitam — opasitas TERKECIL yang membuat teks putih lolos AA di
+// keempat tema (terukur 7,68–20,12); 45% lama hanya 3,82–3,90 di tema
+// terang (teks praktis tak terbaca). Pola yang sama dengan pill clip EQ
+// (45% → 90%) — di sini 65% sudah cukup dengan margin.
+const PILL_BG = "rgba(0,0,0,0.65)";
+
+// Latar pill CLIP: #DC2626, bukan #EF4444 (merah zona). Teks putih di
+// atas #EF4444 hanya 3,76:1; di atas #DC2626 4,83:1 (lolos AA). Bar/peak/
+// garis clip tetap #EF4444 (ANALYZER_COLOR_CLIP) — pill adalah elemen UI,
+// bukan bar.
+const CLIP_PILL_BG = "#DC2626";
+
 // Lebar minimum tiap bar (px) — menentukan lebar konten scroll.
 const MIN_BAR_WIDTH = 14;
 
@@ -132,6 +151,23 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
   isPlaying,
   audioSessionId,
 }) => {
+  // FASE 3 Analyzer: warna teks label dibaca dari tema (bukan hex
+  // hardcoded). Komponen ini hanya dirender di dalam kartu Analyzer —
+  // latar label = background.secondary.
+  const { theme } = useTheme();
+  const cardBg = theme.colors.background.secondary;
+  // Label "0 (maks)" harus tetap MERAH (menandai garis clip) tapi
+  // terbaca di semua tema: status.error dulu, lalu merah zona, lalu
+  // merah gelap untuk tema terang. Terukur: 6,39/6,51/5,40/5,55.
+  const clipLabelColor = useMemo(
+    () =>
+      pickReadable(
+        [theme.colors.status.error, ANALYZER_COLOR_CLIP, "#B91C1C"],
+        cardBg,
+      ) ?? theme.colors.status.error,
+    [theme],
+  );
+
   const barCount = Math.max(
     MIN_BAR_COUNT,
     Math.min(MAX_BAR_COUNT, rawBarCount),
@@ -563,8 +599,13 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
             key={`db-${db}`}
             style={[
               styles.dbLabel,
-              { top: Math.min(barsHeight - 7, Math.max(0, y - 6)) },
-              db === 0 ? styles.dbLabelClip : undefined,
+              {
+                top: Math.min(barsHeight - 7, Math.max(0, y - 6)),
+                color: theme.colors.text.secondary,
+              },
+              db === 0
+                ? [styles.dbLabelClip, { color: clipLabelColor }]
+                : undefined,
             ]}
           >
             {label}
@@ -647,7 +688,13 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
             const x = freqToFraction(freq, freqMax) * contentWidth;
             const left = Math.max(0, Math.min(contentWidth - 36, x - 18));
             return (
-              <Text key={`hz-${freq}`} style={[styles.hzLabel, { left }]}>
+              <Text
+                key={`hz-${freq}`}
+                style={[
+                  styles.hzLabel,
+                  { left, color: theme.colors.text.secondary },
+                ]}
+              >
                 {formatFreq(freq)}
               </Text>
             );
@@ -677,16 +724,14 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
       {/* Frekuensi dominan — di-throttle ~2 Hz di handleData. */}
       {hasRealDataState && dominantFreq && (
         <View style={styles.dominantPill} pointerEvents="none">
-          <Text style={[styles.dominantText, { color }]}>
-            Dominan {dominantFreq}
-          </Text>
+          <Text style={styles.dominantText}>Dominan {dominantFreq}</Text>
         </View>
       )}
 
       {/* U-P1-29: lagu diputar tapi FFT belum/tidak mengembalikan data —\n          katakan jujur, jangan animasikan bar palsu. */}
       {isPlaying && !hasRealDataState && (
         <View style={styles.waitingOverlay} pointerEvents="none">
-          <Text style={[styles.waitingText, { color }]}>
+          <Text style={styles.waitingText}>
             {fftError
               ? "Gagal membaca data visualizer — coba restart lagu."
               : "Menunggu data audio…"}
@@ -701,12 +746,16 @@ const styles = StyleSheet.create({
   container: {
     overflow: "hidden",
   },
+  // FASE 3 Analyzer: bobot → keluarga font token; warna label sumbu
+  // hardcoded (#888888, #EF4444) → token tema (lihat JSX — warna butuh
+  // theme, jadi di-inline). Ukuran tidak berubah (gutter 64px diukur
+  // untuk label 9px — membesarkan merusak geometri sumbu).
   dbCaption: {
     position: "absolute",
     left: 0,
     top: 0,
     fontSize: 9,
-    fontWeight: "600",
+    fontFamily: FONT_FAMILY.semiBold,
   },
   dbLabel: {
     position: "absolute",
@@ -714,11 +763,10 @@ const styles = StyleSheet.create({
     width: 60,
     textAlign: "right",
     fontSize: 9,
-    color: "#888888",
+    fontFamily: FONT_FAMILY.regular,
   },
   dbLabelClip: {
-    color: "#EF4444",
-    fontWeight: "700",
+    fontFamily: FONT_FAMILY.bold,
   },
   hzLabel: {
     position: "absolute",
@@ -726,7 +774,7 @@ const styles = StyleSheet.create({
     width: 36,
     textAlign: "center",
     fontSize: 9,
-    color: "#888888",
+    fontFamily: FONT_FAMILY.regular,
   },
   scrollHint: {
     position: "absolute",
@@ -737,40 +785,41 @@ const styles = StyleSheet.create({
   },
   scrollHintText: {
     fontSize: 9,
-    fontWeight: "600",
-    color: "#888888",
-    backgroundColor: "rgba(0,0,0,0.45)",
+    fontFamily: FONT_FAMILY.semiBold,
+    color: "#FFFFFF",
+    backgroundColor: PILL_BG,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 999,
+    borderRadius: BASE_RADIUS.pill,
     overflow: "hidden",
   },
   clipPill: {
     position: "absolute",
     top: 4,
     left: DB_GUTTER,
-    backgroundColor: "#EF4444",
+    backgroundColor: CLIP_PILL_BG,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 999,
+    borderRadius: BASE_RADIUS.pill,
   },
   clipText: {
     fontSize: 10,
-    fontWeight: "700",
+    fontFamily: FONT_FAMILY.bold,
     color: "#FFFFFF",
   },
   dominantPill: {
     position: "absolute",
     top: 4,
     right: 0,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: PILL_BG,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 999,
+    borderRadius: BASE_RADIUS.pill,
   },
   dominantText: {
     fontSize: 10,
-    fontWeight: "600",
+    fontFamily: FONT_FAMILY.semiBold,
+    color: "#FFFFFF",
   },
   waitingOverlay: {
     position: "absolute",
@@ -783,11 +832,12 @@ const styles = StyleSheet.create({
   },
   waitingText: {
     fontSize: 13,
-    fontWeight: "500",
-    backgroundColor: "rgba(0,0,0,0.45)",
+    fontFamily: FONT_FAMILY.medium,
+    color: "#FFFFFF",
+    backgroundColor: PILL_BG,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 999,
+    borderRadius: BASE_RADIUS.pill,
     overflow: "hidden",
   },
 });

@@ -8,7 +8,6 @@ import {
   ScrollView,
   ActivityIndicator,
   Dimensions,
-  TouchableOpacity,
 } from "react-native";
 import { Image } from "expo-image";
 import Slider from "@react-native-community/slider";
@@ -26,6 +25,14 @@ import {
 // Hooks & Store
 import { useTheme } from "@/shared/context/ThemeContext";
 import { ScreenHeader } from "@/shared/components/ui/ScreenHeader";
+import { EmptyState } from "@/shared/components/ui/EmptyState";
+import { PristineButton } from "@/shared/components/ui/PristineButton";
+import {
+  FONT_FAMILY,
+  BASE_RADIUS,
+  BASE_SHADOWS,
+} from "@/shared/constants/themes/base";
+import { accentOn } from "@/shared/utils/contrast";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useAudioSessionRetry } from "@/features/player/hooks/useAudioSessionRetry";
 import { FLOATING_PLAYER_CLEARANCE } from "@/features/player/layout";
@@ -262,17 +269,29 @@ export default function AnalyzerScreen() {
 
   const status = getQualityStatus();
 
+  // FASE 3 Analyzer: warna ikon tombol retry = warna label varian
+  // sekunder PristineButton di atas kartu (accentOn yang sama dengan
+  // yang dipakai buildButtonStyles).
+  const retryIconColor = accentOn(
+    [colors.accent.primary],
+    colors.background.secondary,
+    [colors.text.primary],
+  );
+
   // ─── Render ─────────────────────────────────────────────────────────────────
 
+  // FASE 3 Analyzer: keadaan kosong layar memakai komponen EmptyState
+  // (Fase 2) — ikon + judul, tanpa aksi. Teks lama 16/400 tertiary kini
+  // judul 16/600 primary dari builder EmptyState.
   if (!currentSong) {
     return (
       <View
         style={[styles.center, { backgroundColor: colors.background.primary }]}
       >
-        <Music size={48} color={colors.text.disabled} />
-        <Text style={[styles.emptyText, { color: colors.text.tertiary }]}>
-          Putar lagu untuk melihat analisis audio
-        </Text>
+        <EmptyState
+          title="Putar lagu untuk melihat analisis audio"
+          icon={<Music size={48} color={colors.text.disabled} />}
+        />
       </View>
     );
   }
@@ -338,7 +357,7 @@ export default function AnalyzerScreen() {
               <Text
                 style={[
                   styles.freqSliderLabel,
-                  { color: colors.text.tertiary },
+                  { color: colors.text.secondary },
                 ]}
               >
                 BATAS ATAS GRAFIK
@@ -395,29 +414,19 @@ export default function AnalyzerScreen() {
                     >
                       Audio session tidak tersedia. Coba restart lagu.
                     </Text>
-                    <TouchableOpacity
+                    {/* FASE 3 Analyzer: tombol retry memakai PristineButton
+                        sekunder (Fase 2) — permukaan kartu sebagai surface
+                        supaya warna aksen diukur di atas kartu. */}
+                    <PristineButton
+                      label="Coba lagi"
                       onPress={retryAudioSession}
                       disabled={isRetrying}
-                      style={[
-                        styles.retryBtn,
-                        {
-                          backgroundColor: colors.background.tertiary,
-                          opacity: isRetrying ? 0.4 : 1,
-                        },
-                      ]}
-                      accessibilityRole="button"
+                      variant="secondary"
+                      icon={<RefreshCw size={16} color={retryIconColor} />}
+                      surface={colors.background.secondary}
+                      style={{ marginTop: 12 }}
                       accessibilityLabel="Coba pulihkan audio session"
-                    >
-                      <RefreshCw size={16} color={colors.primary[500]} />
-                      <Text
-                        style={[
-                          styles.retryBtnText,
-                          { color: colors.primary[500] },
-                        ]}
-                      >
-                        Coba lagi
-                      </Text>
-                    </TouchableOpacity>
+                    />
                   </>
                 ) : (
                   <Text style={{ color: colors.text.tertiary, marginTop: 12 }}>
@@ -426,7 +435,7 @@ export default function AnalyzerScreen() {
                 )}
               </>
             ) : (
-              <Text style={{ color: colors.text.disabled, fontSize: 13 }}>
+              <Text style={{ color: colors.text.tertiary, fontSize: 13 }}>
                 Putar lagu untuk melihat spektrum
               </Text>
             )}
@@ -661,7 +670,9 @@ export default function AnalyzerScreen() {
               ARTIST BIOGRAPHY
             </Text>
             {enrichSource === "db" && (
-              <Text style={[styles.sourceTag, { color: colors.text.disabled }]}>
+              <Text
+                style={[styles.sourceTag, { color: colors.text.tertiary }]}
+              >
                 dari cache lokal
               </Text>
             )}
@@ -699,7 +710,7 @@ export default function AnalyzerScreen() {
             {artistBio}
           </Text>
         ) : (
-          <Text style={[styles.bioText, { color: colors.text.disabled }]}>
+          <Text style={[styles.bioText, { color: colors.text.tertiary }]}>
             Belum ada biografi. Ambil foto & bio artis dari layar detail
             lagu.
           </Text>
@@ -736,21 +747,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 40,
   },
-  emptyText: {
-    textAlign: "center",
-    marginTop: 20,
-    fontSize: 16,
-    lineHeight: 24,
-  },
   card: {
     padding: 20,
-    borderRadius: 24,
+    // FASE 3 Analyzer: radius kartu + bayangan dari token (xl + bayangan
+    // md hangat — sama dengan kartu SectionCard). Padding 20 dipertahankan.
+    borderRadius: BASE_RADIUS.xl,
     marginBottom: 16,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
+    ...BASE_SHADOWS.md,
   },
   cardHeader: {
     flexDirection: "row",
@@ -761,22 +764,43 @@ const styles = StyleSheet.create({
   // U-P2-53: `screenHeaderRow` dihapus — header layar sekarang
   // ScreenHeader (lihat di atas). `headerRow` yang tersisa adalah baris
   // kartu (space-between), bukan header layar.
+  // FASE 3 Analyzer: bobot → keluarga font token (ukuran tidak berubah).
   label: {
     fontSize: 11,
-    fontWeight: "800",
+    fontFamily: FONT_FAMILY.bold,
     letterSpacing: 1.2,
     textTransform: "uppercase",
   },
-  statusValue: { fontSize: 20, fontWeight: "800", marginVertical: 4 },
-  warningText: { fontSize: 12, fontWeight: "600", marginTop: 8 },
+  // Verdict 20px = display (peran h4) — Playfair Display Bold, seperti
+  // judul lagu di Player. 20px bold = teks besar WCAG (ambang 3:1).
+  statusValue: {
+    fontSize: 20,
+    fontFamily: FONT_FAMILY.displayBold,
+    lineHeight: 28,
+    marginVertical: 4,
+  },
+  warningText: {
+    fontSize: 12,
+    fontFamily: FONT_FAMILY.semiBold,
+    marginTop: 8,
+  },
   infoRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 12,
     borderBottomWidth: 0.5,
   },
-  infoLabel: { fontSize: 13, fontWeight: "500", flex: 0.4 },
-  infoValue: { fontSize: 14, fontWeight: "600", flex: 0.6, textAlign: "right" },
+  infoLabel: {
+    fontSize: 13,
+    fontFamily: FONT_FAMILY.medium,
+    flex: 0.4,
+  },
+  infoValue: {
+    fontSize: 14,
+    fontFamily: FONT_FAMILY.semiBold,
+    flex: 0.6,
+    textAlign: "right",
+  },
   divider: { height: 1, marginVertical: 8, opacity: 0.3 },
   visualizerPlaceholder: {
     height: 160,
@@ -790,35 +814,40 @@ const styles = StyleSheet.create({
   },
   freqSliderLabel: {
     fontSize: 11,
-    fontWeight: "700",
+    fontFamily: FONT_FAMILY.bold,
     letterSpacing: 0.8,
   },
-  freqSliderValue: { fontSize: 13, fontWeight: "700" },
-  freqSliderHint: { fontSize: 11, lineHeight: 16, marginTop: 2 },
-  retryBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-    marginTop: 12,
+  freqSliderValue: { fontSize: 13, fontFamily: FONT_FAMILY.bold },
+  freqSliderHint: {
+    fontSize: 11,
+    fontFamily: FONT_FAMILY.regular,
+    lineHeight: 16,
+    marginTop: 2,
   },
-  retryBtnText: { fontSize: 14, fontWeight: "600" },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
     marginBottom: 15,
   },
-  sourceTag: { fontSize: 10, marginTop: 2, fontStyle: "italic" },
+  sourceTag: {
+    fontSize: 10,
+    fontFamily: FONT_FAMILY.regular,
+    marginTop: 2,
+    fontStyle: "italic",
+  },
   artistImageWrapper: {
     width: "100%",
     height: 220,
-    borderRadius: 16,
+    borderRadius: BASE_RADIUS.lg,
     overflow: "hidden",
     marginBottom: 16,
   },
   artistImage: { width: "100%", height: "100%" },
-  bioText: { fontSize: 14, lineHeight: 22, textAlign: "justify" },
+  bioText: {
+    fontSize: 14,
+    fontFamily: FONT_FAMILY.regular,
+    lineHeight: 22,
+    textAlign: "justify",
+  },
 });
