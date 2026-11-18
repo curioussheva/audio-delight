@@ -126,15 +126,29 @@ export const useLibrary = (
           if (!isMountedRef.current) return;
 
           if (isLoadMore) {
+            // N2: halaman tambahan harus sampai ke STORE — layar Library
+            // merender store.tracks, bukan state lokal hook ini, jadi
+            // append lokal saja tidak pernah terlihat di UI. Dasar
+            // append dibaca dari globalSongsCache (daftar penuh tanpa
+            // filter); bila query terfilter, cache bukan daftar ini,
+            // jadi hanya state lokal yang ditambah.
+            const unfiltered =
+              !currentSearch && currentFilter === "all";
+            const base = unfiltered ? (globalSongsCache ?? []) : null;
+            const appended =
+              base !== null ? [...base, ...result] : null;
             setSongs((prev) => {
               const newSongs = [...prev, ...result];
               // Update cache untuk initial load
-              if (!currentSearch && currentFilter === "all") {
+              if (unfiltered) {
                 globalSongsCache = newSongs;
                 lastLoadTime = Date.now();
               }
               return newSongs;
             });
+            if (appended !== null) {
+              setTracks(appended as any);
+            }
           } else {
             setSongs(result);
             // Update global cache

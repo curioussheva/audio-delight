@@ -164,7 +164,7 @@ export default function LibraryScreen() {
   // hook itu ("favorites"/"format-flac"/"sample-rate-hi-res"/...).
   // Panggil useLibrary + useFavorites langsung supaya tidak ada komputasi
   // filter/sort yang hasilnya dibuang.
-  const { loading, error: libraryError, reload } = useLibrary();
+  const { loading, error: libraryError, reload, loadMore } = useLibrary();
   const { isFavorite, toggleFavorite, favoriteIds, favoriteSongs } =
     useFavorites();
 
@@ -800,6 +800,16 @@ export default function LibraryScreen() {
                 colors={[colors.primary[500]]}
               />
             }
+            // N2: library terpotong diam-diam di 1000 lagu — `loadMore`
+            // dulu tidak pernah dipanggil siapa pun. Tab Songs kini
+            // memuat halaman berikut saat mendekati ujung daftar.
+            // Tab lain (album/artis/...) membaca filteredSource yang
+            // sama, jadi ikut membesar tanpa onEndReached sendiri.
+            // Guard di loadMore (hasMore / loading / promise in-flight)
+            // menahan pemanggilan ganda; habisnya halaman ditandai
+            // hasMore=false saat satu halaman kembali < limit.
+            onEndReached={loadMore}
+            onEndReachedThreshold={0.5}
           />
         );
       case "album":
