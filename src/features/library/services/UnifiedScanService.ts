@@ -184,8 +184,13 @@ export class UnifiedScanService {
       const remaining = store.getUnenrichedSongs?.() || [];
       store.setUnenrichedCount(remaining.length);
 
+      // N17: processed = yang BENAR-BENAR diproses (sukses + gagal),
+      // bukan total target. Sebelumnya targetIds.length — saat batal,
+      // lagu yang di-skip ikut dihitung "processed" dan modal
+      // menampilkan angka bohong. skipped = targetIds.length - processed
+      // (ada di result enrichBatch, tidak diekspos ke pemanggil).
       return {
-        processed: targetIds.length,
+        processed: (result.success || 0) + (result.failed || 0),
         success: result.success || 0,
         failed: result.failed || 0,
       };
