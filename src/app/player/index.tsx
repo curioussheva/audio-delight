@@ -636,67 +636,11 @@ export default function PlayerScreen() {
           { paddingBottom: playerBottomPadding },
         ]}
       >
-        {/* Progress Section — U-P2-11: selama drag, slider menampilkan
-            nilai lokal (onValueChange) dan baru commit seek saat dilepas
-            (onSlidingComplete); watcher posisi native tidak boleh menarik
-            balik nilai selama drag. Saat durasi 0, slider tidak dirender
-            sama sekali (max=0 tidak berguna) — diganti trek statis supaya
-            layout tidak lompat. A3: panel solid (lihat HEADER). */}
-        <View
-          style={[
-            styles.progressSection,
-            styles.panel,
-            { backgroundColor: colors.background.primary },
-          ]}
-        >
-          {duration > 0 ? (
-            <Slider
-              style={styles.slider}
-              minimumValue={0}
-              maximumValue={duration}
-              value={dragPosition ?? position}
-              accessibilityRole="adjustable"
-              accessibilityLabel="Posisi pemutaran"
-              accessibilityValue={{
-                min: 0,
-                max: Math.round(duration),
-                now: Math.round(dragPosition ?? position),
-              }}
-              onSlidingStart={(value) => setDragPosition(value)}
-              onValueChange={(value) => setDragPosition(value)}
-              onSlidingComplete={(value) => {
-                setDragPosition(null);
-                void seek(value);
-              }}
-              minimumTrackTintColor={primaryColor}
-              maximumTrackTintColor={borderColor}
-              thumbTintColor={primaryColor}
-            />
-          ) : (
-            <View
-              style={styles.slider}
-              accessibilityRole="progressbar"
-              accessibilityLabel="Posisi pemutaran belum tersedia"
-            >
-              <View
-                style={[
-                  styles.sliderDisabledTrack,
-                  { backgroundColor: borderColor },
-                ]}
-              />
-            </View>
-          )}
-          <View style={styles.timeRow}>
-            <Text style={[styles.timeText, { color: textTertiary }]}>
-              {formatTime(dragPosition ?? position)}
-            </Text>
-            <Text style={[styles.timeText, { color: textTertiary }]}>
-              {formatTime(duration)}
-            </Text>
-          </View>
-        </View>
-
-        {/* Controls — A3: panel solid (lihat HEADER). */}
+        {/* Controls + Progress (LAYOUT-V2 (3): panel progres terpisah
+            DIHAPUS — slider + waktu pindah ke DALAM panel kontrol, di
+            bawah tombol-tombol. Satu panel, menghemat ~44dp vertikal.
+            Perilaku seek tidak berubah (lihat U-P2-11 di bawah).
+            A3: panel solid (lihat HEADER). */}
         <View
           style={[
             styles.controlsSection,
@@ -704,8 +648,11 @@ export default function PlayerScreen() {
             { backgroundColor: colors.background.primary },
           ]}
         >
-          <TouchableOpacity
-            onPress={toggleShuffle}
+          {/* LAYOUT-V2 (3): baris tombol — slider ada di bawah baris ini,
+              di dalam panel yang sama. */}
+          <View style={styles.controlsRow}>
+            <TouchableOpacity
+              onPress={toggleShuffle}
             style={styles.controlBtn}
             accessibilityRole="button"
             accessibilityLabel="Acak"
@@ -791,6 +738,60 @@ export default function PlayerScreen() {
               />
             )}
           </TouchableOpacity>
+          </View>
+
+          {/* LAYOUT-V2 (3): slider + waktu — pindah dari panel progres
+              terpisah ke dalam panel kontrol. U-P2-11: selama drag, slider
+              menampilkan nilai lokal (onValueChange) dan baru commit seek
+              saat dilepas (onSlidingComplete); watcher posisi native tidak
+              boleh menarik balik nilai selama drag. Saat durasi 0, slider
+              tidak dirender sama sekali (max=0 tidak berguna) — diganti
+              trek statis supaya layout tidak lompat. */}
+          {duration > 0 ? (
+            <Slider
+              style={styles.slider}
+              minimumValue={0}
+              maximumValue={duration}
+              value={dragPosition ?? position}
+              accessibilityRole="adjustable"
+              accessibilityLabel="Posisi pemutaran"
+              accessibilityValue={{
+                min: 0,
+                max: Math.round(duration),
+                now: Math.round(dragPosition ?? position),
+              }}
+              onSlidingStart={(value) => setDragPosition(value)}
+              onValueChange={(value) => setDragPosition(value)}
+              onSlidingComplete={(value) => {
+                setDragPosition(null);
+                void seek(value);
+              }}
+              minimumTrackTintColor={primaryColor}
+              maximumTrackTintColor={borderColor}
+              thumbTintColor={primaryColor}
+            />
+          ) : (
+            <View
+              style={styles.slider}
+              accessibilityRole="progressbar"
+              accessibilityLabel="Posisi pemutaran belum tersedia"
+            >
+              <View
+                style={[
+                  styles.sliderDisabledTrack,
+                  { backgroundColor: borderColor },
+                ]}
+              />
+            </View>
+          )}
+          <View style={styles.timeRow}>
+            <Text style={[styles.timeText, { color: textTertiary }]}>
+              {formatTime(dragPosition ?? position)}
+            </Text>
+            <Text style={[styles.timeText, { color: textTertiary }]}>
+              {formatTime(duration)}
+            </Text>
+          </View>
         </View>
 
         {/* Audio Info — A3: panel solid (lihat HEADER). Tanpa metadata
@@ -1168,9 +1169,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
   },
-  progressSection: {
-    marginBottom: 20,
-  },
   slider: {
     width: "100%",
     height: 40,
@@ -1194,11 +1192,16 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   controlsSection: {
+    // LAYOUT-V2 (3): panel kini kolom — baris tombol (controlsRow) di
+    // atas, slider + waktu di bawah. Dulu baris (flexDirection row).
+    marginBottom: 30,
+    paddingHorizontal: 10,
+  },
+  // LAYOUT-V2 (3): baris 5 tombol kontrol di dalam panel kontrol.
+  controlsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 30,
-    paddingHorizontal: 10,
   },
   // Target sentuh >= 44dp: Shuffle/Repeat (ikon 22 + padding 11x2 = 44).
   // Skip (ikon 32) jadi 54 — tidak masalah, tetap dalam bar kontrol.
