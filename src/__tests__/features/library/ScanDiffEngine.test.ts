@@ -31,6 +31,7 @@ import {
 } from "../../../features/library/services/ScanDiffEngine";
 import type { NativeSong } from "@/features/library/native/MediaStoreModule";
 import { MediaStore } from "@/features/library/native/MediaStoreModule";
+import { LibraryScanner } from "@/features/library/api/scanner";
 import { useLibraryStore } from "@/features/library/store/libraryStore";
 
 const song = (uri: string, fileSize = 1000): NativeSong =>
@@ -141,6 +142,7 @@ describe("computeDiff", () => {
 describe("quickDiff — J3-1: tidak bisa menggantikan refresh library", () => {
   const getState = useLibraryStore.getState as jest.Mock;
   const queryAudioFiles = MediaStore.queryAudioFiles as jest.Mock;
+  const getExistingUris = LibraryScanner.getExistingUris as jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -160,5 +162,39 @@ describe("quickDiff — J3-1: tidak bisa menggantikan refresh library", () => {
     });
     // Bukti early-return sebelum getNativeSongs(): tidak ada query sama sekali.
     expect(queryAudioFiles).not.toHaveBeenCalled();
+  });
+
+  it("S1: bypassAutoScanGate=true -> jalan walau auto-scan OFF (scan perdana)", async () => {
+    getState.mockReturnValue({ isAutoScanEnabled: false });
+    queryAudioFiles.mockResolvedValue([song("a")]);
+    getExistingUris.mockReturnValue(new Set<string>());
+
+    const result = await ScanDiffEngine.quickDiff(undefined, {
+      bypassAutoScanGate: true,
+    });
+
+    expect(queryAudioFiles).toHaveBeenCalledTimes(1);
+    expect(result.newCount).toBe(1);
+    expect(result.totalScanned).toBe(1);
+    expect(result.newSongs.map((s) => s.uri)).toEqual(["a"]);
+  });
+
+  it("auto-scan ON -> jalan tanpa bypass (jalur resume/autoScan tidak berubah)", async () => {
+    getState.mockReturnValue({ isAutoScanEnabled: true });
+    queryAudioFiles.mockResolvedValue([]);
+    getExistingUris.mockReturnValue(new Set<string>());
+
+    const result = await ScanDiffEngine.quickDiff();
+
+    expect(queryAudioFiles).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      newCount: 0,
+      deletedCount: 0,
+      updatedCount: 0,
+      totalScanned: 0,
+      newSongs: [],
+      updatedSongs: [],
+      deletedUris: [],
+    });
   });
 });

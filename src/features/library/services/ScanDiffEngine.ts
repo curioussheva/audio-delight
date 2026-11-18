@@ -294,9 +294,20 @@ async function processQuickDiff(
    ============================================= */
 
 export const ScanDiffEngine = {
-  async quickDiff(signal?: AbortSignal): Promise<QuickDiffResult> {
+  /**
+   * S1: `bypassAutoScanGate` — lewati gerbang `isAutoScanEnabled` untuk
+   * scan perdana fresh install. Toggle auto-scan default OFF, dan scan
+   * perdana wajib jalan terlepas dari toggle itu (spek butir 1). Semua
+   * pemanggil lain (resume, autoScan, background task) tetap digerbangi
+   * seperti dulu bila opsi ini tidak diisi.
+   */
+  async quickDiff(
+    signal?: AbortSignal,
+    options?: { bypassAutoScanGate?: boolean },
+  ): Promise<QuickDiffResult> {
     const { isAutoScanEnabled } = useLibraryStore.getState();
-    if (!isAutoScanEnabled) return _emptyQuickResult();
+    if (!isAutoScanEnabled && !options?.bypassAutoScanGate)
+      return _emptyQuickResult();
 
     try {
       const nativeSongs = await getNativeSongs();

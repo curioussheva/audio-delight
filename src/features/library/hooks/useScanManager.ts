@@ -6,9 +6,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { UnifiedScanService } from "../services/UnifiedScanService";
 import { ScanDiffEngine } from "../services/ScanDiffEngine";
+import { LibraryScanner } from "../api/scanner";
 import { useLibraryStore } from "../store/libraryStore";
 import { ScanProgress } from "../types/scan";
-import { MetadataEnricher } from "../services/MetadataEnricher";
+import { shouldRunInitialScan } from "../services/initialScanGuard";
+import { handleResumeDiffResult } from "../services/resumeEnrichment";
 import {
   MIN_BACKGROUND_MS,
   RESUME_SCAN_COOLDOWN_MS,
@@ -31,46 +33,64 @@ export function useScanManager() {
   const [isLocked, setIsLocked] = useState(false);
 
   // ── Initial Scan hanya jika library kosong ──────────────────────────────────
-  
-  // ── Initial Scan — DISABLED SEMENTARA UNTUK DEBUGGING ─────────────────────
-useEffect(() => {
-  if (hasInitialized.current) return;
-  hasInitialized.current = true;
+  // S1: fresh install WAJIB quickscan — SATU KALI, metadata minimal (satu
+  // query MediaStore via quickDiff), lalu tandai selesai.
+  // BUKAN deep scan: kode lama yang dikomen memanggil
+  // UnifiedScanService.manualScan() (full diff) — sengaja TIDAK dipulihkan.
+  // quickDiff dipanggil dengan bypassAutoScanGate karena toggle auto-scan
+  // default OFF; scan perdana jalan terlepas dari toggle itu.
+  // Delay 1 dtk dipertahankan dari kode lama: memberi waktu rehydrate
+  // zustand-persist (tracks dari AsyncStorage) + izin media dari
+  // performInitialization, supaya tracks.length tidak dibaca saat store
+  // masih kosong padahal library sebenarnya sudah ada.
+  // startAutoScan/finishAutoScan: menyalakan status scan yang sudah ada
+  // supaya EmptyLibrary menampilkan "Memindai..." selama quickDiff jalan
+  // (quickDiff sendiri tidak melaporkan progres — lihat S4) dan supaya
+  // resume quickDiff lain tidak tumpang tindih selama scan perdana jalan.
+  // setTracks sesudah diff: quickDiff hanya menulis DB, TIDAK pernah
+  // setTracks (J3-1) — tanpa ini daftar di UI tetap kosong.
+  useEffect(() => {
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
 
-  // 🔥 DISABLED: Uncomment untuk aktifkan kembali
-  console.log("[useScanManager] 🚫 Initial scan DISABLED (debug mode)");
-  return;
+    const timer = setTimeout(async () => {
+      const currentStore = useLibraryStore.getState();
 
-  // ─────────────────────────────────────────────────────────────
-  // Kode asli (jangan dihapus, di-comment sementara):
-  // ─────────────────────────────────────────────────────────────
-  /*
-  const timer = setTimeout(async () => {
-    const currentStore = useLibraryStore.getState();
+      if (
+        !shouldRunInitialScan({
+          trackCount: currentStore.tracks.length,
+          hasCompletedInitialScan: currentStore.hasCompletedInitialScan,
+          isManualScanning: currentStore.isManualScanning,
+          isAutoScanning: currentStore.isAutoScanning,
+        })
+      ) {
+        return;
+      }
 
-    if (currentStore.tracks.length === 0) {
       console.log(
-        "[useScanManager] Fresh/empty library → Running initial MANUAL (DEEP) Scan",
+        "[useScanManager] Fresh/empty library → Running initial quick scan",
       );
-      
       setIsLocked(true);
       try {
-        await UnifiedScanService.manualScan();
+        currentStore.startAutoScan();
+        await ScanDiffEngine.quickDiff(undefined, {
+          bypassAutoScanGate: true,
+        });
+        currentStore.setInitialScanCompleted();
+        // quickDiff menulis DB saja — cerminkan ke store supaya daftar
+        // di UI langsung terisi tanpa menunggu foreground refresh.
+        const freshSongs = (await LibraryScanner.getLibrarySongs()) ?? [];
+        currentStore.setTracks(freshSongs as any);
       } catch (err) {
         console.warn("[useScanManager] Initial scan error:", err);
       } finally {
+        currentStore.finishAutoScan();
         setIsLocked(false);
       }
-    } else {
-      console.log(
-        "[useScanManager] Library already exists → Skipping initial scan",
-      );
-    }
-  }, 1000);
+    }, 1000);
 
-  return () => clearTimeout(timer);
-  */
-}, []);
+    return () => clearTimeout(timer);
+  }, []);
 
   // ── Quick Diff saat App Resume ──────────────────────────────────────────────
   useEffect(() => {
@@ -122,22 +142,10 @@ useEffect(() => {
         try {
           const diffResult = await ScanDiffEngine.quickDiff();
 
-          if (diffResult.newCount > 0 || diffResult.deletedCount > 0) {
-            console.log(
-              `[useScanManager] Changes detected! New: ${diffResult.newCount}, Deleted: ${diffResult.deletedCount}`,
-            );
-
-            const storeInstance = useLibraryStore.getState();
-            storeInstance.finishAutoScan?.();
-
-            if (diffResult.newSongs?.length > 0) {
-              await MetadataEnricher.queueSongs(
-                diffResult.newSongs.map((s) => ({ id: s.id, uri: s.uri })),
-              );
-            }
-          } else {
-            console.log("[useScanManager] No changes detected");
-          }
+          // S2: antre lagu baru + jalankan worker enrichment
+          // (resumeEnrichment.ts) — sebelum S2 antrean hanya diisi,
+          // tidak pernah diproses dari jalur live.
+          await handleResumeDiffResult(diffResult);
         } catch (err) {
           console.warn("[useScanManager] Quick diff on resume failed:", err);
         } finally {
