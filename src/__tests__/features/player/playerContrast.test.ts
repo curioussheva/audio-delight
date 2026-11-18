@@ -10,7 +10,12 @@
  * angka salinan): bila ada tema yang mengubah token sampai pasangan panel
  * gagal, tes ini yang pertama memberi tahu.
  */
-import { contrastRatio, accentOn } from "@/shared/utils/contrast";
+import {
+  contrastRatio,
+  accentOn,
+  pickReadable,
+  AA_NORMAL,
+} from "@/shared/utils/contrast";
 import { PRISTINE_NOIR, PRISTINE_PORCELAIN } from "@/shared/constants/themes/pristine";
 import { PRISTINE_EMBER } from "@/shared/constants/themes/warm";
 import type { Theme } from "@/shared/constants/themes/types";
@@ -120,6 +125,21 @@ describe("Player A3 — kontras panel solid", () => {
           theme.colors.background.secondary,
         ),
       ).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  // LAYOUT-V2 (4): teks badge "1" Repeat One + teks badge sleep
+  // ("12 mnt") — playIconColor di atas primary[500] lolos 4.5:1.
+  // playIconColor dihitung pickReadable(["#FFFFFF","#000000"], primary)
+  // di komponen, jadi lolos by construction; tes ini menguncinya.
+  it.each(BRAND_THEMES)(
+    "$name: teks badge di atas primary[500] lolos 4.5:1",
+    (theme) => {
+      const primary = theme.colors.primary[500];
+      const badgeText =
+        pickReadable(["#FFFFFF", "#000000"], primary, AA_NORMAL) ??
+        "#FFFFFF";
+      expect(contrastRatio(badgeText, primary)).toBeGreaterThanOrEqual(4.5);
     },
   );
 });

@@ -706,9 +706,10 @@ export default function PlayerScreen() {
           </TouchableOpacity>
 
           {/* U-P2-10: Repeat One harus bisa dibedakan dari Repeat All —
-              dulu hanya warna ikon berubah. Dot di bawah ikon, pola yang
-              sama dengan FloatingPlayer (repeatOneDot) dan Controls (mati).
-              Label aksesibilitas ikut membedakan modenya. */}
+              dulu hanya warna ikon berubah. LAYOUT-V2 (4): indikator One
+              kini badge angka "1" di bawah ikon (dulu dot 5px) — pola
+              badge yang sama dengan sleepBadge. Label aksesibilitas ikut
+              membedakan modenya. */}
           <TouchableOpacity
             onPress={toggleRepeat}
             style={[styles.controlBtn, styles.repeatBtn]}
@@ -732,10 +733,19 @@ export default function PlayerScreen() {
             {repeat === "track" && (
               <View
                 style={[
-                  styles.repeatOneDot,
+                  styles.repeatOneBadge,
                   { backgroundColor: primaryColor },
                 ]}
-              />
+              >
+                <Text
+                  style={[
+                    styles.repeatOneBadgeText,
+                    { color: playIconColor },
+                  ]}
+                >
+                  1
+                </Text>
+              </View>
             )}
           </TouchableOpacity>
           </View>
@@ -1220,6 +1230,26 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     bottom: 2,
     alignSelf: "center",
+  },
+  // LAYOUT-V2 (4): badge angka "1" pengganti dot Repeat One — posisi
+  // sama (di bawah ikon, tengah), gaya badge yang sama dengan sleepBadge
+  // (latar primaryColor, teks playIconColor). repeatOneDot di atas tetap
+  // dipakai dot indikator sleep (A4).
+  repeatOneBadge: {
+    position: "absolute",
+    bottom: 0,
+    alignSelf: "center",
+    minWidth: 14,
+    height: 14,
+    borderRadius: 7,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 3,
+  },
+  repeatOneBadgeText: {
+    fontSize: 9,
+    fontWeight: "800",
+    textAlign: "center",
   },
   playBtn: {
     width: 64,
