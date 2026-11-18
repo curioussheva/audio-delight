@@ -303,8 +303,30 @@ export const useLibraryStore = create<LibraryState>()(
     {
       name: "@pristineaudio/library",
       storage: createJSONStorage(() => AsyncStorage),
+      // J2-6: `tracks` TIDAK lagi dipersist. Dulu tiap set() (termasuk
+      // markAsEnriched per lagu selesai enrich) menulis ulang SELURUH
+      // library ke AsyncStorage — N lagu = N kali serialisasi + tulis
+      // JSON seluruh library. SQLite sudah sumber kebenaran; rehidrasi
+      // dari SQLite saat mount (useLibrary auto-load). Yang tetap
+      // dipersist: flag/timestamp/gerbang scan + unenrichedCount.
+      // Catatan perilaku: cold start kini menampilkan daftar kosong
+      // sesaat sampai useLibrary selesai memuat dari SQLite (dulu daftar
+      // langsung tampil dari rehydrate). Initial scan tetap aman:
+      // gerbangnya hasCompletedInitialScan (persist), bukan tracks.length
+      // semata — instalasi lama yang sudah pernah scan tidak mengulang
+      // scan perdana hanya karena tracks belum termuat.
+      version: 1,
+      migrate: (persistedState: any, _version: number) => {
+        if (!persistedState || typeof persistedState !== "object") {
+          return persistedState;
+        }
+        // Buang `tracks` dari state tersimpan instalasi lama — kalau
+        // tidak, rehydrate pertama sesudah update masih memuat daftar
+        // basi dari storage lama.
+        const { tracks: _dropped, ...rest } = persistedState;
+        return rest;
+      },
       partialize: (state) => ({
-        tracks: state.tracks,
         lastScanAt: state.lastScanAt,
         lastEnrichmentAt: state.lastEnrichmentAt,
         unenrichedCount: state.unenrichedCount,
