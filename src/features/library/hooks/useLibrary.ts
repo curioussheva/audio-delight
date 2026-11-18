@@ -35,8 +35,19 @@ interface UseLibraryReturn {
 // Global cache untuk mencegah multiple loading
 let globalLoadingPromise: Promise<void> | null = null;
 let globalSongsCache: Song[] | null = null;
+// N31: cache dulu tidak membedakan query — pemanggil kedua yang memuat
+// dengan filter lain dalam 5 detik menerima hasil filter pertama.
+// Kunci cache = query yang menghasilkannya; hit hanya bila cocok.
+let globalSongsCacheKey: string | null = null;
 let lastLoadTime = 0;
 const CACHE_DURATION = 5000; // 5 detik cache
+
+const buildSongsCacheKey = (
+  searchQuery: string,
+  filterBy: string,
+  sortBy: string,
+  limit: number,
+): string => JSON.stringify({ q: searchQuery, f: filterBy, s: sortBy, l: limit });
 
 export const useLibrary = (
   options: UseLibraryOptions = {},
@@ -50,7 +61,11 @@ export const useLibrary = (
     offset = 0,
   } = options;
 
-  const [songs, setSongs] = useState<Song[]>(globalSongsCache || []);
+  const [songs, setSongs] = useState<Song[]>(
+    globalSongsCache && globalSongsCacheKey === buildSongsCacheKey(searchQuery, filterBy, sortBy, limit)
+      ? globalSongsCache
+      : [],
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
@@ -74,12 +89,19 @@ export const useLibrary = (
       const currentFilter = newFilterBy ?? filterBy;
       const currentSort = newSortBy ?? sortBy;
       const loadOffset = isLoadMore ? currentOffset : 0;
+      const cacheKey = buildSongsCacheKey(
+        currentSearch,
+        currentFilter,
+        currentSort,
+        limit,
+      );
 
       // Cek cache untuk initial load (bukan load more)
       const now = Date.now();
       if (
         !isLoadMore &&
         globalSongsCache &&
+        globalSongsCacheKey === cacheKey &&
         now - lastLoadTime < CACHE_DURATION
       ) {
         if (isMountedRef.current) {
@@ -92,10 +114,17 @@ export const useLibrary = (
       // Jika sudah ada promise yang berjalan, tunggu
       if (globalLoadingPromise && !isLoadMore) {
         await globalLoadingPromise;
-        if (isMountedRef.current && globalSongsCache) {
+        if (
+          isMountedRef.current &&
+          globalSongsCache &&
+          globalSongsCacheKey === cacheKey
+        ) {
           setSongs(globalSongsCache);
+          return;
         }
-        return;
+        // N31: cache yang selesai itu milik query LAIN (atau kosong) —
+        // jangan pakai hasilnya; lanjut muat sendiri di bawah. Dulu
+        // cabang ini memakai cache apa pun tanpa membandingkan query.
       }
 
       if (!isLoadMore) {
@@ -142,6 +171,7 @@ export const useLibrary = (
               // Update cache untuk initial load
               if (unfiltered) {
                 globalSongsCache = newSongs;
+                globalSongsCacheKey = cacheKey;
                 lastLoadTime = Date.now();
               }
               return newSongs;
@@ -153,6 +183,7 @@ export const useLibrary = (
             setSongs(result);
             // Update global cache
             globalSongsCache = result;
+            globalSongsCacheKey = cacheKey;
             lastLoadTime = Date.now();
             // Sync ke store
             if (result.length > 0) {
@@ -200,6 +231,7 @@ export const useLibrary = (
   const reload = useCallback(async () => {
     // Invalidate cache
     globalSongsCache = null;
+    globalSongsCacheKey = null;
     setCurrentOffset(0);
     setHasMore(true);
     await loadSongs(false);
@@ -238,6 +270,7 @@ export const useLibrary = (
     ) {
       // Reset cache and reload
       globalSongsCache = null;
+      globalSongsCacheKey = null;
       setCurrentOffset(0);
       setHasMore(true);
       loadSongs(false);
