@@ -138,6 +138,21 @@ export const BackgroundScanTask = {
       return false;
     }
 
+    // N28: izin notifikasi dulu diminta tapi TIDAK PERNAH diperiksa —
+    // register tetap sukses, toggle ON, tapi _sendChangeNotification
+    // tidak akan pernah sampai ke user. Sekarang ditolak = register
+    // gagal (false), supaya rollback di Settings jalan (toggle kembali
+    // OFF + toast "Periksa izin media & notifikasi"). Alternatif yang
+    // tidak diambil: tetap register tanpa notifikasi (scan tetap jalan,
+    // hanya diam) — itu menyembunyikan bahwa hasil scan tidak akan
+    // pernah diberitahukan.
+    if (notifPerm !== "granted") {
+      console.warn(
+        "[BackgroundTask] Notification permission denied — register dibatalkan.",
+      );
+      return false;
+    }
+
     await _setupNotificationChannel();
 
     try {
