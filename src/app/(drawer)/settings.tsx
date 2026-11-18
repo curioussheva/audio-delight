@@ -407,38 +407,51 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleToggleAutoScan = async (value: boolean) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    toggleAutoScanEnabled(); // update store dulu (optimistic)
+  // N11: serialisasi toggle Auto Discovery — tap ON→OFF cepat tidak boleh
+  // membuat register pertama resolve SETELAH unregister kedua (task
+  // terdaftar padahal toggle OFF). Selama satu register/unregister masih
+  // jalan, tap berikutnya diabaikan: toggle tidak bergerak, jadi UI tetap
+  // konsisten dengan keadaan yang akan dicapai operasi itu.
+  const autoScanToggleInFlightRef = useRef(false);
 
-    if (value) {
-      // Aktifkan → daftarkan background task (interval 240 menit —
-      // less aggressive: koleksi berubah jarang, resume quickDiff
-      // sudah menangkap perubahan saat app dibuka).
-      const ok = await BackgroundScanTask.register(240).catch((err) => {
-        console.warn("[Settings] BackgroundTask register failed:", err);
-        return false;
-      });
-      if (ok) {
-        console.log("[Settings] Background scan registered");
+  const handleToggleAutoScan = async (value: boolean) => {
+    if (autoScanToggleInFlightRef.current) return;
+    autoScanToggleInFlightRef.current = true;
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      toggleAutoScanEnabled(); // update store dulu (optimistic)
+
+      if (value) {
+        // Aktifkan → daftarkan background task (interval 240 menit —
+        // less aggressive: koleksi berubah jarang, resume quickDiff
+        // sudah menangkap perubahan saat app dibuka).
+        const ok = await BackgroundScanTask.register(240).catch((err) => {
+          console.warn("[Settings] BackgroundTask register failed:", err);
+          return false;
+        });
+        if (ok) {
+          console.log("[Settings] Background scan registered");
+        } else {
+          // U-P1-25: rollback optimistis — register mengembalikan false
+          // (izin media/notifikasi ditolak, atau exception) berarti tidak ada
+          // pemindaian background yang berjalan. Kembalikan toggle ke OFF
+          // dan beri tahu user; dulu toggle dibiarkan ON padahal tidak ada
+          // scan yang jalan.
+          toggleAutoScanEnabled();
+          showToast(
+            "Auto Discovery gagal diaktifkan. Pemindaian latar tidak bisa didaftarkan. Periksa izin media & notifikasi, lalu coba lagi.",
+            "error",
+          );
+        }
       } else {
-        // U-P1-25: rollback optimistis — register mengembalikan false
-        // (izin media/notifikasi ditolak, atau exception) berarti tidak ada
-        // pemindaian background yang berjalan. Kembalikan toggle ke OFF
-        // dan beri tahu user; dulu toggle dibiarkan ON padahal tidak ada
-        // scan yang jalan.
-        toggleAutoScanEnabled();
-        showToast(
-          "Auto Discovery gagal diaktifkan. Pemindaian latar tidak bisa didaftarkan. Periksa izin media & notifikasi, lalu coba lagi.",
-          "error",
+        // Matikan → batalkan background task
+        await BackgroundScanTask.unregister().catch((err) =>
+          console.warn("[Settings] BackgroundTask unregister failed:", err),
         );
+        console.log("[Settings] Background scan unregistered");
       }
-    } else {
-      // Matikan → batalkan background task
-      await BackgroundScanTask.unregister().catch((err) =>
-        console.warn("[Settings] BackgroundTask unregister failed:", err),
-      );
-      console.log("[Settings] Background scan unregistered");
+    } finally {
+      autoScanToggleInFlightRef.current = false;
     }
   };
 

@@ -29,6 +29,13 @@ export class MetadataEnricher {
   private static abortController: AbortController | null = null;
   private static processedCount = 0;
 
+  // N11: generasi worker-run. `stop()` menaikkan generasi — start yang
+  // sedang menunggu kunci (N5) atau pemanasan cache saat stop datang
+  // harus batal, bukan jalan diam-diam setelah toggle OFF; sebaliknya
+  // start BARU sesudah stop tidak boleh dimatikan oleh `finally` start
+  // lama (yang mengeset isRunning=false) — lihat re-assert di bawah.
+  private static runGeneration = 0;
+
   // J2-1: cache uri -> NativeSong, dibangun SEKALI per worker-run / batch
   // dari satu queryAudioFiles. Enrichment lookup di memori, bukan query
   // MediaStore penuh per lagu. null = belum dibangun atau query gagal
@@ -136,11 +143,24 @@ export class MetadataEnricher {
     const isPlaying = options?.isPlaying ?? (() => false);
     const store = useLibraryStore.getState();
 
+    // N11: tangkap generasi saat start — stop() yang datang selagi
+    // menunggu kunci membatalkan start ini (cek sesudah lock).
+    const myGeneration = this.runGeneration;
+
     // N5: tunggu giliran kunci bersama batch manual. abortController +
     // processedCount dibuat SESUDAH kunci didapat, supaya stop() yang
     // datang selagi menunggu tidak meninggalkan controller basi.
     const release = await this.acquireEnrichmentLock();
     try {
+      // N11: stop() datang selagi menunggu kunci → generasi berubah →
+      // start ini batal (keluar lewat finally: kunci dilepas, flag
+      // dibersihkan). Tanpa cek ini worker jalan walau toggle sudah OFF.
+      if (myGeneration !== this.runGeneration) return;
+      // N11: tegaskan lagi isRunning — `finally` start LAMA yang
+      // selesai selagi start ini menunggu kunci sudah mengesetnya false;
+      // tanpa re-assert, loop di bawah langsung keluar dan worker baru
+      // mati diam-diam walau toggle ON (tap ON→OFF→ON cepat).
+      this.isRunning = true;
       this.abortController = new AbortController();
       this.processedCount = 0;
 
@@ -202,6 +222,9 @@ export class MetadataEnricher {
    * Menghentikan paksa worker
    */
   static stop(): void {
+    // N11: naikkan generasi — start yang sedang menunggu kunci /
+    // pemanasan cache ikut batal (cek generasi sesudah lock).
+    this.runGeneration++;
     this.abortController?.abort();
     this.isRunning = false;
   }
