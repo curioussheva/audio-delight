@@ -32,7 +32,7 @@ import { useSafePadding } from "@/shared/hooks/useSafePadding";
 // SpectogramView (waterfall) di main player sejak 2026-11-17.
 // BUKAN SpectrumAnalyzer (dead code, jangan dipakai).
 import { ParametricSpectrumView } from "@/features/visualizer/components/ParametricSpectrumView";
-import { accentOn, pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+import { accentOn, pickReadable, parseHex, AA_NORMAL } from "@/shared/utils/contrast";
 import { safeGoBack } from "@/shared/utils/navigation";
 import {
   sleepRemainingMinutes,
@@ -65,6 +65,18 @@ import {
   Music,
   X,
 } from "lucide-react-native";
+
+// ON/OFF Shuffle/Repeat — latar disc ON = tint primary 15% di atas panel
+// (pola "selected" yang sama dengan ReverbDropdown: hexToRGBA(color, 0.15)).
+// Nama + rumus sama seperti dua salinan lokal di repo (ControlKnob,
+// ReverbDropdown) supaya dedup di masa depan tinggal pindah ke shared.
+// parseHex mengembalikan null untuk hex yang tidak terbaca → fallback ke
+// warna aslinya (tanpa tint), bukan hitam buta.
+const hexToRGBA = (hex: string, opacity: number): string => {
+  const rgb = parseHex(hex);
+  if (!rgb) return hex;
+  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity})`;
+};
 
 export default function PlayerScreen() {
   const { theme } = useTheme();
@@ -225,6 +237,15 @@ export default function PlayerScreen() {
   const playIconColor =
     pickReadable(["#FFFFFF", "#000000"], primaryColor, AA_NORMAL) ??
     "#FFFFFF";
+
+  // ON/OFF Shuffle/Repeat — SATU mekanisme untuk kedua ikon (request
+  // terakhir csheva 18:09): ON = ikon primary + disc tint 15% + stroke
+  // lebih tebal (2.5, "bold"); OFF = ikon default polos tanpa latar.
+  // Status terbaca dari bentuk (ada/tidak ada disc) + bobot, bukan hanya
+  // warna — di tema terang pun tidak tertukar. repeatOn dipakai ikon
+  // Repeat (warna + disc + stroke) dan accessibilityState.
+  const repeatOn = repeat !== "off";
+  const toggleOnBackground = hexToRGBA(primaryColor, 0.15);
 
   // U-P1-20: jangan `return null` — layar hitam tanpa penjelasan saat
   // player dibuka tanpa lagu (deep link / antrean habis). Cabang ini tetap
@@ -691,17 +712,21 @@ export default function PlayerScreen() {
           <View style={styles.controlsRow}>
             <TouchableOpacity
               onPress={toggleShuffle}
-            style={styles.controlBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Acak"
-            accessibilityState={{ selected: shuffle }}
-          >
-            <Shuffle
-              size={22}
-              color={shuffle ? primaryColor : iconColorDefault}
-              strokeWidth={2}
-            />
-          </TouchableOpacity>
+              style={[
+                styles.controlBtn,
+                shuffle && styles.controlToggleOn,
+                shuffle && { backgroundColor: toggleOnBackground },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Acak"
+              accessibilityState={{ selected: shuffle }}
+            >
+              <Shuffle
+                size={22}
+                color={shuffle ? primaryColor : iconColorDefault}
+                strokeWidth={shuffle ? 2.5 : 2}
+              />
+            </TouchableOpacity>
 
           <TouchableOpacity
             onPress={() => handleSkip(playPrevious)}
@@ -746,11 +771,19 @@ export default function PlayerScreen() {
           {/* U-P2-10: Repeat One harus bisa dibedakan dari Repeat All —
               dulu hanya warna ikon berubah. LAYOUT-V2 (4): indikator One
               kini badge angka "1" di bawah ikon (dulu dot 5px) — pola
-              badge yang sama dengan sleepBadge. Label aksesibilitas ikut
+              badge yang sama dengan sleepBadge. ON/OFF: ikon ON = primary
+              + disc tint 15% + stroke 2.5 — mekanisme yang SAMA dengan
+              Shuffle (lihat toggleOnBackground di atas); badge "1" tetap
+              di atas disc saat mode track. Label aksesibilitas ikut
               membedakan modenya. */}
           <TouchableOpacity
             onPress={toggleRepeat}
-            style={[styles.controlBtn, styles.repeatBtn]}
+            style={[
+              styles.controlBtn,
+              styles.repeatBtn,
+              repeatOn && styles.controlToggleOn,
+              repeatOn && { backgroundColor: toggleOnBackground },
+            ]}
             accessibilityRole="button"
             accessibilityLabel={
               repeat === "track"
@@ -760,13 +793,13 @@ export default function PlayerScreen() {
                   : "Ulangi mati"
             }
             accessibilityState={{
-              selected: repeat !== "off",
+              selected: repeatOn,
             }}
           >
             <Repeat
               size={22}
-              color={repeat !== "off" ? primaryColor : iconColorDefault}
-              strokeWidth={2}
+              color={repeatOn ? primaryColor : iconColorDefault}
+              strokeWidth={repeatOn ? 2.5 : 2}
             />
             {repeat === "track" && (
               <View
@@ -1239,6 +1272,12 @@ const styles = StyleSheet.create({
   // Skip (ikon 32) jadi 54 — tidak masalah, tetap dalam bar kontrol.
   controlBtn: {
     padding: 11,
+  },
+  // ON/OFF Shuffle/Repeat — disc ON: tombol 44×44 (ikon 22 + padding
+  // 11×2) jadi lingkaran penuh (radius 22). Latar tint diisi inline
+  // (toggleOnBackground) karena warnanya ikut primary[500] tema.
+  controlToggleOn: {
+    borderRadius: 22,
   },
   // U-P2-10: pembungkus relatif supaya dot Repeat One bisa diposisikan
   // absolut di bawah ikon (pola yang sama dengan FloatingPlayer).

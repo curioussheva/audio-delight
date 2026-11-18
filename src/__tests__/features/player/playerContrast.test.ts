@@ -14,6 +14,7 @@ import {
   contrastRatio,
   accentOn,
   pickReadable,
+  parseHex,
   AA_NORMAL,
 } from "@/shared/utils/contrast";
 import { PRISTINE_NOIR, PRISTINE_PORCELAIN } from "@/shared/constants/themes/pristine";
@@ -140,6 +141,59 @@ describe("Player A3 — kontras panel solid", () => {
         pickReadable(["#FFFFFF", "#000000"], primary, AA_NORMAL) ??
         "#FFFFFF";
       expect(contrastRatio(badgeText, primary)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  // ON/OFF Shuffle/Repeat — disc ON = tint primary 15% di atas panel
+  // (komposit rgba di atas background.primary; rumus yang sama dengan
+  // hexToRGBA(primary, 0.15) di komponen). Tiga kunci, semua diukur
+  // dari token tema ASLI:
+  // (a) ikon ON (primary[500]) di atas disc lolos 3:1 (bar ikon);
+  // (b) ikon OFF (iconColorDefault) di atas panel lolos 3:1;
+  // (c) disc terlihat beda dari panel (komposit vs panel ≥ 1.15 —
+  // terukur 1.20–1.29; disc memang tint LEMBUT, bukan solid — yang
+  // membuat ON tidak tertukar adalah disc + warna ikon + stroke 2.5
+  // bersama-sama, bukan disc sendirian).
+  const tintOver = (fg: string, bg: string, alpha: number): string => {
+    const f = parseHex(fg);
+    const b = parseHex(bg);
+    if (!f || !b) throw new Error("hex tidak terbaca");
+    const mix = (x: number, y: number) =>
+      Math.round(x * alpha + y * (1 - alpha));
+    return `#${[mix(f.r, b.r), mix(f.g, b.g), mix(f.b, b.b)]
+      .map((v) => v.toString(16).padStart(2, "0"))
+      .join("")}`;
+  };
+
+  it.each(BRAND_THEMES)(
+    "$name: ikon ON primary[500] di atas disc tint 15% lolos 3:1",
+    (theme) => {
+      const panel = theme.colors.background.primary;
+      const disc = tintOver(theme.colors.primary[500], panel, 0.15);
+      expect(
+        contrastRatio(theme.colors.primary[500], disc),
+      ).toBeGreaterThanOrEqual(3);
+    },
+  );
+
+  it.each(BRAND_THEMES)(
+    "$name: ikon OFF di atas panel lolos 3:1",
+    (theme) => {
+      const panel = theme.colors.background.primary;
+      // iconColorDefault: gelap = textTertiary, terang = textSecondary.
+      const icon = theme.isDark
+        ? theme.colors.text.tertiary
+        : theme.colors.text.secondary;
+      expect(contrastRatio(icon, panel)).toBeGreaterThanOrEqual(3);
+    },
+  );
+
+  it.each(BRAND_THEMES)(
+    "$name: disc ON terlihat beda dari panel (komposit vs panel ≥ 1.15)",
+    (theme) => {
+      const panel = theme.colors.background.primary;
+      const disc = tintOver(theme.colors.primary[500], panel, 0.15);
+      expect(contrastRatio(disc, panel)).toBeGreaterThanOrEqual(1.15);
     },
   );
 });
