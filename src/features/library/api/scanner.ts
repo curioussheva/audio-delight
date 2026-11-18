@@ -539,6 +539,12 @@ export class LibraryScanner {
         "discNumber",
         "composer",
         "lyricist",
+        // I1 (G1): label & publisher ada di form edit [id].tsx dan dikirim
+        // handleSaveEdit/handleApplyMetadata, tapi dulu dibuang diam-diam
+        // karena tidak ada di daftar ini. Kolom DB-nya sudah ada
+        // (sqlite.ts + migrasi v1) dan dbRowToSong sudah memetakannya.
+        "label",
+        "publisher",
         "isEnriched",
         "artistImageUrl",
         "artistBio",
