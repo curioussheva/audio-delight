@@ -61,10 +61,10 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
     private var deviceCallback: AudioDeviceCallback? = null
 
     // (B13-K1, 2026-11-14): callback device jalan di HandlerThread sendiri,
-    // BUKAN main thread — rantai callback -> JNI -> refreshDevices (binder)
-    // + EngineManager tidak boleh memblokir main thread (ANR saat headset
-    // dicabut). Thread dibuat sekali saat module dibuat; dilepas di
-    // invalidate() lewat quitSafely().
+    // BUKAN main thread — rantai callback -> JNI (nativeOnDeviceAdded/
+    // nativeOnDeviceRemoved) + EngineManager tidak boleh memblokir main
+    // thread (ANR saat headset dicabut). Thread dibuat sekali saat module
+    // dibuat; dilepas di invalidate() lewat quitSafely().
     private val deviceThread = android.os.HandlerThread("pristine-device").apply { start() }
     private val deviceHandler by lazy { Handler(deviceThread.looper) }
 
@@ -142,11 +142,13 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
     override fun initialize() {
         super.initialize()
         // (C-HIDDEN, 2026-11-12): init Context native DULU, sebelum
-        // registerDeviceCallback() — callback itu memanggil refreshDevices()
-        // (butuh Context) saat device berubah, dan JS belum bisa memanggil
-        // getDevices() sebelum initialize() selesai. Kalau library gagal
-        // dimuat, refreshDevices/resolve gagal aman di sisi native (return
-        // 0 / "") dengan log, bukan crash.
+        // registerDeviceCallback() — callback memanggil JNI
+        // (nativeOnDeviceAdded/Removed, butuh Context) saat device berubah,
+        // dan JS belum bisa memanggil getDevices() sebelum initialize()
+        // selesai. Kalau library gagal dimuat, panggilan JNI itu gagal aman
+        // di sisi native dengan log, bukan crash.
+        // (F8: komentar lama menyebut refreshDevices() di sini — method itu
+        // tidak pernah dipanggil siapa pun dan kini dihapus.)
         if (NativeLibrary.ensureLoaded()) {
             try {
                 nativeInitAppContext(reactApplicationContext.applicationContext)
@@ -182,24 +184,20 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
 
             for (item in devices) {
                 val map = Arguments.createMap()
-                // nativeGetDevices mengembalikan AudioDeviceInfo (Kotlin data
-                // class) yang dibuat di sisi native lewat JNI.
-                val info = item as? AudioDeviceInfo
-                if (info != null) {
-                    map.putString("id", info.id)
-                    map.putString("name", info.name)
-                    map.putString("type", info.type)
-                    map.putInt("sampleRate", info.sampleRate)
-                    map.putBoolean("exclusive", info.exclusive)
-                    map.putBoolean("isUsb", info.isUsb)
-                } else {
-                    map.putString("id", item.toString())
-                    map.putString("name", item.toString())
-                    map.putString("type", "unknown")
-                    map.putInt("sampleRate", 48000)
-                    map.putBoolean("exclusive", false)
-                    map.putBoolean("isUsb", false)
-                }
+                // F8: nativeGetDevices SELALU mengembalikan AudioDeviceInfo
+                // (C++ membangun NewObjectArray dengan deviceClass itu; gagal
+                // = array kosong, bukan elemen asing). Cabang fallback lama
+                // (id=name=item.toString(), sampleRate 48000) adalah data
+                // fabrikasi yang tak terjangkau — dihapus: elemen asing kini
+                // melempar dan ditangkap catch di bawah (reject), bukan
+                // disamarkan jadi perangkat "unknown".
+                val info = item as AudioDeviceInfo
+                map.putString("id", info.id)
+                map.putString("name", info.name)
+                map.putString("type", info.type)
+                map.putInt("sampleRate", info.sampleRate)
+                map.putBoolean("exclusive", info.exclusive)
+                map.putBoolean("isUsb", info.isUsb)
                 array.pushMap(map)
             }
 
@@ -257,7 +255,13 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
             val map = Arguments.createMap()
             map.putInt("requested", status.getOrElse(0) { 0 })
             map.putInt("actual", status.getOrElse(1) { 0 })
-            map.putBoolean("honored", status.getOrElse(2) { 1 } == 1)
+            // F9: default honored DULU 1 (true) saat array pendek — berbohong
+            // ("permintaan dihormati") bila suatu hari array pendek benar
+            // terjadi. C++ selalu mengembalikan tepat 5 elemen atau nullptr
+            // (nullptr -> NPE -> reject), jadi jalur ini tak terjangkau hari
+            // ini; default disamakan dengan rateHonored (0/false): kalau
+            // tidak tahu, jangan klaim dihormati.
+            map.putBoolean("honored", status.getOrElse(2) { 0 } == 1)
             map.putBoolean("pathLossy", status.getOrElse(3) { 0 } == 1)
             map.putBoolean("rateHonored", status.getOrElse(4) { 0 } == 1)
             promise.resolve(map)
@@ -298,20 +302,6 @@ class NativeDeviceModule(reactContext: ReactApplicationContext) :
             promise.resolve(map)
         } catch (e: Throwable) {
             promise.reject("CURRENT_DEVICE_FAILED", e)
-        }
-    }
-
-    @ReactMethod
-    fun refreshDevices(promise: Promise) {
-        if (!NativeLibrary.ensureLoaded()) {
-            promise.reject("NATIVE_UNAVAILABLE", "Engine native belum termuat")
-            return
-        }
-        try {
-            val devices = nativeGetDevices()
-            promise.resolve(devices.size)
-        } catch (e: Throwable) {
-            promise.reject("DEVICE_LIST_FAILED", e)
         }
     }
 

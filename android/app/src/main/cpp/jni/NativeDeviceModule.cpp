@@ -56,10 +56,12 @@ JNIEXPORT jobjectArray JNICALL Java_com_pristineaudio_audio_NativeDeviceModule_n
     // itu, dan currentOutputDevice() mencari perangkat yang BENAR-BENAR
     // dipakai stream (bisa saja earpiece saat telepon) — menyaring di
     // manager akan membuat keduanya salah. Satu-satunya jalur daftar ke JS
-    // adalah fungsi ini (getDevices() dan refreshDevices() di Kotlin
-    // sama-sama memanggil nativeGetDevices; emitDeviceListChanged hanya
-    // mengirim event kosong tanpa payload, dan tidak ada listener JS untuk
-    // event itu). Active/requested tidak disentuh.
+    // adalah fungsi ini (getDevices() di Kotlin memanggil nativeGetDevices;
+    // refreshDevices() versi Kotlin sudah dihapus di ronde KT F8 — ia hanya
+    // menghitung dan tidak pernah dipanggil siapa pun. emitDeviceListChanged
+    // mengirim event kosong "PristineDeviceChange" tanpa payload; sejak F4
+    // ada listener JS-nya di useAudioOutput yang memanggil refresh()).
+    // Active/requested tidak disentuh.
     const size_t detectedCount = devices.size();
     devices.erase(
         std::remove_if(devices.begin(), devices.end(),
