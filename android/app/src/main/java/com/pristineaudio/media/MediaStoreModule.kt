@@ -6,15 +6,30 @@ import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.media.MediaMetadataRetriever
+import android.os.Process
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
+import java.util.concurrent.Executors
 
 class MediaStoreModule(private val reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
     companion object { const val NAME = "MediaStoreModule" }
     override fun getName() = NAME
-    
+
+    // F2: query + MediaMetadataRetriever per lagu adalah kerja berat dan
+    // sinkron — jalan di executor latar sendiri (pola yang sama dengan
+    // NativeAnalyzerModule), bukan di thread bridge, supaya pause/seek/
+    // getPosition tidak antre di belakang scan ratusan lagu. Single-thread:
+    // dua scan berurutan tidak saling berebut; promise tetap diselesaikan
+    // sekali per panggilan (aman dari thread mana pun).
+    private val scanExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread({
+            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
+            runnable.run()
+        }, "MediaStoreScan")
+    }
+
     private fun getAudioTechnicalInfo(uriString: String): WritableMap {
     val info = Arguments.createMap()
     val retriever = MediaMetadataRetriever()
@@ -51,6 +66,10 @@ class MediaStoreModule(private val reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun queryAudioFiles(promise: Promise) {
+        scanExecutor.execute { queryAudioFilesInternal(promise) }
+    }
+
+    private fun queryAudioFilesInternal(promise: Promise) {
         try {
             val projection = mutableListOf(
                 MediaStore.Audio.Media._ID,
@@ -88,9 +107,22 @@ class MediaStoreModule(private val reactContext: ReactApplicationContext) :
                 sortOrder
             )
 
+            // F2: cursor null (provider error) = gagal, bukan "0 lagu".
+            // Dulu `cursor?.use {}` dilewati begitu saja lalu resolve([]) —
+            // sukses palsu yang dibaca wrapper JS sebagai "semua lagu
+            // terhapus" dan bisa mengosongkan library (kontrak wrapper:
+            // kegagalan harus dilempar, [] berarti device tak punya lagu).
+            if (cursor == null) {
+                promise.reject(
+                    "MEDIASTORE_ERROR",
+                    "MediaStore query returned null cursor",
+                )
+                return
+            }
+
             val result = Arguments.createArray()
 
-            cursor?.use { c ->
+            cursor.use { c ->
                 val idCol       = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
                 val nameCol     = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
                 val titleCol    = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
@@ -205,5 +237,10 @@ class MediaStoreModule(private val reactContext: ReactApplicationContext) :
             albumId.toLongOrNull() ?: 0L
         ).toString()
         promise.resolve(uri)
+    }
+
+    override fun onCatalystInstanceDestroy() {
+        // Jangan tinggalkan thread scan hidup setelah bridge mati (pola F12).
+        scanExecutor.shutdownNow()
     }
 } 
