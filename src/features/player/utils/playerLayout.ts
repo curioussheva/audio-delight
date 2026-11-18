@@ -22,7 +22,7 @@ export const VISUALIZER_CANVAS_HEIGHT = 64;
  * artworkSize meleset dan layar kembali butuh scroll:
  *   header 88 (kotak 76: panel pad 24 + paddingTop 8 + isi 44,
  *     + marginBottom 12)
- * + blok judul 124 (mt 10 + panel 104: pad 16 + judul 20px 2 baris 48
+ * + blok judul 132 (mt 10 + panel 112: pad 16 + judul 20px 2 baris 56
  *     + mb 6 + artis 14px 17 + info file mt 4 + 11px 13, + mb 10)
  * + visualizer 100 (panel 88: pad 24 + kanvas 64, + mb 12)
  * + kontrol 156 (panel 126: pad 24 + baris tombol 56 + slider 40 +
@@ -31,14 +31,21 @@ export const VISUALIZER_CANVAS_HEIGHT = 64;
  *     20 + ikon 20 + label mt 2 + 12)
  * + gap bawah 12 (playerBottomPadding = insets.bottom + 12)
  * + marginBottom sampul 12
- * = 578.
+ * = 586.
+ *
+ * FASE 3 (1): 578 → 586 (+8). Judul lagu kini Playfair Display Bold
+ * (lineHeight 28 peran h4): judul 2 baris 48 → 56. Playfair diukur
+ * dari file TTF-nya (natural 26,7dp @20px, Inter 24,2) — bukan
+ * tebakan. Sampul menyerap selisihnya (150 → 142 di 360×800,
+ * 223 → 215 di 393×873); anggaran total tetap pas 800/873, layar
+ * tetap muat 1 layar tanpa scroll.
  *
  * Asumsi insets (bukan tebakan — layar 17:44 memakai nav 3-tombol):
  * insets.top 24 (status bar), insets.bottom 48 (nav bar). Bila device
  * memakai gesture nav (insets.bottom ~16–20), selisihnya jadi ruang
  * ekstra untuk sampul (artworkSize membesar sendiri).
  */
-export const PLAYER_CHROME_DP = 578;
+export const PLAYER_CHROME_DP = 586;
 
 /** Tinggi bar chip speed/tuning saat tampil (isi 21 + marginBottom 20). */
 export const PLAYER_CHIPS_DP = 41;
@@ -58,7 +65,8 @@ export const PLAYER_ARTWORK_MIN_DP = 96;
  * tetap jadi pengaman scroll. Anggaran memakai judul 2 baris (kasus
  * terburuk); judul 1 baris menyisakan 24dp kosong di tengah.
  *
- * 360×800 (24/48): 150 — 393×873 (24/48): 223.
+ * FASE 3 (1): 360×800 (24/48): 142 — 393×873 (24/48): 215
+ * (dulu 150/223 — judul Playfair +8dp, lihat PLAYER_CHROME_DP).
  */
 export function artworkSize(
   windowWidth: number,

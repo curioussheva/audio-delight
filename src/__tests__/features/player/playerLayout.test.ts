@@ -9,22 +9,22 @@ import {
 } from "@/features/player/utils/playerLayout";
 
 describe("playerLayout — artworkSize (LAYOUT-V3: anggaran vertikal)", () => {
-  it("POCO M6 360x800 muat 1 layar: 800 - 24 - 48 - 578 = 150", () => {
-    expect(artworkSize(360, 800)).toBe(150);
+  it("POCO M6 360x800 muat 1 layar: 800 - 24 - 48 - 586 = 142", () => {
+    expect(artworkSize(360, 800)).toBe(142);
   });
 
-  it("POCO M6 393x873 muat 1 layar: 873 - 24 - 48 - 578 = 223", () => {
-    expect(artworkSize(393, 873)).toBe(223);
+  it("POCO M6 393x873 muat 1 layar: 873 - 24 - 48 - 586 = 215", () => {
+    expect(artworkSize(393, 873)).toBe(215);
   });
 
   it("chip speed/tuning tampil: sampul mengecil 41dp supaya tetap muat", () => {
-    expect(artworkSize(360, 800, 24, 48, true)).toBe(109);
-    expect(artworkSize(393, 873, 24, 48, true)).toBe(182);
+    expect(artworkSize(360, 800, 24, 48, true)).toBe(101);
+    expect(artworkSize(393, 873, 24, 48, true)).toBe(174);
   });
 
   it("gesture nav (insets.bottom kecil): selisihnya jadi ruang sampul", () => {
-    // insets.bottom 20 (bukan 48): 800 - 24 - 20 - 578 = 178.
-    expect(artworkSize(360, 800, 24, 20)).toBe(178);
+    // insets.bottom 20 (bukan 48): 800 - 24 - 20 - 586 = 170.
+    expect(artworkSize(360, 800, 24, 20)).toBe(170);
   });
 
   it("dibatasi lebar: tidak lebih dari lebar layar - 100", () => {
@@ -39,7 +39,7 @@ describe("playerLayout — artworkSize (LAYOUT-V3: anggaran vertikal)", () => {
   });
 
   it("konstanta anggaran terdokumentasi (bila style berubah, ubah ini)", () => {
-    expect(PLAYER_CHROME_DP).toBe(578);
+    expect(PLAYER_CHROME_DP).toBe(586);
     expect(PLAYER_CHIPS_DP).toBe(41);
     expect(PLAYER_ARTWORK_MIN_DP).toBe(96);
     expect(VISUALIZER_CANVAS_HEIGHT).toBe(64);
