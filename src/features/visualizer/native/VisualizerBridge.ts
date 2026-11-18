@@ -7,8 +7,6 @@ interface NativeVisualizerBridgeType {
   startVisualizer(audioSessionId: number): Promise<boolean>;
   stopVisualizer(): void;
   getFFTData(): Promise<number[]>;
-  addListener(eventName: string): void;
-  removeListeners(count: number): void;
 }
 
 const NativeVisualizerBridge = NativeVisualizerBridgeSpec as
