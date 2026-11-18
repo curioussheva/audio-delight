@@ -3,11 +3,26 @@ import { useState, useEffect, useCallback } from "react";
 import PlaylistService from "@/features/playlist/api/service";
 import { Playlist, CreatePlaylistDTO } from "@/features/playlist/types";
 import { Song } from "@/shared/types/audio";
+import { shouldReloadPlaylistsOnBump } from "@/features/library/services/refreshPolicy";
+import { useRefreshStore } from "@/shared/store/refreshStore";
+
+// FASE 4: hook ini dipakai DUA layar (tab playlist Library + drawer
+// Playlist) dengan state lokal MASING-MASING — bukan store bersama.
+// Perubahan playlist di satu layar dulu tidak terlihat di layar lain
+// sampai layar itu remount. Sekarang tiap mutasi me-bump refreshKey
+// ("playlist-change"); instance lain me-reload dari DB, instance yang
+// mengubah melewatkan bump-nya sendiri (datanya sudah update lokal).
+// Id instance stabil per mount (lazy useState — bukan useRef dengan
+// ekspresi yang dievaluasi tiap render).
+let nextPlaylistInstanceId = 1;
 
 export const usePlaylists = () => {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [instanceId] = useState(
+    () => `playlists-${nextPlaylistInstanceId++}`,
+  );
 
   const loadPlaylists = useCallback(async () => {
     setLoading(true);
@@ -27,12 +42,15 @@ export const usePlaylists = () => {
     try {
       const newPlaylist = await PlaylistService.createPlaylist(dto);
       setPlaylists((prev) => [...prev, newPlaylist]);
+      useRefreshStore
+        .getState()
+        .bumpRefreshKey("playlist-change", instanceId);
       return newPlaylist;
     } catch (err: any) {
       setError(err.message);
       throw err;
     }
-  }, []);
+  }, [instanceId]);
 
   const addToPlaylist = useCallback(
     async (playlistId: string, songs: Song[]) => {
@@ -42,11 +60,14 @@ export const usePlaylists = () => {
           songs.map((s) => s.id),
         );
         await loadPlaylists();
+        useRefreshStore
+          .getState()
+          .bumpRefreshKey("playlist-change", instanceId);
       } catch (err: any) {
         setError(err.message);
       }
     },
-    [loadPlaylists],
+    [loadPlaylists, instanceId],
   );
 
   const removeFromPlaylist = useCallback(
@@ -54,21 +75,27 @@ export const usePlaylists = () => {
       try {
         await PlaylistService.removeFromPlaylist(playlistId, songId);
         await loadPlaylists();
+        useRefreshStore
+          .getState()
+          .bumpRefreshKey("playlist-change", instanceId);
       } catch (err: any) {
         setError(err.message);
       }
     },
-    [loadPlaylists],
+    [loadPlaylists, instanceId],
   );
 
   const deletePlaylist = useCallback(async (id: string) => {
     try {
       await PlaylistService.deletePlaylist(id);
       setPlaylists((prev) => prev.filter((p) => p.id !== id));
+      useRefreshStore
+        .getState()
+        .bumpRefreshKey("playlist-change", instanceId);
     } catch (err: any) {
       setError(err.message);
     }
-  }, []);
+  }, [instanceId]);
 
   // Import dari isi mentah file M3U (raw string content, belum di-parse).
   // B1 (ronde 9): dulu objek hasil import di-append langsung ke state
@@ -80,12 +107,15 @@ export const usePlaylists = () => {
     try {
       const newPlaylist = await PlaylistService.importM3U(content);
       await loadPlaylists();
+      useRefreshStore
+        .getState()
+        .bumpRefreshKey("playlist-change", instanceId);
       return newPlaylist;
     } catch (err: any) {
       setError(err.message);
       throw err;
     }
-  }, [loadPlaylists]);
+  }, [loadPlaylists, instanceId]);
 
   // Import dari hasil parseM3U() — array path lagu yang sudah di-parse,
   // dipakai oleh handleImportM3U di playlist.tsx.
@@ -99,13 +129,16 @@ export const usePlaylists = () => {
           description,
         );
         await loadPlaylists();
+        useRefreshStore
+          .getState()
+          .bumpRefreshKey("playlist-change", instanceId);
         return newPlaylist;
       } catch (err: any) {
         setError(err.message);
         throw err;
       }
     },
-    [loadPlaylists],
+    [loadPlaylists, instanceId],
   );
 
   const exportM3U = useCallback(async (playlist: Playlist) => {
@@ -120,6 +153,20 @@ export const usePlaylists = () => {
   useEffect(() => {
     loadPlaylists();
   }, []);
+
+  // FASE 4: berlangganan refreshKey — reload dari DB bila playlist
+  // berubah di instance LAIN (tab Library vs drawer Playlist).
+  // Bump sendiri dilewat (refreshPolicy): state lokal sudah benar.
+  // Key 0 = belum ada bump: jangan reload dobel saat mount.
+  const refreshKey = useRefreshStore((s) => s.refreshKey);
+  useEffect(() => {
+    if (refreshKey === 0) return;
+    const { lastReason, lastOrigin } = useRefreshStore.getState();
+    if (!shouldReloadPlaylistsOnBump(lastReason, lastOrigin, instanceId)) {
+      return;
+    }
+    void loadPlaylists();
+  }, [refreshKey, instanceId, loadPlaylists]);
 
   return {
     playlists,
