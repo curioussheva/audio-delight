@@ -245,6 +245,9 @@ export default function SettingsScreen() {
   const {
     isAutoScanEnabled,
     toggleAutoScanEnabled, // Gunakan action yang sesuai di store kamu
+    // Scan-split: gerbang Pindai Awal (sekali, fresh install).
+    isInitialScanEnabled,
+    toggleInitialScanEnabled,
   } = useLibraryStore();
 
   // --- 2. EXISTING STATES ---
@@ -336,6 +339,13 @@ export default function SettingsScreen() {
       // Reset tema = kembali ke default aplikasi (pristine-ember
       // sejak Fase 1), bukan tema lama yang di-hardcode.
       await setTheme(DEFAULT_THEME.id);
+      // Scan-split: reset mengembalikan kedua toggle ke default —
+      // Pindai Idle OFF ( + batalkan background task), Pindai Awal ON.
+      // Pada instalasi lama, Pindai Awal ON tidak berdampak
+      // (hasCompletedInitialScan sudah true).
+      if (!isInitialScanEnabled) {
+        toggleInitialScanEnabled();
+      }
       if (isAutoScanEnabled) {
         toggleAutoScanEnabled();
         await BackgroundScanTask.unregister().catch((err) =>
@@ -384,7 +394,7 @@ export default function SettingsScreen() {
         // scan yang jalan.
         toggleAutoScanEnabled();
         showToast(
-          "Auto Scan gagal diaktifkan. Pemindaian latar tidak bisa didaftarkan. Periksa izin media & notifikasi, lalu coba lagi.",
+          "Pindai Idle gagal diaktifkan. Pemindaian latar tidak bisa didaftarkan. Periksa izin media & notifikasi, lalu coba lagi.",
           "error",
         );
       }
@@ -395,6 +405,17 @@ export default function SettingsScreen() {
       );
       console.log("[Settings] Background scan unregistered");
     }
+  };
+
+  // Scan-split: Pindai Awal tidak punya efek samping — hanya flip
+  // flag (gerbang diperiksa guard initial scan di useScanManager).
+  // Tidak ada background task yang perlu didaftar/dibatalkan.
+  const handleToggleInitialScan = (value: boolean) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    toggleInitialScanEnabled();
+    console.log(
+      `[Settings] Pindai Awal ${value ? "diaktifkan" : "dimatikan"}`,
+    );
   };
 
   // ─── Handler tambahan ─────────────────────────────────────────────────────────
@@ -1298,11 +1319,17 @@ export default function SettingsScreen() {
 
       {showLibrarySettings && (
         <View style={{ paddingBottom: spacing.sm }}>
-          {/* --- NEW: Auto Scan Library Toggle --- */}
+          {/* Scan-split: SATU toggle "Auto Scan Library" dipecah dua —
+              siklus hidupnya berlainan. Pindai Awal: sekali saat
+              instalasi baru (quickscan metadata minimal). Pindai Idle:
+              pemindaian otomatis berkelanjutan (resume + background).
+              Struktur baris mengikuti baris lama persis (Fase 3
+              Settings: judul token semiBold, deskripsi 11px secondary,
+              0 fontWeight) — hanya label + deskripsi yang membedakan. */}
           <SettingRow colors={colors} spacing={spacing} bordered={false}>
             <View style={{ flex: 1, marginRight: spacing.md }}>
               <Text style={{ color: colors.text.primary, fontFamily: FONT_FAMILY.semiBold }}>
-                Auto Scan Library
+                Pindai Awal
               </Text>
               <Text
                 style={{
@@ -1311,8 +1338,37 @@ export default function SettingsScreen() {
                   marginTop: 2,
                 }}
               >
-                Cari musik baru secara otomatis saat aplikasi dibuka atau di
-                background.
+                Sekali saja saat instalasi baru: memindai metadata lagu
+                supaya library langsung terisi.
+              </Text>
+            </View>
+            <Switch
+              value={isInitialScanEnabled}
+              onValueChange={handleToggleInitialScan}
+              trackColor={{
+                false: colors.background.tertiary,
+                true: colors.primary[500],
+              }}
+              thumbColor={
+                isInitialScanEnabled ? colors.text.primary : colors.text.secondary
+              }
+            />
+          </SettingRow>
+
+          <SettingRow colors={colors} spacing={spacing} bordered={false}>
+            <View style={{ flex: 1, marginRight: spacing.md }}>
+              <Text style={{ color: colors.text.primary, fontFamily: FONT_FAMILY.semiBold }}>
+                Pindai Idle
+              </Text>
+              <Text
+                style={{
+                  color: colors.text.secondary,
+                  fontSize: 11,
+                  marginTop: 2,
+                }}
+              >
+                Memeriksa musik baru secara berkala saat aplikasi dibuka
+                atau di background.
               </Text>
             </View>
             <Switch
