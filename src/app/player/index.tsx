@@ -33,7 +33,11 @@ import { useSafePadding } from "@/shared/hooks/useSafePadding";
 import { ParametricSpectrumView } from "@/features/visualizer/components/ParametricSpectrumView";
 import { accentOn, pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import { safeGoBack } from "@/shared/utils/navigation";
-import { sleepRemainingMinutes } from "@/features/player/utils/playbackStatus";
+import {
+  sleepRemainingMinutes,
+  formatSpeedChip,
+  formatTuningChip,
+} from "@/features/player/utils/playbackStatus";
 
 // Lucide Icons
 import {
@@ -49,6 +53,9 @@ import {
   ListMusic,
   Mic2,
   Volume2,
+  AudioLines,
+  AudioWaveform,
+  FileMusic,
   Sparkles,
   Info,
   TriangleAlert,
@@ -92,6 +99,8 @@ export default function PlayerScreen() {
     audioMode,
     audioSessionId, // ✅ Diperlukan untuk SpectogramView
     sleepTimerEnd,
+    playbackSpeed,
+    tuningCents,
   } = usePlayerStore();
 
   // U-P1-19: hati memakai state favorit asli (libraryStore, dicerminkan
@@ -303,6 +312,11 @@ export default function PlayerScreen() {
   const sleepRemainingMin = sleepRemainingMinutes(sleepTimerEnd, sleepNow);
   const sleepActive = sleepRemainingMin !== null && sleepRemainingMin > 0;
 
+  // P2: chip status speed/tuning — hanya tampil bila bukan default
+  // (tampilan saja, tidak mengubah perilaku).
+  const speedChip = formatSpeedChip(playbackSpeed);
+  const tuningChip = formatTuningChip(tuningCents);
+
   return (
     <View style={[styles.container, { backgroundColor }]}>
       <LinearGradient
@@ -345,7 +359,7 @@ export default function PlayerScreen() {
 
           <View style={styles.headerTitle}>
             <Text style={[styles.nowPlayingText, { color: textTertiary }]}>
-              NOW PLAYING
+              SEDANG DIPUTAR
             </Text>
             <View style={styles.audioModeBadge}>
               {/* Verdict live (FALLBACK / laju) hanya saat status tidak
@@ -468,6 +482,24 @@ export default function PlayerScreen() {
                   contentFit="cover"
                   transition={300}
                 />
+                {/* P2: petunjuk visual bahwa sampul bisa diketuk untuk
+                    lirik — pil solid supaya kontras terjamin di atas foto. */}
+                <View
+                  style={[
+                    styles.artworkLyricsHint,
+                    { backgroundColor: colors.background.primary },
+                  ]}
+                >
+                  <Mic2 size={12} color={textPrimary} />
+                  <Text
+                    style={[
+                      styles.artworkLyricsHintText,
+                      { color: textPrimary },
+                    ]}
+                  >
+                    Lirik
+                  </Text>
+                </View>
               </Animated.View>
             </Pressable>
           </View>
@@ -484,7 +516,7 @@ export default function PlayerScreen() {
           <View style={styles.songTextWrapper}>
             <Text
               style={[styles.songTitle, { color: textPrimary }]}
-              numberOfLines={1}
+              numberOfLines={2}
             >
               {currentSong.title}
             </Text>
@@ -513,15 +545,44 @@ export default function PlayerScreen() {
         {/* ✅ PARAMETRIC SPECTRUM VIEW (bar biru→merah mengikuti dB) —
             ganti SpectogramView (waterfall) sejak 2026-11-17.
             Single-channel (mono FFT); dual-channel L/R butuh FFT native
-            per channel (follow-up). */}
-        <ParametricSpectrumView
-          width={width - 48}
-          height={120}
-          isPlaying={isPlaying}
-          audioSessionId={audioSessionId}
-          barCount={48}
-          sensitivity={2.0}
-        />
+            per channel (follow-up). P2: panel solid + skala dBFS di kiri
+            (0 atas, −80 bawah) + label aksesibilitas — kanvas Skia
+            sendiri dekoratif. */}
+        <View
+          style={[
+            styles.visualizerPanel,
+            { backgroundColor: colors.background.primary },
+          ]}
+          accessible
+          accessibilityRole="image"
+          accessibilityLabel="Visualizer spektrum, skala dBFS"
+        >
+          <View style={styles.visualizerScale}>
+            <Text
+              style={[styles.visualizerScaleText, { color: textTertiary }]}
+            >
+              0
+            </Text>
+            <Text
+              style={[styles.visualizerScaleText, { color: textTertiary }]}
+            >
+              dBFS
+            </Text>
+            <Text
+              style={[styles.visualizerScaleText, { color: textTertiary }]}
+            >
+              −80
+            </Text>
+          </View>
+          <ParametricSpectrumView
+            width={width - 108}
+            height={120}
+            isPlaying={isPlaying}
+            audioSessionId={audioSessionId}
+            barCount={48}
+            sensitivity={2.0}
+          />
+        </View>
 
         {/* Progress Section — U-P2-11: selama drag, slider menampilkan
             nilai lokal (onValueChange) dan baru commit seek saat dilepas
@@ -691,7 +752,7 @@ export default function PlayerScreen() {
           ]}
         >
           <View style={styles.audioBadge}>
-            <Mic2 size={14} color={textTertiary} strokeWidth={2} />
+            <AudioLines size={14} color={textTertiary} strokeWidth={2} />
             <Text style={[styles.audioText, { color: textTertiary }]}>
               {currentSong.sampleRate
                 ? `${(currentSong.sampleRate / 1000).toFixed(0)} kHz`
@@ -707,12 +768,52 @@ export default function PlayerScreen() {
           </View>
           <View style={[styles.audioDot, { backgroundColor: borderColor }]} />
           <View style={styles.audioBadge}>
-            <ListMusic size={14} color={textTertiary} strokeWidth={2} />
+            <FileMusic size={14} color={textTertiary} strokeWidth={2} />
             <Text style={[styles.audioText, { color: textTertiary }]}>
               {currentSong.codec?.toUpperCase() || "-"}
             </Text>
           </View>
         </View>
+
+        {/* P2: chip status speed/tuning — hanya bila bukan default. */}
+        {(speedChip || tuningChip) && (
+          <View style={styles.playbackChips}>
+            {speedChip && (
+              <View
+                style={[
+                  styles.playbackChip,
+                  { backgroundColor: colors.background.tertiary },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.playbackChipText,
+                    { color: colors.text.secondary },
+                  ]}
+                >
+                  {speedChip}
+                </Text>
+              </View>
+            )}
+            {tuningChip && (
+              <View
+                style={[
+                  styles.playbackChip,
+                  { backgroundColor: colors.background.tertiary },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.playbackChipText,
+                    { color: colors.text.secondary },
+                  ]}
+                >
+                  {tuningChip}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
 
         {/* BOTTOM UTILITY BAR — A3: latar selalu background.secondary
             (solid). Dulu mode terang memakai rgba(0,0,0,0.03) sehingga
@@ -729,8 +830,8 @@ export default function PlayerScreen() {
             accessibilityRole="button"
             accessibilityLabel={
               sleepActive
-                ? `Sleep timer aktif, sisa ${sleepRemainingMin} menit`
-                : "Sleep timer"
+                ? `Timer tidur aktif, sisa ${sleepRemainingMin} menit`
+                : "Timer tidur"
             }
             accessibilityState={{ selected: sleepActive }}
           >
@@ -794,7 +895,7 @@ export default function PlayerScreen() {
             accessibilityRole="button"
             accessibilityLabel="Buka analyzer"
           >
-            <Sparkles size={20} color={iconColorDefault} />
+            <AudioWaveform size={20} color={iconColorDefault} />
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -902,6 +1003,59 @@ const styles = StyleSheet.create({
   artwork: {
     width: "100%",
     height: "100%",
+  },
+  // P2: pil petunjuk "sampul bisa diketuk untuk lirik" — latar solid
+  // supaya kontras terjamin di atas foto sampul.
+  artworkLyricsHint: {
+    position: "absolute",
+    bottom: 10,
+    right: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  artworkLyricsHintText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  // P2: panel visualizer — skala dBFS di kiri (kolom 28px, tinggi sama
+  // dengan kanvas 120px; 0 di atas = 0 dB, −80 di bawah = lantai).
+  visualizerPanel: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 20,
+  },
+  visualizerScale: {
+    width: 28,
+    height: 120,
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginRight: 8,
+  },
+  visualizerScaleText: {
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  // P2: chip status speed/tuning (hanya bila bukan default).
+  playbackChips: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 20,
+  },
+  playbackChip: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  playbackChipText: {
+    fontSize: 11,
+    fontWeight: "700",
   },
   songTitle: {
     fontSize: 24,

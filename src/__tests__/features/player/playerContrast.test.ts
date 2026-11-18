@@ -68,6 +68,18 @@ describe("Player A3 — kontras panel solid", () => {
     },
   );
 
+  it.each(BRAND_THEMES)(
+    "$name: chip speed/tuning (teks secondary di atas background.tertiary) lolos 4.5:1",
+    (theme) => {
+      expect(
+        contrastRatio(
+          theme.colors.text.secondary,
+          theme.colors.background.tertiary,
+        ),
+      ).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
   it("gradien Noir di titik terburuk memang gagal — panel yang memperbaiki, bukan warna", () => {
     // Sanity: tanpa panel, ikon header di atas blend gradien Noir @10%
     // (emas #C9A96A -> navy, blend sRGB ~#B69A63) hanya ~2.46:1.

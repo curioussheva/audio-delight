@@ -46,11 +46,11 @@ export const SleepTimerModal = ({
   }, [visible, sleepTimerEnd]);
 
   const options = [
-    { label: "Off", value: null },
-    { label: "15 Minutes", value: 15 },
-    { label: "30 Minutes", value: 30 },
-    { label: "45 Minutes", value: 45 },
-    { label: "60 Minutes", value: 60 },
+    { label: "Mati", value: null },
+    { label: "15 Menit", value: 15 },
+    { label: "30 Menit", value: 30 },
+    { label: "45 Menit", value: 45 },
+    { label: "60 Menit", value: 60 },
   ];
 
   const remainingMs =
@@ -121,13 +121,13 @@ export const SleepTimerModal = ({
             style={[styles.handle, { backgroundColor: colors.border.light }]}
           />
           <Text style={[styles.title, { color: colors.text.primary }]}>
-            Sleep Timer
+            Timer Tidur
           </Text>
           {remainingMs !== null && (
             <Text style={[styles.remaining, { color: accentColor }]}>
               {remainingMs > 0
-                ? `Time remaining: ${formatRemaining(remainingMs)}`
-                : "Timer finished"}
+                ? `Sisa waktu: ${formatRemaining(remainingMs)}`
+                : "Timer selesai"}
             </Text>
           )}
 

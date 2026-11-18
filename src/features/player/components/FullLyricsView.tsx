@@ -83,7 +83,7 @@ export const FullLyricsView = () => {
         ]}
       >
         <Text style={[styles.emptyText, { color: colors.text.secondary }]}>
-          Instrumental or No Lyrics Found
+          Instrumental atau lirik tidak ditemukan
         </Text>
       </View>
     );
