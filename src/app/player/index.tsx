@@ -24,6 +24,7 @@ import Slider from "@react-native-community/slider";
 import { SleepTimerModal } from "@/features/player/components/SleepTimerModal";
 import { QueueManager } from "@/features/player/components/QueueManager";
 import { FullLyricsView } from "@/features/player/components/FullLyricsView";
+import { PristineButton } from "@/shared/components/ui/PristineButton";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSafePadding } from "@/shared/hooks/useSafePadding";
@@ -81,6 +82,14 @@ const hexToRGBA = (hex: string, opacity: number): string => {
 export default function PlayerScreen() {
   const { theme } = useTheme();
   const { colors, isDark } = theme;
+  // FASE 3 (1): judul lagu + heading display Player memakai Playfair
+  // Display lewat token (theme.typography.fontFamily.displayBold) —
+  // BUKAN hardcoded nama font. Semua tema memakai BASE_TYPOGRAPHY, jadi
+  // nilainya selalu ada; bila tidak ada, undefined → font sistem
+  // (fallback yang sama seperti loadAppFonts gagal). Dipakai judul lagu
+  // + judul empty state; artis, info file, label waktu + header tetap
+  // Inter (body/UI).
+  const displayFont = theme.typography?.fontFamily?.displayBold;
   const safePadding = useSafePadding();
   // Follow-up P2-7: padding bawah lokal TANPA reservasi +110
   // FloatingPlayer. useSafePadding() memberi insets.bottom + 110 saat ada
@@ -281,7 +290,10 @@ export default function PlayerScreen() {
             <Music size={48} color={colors.text.tertiary} />
           )}
           <Text
-            style={[styles.emptyTitle, { color: colors.text.primary }]}
+            style={[
+              styles.emptyTitle,
+              { color: colors.text.primary, fontFamily: displayFont },
+            ]}
           >
             {isError
               ? "Lagu gagal diputar"
@@ -294,35 +306,21 @@ export default function PlayerScreen() {
               ? playError
               : "Buka library dan pilih lagu untuk mulai memutar."}
           </Text>
-          <TouchableOpacity
-            style={[
-              styles.emptyPrimaryBtn,
-              { backgroundColor: colors.primary[500] },
-            ]}
+          {/* FASE 3 (4): tombol empty state memakai PristineButton
+              (Fase 2) — primer "Buka Library" + teks "Tutup", satu pola
+              tombol dengan seluruh aplikasi. Dulu TouchableOpacity +
+              gaya tombol lokal (bg primary[500], radius 28). */}
+          <PristineButton
+            label="Buka Library"
             onPress={() => router.push("/(drawer)/(tabs)/library")}
-          >
-            <Text
-              style={[
-                styles.emptyPrimaryBtnText,
-                { color: playIconColor },
-              ]}
-            >
-              Buka Library
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.emptySecondaryBtn}
+            variant="primary"
+            style={{ marginTop: 12 }}
+          />
+          <PristineButton
+            label="Tutup"
             onPress={() => safeGoBack(router)}
-          >
-            <Text
-              style={[
-                styles.emptySecondaryBtnText,
-                { color: colors.text.secondary },
-              ]}
-            >
-              Tutup
-            </Text>
-          </TouchableOpacity>
+            variant="text"
+          />
         </View>
       </View>
     );
@@ -541,7 +539,10 @@ export default function PlayerScreen() {
         >
           <View style={styles.songTextWrapper}>
             <Text
-              style={[styles.songTitle, { color: textPrimary }]}
+              style={[
+                styles.songTitle,
+                { color: textPrimary, fontFamily: displayFont },
+              ]}
               numberOfLines={2}
             >
               {currentSong.title}
@@ -1213,9 +1214,16 @@ const styles = StyleSheet.create({
   // + baris info file 11px di bawah artis (dulu panel terpisah di fixed
   // bottom). Warna textTertiary di atas background.primary sudah dikunci
   // playerContrast.test.ts (pasangan yang sama dengan teks waktu).
+  // FASE 3 (1): judul memakai Playfair Display Bold lewat token
+  // (fontFamily inline di JSX — dari theme.typography, bukan hardcoded).
+  // Bobot TIDAK ditulis di sini: keluarga Bold sudah membawa bobotnya
+  // (konvensi weightToFamily di uiStyles: bobot → keluarga, bukan
+  // keduanya). lineHeight 28 = peran h4 token (20/600/28) — Playfair
+  // diukur dari file TTF-nya: natural 26,7dp @20px (Inter 24,2) — jadi
+  // judul 2 baris 48 → 56 (+8, lihat PLAYER_CHROME_DP).
   songTitle: {
     fontSize: 20,
-    fontWeight: "700",
+    lineHeight: 28,
     marginBottom: 6,
   },
   artistName: {
@@ -1330,8 +1338,11 @@ const styles = StyleSheet.create({
     // dari header fixed.
     // LAYOUT-V3: margin 20/20 → 10/10, padding 8 (menang atas padding 12
     // panel karena urutan style dibalik di JSX) — bagian dari anggaran
-    // vertikal. Panel: pad 16 + isi 88 (judul 2 baris 48 + mb 6 + artis
-    // 17 + info file 17) = 104; total blok 124.
+    // vertikal. Panel: pad 16 + isi 96 (judul 2 baris 56 + mb 6 + artis
+    // 17 + info file 17) = 112; total blok 132.
+    // FASE 3 (1): judul 2 baris 48 → 56 (Playfair, lineHeight 28 peran
+    // h4) — +8 diserap PLAYER_CHROME_DP (578 → 586), sampul mengecil
+    // 8dp; anggaran total tetap pas 800/873.
     marginTop: 10,
     marginBottom: 10,
     padding: 8,
@@ -1403,9 +1414,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 12,
   },
+  // FASE 3 (1): heading display Player — Playfair Display Bold lewat
+  // token (fontFamily inline di JSX), lineHeight 28 peran h4. Bobot
+  // tidak ditulis (keluarga Bold sudah membawanya). Bukan bagian
+  // anggaran layout-v3 (cabang empty state terpisah).
   emptyTitle: {
     fontSize: 20,
-    fontWeight: "700",
+    lineHeight: 28,
     textAlign: "center",
     marginTop: 8,
   },
@@ -1415,24 +1430,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
     paddingHorizontal: 16,
-  },
-  emptyPrimaryBtn: {
-    marginTop: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: 28,
-  },
-  emptyPrimaryBtnText: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  emptySecondaryBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-  },
-  emptySecondaryBtnText: {
-    fontSize: 14,
-    fontWeight: "600",
   },
   // U-P1-20: banner saat lagu tampil tapi pemutaran gagal.
   errorBanner: {
