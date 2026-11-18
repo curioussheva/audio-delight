@@ -103,8 +103,16 @@ export const useLibrary = (
       }
       setError(null);
 
-      // Buat promise baru
-      globalLoadingPromise = (async () => {
+      // N1 (J2-5): bersihkan globalLoadingPromise berdasarkan IDENTITAS
+      // promise, bukan loadId. Dulu finally hanya membersihkan bila
+      // currentLoadId === loadIdRef.current && isMounted — bila load kedua
+      // dimulai saat load pertama masih jalan (atau komponen unmount di
+      // tengah load), promise pertama yang sudah resolved tidak pernah
+      // dibersihkan: semua loadSongs/reload berikutnya masuk cabang
+      // "await globalLoadingPromise; return" dan jadi no-op permanen
+      // sampai restart app. Sekarang promise yang selesai menghapus
+      // dirinya sendiri; loadId tetap hanya menggerbang setState.
+      const myPromise = (async () => {
         try {
           const result = await LibraryScanner.getLibrarySongs({
             searchQuery: currentSearch,
@@ -149,14 +157,21 @@ export const useLibrary = (
             setError(error?.message || "Gagal memuat lagu dari database");
           }
         } finally {
+          // Identitas promise: hanya promise ini yang boleh menghapus
+          // dirinya dari slot global — load yang lebih baru (bila ada)
+          // tidak tertimpa, dan unmount tidak lagi meninggalkan slot
+          // berisi promise resolved selamanya.
+          if (globalLoadingPromise === myPromise) {
+            globalLoadingPromise = null;
+          }
           if (currentLoadId === loadIdRef.current && isMountedRef.current) {
             if (!isLoadMore) {
               setLoading(false);
             }
-            globalLoadingPromise = null;
           }
         }
       })();
+      globalLoadingPromise = myPromise;
 
       await globalLoadingPromise;
     },
