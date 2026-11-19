@@ -6,7 +6,7 @@
  * MediaStore setiap quickDiff/full scan — komentarnya mengklaim
  * "PRESERVE user data" padahal yang dipertahankan hanya
  * isFavorite/playCount/dll. Perilaku baru: field yang pernah diedit
- * user (edit manual + lirik di [id].tsx) ditandai di
+ * user (edit manual + terapkan MusicBrainz di [id].tsx) ditandai di
  * kolom `edited_fields` (JSON array) dan dilewati `updateExistingSong`.
  * Enrichment TIDAK menandai — field hasil enrichment tetap boleh
  * diperbarui scan berikutnya.
