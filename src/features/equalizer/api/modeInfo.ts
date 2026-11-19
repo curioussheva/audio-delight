@@ -25,6 +25,12 @@ export const MODE_INFO: Record<AudioMode, ModeInfo> = {
   immersive: {
     label: "Solfeggio",
     hint: "resonansi",
-    description: "Resonansi 528 Hz + tuning A=432, tanpa EQ/DSP.",
+    // Jujur soal default (P1 audit BitPerfect/Solfeggio 2026-11-20):
+    // tuning default A=440 (tuningCents: 0 di playerStore) — A=432 hanya
+    // bila user menekan presetnya; dan "tanpa EQ/DSP" salah — koreksi
+    // headphone, tuning, dan lebar spatial (dari nilai widener DSP) tetap
+    // memproses di mode ini. Yang dilewati hanya EQ 10-band/efek DSP.
+    description:
+      "Resonansi 528 Hz · tuning A=440 (A=432 tersedia). Tanpa EQ 10-band/efek DSP — koreksi headphone, tuning, dan lebar spatial tetap berlaku.",
   },
 };
