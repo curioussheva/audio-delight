@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { View, StyleSheet, Text } from "react-native";
 
 import {
@@ -63,6 +63,13 @@ interface Props {
 // Tinggi strip label Hz di bawah canvas.
 const HZ_STRIP = 16;
 
+// DIAGNOSTIK SEMENTARA — bisa dicabut (E1, 2026-11-19; lihat
+// followup-b2cde-report.md butir E): penghitung mount FrequencyGraph.
+// Surface Skia 942x385 tercatat dibuat 8x di jendela toggle 14:54-14:56;
+// log ini membuktikan apakah itu mount ulang React (bila 0 mount ulang
+// selama 8 kreasi surface -> pemicu murni native). Tanpa ubah perilaku.
+let frequencyGraphMountCount = 0;
+
 export const FrequencyGraph: React.FC<Props> = ({
   bands,
   combinedGains,
@@ -72,6 +79,20 @@ export const FrequencyGraph: React.FC<Props> = ({
   onBandChange,
 }) => {
   const { theme } = useTheme();
+
+  // DIAGNOSTIK SEMENTARA — bisa dicabut (E1, 2026-11-19): log mount/unmount
+  // FrequencyGraph. Cara baca di logcat: tiap toggle DSP, hitung baris
+  // "[FrequencyGraph-DIAG] mount #N" vs kreasi surface Skia 942x385.
+  // 0 mount ulang + surface tetap tercipta = pemicu murni native.
+  // Catatan: StrictMode (dev) bisa me-mount 2x — hitung mount NETTO.
+  useEffect(() => {
+    frequencyGraphMountCount += 1;
+    const mountId = frequencyGraphMountCount;
+    console.log(`[FrequencyGraph-DIAG] mount #${mountId}`);
+    return () => {
+      console.log(`[FrequencyGraph-DIAG] unmount #${mountId}`);
+    };
+  }, []);
 
   // Dimensi & Skala Konstan
   const midY = height / 2;
