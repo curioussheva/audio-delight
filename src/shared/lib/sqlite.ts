@@ -54,8 +54,8 @@ const SQLiteService = {
           
           -- Artwork & Enrichment
           artwork             TEXT,
-          artist_image_url    TEXT,   -- Dari MusicBrainz / Cover Art Archive
-          artist_bio          TEXT,   -- Dari Wikipedia via MusicBrainz
+          artist_image_url    TEXT,   -- Dulu dari MusicBrainz / Cover Art Archive (jalur online dicabut 2026-11-19)
+          artist_bio          TEXT,   -- Dulu dari Wikipedia via MusicBrainz (jalur online dicabut 2026-11-19)
           album_artwork       TEXT,
           
           -- User Data
@@ -115,12 +115,16 @@ const SQLiteService = {
       `);
 
       /**
-       * artist_cache: Cache hasil enrichment dari MusicBrainz + Wikipedia.
+       * artist_cache: Cache hasil enrichment online lama (MusicBrainz +
+       * Wikipedia). TIDAK LAGI DITULIS — service online dicabut
+       * 2026-11-19. Tabel dipertahankan (tanpa migrasi) supaya data
+       * lama tetap bisa tampil di seksi "Tentang Artis" [id].tsx;
+       * penghapusan tabel butuh migrasi dan diputuskan terpisah.
        *
-       * Kolom yang DIISI oleh OnlineMetadataService:
+       * Kolom yang DULU DIISI oleh OnlineMetadataService:
        *   artist_name, bio, image_url, last_fetched
        *
-       * Kolom yang TIDAK DIISI (reserved untuk integrasi masa depan):
+       * Kolom yang TIDAK PERNAH DIISI (reserved untuk integrasi masa depan):
        *   mb_artist_id    → MBID dari MusicBrainz (bisa disimpan untuk re-fetch lebih cepat)
        *   tags            → Genre tags dari MusicBrainz (belum di-fetch)
        *   similar_artists → Tidak tersedia di MusicBrainz secara gratis

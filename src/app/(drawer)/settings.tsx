@@ -58,7 +58,6 @@ import { useBitPerfectStatus } from "@/features/player/hooks/useBitPerfectStatus
 import { ThemePicker } from "@/shared/components/ui/ThemePicker";
 import type { Theme } from "@/constants/themes/types";
 import { DEFAULT_THEME } from "@/constants/theme";
-import OnlineMetadataService from "@/features/library/services/OnlineMetadataService";
 
 import { Zap, ShieldCheck, TriangleAlert } from "lucide-react-native";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
@@ -268,13 +267,11 @@ export default function SettingsScreen() {
   const [showAudioSettings, setShowAudioSettings] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showLibrarySettings, setShowLibrarySettings] = useState(false);
-  const [isClearing, setIsClearing] = useState(false);
   // Rescan (full scan manual) dari Settings — spinner lokal +
   // kunci store (lihat handleRescan).
   const [isRescanning, setIsRescanning] = useState(false);
   // FASE 3 Settings: konfirmasi destruktif/berdampak lewat ConfirmDialog
   // (bukan dialog sistem) — pola Fase 3 Library/EQ.
-  const [showClearCacheConfirm, setShowClearCacheConfirm] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showBitPerfectConfirm, setShowBitPerfectConfirm] = useState(false);
 
@@ -341,27 +338,6 @@ export default function SettingsScreen() {
   }, [audioMode]);
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
-
-  const handleClearCache = async () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    setShowClearCacheConfirm(true);
-  };
-
-  const doClearCache = async () => {
-    setShowClearCacheConfirm(false);
-    setIsClearing(true);
-    const success = await OnlineMetadataService.clearArtistCache();
-    setIsClearing(false);
-    if (success) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast("Cache telah dibersihkan.", "success");
-    } else {
-      // U-P2-47: dulu gagal diam-diam — tidak ada umpan balik
-      // apa pun bila clearArtistCache() mengembalikan false.
-      // Samakan dengan handleResetAll yang punya umpan balik "Gagal".
-      showToast("Cache gagal dibersihkan. Coba lagi.", "error");
-    }
-  };
 
   const handleResetAll = () => {
     setShowResetConfirm(true);
@@ -1544,31 +1520,9 @@ export default function SettingsScreen() {
             )}
           </SettingRow>
 
-          {/* I2-revisi: toggle "Online Artist Metadata" + "Hanya lewat
-              Wi-Fi" DIHAPUS — pengaturan izin internet tidak ada lagi.
-              Online (MusicBrainz + foto artis) hanya di [id].tsx, dipicu
-              tap user; tidak ada lagi yang membaca setting ini. Tombol
-              "Kosongkan Cache Gambar Artis" di bawah DIPERTAHANKAN. */}
-
-          <TouchableOpacity
-            style={{ padding: spacing.md, alignItems: "center" }}
-            onPress={handleClearCache}
-            disabled={isClearing}
-          >
-            {isClearing ? (
-              <ActivityIndicator size="small" color={accentOnSecondary} />
-            ) : (
-              <Text
-                style={{
-                  color: errorOnSecondary,
-                  fontSize: 13,
-                  fontFamily: FONT_FAMILY.bold,
-                }}
-              >
-                Kosongkan Cache Gambar Artis
-              </Text>
-            )}
-          </TouchableOpacity>
+          {/* 2026-11-19: jalur online (MusicBrainz + foto artis)
+              dicabut dari enrichment — tombol "Kosongkan Cache Gambar
+              Artis" ikut dihapus (clearArtistCache adalah no-op). */}
         </View>
       )}
     </SectionCard>
@@ -1679,14 +1633,6 @@ export default function SettingsScreen() {
       {/* FASE 3 Settings: konfirmasi destruktif/berdampak lewat
           ConfirmDialog — redaksi pesan sama persis dengan dialog
           sistem sebelumnya; umpan balik sukses/gagal lewat toast. */}
-      <ConfirmDialog
-        visible={showClearCacheConfirm}
-        title="Bersihkan Cache"
-        message="Foto artis yang sudah diunduh akan dihapus. Lanjutkan?"
-        confirmLabel="Bersihkan"
-        onConfirm={() => void doClearCache()}
-        onCancel={() => setShowClearCacheConfirm(false)}
-      />
       <ConfirmDialog
         visible={showResetConfirm}
         title="Reset Settings"

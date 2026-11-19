@@ -251,8 +251,8 @@ export class MetadataEnricher {
 
   /**
    * INTI PROSES (lokal saja): Level 1 & 2 (Tags) -> Level 3 (verifikasi
-   * fake Hi-Res) -> DB. Tidak ada fetch online — online (MusicBrainz +
-   * foto artis) hanya di [id].tsx, dipicu tap user.
+   * fake Hi-Res) -> DB. Tidak ada fetch online — jalur online
+   * (MusicBrainz + foto artis) dicabut seluruhnya 2026-11-19.
    */
   private static async processItem(item: QueueItem): Promise<void> {
     const store = useLibraryStore.getState();
@@ -327,8 +327,9 @@ export class MetadataEnricher {
         // I2-revisi: TIDAK ada Level 4 online di sini lagi — enrichment
         // hanya lokal (tag + deteksi fake hi-res). Dulu blok ini memanggil
         // OnlineMetadataService.getArtistEnrichment per lagu (badai 503
-        // di log 2026-11-18) padahal toggle online OFF. Online hanya di
-        // [id].tsx, dipicu tap user.
+        // di log 2026-11-18) padahal toggle online OFF. Jalur online
+        // (service + pemicu manual di [id].tsx) dicabut seluruhnya
+        // 2026-11-19.
       }
     } catch (error) {
       console.error(

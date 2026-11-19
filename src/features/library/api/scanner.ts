@@ -657,8 +657,8 @@ export class LibraryScanner {
     songId: string,
     metadata: Partial<Song>,
     // I3 (G2): `markEdited` hanya diisi pemanggil dari [id].tsx (edit
-    // manual + terapkan MusicBrainz). Enrichment tidak menandai — field
-    // hasil enrichment tetap boleh diperbarui scan berikutnya.
+    // manual + lirik). Enrichment tidak menandai — field hasil
+    // enrichment tetap boleh diperbarui scan berikutnya.
     options?: { markEdited?: boolean },
   ): Promise<void> {
     try {
