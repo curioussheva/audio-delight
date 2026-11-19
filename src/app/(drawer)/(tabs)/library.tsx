@@ -104,6 +104,11 @@ const hexToRGBA = (hex: string, opacity: number): string => {
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity})`;
 };
 
+// Lazyload-fix (butir 2): keyExtractor stabil level modul — dulu inline di
+// JSX tiap FlashList, jadi identitasnya baru tiap render layar dan FlashList
+// (PureComponent) melihat prop baru.
+const songKeyExtractor = (item: Song) => item.id;
+
 export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -143,14 +148,21 @@ export default function LibraryScreen() {
   // refreshKey (lihat efek subscriber di bawah).
   const BOTTOM_COMPENSATION = Platform.OS === "ios" ? insets.bottom + 20 : 30;
 
-  const { playSong, currentSong } = usePlayerStore();
+  // Lazyload-fix (butir 2): dulu `const { playSong, currentSong } = usePlayerStore()`
+  // berlangganan SELURUH store — tick posisi 500ms (`__positionWatcher` di
+  // playerStore, set({ position }) tiap tick) me-render ulang layar ~2×/dtk
+  // selama lagu diputar, tepat saat fling-scroll. Sekarang hanya id lagu yang
+  // diputar (primitif — stabil selama posisi/durasi berubah) + aksi playSong
+  // (stabil, aksi zustand). Layar tetap me-render ulang saat lagu berganti.
+  const playSong = usePlayerStore((s) => s.playSong);
+  const currentSongId = usePlayerStore((s) => s.currentSong?.id);
   const showToast = useToastStore((s) => s.showToast);
 
   // 🔥 FIX: list harus punya ruang untuk FloatingPlayer + tab bar.
   // Sebelumnya padding bawah cuma 30 (Android), tapi FloatingPlayer sendiri
   // sudah 72 + margin, jadi item terakhir tertutupi.
   const FLOATING_BOTTOM =
-    BOTTOM_COMPENSATION + FLOATING_PLAYER_CLEARANCE * (currentSong ? 1 : 0);
+    BOTTOM_COMPENSATION + FLOATING_PLAYER_CLEARANCE * (currentSongId ? 1 : 0);
 
   // Styles with colors
   const s = useMemo(() => createStyles(colors), [colors]);
@@ -712,23 +724,10 @@ export default function LibraryScreen() {
           ) : (
             <FlashList
               data={selectedSongs}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={{
-                paddingBottom: FLOATING_BOTTOM,
-                paddingHorizontal: 12,
-              }}
-              renderItem={({ item }) => (
-                <SongListItem
-                  item={item as any}
-                  isNowPlaying={currentSong?.id === item.id}
-                  isFavorite={isFavorite(item.id)}
-                  colors={colors}
-                  onPress={() => {
-                    handleSongPress(item, selectedSongs);
-                  }}
-                  onToggleFavorite={toggleFavorite}
-                />
-              )}
+              keyExtractor={songKeyExtractor}
+              contentContainerStyle={listContentStyle}
+              renderItem={renderPlaylistSongItem}
+              extraData={currentSongId}
             />
           )}
         </View>
@@ -799,34 +798,13 @@ export default function LibraryScreen() {
         return (
           <FlashList
             data={filteredSource}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={{
-              paddingBottom: FLOATING_BOTTOM,
-              paddingHorizontal: 12,
-            }}
-            renderItem={({ item }) => (
-              <SongListItem
-                item={item as any}
-                isNowPlaying={currentSong?.id === item.id}
-                isFavorite={isFavorite(item.id)}
-                colors={colors}
-                // Gunakan handleSongPress agar konsisten
-                onPress={() => {
-                  handleSongPress(item, filteredSource);
-                }}
-                onToggleFavorite={toggleFavorite}
-              />
-            )}
+            keyExtractor={songKeyExtractor}
+            contentContainerStyle={listContentStyle}
+            renderItem={renderSongItem}
+            extraData={currentSongId}
             // U-P1-39: pull-to-refresh — RefreshControl diimpor tapi dulu
             // tidak pernah dipakai.
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                tintColor={colors.primary[500]}
-                colors={[colors.primary[500]]}
-              />
-            }
+            refreshControl={songsRefreshControl}
             // N2: library terpotong diam-diam di 1000 lagu — `loadMore`
             // dulu tidak pernah dipanggil siapa pun. Tab Songs kini
             // memuat halaman berikut saat mendekati ujung daftar.
@@ -843,7 +821,7 @@ export default function LibraryScreen() {
         return (
           <AlbumGrid
             tracks={filteredSource}
-            currentTrackId={currentSong?.id}
+            currentTrackId={currentSongId}
             onSongPress={handleSongPress} // Pakai bridge
             onToggleFavorite={toggleFavorite}
             isFavorite={isFavorite}
@@ -854,7 +832,7 @@ export default function LibraryScreen() {
     <ArtistList
       artists={artists}           // <--- ADD THIS (Fixes TS2741)
       tracks={filteredSource}
-      currentTrackId={currentSong?.id}
+      currentTrackId={currentSongId}
       favoriteIds={favoriteIdSet}
       onSongPress={handleSongPress}
       onToggleFavorite={toggleFavorite}
@@ -865,7 +843,7 @@ export default function LibraryScreen() {
           <GenreList
             genres={genres}
             tracks={filteredSource}
-            currentTrackId={currentSong?.id}
+            currentTrackId={currentSongId}
             favoriteIds={favoriteIdSet}
             onSongPress={handleSongPress} // Pakai bridge
             onToggleFavorite={toggleFavorite}
@@ -876,7 +854,7 @@ export default function LibraryScreen() {
           <FolderList
             folders={folders}
             tracks={filteredSource}
-            currentTrackId={currentSong?.id}
+            currentTrackId={currentSongId}
             favoriteIds={favoriteIdSet}
             onSongPress={handleSongPress} // Pakai bridge
             onToggleFavorite={toggleFavorite}
@@ -887,7 +865,7 @@ export default function LibraryScreen() {
           <FileTypeList
             fileTypes={fileTypes}
             tracks={filteredSource}
-            currentTrackId={currentSong?.id}
+            currentTrackId={currentSongId}
             favoriteIds={favoriteIdSet}
             onSongPress={handleSongPress} // Pakai bridge
             onToggleFavorite={toggleFavorite}
@@ -917,6 +895,81 @@ export default function LibraryScreen() {
     // Ini menyelesaikan error TS2322 pada AlbumGrid, GenreList, dll.
     playSong(track, queue);
   }, [playSong]);
+
+  // ── Stabilisasi FlashList (lazyload-fix butir 2) ─────────────────────────
+  // Dulu renderItem/keyExtractor/contentContainerStyle/refreshControl dibuat
+  // ulang (inline) tiap render layar — FlashList (PureComponent) melihat
+  // prop baru dan me-render ulang list, tepat saat fling. Sekarang semuanya
+  // referensi stabil: renderItem hanya berubah bila lagu yang diputar /
+  // favorit / warna / antrean berubah. `extraData={currentSongId}` memberi
+  // tahu FlashList untuk me-render ulang baris saat lagu yang diputar
+  // berganti, walau `data` tidak berubah. Semua dep di bawah stabil selama
+  // playback (isFavorite: useCallback atas favoriteIds; toggleFavorite:
+  // aksi store; handleSongPress: useCallback atas playSong; filteredSource /
+  // selectedSongs: useMemo).
+  const listContentStyle = useMemo(
+    () => ({ paddingBottom: FLOATING_BOTTOM, paddingHorizontal: 12 }),
+    [FLOATING_BOTTOM],
+  );
+
+  const renderSongItem = useCallback(
+    ({ item }: { item: Song }) => (
+      <SongListItem
+        item={item as any}
+        isNowPlaying={currentSongId === item.id}
+        isFavorite={isFavorite(item.id)}
+        colors={colors}
+        // Gunakan handleSongPress agar konsisten
+        onPress={() => {
+          handleSongPress(item, filteredSource);
+        }}
+        onToggleFavorite={toggleFavorite}
+      />
+    ),
+    [
+      currentSongId,
+      isFavorite,
+      colors,
+      handleSongPress,
+      toggleFavorite,
+      filteredSource,
+    ],
+  );
+
+  const renderPlaylistSongItem = useCallback(
+    ({ item }: { item: Song }) => (
+      <SongListItem
+        item={item as any}
+        isNowPlaying={currentSongId === item.id}
+        isFavorite={isFavorite(item.id)}
+        colors={colors}
+        onPress={() => {
+          handleSongPress(item, selectedSongs);
+        }}
+        onToggleFavorite={toggleFavorite}
+      />
+    ),
+    [
+      currentSongId,
+      isFavorite,
+      colors,
+      handleSongPress,
+      toggleFavorite,
+      selectedSongs,
+    ],
+  );
+
+  const songsRefreshControl = useMemo(
+    () => (
+      <RefreshControl
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        tintColor={colors.primary[500]}
+        colors={[colors.primary[500]]}
+      />
+    ),
+    [refreshing, onRefresh, colors],
+  );
 
   return (
     <View style={[s.container, { backgroundColor: colors.background.primary }]}>
