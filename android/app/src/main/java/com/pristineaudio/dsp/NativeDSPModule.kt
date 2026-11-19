@@ -112,7 +112,16 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
 
     @ReactMethod
     fun setFullEqualizer(gains: ReadableArray, sessionId: Int, promise: Promise) {
-        if (!engineAvailable) { promise.resolve(false); return }
+        // C (follow-up logcat-4): ukur durasi NATIVE apply (masuk setter →
+        // sebelum promise.resolve) — pemisah "waktu native" vs "hilir
+        // resolve" untuk apply 0,8–2,5 dtk di JS. Bila native ≈ 0 ms
+        // sementara JS detik-an, penundanya ada di antrean bridge /
+        // kelaparan JS, bukan di engine.
+        val t0 = System.nanoTime()
+        if (!engineAvailable) {
+            Log.i(TAG, "[DSP-TIMING] setFullEqualizer native=${(System.nanoTime() - t0) / 1_000_000}ms (engine unavailable)")
+            promise.resolve(false); return
+        }
         try {
             // (C-EQATOM, 2026-11-12): satu panggilan JNI untuk seluruh
             // preset — bukan 10x loop per band. Array parsial (< 10) hanya
@@ -120,6 +129,7 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
             val count = minOf(gains.size(), 10)
             val bands = FloatArray(count) { i -> gains.getDouble(i).toFloat() }
             setNativeEqualizerBands(bands)
+            Log.i(TAG, "[DSP-TIMING] setFullEqualizer native=${(System.nanoTime() - t0) / 1_000_000}ms")
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("DSP_ERROR", e.message)
@@ -128,7 +138,13 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
 
     @ReactMethod
     fun setBassBoost(strength: Float, sessionId: Int, promise: Promise) {
-        if (!engineAvailable) { promise.resolve(false); return }
+        // C (follow-up logcat-4): ukur durasi NATIVE — lihat komentar di
+        // setFullEqualizer.
+        val t0 = System.nanoTime()
+        if (!engineAvailable) {
+            Log.i(TAG, "[DSP-TIMING] setBassBoost native=${(System.nanoTime() - t0) / 1_000_000}ms (engine unavailable)")
+            promise.resolve(false); return
+        }
         try {
             // 🔥 FIX (2026-10-10): konversi satuan.
             //
@@ -148,6 +164,7 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
             // membagi 1000 sebelum memanggil `setNativeStereoWide`.
             val gainDb = strength / 1000.0f * kMaxBassBoostDb
             setNativeBassBoost(gainDb)
+            Log.i(TAG, "[DSP-TIMING] setBassBoost native=${(System.nanoTime() - t0) / 1_000_000}ms")
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("DSP_ERROR", e.message)
@@ -156,7 +173,13 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
 
     @ReactMethod
     fun setVirtualizer(strength: Float, sessionId: Int, promise: Promise) {
-        if (!engineAvailable) { promise.resolve(false); return }
+        // C (follow-up logcat-4): ukur durasi NATIVE — lihat komentar di
+        // setFullEqualizer.
+        val t0 = System.nanoTime()
+        if (!engineAvailable) {
+            Log.i(TAG, "[DSP-TIMING] setVirtualizer native=${(System.nanoTime() - t0) / 1_000_000}ms (engine unavailable)")
+            promise.resolve(false); return
+        }
         try {
             // 🔥 FIX (2026-10-10): slider ini bernama "WIDTH" di UI, jadi harus
             // benar-benar MELEBARKAN.
@@ -179,6 +202,7 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
             // EQ. Melebar tidak boleh menghilangkan stereo.
             val width = 1.0f + strength / 1000.0f
             setNativeStereoWide(width)
+            Log.i(TAG, "[DSP-TIMING] setVirtualizer native=${(System.nanoTime() - t0) / 1_000_000}ms")
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("DSP_ERROR", e.message)
@@ -187,7 +211,12 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
 
     @ReactMethod
     fun setReverbPreset(preset: Int, sessionId: Int, promise: Promise) {
+        // C (follow-up logcat-4): ukur durasi NATIVE — lihat komentar di
+        // setFullEqualizer. Stub: resolve(false) tanpa JNI, durasi ≈ 0 ms
+        // membuktikan stub bukan biang kelambatan apply.
+        val t0 = System.nanoTime()
         // Reverb tidak didukung oleh engine C++ saat ini
+        Log.i(TAG, "[DSP-TIMING] setReverbPreset native=${(System.nanoTime() - t0) / 1_000_000}ms (stub)")
         promise.resolve(false)
     }
 
