@@ -214,6 +214,16 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 4,
     position: "absolute",
+    // WAJIB `top: 0`: thumb adalah satu-satunya anak absolute track
+    // tanpa jangkar vertikal (tick pakai absoluteFill, fill pakai
+    // bottom: 0). Tanpa ini Yoga menaruh thumb di posisi statisnya —
+    // di bawah track — sehingga thumb tampil sebagai bar hitam di
+    // bawah label frekuensi, terpotong tepi kartu (screenshot
+    // 2026-11-20 00:27: bar hitam di bawah 31/62/125 = thumb band
+    // yang gain-nya ≠ 0; band 0.0 tidak kelihatan karena warna
+    // thumb-nya tertiary). `translateY - 12` baru benar sesudah
+    // ada jangkar ini.
+    top: 0,
     left: 1,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.25)",
