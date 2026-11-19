@@ -256,8 +256,23 @@ export function SolfeggioSubscreen() {
       {/* Koreksi headphone (B-HPIMM) — berlaku di Solfeggio: native
           menerapkannya di akhir rantai Immersive, dengan switch yang sama
           seperti di DSP. Tanpa `disabled`: seksi ini TIDAK beku di sini,
-          tidak seperti seksi DSP lain di mode ini. */}
-      <HeadphoneSection />
+          tidak seperti seksi DSP lain di mode ini.
+          P2 audit BitPerfect/Solfeggio 2026-11-20: dulu tampil telanjang
+          tanpa kartu, judulnya 16 mengalahkan judul kartu 14 di
+          sekelilingnya. Kini dibungkus kartu yang sama seperti seksi lain
+          (inCard: padding + judul disamakan). */}
+      <View
+        style={[
+          styles.card,
+          {
+            backgroundColor: colors.background.secondary,
+            borderColor: colors.border.medium,
+            padding: spacing.md,
+          },
+        ]}
+      >
+        <HeadphoneSection inCard />
+      </View>
 
       {/* P2 audit BitPerfect/Solfeggio 2026-11-20: teks lama "tidak berlaku
           di mode ini" tidak tepat — nilai widener DSP menggerakkan lebar

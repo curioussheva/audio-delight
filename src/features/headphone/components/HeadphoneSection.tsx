@@ -37,9 +37,18 @@ interface Props {
       seksi meredup seperti seksi lain — koreksi di-bypass di mode itu,
       jadi kartu tidak boleh tampil seolah aktif. */
   disabled?: boolean;
+  /** Dirender di dalam kartu induk (Solfeggio): seksi tidak menambah
+      padding sendiri (kartu yang memberi padding) dan judulnya disamakan
+      dengan judul kartu (14 bold) — P2 audit BitPerfect/Solfeggio:
+      judul 16 semibold di luar kartu membalik hierarki. */
+  inCard?: boolean;
 }
 
-export const HeadphoneSection: React.FC<Props> = ({ accent, disabled }) => {
+export const HeadphoneSection: React.FC<Props> = ({
+  accent,
+  disabled,
+  inCard,
+}) => {
   const { theme } = useTheme();
 
   const colors = theme.colors;
@@ -159,15 +168,26 @@ export const HeadphoneSection: React.FC<Props> = ({ accent, disabled }) => {
       style={[
         styles.wrap,
         {
-          paddingHorizontal: spacing.md,
-          paddingTop: spacing.md,
-          paddingBottom: spacing.xs,
+          // inCard: kartu induk yang memberi padding — padding seksi
+          // sendiri di-nol-kan supaya tidak dobel.
+          paddingHorizontal: inCard ? 0 : spacing.md,
+          paddingTop: inCard ? 0 : spacing.md,
+          paddingBottom: inCard ? 0 : spacing.xs,
           opacity: disabled ? 0.4 : 1,
         },
       ]}
     >
       <View style={styles.headerRow}>
-        <Text style={[styles.title, { color: colors.text.primary }]}>
+        <Text
+          style={[
+            styles.title,
+            // inCard: samakan dengan judul kartu (14 bold); 16 semibold
+            // di dalam kartu akan terlihat lebih penting daripada judul
+            // kartu di sekelilingnya.
+            inCard && styles.titleInCard,
+            { color: colors.text.primary },
+          ]}
+        >
           Koreksi Headphone
         </Text>
 
@@ -620,6 +640,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   title: { fontSize: 16, fontFamily: FONT_FAMILY.semiBold },
+  // Judul saat dirender di dalam kartu induk (Solfeggio): sama dengan
+  // judul kartu lain (14 bold) supaya hierarki tidak terbalik.
+  titleInCard: { fontSize: 14, fontFamily: FONT_FAMILY.bold },
   pill: {
     borderWidth: 1,
     borderRadius: BASE_RADIUS.md,
