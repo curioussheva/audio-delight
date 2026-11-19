@@ -512,7 +512,11 @@ void AudioPipeline::applyDSPConfig(
     const DSPParameters& params
 ) noexcept {
 
-    mDspConfig.enabled = true;
+    // Master EQ (P0-1, 2026-11-19): sakelar master "Pemrosesan DSP".
+    // false = DSPChain passthrough bit-exact (DSPConfig.enabled).
+    // dspConfigEquals SUDAH membandingkan field ini, jadi toggle
+    // terkirim lewat dedup yang sama seperti flag lain.
+    mDspConfig.enabled = params.eqEnabled;
     mDspConfig.limiterEnabled = params.limiterEnabled;
     mDspConfig.mode = params.processingMode;
 
@@ -538,14 +542,13 @@ void AudioPipeline::applyDSPConfig(
     mDspConfig.headphonePreset =
         params.headphonePreset;
 
-    // `enabled` sengaja SELALU true, bukan flag `dspEnabled` lama.
-    //
-    // `dspEnabled` adalah flag lama yang tidak punya pemanggil di JS dan
-    // defaultnya false (dihapus B12-W7). Kalau ia dipakai sebagai gerbang,
-    // `DSPChain::process()` akan langsung `return` dan mode DSP tetap tidak
-    // berefek — persis bug yang sedang diperbaiki. Gerbang yang sah adalah
-    // mode itu sendiri: fungsi ini hanya dipanggil dari cabang
-    // DSP/Immersive.
+    // `enabled` DULU sengaja selalu true (komentar lama, dihapus P0-1
+    // 2026-11-19): flag `dspEnabled` lama tidak punya pemanggil di JS
+    // dan defaultnya false (dihapus B12-W7), jadi hardcode true adalah
+    // satu-satunya cara rantai jalan. Sekarang gerbangnya adalah
+    // `params.eqEnabled` — sakelar master yang DIDORONG dari JS
+    // (setEqEnabled) dan defaultnya true, jadi perilaku lama
+    // dipertahankan untuk jalur yang tidak pernah menyetelnya.
     //
     // Lihat docs/DSP_CHAIN_AUDIT.md § "dspEnabled/limiterEnabled".
 
