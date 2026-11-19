@@ -13,6 +13,10 @@ import {
   SOLFEGGIO_TEMPLATES,
   getSolfeggioTemplate,
 } from "@/features/equalizer/api/solfeggioTemplates";
+import {
+  BRAINWAVE_BANDS,
+  matchBrainwaveBand,
+} from "@/features/equalizer/api/brainwaveBands";
 import { TuningControl } from "@/features/player/components/TuningControl";
 import { HeadphoneSection } from "@/features/headphone/components/HeadphoneSection";
 import { usePlayerStore } from "@/features/player/store/playerStore";
@@ -30,10 +34,16 @@ import { usePlayerStore } from "@/features/player/store/playerStore";
  * - Tuning: TuningControl bersama (dipakai juga settings) — preset A=440 /
  *   A=432, stepper ±5 sen, nonaktif di Bit-Perfect.
  * - Intensitas: slider master 0–100% (resonansi + exciter + spatial
- *   bersama), default 50%, live ke NativeDSPModule.setResonanceIntensity
- *   lewat playerStore — dorong native di-throttle 100 ms, tulis storage
- *   saat drag selesai (P2 audit BitPerfect/Solfeggio 2026-11-20).
- * - Tidak ada kontrol binaural: binaural beat tidak diimplementasikan.
+ *   bersama, dan volume denyut binaural), default 50%, live ke
+ *   NativeDSPModule.setResonanceIntensity lewat playerStore — dorong
+ *   native di-throttle 100 ms, tulis storage saat drag selesai (P2 audit
+ *   BitPerfect/Solfeggio 2026-11-20).
+ * - Denyut Binaural (2026-11-20): binaural beat akhirnya dihidupkan.
+ *   Chip Mati + 5 pita (Delta 2,5 / Theta 6 / Alpha 10 / Beta 18 /
+ *   Gamma 40 Hz) — frekuensi denyut yang benar-benar dimainkan native
+ *   (carrier tetap 200 Hz). Volume denyut mengikuti Intensitas; hanya
+ *   terdengar lewat headphone/IEM. Asosiasi pita atribusi tradisional,
+ *   bukan klaim medis.
  * - Kontrol EQ/DSP diatur di tab DSP; nilainya tetap berlaku di sini
  *   (mis. lebar widener → lebar spatial; koreksi headphone punya seksi
  *   sendiri di bawah). Yang tidak berlaku: EQ 10-band, bass, reverb,
@@ -49,6 +59,8 @@ export function SolfeggioSubscreen() {
   const setSolfeggioFreq = usePlayerStore((s) => s.setSolfeggioFreq);
   const setSolfeggioTemplate = usePlayerStore((s) => s.setSolfeggioTemplate);
   const setAudioMode = usePlayerStore((s) => s.setAudioMode);
+  const brainwaveFreq = usePlayerStore((s) => s.brainwaveFreq);
+  const setBrainwaveFreq = usePlayerStore((s) => s.setBrainwaveFreq);
   // Tulis storage tertunda saat drag slider selesai (P2 audit).
   const persistSolfeggioNow = usePlayerStore((s) => s.persistSolfeggioNow);
 
@@ -63,6 +75,9 @@ export function SolfeggioSubscreen() {
 
   const activeTemplate = getSolfeggioTemplate(solfeggioTemplateId);
   const isCustom = solfeggioTemplateId === CUSTOM_TEMPLATE_ID;
+  // Pita denyut yang benar-benar dimainkan native untuk frekuensi
+  // tersimpan (ambang sama dengan ImmersiveStage).
+  const activeBand = matchBrainwaveBand(brainwaveFreq);
 
   return (
     <View
@@ -254,8 +269,104 @@ export function SolfeggioSubscreen() {
           accessibilityRole="adjustable"
         />
         <Text style={[styles.cardHint, { color: colors.text.tertiary }]}>
-          Intensitas master — resonansi, exciter, dan spatial diatur bersama.
+          Intensitas master — resonansi, exciter, spatial, dan volume
+          denyut binaural diatur bersama.
         </Text>
+      </View>
+
+      {/* Denyut Binaural — tahap Brainwave di akhir rantai Immersive
+          (2026-11-20): binaural beat akhirnya dihidupkan. Chip Mati + 5
+          pita; yang dimainkan native selalu salah satu dari 2,5/6/10/18/
+          40 Hz (carrier tetap 200 Hz). Volume denyut mengikuti
+          Intensitas di atas — intensitas 0 = denyut tidak terdengar.
+          Hanya terdengar lewat headphone/IEM; di speaker, kedua kanal
+          bercampur di udara dan denyutnya hilang. Asosiasi pita atribusi
+          tradisional, bukan klaim medis. Kartu ini hanya ada di mode
+          Immersive (subscreen ini tidak dirender di mode lain), dan
+          keluar dari mode ini me-reset denyut di native ke 0. */}
+      <View
+        style={[
+          styles.card,
+          {
+            backgroundColor: colors.background.secondary,
+            borderColor: colors.border.medium,
+            padding: spacing.md,
+          },
+        ]}
+      >
+        <View style={styles.rowBetween}>
+          <Text style={[styles.cardTitle, { color: colors.text.primary }]}>
+            Denyut Binaural
+          </Text>
+          <Text style={[styles.value, { color: accentOnSecondary }]}>
+            {activeBand.name}
+          </Text>
+        </View>
+        <View style={[styles.chipGrid, { marginTop: spacing.sm }]}>
+          {BRAINWAVE_BANDS.map((band) => {
+            const active = band.id === activeBand.id;
+            return (
+              <Pressable
+                key={band.id}
+                onPress={() => {
+                  void Haptics.impactAsync(
+                    Haptics.ImpactFeedbackStyle.Light,
+                  );
+                  void setBrainwaveFreq(band.freq);
+                }}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`Denyut binaural ${band.name}${band.freq > 0 ? `, ${band.freq} Hz` : ", mati"}`}
+                style={({ pressed }) => [
+                  styles.chip,
+                  {
+                    borderColor: active
+                      ? colors.primary[500]
+                      : colors.border.medium,
+                    borderWidth: active ? 2 : 1,
+                    backgroundColor: active
+                      ? colors.background.tertiary
+                      : colors.background.secondary,
+                  },
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.chipName,
+                    {
+                      color: colors.text.primary,
+                      fontFamily: active
+                        ? FONT_FAMILY.bold
+                        : FONT_FAMILY.semiBold,
+                    },
+                  ]}
+                >
+                  {band.name}
+                </Text>
+                <Text
+                  style={[styles.chipFreq, { color: colors.text.secondary }]}
+                >
+                  {band.freq > 0 ? `${band.freq} Hz` : "Tidak aktif"}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={[styles.cardHint, { color: colors.text.tertiary }]}>
+          {activeBand.freq > 0
+            ? activeBand.association
+            : "Tidak ada denyut — hanya musik + resonator."}
+        </Text>
+        <Text style={[styles.cardHint, { color: colors.text.tertiary }]}>
+          Hanya terdengar lewat headphone/IEM. Kekuatan denyut mengikuti
+          slider Intensitas.
+        </Text>
+        {resonanceIntensity === 0 && brainwaveFreq > 0 && (
+          <Text style={[styles.cardHint, { color: colors.text.tertiary }]}>
+            Intensitas 0% — denyut tidak terdengar; naikkan Intensitas.
+          </Text>
+        )}
       </View>
 
       {/* Koreksi headphone (B-HPIMM) — berlaku di Solfeggio: native
