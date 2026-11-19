@@ -11,13 +11,18 @@ export interface NativeDSPInterface {
   // Ada di spec sejak langkah 5; antarmuka ini yang dipakai equalizerStore
   // (applyAllEffectsToNative) untuk memulihkan flag saat init/ganti session.
   setHrtfEnabled(enabled: boolean, sessionId: number): Promise<boolean>;
+  // Master EQ (P0-1, 2026-11-19): sakelar master "Pemrosesan DSP".
+  // false = DSPChain passthrough bit-exact (DSPConfig.enabled).
+  setEqEnabled(enabled: boolean, sessionId: number): Promise<boolean>;
   releaseAllFX(): Promise<boolean>;
 
   // Audio session
   createAudioSession(): Promise<{ sessionId: number; isNew: boolean }>;
 
   // Direct controls
-  setMasterGain(gain: number): void;
+  // P1-9 (2026-11-19): Promise<boolean> supaya keberhasilan apply bisa
+  // diverifikasi seperti setter lain (dulu void).
+  setMasterGain(gain: number): Promise<boolean>;
   setBalance(balance: number): void;
   setExclusiveMode(enabled: boolean): void;
 
