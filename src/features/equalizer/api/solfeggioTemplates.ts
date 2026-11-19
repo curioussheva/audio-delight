@@ -88,8 +88,12 @@ export const SOLFEGGIO_TEMPLATES: readonly SolfeggioTemplate[] = [
       "Secara tradisional dikaitkan dengan keseimbangan dan ketenangan batin.",
   },
   {
+    // P2 audit BitPerfect/Solfeggio 2026-11-20: namanya dulu "963 Hz"
+    // (nama frekuensi), tidak konsisten dengan 6 template lain yang
+    // memakai nama asosiasi. Id stabil "963" tidak berubah — hanya nama
+    // tampil; "963 Hz" tetap tampil sebagai sub-teks chip.
     id: "963",
-    name: "963 Hz",
+    name: "Kesadaran",
     freq: 963,
     intensity: 0.4,
     association:
