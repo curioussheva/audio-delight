@@ -7,6 +7,7 @@
 
 #include "dynamics/LimiterNode.h"
 #include "headphone/HeadphoneCorrectionNode.h"
+#include "hrtf/HRTFNode.h"
 #include "spatial/StereoWidenerNode.h"
 #include "tone/EQNode.h"
 #include "tone/GainNode.h"
@@ -161,6 +162,33 @@ void DSPChain::buildGraph() {
     mGraph.addNode(
         std::make_unique<
             ReverbNode
+        >()
+    );
+
+    // =========================================
+    // HRTF STAGE (2026-11-19)
+    // =========================================
+    //
+    // Virtual speaker ±30° (HRIR KEMAR, SADIE II DFC) sesudah reverb,
+    // sebelum gain + limiter. Urutan ini disengaja (keputusan user):
+    //   - Sesudah widener: HRTF me-render mix yang sudah dilebarkan
+    //     (keduanya komplementer, bukan pilihan).
+    //   - Sesudah reverb: ekor reverb ikut ter-spatialisasi — kalau
+    //     HRTF duduk sebelum reverb, sinyal kering di luar kepala
+    //     sementara ekornya tetap stereo di dalam kepala.
+    //   - Sebelum gain: master gain mengatur level AKHIR termasuk
+    //     trim HRIR (+0,39 dB); slider gain 0 tetap membisukan
+    //     segalanya.
+    //   - Sebelum limiter: limiter menangkap puncak campuran (dua
+    //     virtual speaker bisa menaikkan puncak sesaat).
+    // Toggle OFF = node passthrough bit-exact (biaya NOL sesudah
+    // fade), jadi rantai tanpa HRTF berperilaku persis seperti
+    // sebelumnya. Bit-perfect tidak tersentuh: node hanya hidup di
+    // DSPChain (processDSP), processBitPerfect() no-op.
+
+    mGraph.addNode(
+        std::make_unique<
+            HRTFNode
         >()
     );
 

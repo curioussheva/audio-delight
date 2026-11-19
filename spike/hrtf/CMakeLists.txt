@@ -37,3 +37,13 @@ add_executable(test_hrtf_convolver
 )
 target_include_directories(test_hrtf_convolver PRIVATE ${PRISTINE_CPP})
 target_compile_options(test_hrtf_convolver PRIVATE -Wall -Wextra)
+
+add_executable(test_hrtf_node
+  test_hrtf_node.cpp
+  ${PRISTINE_CPP}/dsp/hrtf/HRTFNode.cpp
+  ${PRISTINE_CPP}/dsp/convolution/UniformPartitionedConvolver.cpp
+  ${PRISTINE_CPP}/dsp/convolution/FIRFilter.cpp
+  ${PRISTINE_CPP}/fft/FFTPlan.cpp
+)
+target_include_directories(test_hrtf_node PRIVATE ${PRISTINE_CPP})
+target_compile_options(test_hrtf_node PRIVATE -Wall -Wextra)

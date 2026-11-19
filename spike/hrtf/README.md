@@ -1,7 +1,8 @@
 # spike/hrtf — Harness host HRTF
 
 Harness host (g++, tanpa perangkat, tanpa NDK) untuk konvolver
-partitioned HRTF (`UniformPartitionedConvolver`).
+partitioned HRTF (`UniformPartitionedConvolver`) dan node
+`HRTFNode` (virtual speaker ±30°).
 
 ## Bangun & jalankan
 
@@ -9,12 +10,15 @@ partitioned HRTF (`UniformPartitionedConvolver`).
 cmake -S spike/hrtf -B /tmp/hrtf-build
 cmake --build /tmp/hrtf-build
 /tmp/hrtf-build/test_hrtf_convolver
+/tmp/hrtf-build/test_hrtf_node
 ```
 
-Atau langsung g++ (lihat header `test_hrtf_convolver.cpp`).
+Atau langsung g++ (lihat header tiap file test).
 Dengan sanitizer (ASan+UBSan) juga tercantum di sana.
 
 ## Yang dibuktikan
+
+`test_hrtf_convolver`:
 
 - FFTPlan round-trip (forward -> inverse = identitas).
 - Konvolver == FIR langsung (`FIRFilter`) pada sinyal panjang,
@@ -24,6 +28,19 @@ Dengan sanitizer (ASan+UBSan) juga tercantum di sana.
 - Tes impuls: output = IR digeser satu blok.
 - Sunyi -> sunyi; NaN tidak menggantung (reset membersihkan).
 - Validasi kernel + passthrough bila kernel belum dimuat.
+
+`test_hrtf_node`:
+
+- Disabled: passthrough bit-exact; enabled + settle: output ==
+  konvolusi langsung 4 kernel HRIR (trim dilipat).
+- Impuls L saja -> outL = kLL, outR = kLR (dan sebaliknya) —
+  membuktikan pemetaan azimuth terkoreksi (+30° = speaker kiri).
+- Disable: fade-out kembali ke passthrough bit-exact.
+- Input mono: phantom centre (level seimbang + ITD ~0).
+- Prepare 44,1 kHz: kernel ter-resample, ITD terjaga (lag 11);
+  96 kHz: node inert.
+- Toggle sinus 100 Hz tidak mengklik; NaN + reset; chunking
+  count > maxFrames.
 
 ## Yang TIDAK dibuktikan di sini
 
