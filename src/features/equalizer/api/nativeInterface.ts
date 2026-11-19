@@ -7,6 +7,10 @@ export interface NativeDSPInterface {
   setBassBoost(strength: number, sessionId: number): Promise<boolean>;
   setVirtualizer(strength: number, sessionId: number): Promise<boolean>;
   setReverbPreset(preset: number, sessionId: number): Promise<boolean>;
+  // HRTF (langkah 5, 2026-11-19): virtual speaker ±30° via HRIR SADIE II.
+  // Ada di spec sejak langkah 5; antarmuka ini yang dipakai equalizerStore
+  // (applyAllEffectsToNative) untuk memulihkan flag saat init/ganti session.
+  setHrtfEnabled(enabled: boolean, sessionId: number): Promise<boolean>;
   releaseAllFX(): Promise<boolean>;
 
   // Audio session

@@ -23,15 +23,29 @@ jest.mock("@/features/equalizer/api/nativeInterface", () => ({
   __esModule: true,
   NativeDSPModule: {
     setFullEqualizer: jest.fn(async () => true),
-    // N4: mock ketiga setter efek — applyAllEffectsToNative kini
-    // memanggil keempatnya saat EQ dinyalakan / session berganti.
+    // N4: mock keempat setter efek — applyAllEffectsToNative kini
+    // memanggil kelimanya saat EQ dinyalakan / session berganti.
     setBassBoost: jest.fn(async () => true),
     setVirtualizer: jest.fn(async () => true),
     setReverbPreset: jest.fn(async () => true),
+    // HRTF (2026-11-19): flag dari hrtfStore, dipulihkan di sini.
+    setHrtfEnabled: jest.fn(async () => true),
     // Master gain: sinkron (void) di native, bukan Promise.
     setMasterGain: jest.fn(() => undefined),
     releaseAllFX: jest.fn(async () => true),
     createAudioSession: jest.fn(async () => ({ sessionId: -1, isNew: false })),
+  },
+}));
+
+// HRTF store di-mock: modul aslinya mengimpor spec TurboModule langsung
+// (getEnforcing) yang tidak ada di bawah mock react-native test ini.
+// Flag bisa diubah per test supaya N4 membuktikan pemulihan HRTF.
+const mockHrtfState = { isHrtfEnabled: false };
+
+jest.mock("@/features/hrtf/store/hrtfStore", () => ({
+  __esModule: true,
+  useHrtfStore: {
+    getState: () => mockHrtfState,
   },
 }));
 
@@ -117,7 +131,7 @@ describe("setBandGain store throttle (Fix G)", () => {
   });
 });
 
-describe("N4 — applyAllEffectsToNative mengirim keempat efek", () => {
+describe("N4 — applyAllEffectsToNative mengirim kelima efek", () => {
   const native = () =>
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     require("@/features/equalizer/api/nativeInterface").NativeDSPModule as {
@@ -125,6 +139,7 @@ describe("N4 — applyAllEffectsToNative mengirim keempat efek", () => {
       setBassBoost: jest.Mock;
       setVirtualizer: jest.Mock;
       setReverbPreset: jest.Mock;
+      setHrtfEnabled: jest.Mock;
     };
 
   beforeEach(() => {
@@ -149,6 +164,20 @@ describe("N4 — applyAllEffectsToNative mengirim keempat efek", () => {
     expect(n.setBassBoost).toHaveBeenCalledWith(500, 7);
     expect(n.setVirtualizer).toHaveBeenCalledWith(300, 7);
     expect(n.setReverbPreset).toHaveBeenCalledWith(2, 7);
+    // HRTF default OFF -> dikirim false (bukan tidak dikirim).
+    expect(n.setHrtfEnabled).toHaveBeenCalledWith(false, 7);
+  });
+
+  it("HRTF ON di store sendiri -> ikut terkirim true saat EQ dinyalakan", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    mockHrtfState.isHrtfEnabled = true;
+    try {
+      await store.getState().setEQEnabled(true);
+      expect(native().setHrtfEnabled).toHaveBeenCalledWith(true, 7);
+    } finally {
+      mockHrtfState.isHrtfEnabled = false;
+    }
   });
 
   it("sakelar efek OFF -> efek itu dikirim 0, yang lain tetap nilainya", async () => {

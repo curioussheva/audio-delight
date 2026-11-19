@@ -1,0 +1,55 @@
+// src/features/hrtf/store/hrtfStore.ts
+//
+// State HRTF — store DEDIKASI dengan kunci persist sendiri
+// ("hrtf-storage"), DI LUAR preset EQ (keputusan csheva 2026-11-19,
+// langkah 6): preset tidak pernah membaca/menulis flag ini;
+// applyPreset tidak menyentuhnya.
+//
+// Pola mengikuti headphoneStore (efek di luar EQ): NativeDSPModule
+// diimpor langsung dari spec, dorongan ke native tanpa gate
+// isEQEnabled — toggle HRTF sendiri yang mengaturnya. Pemulihan saat
+// app start / ganti session lewat applyAllEffectsToNative di
+// equalizerStore (yang membaca flag ini). sessionId diambil dari
+// createAudioSession() (F7: panggilan pertama mengalokasikan,
+// berikut mengembalikan ID yang sama — bukan state per-sesi, hanya
+// token "native siap").
+
+import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import NativeDSPModule from "@/specs/NativeDSPModule";
+
+export interface HrtfStore {
+  /** HRTF menyala (virtual speaker ±30°). Default OFF. */
+  isHrtfEnabled: boolean;
+  /** Simpan niat user + dorong ke native (pola N23: gagal -> log saja). */
+  setHrtfEnabled: (enabled: boolean) => Promise<void>;
+}
+
+export const useHrtfStore = create<HrtfStore>()(
+  persist(
+    (set) => ({
+      isHrtfEnabled: false,
+
+      setHrtfEnabled: async (enabled: boolean) => {
+        set({ isHrtfEnabled: enabled });
+        try {
+          const { sessionId } = await NativeDSPModule.createAudioSession();
+          if (sessionId !== -1) {
+            await NativeDSPModule.setHrtfEnabled(enabled, sessionId);
+          }
+        } catch (e) {
+          console.error("[HRTF Store] setHrtfEnabled gagal:", e);
+        }
+      },
+    }),
+    {
+      name: "hrtf-storage",
+      storage: createJSONStorage(() => AsyncStorage),
+      // Fungsi tidak ikut disimpan.
+      partialize: (state) => ({ isHrtfEnabled: state.isHrtfEnabled }),
+    },
+  ),
+);
+
+export default useHrtfStore;

@@ -34,6 +34,7 @@ import {
 import type { Song } from "@/shared/types/audio";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
 import { useForegroundRefreshCoordinator } from "@/features/library/hooks/useForegroundRefreshCoordinator";
+import { useHrtfGate } from "@/features/hrtf/hooks/useHrtfGate";
 import { requestAudioPermissions } from "@/shared/utils/permissions";
 import { startJsLagMonitor } from "@/shared/utils/jsLagMonitor";
 
@@ -130,6 +131,13 @@ function ThemedStack({ contentOpacity }: { contentOpacity: Animated.Value }) {
   // — ter-mount sekali di sini, hidup selama app ready. Pengganti dua
   // listener AppState di library.tsx + useScanManager.
   useForegroundRefreshCoordinator();
+
+  // HRTF gate (langkah 6, 2026-11-19): HRTF dimatikan otomatis begitu
+  // output bukan headphone. Dipasang di sini — hidup selama app ready —
+  // bukan hanya di layar EQ (pelajaran P1-7: auto-off koreksi hanya
+  // jalan saat layar EQ terbuka, jadi cabut jack di layar lain tidak
+  // mematikan apa pun).
+  useHrtfGate();
 
   return (
     <SafeAreaProvider>

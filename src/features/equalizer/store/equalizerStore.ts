@@ -8,6 +8,7 @@ import { EqualizerStore, Preset } from "@/features/equalizer/types";
 import { ALL_PRESETS, makeBands } from "../constants/presets";
 import { audioEngine } from "@/features/player/api/engine";
 import { NativeDSPModule } from "@/features/equalizer/api/nativeInterface";
+import { useHrtfStore } from "@/features/hrtf/store/hrtfStore";
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -113,9 +114,12 @@ const getCurrentSessionId = async (): Promise<number> => {
 // band — matikan EQ lalu nyalakan lagi (atau ganti session): store masih
 // menyimpan bassStrength/virtualizerLevel/reverbPreset > 0 dan UI
 // menampilkannya aktif, tapi native tidak pernah menerima ketiganya.
-// Sekarang keempat efek dikirim (EQ + bass + virtualizer + reverb),
+// Sekarang kelima efek dikirim (EQ + bass + virtualizer + reverb + HRTF),
 // masing-masing try/catch sendiri supaya satu efek yang gagal tidak
 // membatalkan yang lain. Nilai 0 dikirim bila sakelar efeknya OFF.
+// HRTF (2026-11-19): di luar preset — flag dibaca dari hrtfStore
+// (kunci persist sendiri) supaya pemulihan saat app start / ganti
+// session / EQ dinyalakan tidak kehilangan HRTF yang dipersist ON.
 // (service.ts lama yang berisi applyAllSettings SUDAH DIHAPUS atas
 // putusan csheva — logika restore-nya ditulis ulang di sini, file itu
 // tidak dikembalikan. Jeda 300 ms dari applyAllSettings lama TIDAK
@@ -169,6 +173,8 @@ finalSessionId = sessionResult?.sessionId ?? 0;
   const reverb = isReverbEnabled
     ? Math.min(6, Math.max(0, reverbPreset ?? 0))
     : 0;
+  // HRTF: flag dari store sendiri (bukan dari state EQ — di luar preset).
+  const hrtf = useHrtfStore.getState().isHrtfEnabled;
   // Master gain: nilai linear 0.251..3.98 (−12..+12 dB, 1.0 netral).
   // TIDAK digate sakelar efek — gain bukan efek yang bisa OFF; lantai
   // −12 dB = 0,25× (bukan senyap). Yang di-gate hanya pengiriman ke
@@ -188,6 +194,8 @@ finalSessionId = sessionResult?.sessionId ?? 0;
     // Freeverb) — restore ini benar-benar mengubah suara. Preset 0 =
     // tanpa reverb.
     ["setReverbPreset", () => NativeDSPModule.setReverbPreset(reverb, finalSessionId)],
+    // HRTF (2026-11-19): flag dari hrtfStore — di luar preset.
+    ["setHrtfEnabled", () => NativeDSPModule.setHrtfEnabled(hrtf, finalSessionId)],
     // Master gain: panggilan native sinkron (void, tanpa sessionId —
     // engine global, F7) jadi dibungkus supaya masuk Promise.all yang
     // sama. `?.()` supaya JS lama tetap jalan lawan modul native yang
@@ -223,7 +231,7 @@ finalSessionId = sessionResult?.sessionId ?? 0;
     .map((r) => `${r.name}:${Math.round(r.ms)}ms`)
     .join(" ");
   console.log(
-    `[DSP] Applied to Session: ${finalSessionId} (trigger: ${trigger}) in ${Math.round(totalMs)}ms (${perEffect}) preset=${activePresetId ?? "?"} bass=${bass} widener=${virtualizer} reverb=${reverb} gain=${gain.toFixed(2)} gains=[${gains.join(",")}]`,
+    `[DSP] Applied to Session: ${finalSessionId} (trigger: ${trigger}) in ${Math.round(totalMs)}ms (${perEffect}) preset=${activePresetId ?? "?"} bass=${bass} widener=${virtualizer} reverb=${reverb} hrtf=${hrtf ? 1 : 0} gain=${gain.toFixed(2)} gains=[${gains.join(",")}]`,
   );
   return results.every((r) => r.ok);
 };
