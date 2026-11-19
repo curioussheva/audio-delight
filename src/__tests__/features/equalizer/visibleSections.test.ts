@@ -1,16 +1,17 @@
 import {
   DEFAULT_VISIBLE_SECTIONS,
   parseVisibleSections,
+  serializeVisibleSections,
 } from "@/features/equalizer/utils/visibleSections";
 
 describe("parseVisibleSections", () => {
-  it("default baru (declutter 2026-11-18): headphone + mixer tertutup", () => {
+  it("default baru (declutter 2026-11-19): hanya GRAFIK + EFEK", () => {
     expect(DEFAULT_VISIBLE_SECTIONS).toEqual({
       graph: true,
       effects: true,
       mixer: false,
       headphone: false,
-      preset: true,
+      preset: false,
     });
   });
 
@@ -27,17 +28,50 @@ describe("parseVisibleSections", () => {
     expect(parseVisibleSections("42")).toEqual(DEFAULT_VISIBLE_SECTIONS);
   });
 
-  it("memakai nilai tersimpan dan melengkapi kunci yang hilang", () => {
-    expect(parseVisibleSections('{"graph":false}')).toEqual({
-      graph: false,
-      effects: true,
-      mixer: true,
-      headphone: true,
-      preset: true,
-    });
+  it("format lama (tanpa version) dimigrasi ke default baru", () => {
+    // Pengguna lama menyimpan {"graph":false,...} tanpa version — payload
+    // lama sengaja tidak dikenali supaya default declutter mencapai mereka.
     expect(
       parseVisibleSections(
         '{"graph":false,"effects":false,"mixer":false,"headphone":false,"preset":false}',
+      ),
+    ).toEqual(DEFAULT_VISIBLE_SECTIONS);
+    expect(
+      parseVisibleSections('{"graph":true,"effects":true,"mixer":true}'),
+    ).toEqual(DEFAULT_VISIBLE_SECTIONS);
+  });
+
+  it("version yang tidak dikenali jatuh ke default", () => {
+    expect(
+      parseVisibleSections(
+        '{"version":1,"sections":{"graph":false,"effects":false,"mixer":false,"headphone":false,"preset":false}}',
+      ),
+    ).toEqual(DEFAULT_VISIBLE_SECTIONS);
+    expect(
+      parseVisibleSections(
+        '{"version":3,"sections":{"graph":false,"effects":false,"mixer":false,"headphone":false,"preset":false}}',
+      ),
+    ).toEqual(DEFAULT_VISIBLE_SECTIONS);
+    expect(parseVisibleSections('{"version":2}')).toEqual(
+      DEFAULT_VISIBLE_SECTIONS,
+    );
+  });
+
+  it("v2: memakai nilai tersimpan dan melengkapi kunci yang hilang", () => {
+    expect(
+      parseVisibleSections(
+        '{"version":2,"sections":{"graph":false}}',
+      ),
+    ).toEqual({
+      graph: false,
+      effects: true,
+      mixer: false,
+      headphone: false,
+      preset: false,
+    });
+    expect(
+      parseVisibleSections(
+        '{"version":2,"sections":{"graph":false,"effects":false,"mixer":false,"headphone":false,"preset":false}}',
       ),
     ).toEqual({
       graph: false,
@@ -48,34 +82,38 @@ describe("parseVisibleSections", () => {
     });
   });
 
-  it("kunci baru yang hilang (data lama) dianggap tampil", () => {
-    // Nilai tersimpan sebelum headphone/preset ada: keduanya true.
-    expect(parseVisibleSections('{"graph":true,"effects":true,"mixer":true}')).toEqual({
+  it("v2: hanya boolean yang dipakai, sisanya default", () => {
+    expect(
+      parseVisibleSections(
+        '{"version":2,"sections":{"graph":0,"preset":"ya"}}',
+      ),
+    ).toEqual({
       graph: true,
       effects: true,
-      mixer: true,
-      headphone: true,
-      preset: true,
-    });
-  });
-
-  it("false eksplisit pada kunci baru dihormati", () => {
-    expect(parseVisibleSections('{"headphone":false,"preset":false}')).toEqual({
-      graph: true,
-      effects: true,
-      mixer: true,
+      mixer: false,
       headphone: false,
       preset: false,
     });
   });
+});
 
-  it("hanya boolean false yang mematikan seksi", () => {
-    expect(parseVisibleSections('{"graph":0}')).toEqual({
-      graph: true,
+describe("serializeVisibleSections", () => {
+  it("round-trip: serialize lalu parse kembali sama", () => {
+    const sections = {
+      graph: false,
       effects: true,
       mixer: true,
       headphone: true,
       preset: true,
-    });
+    };
+    expect(parseVisibleSections(serializeVisibleSections(sections))).toEqual(
+      sections,
+    );
+  });
+
+  it("menulis format v2", () => {
+    expect(
+      JSON.parse(serializeVisibleSections(DEFAULT_VISIBLE_SECTIONS)),
+    ).toEqual({ version: 2, sections: DEFAULT_VISIBLE_SECTIONS });
   });
 });

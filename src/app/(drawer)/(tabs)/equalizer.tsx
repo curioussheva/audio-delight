@@ -69,6 +69,7 @@ import {
   DEFAULT_VISIBLE_SECTIONS,
   VISIBLE_SECTIONS_KEY,
   parseVisibleSections,
+  serializeVisibleSections,
   type VisibleSections,
 } from "@/features/equalizer/utils/visibleSections";
 import { FLOATING_PLAYER_CLEARANCE } from "@/features/player/layout";
@@ -288,7 +289,7 @@ export default function EqualizerScreen() {
     if (!sectionsLoaded) return;
     AsyncStorage.setItem(
       VISIBLE_SECTIONS_KEY,
-      JSON.stringify(visibleSections),
+      serializeVisibleSections(visibleSections),
     ).catch(() => {});
   }, [visibleSections, sectionsLoaded]);
 

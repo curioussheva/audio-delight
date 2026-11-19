@@ -1,55 +1,92 @@
 // src/features/equalizer/utils/visibleSections.ts
 //
-// Pilihan tampil/sembunyi seksi layar Equalizer
-// (GRAFIK/HEADPHONE/EFEK/MIXER/PRESET) yang
-// disimpan ke AsyncStorage supaya tidak reset tiap kali layar dibuka ulang
-// (U-P2-44). Logika parse dipisah ke sini supaya bisa diuji Jest tanpa
-// React Native.
+// Visibilitas seksi layar EQ (GRAFIK / PRESET / MIXER / HEADPHONE / EFEK).
+// Disimpan di AsyncStorage sebagai JSON.
+//
+// Format v2 (2026-11-19, ronde clean-cozy):
+//   {"version":2,"sections":{"graph":true,"preset":false,"mixer":false,
+//    "headphone":false,"effects":true}}
+//
+// Default baru: hanya GRAFIK + EFEK yang tampil. Layar dinilai "masih terlalu
+// ramai" (2026-11-18, semua 5 seksi tampil) — PRESET, MIXER, dan HEADPHONE
+// disembunyikan secara default, bisa ditampilkan lewat tombol pengalih.
+//
+// Migrasi: payload format lama (tanpa `version`, semua kunci boolean di root)
+// TIDAK dikenali dan jatuh ke default baru. Ini disengaja: default declutter
+// harus mencapai pengguna LAMA juga, bukan hanya instalasi baru. Pilihan
+// pengguna sesudah migrasi tersimpan dalam format v2 dan dihormati.
 
 export interface VisibleSections {
   graph: boolean;
-  effects: boolean;
+  preset: boolean;
   mixer: boolean;
   headphone: boolean;
-  preset: boolean;
+  effects: boolean;
 }
 
+export type SectionId = keyof VisibleSections;
+
+export const VISIBLE_SECTIONS_VERSION = 2;
+
+/** Default seksi: hanya GRAFIK + EFEK. */
 export const DEFAULT_VISIBLE_SECTIONS: VisibleSections = {
   graph: true,
-  effects: true,
-  // Declutter 2026-11-18: koreksi headphone + detail band default
-  // tertutup — koreksi di-set sekali per perangkat (jarang diubah), dan
-  // band bisa diedit langsung dari grafik (drag). Toggle tetap ada;
-  // pilihan tersimpan pengguna tidak ditimpa (parse: stored false tetap
-  // sembunyi, stored true tetap tampil — hanya instalasi/pengguna tanpa
-  // nilai tersimpan yang kena default baru).
+  preset: false,
   mixer: false,
   headphone: false,
-  preset: true,
+  effects: true,
 };
 
 export const VISIBLE_SECTIONS_KEY = "equalizer-visible-sections";
 
+const parseSectionValue = (value: unknown, fallback: boolean): boolean =>
+  typeof value === "boolean" ? value : fallback;
+
+const parseVersionedPayload = (value: unknown): VisibleSections => {
+  if (typeof value !== "object" || value === null) {
+    return DEFAULT_VISIBLE_SECTIONS;
+  }
+  const payload = value as { version?: unknown; sections?: unknown };
+  if (payload.version !== VISIBLE_SECTIONS_VERSION) {
+    return DEFAULT_VISIBLE_SECTIONS;
+  }
+  if (typeof payload.sections !== "object" || payload.sections === null) {
+    return DEFAULT_VISIBLE_SECTIONS;
+  }
+  const sections = payload.sections as Partial<Record<SectionId, unknown>>;
+  return {
+    graph: parseSectionValue(sections.graph, DEFAULT_VISIBLE_SECTIONS.graph),
+    preset: parseSectionValue(
+      sections.preset,
+      DEFAULT_VISIBLE_SECTIONS.preset,
+    ),
+    mixer: parseSectionValue(sections.mixer, DEFAULT_VISIBLE_SECTIONS.mixer),
+    headphone: parseSectionValue(
+      sections.headphone,
+      DEFAULT_VISIBLE_SECTIONS.headphone,
+    ),
+    effects: parseSectionValue(
+      sections.effects,
+      DEFAULT_VISIBLE_SECTIONS.effects,
+    ),
+  };
+};
+
 /**
- * Parse nilai tersimpan. Apa pun yang bukan boolean `false` dianggap tampil:
- * kunci yang hilang (data lama/sebagian) tidak boleh mematikan seksi, dan
- * JSON rusak jatuh ke default semua tampil.
+ * Urai string tersimpan menjadi visibilitas seksi. String kosong, JSON rusak,
+ * format lama (tanpa version), atau version yang tidak dikenali semuanya
+ * jatuh ke DEFAULT_VISIBLE_SECTIONS (migrasi sekali jalan).
  */
 export function parseVisibleSections(raw: string | null): VisibleSections {
   if (!raw) return { ...DEFAULT_VISIBLE_SECTIONS };
   try {
-    const parsed = JSON.parse(raw) as Partial<VisibleSections>;
-    if (typeof parsed !== "object" || parsed === null) {
-      return { ...DEFAULT_VISIBLE_SECTIONS };
-    }
-    return {
-      graph: parsed.graph !== false,
-      effects: parsed.effects !== false,
-      mixer: parsed.mixer !== false,
-      headphone: parsed.headphone !== false,
-      preset: parsed.preset !== false,
-    };
+    return parseVersionedPayload(JSON.parse(raw));
   } catch {
     return { ...DEFAULT_VISIBLE_SECTIONS };
   }
+}
+
+/** Serialisasi untuk disimpan (format v2). */
+export function serializeVisibleSections(sections: VisibleSections): string {
+  return JSON.stringify({ version: VISIBLE_SECTIONS_VERSION, sections });
 }
