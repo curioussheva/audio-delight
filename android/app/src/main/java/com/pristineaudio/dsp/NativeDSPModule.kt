@@ -55,6 +55,7 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     private external fun setNativeBassBoost(gain: Float)
     private external fun setNativeReverbPreset(preset: Int)
     private external fun setNativeHrtfEnabled(enabled: Boolean)
+    private external fun setNativeEqEnabled(enabled: Boolean)
     private external fun setNativeBalance(balance: Float)
     private external fun toggleNativeExclusiveMode(enabled: Boolean)
 
@@ -267,6 +268,26 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     }
 
     @ReactMethod
+    fun setEqEnabled(enabled: Boolean, sessionId: Int, promise: Promise) {
+        // Master EQ (P0-1, 2026-11-19): sakelar master "Pemrosesan DSP".
+        // false = DSPChain passthrough bit-exact (DSPConfig.enabled).
+        // sessionId diterima demi kompatibilitas API tapi diabaikan
+        // native (F7: satu stream global) — sama seperti setHrtfEnabled.
+        val t0 = System.nanoTime()
+        if (!engineAvailable) {
+            Log.i(TAG, "[DSP-TIMING] setEqEnabled enabled=$enabled native=${(System.nanoTime() - t0) / 1_000_000}ms (engine unavailable)")
+            promise.resolve(false); return
+        }
+        try {
+            setNativeEqEnabled(enabled)
+            Log.i(TAG, "[DSP-TIMING] setEqEnabled enabled=$enabled native=${(System.nanoTime() - t0) / 1_000_000}ms")
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("DSP_ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
     fun releaseAllFX(promise: Promise) {
         // Tidak ada alokasi efek khusus; bisa dianggap sukses
         promise.resolve(true)
@@ -299,14 +320,29 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
         }
     }
 
-    // F14: method void di bawah tidak bisa memberi tahu JS kalau engine
-    // tidak tersedia (tidak ada Promise untuk resolve false / reject) —
-    // tapi jangan buang diam-diam: catat di logcat supaya "efek tidak
-    // jalan" (mis. Solfeggio/retune) bisa dilacak, bukan ditebak.
+    // F14: method void di bawah (setBalance, setExclusiveMode) tidak bisa
+    // memberi tahu JS kalau engine tidak tersedia (tidak ada Promise
+    // untuk resolve false / reject) — tapi jangan buang diam-diam: catat
+    // di logcat supaya "efek tidak jalan" (mis. Solfeggio/retune) bisa
+    // dilacak, bukan ditebak. setMasterGain SUDAH Promise (P1-9,
+    // 2026-11-19) sehingga tidak termasuk di sini lagi.
     @ReactMethod
-    fun setMasterGain(gain: Float) {
-        if (engineAvailable) setNativeMasterGain(gain)
-        else Log.w(TAG, "setMasterGain dibuang: engine native tidak tersedia")
+    fun setMasterGain(gain: Float, promise: Promise) {
+        // P1-9 (2026-11-19): Promise<boolean> supaya keberhasilan apply
+        // bisa diverifikasi seperti setter lain. Pola setHrtfEnabled:
+        // engine-unavailable -> resolve(false), bukan reject.
+        val t0 = System.nanoTime()
+        if (!engineAvailable) {
+            Log.i(TAG, "[DSP-TIMING] setMasterGain gain=$gain native=${(System.nanoTime() - t0) / 1_000_000}ms (engine unavailable)")
+            promise.resolve(false); return
+        }
+        try {
+            setNativeMasterGain(gain)
+            Log.i(TAG, "[DSP-TIMING] setMasterGain gain=$gain native=${(System.nanoTime() - t0) / 1_000_000}ms")
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("DSP_ERROR", e.message)
+        }
     }
 
     @ReactMethod
