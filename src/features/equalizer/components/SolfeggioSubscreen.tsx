@@ -303,8 +303,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chip: {
-    flexGrow: 1,
-    flexBasis: "30%",
+    // P2 audit BitPerfect/Solfeggio 2026-11-20: flexGrow: 1 dulu membuat
+    // chip ke-7 (sendirian di baris terakhir 3/3/1) melar selebar baris.
+    // Lebar dikunci: 3 chip per baris, semua sama besar.
+    flexGrow: 0,
+    flexBasis: "31%",
     borderRadius: BASE_RADIUS.md,
     paddingVertical: 8,
     paddingHorizontal: 10,
