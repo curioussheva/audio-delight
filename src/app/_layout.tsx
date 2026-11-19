@@ -35,6 +35,7 @@ import type { Song } from "@/shared/types/audio";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
 import { useForegroundRefreshCoordinator } from "@/features/library/hooks/useForegroundRefreshCoordinator";
 import { useHrtfGate } from "@/features/hrtf/hooks/useHrtfGate";
+import { useHeadphoneCorrection } from "@/features/headphone/hooks/useHeadphoneCorrection";
 import { requestAudioPermissions } from "@/shared/utils/permissions";
 import { startJsLagMonitor } from "@/shared/utils/jsLagMonitor";
 
@@ -139,6 +140,13 @@ function ThemedStack({ contentOpacity }: { contentOpacity: Animated.Value }) {
   // mematikan apa pun).
   useHrtfGate();
 
+  // Auto-OFF koreksi headphone (P1-7, 2026-11-19): hook yang sama
+  // dipasang di root playback, di samping useHrtfGate — cabut jack/DAC
+  // di layar mana pun tetap mematikan koreksi. Mount di layar EQ tetap
+  // ada (layar itu butuh return value-nya untuk caption grafik); hook
+  // ini idempotent, jadi dua mount tidak saling mengganggu.
+  useHeadphoneCorrection();
+
   return (
     <SafeAreaProvider>
       <Animated.View
@@ -241,14 +249,35 @@ export default function RootLayout() {
     return () => sub.remove();
   }, [appState, handleExternalAudioUrl]);
 
-  // DSP Guard
+  // DSP Guard (diperbaiki 2026-11-19, ronde clean-cozy): saat masuk
+  // bit-perfect, sakelar master EQ dimatikan — TAPI preferensi dicatat
+  // dulu di penanda eqEnabledBeforeBitPerfect (dipersist, tahan
+  // restart). Saat kembali ke mode DSP, preferensi dipulihkan: EQ
+  // menyala lagi persis seperti sebelum masuk bit-perfect. Perilaku
+  // lama mematikan isEQEnabled persisten tanpa jejak, jadi pengguna
+  // yang kembali ke DSP mendapati EQ-nya mati tanpa pernah mematikannya.
   useEffect(() => {
-    const unsub = usePlayerStore.subscribe((state) => {
+    const unsub = usePlayerStore.subscribe((state, prevState) => {
+      const eqStore = useEqualizerStore.getState();
       if (state.audioMode === "bit-perfect") {
-        const eqStore = useEqualizerStore.getState();
         if (eqStore.isEQEnabled) {
+          eqStore.setEqEnabledBeforeBitPerfect(true);
           console.log("🛡️ [System] Bit-Perfect Mode active, disabling DSP.");
-          eqStore.setEQEnabled(false);
+          void eqStore.setEQEnabled(false);
+        }
+      } else if (
+        state.audioMode === "dsp" &&
+        prevState.audioMode !== "dsp" &&
+        eqStore.eqEnabledBeforeBitPerfect === true
+      ) {
+        // Kembali ke DSP (dari bit-perfect ATAU dari Solfeggio sesudah
+        // bit-perfect): pulihkan preferensi, lalu bersihkan penanda.
+        console.log(
+          "🛡️ [System] Kembali ke DSP, memulihkan sakelar EQ.",
+        );
+        eqStore.setEqEnabledBeforeBitPerfect(null);
+        if (!eqStore.isEQEnabled) {
+          void eqStore.setEQEnabled(true);
         }
       }
     });

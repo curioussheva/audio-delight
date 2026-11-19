@@ -50,8 +50,7 @@ export interface EqualizerStore {
   isInitialized: boolean;
   // Preferensi isEQEnabled sebelum DSP Guard mematikannya saat masuk
   // bit-perfect (2026-11-19, ronde clean-cozy). null = tidak ada yang
-  // perlu dipulihkan. BUKAN bagian persist (hanya penanda sesi) — lihat
-  // partialize di store: field ini tidak disimpan.
+  // perlu dipulihkan. Ikut dipersist supaya preferensi tahan restart.
   eqEnabledBeforeBitPerfect: boolean | null;
 
   // --- Actions ---

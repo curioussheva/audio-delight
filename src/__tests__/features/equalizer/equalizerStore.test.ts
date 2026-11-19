@@ -444,14 +444,15 @@ describe("resetToDefault + penanda DSP Guard (clean-cozy 2026-11-19)", () => {
     expect(store.getState().eqEnabledBeforeBitPerfect).toBeNull();
   });
 
-  it("penanda TIDAK dipersist (hanya penanda sesi)", () => {
+  it("penanda DIPERSIST (preferensi tahan restart)", () => {
     const store = loadStore();
     const partialize = store.persist.getOptions().partialize as (
       s: any,
     ) => Record<string, unknown>;
     store.getState().setEqEnabledBeforeBitPerfect(true);
-    expect(
-      partialize(store.getState()),
-    ).not.toHaveProperty("eqEnabledBeforeBitPerfect");
+    expect(partialize(store.getState())).toHaveProperty(
+      "eqEnabledBeforeBitPerfect",
+      true,
+    );
   });
 });

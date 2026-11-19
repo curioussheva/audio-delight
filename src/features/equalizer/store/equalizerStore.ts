@@ -713,6 +713,11 @@ export const useEqualizerStore = create<EqualizerStore>()(
         isBassEnabled: state.isBassEnabled,
         isVirtualizerEnabled: state.isVirtualizerEnabled,
         isReverbEnabled: state.isReverbEnabled,
+        // Penanda DSP Guard ikut dipersist: preferensi "EQ menyala di
+        // mode DSP" harus tahan restart — kalau tidak, guard yang
+        // mematikan EQ saat masuk bit-perfect tetap menghancurkan
+        // preferensi itu setiap kali app di-restart di mode bit-perfect.
+        eqEnabledBeforeBitPerfect: state.eqEnabledBeforeBitPerfect,
       }),
     },
   ),

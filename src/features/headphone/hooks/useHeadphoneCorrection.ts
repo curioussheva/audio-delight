@@ -90,10 +90,10 @@ export const useHeadphoneCorrection =
     // ada auto-ON saat dicolok lagi (user menyalakan manual; pindah ke
     // perangkat kabel lain yang terikat tetap mengaktifkan profilnya
     // lewat syncForDevice di atas). Latensi sampai ~3 detik (poll).
-    // Hanya jalan selama hook terpasang (layar EQ); cabut yang terjadi
-    // saat layar lain terbuka baru ketahuan saat layar EQ dibuka lagi —
-    // itu tindak lanjut (pasang hook di root / buat daftar devices
-    // hidup), bukan ronde ini.
+    // Hook ini terpasang di root playback (ThemedStack, _layout.tsx)
+    // sejak P1-7 (2026-11-19), jadi auto-OFF jalan di layar mana pun —
+    // mount di layar EQ tetap ada karena layar itu butuh return
+    // value-nya.
     const prevDeviceTypeRef = useRef<string | null>(null);
     useEffect(() => {
       const prevType = prevDeviceTypeRef.current;
