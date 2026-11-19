@@ -22,6 +22,10 @@ import {
   getSolfeggioTemplate,
 } from "@/features/equalizer/api/solfeggioTemplates";
 import {
+  DEFAULT_BRAINWAVE_FREQ,
+  clampBrainwaveFreq,
+} from "@/features/equalizer/api/brainwaveBands";
+import {
   findSongByUri,
   isPlayingFromStatus,
   shouldCorrectDuration,
@@ -61,6 +65,7 @@ const KEYS = {
   RESONANCE_INTENSITY: "resonance_intensity",
   SOLFEGGIO_FREQ: "solfeggio_freq",
   SOLFEGGIO_TEMPLATE: "solfeggio_template",
+  BRAINWAVE_FREQ: "brainwave_freq",
   MODE: "audio_mode_preference",
   LAST_SONG_ID: "last_song_id",
   LAST_QUEUE_IDS: "last_queue_ids",
@@ -159,6 +164,11 @@ export interface PlayerState {
   // frekuensi/intensitas tidak lagi cocok dengan template mana pun.
   solfeggioFreq: number;
   solfeggioTemplateId: string;
+  // Frekuensi denyut binaural (Hz, 0..40, default 0 = mati = default
+  // native). 0 = tidak ada denyut; >0 = denyut aktif di mode Immersive
+  // saja (tahap Brainwave di akhir rantai ImmersiveStage). Volume denyut
+  // mengikuti resonanceIntensity.
+  brainwaveFreq: number;
   audioMode: AudioMode;
   lyrics: LyricLine[];
   sleepTimerEnd: number | null;
@@ -195,6 +205,7 @@ export interface PlayerState {
   setResonanceIntensity: (intensity: number) => Promise<void>;
   setSolfeggioFreq: (freq: number) => Promise<void>;
   setSolfeggioTemplate: (id: string) => Promise<void>;
+  setBrainwaveFreq: (freq: number) => Promise<void>;
   setAudioMode: (mode: AudioMode) => Promise<void>;
   setSleepTimer: (minutes: number | null) => void;
   setCurrentSong: (song: Song | null) => void;
@@ -224,12 +235,17 @@ const SOLFEGGIO_NATIVE_THROTTLE_MS = 100;
 let _solfeggioLastAt = 0;
 let _solfeggioTimer: ReturnType<typeof setTimeout> | null = null;
 // Nilai terakhir yang belum didorong ke native (per field).
-let _solfeggioPendingPush: { freq?: number; intensity?: number } = {};
+let _solfeggioPendingPush: {
+  freq?: number;
+  intensity?: number;
+  brainwave?: number;
+} = {};
 // Nilai terakhir yang belum ditulis ke AsyncStorage (per key).
 let _solfeggioPendingPersist: {
   freq?: number;
   intensity?: number;
   templateId?: string;
+  brainwave?: number;
 } = {};
 
 const flushSolfeggioPersist = async (): Promise<void> => {
@@ -247,6 +263,12 @@ const flushSolfeggioPersist = async (): Promise<void> => {
     }
     if (pending.templateId !== undefined) {
       await AsyncStorage.setItem(KEYS.SOLFEGGIO_TEMPLATE, pending.templateId);
+    }
+    if (pending.brainwave !== undefined) {
+      await AsyncStorage.setItem(
+        KEYS.BRAINWAVE_FREQ,
+        pending.brainwave.toString(),
+      );
     }
   } catch (error) {
     console.error("[Player] flushSolfeggioPersist failed:", error);
@@ -269,6 +291,9 @@ const pushSolfeggioThrottled = (): void => {
     }
     if (pending.intensity !== undefined) {
       NativeDSPModule?.setResonanceIntensity?.(pending.intensity);
+    }
+    if (pending.brainwave !== undefined) {
+      NativeDSPModule?.setBrainwaveFreq?.(pending.brainwave);
     }
     if (isTrailing) {
       // Idempotent dengan flush eksplisit — keduanya menulis nilai akhir
@@ -305,6 +330,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   resonanceIntensity: 0.5,
   solfeggioFreq: DEFAULT_SOLFEGEGGIO_FREQ,
   solfeggioTemplateId: DEFAULT_SOLFEGEGGIO_TEMPLATE_ID,
+  brainwaveFreq: DEFAULT_BRAINWAVE_FREQ,
   audioMode: "dsp",
   lyrics: [],
   sleepTimerEnd: null,
@@ -323,6 +349,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         resonanceIntensity,
         solfeggioFreqRaw,
         solfeggioTemplateRaw,
+        brainwaveFreqRaw,
         mode,
         lastSongId,
         lastQueueIdsRaw,
@@ -333,6 +360,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           AsyncStorage.getItem(KEYS.RESONANCE_INTENSITY),
           AsyncStorage.getItem(KEYS.SOLFEGGIO_FREQ),
           AsyncStorage.getItem(KEYS.SOLFEGGIO_TEMPLATE),
+          AsyncStorage.getItem(KEYS.BRAINWAVE_FREQ),
           AsyncStorage.getItem(KEYS.MODE),
           AsyncStorage.getItem(KEYS.LAST_SONG_ID),
           AsyncStorage.getItem(KEYS.LAST_QUEUE_IDS),
@@ -356,6 +384,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           restoredIntensity
           ? solfeggioTemplateRaw
           : activeSolfeggioTemplateId(restoredFreq, restoredIntensity);
+      // Denyut binaural tersimpan (0 = mati = default engine).
+      const restoredBrainwave = brainwaveFreqRaw
+        ? clampBrainwaveFreq(parseFloat(brainwaveFreqRaw))
+        : DEFAULT_BRAINWAVE_FREQ;
 
       set({
         ...(speed ? { playbackSpeed: parseFloat(speed) } : {}),
@@ -369,6 +401,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         ...(solfeggioFreqRaw || solfeggioTemplateRaw
           ? { solfeggioTemplateId: restoredTemplate }
           : {}),
+        ...(brainwaveFreqRaw ? { brainwaveFreq: restoredBrainwave } : {}),
         ...(mode ? { audioMode: mode as AudioMode } : {}),
       });
 
@@ -1229,6 +1262,17 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           console.warn("[Player] terapkan solfeggioFreq gagal:", freqErr);
         }
 
+        // Denyut binaural tersimpan — terapkan sebelum play, pola yang
+        // sama (native default 0 = mati setelah app restart).
+        try {
+          const beat = get().brainwaveFreq;
+          if (beat !== 0) {
+            NativeDSPModule?.setBrainwaveFreq?.(beat);
+          }
+        } catch (beatErr) {
+          console.warn("[Player] terapkan brainwaveFreq gagal:", beatErr);
+        }
+
         // Kalau native menolak (dekoder gagal), jangan tandai playing.
         try {
           await timedCall("play", () => NativePlaybackService.play());
@@ -1388,6 +1432,28 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
   },
 
+  // Frekuensi denyut binaural (Hz, 0..40, 0 = mati). Pola
+  // setResonanceIntensity: state langsung, native di-throttle — tapi ini
+  // aksi ketuk diskrit (chip), bukan drag: tulis storage langsung seperti
+  // setSolfeggioTemplate. Native menerima Hz denyut dan memetakan ke pita
+  // (<4 Delta, <8 Theta, <13 Alpha, <30 Beta, sisanya Gamma); yang
+  // dimainkan selalu salah satu dari 2.5/6/10/18/40 Hz, carrier tetap
+  // 200 Hz, volume mengikuti resonanceIntensity.
+  setBrainwaveFreq: async (freq: number) => {
+    try {
+      const clamped = clampBrainwaveFreq(freq);
+      set({ brainwaveFreq: clamped });
+      _solfeggioPendingPersist.brainwave = clamped;
+      _solfeggioPendingPush.brainwave = clamped;
+      pushSolfeggioThrottled();
+      // Aksi ketuk diskrit — tulis storage langsung, jangan tunggu drag
+      // selesai (trailing fire idempotent: pending sudah kosong).
+      await get().persistSolfeggioNow();
+    } catch (error) {
+      console.error("[Player] setBrainwaveFreq failed:", error);
+    }
+  },
+
   // Tulis nilai Solfeggio yang tertunda ke AsyncStorage — dipanggil saat
   // drag slider selesai (onSlidingComplete) dan sesudah pilih template.
   persistSolfeggioNow: async () => {
@@ -1447,6 +1513,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
     // Pemrosesan: berlaku untuk ketiga mode.
     audioEngine.setProcessingMode(mode);
+
+    // Denyut binaural hanya hidup di rantai Immersive — tapi nilai
+    // native-nya (AudioState) bertahan melewati ganti mode. Keluar dari
+    // immersive: reset native ke 0 supaya tidak ada denyut basi yang
+    // tertinggal; preferensi tersimpan di store tetap dipertahankan.
+    // Masuk immersive: dorong lagi nilai tersimpan supaya denyut lanjut.
+    if (previous === "immersive" && mode !== "immersive") {
+      NativeDSPModule?.setBrainwaveFreq?.(0);
+    } else if (mode === "immersive" && previous !== "immersive") {
+      const beat = get().brainwaveFreq;
+      if (beat !== 0) {
+        NativeDSPModule?.setBrainwaveFreq?.(beat);
+      }
+    }
 
     // Jalur: hanya relevan untuk bit-perfect.
     //
