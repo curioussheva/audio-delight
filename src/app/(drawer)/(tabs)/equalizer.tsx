@@ -845,7 +845,7 @@ export default function EqualizerScreen() {
                     Alert konfirmasi + hanya untuk preset custom.) */}
                 <ScrollView
                   horizontal
-                  showsHorizontalScrollIndicator={false}
+                  showsHorizontalScrollIndicator
                   style={styles.presetScroll}
                   contentContainerStyle={{ paddingRight: spacing.sm }}
                 >
@@ -876,7 +876,7 @@ export default function EqualizerScreen() {
                     },
                   ]}
                 >
-                  Tekan lama untuk menghapus.
+                  Geser untuk profil lain · tekan lama untuk menghapus.
                 </Text>
               </View>
             </View>
@@ -917,6 +917,18 @@ export default function EqualizerScreen() {
                 >
                   DETAIL BAND
                 </Text>
+                {/* Petunjuk geser: hanya 5 dari 10 band yang muat di
+                    layar; strip horizontal tanpa indikator membuat 5
+                    band sisanya (1k–16k) tidak ketahuan (screenshot
+                    2026-11-20 00:27). */}
+                <Text
+                  style={[
+                    styles.bandHint,
+                    { color: colors.text.tertiary },
+                  ]}
+                >
+                  10 band · geser untuk 1k–16k
+                </Text>
                 {/* U-P2-53: daftar band lewat pola daftar bersama.
                     Jalur yang dipilih tetap FlatList (horizontal +
                     bersarang di ScrollView — lihat chooseListKind);
@@ -925,7 +937,7 @@ export default function EqualizerScreen() {
                 <ScreenList
                   horizontal
                   nestedInScrollView
-                  showsHorizontalScrollIndicator={false}
+                  showsHorizontalScrollIndicator
                   data={eq.currentBands}
                   keyExtractor={(item) => item.frequency.toString()}
                   renderItem={({ item, index }) => (
@@ -1072,6 +1084,14 @@ export default function EqualizerScreen() {
                     />
                   </View>
                   <View style={styles.sliderCol}>
+                    {/* Spacer setinggi baris MiniSwitch (44) supaya
+                        label/track/nilai ketiga kolom sejajar. Kolom ini
+                        tanpa switch (gain bukan efek yang bisa OFF);
+                        tanpa spacer, "MASTER GAIN" naik ke baris switch
+                        dan seluruh kolomnya bergeser ke atas (screenshot
+                        2026-11-20 00:27: "−12 dB" melayang di tengah
+                        kartu, lebih tinggi dari "0 dB"/"×1.00"). */}
+                    <View style={styles.miniSwitchHit} accessible={false} />
                     <VerticalSlider
                       label="MASTER GAIN"
                       value={gainToDb(eq.masterGain) - MASTER_GAIN_DB_MIN}
@@ -1439,6 +1459,11 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     marginBottom: 4,
     textAlign: "center",
+  },
+  bandHint: {
+    fontSize: 10,
+    textAlign: "center",
+    marginBottom: 4,
   },
   effectsSection: { gap: 12 },
   effectItem: {
