@@ -30,8 +30,10 @@ jest.mock("@/features/equalizer/api/nativeInterface", () => ({
     setReverbPreset: jest.fn(async () => true),
     // HRTF (2026-11-19): flag dari hrtfStore, dipulihkan di sini.
     setHrtfEnabled: jest.fn(async () => true),
-    // Master gain: sinkron (void) di native, bukan Promise.
-    setMasterGain: jest.fn(() => undefined),
+    // Master gain: Promise<boolean> di native (P1-9, 2026-11-19).
+    setMasterGain: jest.fn(async () => true),
+    // Sakelar master native (P0, 2026-11-19).
+    setEqEnabled: jest.fn(async () => true),
     releaseAllFX: jest.fn(async () => true),
     createAudioSession: jest.fn(async () => ({ sessionId: -1, isNew: false })),
   },
@@ -40,12 +42,29 @@ jest.mock("@/features/equalizer/api/nativeInterface", () => ({
 // HRTF store di-mock: modul aslinya mengimpor spec TurboModule langsung
 // (getEnforcing) yang tidak ada di bawah mock react-native test ini.
 // Flag bisa diubah per test supaya N4 membuktikan pemulihan HRTF.
-const mockHrtfState = { isHrtfEnabled: false };
+const mockHrtfState = {
+  isHrtfEnabled: false,
+  setHrtfEnabled: jest.fn(async (v: boolean) => {
+    mockHrtfState.isHrtfEnabled = v;
+  }),
+};
 
 jest.mock("@/features/hrtf/store/hrtfStore", () => ({
   __esModule: true,
   useHrtfStore: {
     getState: () => mockHrtfState,
+  },
+}));
+
+// Koreksi headphone di-mock dengan alasan yang sama: headphoneStore
+// mengimpor spec TurboModule langsung. resetToDefault memanggil
+// deactivate() dari store ini.
+const mockHeadphone = { deactivate: jest.fn(async () => {}) };
+
+jest.mock("@/features/headphone/store/headphoneStore", () => ({
+  __esModule: true,
+  useHeadphoneStore: {
+    getState: () => mockHeadphone,
   },
 }));
 
@@ -377,5 +396,62 @@ describe("Master gain skala dB (2026-11-19) — preamp −12..+12 dB", () => {
     expect(migrate({ masterGain: 9 }, 1).masterGain).toBeCloseTo(3.981, 3);
     expect(migrate({ masterGain: NaN }, 1).masterGain).toBe(1.0);
     expect(migrate({}, 1).masterGain).toBeUndefined();
+  });
+});
+
+describe("resetToDefault + penanda DSP Guard (clean-cozy 2026-11-19)", () => {
+  const native = () =>
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("@/features/equalizer/api/nativeInterface").NativeDSPModule as {
+      setHrtfEnabled: jest.Mock;
+    };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockHrtfState.isHrtfEnabled = false;
+  });
+
+  it("reset mematikan HRTF + menonaktifkan koreksi headphone", async () => {
+    const store = loadStore();
+    mockHrtfState.isHrtfEnabled = true;
+    await store.getState().resetToDefault();
+
+    expect(mockHrtfState.setHrtfEnabled).toHaveBeenCalledWith(false);
+    expect(mockHrtfState.isHrtfEnabled).toBe(false);
+    expect(mockHeadphone.deactivate).toHaveBeenCalled();
+  });
+
+  it("reset saat EQ menyala -> native menerima hrtf=0 lewat apply", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    mockHrtfState.isHrtfEnabled = true;
+    await store.getState().setEQEnabled(true);
+    jest.clearAllMocks();
+
+    await store.getState().resetToDefault();
+
+    expect(native().setHrtfEnabled).toHaveBeenCalledWith(false, 7);
+  });
+
+  it("penanda eqEnabledBeforeBitPerfect default null, bisa di-set dan dihapus", () => {
+    const store = loadStore();
+    expect(store.getState().eqEnabledBeforeBitPerfect).toBeNull();
+    store.getState().setEqEnabledBeforeBitPerfect(true);
+    expect(store.getState().eqEnabledBeforeBitPerfect).toBe(true);
+    store.getState().setEqEnabledBeforeBitPerfect(false);
+    expect(store.getState().eqEnabledBeforeBitPerfect).toBe(false);
+    store.getState().setEqEnabledBeforeBitPerfect(null);
+    expect(store.getState().eqEnabledBeforeBitPerfect).toBeNull();
+  });
+
+  it("penanda TIDAK dipersist (hanya penanda sesi)", () => {
+    const store = loadStore();
+    const partialize = store.persist.getOptions().partialize as (
+      s: any,
+    ) => Record<string, unknown>;
+    store.getState().setEqEnabledBeforeBitPerfect(true);
+    expect(
+      partialize(store.getState()),
+    ).not.toHaveProperty("eqEnabledBeforeBitPerfect");
   });
 });

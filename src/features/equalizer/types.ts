@@ -48,10 +48,16 @@ export interface EqualizerStore {
   masterGain: number;
   audioSessionId: number;
   isInitialized: boolean;
+  // Preferensi isEQEnabled sebelum DSP Guard mematikannya saat masuk
+  // bit-perfect (2026-11-19, ronde clean-cozy). null = tidak ada yang
+  // perlu dipulihkan. BUKAN bagian persist (hanya penanda sesi) — lihat
+  // partialize di store: field ini tidak disimpan.
+  eqEnabledBeforeBitPerfect: boolean | null;
 
   // --- Actions ---
   initialize: () => Promise<void>;
   setAudioSessionId: (id: number) => void;
+  setEqEnabledBeforeBitPerfect: (value: boolean | null) => void;
 
   // Master Switch
   setEQEnabled: (enabled: boolean) => Promise<void>;

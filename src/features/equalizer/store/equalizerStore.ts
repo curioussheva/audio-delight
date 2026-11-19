@@ -9,6 +9,7 @@ import { ALL_PRESETS, makeBands } from "../constants/presets";
 import { audioEngine } from "@/features/player/api/engine";
 import { NativeDSPModule } from "@/features/equalizer/api/nativeInterface";
 import { useHrtfStore } from "@/features/hrtf/store/hrtfStore";
+import { useHeadphoneStore } from "@/features/headphone/store/headphoneStore";
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -218,8 +219,11 @@ finalSessionId = sessionResult?.sessionId ?? 0;
     effects.map(async ([name, apply]) => {
       const startedAt = performance.now();
       try {
-        await apply();
-        return { ok: true, name, ms: performance.now() - startedAt };
+        // Hasil apply ikut dinilai: setter lama mengembalikan void
+        // (undefined = berhasil), setter baru mengembalikan boolean —
+        // `false` berarti native menolak dan harus tercatat sebagai gagal.
+        const r: unknown = await apply();
+        return { ok: r !== false, name, ms: performance.now() - startedAt };
       } catch (e) {
         console.error(`[EQ Store] Failed to apply ${name}:`, e);
         return { ok: false, name, ms: performance.now() - startedAt };
@@ -230,9 +234,20 @@ finalSessionId = sessionResult?.sessionId ?? 0;
   const perEffect = results
     .map((r) => `${r.name}:${Math.round(r.ms)}ms`)
     .join(" ");
-  console.log(
-    `[DSP] Applied to Session: ${finalSessionId} (trigger: ${trigger}) in ${Math.round(totalMs)}ms (${perEffect}) preset=${activePresetId ?? "?"} bass=${bass} widener=${virtualizer} reverb=${reverb} hrtf=${hrtf ? 1 : 0} gain=${gain.toFixed(2)} gains=[${gains.join(",")}]`,
-  );
+  const detail = `(trigger: ${trigger}) in ${Math.round(totalMs)}ms (${perEffect}) preset=${activePresetId ?? "?"} bass=${bass} widener=${virtualizer} reverb=${reverb} hrtf=${hrtf ? 1 : 0} gain=${gain.toFixed(2)} gains=[${gains.join(",")}]`;
+  if (results.every((r) => r.ok)) {
+    console.log(`[DSP] Applied to Session: ${finalSessionId} ${detail}`);
+  } else {
+    // Jujur: jangan klaim "Applied" kalau sebagian efek gagal — log
+    // menyebut yang gagal supaya logcat berikutnya bisa membuktikannya.
+    const failed = results
+      .filter((r) => !r.ok)
+      .map((r) => r.name)
+      .join(", ");
+    console.log(
+      `[DSP] Apply GAGAL SEBAGIAN to Session: ${finalSessionId} ${detail} — gagal: ${failed}`,
+    );
+  }
   return results.every((r) => r.ok);
 };
 
@@ -342,8 +357,13 @@ export const useEqualizerStore = create<EqualizerStore>()(
       masterGain: MASTER_GAIN_DEFAULT,
       audioSessionId: -1,
       isInitialized: false,
+      eqEnabledBeforeBitPerfect: null,
 
       // --- Actions ---
+
+      setEqEnabledBeforeBitPerfect: (value: boolean | null) => {
+        set({ eqEnabledBeforeBitPerfect: value });
+      },
 
       initialize: async () => {
         if (get().isInitialized) return;
@@ -629,6 +649,13 @@ export const useEqualizerStore = create<EqualizerStore>()(
       resetToDefault: async () => {
         // Fix G: batalkan trailing flush setBandGain yang masih tertunda.
         cancelPendingStoreUpdate();
+        // Reset mencakup HRTF + koreksi headphone (2026-11-19, ronde
+        // clean-cozy): "netral" berarti semua pemrosesan DSP kembali
+        // netral, bukan hanya kurva + efek. HRTF dimatikan dulu supaya
+        // applyAllEffectsToNative di bawah mengirim hrtf=0; koreksi
+        // dimatikan lewat deactivate() (native + state headphoneStore).
+        void useHrtfStore.getState().setHrtfEnabled(false);
+        await useHeadphoneStore.getState().deactivate();
         set({
           bands: makeBands([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
           activePresetId: "flat",
