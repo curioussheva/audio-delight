@@ -96,6 +96,10 @@ export class MetadataEnricher {
    * hanya tanpa hemat query.
    */
   private static async warmNativeSongCache(): Promise<void> {
+    // Follow-up logcat: start worker 22 → 38,7 → 27,7 dtk di tiga sesi —
+    // catat durasi query supaya logcat berikutnya bisa memisahkan waktu
+    // tunggu kunci dari waktu query (lihat log "lock acquired" di bawah).
+    const startedAt = Date.now();
     try {
       const songs = await MediaStore.queryAudioFiles();
       const map = new Map<string, NativeSong>();
@@ -104,11 +108,11 @@ export class MetadataEnricher {
       }
       this.nativeSongCache = map;
       console.log(
-        `[MetadataEnricher] NativeSong cache warmed: ${map.size} songs (1 query)`,
+        `[MetadataEnricher] NativeSong cache warmed: ${map.size} songs (1 query, ${Date.now() - startedAt} ms)`,
       );
     } catch (error) {
       console.warn(
-        "[MetadataEnricher] Failed to warm NativeSong cache, falling back to per-song lookup:",
+        `[MetadataEnricher] Failed to warm NativeSong cache after ${Date.now() - startedAt} ms, falling back to per-song lookup:`,
         error,
       );
       this.nativeSongCache = null;
@@ -150,7 +154,11 @@ export class MetadataEnricher {
     // N5: tunggu giliran kunci bersama batch manual. abortController +
     // processedCount dibuat SESUDAH kunci didapat, supaya stop() yang
     // datang selagi menunggu tidak meninggalkan controller basi.
+    const lockWaitStartedAt = Date.now();
     const release = await this.acquireEnrichmentLock();
+    console.log(
+      `[MetadataEnricher] Enrichment lock acquired after ${Date.now() - lockWaitStartedAt} ms`,
+    );
     try {
       // N11: stop() datang selagi menunggu kunci → generasi berubah →
       // start ini batal (keluar lewat finally: kunci dilepas, flag
@@ -341,10 +349,17 @@ export class MetadataEnricher {
     // N5: kunci bersama worker — tunggu giliran. Bila dibatalkan selagi
     // menunggu, laporkan semua lagu sebagai skipped (sama seperti batal
     // di tengah loop) tanpa menyentuh cache/store.
+    const lockWaitStartedAt = Date.now();
     const release = await this.acquireEnrichmentLock(signal);
     if (!release) {
+      console.log(
+        `[MetadataEnricher] Enrichment lock wait aborted after ${Date.now() - lockWaitStartedAt} ms`,
+      );
       return { success: 0, failed: 0, skipped: songIds.length };
     }
+    console.log(
+      `[MetadataEnricher] Enrichment lock acquired after ${Date.now() - lockWaitStartedAt} ms`,
+    );
 
     try {
       // J2-1: satu query MediaStore untuk seluruh batch.
