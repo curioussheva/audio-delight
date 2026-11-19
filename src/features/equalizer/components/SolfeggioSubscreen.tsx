@@ -32,10 +32,10 @@ import { usePlayerStore } from "@/features/player/store/playerStore";
  *   bersama), default 50%, live ke NativeDSPModule.setResonanceIntensity
  *   lewat playerStore — pola setBassBoost, tanpa throttle.
  * - Tidak ada kontrol binaural: binaural beat tidak diimplementasikan.
- * - Kontrol EQ/DSP tidak berlaku di mode ini; mereka tinggal di tab DSP.
- *   Pengecualian: koreksi headphone (B-HPIMM) — seksi di bawah, tanpa
- *   `disabled`, jadi switch-nya bisa dipakai di sini sama seperti di DSP.
- *   Native menerapkan preset yang sama di akhir rantai Immersive.
+ * - Kontrol EQ/DSP diatur di tab DSP; nilainya tetap berlaku di sini
+ *   (mis. lebar widener → lebar spatial; koreksi headphone punya seksi
+ *   sendiri di bawah). Yang tidak berlaku: EQ 10-band, bass, reverb,
+ *   HRTF, dan master gain.
  */
 export function SolfeggioSubscreen() {
   const { theme } = useTheme();
@@ -201,7 +201,7 @@ export function SolfeggioSubscreen() {
           ]}
         >
           Tinggi nada lagu tanpa mengubah tempo (A=440 standar, A=432 Verdi).
-          Tidak berlaku di mode Bit-Perfect.
+          Berlaku di mode ini dan DSP.
         </Text>
         <TuningControl />
       </View>
@@ -249,8 +249,13 @@ export function SolfeggioSubscreen() {
           tidak seperti seksi DSP lain di mode ini. */}
       <HeadphoneSection />
 
+      {/* P2 audit BitPerfect/Solfeggio 2026-11-20: teks lama "tidak berlaku
+          di mode ini" tidak tepat — nilai widener DSP menggerakkan lebar
+          spatial di sini, jadi kontrolnya memang diatur di tab DSP tapi
+          nilainya berlaku. */}
       <Text style={[styles.note, { color: colors.text.tertiary }]}>
-        Kontrol EQ/DSP lain tidak berlaku di mode ini — atur di tab DSP.
+        Kontrol EQ/DSP lain diatur di tab DSP (nilainya tetap berlaku di
+        sini).
       </Text>
     </View>
   );
