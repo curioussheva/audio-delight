@@ -75,6 +75,7 @@ const applyAllEffectsToNative = async (state: any, trigger = "unknown") => {
     virtualizerLevel,
     reverbPreset,
     audioSessionId,
+    activePresetId,
   } = state;
 
   if (!NativeDSPModule || !isEQEnabled) return false;
@@ -121,6 +122,12 @@ finalSessionId = sessionResult?.sessionId ?? 0;
   // timing log membuktikan/membantah dugaan "apply DSP lambat/berat" dari
   // logcat berikutnya. Murni log; urutan/perilaku tidak berubah, tanpa
   // debounce (debounce TIDAK diputuskan).
+  // Nilai efek dicetak juga (follow-up logcat 14:47, 2026-11-19): 5× apply
+  // membuktikan jalur restore jalan, tapi NOL log nilai efek sehingga N4
+  // (bass/widener > 0 saat toggle?) tetap tidak bisa dibuktikan dari logcat.
+  // Nilai yang dicetak adalah nilai TERKIRIM ke native (sudah di-clamp;
+  // 0 bila sakelar efeknya OFF) + activePresetId — jadi logcat berikutnya
+  // menjawab N4 langsung.
   const applyStartedAt = performance.now();
   const results = await Promise.all(
     effects.map(async ([name, apply]) => {
@@ -139,7 +146,7 @@ finalSessionId = sessionResult?.sessionId ?? 0;
     .map((r) => `${r.name}:${Math.round(r.ms)}ms`)
     .join(" ");
   console.log(
-    `[DSP] Applied to Session: ${finalSessionId} (trigger: ${trigger}) in ${Math.round(totalMs)}ms (${perEffect})`,
+    `[DSP] Applied to Session: ${finalSessionId} (trigger: ${trigger}) in ${Math.round(totalMs)}ms (${perEffect}) preset=${activePresetId ?? "?"} bass=${bass} widener=${virtualizer} reverb=${reverb} gains=[${gains.join(",")}]`,
   );
   return results.every((r) => r.ok);
 };
