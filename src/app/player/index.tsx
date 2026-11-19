@@ -17,6 +17,7 @@ import * as Haptics from "expo-haptics";
 
 import { useAudioProgress } from "@/features/player/hooks/useAudioProgress";
 import { usePlayerStore } from "@/features/player/store/playerStore";
+import { useArtworkDisplayStore } from "@/features/player/store/artworkDisplayStore";
 import {
   isFailedArtworkUri,
   markArtworkUriFailed,
@@ -107,8 +108,10 @@ export default function PlayerScreen() {
   // lagu / hanya paddingTop).
   // LAYOUT-V3: +20 → +12 — bagian dari anggaran vertikal supaya semua
   // muat 1 layar (lihat PLAYER_CHROME_DP di playerLayout.ts).
+  // 2026-11-20 (sampul contain + rapatkan): +12 → +8 — bagian dari
+  // chrome 586 → 552.
   const insets = useSafeAreaInsets();
-  const playerBottomPadding = insets.bottom + 12;
+  const playerBottomPadding = insets.bottom + 8;
   // P2-7: dimensi REAKTIF terhadap rotasi (dulu `Dimensions.get("window")`
   // di level modul — dibekukan saat import). Hook HARUS di atas return
   // kondisional, jangan dipindah ke bawah (U-P0-4: Rules of Hooks).
@@ -155,6 +158,11 @@ export default function PlayerScreen() {
   // dari kolom songs.isFavorite) — hook HARUS di atas return kondisional,
   // jangan dipindah ke bawah (U-P0-4: Rules of Hooks).
   const { isFavorite, toggleFavorite } = useFavorites();
+
+  // 2026-11-20: tampilan sampul (contain default, bisa diubah di
+  // Settings → Tampilan). Store persist sendiri — dibaca di sini supaya
+  // ganti pengaturan langsung mengubah contentFit tanpa reload.
+  const artworkFit = useArtworkDisplayStore((s) => s.artworkFit);
 
   // Follow-up lazyload: artwork rusak tidak dicoba lagi (negative cache
   // bersama SongListItem + FloatingPlayer). State error di-reset saat lagu
@@ -383,10 +391,10 @@ export default function PlayerScreen() {
   ].join(" · ");
 
   // LAYOUT-V3: ukuran sampul dari anggaran vertikal (playerLayout.ts) —
-  // tinggi layar − insets − chrome tetap 578 (−41 bila chip tampil),
+  // tinggi layar − insets − chrome tetap 552 (−41 bila chip tampil),
   // supaya header + judul + sampul + visualizer + kontrol + utilitas
-  // muat 1 layar tanpa scroll di portrait POCO M6 (360×800: 150,
-  // 393×873: 223). Dibatasi lebar (layar − 100) dan lantai 96.
+  // muat 1 layar tanpa scroll di portrait POCO M6 (360×800: 176,
+  // 393×873: 249). Dibatasi lebar (layar − 100) dan lantai 96.
   const artSize = artworkSize(
     windowWidth,
     windowHeight,
@@ -614,6 +622,12 @@ export default function PlayerScreen() {
                   styles.artworkContainer,
                   { width: artSize, height: artSize },
                   { transform: [{ scale: artworkScale }] },
+                  // 2026-11-20 (sampul contain): latar kotak = background
+                  // panel (token tema) supaya pita letterbox sampul
+                  // landscape terbaca sebagai permukaan kartu, bukan
+                  // lubang kosong — di tema gelap pun tetap konsisten
+                  // (background.primary gelap di sana).
+                  { backgroundColor: colors.background.primary },
                   theme.shadows.xl,
                 ]}
               >
@@ -626,7 +640,7 @@ export default function PlayerScreen() {
                       : require("../../../assets/images/icon.png")
                   }
                   style={styles.artwork}
-                  contentFit="cover"
+                  contentFit={artworkFit}
                   transition={300}
                   onError={() => {
                     markArtworkUriFailed(currentSong.artwork);
@@ -634,11 +648,19 @@ export default function PlayerScreen() {
                   }}
                 />
                 {/* P2: petunjuk visual bahwa sampul bisa diketuk untuk
-                    lirik — pil solid supaya kontras terjamin di atas foto. */}
+                    lirik — pil solid supaya kontras terjamin di atas foto.
+                    2026-11-20 (sampul contain): border tipis supaya pil
+                    tetap terbedakan saat jatuh di atas pita letterbox
+                    (latar pil = background.primary, sama dengan latar
+                    kotak) — di atas foto, border ini tidak mengganggu. */}
                 <View
                   style={[
                     styles.artworkLyricsHint,
-                    { backgroundColor: colors.background.primary },
+                    {
+                      backgroundColor: colors.background.primary,
+                      borderWidth: 1,
+                      borderColor: colors.border.medium,
+                    },
                   ]}
                 >
                   <Mic2 size={12} color={textPrimary} />
@@ -1127,7 +1149,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     // LAYOUT-V3: marginBottom 20 → 12 — bagian dari anggaran vertikal
     // (isi header tidak berubah, hanya jarak ke panel judul).
-    marginBottom: 12,
+    // 2026-11-20 (rapatkan): 12 → 8 (spacing.sm) — chrome 586 → 552.
+    marginBottom: 8,
     paddingTop: 8,
   },
   headerBtn: {
@@ -1161,8 +1184,9 @@ const styles = StyleSheet.create({
     // songInfoContainer (marginTop 20); jarak info→sampul tetap 20
     // dari marginBottom songInfoContainer.
     // LAYOUT-V3: marginBottom 30 → 12 — bagian dari anggaran vertikal.
+    // 2026-11-20 (rapatkan): 12 → 8 (spacing.sm) — chrome 586 → 552.
     marginTop: 0,
-    marginBottom: 12,
+    marginBottom: 8,
   },
   artworkContainer: {
     borderRadius: 16,
@@ -1194,12 +1218,13 @@ const styles = StyleSheet.create({
   // LAYOUT-V3: kanvas 120 → VISUALIZER_CANVAS_HEIGHT (64) + marginBottom
   // 20 → 12 — visualizer mendapat ruang TETAP yang dihitung dalam
   // anggaran vertikal (bukan lagi konten yang jatuh di bawah lipatan).
+  // 2026-11-20 (rapatkan): 12 → 8 (spacing.sm) — chrome 586 → 552.
   visualizerPanel: {
     flexDirection: "row",
     alignItems: "center",
     borderRadius: 16,
     padding: 12,
-    marginBottom: 12,
+    marginBottom: 8,
   },
   visualizerScale: {
     width: 28,
@@ -1278,7 +1303,10 @@ const styles = StyleSheet.create({
   controlsSection: {
     // LAYOUT-V2 (3): panel kini kolom — baris tombol (controlsRow) di
     // atas, slider + waktu di bawah. Dulu baris (flexDirection row).
-    marginBottom: 30,
+    // 2026-11-20 (rapatkan): marginBottom 30 → 16 (spacing.md) —
+    // jeda seksi sebelum bar utilitas (16 + marginTop 8 = 24) tetap
+    // lebih lega dari jarak antar-seksi 8, tapi tidak lagi 38.
+    marginBottom: 16,
     paddingHorizontal: 10,
   },
   // LAYOUT-V2 (3): baris 5 tombol kontrol di dalam panel kontrol.
@@ -1351,11 +1379,13 @@ const styles = StyleSheet.create({
     // panel karena urutan style dibalik di JSX) — bagian dari anggaran
     // vertikal. Panel: pad 16 + isi 96 (judul 2 baris 56 + mb 6 + artis
     // 17 + info file 17) = 112; total blok 132.
+    // 2026-11-20 (rapatkan): margin 10/10 → 8/8 (spacing.sm) — total
+    // blok 128; chrome 586 → 552.
     // FASE 3 (1): judul 2 baris 48 → 56 (Playfair, lineHeight 28 peran
     // h4) — +8 diserap PLAYER_CHROME_DP (578 → 586), sampul mengecil
     // 8dp; anggaran total tetap pas 800/873.
-    marginTop: 10,
-    marginBottom: 10,
+    marginTop: 8,
+    marginBottom: 8,
     padding: 8,
     width: "100%",
   },
@@ -1367,8 +1397,8 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   // LAYOUT-V3: marginTop 10 → 8, paddingVertical 15 → 12 — bar utilitas
-  // tetap elemen TERAKHIR di paling bawah; jarak ke panel kontrol tetap
-  // lega (marginBottom 30 kontrol + marginTop 8 = 38dp). Total blok 86.
+  // tetap elemen TERAKHIR di paling bawah; jarak ke panel kontrol
+  // (marginBottom 16 kontrol + marginTop 8 = 24dp). Total blok 86.
   bottomUtilities: {
     flexDirection: "row",
     justifyContent: "space-around",
