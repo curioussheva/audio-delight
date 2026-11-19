@@ -19,6 +19,7 @@ export const useEqualizer = () => {
     bassStrength,
     virtualizerLevel,
     reverbPreset,
+    masterGain,
 
     setBandGain,
     applyPreset,
@@ -27,6 +28,7 @@ export const useEqualizer = () => {
     setBassBoost,
     setVirtualizer,
     setReverb,
+    setMasterGain,
     toggleEQ,
     // ✅ Ambil setters baru dari store
     setBassEnabled,
@@ -119,6 +121,14 @@ export const useEqualizer = () => {
     [isDSPDisabled, setReverb],
   );
 
+  const handleSetMasterGain = useCallback(
+    (val: number) => {
+      if (isDSPDisabled) return;
+      setMasterGain(val);
+    },
+    [isDSPDisabled, setMasterGain],
+  );
+
   const handleResetToDefault = useCallback(() => {
     if (isDSPDisabled) return;
     resetToDefault();
@@ -142,12 +152,14 @@ export const useEqualizer = () => {
     bassStrength,
     virtualizerLevel,
     reverbPreset,
+    masterGain,
 
     // Actions
     toggleEQ: handleToggleEQ,
     setBassEnabled: handleSetBassEnabled, // ✅ Expose ke UI
     setVirtualizerEnabled: handleSetVirtualizerEnabled, // ✅ Expose ke UI
     setReverbEnabled: handleSetReverbEnabled, // ✅ Expose ke UI
+    setMasterGain: handleSetMasterGain,
     updateBandGain,
     applyPreset: handleApplyPreset,
     savePreset: saveCustomPreset,

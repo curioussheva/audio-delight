@@ -29,6 +29,24 @@ const clampBandGain = (g: number): number =>
 const clampPresetBands = (bands: any[]): any[] =>
   bands.map((b) => ({ ...b, gain: clampBandGain(b?.gain ?? 0) }));
 
+// Master gain (2026-11-19): rentang slider 0..1.5 linear (1.0 = netral,
+// 0 = senyap, 1.5 = +3.52 dB). Dipilih DI DALAM clamp native AudioState
+// (0..4, fallback 1.0) — bukan di batasnya: boost 1.5x masih bisa
+// ditahan limiter yang duduk sesudah GainNode di rantai, sementara 4x
+// (+12 dB) akan memaksa limiter bekerja terus-menerus. Slider tampil
+// ×1.00; nilai yang dikirim ke native = nilai linear yang sama (tanpa
+// konversi dB — GainNode mengalikan langsung). BUKAN bagian profil
+// preset: preset menyimpan kurva + bass/widener/reverb (D1), tapi gain
+// adalah level output global — preset tidak boleh menarik volume.
+const MASTER_GAIN_MIN = 0;
+const MASTER_GAIN_MAX = 1.5;
+const MASTER_GAIN_DEFAULT = 1.0;
+const clampMasterGain = (g: number): number =>
+  Math.min(
+    MASTER_GAIN_MAX,
+    Math.max(MASTER_GAIN_MIN, Number.isFinite(g) ? g : MASTER_GAIN_DEFAULT),
+  );
+
 const getCurrentSessionId = async (): Promise<number> => {
   try {
     if (!NativeDSPModule?.createAudioSession) {
@@ -74,6 +92,7 @@ const applyAllEffectsToNative = async (state: any, trigger = "unknown") => {
     bassStrength,
     virtualizerLevel,
     reverbPreset,
+    masterGain,
     audioSessionId,
     activePresetId,
   } = state;
@@ -108,6 +127,11 @@ finalSessionId = sessionResult?.sessionId ?? 0;
   const reverb = isReverbEnabled
     ? Math.min(6, Math.max(0, reverbPreset ?? 0))
     : 0;
+  // Master gain: nilai linear 0..1.5 (1.0 netral). TIDAK digate sakelar
+  // efek — gain bukan efek yang bisa OFF; 0 = senyap. Yang di-gate
+  // hanya pengiriman ke native (isEQEnabled di atas): rantai DSP yang
+  // membawa GainNode hanya hidup di mode DSP saat EQ menyala.
+  const gain = clampMasterGain(masterGain ?? MASTER_GAIN_DEFAULT);
 
   const effects: Array<[string, () => Promise<unknown>]> = [
     ["setFullEqualizer", () => NativeDSPModule.setFullEqualizer(gains, finalSessionId)],
@@ -117,6 +141,12 @@ finalSessionId = sessionResult?.sessionId ?? 0;
     // 2026-11-14: stub resolve false, tidak mengubah suara) — supaya
     // saat engine reverb beneran ada, restore ini langsung bekerja.
     ["setReverbPreset", () => NativeDSPModule.setReverbPreset(reverb, finalSessionId)],
+    // Master gain: panggilan native sinkron (void, tanpa sessionId —
+    // engine global, F7) jadi dibungkus supaya masuk Promise.all yang
+    // sama. `?.()` supaya JS lama tetap jalan lawan modul native yang
+    // belum punya metode ini (mirip guard `?.setFullEqualizer` di
+    // applyEqThrottled); tanpa itu TypeError membuat apply gagal total.
+    ["setMasterGain", async () => NativeDSPModule?.setMasterGain?.(gain)],
   ];
   // Diagnostik (verifikasi 2nd opinion, 2026-11-19): ukur durasi apply —
   // timing log membuktikan/membantah dugaan "apply DSP lambat/berat" dari
@@ -146,7 +176,7 @@ finalSessionId = sessionResult?.sessionId ?? 0;
     .map((r) => `${r.name}:${Math.round(r.ms)}ms`)
     .join(" ");
   console.log(
-    `[DSP] Applied to Session: ${finalSessionId} (trigger: ${trigger}) in ${Math.round(totalMs)}ms (${perEffect}) preset=${activePresetId ?? "?"} bass=${bass} widener=${virtualizer} reverb=${reverb} gains=[${gains.join(",")}]`,
+    `[DSP] Applied to Session: ${finalSessionId} (trigger: ${trigger}) in ${Math.round(totalMs)}ms (${perEffect}) preset=${activePresetId ?? "?"} bass=${bass} widener=${virtualizer} reverb=${reverb} gain=${gain.toFixed(2)} gains=[${gains.join(",")}]`,
   );
   return results.every((r) => r.ok);
 };
@@ -254,6 +284,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
       bassStrength: 0,
       reverbPreset: 0,
       virtualizerLevel: 0,
+      masterGain: MASTER_GAIN_DEFAULT,
       audioSessionId: -1,
       isInitialized: false,
 
@@ -377,6 +408,27 @@ export const useEqualizerStore = create<EqualizerStore>()(
             await NativeDSPModule.setVirtualizer(clamped, audioSessionId);
           } catch (e) {
             console.error("[EQ Store] setVirtualizer gagal:", e);
+          }
+        }
+      },
+
+      // Master gain (2026-11-19): mesin native-nya SUDAH lengkap sejak
+      // lama (spec setMasterGain -> Kotlin -> JNI -> AudioEngine ->
+      // AudioState clamp 0..4 -> GainNode di DSPChain), tapi NOL
+      // pemanggil di src/ — slider ini yang pertama. Tanpa sessionId:
+      // gain itu global engine (F7), bukan per-sesi, jadi yang di-gate
+      // hanya isEQEnabled (mirip bass/widener, minus cek session).
+      // State selalu disimpan (niat user); dorongan ke native yang gagal
+      // hanya dicatat (pola N23). Tidak masuk profil preset (lihat
+      // komentar MASTER_GAIN_* di atas).
+      setMasterGain: async (gain: number) => {
+        const clamped = clampMasterGain(gain);
+        set({ masterGain: clamped });
+        if (get().isEQEnabled) {
+          try {
+            NativeDSPModule?.setMasterGain?.(clamped);
+          } catch (e) {
+            console.error("[EQ Store] setMasterGain gagal:", e);
           }
         }
       },
@@ -521,6 +573,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
           bassStrength: 0,
           virtualizerLevel: 0,
           reverbPreset: 0,
+          masterGain: MASTER_GAIN_DEFAULT,
         });
         if (get().isEQEnabled && get().audioSessionId !== -1) {
           await applyAllEffectsToNative(get(), "resetToDefault");
@@ -560,6 +613,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
         bassStrength: state.bassStrength,
         virtualizerLevel: state.virtualizerLevel,
         reverbPreset: state.reverbPreset,
+        masterGain: state.masterGain,
         isEQEnabled: state.isEQEnabled,
         isBassEnabled: state.isBassEnabled,
         isVirtualizerEnabled: state.isVirtualizerEnabled,

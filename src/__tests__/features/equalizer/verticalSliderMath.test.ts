@@ -40,4 +40,30 @@ describe("verticalSliderMath (slider vertikal DSP)", () => {
       );
     }
   });
+
+  it("rentang kustom 0..1.5 (master gain): ujung + tengah + round-trip", () => {
+    expect(dspValueToY(1.5, DSP_SLIDER_HEIGHT, 0, 1.5)).toBe(12);
+    expect(dspValueToY(0, DSP_SLIDER_HEIGHT, 0, 1.5)).toBe(
+      DSP_SLIDER_HEIGHT - 12,
+    );
+    expect(dspValueToY(0.75, DSP_SLIDER_HEIGHT, 0, 1.5)).toBe(
+      DSP_SLIDER_HEIGHT / 2,
+    );
+    expect(dspYToValue(12, DSP_SLIDER_HEIGHT, 0, 1.5)).toBeCloseTo(1.5, 9);
+    expect(dspYToValue(DSP_SLIDER_HEIGHT - 12, DSP_SLIDER_HEIGHT, 0, 1.5)).toBeCloseTo(
+      0,
+      9,
+    );
+    for (const v of [0, 0.25, 0.5, 1, 1.25, 1.5]) {
+      expect(
+        Math.abs(dspYToValue(dspValueToY(v, DSP_SLIDER_HEIGHT, 0, 1.5), DSP_SLIDER_HEIGHT, 0, 1.5) - v),
+      ).toBeLessThanOrEqual(0.01);
+    }
+  });
+
+  it("dspYToValue tidak membulatkan: 0.75 tetap pecahan, bukan 1", () => {
+    // Dulu Math.round di sini — rentang 0..1.5 akan terpotong jadi 0/1/2.
+    const y = dspValueToY(0.75, DSP_SLIDER_HEIGHT, 0, 1.5);
+    expect(dspYToValue(y, DSP_SLIDER_HEIGHT, 0, 1.5)).toBeCloseTo(0.75, 9);
+  });
 });

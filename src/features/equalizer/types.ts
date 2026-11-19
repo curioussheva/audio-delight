@@ -43,6 +43,8 @@ export interface EqualizerStore {
   bassStrength: number;
   virtualizerLevel: number;
   reverbPreset: number;
+  // Master gain linear 0..1.5 (1.0 = netral). Bukan bagian profil preset.
+  masterGain: number;
   audioSessionId: number;
   isInitialized: boolean;
 
@@ -63,6 +65,7 @@ export interface EqualizerStore {
   setBassBoost: (strength: number) => Promise<void>;
   setVirtualizer: (level: number) => Promise<void>;
   setReverb: (preset: number) => Promise<void>;
+  setMasterGain: (gain: number) => Promise<void>;
   setBandGain: (index: number, gain: number) => void;
   setBandsGain: (gains: number[]) => Promise<void>; // Ditambahkan untuk Full EQ Apply
 

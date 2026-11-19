@@ -18,37 +18,38 @@ export const DSP_THUMB_HALF_HEIGHT = 12;
 export const DSP_SLIDER_MIN = 0;
 export const DSP_SLIDER_MAX = 1000;
 
-/** Posisi y (titik tengah thumb) untuk nilai 0..1000. 1000 -> y = 12. */
+/** Posisi y (titik tengah thumb) untuk nilai min..max. max -> y = 12.
+ *  Default min/max = DSP_SLIDER_MIN/MAX (0..1000) — pemakaian lama
+ *  (bass/widener) tidak berubah. Master gain memakai min 0 / max 1.5. */
 export function dspValueToY(
   value: number,
   sliderHeight: number = DSP_SLIDER_HEIGHT,
+  min: number = DSP_SLIDER_MIN,
+  max: number = DSP_SLIDER_MAX,
 ): number {
   "worklet"; // dipanggil dari gesture (UI thread) dan useEffect
-  const clamped = Math.min(
-    DSP_SLIDER_MAX,
-    Math.max(DSP_SLIDER_MIN, value),
-  );
+  const clamped = Math.min(max, Math.max(min, value));
   const top = DSP_THUMB_HALF_HEIGHT;
   const bottom = sliderHeight - DSP_THUMB_HALF_HEIGHT;
   return (
-    bottom -
-    ((clamped - DSP_SLIDER_MIN) / (DSP_SLIDER_MAX - DSP_SLIDER_MIN)) *
-      (bottom - top)
+    bottom - ((clamped - min) / (max - min)) * (bottom - top)
   );
 }
 
-/** Nilai 0..1000 untuk posisi y (titik tengah thumb). y = 12 -> 1000. */
+/** Nilai min..max untuk posisi y (titik tengah thumb). y = 12 -> max.
+ *  Sengaja TIDAK dibulatkan: rentang 0..1000 (bass/widener) praktis
+ *  tetap bulat di ujung, tapi rentang 0..1.5 (master gain) butuh pecahan —
+ *  pembulatan di sini akan memotongnya jadi 0/1/2. Pembulatan tampilan
+ *  urusan komponen (formatValue), bukan matematika ini. */
 export function dspYToValue(
   y: number,
   sliderHeight: number = DSP_SLIDER_HEIGHT,
+  min: number = DSP_SLIDER_MIN,
+  max: number = DSP_SLIDER_MAX,
 ): number {
   "worklet"; // dipanggil dari gesture (UI thread)
   const top = DSP_THUMB_HALF_HEIGHT;
   const bottom = sliderHeight - DSP_THUMB_HALF_HEIGHT;
   const clamped = Math.min(bottom, Math.max(top, y));
-  return Math.round(
-    DSP_SLIDER_MAX -
-      ((clamped - top) / (bottom - top)) *
-        (DSP_SLIDER_MAX - DSP_SLIDER_MIN),
-  );
+  return max - ((clamped - top) / (bottom - top)) * (max - min);
 }

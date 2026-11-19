@@ -28,6 +28,8 @@ jest.mock("@/features/equalizer/api/nativeInterface", () => ({
     setBassBoost: jest.fn(async () => true),
     setVirtualizer: jest.fn(async () => true),
     setReverbPreset: jest.fn(async () => true),
+    // Master gain: sinkron (void) di native, bukan Promise.
+    setMasterGain: jest.fn(() => undefined),
     releaseAllFX: jest.fn(async () => true),
     createAudioSession: jest.fn(async () => ({ sessionId: -1, isNew: false })),
   },
@@ -179,5 +181,80 @@ describe("N4 — applyAllEffectsToNative mengirim keempat efek", () => {
     expect(n.setBassBoost).toHaveBeenCalledWith(500, 7);
     expect(n.setVirtualizer).toHaveBeenCalledWith(300, 7);
     expect(n.setReverbPreset).toHaveBeenCalled();
+  });
+});
+
+describe("Master gain (2026-11-19) — store + native + log [DSP] Applied", () => {
+  const native = () =>
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("@/features/equalizer/api/nativeInterface").NativeDSPModule as {
+      setMasterGain: jest.Mock;
+      setReverbPreset: jest.Mock;
+    };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("default 1.0 (netral)", () => {
+    const store = loadStore();
+    expect(store.getState().masterGain).toBe(1.0);
+  });
+
+  it("setMasterGain menyimpan + mendorong ke native saat EQ menyala", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    await store.getState().setEQEnabled(true);
+    jest.clearAllMocks();
+
+    await store.getState().setMasterGain(1.25);
+
+    expect(store.getState().masterGain).toBe(1.25);
+    expect(native().setMasterGain).toHaveBeenCalledWith(1.25);
+  });
+
+  it("clamp 0..1.5: 9 -> 1.5, -1 -> 0", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    await store.getState().setEQEnabled(true);
+
+    await store.getState().setMasterGain(9);
+    expect(store.getState().masterGain).toBe(1.5);
+    expect(native().setMasterGain).toHaveBeenLastCalledWith(1.5);
+
+    await store.getState().setMasterGain(-1);
+    expect(store.getState().masterGain).toBe(0);
+    expect(native().setMasterGain).toHaveBeenLastCalledWith(0);
+  });
+
+  it("EQ mati -> native tidak dipanggil, tapi state tetap disimpan", async () => {
+    const store = loadStore();
+    await store.getState().setMasterGain(1.2);
+    expect(store.getState().masterGain).toBe(1.2);
+    expect(native().setMasterGain).not.toHaveBeenCalled();
+  });
+
+  it("nyalakan EQ lagi -> gain ikut ter-restore + tercatat di log [DSP] Applied", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    await store.getState().setMasterGain(1.2);
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    jest.clearAllMocks();
+
+    await store.getState().setEQEnabled(true);
+
+    expect(native().setMasterGain).toHaveBeenCalledWith(1.2);
+    const applied = logSpy.mock.calls
+      .map((c) => String(c[0]))
+      .find((s) => s.includes("[DSP] Applied"));
+    expect(applied).toContain("gain=1.20");
+    logSpy.mockRestore();
+  });
+
+  it("resetToDefault mengembalikan gain ke 1.0", async () => {
+    const store = loadStore();
+    await store.getState().setMasterGain(0.5);
+    await store.getState().resetToDefault();
+    expect(store.getState().masterGain).toBe(1.0);
   });
 });

@@ -13,6 +13,10 @@
 // nilai yang dikirim ke store/native tidak berubah, hanya bentuk
 // kontrolnya. Tampilan % juga sama dengan knob (value/10).
 //
+// Master gain memakai rentang lain (0..1.5, tampil ×1.00) lewat props
+// opsional `maxValue` + `formatValue` — default tetap 0..1000 + %,
+// jadi kedua pemakai lama tidak berubah.
+//
 // ControlKnob TIDAK dihapus di ronde ini (aturan dead code: inventaris
 // dulu) — tapi sesudah ronde ini nol pemakainya; lihat laporan Fase 3 EQ.
 import React from "react";
@@ -38,10 +42,15 @@ import {
 
 interface VerticalSliderProps {
   label: string;
-  value: number; // 0 - 1000 (sama seperti knob lama)
+  value: number; // 0 - maxValue (default 1000, sama seperti knob lama)
   onChange: (val: number) => void;
   color: string;
   disabled?: boolean;
+  // Batas atas rentang (default 1000). Master gain memakai 1.5.
+  maxValue?: number;
+  // Teks nilai di bawah slider. Default: persen (value/10), sama seperti
+  // knob lama. Master gain memakai `×${v.toFixed(2)}`.
+  formatValue?: (value: number) => string;
 }
 
 const TRACK_WIDTH = 30;
@@ -54,18 +63,20 @@ export const VerticalSlider = ({
   onChange,
   color,
   disabled,
+  maxValue = 1000,
+  formatValue,
 }: VerticalSliderProps) => {
   const { theme } = useTheme();
   const colors = theme.colors;
 
-  const translateY = useSharedValue(dspValueToY(value || 0));
+  const translateY = useSharedValue(dspValueToY(value || 0, DSP_SLIDER_HEIGHT, 0, maxValue));
 
   // Sync saat value prop berubah (mis. ganti preset / reset)
   React.useEffect(() => {
     if (!isNaN(value)) {
-      translateY.value = withSpring(dspValueToY(value));
+      translateY.value = withSpring(dspValueToY(value, DSP_SLIDER_HEIGHT, 0, maxValue));
     }
-  }, [value]);
+  }, [value, maxValue]);
 
   const gesture = Gesture.Pan()
     .enabled(!disabled)
@@ -80,7 +91,7 @@ export const VerticalSlider = ({
       if (nextY < 12) nextY = 12;
       if (nextY > DSP_SLIDER_HEIGHT - 12) nextY = DSP_SLIDER_HEIGHT - 12;
       translateY.value = nextY;
-      const newValue = dspYToValue(nextY, DSP_SLIDER_HEIGHT);
+      const newValue = dspYToValue(nextY, DSP_SLIDER_HEIGHT, 0, maxValue);
       runOnJS(onChange)(newValue);
     });
 
@@ -93,20 +104,24 @@ export const VerticalSlider = ({
   const animatedFillStyle = useAnimatedStyle(() => ({
     height: DSP_SLIDER_HEIGHT - translateY.value,
     backgroundColor: color,
-    opacity: interpolate(value || 0, [0, 1000], [0.2, 0.8]),
+    opacity: interpolate(value || 0, [0, maxValue], [0.2, 0.8]),
   }));
 
   const displayValue = !isNaN(value) ? Math.round(value / 10) : 0;
+  const displayText =
+    formatValue != null
+      ? formatValue(!isNaN(value) ? value : 0)
+      : `${displayValue}%`;
 
   // Aksesibilitas: pola yang sama dengan knob lama — screen reader
   // mengatur lewat aksi naik/turun (langkah 10%), bukan cuma drag.
   const handleAccessibilityAction = (event: {
     nativeEvent: { actionName: string };
   }) => {
-    const step = 100; // 10% dari rentang 0..1000
+    const step = maxValue / 10; // 10% dari rentang
     const next =
       event.nativeEvent.actionName === "increment"
-        ? Math.min(1000, (value || 0) + step)
+        ? Math.min(maxValue, (value || 0) + step)
         : Math.max(0, (value || 0) - step);
     onChange(next);
   };
@@ -115,8 +130,8 @@ export const VerticalSlider = ({
     <View
       style={[styles.container, { opacity: disabled ? 0.35 : 1 }]}
       accessibilityRole="adjustable"
-      accessibilityLabel={`${label} ${displayValue} persen`}
-      accessibilityValue={{ min: 0, max: 100, now: displayValue }}
+      accessibilityLabel={`${label} ${displayText}`}
+      accessibilityValue={{ min: 0, max: maxValue, now: value || 0 }}
       accessibilityState={{ disabled: !!disabled }}
       accessibilityActions={[
         { name: "increment", label: "Naikkan" },
@@ -175,14 +190,15 @@ export const VerticalSlider = ({
         </View>
       </GestureDetector>
 
-      {/* Nilai % di bawah — sama seperti readout knob lama. */}
+      {/* Nilai di bawah — default %, atau formatValue pemakai (mis. ×1.00
+          untuk master gain). */}
       <Text
         style={[
           styles.valueText,
           { color: disabled ? colors.text.tertiary : color },
         ]}
       >
-        {displayValue}%
+        {displayText}
       </Text>
     </View>
   );

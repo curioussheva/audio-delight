@@ -875,19 +875,20 @@ export default function EqualizerScreen() {
                   Nonaktif di mode ini — pindah ke DSP untuk menyetel.
                 </Text>
               )}
-              {/* SLIDER VERTIKAL BASS + PELEBAR STEREO — opsi B Fase 3
-                  (keputusan csheva 2026-11-18 08:08): dua knob diganti
-                  fader vertikal ala slider GAIN kanan Neutron, bahasa
-                  visual yang sama dengan fader band (track 160px, tick,
-                  fill, thumb kotak). Rentang nilai 0..1000 sama persis
+              {/* SLIDER VERTIKAL BASS + PELEBAR STEREO + MASTER GAIN —
+                  opsi B Fase 3 (keputusan csheva 2026-11-18 08:08): dua knob
+                  diganti fader vertikal ala slider GAIN kanan Neutron,
+                  bahasa visual yang sama dengan fader band (track 160px,
+                  tick, fill, thumb kotak). Rentang nilai 0..1000 sama persis
                   dengan knob lama dan dengan yang diterima Kotlin (bass
                   0..+12 dB, widener width 1.0..2.0), jadi tanpa konversi.
                   Tiap slider punya MiniSwitch enable sendiri di atasnya
                   (tanpa label teks — nama efek sudah di label slider).
-                  Main gain TIDAK ada di layar ini: `setMasterGain` hanya
-                  ada di antarmuka native + spec, nol pemanggil di `src/`
-                  (tidak ada kontrol gain master di store/hook) — opsi B
-                  hanya mencakup dua kontrol yang memang ada. */}
+                  Master gain MENYUSUL 2026-11-19: mesin native-nya sudah
+                  lengkap (setMasterGain -> GainNode), hanya belum ada
+                  kontrolnya. Slider ketiga, rentang 0..1.5 linear (1.0 =
+                  netral, tampil ×1.00), tanpa MiniSwitch — gain bukan efek
+                  yang bisa OFF; 0 = senyap. */}
               <View
                 style={[
                   styles.effectItem,
@@ -935,6 +936,17 @@ export default function EqualizerScreen() {
                       disabled={
                         !eq.isVirtualizerEnabled || eq.isDSPDisabled
                       }
+                    />
+                  </View>
+                  <View style={styles.sliderCol}>
+                    <VerticalSlider
+                      label="MASTER GAIN"
+                      value={eq.masterGain}
+                      onChange={eq.setMasterGain}
+                      color={masterColor}
+                      disabled={eq.isDSPDisabled}
+                      maxValue={1.5}
+                      formatValue={(v) => `×${v.toFixed(2)}`}
                     />
                   </View>
                 </View>
