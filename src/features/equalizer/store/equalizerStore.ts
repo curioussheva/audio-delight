@@ -60,7 +60,11 @@ const getCurrentSessionId = async (): Promise<number> => {
 // putusan csheva — logika restore-nya ditulis ulang di sini, file itu
 // tidak dikembalikan. Jeda 300 ms dari applyAllSettings lama TIDAK
 // ikut dibawa: jalur live ini tidak pernah memilikinya.)
-const applyAllEffectsToNative = async (state: any) => {
+// `trigger` dicetak di log "[DSP] Applied" supaya tes N4 bisa dibuktikan
+// dari logcat (follow-up logcat 06:25/06:52/08:06: "[DSP] Applied" muncul
+// 2×/5×/4× tanpa pemicu yang diketahui). Murni log — tanpa trigger pun
+// perilakunya sama.
+const applyAllEffectsToNative = async (state: any, trigger = "unknown") => {
   const {
     bands,
     isEQEnabled,
@@ -124,7 +128,7 @@ finalSessionId = sessionResult?.sessionId ?? 0;
       }
     }),
   );
-  console.log(`[DSP] Applied to Session: ${finalSessionId}`);
+  console.log(`[DSP] Applied to Session: ${finalSessionId} (trigger: ${trigger})`);
   return results.every(Boolean);
 };
 
@@ -250,7 +254,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
           set({ audioSessionId: sessionId, isInitialized: true });
 
           if (get().isEQEnabled && sessionId !== -1) {
-            await applyAllEffectsToNative(get());
+            await applyAllEffectsToNative(get(), "initialize");
           }
         } catch (error) {
           set({ isInitialized: true });
@@ -260,7 +264,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
       setAudioSessionId: (id: number) => {
         set({ audioSessionId: id });
         if (get().isEQEnabled && id !== -1) {
-          applyAllEffectsToNative(get());
+          applyAllEffectsToNative(get(), "setAudioSessionId");
         }
       },
 
@@ -272,7 +276,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
       setEQEnabled: async (enabled: boolean) => {
         set({ isEQEnabled: enabled });
         if (enabled && get().audioSessionId !== -1) {
-          await applyAllEffectsToNative(get());
+          await applyAllEffectsToNative(get(), "setEQEnabled");
         } else if (!enabled && NativeDSPModule?.releaseAllFX) {
           await NativeDSPModule.releaseAllFX();
         }
@@ -452,7 +456,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
           if (preset.reverb !== undefined)
             void get().setReverb(preset.reverb);
           if (get().isEQEnabled && get().audioSessionId !== -1) {
-            applyAllEffectsToNative(get());
+            applyAllEffectsToNative(get(), "applyPreset");
           }
         }
       },
@@ -500,7 +504,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
           reverbPreset: 0,
         });
         if (get().isEQEnabled && get().audioSessionId !== -1) {
-          await applyAllEffectsToNative(get());
+          await applyAllEffectsToNative(get(), "resetToDefault");
         }
       },
     }),
