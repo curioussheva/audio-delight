@@ -4,10 +4,10 @@
  * Regresi yang dikunci: `processItem` dulu menjalankan "Level 4" —
  * `OnlineMetadataService.getArtistEnrichment` per lagu (non-blocking) —
  * yang membanjiri log dengan 503 + unduhan gambar padahal toggle online
- * OFF sejak awal. Setelah revisi, satu-satunya jalur online adalah
- * [id].tsx (tap user). Test ini menjalankan worker dengan satu lagu
- * berartis nyata dan memastikan getArtistEnrichment TIDAK pernah
- * dipanggil, sementara penyimpanan lokal (updateMetadata) tetap jalan.
+ * OFF sejak awal. Setelah revisi, worker tidak lagi memanggil online.
+ * 2026-11-19: service online dicabut seluruhnya, jadi worker secara
+ * struktural tidak bisa memanggilnya lagi — mock/assert online dihapus;
+ * test ini mengunci perilaku lokal (penyimpanan lokal tetap jalan).
  */
 jest.mock("@/features/library/services/ScanQueue", () => ({
   ScanQueue: {
@@ -35,10 +35,6 @@ jest.mock("@/features/library/native/MediaStoreModule", () => ({
 jest.mock("@/features/audio/api/BitDepthVerifier", () => ({
   analyzeBitDepth: jest.fn(),
 }));
-jest.mock("@/features/library/services/OnlineMetadataService", () => ({
-  __esModule: true,
-  default: { getArtistEnrichment: jest.fn() },
-}));
 // L1: worker membaca .lrc berdampingan lewat lyricsSource — modul expo
 // di-mock (default: tidak ada file), test sidecar menimpa per-test.
 jest.mock("expo-file-system/legacy", () => ({
@@ -54,7 +50,6 @@ import { ScanQueue } from "@/features/library/services/ScanQueue";
 import MetadataExtractor from "@/features/library/api/metadata";
 import { LibraryScanner } from "@/features/library/api/scanner";
 import { useLibraryStore } from "@/features/library/store/libraryStore";
-import OnlineMetadataService from "@/features/library/services/OnlineMetadataService";
 import * as FileSystem from "expo-file-system/legacy";
 import * as MediaLibrary from "expo-media-library";
 
@@ -65,8 +60,6 @@ const getAssetMock = MediaLibrary.getAssetInfoAsync as jest.Mock;
 const shiftMock = ScanQueue.shift as jest.Mock;
 const extractMock = (MetadataExtractor as any).extract as jest.Mock;
 const updateMetadataMock = LibraryScanner.updateMetadata as jest.Mock;
-const getArtistEnrichmentMock =
-  OnlineMetadataService.getArtistEnrichment as jest.Mock;
 
 describe("I2-revisi (a) — enrichment lokal saja", () => {
   beforeEach(() => {
@@ -101,7 +94,6 @@ describe("I2-revisi (a) — enrichment lokal saja", () => {
     await MetadataEnricher.startBackgroundWorker();
 
     expect(updateMetadataMock).toHaveBeenCalled();
-    expect(getArtistEnrichmentMock).not.toHaveBeenCalled();
   });
 
   it("L1: .lrc berdampingan masuk ke lyrics_synced (tanpa online)", async () => {
@@ -118,7 +110,6 @@ describe("I2-revisi (a) — enrichment lokal saja", () => {
       "1",
       expect.objectContaining({ lyricsSynced: "[00:01.00]la" }),
     );
-    expect(getArtistEnrichmentMock).not.toHaveBeenCalled();
   });
 
   it("L2: lirik yang dihapus manual tidak dihidupkan lagi oleh worker", async () => {
