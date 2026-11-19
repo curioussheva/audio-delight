@@ -1319,6 +1319,15 @@ void EngineManager::setHrtfEnabled(
     );
 }
 
+void EngineManager::setEqEnabled(
+    bool enabled
+) {
+
+    mEngine.setEqEnabled(
+        enabled
+    );
+}
+
 // =====================================================
 // KOREKSI HEADPHONE (Fase D)
 // =====================================================

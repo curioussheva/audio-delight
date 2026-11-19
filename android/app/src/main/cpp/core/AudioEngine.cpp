@@ -495,6 +495,21 @@ void AudioEngine::setHrtfEnabled(
 }
 
 // =====================================================
+// MASTER EQ (P0-1, 2026-11-19)
+// =====================================================
+//
+// Sakelar master "Pemrosesan DSP" (tab EQ). Disimpan di AudioState dan
+// dibaca `AudioCallback::updateParameters()` tiap buffer, lalu diteruskan
+// AudioPipeline -> DSPChain -> DSPConfig.enabled (false = passthrough).
+
+void AudioEngine::setEqEnabled(
+    bool enabled
+) {
+
+    mState.setEqEnabled(enabled);
+}
+
+// =====================================================
 // EQ BAND
 // =====================================================
 

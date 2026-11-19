@@ -191,6 +191,13 @@ public:
         bool enabled
     );
 
+    // Master EQ (P0-1, 2026-11-19): sakelar master "Pemrosesan DSP".
+    // Disimpan di AudioState, dibaca tiap buffer oleh updateParameters(),
+    // diteruskan AudioPipeline -> DSPConfig.enabled.
+    void setEqEnabled(
+        bool enabled
+    );
+
     // =============================================
     // KOREKSI HEADPHONE (Fase D)
     // =============================================
