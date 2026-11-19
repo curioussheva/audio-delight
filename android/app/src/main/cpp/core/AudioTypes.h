@@ -197,6 +197,14 @@ struct DSPParameters {
     bool hrtfEnabled =
         false;
 
+    // Master EQ (P0-1, 2026-11-19): sakelar master "Pemrosesan DSP".
+    // true = rantai DSP jalan normal; false = DSPChain passthrough
+    // (DSPConfig.enabled = false). Default true = perilaku sekarang
+    // untuk jalur apa pun yang tidak pernah menyetelnya. Dibaca
+    // updateParameters() tiap buffer, sama seperti hrtfEnabled di atas.
+    bool eqEnabled =
+        true;
+
     // =============================================
     // OUTPUT
     // =============================================

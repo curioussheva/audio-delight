@@ -527,6 +527,36 @@ public:
     }
 
     // =============================================
+    // MASTER EQ (P0-1, 2026-11-19)
+    // =============================================
+    //
+    // Sakelar master "Pemrosesan DSP" di tab EQ. Boolean polos, tanpa
+    // clamp — pola yang sama dengan setHrtfEnabled di atas. Dibaca
+    // AudioCallback::updateParameters() tiap buffer, lalu diteruskan
+    // AudioPipeline -> DSPConfig.enabled: false = DSPChain passthrough
+    // bit-exact (EQ, bass, widener, reverb, gain, koreksi, HRTF semua
+    // diam — semuanya hidup di dalam rantai itu). Default true =
+    // perilaku sekarang. BUKAN DSPProcessingGate: gate itu kill-switch
+    // produksi milik Settings yang mematikan pipeline di SEMUA mode;
+    // flag ini hanya mematikan rantai DSP di mode DSP.
+    inline void setEqEnabled(
+        bool value
+    ) {
+
+        mEqEnabled.store(
+            value,
+            std::memory_order_release
+        );
+    }
+
+    inline bool eqEnabled() const {
+
+        return mEqEnabled.load(
+            std::memory_order_acquire
+        );
+    }
+
+    // =============================================
     // HEADPHONE CORRECTION
     // =============================================
     //
@@ -817,6 +847,11 @@ private:
     // HRTF (2026-11-19): virtual speaker ±30°, toggle sendiri.
     std::atomic<bool>
         mHrtfEnabled{false};
+
+    // Master EQ (P0-1, 2026-11-19): sakelar master "Pemrosesan DSP".
+    // Default true = rantai DSP jalan (perilaku sekarang).
+    std::atomic<bool>
+        mEqEnabled{true};
 
     // =============================================
     // HEADPHONE CORRECTION (Fase D)
