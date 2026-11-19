@@ -29,17 +29,59 @@ const clampBandGain = (g: number): number =>
 const clampPresetBands = (bands: any[]): any[] =>
   bands.map((b) => ({ ...b, gain: clampBandGain(b?.gain ?? 0) }));
 
-// Master gain (2026-11-19): rentang slider 0..1.5 linear (1.0 = netral,
-// 0 = senyap, 1.5 = +3.52 dB). Dipilih DI DALAM clamp native AudioState
-// (0..4, fallback 1.0) — bukan di batasnya: boost 1.5x masih bisa
-// ditahan limiter yang duduk sesudah GainNode di rantai, sementara 4x
-// (+12 dB) akan memaksa limiter bekerja terus-menerus. Slider tampil
-// ×1.00; nilai yang dikirim ke native = nilai linear yang sama (tanpa
-// konversi dB — GainNode mengalikan langsung). BUKAN bagian profil
-// preset: preset menyimpan kurva + bass/widener/reverb (D1), tapi gain
-// adalah level output global — preset tidak boleh menarik volume.
-const MASTER_GAIN_MIN = 0;
-const MASTER_GAIN_MAX = 1.5;
+// Master gain sebagai preamp skala dB (2026-11-19): slider −12..+12 dB
+// simetris (0 dB = netral, tengah slider), konvensi preamp umum
+// (Poweramp ±12 dB). Prinsip csheva: "ear as judge, setelan flexible
+// buat pro" — +12 dB di lagu keras akan memaksa limiter (ambang 0,98)
+// kerja terus-menerus; itu diterima (telinga yang menilai). Lantai
+// −12 dB = 0,25×, BUKAN senyap — slider kehilangan fungsi mute
+// (mute lewat volume).
+// Kontrak ke native TIDAK berubah: store + native tetap LINEAR —
+// konversi dB↔linear hanya di batas UI (equalizer.tsx). Nilai linear
+// dikirim ke native, dicatat di log [DSP] Applied (gain=), dan
+// dipersist persis seperti sebelumnya. Dipilih DI DALAM clamp native
+// AudioState (0..4, fallback 1.0). BUKAN bagian profil preset: preset
+// menyimpan kurva + bass/widener/reverb (D1), tapi gain adalah level
+// output global — preset tidak boleh menarik volume.
+export const MASTER_GAIN_DB_MIN = -12;
+export const MASTER_GAIN_DB_MAX = 12;
+export const MASTER_GAIN_DB_DEFAULT = 0;
+// Offset domain slider 0..24 -> dB −12..+12 (VerticalSlider hanya
+// mendukung min 0; lihat equalizer.tsx).
+export const MASTER_GAIN_DB_OFFSET = 12;
+export const MASTER_GAIN_DB_RANGE = 24;
+
+/** dB -> pengali linear (10^(dB/20)). */
+export const dbToGain = (db: number): number => Math.pow(10, db / 20);
+
+/** Pengali linear -> dB (20*log10(gain)). gain <= 0 -> -Infinity. */
+export const gainToDb = (gain: number): number =>
+  gain > 0 ? 20 * Math.log10(gain) : -Infinity;
+
+/** Clamp dB ke rentang preamp; non-finite -> default 0 dB. */
+export const clampMasterGainDb = (db: number): number =>
+  Math.min(
+    MASTER_GAIN_DB_MAX,
+    Math.max(
+      MASTER_GAIN_DB_MIN,
+      Number.isFinite(db) ? db : MASTER_GAIN_DB_DEFAULT,
+    ),
+  );
+
+/** Format dB buat slider: "0 dB", "+3.5 dB", "−12 dB" (satu desimal,
+ *  tanpa desimal bila bulat; non-finite di-clamp ke rentang). */
+export const formatMasterGainDb = (db: number): string => {
+  const clamped = clampMasterGainDb(db);
+  const rounded = Math.round(clamped * 10) / 10;
+  if (rounded === 0) return "0 dB";
+  const sign = rounded > 0 ? "+" : "−";
+  const abs = Math.abs(rounded);
+  const num = Number.isInteger(abs) ? String(abs) : abs.toFixed(1);
+  return `${sign}${num} dB`;
+};
+
+const MASTER_GAIN_MIN = dbToGain(MASTER_GAIN_DB_MIN);
+const MASTER_GAIN_MAX = dbToGain(MASTER_GAIN_DB_MAX);
 const MASTER_GAIN_DEFAULT = 1.0;
 const clampMasterGain = (g: number): number =>
   Math.min(
@@ -127,10 +169,11 @@ finalSessionId = sessionResult?.sessionId ?? 0;
   const reverb = isReverbEnabled
     ? Math.min(6, Math.max(0, reverbPreset ?? 0))
     : 0;
-  // Master gain: nilai linear 0..1.5 (1.0 netral). TIDAK digate sakelar
-  // efek — gain bukan efek yang bisa OFF; 0 = senyap. Yang di-gate
-  // hanya pengiriman ke native (isEQEnabled di atas): rantai DSP yang
-  // membawa GainNode hanya hidup di mode DSP saat EQ menyala.
+  // Master gain: nilai linear 0.251..3.98 (−12..+12 dB, 1.0 netral).
+  // TIDAK digate sakelar efek — gain bukan efek yang bisa OFF; lantai
+  // −12 dB = 0,25× (bukan senyap). Yang di-gate hanya pengiriman ke
+  // native (isEQEnabled di atas): rantai DSP yang membawa GainNode
+  // hanya hidup di mode DSP saat EQ menyala.
   const gain = clampMasterGain(masterGain ?? MASTER_GAIN_DEFAULT);
 
   const effects: Array<[string, () => Promise<unknown>]> = [
@@ -598,7 +641,10 @@ export const useEqualizerStore = create<EqualizerStore>()(
       // State tersimpan lama (version 0 / tanpa version) bisa membawa
       // bands + customPresets ±12; migrate jalan sekali untuk state itu.
       // Preset bawaan maks ±6 — tidak berubah.
-      version: 1,
+      // version 2 = master gain jadi preamp −12..+12 dB: nilai linear
+      // lama di luar [0.251, 3.98] di-clamp saat dibaca (0 lama = mute
+      // -> lantai −12 dB; 1.5 lama = +3.52 dB, tetap dalam rentang).
+      version: 2,
       migrate: (persistedState: any, _version: number) => {
         if (!persistedState || typeof persistedState !== "object") {
           return persistedState;
@@ -614,6 +660,9 @@ export const useEqualizerStore = create<EqualizerStore>()(
               ? clampPresetBands(p.bands)
               : p?.bands,
           }));
+        }
+        if (s.masterGain !== undefined) {
+          s.masterGain = clampMasterGain(s.masterGain);
         }
         return s;
       },

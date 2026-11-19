@@ -213,18 +213,22 @@ describe("Master gain (2026-11-19) — store + native + log [DSP] Applied", () =
     expect(native().setMasterGain).toHaveBeenCalledWith(1.25);
   });
 
-  it("clamp 0..1.5: 9 -> 1.5, -1 -> 0", async () => {
+  it("clamp −12..+12 dB: 9 -> ~3.98, -1 -> ~0.251", async () => {
     const store = loadStore();
     store.getState().setAudioSessionId(7);
     await store.getState().setEQEnabled(true);
 
     await store.getState().setMasterGain(9);
-    expect(store.getState().masterGain).toBe(1.5);
-    expect(native().setMasterGain).toHaveBeenLastCalledWith(1.5);
+    expect(store.getState().masterGain).toBeCloseTo(3.981, 3);
+    expect(native().setMasterGain).toHaveBeenLastCalledWith(
+      expect.closeTo(3.981, 3),
+    );
 
     await store.getState().setMasterGain(-1);
-    expect(store.getState().masterGain).toBe(0);
-    expect(native().setMasterGain).toHaveBeenLastCalledWith(0);
+    expect(store.getState().masterGain).toBeCloseTo(0.251, 3);
+    expect(native().setMasterGain).toHaveBeenLastCalledWith(
+      expect.closeTo(0.251, 3),
+    );
   });
 
   it("EQ mati -> native tidak dipanggil, tapi state tetap disimpan", async () => {
@@ -256,5 +260,70 @@ describe("Master gain (2026-11-19) — store + native + log [DSP] Applied", () =
     await store.getState().setMasterGain(0.5);
     await store.getState().resetToDefault();
     expect(store.getState().masterGain).toBe(1.0);
+  });
+});
+
+describe("Master gain skala dB (2026-11-19) — preamp −12..+12 dB", () => {
+  const helpers = () =>
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("@/features/equalizer/store/equalizerStore") as {
+      dbToGain: (db: number) => number;
+      gainToDb: (gain: number) => number;
+      formatMasterGainDb: (db: number) => string;
+      clampMasterGainDb: (db: number) => number;
+    };
+
+  it("dbToGain: 0 dB = 1×, +12 dB ≈ 3.98×, −12 dB ≈ 0.251×", () => {
+    const h = helpers();
+    expect(h.dbToGain(0)).toBe(1);
+    expect(h.dbToGain(12)).toBeCloseTo(3.981, 3);
+    expect(h.dbToGain(-12)).toBeCloseTo(0.251, 3);
+    expect(h.dbToGain(-6)).toBeCloseTo(0.501, 3);
+  });
+
+  it("gainToDb: 1× = 0 dB, 2× ≈ +6.02 dB, 0.5× ≈ −6.02 dB, 0 -> -Infinity", () => {
+    const h = helpers();
+    expect(h.gainToDb(1)).toBe(0);
+    expect(h.gainToDb(2)).toBeCloseTo(6.021, 3);
+    expect(h.gainToDb(0.5)).toBeCloseTo(-6.021, 3);
+    expect(h.gainToDb(0)).toBe(-Infinity);
+  });
+
+  it("round-trip: dbToGain(gainToDb(x)) ≈ x dan sebaliknya", () => {
+    const h = helpers();
+    expect(h.dbToGain(h.gainToDb(1.5))).toBeCloseTo(1.5, 10);
+    expect(h.gainToDb(h.dbToGain(-12))).toBeCloseTo(-12, 10);
+    expect(h.gainToDb(h.dbToGain(3.52))).toBeCloseTo(3.52, 10);
+  });
+
+  it("clampMasterGainDb: 20 -> 12, -30 -> -12, NaN -> 0", () => {
+    const h = helpers();
+    expect(h.clampMasterGainDb(20)).toBe(12);
+    expect(h.clampMasterGainDb(-30)).toBe(-12);
+    expect(h.clampMasterGainDb(NaN)).toBe(0);
+  });
+
+  it("formatMasterGainDb: 0 -> '0 dB', 3.52 -> '+3.5 dB', -12 -> '−12 dB'", () => {
+    const h = helpers();
+    expect(h.formatMasterGainDb(0)).toBe("0 dB");
+    expect(h.formatMasterGainDb(3.52)).toBe("+3.5 dB");
+    expect(h.formatMasterGainDb(-12)).toBe("−12 dB");
+    expect(h.formatMasterGainDb(12)).toBe("+12 dB");
+    expect(h.formatMasterGainDb(0.04)).toBe("0 dB");
+    expect(h.formatMasterGainDb(NaN)).toBe("0 dB");
+  });
+
+  it("migrate v2: nilai linear lama di-clamp (0 -> lantai −12 dB, 9 -> ~3.98, NaN -> 1.0)", () => {
+    const store = loadStore();
+    const migrate = store.persist.getOptions().migrate as (
+      s: any,
+      v: number,
+    ) => any;
+
+    expect(migrate({ masterGain: 0 }, 1).masterGain).toBeCloseTo(0.251, 3);
+    expect(migrate({ masterGain: 1.5 }, 1).masterGain).toBe(1.5);
+    expect(migrate({ masterGain: 9 }, 1).masterGain).toBeCloseTo(3.981, 3);
+    expect(migrate({ masterGain: NaN }, 1).masterGain).toBe(1.0);
+    expect(migrate({}, 1).masterGain).toBeUndefined();
   });
 });

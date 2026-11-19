@@ -43,6 +43,13 @@ import {
 import { FrequencyGraph } from "@/features/equalizer/components/Graph";
 import { EqualizerBand } from "@/features/equalizer/components/Band";
 import { VerticalSlider } from "@/features/equalizer/components/VerticalSlider";
+import {
+  dbToGain,
+  gainToDb,
+  formatMasterGainDb,
+  MASTER_GAIN_DB_MIN,
+  MASTER_GAIN_DB_RANGE,
+} from "@/features/equalizer/store/equalizerStore";
 import { PresetChip } from "@/features/equalizer/components/PresetChip";
 import { SavePresetModal } from "@/features/equalizer/components/SavePresetModal";
 import { HeadphoneSection } from "@/features/headphone/components/HeadphoneSection";
@@ -907,9 +914,14 @@ export default function EqualizerScreen() {
                   (tanpa label teks — nama efek sudah di label slider).
                   Master gain MENYUSUL 2026-11-19: mesin native-nya sudah
                   lengkap (setMasterGain -> GainNode), hanya belum ada
-                  kontrolnya. Slider ketiga, rentang 0..1.5 linear (1.0 =
-                  netral, tampil ×1.00), tanpa MiniSwitch — gain bukan efek
-                  yang bisa OFF; 0 = senyap. */}
+                  kontrolnya. Slider ketiga, PREAMP skala dB −12..+12
+                  simetris (0 dB = netral, tengah slider) sejak 2026-11-19
+                  — konvensi preamp umum (Poweramp ±12 dB). VerticalSlider
+                  hanya mendukung min 0, jadi domain slider 0..24 dipetakan
+                  ke dB (nilai − 12); konversi dB↔linear (10^(dB/20)) hanya
+                  di batas layar ini — store + native tetap linear.
+                  Tanpa MiniSwitch — gain bukan efek yang bisa OFF; lantai
+                  −12 dB = 0,25×, BUKAN senyap (mute lewat volume). */}
               <View
                 style={[
                   styles.effectItem,
@@ -962,12 +974,16 @@ export default function EqualizerScreen() {
                   <View style={styles.sliderCol}>
                     <VerticalSlider
                       label="MASTER GAIN"
-                      value={eq.masterGain}
-                      onChange={eq.setMasterGain}
+                      value={gainToDb(eq.masterGain) - MASTER_GAIN_DB_MIN}
+                      onChange={(v) =>
+                        eq.setMasterGain(dbToGain(v + MASTER_GAIN_DB_MIN))
+                      }
                       color={masterColor}
                       disabled={eq.isDSPDisabled}
-                      maxValue={1.5}
-                      formatValue={(v) => `×${v.toFixed(2)}`}
+                      maxValue={MASTER_GAIN_DB_RANGE}
+                      formatValue={(v) =>
+                        formatMasterGainDb(v + MASTER_GAIN_DB_MIN)
+                      }
                     />
                   </View>
                 </View>
