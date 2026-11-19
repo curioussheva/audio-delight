@@ -79,6 +79,7 @@ file(GLOB_RECURSE ALL_SRCS CONFIGURE_DEPENDS
   "dsp/*/*.cpp"
   "fft/*.cpp"
   "devices/*.cpp"
+  "usb/*.cpp"
   "visualizer/*.cpp"
   "resampler/*.cpp"
 )
@@ -90,6 +91,17 @@ list(APPEND ALL_SRCS
   jni/NativePlaybackModule.cpp
   jni/NativeVisualizerModule.cpp
   jni/NativeAnalyzerModule.cpp
+  jni/NativeUsbDirect.cpp
+)
+
+# USB Direct (2026-11-19): parser + streamer UAC2 tinggal di spike/
+# (sumber tunggal, dites harness host 71 cek) — JANGAN di-copy ke
+# cpp/ (duplikasi = drift). File-file ini yang ikut ter-compile ke app;
+# test_usb_direct.cpp TIDAK ikut (harness host saja).
+set(SPIKE_USB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../spike/usb-direct")
+list(APPEND ALL_SRCS
+  "${SPIKE_USB_DIR}/usb_direct.cpp"
+  "${SPIKE_USB_DIR}/usb_direct_stream.cpp"
 )
 
 set(EXCLUDED_SRCS "")
@@ -217,6 +229,7 @@ target_include_directories(pristine-audio PRIVATE
   dsp dsp/graph dsp/tone dsp/spatial dsp/dynamics
   dsp/filters dsp/convolution dsp/immersive dsp/headphone
   fft devices visualizer utils jni resampler
+  ${SPIKE_USB_DIR}
   ${AUTOLINKING_JNI_DIR}
 )
 

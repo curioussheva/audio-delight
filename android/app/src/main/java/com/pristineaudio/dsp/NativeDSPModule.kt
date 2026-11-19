@@ -1,11 +1,15 @@
 package com.pristineaudio.dsp
 
 import android.content.Context
+import android.hardware.usb.UsbDevice
 import android.media.AudioManager
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
 import com.pristineaudio.NativeLibrary
+import com.pristineaudio.usb.UsbDirectManager
 
 @ReactModule(name = NativeDSPModule.NAME)
 class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
@@ -17,6 +21,11 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     // `if (engineAvailable)` di bawah tidak berubah.
     private val engineAvailable: Boolean
         get() = NativeLibrary.ensureLoaded()
+
+    // USB Direct (2026-11-19): manager discovery + izin + fd. Dibuat di
+    // sini (bukan di JS) supaya satu-satunya pintu JS adalah dua method
+    // di bawah — dan supaya detach receiver hidup selama modul hidup.
+    private val usbDirectManager = UsbDirectManager(reactApplicationContext)
 
     companion object {
         const val NAME = "NativeDSPModule"
@@ -288,6 +297,109 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     fun setExclusiveMode(enabled: Boolean) {
         if (engineAvailable) toggleNativeExclusiveMode(enabled)
         else Log.w(TAG, "setExclusiveMode dibuang: engine native tidak tersedia")
+    }
+
+    // =============================================
+    // USB DIRECT — backend output kedua (UAC2)
+    // =============================================
+    //
+    // isUsbDirectAvailable(): ada perangkat audio USB tercolok. TRUE di
+    // sini BELUM berarti bisa dipakai — daftar Kotlin memuat UAC1 juga
+    // (CM108 csheva ikut terdaftar); verifikasi UAC2 yang sebenarnya
+    // terjadi di open() native (parser bcdADC), dan setUsbDirectEnabled
+    // mencoba perangkat berikut bila yang pertama ditolak.
+    //
+    // setUsbDirectEnabled(true): cari DAC -> minta izin -> open -> pindah
+    // output ke USB. Resolve false bila tidak ada DAC / izin ditolak /
+    // open gagal / start gagal — AAudio tetap jalan seperti sekarang.
+    // Resolve true hanya bila USB benar-benar streaming. Tidak ada UI
+    // toggle di ronde ini (menunggu bukti device); pemakaian lewat API
+    // modul ini.
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    fun isUsbDirectAvailable(): Boolean {
+        return try {
+            usbDirectManager.findAudioDevices().isNotEmpty()
+        } catch (e: Exception) {
+            Log.w(TAG, "isUsbDirectAvailable gagal: ${e.message}")
+            false
+        }
+    }
+
+    @ReactMethod
+    fun setUsbDirectEnabled(enabled: Boolean, promise: Promise) {
+        if (!enabled) {
+            try {
+                usbDirectManager.close()
+                promise.resolve(true)
+            } catch (e: Exception) {
+                promise.reject("USB_ERROR", e.message)
+            }
+            return
+        }
+        if (!engineAvailable) {
+            promise.resolve(false)
+            return
+        }
+        // open() blocking ringan (control transfer + ioctl) — JANGAN di
+        // main thread. Izin diminta di thread ini; callback izin jalan di
+        // main, lalu open() dilempar lagi ke thread latar.
+        Thread {
+            try {
+                val devices = usbDirectManager.findAudioDevices()
+                if (devices.isEmpty()) {
+                    resolveOnMain(promise, false)
+                    return@Thread
+                }
+                val rate = nativeGetActualSampleRate()
+                val wantedRate = if (rate > 0) rate else 48000
+                tryOpenDevices(devices, 0, wantedRate, promise)
+            } catch (e: Exception) {
+                promise.reject("USB_ERROR", e.message)
+            }
+        }.start()
+    }
+
+    // Coba perangkat satu per satu: UAC1 ditolak native (bcdADC), izin
+    // ditolak user, atau open gagal — lanjut ke perangkat berikut, bukan
+    // langsung menyerah (user bisa punya dongle UAC1 + DAC UAC2 bersamaan).
+    private fun tryOpenDevices(
+        devices: List<UsbDevice>,
+        index: Int,
+        wantedRate: Int,
+        promise: Promise,
+    ) {
+        if (index >= devices.size) {
+            resolveOnMain(promise, false)
+            return
+        }
+        val device = devices[index]
+        usbDirectManager.requestPermission(device) { granted ->
+            if (!granted) {
+                tryOpenDevices(devices, index + 1, wantedRate, promise)
+                return@requestPermission
+            }
+            Thread {
+                usbDirectManager.open(device, wantedRate) { err ->
+                    if (err != null) {
+                        Log.w(TAG, "USB Direct open gagal (${device.deviceName}): $err")
+                        tryOpenDevices(devices, index + 1, wantedRate, promise)
+                    } else if (!usbDirectManager.start()) {
+                        Log.w(TAG, "USB Direct start gagal (${device.deviceName})")
+                        usbDirectManager.close()
+                        tryOpenDevices(devices, index + 1, wantedRate, promise)
+                    } else {
+                        Log.i(TAG, "USB Direct aktif: ${device.deviceName} @ ${wantedRate} Hz")
+                        resolveOnMain(promise, true)
+                    }
+                }
+            }.start()
+        }
+    }
+
+    // Promise React Native diselesaikan dari main thread (resolve dari
+    // thread latar tidak dijamin di semua versi RN).
+    private fun resolveOnMain(promise: Promise, value: Boolean) {
+        Handler(Looper.getMainLooper()).post { promise.resolve(value) }
     }
 
     /**

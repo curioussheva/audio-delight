@@ -13,6 +13,7 @@
 #include "../core/Export.h"
 #include "../devices/AudioDeviceManager.h"
 #include "../playback/PlaybackController.h"
+#include "../usb/UsbDirectOutput.h"
 
 namespace pristine {
 
@@ -230,6 +231,42 @@ public:
         bool enabled
     );
 
+    // =============================================
+    // USB DIRECT — backend output kedua (UAC2)
+    // =============================================
+    //
+    // Backend paralel Oboe (lihat usb/UsbDirectOutput.h): DAC UAC2
+    // dibicarai langsung lewat usbdevfs, bypass AudioFlinger/AAudio.
+    // Dipakai HANYA bila DAC UAC2 terdeteksi + user mengaktifkan; gagal
+    // di titik mana pun -> AAudio tetap jalan seperti sekarang.
+    //
+    // Alur (Kotlin UsbDirectManager): usbDirectOpen(fd, rate) lalu
+    // usbDirectStart(). Stop: usbDirectStop() — menutup USB dan membuka
+    // ulang Oboe bila tadi berjalan (posisi dipertahankan, pola yang
+    // sama dengan reopenStreamPreservingPlayback).
+    //
+    // Semua method aman dipanggil dari thread JNI/Kotlin mana pun;
+    // usbDirectStop() TIDAK memegang mMutex saat reopen (B1).
+
+    // Buka perangkat dari fd UsbDeviceConnection. `error` berisi pesan
+    // bila gagal (mis. "bukan UAC2 (bcdADC=0x0100)"). Oboe tidak
+    // disentuh — gagal open = tetap AAudio.
+    bool usbDirectOpen(int fd, int32_t sampleRate, std::string& error);
+
+    // Pindah output ke USB (tutup Oboe dulu, lalu streaming). true bila
+    // sudah aktif / berhasil pindah; false bila belum open / start gagal
+    // (Oboe dibuka ulang bila tadi berjalan — tidak ada keadaan senyap).
+    bool usbDirectStart();
+
+    // Kembali ke Oboe (tutup USB). Idempotent; aman dipanggil saat USB
+    // tidak aktif (hanya menutup device bila ada yang terbuka).
+    void usbDirectStop();
+
+    bool isUsbDirectActive() const;
+
+    // Statistik streaming terakhir sebagai JSON (IsoStats + active).
+    std::string usbDirectStatsJson() const;
+
     // Status stream AKTUAL, bukan yang diminta. Lihat AudioEngine::isExclusive.
     bool isExclusive() const;
     int32_t actualSampleRate() const;
@@ -445,6 +482,20 @@ private:
     AudioEngine mEngine;
 
     playback::PlaybackController mPlayback;
+
+    // USB Direct (2026-11-19): backend output kedua. unique_ptr supaya
+    // device tidak dibangun sebelum ada fd (dan supaya close() di
+    // destruktor body bisa jalan sebelum member dihancurkan — urutan
+    // deklarasi: mUsbOutput sesudah mPlayback, jadi worker USB berhenti
+    // SEBELUM PlaybackController dihancurkan).
+    std::unique_ptr<usb::UsbDirectOutput> mUsbOutput;
+    std::atomic<bool> mUsbDirectActive{false};
+    // Apakah Oboe berjalan saat pindah ke USB (dibaca usbDirectStop
+    // untuk memutuskan reopen). Ditulis/dibaca di bawah mMutex.
+    bool mUsbDirectWasRunning = false;
+    // Laju saat device USB dibuka (ditulis usbDirectOpen di bawah
+    // mMutex, dibaca usbDirectStart) — laju render USB.
+    int32_t mUsbDirectRate = 0;
 };
 
 } // namespace pristine 

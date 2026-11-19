@@ -50,6 +50,20 @@ export interface Spec extends TurboModule {
   setBalance(balance: number): void;
   setExclusiveMode(enabled: boolean): void;
 
+  // USB Direct — backend output kedua (UAC2 via usbdevfs, 2026-11-19).
+  // isUsbDirectAvailable(): ada perangkat audio USB tercolok. TRUE di
+  // sini BELUM berarti bisa dipakai — daftar Kotlin memuat UAC1 juga
+  // (CM108 csheva ikut terdaftar); verifikasi UAC2 terjadi di open()
+  // native (parser bcdADC), dan setUsbDirectEnabled mencoba perangkat
+  // berikut bila yang pertama ditolak.
+  // setUsbDirectEnabled(true): cari DAC -> minta izin -> open -> pindah
+  // output ke USB; resolve false bila tidak ada DAC UAC2 / izin ditolak
+  // / open gagal — AAudio tetap jalan seperti sekarang. Resolve true
+  // hanya bila USB benar-benar streaming. Tidak ada UI toggle di ronde
+  // ini (menunggu bukti device).
+  isUsbDirectAvailable(): boolean;
+  setUsbDirectEnabled(enabled: boolean): Promise<boolean>;
+
   // 🔥 Status stream AKTUAL, bukan yang diminta.
   // AAudio bisa menolak exclusive → Oboe fallback ke shared secara diam-diam.
   // isExclusiveModeActive() false meski setExclusiveMode(true) dipanggil.

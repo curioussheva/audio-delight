@@ -42,6 +42,7 @@ PAIRS = {
     "audio/NativeDeviceModule.kt": "jni/NativeDeviceModule.cpp",
     "audio/NativePlaybackModule.kt": "jni/NativePlaybackModule.cpp",
     "audio/NativePristineAudio.kt": "jni/NativePristineAudio.cpp",
+    "usb/UsbDirectManager.kt": "jni/NativeUsbDirect.cpp",
 }
 
 

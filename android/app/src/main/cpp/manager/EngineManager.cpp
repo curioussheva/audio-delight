@@ -9,6 +9,7 @@
 #include "../core/RateSelection.h"
 
 #include <chrono>
+#include <cstdio>
 #include <system_error>
 
 namespace pristine {
@@ -93,6 +94,12 @@ EngineManager::EngineManager()
 // stop() lagi dari ~AudioEngine() aman.
 EngineManager::~EngineManager() {
 
+    // USB dulu (worker berhenti sebelum PlaybackController disentuh),
+    // baru Oboe — urutan yang sama dengan deklarasi member terbalik.
+    if (mUsbOutput) {
+        mUsbOutput->close();
+    }
+
     mEngine.stop();
 }
 
@@ -142,6 +149,15 @@ void EngineManager::start() {
     // atomik, tanpa lock. (Jalur play saat engine SUDAH berjalan tidak
     // lewat sini — di sana nativePlay memanggil cancelIdleClose()
     // langsung.)
+
+    // USB Direct aktif: worker USB yang me-render — JANGAN buka stream
+    // Oboe. Tanpa guard ini, tekan play saat USB aktif (engine "belum
+    // berjalan" menurut isRunning()) akan membuka Oboe DI SAMPING USB:
+    // dua suara + dua render thread. Play/decoder tetap jalan lewat
+    // PlaybackController; yang tidak dibuka hanya stream Oboe-nya.
+    if (mUsbDirectActive.load(std::memory_order_acquire)) {
+        return;
+    }
     cancelIdleClose();
 
     // unique_lock (bukan lock_guard): lock HARUS bisa dilepas sebelum
@@ -835,6 +851,12 @@ void EngineManager::runIdleClose(uint64_t generation) {
 
 void EngineManager::reopenStreamPreservingPlayback() {
 
+    // USB Direct aktif: Oboe BUKAN outputnya — jangan buka ulang stream
+    // (mis. worker recovery sesudah colok/cabut headset saat USB jalan).
+    if (mUsbDirectActive.load(std::memory_order_acquire)) {
+        return;
+    }
+
     // Guard reentrancy (M1): loadTrack() dipanggil DARI reopen() ini, dan
     // loadTrack() memicu trackLoadedListener → onTrackLoaded(). Sejak
     // PB6-B1 handler itu tidak lagi reopen sinkron, tapi flag ini tetap
@@ -1439,6 +1461,153 @@ void EngineManager::setExclusiveMode(
 
 bool EngineManager::isExclusive() const {
     return mEngine.isExclusive();
+}
+
+// =====================================================
+// USB DIRECT — backend output kedua (UAC2, 2026-11-19)
+// =====================================================
+//
+// Urutan yang aman (lihat usb/UsbDirectOutput.h): open() dulu (parser
+// menolak UAC1, laju tak didukung ditolak — Oboe tidak disentuh),
+// baru start() (tutup Oboe, lalu streaming). Gagal di titik mana pun
+// -> AAudio tetap jalan. Stop() menutup USB lalu membuka ulang Oboe
+// bila tadi berjalan (posisi dipertahankan via reopen).
+
+bool EngineManager::usbDirectOpen(
+    int fd,
+    int32_t sampleRate,
+    std::string& error
+) {
+    std::lock_guard<std::mutex> lock(mMutex);
+
+    if (mUsbDirectActive.load(std::memory_order_acquire)) {
+        error = "USB Direct sudah aktif";
+        return false;
+    }
+    if (!mUsbOutput) {
+        mUsbOutput = std::make_unique<usb::UsbDirectOutput>();
+    }
+
+    // Format tetap spike (stereo, 32-bit) — cocok untuk CX31993; bila
+    // DAC-nya berbeda, parser menolak format yang tidak cocok dan
+    // error-nya menyebut alasannya (bukan tebakan).
+    const int32_t rate = sampleRate > 0 ? sampleRate : 48000;
+    char err[256] = {};
+    if (!mUsbOutput->open(fd, static_cast<uint32_t>(rate),
+                          2, 4, 32, err, sizeof(err))) {
+        error = err[0] != '\0' ? err : "open USB Direct gagal (tanpa pesan)";
+        return false;
+    }
+    mUsbDirectRate = rate;
+    return true;
+}
+
+bool EngineManager::usbDirectStart() {
+    std::unique_lock<std::mutex> lock(mMutex);
+
+    if (mUsbDirectActive.load(std::memory_order_acquire)) {
+        return true;
+    }
+    if (!mUsbOutput || !mUsbOutput->isOpen()) {
+        return false;
+    }
+
+    const bool wasRunning = mEngine.isRunning();
+
+    // Laju render DULU: decoder me-resample ke laju ini (bukan laju
+    // stream Oboe lama). setStreamSampleRate = target decoder;
+    // setRenderSampleRate = laju yang diterima render().
+    const int32_t usbRate = mUsbDirectRate > 0 ? mUsbDirectRate : 48000;
+    mEngine.setRenderSampleRate(usbRate);
+    mPlayback.setStreamSampleRate(static_cast<uint32_t>(usbRate));
+
+    if (wasRunning) {
+        // Tutup Oboe SEBELUM worker USB mulai me-render (invarian satu
+        // render thread). stop() tidak menyentuh decoder/antrean/posisi
+        // — PlaybackController milik EngineManager, bukan engine — jadi
+        // render USB melanjutkan dari titik yang sama.
+        mEngine.stop();
+    }
+    mUsbDirectWasRunning = wasRunning;
+
+    // LEPAS lock sebelum startStreaming (pola B1): worker USB memanggil
+    // render tanpa mMutex, dan usbDirectStop()/close() dari thread lain
+    // tidak boleh tertahan di belakang lock ini.
+    lock.unlock();
+
+    auto render = [this](float* out, int32_t frames) {
+        mEngine.renderForUsbOutput(out, frames);
+    };
+    if (!mUsbOutput->start(std::move(render))) {
+        // Gagal start sesudah Oboe ditutup: jangan tinggalkan pengguna
+        // tanpa suara — buka ulang Oboe bila tadi berjalan.
+        if (wasRunning) {
+            reopenStreamPreservingPlayback();
+        }
+        return false;
+    }
+
+    mUsbDirectActive.store(true, std::memory_order_release);
+    return true;
+}
+
+void EngineManager::usbDirectStop() {
+    std::unique_lock<std::mutex> lock(mMutex);
+
+    if (!mUsbDirectActive.load(std::memory_order_acquire)) {
+        // Tidak aktif: pastikan device tertutup juga (mis. open() sukses
+        // tapi start() tidak pernah dipanggil, atau start() gagal).
+        if (mUsbOutput) {
+            mUsbOutput->close();
+        }
+        return;
+    }
+
+    const bool wasRunning = mUsbDirectWasRunning;
+    mUsbDirectActive.store(false, std::memory_order_release);
+    if (mUsbOutput) {
+        // close() menggabung worker USB (stopStreaming di dalamnya)
+        // sebelum melepas interface — render tidak lagi berjalan saat
+        // fungsi ini kembali.
+        mUsbOutput->close();
+    }
+
+    // LEPAS lock dulu: reopen mengambil mMutex sendiri (B1, lihat
+    // setExclusiveMode di atas).
+    lock.unlock();
+    if (wasRunning) {
+        reopenStreamPreservingPlayback();
+    }
+}
+
+bool EngineManager::isUsbDirectActive() const {
+    return mUsbDirectActive.load(std::memory_order_acquire);
+}
+
+std::string EngineManager::usbDirectStatsJson() const {
+    std::lock_guard<std::mutex> lock(mMutex);
+    if (!mUsbOutput) {
+        return "{\"active\":false}";
+    }
+    const usb::IsoStats st = mUsbOutput->stats();
+    char json[512];
+    std::snprintf(json, sizeof(json),
+                  "{\"active\":%s,\"urbsSubmitted\":%llu,\"urbsCompleted\":%llu,"
+                  "\"packetsCompleted\":%llu,\"bytesSent\":%llu,"
+                  "\"urbErrors\":%llu,\"shortPackets\":%llu,"
+                  "\"underruns\":%llu,\"framesSent\":%llu}",
+                  mUsbDirectActive.load(std::memory_order_acquire)
+                      ? "true"
+                      : "false",
+                  (unsigned long long)st.urbsSubmitted,
+                  (unsigned long long)st.urbsCompleted,
+                  (unsigned long long)st.packetsCompleted,
+                  (unsigned long long)st.bytesSent,
+                  (unsigned long long)st.urbErrors,
+                  (unsigned long long)st.shortPackets,
+                  (unsigned long long)st.underruns,
+                  (unsigned long long)st.framesSent);
+    return std::string(json);
 }
 
 int32_t EngineManager::actualSampleRate() const {

@@ -1,6 +1,21 @@
 # Spike: USB Direct — backend output kedua (UAC2 via usbdevfs)
 
 **Status: SPIKE — bukan kode produksi. 2026-11-16, HEAD cdafb831.**
+**INTEGRASI SELESAI 2026-11-19 (commit Butir 3, HEAD lihat log):**
+file-file spike ini tetap sumber tunggal (TIDAK di-copy) dan kini
+ter-compile ke app lewat `android/app/src/main/cpp/CMakeLists.txt`
+(`usb_direct.cpp` + `usb_direct_stream.cpp` eksplisit + spike dir di
+include path); wiring-nya di `cpp/usb/UsbDirectOutput.{h,cpp}`,
+`cpp/jni/NativeUsbDirect.cpp`, `manager/EngineManager.{h,cpp}`,
+`core/AudioCallback.{h,cpp}` (renderFrames) + `core/AudioEngine.{h,cpp}`,
+Kotlin `com.pristineaudio.usb.UsbDirectManager` + 2 method di
+`NativeDSPModule.kt` + spec `src/specs/NativeDSPModule.ts`. R6
+DIPUTUSKAN: backend kedua paralel Oboe. R7 SELESAI: sumber PCM = render
+engine (decoder), sine hanya di harness. Yang masih spike: DAC belum
+dibeli (bukti device menunggu), R2 (servo feedback) dan R4 masih
+berlaku, `usb_direct_jni.cpp` + `android/UsbDirectManager.kt` di sini
+hanya referensi (versi produksi ada di `cpp/jni/` + `java/com/
+pristineaudio/usb/`).
 
 Tujuan: buktikan apakah PristineAudio bisa bicara LANGSUNG ke DAC USB
 UAC2 lewat Linux `usbdevfs` isochronous transfer — bypass total
@@ -47,9 +62,12 @@ Backend (UsbDeviceIo)                                     │
 **Yang sengaja TIDAK ada di spike:**
 - Servo feedback endpoint async (kirim di laju nominal; drift jangka
   panjang belum ditangani — lihat Risiko).
-- Integrasi decoder FFmpeg (sumber PCM masih sine 1 kHz).
+- Integrasi decoder FFmpeg (sumber PCM masih sine 1 kHz) — SELESAI di
+  produksi 2026-11-19 (R7): render engine, bukan sine.
 - Integrasi ke engine Oboe / mode bit-perfect / UI. Jalur playback
   utama TIDAK DISENTUH — folder `spike/` di luar glob CMakeLists app.
+  — SELESAI 2026-11-19 (R6): backend kedua paralel, file spike tetap
+  sumber tunggal dan ikut ter-compile ke app (lihat Status di atas).
 
 ## File
 
@@ -58,7 +76,7 @@ Backend (UsbDeviceIo)                                     │
 | `usbdevfs.h` | Pembungkus `<linux/usbdevice_fs.h>` + fallback (nilai terverifikasi vs header host) |
 | `usb_direct.h/.cpp` | Parser deskriptor UAC2 + sine + packet sizing (murni) |
 | `usb_direct_stream.h/.cpp` | Setup perangkat + ring URB + backend nyata/mock |
-| `test_usb_direct.cpp` | Harness host (68 cek) |
+| `test_usb_direct.cpp` | Harness host (71 cek — 68 lama + 3 gate UAC2, 2026-11-19) |
 | `usb_direct_jni.cpp` | Jembatan JNI (CI-only, syntax-check stub) |
 | `android/UsbDirectManager.kt` | Discovery + permission + fd (referensi) |
 | `android/device_filter.xml` | Template (VID:PID diisi setelah DAC dibeli) |
@@ -181,8 +199,8 @@ cmake --build /tmp/usb-direct-build
 | R3 | CX31993 ternyata UAC1 / quasi-UAC2 (bukan UAC2 penuh) | Cek deskriptor dulu (`bcdADC`); bila UAC1, spike ini tidak berlaku |
 | R4 | Worker pakai REAPURBNDELAY + tidur 1 ms (polling), bukan REAPURB blocking | Sengaja di spike (hindari race stop). Produksi: blocking + DISCARDURB wakeup |
 | R5 | NDK tidak punya `<linux/usbdevice_fs.h>` | Fallback di `usbdevfs.h` sudah siap (nilai terverifikasi); konfirmasi saat CI pertama |
-| R6 | Integrasi ke engine: backend kedua paralel Oboe vs ganti output | Belum diputuskan — butuh desain (mode vs path; lihat MEMORY.md soal "USB Direct") |
-| R7 | Sumber PCM: sine → decoder FFmpeg | Follow-up: sambung `PcmSource` ke decoder yang ada |
+| R6 | Integrasi ke engine: backend kedua paralel Oboe vs ganti output | DIPUTUSKAN 2026-11-19: backend kedua paralel (lihat Status di atas) |
+| R7 | Sumber PCM: sine → decoder FFmpeg | SELESAI 2026-11-19: render engine (decoder) via AudioCallback::renderFrames |
 | R8 | Latensi/buffer: 4 URB × 8 paket × 125µs = 4 ms in flight | Cukup untuk spike; tuning (2–8 URB) setelah uji device |
 
 ## Langkah berikut (konkret, berurutan)
@@ -195,7 +213,9 @@ cmake --build /tmp/usb-direct-build
 3. **Build CI** — trigger build dev dengan spike ikut ter-compile
    sebagai target terpisah (tambah `add_subdirectory` ber-flag di
    CMakeLists app — BELUM dilakukan di spike ini); pastikan build app
-   default tidak berubah + JNI/Kotlin kompil.
+   default tidak berubah + JNI/Kotlin kompil. — SELESAI sebagian
+   2026-11-19: file spike ikut ter-compile ke app (bukan target
+   terpisah); kompilasi NDK + Kotlin menunggu CI (tidak ada di VM).
 4. **Tes device 1 (konektivitas)** — app spike: discovery → permission
    → open 48k → log `claim ok / SET_CUR ok`; cek `/proc/asound`
    (tidak ada card baru = driver kernel ter-detach).
@@ -204,9 +224,10 @@ cmake --build /tmp/usb-direct-build
 6. **Tes device 3 (bit-perfect)** — putar file test (chirp/sine yang
    diketahui) via decoder → rekam output DAC (bila ada alat) atau
    minimal verifikasi prosedur decent-player (laju DAC = laju sumber).
-7. **Follow-up** — servo feedback (R2), sumber decoder (R7), desain
-   integrasi backend kedua (R6), lalu putuskan: lanjut ke produksi
-   atau parkir.
+7. **Follow-up** — servo feedback (R2), sumber decoder (R7 — selesai),
+   desain integrasi backend kedua (R6 — selesai), lalu putuskan: lanjut
+   ke produksi atau parkir. Bukti device tetap menunggu DAC UAC2 +
+   build baru; toggle UI menyusul sesudah bukti device.
 
 ## Referensi
 

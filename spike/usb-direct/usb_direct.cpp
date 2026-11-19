@@ -42,6 +42,7 @@ constexpr uint8_t kSubAudioControl = 0x01;
 constexpr uint8_t kSubAudioStreaming = 0x02;
 
 constexpr uint8_t kAcClockSource = 0x0A;
+constexpr uint8_t kAcHeader = 0x01;
 constexpr uint8_t kAsGeneral = 0x01;
 constexpr uint8_t kAsFormatType = 0x02;
 constexpr uint8_t kFormatTypeI = 0x01;
@@ -98,6 +99,17 @@ ParseResult parseConfigDescriptor(const uint8_t* data, size_t len, uint32_t want
 
     uint8_t clockSourceId = 0;
 
+    // Gate UAC2 (integrasi 2026-11-19): bcdADC dari header AudioControl
+    // HARUS 0x0200. UAC1 (0x0100, mis. C-Media CM108 0d8c:000c) memakai
+    // layout deskriptor berbeda (bNrChannels AS_GENERAL di offset 7,
+    // laju di deskriptor) sehingga parser ini — yang membaca layout
+    // UAC2 (offset 10, laju dari clock source) — akan salah baca bila
+    // dibiarkan lolos. Perangkat UAC1 DITOLAK di sini dengan pesan yang
+    // menyebut versinya, supaya jalur USB Direct tidak pernah mengklaim
+    // DAC UAC1: pemanggil jatuh kembali ke AAudio.
+    bool sawAcHeader = false;
+    uint16_t bcdADC = 0;
+
     StreamChoice best;
     int bestSyncScore = -1;
     int altSeen = 0;
@@ -134,6 +146,13 @@ ParseResult parseConfigDescriptor(const uint8_t* data, size_t len, uint32_t want
                 if (bLength < 3) break;
                 const uint8_t subtype = d[2];
                 if (!curIsAudio) break;
+                if (curSubclass == kSubAudioControl && subtype == kAcHeader) {
+                    // HEADER AudioControl: bcdADC le16 di offset 3.
+                    if (bLength >= 5) {
+                        sawAcHeader = true;
+                        bcdADC = readLe16(d + 3);
+                    }
+                }
                 if (curSubclass == kSubAudioControl && subtype == kAcClockSource) {
                     // CLOCK_SOURCE: bClockID di offset 3.
                     if (bLength >= 8 && clockSourceId == 0) {
@@ -210,6 +229,19 @@ ParseResult parseConfigDescriptor(const uint8_t* data, size_t len, uint32_t want
     }
 
     result.altSettingsSeen = altSeen;
+    if (!sawAcHeader) {
+        setError(result.error, sizeof(result.error),
+                 "tidak ada header AudioControl — bukan perangkat UAC2?");
+        return result;
+    }
+    if (bcdADC != 0x0200) {
+        char msg[128];
+        std::snprintf(msg, sizeof(msg),
+                      "bukan UAC2 (bcdADC=0x%04x) — UAC1 tidak didukung",
+                      bcdADC);
+        setError(result.error, sizeof(result.error), msg);
+        return result;
+    }
     if (!best.valid()) {
         if (altSeen == 0) {
             setError(result.error, sizeof(result.error),

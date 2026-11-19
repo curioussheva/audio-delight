@@ -105,13 +105,6 @@ AudioCallback::onAudioReady(
     void* audioData,
     int32_t numFrames
 ) {
-    // (C-FTZ, 2026-11-12): set FZ di FPCR sekali per thread callback —
-    // flush-to-zero denormal (lihat enableFlushToZeroOnce di atas). Harus
-    // di baris pertama: sebelum FP apa pun di callback ini, dan sebelum
-    // early-return numFrames <= 0 — thread baru sesudah reopen tetap
-    // ter-setup di callback pertamanya.
-    enableFlushToZeroOnce();
-
     auto* output = static_cast<float*>(audioData);
 
     // Guard (fix 2026-11-10, m1): JANGAN memset dengan numFrames <= 0 —
@@ -119,6 +112,53 @@ AudioCallback::onAudioReady(
     // jauh melewati buffer (UB).
     if (numFrames <= 0) {
         return oboe::DataCallbackResult::Continue;
+    }
+
+    // Waktu mulai callback, untuk metrik (M5). steady_clock di audio thread:
+    // tanpa alokasi, tanpa lock, hanya atomic store di akhir.
+    const auto callbackStart = std::chrono::steady_clock::now();
+
+    renderFrames(output, numFrames);
+
+    updateCallbackMetrics(stream, numFrames, callbackStart);
+    return oboe::DataCallbackResult::Continue;
+}
+
+// =====================================================
+// RENDER FRAMES (dipakai Oboe DAN USB Direct)
+// =====================================================
+//
+// Seluruh isi onAudioReady lama KECUALI metrik stream Oboe —
+// diekstrak verbatim supaya backend output kedua (USB Direct, worker
+// IsoStreamer) bisa me-render frame yang SAMA PERSIS tanpa menduplikasi
+// jalur render + pipeline. Satu-satunya perbedaan: pemanggil.
+//   - Oboe: onAudioReady() di atas (thread callback AAudio/OpenSLES).
+//   - USB: UsbDirectOutput memanggil AudioEngine::renderForUsbOutput()
+//     dari worker thread-nya (lihat usb/UsbDirectOutput.h).
+//
+// INVARIAN SATU RENDER THREAD: hanya SATU backend yang me-render dalam
+// satu waktu — EngineManager menghentikan stream Oboe SEBELUM memulai
+// streaming USB, dan sebaliknya. PlaybackController::render() tidak
+// thread-safe terhadap dua pemanggil bersamaan (antrean PCM + clock).
+//
+// FZ (C-FTZ) tinggal di sini (bukan di onAudioReady): thread worker USB
+// adalah thread BERBEDA dan butuh setup FPCR-nya sendiri; guard
+// thread_local di enableFlushToZeroOnce() membuat pemanggilan kedua
+// dari thread yang sama jadi no-op.
+
+void AudioCallback::renderFrames(
+    float* output,
+    int32_t numFrames
+) noexcept {
+    // (C-FTZ, 2026-11-12): set FZ di FPCR sekali per thread — flush-to-zero
+    // denormal (lihat enableFlushToZeroOnce di atas). Harus di baris
+    // pertama: sebelum FP apa pun, dan sebelum early-return numFrames <= 0
+    // — thread baru sesudah reopen tetap ter-setup di callback pertamanya.
+    enableFlushToZeroOnce();
+
+    // Guard (fix 2026-11-10, m1): lihat onAudioReady di atas.
+    if (output == nullptr || numFrames <= 0) {
+        return;
     }
     // (C-C2, 2026-11-12): guard lama `numFrames > kMaxFramesPerCallback`
     // membisukan SELURUH buffer (memset + return) tanpa log/metrik.
@@ -129,11 +169,7 @@ AudioCallback::onAudioReady(
     // zero-fill seluruh buffer yang diminta (clearing_/paused/shortfall —
     // PlaybackController.cpp:704,725,900).
     // (C-FALLBACK, 2026-11-12): jalur fallback AudioBufferController
-    // dihapus — lihat catatan di akhir onAudioReady.
-
-    // Waktu mulai callback, untuk metrik (M5). steady_clock di audio thread:
-    // tanpa alokasi, tanpa lock, hanya atomic store di akhir.
-    const auto callbackStart = std::chrono::steady_clock::now();
+    // dihapus — lihat catatan di akhir renderFrames.
 
     // =============================================
     // Jika PlaybackController tersedia, gunakan sebagai sumber audio
@@ -192,8 +228,7 @@ AudioCallback::onAudioReady(
             feedVisualizer(output, numFrames);
         }
 
-        updateCallbackMetrics(stream, numFrames, callbackStart);
-        return oboe::DataCallbackResult::Continue;
+        return;
     }
 
     // =============================================
@@ -217,9 +252,6 @@ AudioCallback::onAudioReady(
     );
     mMetrics.recordUnderrun();
     mMetrics.updateBufferedSamples(0);
-
-    updateCallbackMetrics(stream, numFrames, callbackStart);
-    return oboe::DataCallbackResult::Continue;
 }
 
 // =====================================================

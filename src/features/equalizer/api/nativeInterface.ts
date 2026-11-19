@@ -17,6 +17,12 @@ export interface NativeDSPInterface {
   setBalance(balance: number): void;
   setExclusiveMode(enabled: boolean): void;
 
+  // USB Direct — backend output kedua (UAC2). `?.()` di pemakai supaya
+  // JS lama tetap jalan lawan APK lama (tanpa metode ini, tampilkan
+  // "tidak tersedia", bukan menebak). Lihat spec untuk kontraknya.
+  isUsbDirectAvailable(): boolean;
+  setUsbDirectEnabled(enabled: boolean): Promise<boolean>;
+
   // Status stream aktual — AAudio bisa tolak exclusive, fallback diam-diam.
   isExclusiveModeActive(): boolean;
   getActualSampleRate(): number;

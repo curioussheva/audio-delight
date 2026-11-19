@@ -119,6 +119,26 @@ public:
     );
 
     // =============================================
+    // RENDER UNTUK BACKEND OUTPUT KEDUA (USB Direct)
+    // =============================================
+    //
+    // renderForUsbOutput() = AudioCallback::renderFrames() — frame yang
+    // SAMA PERSIS dengan yang dikirim ke Oboe, hanya pemanggilnya worker
+    // thread USB (lihat usb/UsbDirectOutput.h). Dipanggil HANYA saat
+    // stream Oboe berhenti (invarian satu render thread, EngineManager).
+    // setRenderSampleRate() menyetel laju render (decoder me-resample ke
+    // laju ini); dipanggil EngineManager saat pindah backend, dan
+    // start() mengembalikannya ke laju stream saat kembali ke Oboe.
+    void renderForUsbOutput(
+        float* out,
+        int32_t numFrames
+    );
+
+    void setRenderSampleRate(
+        int32_t sampleRate
+    );
+
+    // =============================================
     // MODE
     // =============================================
 

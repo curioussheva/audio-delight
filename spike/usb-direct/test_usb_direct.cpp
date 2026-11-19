@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -155,6 +156,23 @@ int main() {
         bad[1] = 0x99;  // bukan config descriptor
         check("tolak bDescriptorType salah",
               !parseConfigDescriptor(bad.data(), bad.size(), 48000, 2, 4, 32).ok);
+    }
+    {
+        // Gate UAC2 (integrasi 2026-11-19): bcdADC header AudioControl
+        // harus 0x0200. Header ada di offset 18..26 (bcdADC LE di 21..22).
+        auto blob = buildBlob();
+        blob[21] = 0x00;
+        blob[22] = 0x01;  // 0x0200 -> 0x0100 (UAC1, mis. CM108)
+        const ParseResult r1 =
+            parseConfigDescriptor(blob.data(), blob.size(), 48000, 2, 4, 32);
+        check("tolak UAC1 (bcdADC 0x0100)", !r1.ok);
+        check("pesan menyebut bcdADC 0x0100",
+              std::string(r1.error).find("0x0100") != std::string::npos);
+        // Tanpa header AC sama sekali (bType header diganti).
+        auto blob2 = buildBlob();
+        blob2[19] = 0x99;
+        check("tolak tanpa header AudioControl",
+              !parseConfigDescriptor(blob2.data(), blob2.size(), 48000, 2, 4, 32).ok);
     }
 
     std::printf("== packet sizing ==\n");

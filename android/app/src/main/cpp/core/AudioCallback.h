@@ -49,6 +49,22 @@ public:
     ) override;
 
     // =============================================
+    // RENDER FRAMES — dipakai Oboe DAN USB Direct
+    // =============================================
+    //
+    // Isi onAudioReady tanpa metrik stream Oboe: render dari
+    // PlaybackController + pipeline + visualizer + sanitasi. USB Direct
+    // memanggil ini dari worker thread-nya lewat
+    // AudioEngine::renderForUsbOutput() — lihat komentar di
+    // AudioCallback.cpp. Hanya SATU backend me-render dalam satu waktu
+    // (EngineManager menjaminnya); jangan panggil dari dua thread
+    // bersamaan.
+    void renderFrames(
+        float* out,
+        int32_t numFrames
+    ) noexcept;
+
+    // =============================================
     // PLAYBACK SOURCE
     // =============================================
 

@@ -327,6 +327,25 @@ void AudioEngine::setPlaybackController(
     mCallback.setPlaybackController(controller);
 }
 
+// =====================================================
+// RENDER UNTUK BACKEND OUTPUT KEDUA (USB Direct)
+// =====================================================
+
+void AudioEngine::renderForUsbOutput(
+    float* out,
+    int32_t numFrames
+) {
+
+    mCallback.renderFrames(out, numFrames);
+}
+
+void AudioEngine::setRenderSampleRate(
+    int32_t sampleRate
+) {
+
+    mCallback.setSampleRate(sampleRate);
+}
+
 // (pushData dihapus 2026-11-12, C-FALLBACK: 0 pemanggil di seluruh
 // cpp/jni/Kotlin; jalur fallback AudioBufferController/RingBuffer dihapus.)
 
