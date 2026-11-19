@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { View, StyleSheet, Text } from "react-native";
 
 import {
@@ -58,17 +58,19 @@ interface Props {
    * Dipanggil di JS thread; pemanggil yang menjaga klem/guard DSP.
    */
   onBandChange?: (index: number, gain: number) => void;
+  /**
+   * Boost yang TIDAK terlihat di kurva tapi ikut menaikkan puncak akhir:
+   * bass boost (low-shelf 100 Hz, 0..+12 dB) dan master gain
+   * (−12..+12 dB). Keduanya ditambahkan ke puncak kurva untuk
+   * peringatan clip — sebelumnya pill hanya menghitung kurva, jadi
+   * bass +12 dB + gain +12 dB bisa clip tanpa peringatan.
+   */
+  bassBoostDb?: number;
+  masterGainDb?: number;
 }
 
 // Tinggi strip label Hz di bawah canvas.
 const HZ_STRIP = 16;
-
-// DIAGNOSTIK SEMENTARA — bisa dicabut (E1, 2026-11-19; lihat
-// followup-b2cde-report.md butir E): penghitung mount FrequencyGraph.
-// Surface Skia 942x385 tercatat dibuat 8x di jendela toggle 14:54-14:56;
-// log ini membuktikan apakah itu mount ulang React (bila 0 mount ulang
-// selama 8 kreasi surface -> pemicu murni native). Tanpa ubah perilaku.
-let frequencyGraphMountCount = 0;
 
 export const FrequencyGraph: React.FC<Props> = ({
   bands,
@@ -77,22 +79,10 @@ export const FrequencyGraph: React.FC<Props> = ({
   height = 120,
   disabled,
   onBandChange,
+  bassBoostDb = 0,
+  masterGainDb = 0,
 }) => {
   const { theme } = useTheme();
-
-  // DIAGNOSTIK SEMENTARA — bisa dicabut (E1, 2026-11-19): log mount/unmount
-  // FrequencyGraph. Cara baca di logcat: tiap toggle DSP, hitung baris
-  // "[FrequencyGraph-DIAG] mount #N" vs kreasi surface Skia 942x385.
-  // 0 mount ulang + surface tetap tercipta = pemicu murni native.
-  // Catatan: StrictMode (dev) bisa me-mount 2x — hitung mount NETTO.
-  useEffect(() => {
-    frequencyGraphMountCount += 1;
-    const mountId = frequencyGraphMountCount;
-    console.log(`[FrequencyGraph-DIAG] mount #${mountId}`);
-    return () => {
-      console.log(`[FrequencyGraph-DIAG] unmount #${mountId}`);
-    };
-  }, []);
 
   // Dimensi & Skala Konstan
   const midY = height / 2;
@@ -309,8 +299,21 @@ export const FrequencyGraph: React.FC<Props> = ({
       ? width / (currentBands.length - 1)
       : width;
 
+  // Puncak akhir yang jujur: puncak kurva + bass boost + master gain.
+  // Bass dan gain TIDAK tergambar di kurva (bass = shelf, gain =
+  // uniform), tapi keduanya menaikkan level yang keluar — pill clip
+  // harus menghitungnya. Overlay kuning/merah di canvas tetap
+  // mengikuti kurva saja (lihat komentar di sana).
+  const effectiveMaxGain = maxGain + bassBoostDb + masterGainDb;
+
   return (
     <View
+      accessibilityRole="image"
+      accessibilityLabel={
+        effectiveMaxGain > 0
+          ? `Kurva EQ. Boost maksimum ${formatBoostDb(effectiveMaxGain)} — bisa clip di lagu keras.${disabled ? " Tidak aktif (bypass)." : " Buka MIXER untuk menyetel tiap band."}`
+          : `Kurva EQ. Tidak ada boost.${disabled ? " Tidak aktif (bypass)." : " Buka MIXER untuk menyetel tiap band."}`
+      }
       style={[
         styles.container,
         {
@@ -406,21 +409,23 @@ export const FrequencyGraph: React.FC<Props> = ({
       </GestureDetector>
 
       {/* Peringatan boost: gain di atas 0 dB BELUM tentu clip (tergantung
-          level sinyal lagu) — makanya teksnya "bisa clip", bukan "clip". */}
-      {maxGain > 0 && (
+          level sinyal lagu) — makanya teksnya "bisa clip", bukan "clip".
+          Puncak yang dinilai = kurva + bass boost + master gain; pill
+          disembunyikan saat bypass (tidak ada yang diterapkan). */}
+      {effectiveMaxGain > 0 && !disabled && (
         <View style={styles.warnPill} pointerEvents="none">
           <Text
             style={[
               styles.warnText,
               {
                 color:
-                  maxGain > BOOST_WARN_DB
+                  effectiveMaxGain > BOOST_WARN_DB
                     ? GRAPH_CLIP_RED
                     : GRAPH_CLIP_YELLOW,
               },
             ]}
           >
-            Boost {formatBoostDb(maxGain)} — bisa clip di lagu keras
+            Boost {formatBoostDb(effectiveMaxGain)} — bisa clip di lagu keras
           </Text>
         </View>
       )}
