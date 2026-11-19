@@ -307,6 +307,7 @@ export const HeadphoneSection: React.FC<Props> = ({ accent, disabled }) => {
       </Text>
 
       <TextInput
+        accessibilityLabel="Cari preset bawaan"
         value={builtinQuery}
         onChangeText={setBuiltinQuery}
         placeholder="Cari IEM… (mis. Chu, Aria, Zero)"
@@ -496,6 +497,7 @@ export const HeadphoneSection: React.FC<Props> = ({ accent, disabled }) => {
             </Text>
 
             <TextInput
+              accessibilityLabel="Nama preset yang diimpor"
               value={importName}
               onChangeText={setImportName}
               placeholder="Nama (mis. Moondrop Chu)"
@@ -507,6 +509,7 @@ export const HeadphoneSection: React.FC<Props> = ({ accent, disabled }) => {
             />
 
             <TextInput
+              accessibilityLabel="Teks preset AutoEq yang diimpor"
               value={importText}
               onChangeText={setImportText}
               placeholder={
