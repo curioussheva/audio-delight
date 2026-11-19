@@ -27,6 +27,7 @@ import {
   Play,
   Music,
   AlertCircle,
+  Database,
   Info,
   Disc,
   Folder,
@@ -41,8 +42,17 @@ import { pickReadable, accentOn, AA_NORMAL } from "@/shared/utils/contrast";
 import { useLibraryStore } from "@/features/library/store/libraryStore";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { LibraryScanner } from "@/features/library/api/scanner";
+import OnlineMetadataService from "@/features/library/services/OnlineMetadataService";
+import { MetadataSyncModal } from "@/features/library/components/MetadataSyncModal";
 import QualityBadge from "@/shared/components/ui/QualityBadge";
 import { Song, formatDuration, formatFileSize } from "@/shared/types/audio";
+import {
+  missingMetadataFields,
+  isFieldMissing,
+  fillEmptyFields,
+  FILLABLE_FIELD_LABELS,
+  type FillableField,
+} from "@/features/library/utils/metadataCompleteness";
 // L2: menu Lirik — logika murni status/parse/penanda manual + baris
 // lirik dari DB untuk pratinjau & player store.
 import {
@@ -55,6 +65,15 @@ import {
 import { songLyricsToLines } from "@/features/library/services/lyricsSource";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+interface AppliedMeta {
+  title?: string;
+  artist?: string;
+  album?: string;
+  year?: string;
+  label?: string;
+  releaseId?: string;
+}
 
 interface EditFormData {
   title: string;
@@ -207,11 +226,13 @@ export default function SongDetailScreen() {
   // (Fase 2) — menggantikan Alert.alert di layar ini.
   const showToast = useToastStore((s) => s.showToast);
 
+  const [syncModalVisible, setSyncModalVisible] = useState(false);
   // L2: menu Lirik — editor tempel + dialog hapus.
   const [lyricsEditorVisible, setLyricsEditorVisible] = useState(false);
   const [lyricsDraft, setLyricsDraft] = useState("");
   const [isLyricsBusy, setIsLyricsBusy] = useState(false);
   const [deleteLyricsVisible, setDeleteLyricsVisible] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   // U-P1-21: retry memuat ulang library dari SQLite saat lagu tidak
@@ -222,6 +243,18 @@ export default function SongDetailScreen() {
     () => tracks?.find((t) => t.id.toString() === id),
     [tracks, id],
   );
+
+  // U1: field mana yang masih kosong — penanda "data belum lengkap",
+  // badge tombol sync, dan pratinjau modal. Placeholder "Unknown
+  // Artist/Album" dihitung kosong (lihat metadataCompleteness.ts).
+  const missingFields: FillableField[] = useMemo(
+    () => (song ? missingMetadataFields(song) : []),
+    [song],
+  );
+  const missingCount = missingFields.length;
+  const missingLabels = missingFields
+    .map((f) => FILLABLE_FIELD_LABELS[f])
+    .join(", ");
 
   // L2: status lirik dari DB — synced (.lrc) menang atas polos, sama
   // seperti player (songLyricsToLines). Dipakai seksi LIRIK.
@@ -318,6 +351,62 @@ export default function SongDetailScreen() {
       console.warn("[SongDetail] Retry load failed:", e);
     } finally {
       setIsRetrying(false);
+    }
+  };
+
+  const handleApplyMetadata = async (newMeta: AppliedMeta) => {
+    if (!song) return;
+    setIsUpdating(true);
+
+    try {
+      const artistName = newMeta.artist?.trim() || song.artist;
+      const enrichment =
+        await OnlineMetadataService.getArtistEnrichment(artistName);
+
+      // U1: MusicBrainz = "sapu bersih" — isi YANG KOSONG saja. Online
+      // hanya mengisi field lokal yang kosong (placeholder "Unknown
+      // Artist/Album" dihitung kosong); field lokal yang sudah terisi
+      // tidak pernah ada di payload, jadi tidak tertimpa. Cover diisi
+      // hanya bila artwork lokal kosong; foto/bio artis juga begitu.
+      // Tahun non-numerik dari online diabaikan (lihat fillEmptyFields).
+      const filled = fillEmptyFields(song, {
+        title: newMeta.title,
+        artist: newMeta.artist,
+        album: newMeta.album,
+        year: newMeta.year,
+        label: newMeta.label,
+        artwork: newMeta.releaseId
+          ? OnlineMetadataService.getCoverArtUrl(newMeta.releaseId)
+          : undefined,
+        artistImageUrl: enrichment.imageUrl,
+        artistBio: enrichment.bio,
+      });
+
+      const updatedData: Partial<Song> = {
+        ...filled,
+        isEnriched: true,
+        lastEnrichedAt: enrichment.lastUpdated || Date.now(),
+      };
+
+      await LibraryScanner.updateMetadata(song.id, updatedData, {
+        // I3 (G2): tandai field yang diterapkan dari MusicBrainz —
+        // rescan tidak boleh menimpanya. updateMetadata hanya menandai
+        // field yang ada di payload, dan payload U1 hanya berisi field
+        // yang benar-benar diisi — jadi yang ditandai = yang diisi.
+        markEdited: true,
+      });
+      updateTrackInStore(song.id, updatedData);
+
+      setSyncModalVisible(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // FASE 4: lengkapi dari MusicBrainz kini ber-toast sukses (dulu
+      // hanya haptic + modal tertutup).
+      showToast("Metadata dilengkapi dari MusicBrainz.", "success");
+    } catch (error) {
+      console.error("[SongDetail] Failed to apply metadata:", error);
+      showToast("Terjadi kesalahan saat menyimpan metadata.", "error");
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -787,6 +876,17 @@ export default function SongDetailScreen() {
                 </TouchableOpacity>
               )}
               <TouchableOpacity
+                onPress={() => setSyncModalVisible(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Sinkronkan metadata"
+                style={[
+                  styles.iconBtn,
+                  { backgroundColor: `${colors.primary[500]}15` },
+                ]}
+              >
+                <Database size={22} color={colors.primary[500]} />
+              </TouchableOpacity>
+              <TouchableOpacity
                 onPress={handleToggleFavorite}
                 style={styles.iconBtn}
                 accessibilityRole="button"
@@ -831,13 +931,11 @@ export default function SongDetailScreen() {
             numberOfLines={2}
           >
             {/* U1: judul kosong tampil "-" (konsisten dengan baris detail). */}
-            {!song.title?.trim() ? "-" : song.title}
+            {isFieldMissing(song, "title") ? "-" : song.title}
           </Text>
           <Text style={[styles.artist, { color: colors.text.secondary }]}>
             {/* U1: "Unknown Artist" = kosong → "-". */}
-            {!song.artist?.trim() || song.artist.trim() === "Unknown Artist"
-              ? "-"
-              : song.artist}
+            {isFieldMissing(song, "artist") ? "-" : song.artist}
           </Text>
 
           <View style={styles.badgeContainer}>
@@ -867,6 +965,81 @@ export default function SongDetailScreen() {
           renderEditForm()
         ) : (
           <>
+            {/* U1: penanda "data belum lengkap" + tombol sync. Bila ada
+                field kosong, tombol DITEKANKAN (latar primary) + badge
+                jumlah field kosong; bila lengkap, tampil biasa (tetap
+                bisa ditekan, untuk koreksi data yang salah). */}
+            {missingCount > 0 && (
+              <View style={styles.incompleteNotice}>
+                <AlertCircle
+                  size={16}
+                  color={colors.status.warning ?? colors.primary[500]}
+                />
+                <Text
+                  style={[
+                    styles.incompleteNoticeText,
+                    { color: colors.status.warning ?? colors.primary[500] },
+                  ]}
+                >
+                  Data belum lengkap: {missingLabels}
+                </Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={[
+                styles.syncButton,
+                missingCount > 0
+                  ? { backgroundColor: colors.primary[500] }
+                  : {
+                      backgroundColor: colors.background.secondary,
+                      borderWidth: 1,
+                      borderColor: colors.border.light,
+                    },
+              ]}
+              onPress={() => setSyncModalVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel={
+                missingCount > 0
+                  ? `Lengkapi dari MusicBrainz, ${missingCount} field kosong`
+                  : "Lengkapi dari MusicBrainz"
+              }
+            >
+              <Database
+                size={18}
+                color={
+                  missingCount > 0 ? onPrimary : colors.primary[500]
+                }
+              />
+              <Text
+                style={[
+                  styles.syncButtonText,
+                  {
+                    color:
+                      missingCount > 0 ? onPrimary : colors.text.primary,
+                  },
+                ]}
+              >
+                Lengkapi dari MusicBrainz
+              </Text>
+              {missingCount > 0 && (
+                <View
+                  style={[
+                    styles.syncBadge,
+                    { backgroundColor: onPrimary },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.syncBadgeText,
+                      { color: colors.primary[500] },
+                    ]}
+                  >
+                    {missingCount} kosong
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
             <SectionCard style={sectionCardStyle}>
               <View style={styles.sectionHeader}>
                 <Disc size={16} color={accentOnElevated} />
@@ -878,11 +1051,7 @@ export default function SongDetailScreen() {
               </View>
               <DetailRow
                 label="Album"
-                value={
-                  !song.album?.trim() || song.album.trim() === "Unknown Album"
-                    ? "-"
-                    : song.album
-                }
+                value={isFieldMissing(song, "album") ? "-" : song.album}
                 colors={colors}
               />
               <DetailRow
@@ -902,10 +1071,10 @@ export default function SongDetailScreen() {
               />
             </SectionCard>
 
-            {/* Bio & foto artis dari DB (isi lama hasil enrichment
-                online masih tampil bila ada; jalur online sudah dicabut
-                2026-11-19, jadi tidak ada lagi yang mengisinya).
-                Kosong → "-" (konsisten dengan baris detail lain). */}
+            {/* U1 (Koreksi 2): bio & foto artis dari DB — sebelumnya hanya
+                ditulis ke DB (handleApplyMetadata) tapi tidak pernah
+                ditampilkan di layar ini. Kosong → "-" (konsisten dengan
+                baris detail lain). */}
             <SectionCard style={sectionCardStyle}>
               <View style={styles.sectionHeader}>
                 <User size={16} color={accentOnElevated} />
@@ -1162,7 +1331,7 @@ export default function SongDetailScreen() {
         <View style={{ height: insets.bottom + 100 }} />
       </ScrollView>
 
-      {(isSaving || isLyricsBusy) && (
+      {(isUpdating || isSaving || isLyricsBusy) && (
         <View style={styles.overlay}>
           <ActivityIndicator size="large" color={colors.primary[500]} />
         </View>
@@ -1177,6 +1346,16 @@ export default function SongDetailScreen() {
         confirmLabel="Hapus"
         onConfirm={handleConfirmDeleteLyrics}
         onCancel={() => setDeleteLyricsVisible(false)}
+      />
+
+      <MetadataSyncModal
+        visible={syncModalVisible}
+        onClose={() => setSyncModalVisible(false)}
+        initialTitle={song.title}
+        initialArtist={song.artist}
+        missingFields={missingFields}
+        onSelect={handleApplyMetadata}
+        colors={colors}
       />
     </View>
   );
@@ -1236,6 +1415,29 @@ const styles = StyleSheet.create({
     // onPrimary (pickReadable atas primary[500]) di pemakaian style ini.
     letterSpacing: 1,
   },
+  // U1: tombol sync "Lengkapi dari MusicBrainz" — ditekankan (latar
+  // primary) + badge bila ada field kosong, biasa bila sudah lengkap.
+  syncButton: {
+    flexDirection: "row",
+    marginHorizontal: 24,
+    height: 52,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 16,
+  },
+  syncButtonText: { fontSize: 15, fontFamily: FONT_FAMILY.bold },
+  syncBadge: { borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2 },
+  syncBadgeText: { fontSize: 12, fontFamily: FONT_FAMILY.bold },
+  incompleteNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 24,
+    marginBottom: 12,
+  },
+  incompleteNoticeText: { fontSize: 13, fontFamily: FONT_FAMILY.semiBold, flex: 1 },
   artistImage: {
     width: 120,
     height: 120,
