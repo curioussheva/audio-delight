@@ -4,8 +4,6 @@ import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
 import android.util.Log
 import com.pristineaudio.NativeLibrary
-import kotlin.math.ln
-import kotlin.math.sqrt
 
 /**
  * Jembatan visualizer: sample audio dari engine C++ -> 128 bin spektrum -> JS.
@@ -16,23 +14,22 @@ import kotlin.math.sqrt
  * AudioCallback (C++, audio thread)
  *   -> VisualizerBuffer.write()          mono mixdown, ring buffer 2048
  *   -> EngineManager::engine().getVisualizerData()   (UI thread)
- *   -> JNI Java_..._getVisualizerData    mengisi FloatArray 2048 sample
- *        MENTAH yang dipakai ulang (B12-W9, tanpa NewFloatArray per panggilan)
- *   -> [KELAS INI] FFT 2048 -> magnitude -> 128 bin log-scaled
+ *   -> JNI getSpectrumData                Hann + FFT 2048 (FFTProcessor /
+ *        FFTPlan C++) + 128 bin log-scaled, di C++
  *   -> JS: getFFTData() -> number[128]
  * ```
  *
- * ## Kenapa FFT-nya di sini, bukan di C++
+ * ## Kenapa FFT-nya di C++ (E1, 2026-11-19)
  *
- * Implementasi FFT native ada di `cpp/fft/FFTPlan.{h,cpp}` (radix-2), tapi
- * JNI yang mengeksposnya belum ada - `NativeVisualizerModule.cpp` hanya
- * mengembalikan sample mentah 2048 float. Sampai itu tersambung, komputasi
- * spektrum dilakukan di sisi Kotlin memakai `java.lang.Math`/kotlin.math,
- * sehingga visualizer bisa berfungsi tanpa menambah jalur JNI baru.
- *
- * Kalau nanti FFT native dihubungkan, kelas ini cukup meneruskan hasilnya -
- * bagian FFT-nya bisa dihapus tanpa mengubah kontrak ke JS (tetap 128 bin,
- * 0.0-1.0).
+ * Dulu FFT 2048 + log-bins dihitung di sini (Kotlin) di thread bridge tiap
+ * poll — itu beban yang membuat poll 100 ms terasa berat dan jadi alasan
+ * eksperimen B 2026-11-13 menaikkan poll 50 -> 100. Sekarang
+ * `NativeVisualizerModule.cpp::getSpectrumData` menghitung semuanya di
+ * C++ (FFTProcessor + FFTPlan, tabel twiddle/bit-reversal sekali di
+ * konstruktor, tanpa alokasi per tick) dan kelas ini cukup meneruskan
+ * hasilnya — bagian FFT Kotlin dihapus tanpa mengubah kontrak ke JS
+ * (tetap 128 bin, 0.0-1.0, skala dBFS -80..0, bin log 20 Hz..Nyquist
+ * stream). Tap tetap sesudah DSP; yang pindah hanya tempat FFT dihitung.
  *
  * ## Kenapa 128 bin
  *
@@ -63,43 +60,31 @@ class NativeVisualizerBridge(reactContext: ReactApplicationContext) :
         const val NAME = "NativeVisualizerBridge"
         private const val TAG = "NativeVisualizerBridge"
 
-        /** FFT size. Pangkat dua. Ini yang menentukan resolusi frekuensi. */
-        private const val FFT_SIZE = 2048
-
         /** Jumlah bin yang dikirim ke JS. Dipertahankan agar cocok dengan fft.ts. */
         private const val OUTPUT_BINS = 128
-
-        // Rentang dinamis yang dipetakan ke 0.0-1.0, dalam dB.
-        // Full scale: -80 dB (praktis senyap) sampai 0 dB (clip). Batas atas
-        // DULU -10 dB "supaya puncak terlihat penuh" — akibatnya semua yang
-        // lebih keras dari -10 dB di-clamp ke 1.0 dan bar terpotong di atas
-        // (keputusan csheva 2026-11-14: full scale + warna clip).
-        private const val DB_FLOOR = -80.0
-        private const val DB_CEIL = 0.0
     }
 
     override fun getName() = NAME
 
-    // B12-W9: satu FloatArray yang dipakai ulang tiap panggilan getFFTData().
-    // Sebelumnya JNI mengalokasi NewFloatArray(2048) di tiap panggilan
-    // (~20x/detik dari poller VisualizerService). JNI sekarang menerima
-    // array ini sebagai parameter dan hanya mengisinya via SetFloatArrayRegion.
+    // E1 (2026-11-19): satu FloatArray(128) yang dipakai ulang tiap
+    // panggilan getFFTData(). JNI getSpectrumData hanya mengisinya via
+    // SetFloatArrayRegion (tanpa NewFloatArray per panggilan) — pola yang
+    // sama dengan B12-W9 dulu, tapi kini isinya 128 bin JADI, bukan 2048
+    // sample mentah. FFT_SIZE 2048 + skala dB -80..0 kini hidup di C++
+    // (NativeVisualizerModule.cpp).
     //
     // Thread-safety: pemanggil satu-satunya adalah poller VisualizerService
     // (satu setInterval, await), dan @ReactMethod dieksekusi berurutan di
     // JS thread — jadi tidak ada dua pemanggil bersamaan dalam praktik.
-    // Pengisian + computeSpectrum tetap dibungkus synchronized(samplesLock)
-    // sebagai defense-in-depth, karena array ini dipakai ulang.
-    private val visualizerSamples = FloatArray(FFT_SIZE)
+    // Pengisian tetap dibungkus synchronized(samplesLock) sebagai
+    // defense-in-depth, karena array ini dipakai ulang.
+    private val spectrumBins = FloatArray(OUTPUT_BINS)
     private val samplesLock = Any()
 
-    private external fun getVisualizerData(out: FloatArray)
-
-    // Laju stream aktual (Hz) dari engine — 0 bila engine belum start.
-    // Dipakai mapToLogBins supaya Nyquist/bin mengikuti reopen per laju
-    // file (44,1/48/96 kHz); TS harus memakai laju yang sama lewat prop
-    // sampleRate AnalyzerSpectrum (dari useBitPerfectStatus).
-    private external fun getActualSampleRate(): Int
+    // JNI: baca ring VisualizerBuffer + Hann + FFT 2048 + 128 bin log di
+    // C++, isi `out` (FloatArray(128), 0.0-1.0). Menggantikan pasangan
+    // getVisualizerData + getActualSampleRate + FFT Kotlin (dihapus E1).
+    private external fun getSpectrumData(out: FloatArray)
 
     // =====================================================
     // SIKLUS HIDUP
@@ -153,26 +138,12 @@ class NativeVisualizerBridge(reactContext: ReactApplicationContext) :
         }
 
         try {
-            // B12-W9: isi ulang visualizerSamples, lalu hitung spektrum dari
-            // array yang sama — masih di dalam lock supaya tidak ada
-            // pemanggil lain yang menimpa isinya di tengah computeSpectrum.
-            // Kontrak ke JS tidak berubah: getFFTData() tetap Promise<number[128]>.
-            val bins: FloatArray? = synchronized(samplesLock) {
-                getVisualizerData(visualizerSamples)
-
-                if (visualizerSamples.size < FFT_SIZE) {
-                    null
-                } else {
-                    computeSpectrum(visualizerSamples)
-                }
-            }
-
-            if (bins == null) {
-                promise.reject(
-                    "VISUALIZER_SHORT_BUFFER",
-                    "Engine mengembalikan ${visualizerSamples.size} sample, butuh $FFT_SIZE",
-                )
-                return
+            // E1: spektrum dihitung di C++ (getSpectrumData) — Kotlin hanya
+            // meneruskan 128 bin jadi ke JS. Kontrak tidak berubah:
+            // getFFTData() tetap Promise<number[128]>.
+            val bins: FloatArray = synchronized(samplesLock) {
+                getSpectrumData(spectrumBins)
+                spectrumBins
             }
 
             val array = Arguments.createArray()
@@ -187,162 +158,6 @@ class NativeVisualizerBridge(reactContext: ReactApplicationContext) :
             Log.e(TAG, "getFFTData gagal: ${e.message}", e)
             promise.reject("VISUALIZER_ERROR", "Gagal menghitung spektrum: ${e.message}")
         }
-    }
-
-    // =====================================================
-    // FFT + PEMETAAN KE 128 BIN
-    // =====================================================
-
-    /**
-     * Hitung spektrum magnitude dari [samples], kembalikan [OUTPUT_BINS] nilai
-     * ternormalisasi 0.0-1.0 (log-scaled).
-     */
-    private fun computeSpectrum(samples: FloatArray): FloatArray {
-        val re = FloatArray(FFT_SIZE)
-        val im = FloatArray(FFT_SIZE)
-
-        // Ambil FFT_SIZE sample terakhir dan terapkan jendela Hann.
-        // Hann penting: tanpa itu, tepi blok yang terpotong menimbulkan
-        // spektral leakage (puncak palsu di sekitar nada).
-        val offset = samples.size - FFT_SIZE
-        for (i in 0 until FFT_SIZE) {
-            val hann = 0.5 * (1.0 - kotlin.math.cos(2.0 * Math.PI * i / (FFT_SIZE - 1)))
-            re[i] = (samples[offset + i] * hann).toFloat()
-            im[i] = 0.0f
-        }
-
-        fftInPlace(re, im)
-
-        // Magnitude hanya sampai Nyquist (paruh pertama), lalu dikelompokkan.
-        //
-        // `kotlin.math.sqrt` hanya punya overload Double untuk argumen skalar,
-        // jadi hasil perkalian Float di sini dikonversi eksplisit. Ini kena
-        // pada build pertama: maxOf(Float, Double) di bawah juga error,
-        // keduanya pola yang sama - Kotlin tidak mempromosikan tipe numerik
-        // secara implisit seperti C++.
-        val half = FFT_SIZE / 2
-        val magnitude = FloatArray(half)
-        for (i in 0 until half) {
-            val power = (re[i] * re[i] + im[i] * im[i]).toDouble()
-            magnitude[i] = (sqrt(power) / half).toFloat()
-        }
-
-        return mapToLogBins(magnitude)
-    }
-
-    /**
-     * FFT radix-2 in-place (decimation in time). Forward, tanpa normalisasi.
-     *
-     * Ditulis di sini supaya visualizer bisa hidup tanpa menunggu jalur JNI
-     * FFT native. Sama algoritmenya dengan `cpp/fft/FFTPlan.cpp` - kalaupun
-     * nanti salah satu dipakai, hasilnya sepadan.
-     */
-    private fun fftInPlace(re: FloatArray, im: FloatArray) {
-        val n = re.size
-
-        // Bit-reversal permutation
-        var j = 0
-        for (i in 1 until n) {
-            var bit = n shr 1
-            while (j and bit != 0) {
-                j = j xor bit
-                bit = bit shr 1
-            }
-            j = j or bit
-            if (i < j) {
-                var tmp = re[i]; re[i] = re[j]; re[j] = tmp
-                tmp = im[i]; im[i] = im[j]; im[j] = tmp
-            }
-        }
-
-        // Butterfly
-        var len = 2
-        while (len <= n) {
-            val ang = -2.0 * Math.PI / len
-            val wRe = kotlin.math.cos(ang).toFloat()
-            val wIm = kotlin.math.sin(ang).toFloat()
-
-            var i = 0
-            while (i < n) {
-                var curRe = 1.0f
-                var curIm = 0.0f
-                for (k in 0 until len / 2) {
-                    val uRe = re[i + k]
-                    val uIm = im[i + k]
-                    val vRe = re[i + k + len / 2] * curRe - im[i + k + len / 2] * curIm
-                    val vIm = re[i + k + len / 2] * curIm + im[i + k + len / 2] * curRe
-
-                    re[i + k] = uRe + vRe
-                    im[i + k] = uIm + vIm
-                    re[i + k + len / 2] = uRe - vRe
-                    im[i + k + len / 2] = uIm - vIm
-
-                    val nextRe = curRe * wRe - curIm * wIm
-                    curIm = curRe * wIm + curIm * wRe
-                    curRe = nextRe
-                }
-                i += len
-            }
-            len = len shl 1
-        }
-    }
-
-    /**
-     * Kelompokkan [half] bin magnitude linear menjadi [OUTPUT_BINS] bin
-     * log-scaled 0.0-1.0.
-     *
-     * Pengelompokan memakai batas logaritmik, bukan pembagian rata: telinga
-     * mendengar frekuensi secara logaritmik, jadi pembagian rata akan
-     * menumpuk hampir semua detail musik di beberapa bin pertama.
-     *
-     * Nyquist diambil dari laju stream aktual (bukan hardcode): engine
-     * reopen per laju file, dan bin teratas = Nyquist. Bila engine belum
-     * start (rate 0), fallback 48 kHz — sama dengan default TS.
-     */
-    private fun mapToLogBins(magnitude: FloatArray): FloatArray {
-        val out = FloatArray(OUTPUT_BINS)
-        val half = magnitude.size
-        val streamRate = getActualSampleRate().takeIf { it > 0 } ?: 48000
-        val nyquist = streamRate / 2.0
-
-        for (b in 0 until OUTPUT_BINS) {
-            // Batas bawah/atas bin b pada skala log.
-            val lo = logIndex(b.toDouble() / OUTPUT_BINS, half, nyquist)
-            val hi = logIndex((b + 1).toDouble() / OUTPUT_BINS, half, nyquist)
-
-            var sum = 0.0f
-            var count = 0
-            for (i in lo until maxOf(hi, lo + 1)) {
-                if (i < half) {
-                    sum += magnitude[i]
-                    count++
-                }
-            }
-
-            val linear = if (count > 0) sum / count else 0.0f
-
-            // dB, lalu petakan ke 0.0-1.0.
-            //
-            // `coerceAtLeast`, bukan `maxOf`: `linear` bertipe Float sementara
-            // ambangnya Double, dan maxOf tidak punya overload untuk tipe
-            // campuran (error kompilasi, bukan konversi otomatis).
-            val db = 20.0 * ln(linear.coerceAtLeast(1e-9f).toDouble()) / ln(10.0)
-            val normalized = ((db - DB_FLOOR) / (DB_CEIL - DB_FLOOR)).coerceIn(0.0, 1.0)
-
-            out[b] = normalized.toFloat()
-        }
-
-        return out
-    }
-
-    /** Indeks bin linear untuk posisi normalisasi [t] (0..1) pada skala log. */
-    private fun logIndex(t: Double, half: Int, nyquist: Double): Int {
-        if (t <= 0.0) return 0
-        val minF = 20.0      // batas bawah pendengaran (Hz)
-        val maxF = nyquist  // batas atas = Nyquist stream aktual
-        val freq = minF * Math.pow(maxF / minF, t)
-        val idx = (freq / nyquist * half).toInt()
-        return idx.coerceIn(0, half - 1)
     }
 
     override fun onCatalystInstanceDestroy() {

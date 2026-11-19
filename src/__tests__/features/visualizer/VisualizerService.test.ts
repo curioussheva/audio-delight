@@ -53,6 +53,23 @@ describe("VisualizerService (multi-subscriber)", () => {
     await jest.advanceTimersByTimeAsync(ms);
   };
 
+  // E1 (2026-11-19, lag visualizer): default polling 50 ms (dulu 100).
+  // HARUS jadi test pertama di file — subscribe dengan config di test lain
+  // mengubah config singleton (merge), jadi default hanya terlihat sebelum
+  // ada yang meng-override. Tanpa config, 100 ms = 2 tick (t=50, t=100).
+  test("default polling interval 50 ms (E1)", async () => {
+    const received: number[][] = [];
+    visualizerService.setDataCallback((d) => received.push(d));
+
+    const ok = await visualizerService.start(123);
+    expect(ok).toBe(true);
+
+    await frames(100);
+
+    expect(mockGetFFTData.mock.calls.length).toBe(2);
+    expect(received.length).toBe(2);
+  });
+
   test("fan-out: dua callback sama-sama menerima data", async () => {
     const receivedA: number[][] = [];
     const receivedB: number[][] = [];

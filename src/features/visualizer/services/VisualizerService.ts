@@ -23,7 +23,7 @@ interface VisualizerConfig {
   smoothingFactor?: number; // 0-1, default 0.3
   minDecibels?: number;     // informational, tidak dipakai native saat ini
   maxDecibels?: number;     // informational
-  pollingIntervalMs?: number; // default 100 (eksperimen B 2026-11-13: 50 -> 100, kurangi beban bridge JS)
+  pollingIntervalMs?: number; // default 50 (E1 2026-11-19: 100 -> 50; FFT sudah di C++ sehingga beban bridge per tick turun — pembalikan eksperimen B 2026-11-13 yang menaikkan 50 -> 100 saat FFT masih di Kotlin)
 }
 
 // ============================================================================
@@ -59,9 +59,10 @@ class VisualizerService {
   private pollingTimer: ReturnType<typeof setInterval> | null = null;
 
   // J1-1 (Batch JS-1): penjaga overlap poll. Tanpa ini, tick setInterval yang
-  // async bisa menumpuk kalau satu getFFTData() > 100 ms (pola yang sama
-  // dengan _posInFlight di playerStore). Tick yang datang saat poll masih
-  // jalan dilewati saja — data terbaru datang di tick berikut.
+  // async bisa menumpuk kalau satu getFFTData() > interval polling (50 ms,
+  // E1) — pola yang sama dengan _posInFlight di playerStore. Tick yang
+  // datang saat poll masih jalan dilewati saja — data terbaru datang di
+  // tick berikut.
   private pollInFlight = false;
 
   // Status
@@ -113,7 +114,7 @@ class VisualizerService {
     smoothingFactor: 0.3,
     minDecibels: -100,
     maxDecibels: -30,
-    pollingIntervalMs: 100,
+    pollingIntervalMs: 50,
   };
 
   // Data smoothing
