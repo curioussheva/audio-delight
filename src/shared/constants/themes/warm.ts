@@ -9,6 +9,17 @@
 // - Aksen amber #B7791F, burgundy #7A2E3A, chrome silver #C0C4CC (kecil)
 // - Teks utama #2E2118
 //
+// KOREKSI (P2 audit BitPerfect/Solfeggio 2026-11-20): cerita "palet 4
+// warna" di atas sudah tidak akurat — yang benar-benar dikirim adalah:
+// cokelat hangat + amber sebagai aksen identitas, DITAMBAH satu set
+// semantik lengkap (biru/ungu/hijau/oranye/merah coral) untuk status dan
+// verdict. Burgundy #7A2E3A dari rencana TIDAK PERNAH jadi token (nol
+// pemakaian di codebase — satu-satunya jejak adalah komentar ini);
+// merah yang dipakai adalah coral (#F08070 gelap / #C0453A terang).
+// Chrome silver juga tidak pernah jadi token. Jangan tambahkan burgundy
+// sebagai token baru tanpa pemakaian yang jelas — token mati sama
+// berbahayanya dengan stub yang dikompilasi (lihat AGENTS.md).
+//
 // Prinsip palet (mengikuti pristine.ts):
 // - `primary[500]` dipakai JUGA sebagai warna teks di ±30 tempat, jadi di
 //   tema terang 500 sengaja gelap (#8A5A1B, 5.62:1 di atas #FDF9F1), bukan
