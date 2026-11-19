@@ -16,7 +16,10 @@
 import React, { type ReactElement } from "react";
 import {
   FlatList,
+  type LayoutChangeEvent,
   type ListRenderItem,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
@@ -39,6 +42,12 @@ export interface ScreenListProps<T> {
   showsVerticalScrollIndicator?: boolean;
   showsHorizontalScrollIndicator?: boolean;
   directionalLockEnabled?: boolean;
+  /** Teruskan metrik scroll ke pemanggil — mis. indikator geser kustom
+      (strip DETAIL BAND Equalizer). Opsional; pemanggil lain tidak berubah. */
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  onContentSizeChange?: (width: number, height: number) => void;
+  onLayout?: (event: LayoutChangeEvent) => void;
+  scrollEventThrottle?: number;
 }
 
 export function ScreenList<T>({
@@ -55,6 +64,10 @@ export function ScreenList<T>({
   showsVerticalScrollIndicator,
   showsHorizontalScrollIndicator,
   directionalLockEnabled,
+  onScroll,
+  onContentSizeChange,
+  onLayout,
+  scrollEventThrottle,
 }: ScreenListProps<T>) {
   const kind = chooseListKind({ horizontal, nestedInScrollView, boundedSmall });
 
@@ -78,6 +91,10 @@ export function ScreenList<T>({
         extraData={extraData}
         showsVerticalScrollIndicator={showsVerticalScrollIndicator}
         showsHorizontalScrollIndicator={showsHorizontalScrollIndicator}
+        onScroll={onScroll}
+        onContentSizeChange={onContentSizeChange}
+        onLayout={onLayout}
+        scrollEventThrottle={scrollEventThrottle}
       />
     );
   }
@@ -95,6 +112,10 @@ export function ScreenList<T>({
       showsVerticalScrollIndicator={showsVerticalScrollIndicator}
       showsHorizontalScrollIndicator={showsHorizontalScrollIndicator}
       directionalLockEnabled={directionalLockEnabled}
+      onScroll={onScroll}
+      onContentSizeChange={onContentSizeChange}
+      onLayout={onLayout}
+      scrollEventThrottle={scrollEventThrottle}
     />
   );
 }
