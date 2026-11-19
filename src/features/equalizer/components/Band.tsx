@@ -85,6 +85,12 @@ export const EqualizerBand = ({
   }));
 
   const freqLabel = frequency < 1000 ? `${frequency}` : `${frequency / 1000}k`;
+  // Label aksesibilitas (pola VerticalSlider): frekuensi lengkap + gain.
+  const freqA11y =
+    frequency >= 1000 ? `${frequency / 1000} kHz` : `${frequency} Hz`;
+  const gainA11y = `${gain > 0 ? "+" : ""}${gain.toFixed(1)} dB`;
+  const stepGain = (delta: number) =>
+    Math.min(10, Math.max(-10, gain + delta));
 
   // Nilai dB di atas fader. Warna dulu aksen mentah / `#555` hardcoded.
   // Diukur terhadap latar kartu supaya angka gain selalu terbaca - elemen ini
@@ -97,7 +103,25 @@ export const EqualizerBand = ({
          colors.text.primary);
 
   return (
-    <View style={[styles.container, { opacity: disabled ? 0.35 : 1 }]}>
+    <View
+      style={[styles.container, { opacity: disabled ? 0.35 : 1 }]}
+      accessibilityRole="adjustable"
+      accessibilityLabel={`Band ${freqA11y}, ${gainA11y}`}
+      accessibilityValue={{ min: -10, max: 10, now: gain }}
+      accessibilityState={{ disabled: !!disabled }}
+      accessibilityActions={[
+        { name: "increment" },
+        { name: "decrement" },
+      ]}
+      onAccessibilityAction={(event) => {
+        if (disabled) return;
+        if (event.nativeEvent.actionName === "increment") {
+          onValueChange(stepGain(1));
+        } else if (event.nativeEvent.actionName === "decrement") {
+          onValueChange(stepGain(-1));
+        }
+      }}
+    >
       {/* DB Value di atas — satu desimal (D4): langkah gesture 0,1 dB,
           jadi +2,4 dan +2,5 tidak boleh tampil sama. */}
       <Text style={[styles.gainText, { color: gainColor }]}>
