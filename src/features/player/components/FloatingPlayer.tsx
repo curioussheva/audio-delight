@@ -37,9 +37,8 @@ import { useTheme } from "@/shared/context/ThemeContext";
 const PLACEHOLDER = require("../../../../assets/images/icon.png");
 
 // ON/OFF Shuffle/Repeat — latar disc ON = tint primary 15% di atas pill
-// (pola "selected" yang sama dengan layar Player d0ddf23d, ControlKnob,
-// ReverbDropdown). Nama + rumus sama supaya dedup di masa depan tinggal
-// pindah ke shared. parseHex mengembalikan null untuk hex yang tidak
+// (pola "selected" yang sama dengan layar Player d0ddf23d, library.tsx).
+// Nama + rumus sama supaya dedup di masa depan tinggal pindah ke shared. parseHex mengembalikan null untuk hex yang tidak
 // terbaca → fallback ke warna aslinya (tanpa tint), bukan hitam buta.
 const hexToRGBA = (hex: string, opacity: number): string => {
   const rgb = parseHex(hex);

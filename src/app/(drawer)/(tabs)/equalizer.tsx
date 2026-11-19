@@ -85,9 +85,8 @@ const MODE_LABELS: Record<string, string> = {
 };
 
 // Label preset reverb Bahasa Indonesia (dulu Inggris di tengah UI
-// Indonesia) — urutan SAMA dengan daftar preset ReverbDropdown /
-// REVERB_PRESET_MAP (0..6). "Plate" tetap — itu nama jenis reverb,
-// bukan ukuran ruang.
+// Indonesia) — urutan SAMA dengan REVERB_PRESET_MAP (0..6). "Plate"
+// tetap — itu nama jenis reverb, bukan ukuran ruang.
 const REVERB_LABELS = [
   "Tanpa Reverb",
   "Ruang Kecil",
@@ -1137,10 +1136,9 @@ export default function EqualizerScreen() {
                   kontrolnya kembali. Koreksi catatan: yang disembunyikan
                   dulu adalah stepper ini (REVERB_LABELS + tombol
                   mundur/maju, U-P2-40), BUKAN komponen ReverbDropdown —
-                  komponen itu tidak pernah terpasang di layar ini.
-                  Stepper dipulihkan verbatim; ReverbDropdown tetap ada
-                  sebagai komponen tak terpakai (aturan dead code:
-                  inventaris dulu, bukan dihapus di ronde ini). */}
+                  komponen itu tidak pernah terpasang di layar ini dan
+                  dihapus di ronde clean-cozy 2026-11-19 (0 pemakai).
+                  Stepper dipulihkan verbatim. */}
               <View
                 style={[
                   styles.effectItem,

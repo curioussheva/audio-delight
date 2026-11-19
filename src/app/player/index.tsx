@@ -72,9 +72,9 @@ import {
 } from "lucide-react-native";
 
 // ON/OFF Shuffle/Repeat — latar disc ON = tint primary 15% di atas panel
-// (pola "selected" yang sama dengan ReverbDropdown: hexToRGBA(color, 0.15)).
-// Nama + rumus sama seperti dua salinan lokal di repo (ControlKnob,
-// ReverbDropdown) supaya dedup di masa depan tinggal pindah ke shared.
+// (pola "selected": hexToRGBA(color, 0.15)). Nama + rumus sama seperti
+// salinan lokal di repo (library.tsx, FloatingPlayer.tsx) supaya dedup di
+// masa depan tinggal pindah ke shared.
 // parseHex mengembalikan null untuk hex yang tidak terbaca → fallback ke
 // warna aslinya (tanpa tint), bukan hitam buta.
 const hexToRGBA = (hex: string, opacity: number): string => {
