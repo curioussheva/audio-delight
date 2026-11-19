@@ -3,7 +3,8 @@
 // Slider vertikal DSP (opsi B Fase 3, keputusan csheva 2026-11-18 08:08):
 // bass boost + pelebar stereo yang dulu ControlKnob kini fader vertikal
 // ala slider GAIN kanan Neutron — spektrum di atas, slider di bawah,
-// label di atas, nilai % di bawah.
+// label di atas, nilai di bawah (format per pemakai: bass dB, pelebar
+// ×, master gain dB — bukan lagi %).
 //
 // Bahasa visualnya SAMA dengan fader band di Band.tsx (track 160px,
 // tick, fill dari bawah, thumb kotak) supaya kedua slider di layar ini
@@ -11,14 +12,15 @@
 // Rentang nilai SAMA dengan knob lama (0..1000) dan dengan yang diterima
 // Kotlin (bass 0..+12 dB, widener width 1.0..2.0), jadi tanpa konversi:
 // nilai yang dikirim ke store/native tidak berubah, hanya bentuk
-// kontrolnya. Tampilan % juga sama dengan knob (value/10).
+// kontrolnya. Format default tetap % (value/10, sama seperti knob),
+// tapi ketiga pemakai saat ini meng-override lewat `formatValue`.
 //
-// Master gain memakai rentang lain (0..1.5, tampil ×1.00) lewat props
-// opsional `maxValue` + `formatValue` — default tetap 0..1000 + %,
-// jadi kedua pemakai lama tidak berubah.
+// Master gain memakai rentang lain (domain 0..24 = dB −12..+12, tampil
+// dB) lewat props opsional `maxValue` + `formatValue` — default tetap
+// 0..1000 + %, jadi kedua pemakai lama tidak berubah.
 //
-// ControlKnob TIDAK dihapus di ronde ini (aturan dead code: inventaris
-// dulu) — tapi sesudah ronde ini nol pemakainya; lihat laporan Fase 3 EQ.
+// ControlKnob sudah tidak ada lagi (dihapus di ronde dead-code); ketiga
+// pemakainya kini fader vertikal.
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 
@@ -46,10 +48,11 @@ interface VerticalSliderProps {
   onChange: (val: number) => void;
   color: string;
   disabled?: boolean;
-  // Batas atas rentang (default 1000). Master gain memakai 1.5.
+  // Batas atas rentang (default 1000). Master gain memakai 24 (dB −12..+12).
   maxValue?: number;
   // Teks nilai di bawah slider. Default: persen (value/10), sama seperti
-  // knob lama. Master gain memakai `×${v.toFixed(2)}`.
+  // knob lama — tapi ketiga pemakai saat ini meng-override: bass dB,
+  // pelebar ×, master gain dB.
   formatValue?: (value: number) => string;
 }
 
@@ -190,8 +193,8 @@ export const VerticalSlider = ({
         </View>
       </GestureDetector>
 
-      {/* Nilai di bawah — default %, atau formatValue pemakai (mis. ×1.00
-          untuk master gain). */}
+      {/* Nilai di bawah — default %, atau formatValue pemakai (mis. ×1.50
+          untuk pelebar, +3.5 dB untuk master gain). */}
       <Text
         style={[
           styles.valueText,

@@ -38,9 +38,10 @@ export function dspValueToY(
 
 /** Nilai min..max untuk posisi y (titik tengah thumb). y = 12 -> max.
  *  Sengaja TIDAK dibulatkan: rentang 0..1000 (bass/widener) praktis
- *  tetap bulat di ujung, tapi rentang 0..1.5 (master gain) butuh pecahan —
- *  pembulatan di sini akan memotongnya jadi 0/1/2. Pembulatan tampilan
- *  urusan komponen (formatValue), bukan matematika ini. */
+ *  tetap bulat di ujung, tapi rentang 0..24 (master gain, dB −12..+12)
+ *  butuh pecahan — pembulatan di sini akan memotongnya jadi bilangan
+ *  bulat dB. Pembulatan tampilan urusan komponen (formatValue), bukan
+ *  matematika ini. */
 export function dspYToValue(
   y: number,
   sliderHeight: number = DSP_SLIDER_HEIGHT,
