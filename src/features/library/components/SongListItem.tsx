@@ -11,6 +11,10 @@ import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Song } from "@/shared/types/audio";
+import {
+  isFailedArtworkUri,
+  markArtworkUriFailed,
+} from "@/features/library/utils/failedArtworkUris";
 import { formatTime } from "@/shared/utils/time";
 import { DURATION_FONT_FAMILY } from "@/shared/utils/typography";
 import QualityBadge from "@/shared/components/ui/QualityBadge";
@@ -32,17 +36,6 @@ interface SongListItemProps {
 
 // ─── Artwork Thumbnail ────────────────────────────────────────────────────────
 
-// Lazyload-fix (butir 3): negative cache URI artwork gagal, level modul.
-// `imgError` saja adalah state per-mount — URI artwork yang rusak dicoba
-// lagi tiap baris masuk viewport saat fling (log: MediaMetadataRetriever
-// "negative length" 9× untuk URI yang sama; ExpoImage gagal 34×).
-// URI yang sekali terbukti gagal TIDAK dicoba lagi sampai restart app
-// (scope sesi). Alternatif yang sengaja TIDAK diambil: TTL/eviction —
-// artwork yang gagal karena file rusak tidak akan pulih dalam satu sesi;
-// bila URI gagal karena file belum ada lalu muncul kemudian, restart app
-// diperlukan (bukan ditebak).
-const failedArtworkUris = new Set<string>();
-
 const ArtworkThumb = memo(
   ({
     uri,
@@ -57,10 +50,7 @@ const ArtworkThumb = memo(
     // Lewati URI yang sudah terbukti gagal (negative cache) — jangan
     // coba lagi tiap remount saat fling.
     const showImage =
-      !!uri &&
-      !imgError &&
-      !isNowPlaying &&
-      !(uri && failedArtworkUris.has(uri));
+      !!uri && !imgError && !isNowPlaying && !isFailedArtworkUri(uri);
 
     // Ikon di atas thumb primary[500] (lagu sedang diputar) — dipilih dari
     // luminansi primary (background.primary 1,12:1 di charcoal-black),
@@ -97,7 +87,7 @@ const ArtworkThumb = memo(
             onError={() => {
               // Catat URI gagal ke negative cache supaya remount
               // berikutnya (fling) tidak mencoba lagi.
-              if (uri) failedArtworkUris.add(uri);
+              markArtworkUriFailed(uri);
               setImgError(true);
             }}
           />

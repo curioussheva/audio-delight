@@ -17,6 +17,10 @@ import * as Haptics from "expo-haptics";
 
 import { useAudioProgress } from "@/features/player/hooks/useAudioProgress";
 import { usePlayerStore } from "@/features/player/store/playerStore";
+import {
+  isFailedArtworkUri,
+  markArtworkUriFailed,
+} from "@/features/library/utils/failedArtworkUris";
 import { useBitPerfectStatus } from "@/features/player/hooks/useBitPerfectStatus";
 import { useFavorites } from "@/features/favorites/hooks/useFavorites";
 import { formatTime } from "@/shared/utils/time";
@@ -151,6 +155,14 @@ export default function PlayerScreen() {
   // dari kolom songs.isFavorite) — hook HARUS di atas return kondisional,
   // jangan dipindah ke bawah (U-P0-4: Rules of Hooks).
   const { isFavorite, toggleFavorite } = useFavorites();
+
+  // Follow-up lazyload: artwork rusak tidak dicoba lagi (negative cache
+  // bersama SongListItem + FloatingPlayer). State error di-reset saat lagu
+  // berganti — layar ini bertahan antar lagu.
+  const [artworkError, setArtworkError] = useState(false);
+  useEffect(() => {
+    setArtworkError(false);
+  }, [currentSong?.id]);
 
   const artworkScale = useRef(new Animated.Value(1)).current;
 
@@ -607,13 +619,19 @@ export default function PlayerScreen() {
               >
                 <Image
                   source={
-                    currentSong.artwork
+                    currentSong.artwork &&
+                    !artworkError &&
+                    !isFailedArtworkUri(currentSong.artwork)
                       ? { uri: currentSong.artwork }
                       : require("../../../assets/images/icon.png")
                   }
                   style={styles.artwork}
                   contentFit="cover"
                   transition={300}
+                  onError={() => {
+                    markArtworkUriFailed(currentSong.artwork);
+                    setArtworkError(true);
+                  }}
                 />
                 {/* P2: petunjuk visual bahwa sampul bisa diketuk untuk
                     lirik — pil solid supaya kontras terjamin di atas foto. */}

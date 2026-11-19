@@ -1,5 +1,5 @@
 // src/features/player/components/FloatingPlayer.tsx
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
@@ -27,6 +27,10 @@ import { usePlayerStore } from "@/features/player/store/playerStore";
 import { progressPercent } from "@/shared/utils/queueNavigation";
 import { isHiRes } from "@/shared/utils/audioQuality";
 import { pickReadable, parseHex, AA_NORMAL } from "@/shared/utils/contrast";
+import {
+  isFailedArtworkUri,
+  markArtworkUriFailed,
+} from "@/features/library/utils/failedArtworkUris";
 import { FONT_FAMILY } from "@/shared/constants/themes/base";
 import { useTheme } from "@/shared/context/ThemeContext";
 
@@ -49,6 +53,15 @@ export default function FloatingPlayer() {
   const router = useRouter();
 
     const currentSong = usePlayerStore((s) => s.currentSong);
+
+  // Follow-up lazyload: artwork rusak tidak dicoba lagi (negative cache
+  // bersama SongListItem + layar Player). State error di-reset saat lagu
+  // berganti — komponen ini bertahan antar lagu, tidak seperti
+  // SongListItem yang instance-nya per baris lagu.
+  const [artworkError, setArtworkError] = useState(false);
+  useEffect(() => {
+    setArtworkError(false);
+  }, [currentSong?.id]);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const togglePlay = usePlayerStore((s) => s.togglePlay);
   const position = usePlayerStore((s) => s.position);
@@ -120,9 +133,12 @@ export default function FloatingPlayer() {
   //    TabsLayout yang handle visibility per tab
   if (!currentSong) return null;
 
-  const artworkSource = currentSong.artwork
-    ? { uri: currentSong.artwork }
-    : PLACEHOLDER;
+  const artworkFailed =
+    artworkError || isFailedArtworkUri(currentSong.artwork);
+  const artworkSource =
+    currentSong.artwork && !artworkFailed
+      ? { uri: currentSong.artwork }
+      : PLACEHOLDER;
 
   return (
     // ✅ outer TIDAK punya position absolute / bottom — TabsLayout yang atur
@@ -175,6 +191,10 @@ export default function FloatingPlayer() {
               ]}
               contentFit="cover"
               transition={300}
+              onError={() => {
+                markArtworkUriFailed(currentSong.artwork);
+                setArtworkError(true);
+              }}
             />
           </Pressable>
 
