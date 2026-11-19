@@ -191,8 +191,8 @@ export function BitPerfectSubscreen() {
             { color: colors.text.tertiary, marginTop: spacing.xs },
           ]}
         >
-          Koreksi headphone dimatikan otomatis di Bit-Perfect — aktif lagi
-          saat kembali ke DSP atau Solfeggio.
+          Koreksi headphone tidak memproses di Bit-Perfect (seluruh DSP
+          dilewati) — berlaku lagi saat kembali ke DSP atau Solfeggio.
         </Text>
       </View>
 

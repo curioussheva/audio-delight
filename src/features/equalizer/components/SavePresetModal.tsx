@@ -82,7 +82,22 @@ export const SavePresetModal: React.FC<Props> = ({
             Simpan Preset
           </Text>
 
+          {/* Cakupan simpan (clean-cozy 2026-11-19): preset menyimpan
+              kurva + bass + pelebar + reverb — BUKAN master gain, HRTF,
+              atau koreksi headphone. Dulu modal diam soal ini, jadi
+              pengguna bisa mengira semuanya ikut tersimpan. */}
+          <Text
+            style={[
+              styles.scopeText,
+              { color: theme.colors.text.secondary },
+            ]}
+          >
+            Menyimpan kurva EQ + bass + pelebar + reverb. Master gain,
+            HRTF, dan koreksi headphone tidak ikut tersimpan.
+          </Text>
+
           <TextInput
+            accessibilityLabel="Nama preset"
             style={[
               styles.input,
               {
@@ -154,9 +169,15 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontFamily: FONT_FAMILY.displayBold,
-    marginBottom: 20,
+    marginBottom: 8,
     letterSpacing: 0.5,
     lineHeight: 28,
+  },
+  scopeText: {
+    fontSize: 12,
+    fontFamily: FONT_FAMILY.regular,
+    lineHeight: 17,
+    marginBottom: 16,
   },
   input: {
     padding: 14,
