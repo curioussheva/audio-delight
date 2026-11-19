@@ -1,0 +1,26 @@
+diff --git a/ReactAndroid/src/main/java/com/facebook/react/modules/core/JavaTimerManager.kt b/ReactAndroid/src/main/java/com/facebook/react/modules/core/JavaTimerManager.kt
+--- a/ReactAndroid/src/main/java/com/facebook/react/modules/core/JavaTimerManager.kt
++++ b/ReactAndroid/src/main/java/com/facebook/react/modules/core/JavaTimerManager.kt
+@@ -289,7 +289,22 @@ public open class JavaTimerManager(
+     /** Calls all timers that have expired since the last time this frame callback was called. */
+     override fun doFrame(frameTimeNanos: Long) {
+       if (isPaused.get() && !isRunningTasks.get()) {
++        // PERCOBAAN Trace 3 (PristineAudio, 2026-11-19) — BISA DI-REVERT.
++        // Dulu early-return ini mematikan pompa timer: callback
++        // Choreographer itu one-shot, re-post ada di ujung doFrame yang
++        // tidak tercapai, dan frameCallbackPosted tetap true sehingga
++        // setChoreographerCallback() berikutnya menolak re-post — pompa
++        // hanya bisa pulih lewat siklus onHostPause -> onHostResume.
++        // Reset flag supaya onHostResume / onHeadlessJsTaskStart
++        // berikutnya bisa memasang callback lagi. Perilaku saat pause
++        // TIDAK berubah (timer tetap tidak jalan selama pause); yang
++        // diperbaiki hanya flag yang nyangkut. Alternatif yang TIDAK
++        // dipilih: re-post callback di sini (pompa tetap berdetak tiap
++        // frame selama pause — boros baterai, ubah perilaku pause).
++        // BUKAN patch DecoderWorker D1 / "Batch 7 lost-wakeup" (patch
++        // itu terbukti SALAH dan DILARANG — tidak disentuh di sini).
++        frameCallbackPosted = false
+         return
+       }
+       val frameTimeMillis = frameTimeNanos / 1000000
+       synchronized(timerGuard) {
