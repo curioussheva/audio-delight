@@ -25,11 +25,17 @@ import {
  * Tidak ada indikator limiter di sini — Ide 3 butuh getter native baru,
  * di luar ronde ini.
  */
+// P2 audit BitPerfect/Solfeggio 2026-11-20: HRTF + master gain dulu hilang
+// dari daftar — keduanya dilewati di bit-perfect (HRTFNode dan GainNode
+// ada di DSPChain yang tidak jalan di mode ini), jadi daftar ini tidak
+// lengkap tanpa mereka.
 const BYPASSED = [
   "EQ",
   "bass boost",
   "pelebar stereo",
   "reverb",
+  "HRTF",
+  "master gain",
   "koreksi headphone",
   "retune (tuning)",
 ];
