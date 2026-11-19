@@ -28,6 +28,7 @@ import {
   RefreshCw,
   Sparkles,
   Database,
+  Image as ImageIcon,
 } from "lucide-react-native";
 import { useLibraryStore } from "@/features/library/store/libraryStore"; // Pastikan path benar
 import { BackgroundScanTask } from "@/features/library/services/BackgroundScanTask";
@@ -48,6 +49,10 @@ import { SectionCard } from "@/shared/components/ui/SectionCard";
 import { ConfirmDialog } from "@/shared/components/ui/ConfirmDialog";
 import { PristineButton } from "@/shared/components/ui/PristineButton";
 import { useToastStore } from "@/shared/store/toastStore";
+import {
+  useArtworkDisplayStore,
+  type ArtworkFit,
+} from "@/features/player/store/artworkDisplayStore";
 import { FONT_FAMILY } from "@/shared/constants/themes/base";
 import { pickReadable, accentOn, compositeOver, AA_NORMAL } from "@/shared/utils/contrast";
 import { useAudioOutput } from "@/features/hardware/hooks/useAudioOutput";
@@ -180,6 +185,12 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { theme, isDarkMode, toggleTheme, setTheme } = useTheme();
   const { colors, spacing } = theme;
+
+  // 2026-11-20: tampilan sampul layar Player (contain default) —
+  // store persist sendiri; ganti di sini langsung mengubah contentFit
+  // di Player tanpa reload.
+  const artworkFit = useArtworkDisplayStore((s) => s.artworkFit);
+  const setArtworkFit = useArtworkDisplayStore((s) => s.setArtworkFit);
 
   // Aksen sebagai TEKS/IKON — pola Equalizer: aksen dipakai selama terbaca di
   // atas permukaan, jatuh ke warna teks bila tidak. primary[500] mentah
@@ -376,6 +387,8 @@ export default function SettingsScreen() {
       // Reset tema = kembali ke default aplikasi (pristine-ember
       // sejak Fase 1), bukan tema lama yang di-hardcode.
       await setTheme(DEFAULT_THEME.id);
+      // 2026-11-20: tampilan sampul kembali ke default Utuh (contain).
+      setArtworkFit("contain");
       // Reset mengembalikan Auto Discovery ke default OFF
       // (+ batalkan background task) dan Auto Enriching ke default ON.
       // Initial scan tidak punya toggle — reset tidak menyentuhnya.
@@ -649,7 +662,12 @@ export default function SettingsScreen() {
       <View
         style={[
           styles.settingRow,
-          { paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
+          {
+            paddingVertical: spacing.sm,
+            paddingHorizontal: spacing.md,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.background.tertiary,
+          },
         ]}
       >
         <View style={styles.row}>
@@ -671,6 +689,97 @@ export default function SettingsScreen() {
           }}
           thumbColor={isDarkMode ? colors.text.primary : colors.text.secondary}
         />
+      </View>
+
+      {/* Tampilan Sampul (2026-11-20): cara sampul mengisi kotak persegi
+          di layar Player. "Utuh" = contain — seluruh sampul tampil,
+          sampul landscape mendapat pita kosong atas-bawah. "Penuh" =
+          cover — sampul mengisi penuh kotak, sisi sampul landscape
+          terpotong. Kata-kata di sini jujur soal itu (bukan cuma nama
+          teknis). Pola tombol mengikuti pemilih mode Equalizer
+          (label + hint, aktif = primary). */}
+      <View
+        style={{
+          paddingVertical: spacing.sm,
+          paddingHorizontal: spacing.md,
+        }}
+      >
+        <View style={styles.row}>
+          <ImageIcon
+            size={20}
+            color={colors.text.secondary}
+            strokeWidth={2.2}
+          />
+          <Text style={{ color: colors.text.primary, marginLeft: spacing.sm }}>
+            Tampilan Sampul
+          </Text>
+        </View>
+        <View
+          style={{
+            flexDirection: "row",
+            gap: spacing.sm,
+            marginTop: spacing.sm,
+          }}
+        >
+          {(
+            [
+              {
+                id: "contain" as ArtworkFit,
+                label: "Utuh",
+                hint: "Sampul tampil semua",
+              },
+              {
+                id: "cover" as ArtworkFit,
+                label: "Penuh",
+                hint: "Isi kotak, sisi terpotong",
+              },
+            ] as const
+          ).map((option) => {
+            const isActive = artworkFit === option.id;
+            return (
+              <TouchableOpacity
+                key={option.id}
+                onPress={() => setArtworkFit(option.id)}
+                style={{
+                  flex: 1,
+                  borderRadius: 12,
+                  paddingVertical: spacing.sm,
+                  paddingHorizontal: spacing.md,
+                  alignItems: "center",
+                  backgroundColor: isActive
+                    ? colors.primary[500]
+                    : colors.background.tertiary,
+                  borderWidth: 1,
+                  borderColor: isActive
+                    ? colors.primary[500]
+                    : colors.border.medium,
+                }}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isActive }}
+                accessibilityLabel={`Tampilan sampul: ${option.label} — ${option.hint}`}
+              >
+                <Text
+                  style={{
+                    color: isActive ? onAccent : colors.text.primary,
+                    fontWeight: "700",
+                  }}
+                >
+                  {option.label}
+                </Text>
+                <Text
+                  style={{
+                    color: isActive ? onAccent : colors.text.secondary,
+                    fontSize: 11,
+                    marginTop: 2,
+                    textAlign: "center",
+                  }}
+                >
+                  {option.hint}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
     </SectionCard>
   );
