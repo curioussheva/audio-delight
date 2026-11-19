@@ -31,7 +31,8 @@ import { usePlayerStore } from "@/features/player/store/playerStore";
  *   A=432, stepper ±5 sen, nonaktif di Bit-Perfect.
  * - Intensitas: slider master 0–100% (resonansi + exciter + spatial
  *   bersama), default 50%, live ke NativeDSPModule.setResonanceIntensity
- *   lewat playerStore — pola setBassBoost, tanpa throttle.
+ *   lewat playerStore — dorong native di-throttle 100 ms, tulis storage
+ *   saat drag selesai (P2 audit BitPerfect/Solfeggio 2026-11-20).
  * - Tidak ada kontrol binaural: binaural beat tidak diimplementasikan.
  * - Kontrol EQ/DSP diatur di tab DSP; nilainya tetap berlaku di sini
  *   (mis. lebar widener → lebar spatial; koreksi headphone punya seksi
@@ -48,6 +49,8 @@ export function SolfeggioSubscreen() {
   const setSolfeggioFreq = usePlayerStore((s) => s.setSolfeggioFreq);
   const setSolfeggioTemplate = usePlayerStore((s) => s.setSolfeggioTemplate);
   const setAudioMode = usePlayerStore((s) => s.setAudioMode);
+  // Tulis storage tertunda saat drag slider selesai (P2 audit).
+  const persistSolfeggioNow = usePlayerStore((s) => s.persistSolfeggioNow);
 
   const info = MODE_INFO.immersive;
   // Nilai % sebagai teks aksen — pola Equalizer: aksen dipakai selama
@@ -178,6 +181,7 @@ export function SolfeggioSubscreen() {
           step={1}
           value={solfeggioFreq}
           onValueChange={setSolfeggioFreq}
+          onSlidingComplete={() => void persistSolfeggioNow()}
           minimumTrackTintColor={colors.primary[500]}
           maximumTrackTintColor={colors.background.tertiary}
           thumbTintColor={colors.primary[500]}
@@ -242,6 +246,7 @@ export function SolfeggioSubscreen() {
           step={0.01}
           value={resonanceIntensity}
           onValueChange={setResonanceIntensity}
+          onSlidingComplete={() => void persistSolfeggioNow()}
           minimumTrackTintColor={colors.primary[500]}
           maximumTrackTintColor={colors.background.tertiary}
           thumbTintColor={colors.primary[500]}

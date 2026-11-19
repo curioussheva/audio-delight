@@ -209,7 +209,87 @@ export interface PlayerState {
   toggleMainPlayer: () => void;
   resetFloatingPlayerVisibility: () => void;
   setAudioSessionId: (id: number | null) => void;
+  /** Tulis nilai Solfeggio yang tertunda ke AsyncStorage — dipanggil saat
+      drag slider selesai (onSlidingComplete) dan sesudah pilih template. */
+  persistSolfeggioNow: () => Promise<void>;
 }
+
+// P2 audit BitPerfect/Solfeggio 2026-11-20: slider Solfeggio dulu tanpa
+// throttle + tulis AsyncStorage per tick drag — kelas masalah yang sama
+// dengan setMasterGain (P1-9 clean-cozy). Pola yang sama: dorong native
+// di-throttle 100 ms (leading + trailing, nilai akhir selalu terkirim),
+// tulis storage ditunda sampai drag selesai (onSlidingComplete) atau
+// sampai trailing fire.
+const SOLFEGGIO_NATIVE_THROTTLE_MS = 100;
+let _solfeggioLastAt = 0;
+let _solfeggioTimer: ReturnType<typeof setTimeout> | null = null;
+// Nilai terakhir yang belum didorong ke native (per field).
+let _solfeggioPendingPush: { freq?: number; intensity?: number } = {};
+// Nilai terakhir yang belum ditulis ke AsyncStorage (per key).
+let _solfeggioPendingPersist: {
+  freq?: number;
+  intensity?: number;
+  templateId?: string;
+} = {};
+
+const flushSolfeggioPersist = async (): Promise<void> => {
+  const pending = _solfeggioPendingPersist;
+  _solfeggioPendingPersist = {};
+  try {
+    if (pending.freq !== undefined) {
+      await AsyncStorage.setItem(KEYS.SOLFEGGIO_FREQ, pending.freq.toString());
+    }
+    if (pending.intensity !== undefined) {
+      await AsyncStorage.setItem(
+        KEYS.RESONANCE_INTENSITY,
+        pending.intensity.toString(),
+      );
+    }
+    if (pending.templateId !== undefined) {
+      await AsyncStorage.setItem(KEYS.SOLFEGGIO_TEMPLATE, pending.templateId);
+    }
+  } catch (error) {
+    console.error("[Player] flushSolfeggioPersist failed:", error);
+  }
+};
+
+const pushSolfeggioThrottled = (): void => {
+  // isTrailing: trailing fire = drag sudah berhenti — tulis juga storage
+  // yang tertunda, supaya nilai akhir tersimpan walau onSlidingComplete
+  // tidak terpanggil (mis. pemanggil programatik). Leading fire tidak
+  // menulis storage: storage hanya ditulis saat drag selesai.
+  const fire = (isTrailing: boolean) => {
+    _solfeggioLastAt = Date.now();
+    _solfeggioTimer = null;
+    const pending = _solfeggioPendingPush;
+    _solfeggioPendingPush = {};
+    // Sync void — rantai JNI lengkap; tidak ada Promise yang ditunggu.
+    if (pending.freq !== undefined) {
+      NativeDSPModule?.setSolfeggioFreq?.(pending.freq);
+    }
+    if (pending.intensity !== undefined) {
+      NativeDSPModule?.setResonanceIntensity?.(pending.intensity);
+    }
+    if (isTrailing) {
+      // Idempotent dengan flush eksplisit — keduanya menulis nilai akhir
+      // yang sama; yang kedua tidak menulis apa-apa (pending kosong).
+      void flushSolfeggioPersist();
+    }
+  };
+  const now = Date.now();
+  if (now - _solfeggioLastAt >= SOLFEGGIO_NATIVE_THROTTLE_MS) {
+    if (_solfeggioTimer) {
+      clearTimeout(_solfeggioTimer);
+      _solfeggioTimer = null;
+    }
+    fire(false);
+  } else if (!_solfeggioTimer) {
+    _solfeggioTimer = setTimeout(
+      () => fire(true),
+      SOLFEGGIO_NATIVE_THROTTLE_MS - (now - _solfeggioLastAt),
+    );
+  }
+};
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   currentSong: null,
@@ -1265,49 +1345,53 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
   },
 
-  // Intensitas master Solfeggio (0..1). Pola setBassBoost
-  // (equalizerStore): jepit, simpan, dorong langsung ke native — live,
-  // tanpa throttle/debounce.
+  // Intensitas master Solfeggio (0..1). State store di-update langsung
+  // tiap tick (UI responsif); dorong native di-throttle 100 ms dan tulis
+  // AsyncStorage ditunda sampai drag selesai (P2 audit, pola
+  // pushMasterGainThrottled) — dulu tiap tick = 2× setItem + 1× JNI.
   setResonanceIntensity: async (intensity: number) => {
     try {
       const clamped = Math.min(1, Math.max(0, intensity));
       set({ resonanceIntensity: clamped });
-      await AsyncStorage.setItem(KEYS.RESONANCE_INTENSITY, clamped.toString());
-      // Sync void — rantai JNI lengkap (NativeDSPModule.cpp →
-      // EngineManager → AudioEngine → AudioState); default native 0.5.
-      NativeDSPModule?.setResonanceIntensity?.(clamped);
       // Intensitas berubah -> template aktif bisa jadi "kustom".
       const templateId = activeSolfeggioTemplateId(
         get().solfeggioFreq,
         clamped,
       );
       set({ solfeggioTemplateId: templateId });
-      await AsyncStorage.setItem(KEYS.SOLFEGGIO_TEMPLATE, templateId);
+      _solfeggioPendingPersist.intensity = clamped;
+      _solfeggioPendingPersist.templateId = templateId;
+      _solfeggioPendingPush.intensity = clamped;
+      pushSolfeggioThrottled();
     } catch (error) {
       console.error("[Player] setResonanceIntensity failed:", error);
     }
   },
 
-  // Frekuensi resonator Solfeggio (Hz). Pola setResonanceIntensity:
-  // jepit 100–2000, simpan, dorong langsung ke native — live, tanpa
-  // throttle/debounce. Template aktif ikut dihitung ulang (bisa "kustom").
+  // Frekuensi resonator Solfeggio (Hz). Pola setResonanceIntensity di
+  // atas: state langsung, native di-throttle, storage tertunda.
   setSolfeggioFreq: async (freq: number) => {
     try {
       const clamped = clampSolfeggioFreq(freq);
       set({ solfeggioFreq: clamped });
-      await AsyncStorage.setItem(KEYS.SOLFEGGIO_FREQ, clamped.toString());
-      // Sync void — rantai JNI lengkap (NativeDSPModule.cpp →
-      // EngineManager → AudioEngine → AudioState); default native 528 Hz.
-      NativeDSPModule?.setSolfeggioFreq?.(clamped);
       const templateId = activeSolfeggioTemplateId(
         clamped,
         get().resonanceIntensity,
       );
       set({ solfeggioTemplateId: templateId });
-      await AsyncStorage.setItem(KEYS.SOLFEGGIO_TEMPLATE, templateId);
+      _solfeggioPendingPersist.freq = clamped;
+      _solfeggioPendingPersist.templateId = templateId;
+      _solfeggioPendingPush.freq = clamped;
+      pushSolfeggioThrottled();
     } catch (error) {
       console.error("[Player] setSolfeggioFreq failed:", error);
     }
+  },
+
+  // Tulis nilai Solfeggio yang tertunda ke AsyncStorage — dipanggil saat
+  // drag slider selesai (onSlidingComplete) dan sesudah pilih template.
+  persistSolfeggioNow: async () => {
+    await flushSolfeggioPersist();
   },
 
   // Pilih template Solfeggio: atur frekuensi + intensitas template, live
@@ -1324,7 +1408,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       await get().setSolfeggioFreq(template.freq);
       await get().setResonanceIntensity(template.intensity);
       set({ solfeggioTemplateId: template.id });
-      await AsyncStorage.setItem(KEYS.SOLFEGGIO_TEMPLATE, template.id);
+      // Pilih template = aksi diskrit (ketuk), bukan drag — tulis
+      // storage langsung, jangan tunggu drag selesai.
+      _solfeggioPendingPersist.templateId = template.id;
+      await get().persistSolfeggioNow();
     } catch (error) {
       console.error("[Player] setSolfeggioTemplate failed:", error);
     }
