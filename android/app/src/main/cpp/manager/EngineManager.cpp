@@ -1264,6 +1264,15 @@ void EngineManager::setBassBoost(
     );
 }
 
+void EngineManager::setReverbPreset(
+    int preset
+) {
+
+    mEngine.setReverbPreset(
+        preset
+    );
+}
+
 // =====================================================
 // KOREKSI HEADPHONE (Fase D)
 // =====================================================

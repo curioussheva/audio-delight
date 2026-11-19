@@ -61,6 +61,18 @@ struct DSPConfig {
     float bassBoost =
         0.0f;
 
+    // =============================================
+    // REVERB (2026-11-19)
+    // =============================================
+    //
+    // Preset Android PresetReverb 0..6 (0 = Off). Daftar preset sama
+    // dengan ReverbDropdown / REVERB_PRESET_MAP di JS; pemetaan ke
+    // parameter filter ada di ReverbParams::fromPreset() (dsp/tone/
+    // ReverbNode.h). Node membaca field ini lewat applyConfig.
+
+    int reverbPreset =
+        0;
+
     // (Field immersiveEnabled/solfeggioFreq/brainwaveFreq/resonanceIntensity/
     // convolverEnabled dihapus 2026-11-10: tidak pernah dibaca — ImmersiveStage
     // membaca parameter langsung dari DSPParameters, bukan lewat DSPConfig.
@@ -99,6 +111,8 @@ struct DSPConfig {
         eqGain.fill(0.0f);
 
         bassBoost = 0.0f;
+
+        reverbPreset = 0;
 
         headphoneCorrectionEnabled =
             false;

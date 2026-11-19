@@ -159,6 +159,12 @@ public:
         float gainDb
     );
 
+    // Reverb (2026-11-19): preset 0..6, 0 = Off. Disimpan di AudioState,
+    // dibaca tiap buffer oleh AudioCallback::updateParameters().
+    void setReverbPreset(
+        int preset
+    );
+
     // =============================================
     // KOREKSI HEADPHONE (Fase D)
     // =============================================

@@ -44,6 +44,7 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     // setengah-jadi. Nama HARUS cocok dengan JNI di NativeDSPModule.cpp.
     private external fun setNativeEqualizerBands(gains: FloatArray)
     private external fun setNativeBassBoost(gain: Float)
+    private external fun setNativeReverbPreset(preset: Int)
     private external fun setNativeBalance(balance: Float)
     private external fun toggleNativeExclusiveMode(enabled: Boolean)
 
@@ -212,12 +213,26 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     @ReactMethod
     fun setReverbPreset(preset: Int, sessionId: Int, promise: Promise) {
         // C (follow-up logcat-4): ukur durasi NATIVE — lihat komentar di
-        // setFullEqualizer. Stub: resolve(false) tanpa JNI, durasi ≈ 0 ms
-        // membuktikan stub bukan biang kelambatan apply.
+        // setFullEqualizer.
+        //
+        // 2026-11-19: BUKAN stub lagi. Engine reverb beneran ada di C++
+        // (ReverbNode Freeverb di DSPChain, sesudah widener, sebelum
+        // gain/limiter) — preset 0..6 diteruskan lewat JNI, resolve(true)
+        // bila engine tersedia. Preset 0 = tanpa reverb (node passthrough
+        // bit-exact). Stub lama (resolve false, "tidak didukung engine
+        // C++") dihapus bersama keputusan 2026-11-14 yang menyatakannya.
         val t0 = System.nanoTime()
-        // Reverb tidak didukung oleh engine C++ saat ini
-        Log.i(TAG, "[DSP-TIMING] setReverbPreset native=${(System.nanoTime() - t0) / 1_000_000}ms (stub)")
-        promise.resolve(false)
+        if (!engineAvailable) {
+            Log.i(TAG, "[DSP-TIMING] setReverbPreset native=${(System.nanoTime() - t0) / 1_000_000}ms (engine unavailable)")
+            promise.resolve(false); return
+        }
+        try {
+            setNativeReverbPreset(preset)
+            Log.i(TAG, "[DSP-TIMING] setReverbPreset native=${(System.nanoTime() - t0) / 1_000_000}ms")
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("DSP_ERROR", e.message)
+        }
     }
 
     @ReactMethod

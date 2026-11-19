@@ -17,6 +17,8 @@ import {
   RotateCcw,
   Eye,
   EyeOff,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react-native";
 
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -71,6 +73,20 @@ const MODE_LABELS: Record<string, string> = {
   dsp: "DSP",
   immersive: "SOLFEGGIO",
 };
+
+// Label preset reverb Bahasa Indonesia (dulu Inggris di tengah UI
+// Indonesia) — urutan SAMA dengan daftar preset ReverbDropdown /
+// REVERB_PRESET_MAP (0..6). "Plate" tetap — itu nama jenis reverb,
+// bukan ukuran ruang.
+const REVERB_LABELS = [
+  "Tanpa Reverb",
+  "Ruang Kecil",
+  "Ruang Sedang",
+  "Ruang Besar",
+  "Aula Sedang",
+  "Aula Besar",
+  "Plate",
+];
 
 // ─── MINI COMPONENTS ─────────────────────────────────────────────────────
 
@@ -414,6 +430,11 @@ export default function EqualizerScreen() {
   );
   const widthColor = accentOn(
     [colors.accent.blue],
+    onCard,
+    accentTextFallback,
+  );
+  const reverbColor = accentOn(
+    [colors.accent.purple],
     onCard,
     accentTextFallback,
   );
@@ -952,14 +973,110 @@ export default function EqualizerScreen() {
                 </View>
               </View>
 
-              {/* REVERB — DISEMBUNYIKAN 2026-11-18 (declutter layar EQ).
-                  Engine reverb masih STUB (keputusan 2026-11-14):
-                  `setReverbPreset` native tidak memproses apa pun, jadi
-                  kontrolnya tidak ditampilkan supaya tidak terlihat
-                  seperti kontrol hidup. Kembalikan blok ini saat engine
-                  reverb beneran ada di C++. State reverb di store tetap
-                  dipertahankan karena preset menyimpannya sebagai bagian
-                  profil penuh (applyPreset/saveCustomPreset). */}
+              {/* REVERB PRESET SELECTOR — DIPULIHKAN 2026-11-19.
+                  Disembunyikan 2026-11-18 karena engine reverb masih STUB
+                  (keputusan 2026-11-14); syarat "sampai engine C++ ada"
+                  kini terpenuhi (ReverbNode Freeverb di DSPChain), jadi
+                  kontrolnya kembali. Koreksi catatan: yang disembunyikan
+                  dulu adalah stepper ini (REVERB_LABELS + tombol
+                  mundur/maju, U-P2-40), BUKAN komponen ReverbDropdown —
+                  komponen itu tidak pernah terpasang di layar ini.
+                  Stepper dipulihkan verbatim; ReverbDropdown tetap ada
+                  sebagai komponen tak terpakai (aturan dead code:
+                  inventaris dulu, bukan dihapus di ronde ini). */}
+              <View
+                style={[
+                  styles.effectItem,
+                  {
+                    backgroundColor: colors.background.secondary,
+                    borderColor: colors.border.medium,
+                    paddingVertical: spacing.md,
+                  },
+                ]}
+              >
+                <MiniSwitch
+                  label="REVERB LINGKUNGAN"
+                  value={eq.isReverbEnabled}
+                  onValueChange={eq.setReverbEnabled}
+                  disabled={eq.isDSPDisabled}
+                  color={reverbColor}
+                />
+                {/* U-P2-40: kontrol reverb DULU hanya bisa maju — satu tombol
+                    dengan ChevronRight menyiratkan membuka daftar, padahal
+                    ketukan hanya memajukan preset (sampai 6 ketukan untuk
+                    kembali). Sekarang ada tombol mundur eksplisit di kiri;
+                    ChevronRight di kanan jujur berarti "berikutnya". */}
+                <View
+                  style={[
+                    styles.reverbRow,
+                    { marginHorizontal: spacing.md, marginTop: spacing.sm },
+                  ]}
+                >
+                  <TouchableOpacity
+                    onPress={() => {
+                      const prev =
+                        (eq.reverbPreset - 1 + REVERB_LABELS.length) %
+                        REVERB_LABELS.length;
+                      eq.setReverb(prev);
+                    }}
+                    disabled={!eq.isReverbEnabled || eq.isDSPDisabled}
+                    style={[
+                      styles.reverbStepBtn,
+                      {
+                        backgroundColor: colors.background.tertiary,
+                        borderColor: colors.border.medium,
+                      },
+                      (!eq.isReverbEnabled || eq.isDSPDisabled) && {
+                        opacity: 0.4,
+                      },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Preset reverb sebelumnya: ${REVERB_LABELS[(eq.reverbPreset - 1 + REVERB_LABELS.length) % REVERB_LABELS.length]}`}
+                  >
+                    <ChevronLeft size={16} color={colors.text.secondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.reverbBox,
+                      {
+                        backgroundColor: colors.background.tertiary,
+                        borderColor: colors.border.medium,
+                        padding: spacing.md,
+                        minHeight: 44,
+                        flex: 1,
+                      },
+                      (!eq.isReverbEnabled || eq.isDSPDisabled) && {
+                        opacity: 0.4,
+                      },
+                    ]}
+                    disabled={!eq.isReverbEnabled || eq.isDSPDisabled}
+                    onPress={() => {
+                      const next =
+                        (eq.reverbPreset + 1) % REVERB_LABELS.length;
+                      eq.setReverb(next);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Reverb: ${REVERB_LABELS[eq.reverbPreset]}. Ketuk untuk preset berikutnya, tombol kiri untuk sebelumnya.`}
+                  >
+                    <Text
+                      style={[
+                        styles.reverbLabel,
+                        { color: colors.text.secondary },
+                      ]}
+                    >
+                      LINGKUNGAN
+                    </Text>
+                    <View style={styles.reverbValueRow}>
+                      <Text
+                        style={[styles.reverbValue, { color: reverbColor }]}
+                      >
+                        {REVERB_LABELS[eq.reverbPreset]}
+                      </Text>
+                      <ChevronRight size={16} color={colors.text.secondary} />
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
           )}
 
@@ -1176,6 +1293,29 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
   },
+  reverbRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  reverbStepBtn: {
+    minWidth: 44,
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reverbBox: {
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  reverbLabel: { fontSize: 10, fontWeight: "bold", letterSpacing: 1 },
+  reverbValueRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  reverbValue: { fontSize: 13, fontWeight: "900" },
   // U-P2-01: penangkap sentuh MiniSwitch (lihat komentar di komponen).
   miniSwitchHit: {
     minWidth: 44,

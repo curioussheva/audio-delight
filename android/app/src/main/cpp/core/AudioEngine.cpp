@@ -444,6 +444,22 @@ void AudioEngine::setBassBoost(
 }
 
 // =====================================================
+// REVERB (2026-11-19)
+// =====================================================
+//
+// Dulu tidak ada — `setReverbPreset` Kotlin stub eksplisit (resolve
+// false). Sekarang preset disimpan di AudioState dan dibaca
+// `AudioCallback::updateParameters()` tiap buffer, lalu diteruskan
+// AudioPipeline -> DSPChain -> ReverbNode (Freeverb).
+
+void AudioEngine::setReverbPreset(
+    int preset
+) {
+
+    mState.setReverbPreset(preset);
+}
+
+// =====================================================
 // EQ BAND
 // =====================================================
 

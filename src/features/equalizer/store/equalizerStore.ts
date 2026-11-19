@@ -137,9 +137,9 @@ finalSessionId = sessionResult?.sessionId ?? 0;
     ["setFullEqualizer", () => NativeDSPModule.setFullEqualizer(gains, finalSessionId)],
     ["setBassBoost", () => NativeDSPModule.setBassBoost(bass, finalSessionId)],
     ["setVirtualizer", () => NativeDSPModule.setVirtualizer(virtualizer, finalSessionId)],
-    // Reverb tetap dikirim walau native-nya stub (keputusan csheva
-    // 2026-11-14: stub resolve false, tidak mengubah suara) — supaya
-    // saat engine reverb beneran ada, restore ini langsung bekerja.
+    // Reverb (2026-11-19): engine beneran ada di C++ (ReverbNode
+    // Freeverb) — restore ini benar-benar mengubah suara. Preset 0 =
+    // tanpa reverb.
     ["setReverbPreset", () => NativeDSPModule.setReverbPreset(reverb, finalSessionId)],
     // Master gain: panggilan native sinkron (void, tanpa sessionId —
     // engine global, F7) jadi dibungkus supaya masuk Promise.all yang

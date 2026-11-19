@@ -341,6 +341,9 @@ void AudioCallback::updateParameters() {
 
     mParams.bassBoostGain = mState.bassBoost();
 
+    // Reverb (2026-11-19): preset 0..6, 0 = Off.
+    mParams.reverbPreset = mState.reverbPreset();
+
     // 🔥 FASE D (2026-10-10): preset koreksi headphone ikut dibaca.
     //
     // Yang disalin hanya POD (~272 byte), dan itu di luar loop sample.

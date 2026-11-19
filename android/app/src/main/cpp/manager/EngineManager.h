@@ -195,6 +195,7 @@ public:
     // dalam satu transaksi seqlock di AudioState.
     void setEqBands(const float* gains, int count);
     void setBassBoost(float gainDb);
+    void setReverbPreset(int preset);
 
     // =============================================
     // KOREKSI HEADPHONE (Fase D)

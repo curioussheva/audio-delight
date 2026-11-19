@@ -115,6 +115,29 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeBassBoost(
 }
 
 // =====================================================
+// REVERB (2026-11-19)
+// =====================================================
+//
+// Dulu tidak ada fungsi JNI ini — Kotlin setReverbPreset stub
+// eksplisit (resolve false). Sekarang preset diteruskan ke engine
+// (AudioState clamp 0..6 -> DSPChain -> ReverbNode Freeverb).
+// Nama HARUS cocok dengan `external fun` di Kotlin (lihat
+// setNativeEqualizerBands di atas): salah nama = UnsatisfiedLinkError.
+
+JNIEXPORT void JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_setNativeReverbPreset(
+    JNIEnv* env,
+    jobject,
+    jint preset
+) {
+    pristine::jni::guardedVoid(env, "setNativeReverbPreset", [&] {
+
+    EngineManager::get()
+        .setReverbPreset(static_cast<int>(preset));
+    });
+}
+
+// =====================================================
 // MASTER GAIN
 // =====================================================
 

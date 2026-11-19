@@ -10,6 +10,7 @@
 #include "spatial/StereoWidenerNode.h"
 #include "tone/EQNode.h"
 #include "tone/GainNode.h"
+#include "tone/ReverbNode.h"
 
 namespace pristine {
 
@@ -138,6 +139,28 @@ void DSPChain::buildGraph() {
     mGraph.addNode(
         std::make_unique<
             StereoWidenerNode
+        >()
+    );
+
+    // =========================================
+    // REVERB STAGE (2026-11-19)
+    // =========================================
+    //
+    // Freeverb (Schroeder-Moorer) sesudah widener, sebelum gain +
+    // limiter. Urutan ini disengaja:
+    //   - Sesudah widener: ekor reverb ikut mendapat lebar stereo
+    //     (widener melebarkan sinyal kering; reverb yang ditaruh
+    //     sebelumnya akan terdengar sempit di tengah).
+    //   - Sebelum gain: master gain mengatur level AKHIR termasuk
+    //     ekor — slider gain 0 benar-benar membisukan segalanya.
+    //   - Sebelum limiter: limiter menangkap puncak campuran
+    //     kering+basah (reverb bisa menaikkan puncak sesaat).
+    // Preset 0 = node passthrough bit-exact (biaya NOL sesudah fade),
+    // jadi rantai tanpa reverb berperilaku persis seperti sebelumnya.
+
+    mGraph.addNode(
+        std::make_unique<
+            ReverbNode
         >()
     );
 

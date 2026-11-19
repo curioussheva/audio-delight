@@ -403,6 +403,11 @@ bool dspConfigEquals(
     if (a.balance != b.balance) return false;
     if (a.stereoWidth != b.stereoWidth) return false;
     if (a.bassBoost != b.bassBoost) return false;
+    // Reverb (2026-11-19): preset WAJIB dibandingkan — tanpa ini ganti
+    // preset tidak terkirim ke rantai (flag lain tidak berubah, config
+    // dianggap sama, suara diam — bug senyap yang sama seperti koreksi
+    // headphone di bawah).
+    if (a.reverbPreset != b.reverbPreset) return false;
 
     for (int i = 0; i < 10; ++i) {
         if (a.eqGain[i] != b.eqGain[i]) return false;
@@ -512,6 +517,7 @@ void AudioPipeline::applyDSPConfig(
     mDspConfig.balance = params.balance;
     mDspConfig.stereoWidth = params.stereoWidth;
     mDspConfig.bassBoost = params.bassBoostGain;
+    mDspConfig.reverbPreset = params.reverbPreset;
 
     for (int i = 0; i < 10; ++i) {
         mDspConfig.eqGain[i] = params.eqGains[i];

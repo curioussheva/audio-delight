@@ -476,6 +476,33 @@ public:
     }
 
     // =============================================
+    // REVERB (2026-11-19)
+    // =============================================
+    //
+    // Preset Android PresetReverb 0..6 (0 = Off, sama seperti
+    // ReverbDropdown / REVERB_PRESET_MAP di JS). Disimpan di sini dan
+    // dibaca AudioCallback::updateParameters() tiap buffer, sama
+    // seperti bassBoost di atas. Clamp 0..6, fallback 0 = tanpa reverb
+    // (perilaku lama yang TIDAK BOLEH berubah: toggle OFF = senyap
+    // dari reverb).
+    inline void setReverbPreset(
+        int preset
+    ) {
+
+        mReverbPreset.store(
+            preset < 0 ? 0 : (preset > 6 ? 6 : preset),
+            std::memory_order_release
+        );
+    }
+
+    inline int reverbPreset() const {
+
+        return mReverbPreset.load(
+            std::memory_order_acquire
+        );
+    }
+
+    // =============================================
     // HEADPHONE CORRECTION
     // =============================================
     //
@@ -758,6 +785,10 @@ private:
     // jadi `AudioEngine::setBassBoost()` tidak punya tempat menyimpan.
     std::atomic<float>
         mBassBoost{0.0f};
+
+    // Reverb (2026-11-19): preset 0..6, 0 = Off.
+    std::atomic<int>
+        mReverbPreset{0};
 
     // =============================================
     // HEADPHONE CORRECTION (Fase D)
