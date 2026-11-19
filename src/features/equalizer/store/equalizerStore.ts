@@ -117,19 +117,31 @@ finalSessionId = sessionResult?.sessionId ?? 0;
     // saat engine reverb beneran ada, restore ini langsung bekerja.
     ["setReverbPreset", () => NativeDSPModule.setReverbPreset(reverb, finalSessionId)],
   ];
+  // Diagnostik (verifikasi 2nd opinion, 2026-11-19): ukur durasi apply —
+  // timing log membuktikan/membantah dugaan "apply DSP lambat/berat" dari
+  // logcat berikutnya. Murni log; urutan/perilaku tidak berubah, tanpa
+  // debounce (debounce TIDAK diputuskan).
+  const applyStartedAt = performance.now();
   const results = await Promise.all(
     effects.map(async ([name, apply]) => {
+      const startedAt = performance.now();
       try {
         await apply();
-        return true;
+        return { ok: true, name, ms: performance.now() - startedAt };
       } catch (e) {
         console.error(`[EQ Store] Failed to apply ${name}:`, e);
-        return false;
+        return { ok: false, name, ms: performance.now() - startedAt };
       }
     }),
   );
-  console.log(`[DSP] Applied to Session: ${finalSessionId} (trigger: ${trigger})`);
-  return results.every(Boolean);
+  const totalMs = performance.now() - applyStartedAt;
+  const perEffect = results
+    .map((r) => `${r.name}:${Math.round(r.ms)}ms`)
+    .join(" ");
+  console.log(
+    `[DSP] Applied to Session: ${finalSessionId} (trigger: ${trigger}) in ${Math.round(totalMs)}ms (${perEffect})`,
+  );
+  return results.every((r) => r.ok);
 };
 
 // ─────────────────────────────────────────────
