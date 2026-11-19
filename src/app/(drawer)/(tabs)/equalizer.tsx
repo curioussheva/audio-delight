@@ -9,7 +9,6 @@ import {
   Dimensions,
   ScrollView,
   LayoutAnimation,
-  UIManager,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -62,13 +61,6 @@ import {
   type VisibleSections,
 } from "@/features/equalizer/utils/visibleSections";
 import { FLOATING_PLAYER_CLEARANCE } from "@/features/player/layout";
-
-if (
-  require("react-native").Platform.OS === "android" &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 const { width } = Dimensions.get("window");
 
