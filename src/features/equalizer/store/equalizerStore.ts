@@ -136,7 +136,11 @@ finalSessionId = sessionResult?.sessionId ?? 0;
   const effects: Array<[string, () => Promise<unknown>]> = [
     ["setFullEqualizer", () => NativeDSPModule.setFullEqualizer(gains, finalSessionId)],
     ["setBassBoost", () => NativeDSPModule.setBassBoost(bass, finalSessionId)],
-    ["setVirtualizer", () => NativeDSPModule.setVirtualizer(virtualizer, finalSessionId)],
+    ["setVirtualizer", () => {
+      // DIAGNOSTIK SEMENTARA — bisa dicabut (audit setVirtualizer 2026-11-19, opsi B).
+      console.log(`[EQ-DIAG] setVirtualizer via applyAllEffectsToNative strength=${virtualizer}`);
+      return NativeDSPModule.setVirtualizer(virtualizer, finalSessionId);
+    }],
     // Reverb (2026-11-19): engine beneran ada di C++ (ReverbNode
     // Freeverb) — restore ini benar-benar mengubah suara. Preset 0 =
     // tanpa reverb.
@@ -359,6 +363,8 @@ export const useEqualizerStore = create<EqualizerStore>()(
         const { isEQEnabled, audioSessionId, virtualizerLevel } = get();
         if (isEQEnabled && audioSessionId !== -1) {
           try {
+            // DIAGNOSTIK SEMENTARA — bisa dicabut (audit setVirtualizer 2026-11-19, opsi B).
+            console.log(`[EQ-DIAG] setVirtualizer via setVirtualizerEnabled strength=${enabled ? virtualizerLevel : 0}`);
             await NativeDSPModule.setVirtualizer(
               enabled ? virtualizerLevel : 0,
               audioSessionId,
@@ -405,6 +411,8 @@ export const useEqualizerStore = create<EqualizerStore>()(
         const { isEQEnabled, isVirtualizerEnabled, audioSessionId } = get();
         if (isEQEnabled && isVirtualizerEnabled && audioSessionId !== -1) {
           try {
+            // DIAGNOSTIK SEMENTARA — bisa dicabut (audit setVirtualizer 2026-11-19, opsi B).
+            console.log(`[EQ-DIAG] setVirtualizer via setVirtualizer strength=${clamped}`);
             await NativeDSPModule.setVirtualizer(clamped, audioSessionId);
           } catch (e) {
             console.error("[EQ Store] setVirtualizer gagal:", e);
@@ -522,8 +530,11 @@ export const useEqualizerStore = create<EqualizerStore>()(
           // saat ini (preset bawaan yang EQ-only tidak me-reset efek).
           if (preset.bassBoost !== undefined)
             void get().setBassBoost(preset.bassBoost);
-          if (preset.virtualizer !== undefined)
+          if (preset.virtualizer !== undefined) {
+            // DIAGNOSTIK SEMENTARA — bisa dicabut (audit setVirtualizer 2026-11-19, opsi B).
+            console.log(`[EQ-DIAG] setVirtualizer via applyPreset preset=${presetId} virtualizer=${preset.virtualizer}`);
             void get().setVirtualizer(preset.virtualizer);
+          }
           if (preset.reverb !== undefined)
             void get().setReverb(preset.reverb);
           if (get().isEQEnabled && get().audioSessionId !== -1) {
