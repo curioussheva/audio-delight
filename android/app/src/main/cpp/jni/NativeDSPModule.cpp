@@ -138,6 +138,26 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeReverbPreset(
 }
 
 // =====================================================
+// HRTF (2026-11-19)
+// =====================================================
+//
+// Nama HARUS cocok dengan `external fun` di Kotlin: salah nama =
+// UnsatisfiedLinkError.
+
+JNIEXPORT void JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_setNativeHrtfEnabled(
+    JNIEnv* env,
+    jobject,
+    jboolean enabled
+) {
+    pristine::jni::guardedVoid(env, "setNativeHrtfEnabled", [&] {
+
+    EngineManager::get()
+        .setHrtfEnabled(enabled == JNI_TRUE);
+    });
+}
+
+// =====================================================
 // MASTER GAIN
 // =====================================================
 

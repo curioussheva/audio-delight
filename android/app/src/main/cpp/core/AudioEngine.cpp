@@ -479,6 +479,22 @@ void AudioEngine::setReverbPreset(
 }
 
 // =====================================================
+// HRTF (2026-11-19)
+// =====================================================
+//
+// Virtual speaker ±30° (HRTFNode, sesudah reverb, sebelum gain).
+// Disimpan di AudioState dan dibaca
+// `AudioCallback::updateParameters()` tiap buffer, lalu diteruskan
+// AudioPipeline -> DSPChain -> HRTFNode.
+
+void AudioEngine::setHrtfEnabled(
+    bool enabled
+) {
+
+    mState.setHrtfEnabled(enabled);
+}
+
+// =====================================================
 // EQ BAND
 // =====================================================
 

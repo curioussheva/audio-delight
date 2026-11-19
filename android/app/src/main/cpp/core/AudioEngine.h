@@ -185,6 +185,12 @@ public:
         int preset
     );
 
+    // HRTF (2026-11-19): virtual speaker ±30° (HRTFNode). Disimpan di
+    // AudioState, dibaca tiap buffer oleh updateParameters().
+    void setHrtfEnabled(
+        bool enabled
+    );
+
     // =============================================
     // KOREKSI HEADPHONE (Fase D)
     // =============================================

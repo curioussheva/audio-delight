@@ -1310,6 +1310,15 @@ void EngineManager::setReverbPreset(
     );
 }
 
+void EngineManager::setHrtfEnabled(
+    bool enabled
+) {
+
+    mEngine.setHrtfEnabled(
+        enabled
+    );
+}
+
 // =====================================================
 // KOREKSI HEADPHONE (Fase D)
 // =====================================================

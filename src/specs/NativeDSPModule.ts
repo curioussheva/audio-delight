@@ -36,6 +36,7 @@ export interface Spec extends TurboModule {
   setBassBoost(strength: number, sessionId: number): Promise<boolean>;
   setVirtualizer(strength: number, sessionId: number): Promise<boolean>;
   setReverbPreset(preset: number, sessionId: number): Promise<boolean>;
+  setHrtfEnabled(enabled: boolean, sessionId: number): Promise<boolean>;
   releaseAllFX(): Promise<boolean>;
 
   // Audio session.

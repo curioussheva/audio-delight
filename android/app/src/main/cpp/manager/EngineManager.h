@@ -197,6 +197,7 @@ public:
     void setEqBands(const float* gains, int count);
     void setBassBoost(float gainDb);
     void setReverbPreset(int preset);
+    void setHrtfEnabled(bool enabled);
 
     // =============================================
     // KOREKSI HEADPHONE (Fase D)

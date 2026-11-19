@@ -54,6 +54,7 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     private external fun setNativeEqualizerBands(gains: FloatArray)
     private external fun setNativeBassBoost(gain: Float)
     private external fun setNativeReverbPreset(preset: Int)
+    private external fun setNativeHrtfEnabled(enabled: Boolean)
     private external fun setNativeBalance(balance: Float)
     private external fun toggleNativeExclusiveMode(enabled: Boolean)
 
@@ -238,6 +239,27 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
         try {
             setNativeReverbPreset(preset)
             Log.i(TAG, "[DSP-TIMING] setReverbPreset native=${(System.nanoTime() - t0) / 1_000_000}ms")
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("DSP_ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun setHrtfEnabled(enabled: Boolean, sessionId: Int, promise: Promise) {
+        // HRTF (2026-11-19): virtual speaker ±30° (HRTFNode sesudah
+        // reverb, sebelum gain). Toggle sendiri, DI LUAR preset EQ.
+        // C (follow-up logcat-4): ukur durasi NATIVE — lihat komentar di
+        // setFullEqualizer. sessionId diterima demi kompatibilitas API
+        // tapi diabaikan native (F7: satu stream global).
+        val t0 = System.nanoTime()
+        if (!engineAvailable) {
+            Log.i(TAG, "[DSP-TIMING] setHrtfEnabled enabled=$enabled native=${(System.nanoTime() - t0) / 1_000_000}ms (engine unavailable)")
+            promise.resolve(false); return
+        }
+        try {
+            setNativeHrtfEnabled(enabled)
+            Log.i(TAG, "[DSP-TIMING] setHrtfEnabled enabled=$enabled native=${(System.nanoTime() - t0) / 1_000_000}ms")
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("DSP_ERROR", e.message)
