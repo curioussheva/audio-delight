@@ -1,6 +1,7 @@
 import React from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import Slider from "@react-native-community/slider";
+import * as Haptics from "expo-haptics";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
 import { accentOn } from "@/shared/utils/contrast";
@@ -46,6 +47,7 @@ export function SolfeggioSubscreen() {
   const solfeggioTemplateId = usePlayerStore((s) => s.solfeggioTemplateId);
   const setSolfeggioFreq = usePlayerStore((s) => s.setSolfeggioFreq);
   const setSolfeggioTemplate = usePlayerStore((s) => s.setSolfeggioTemplate);
+  const setAudioMode = usePlayerStore((s) => s.setAudioMode);
 
   const info = MODE_INFO.immersive;
   // Nilai % sebagai teks aksen — pola Equalizer: aksen dipakai selama
@@ -96,11 +98,18 @@ export function SolfeggioSubscreen() {
             return (
               <Pressable
                 key={template.id}
-                onPress={() => setSolfeggioTemplate(template.id)}
+                onPress={() => {
+                  // P2 audit: chip dulu tanpa umpan balik tekan/haptic
+                  // (TuningControl di layar yang sama memberi haptic).
+                  void Haptics.impactAsync(
+                    Haptics.ImpactFeedbackStyle.Light,
+                  );
+                  void setSolfeggioTemplate(template.id);
+                }}
                 accessibilityRole="button"
                 accessibilityState={{ selected: active }}
                 accessibilityLabel={`Template ${template.name}, ${template.freq} Hz`}
-                style={[
+                style={({ pressed }) => [
                   styles.chip,
                   {
                     borderColor: active
@@ -111,6 +120,7 @@ export function SolfeggioSubscreen() {
                       ? colors.background.tertiary
                       : colors.background.secondary,
                   },
+                  pressed && styles.pressed,
                 ]}
               >
                 <Text
@@ -257,6 +267,28 @@ export function SolfeggioSubscreen() {
         Kontrol EQ/DSP lain diatur di tab DSP (nilainya tetap berlaku di
         sini).
       </Text>
+
+      {/* Pindah ke DSP — jalan keluar di bawah layar (P2 audit
+          BitPerfect/Solfeggio 2026-11-20): BitPerfect punya tombol ini;
+          Solfeggio — layar terpanjang di tab — tidak punya, padahal
+          pemilih mode ada di atas dan mengharuskan scroll ke atas. */}
+      <Pressable
+        style={({ pressed }) => [
+          styles.button,
+          { backgroundColor: colors.primary[500] },
+          pressed && styles.pressed,
+        ]}
+        onPress={() => {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          void setAudioMode("dsp");
+        }}
+        accessibilityRole="button"
+        accessibilityLabel="Pindah ke mode DSP"
+      >
+        <Text style={[styles.buttonText, { color: colors.text.inverse }]}>
+          Pindah ke DSP
+        </Text>
+      </Pressable>
     </View>
   );
 }
@@ -326,5 +358,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: FONT_FAMILY.regular,
     lineHeight: 17,
+  },
+  // Tombol "Pindah ke DSP" — sama seperti BitPerfectSubscreen.
+  button: {
+    borderRadius: BASE_RADIUS.md,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  buttonText: {
+    fontSize: 14,
+    fontFamily: FONT_FAMILY.bold,
+  },
+  // Umpan balik tekan (P2 audit): Pressable tanpa style pressed terasa
+  // mati — samakan dengan TuningControl (haptic) + opacity.
+  pressed: {
+    opacity: 0.7,
   },
 });

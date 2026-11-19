@@ -1,5 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
+import * as Haptics from "expo-haptics";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
 import { accentOn } from "@/shared/utils/contrast";
@@ -202,10 +203,19 @@ export function BitPerfectSubscreen() {
         </Text>
       </View>
 
-      {/* Pindah ke DSP — keluar dari bit-perfect tidak perlu konfirmasi. */}
+      {/* Pindah ke DSP — keluar dari bit-perfect tidak perlu konfirmasi.
+          P2 audit: dulu tanpa umpan balik tekan/haptic (TuningControl di
+          layar sebelah memberi haptic tiap ketukan). */}
       <Pressable
-        style={[styles.button, { backgroundColor: colors.primary[500] }]}
-        onPress={() => void setAudioMode("dsp")}
+        style={({ pressed }) => [
+          styles.button,
+          { backgroundColor: colors.primary[500] },
+          pressed && styles.pressed,
+        ]}
+        onPress={() => {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          void setAudioMode("dsp");
+        }}
         accessibilityRole="button"
         accessibilityLabel="Pindah ke mode DSP"
       >
@@ -270,5 +280,10 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: 14,
     fontFamily: FONT_FAMILY.bold,
+  },
+  // Umpan balik tekan (P2 audit): Pressable tanpa style pressed terasa
+  // mati — samakan dengan TuningControl (haptic) + opacity.
+  pressed: {
+    opacity: 0.7,
   },
 });
