@@ -295,6 +295,9 @@ describe("Master gain (2026-11-19) — store + native + log [DSP] Applied", () =
       expect.closeTo(3.981, 3),
     );
 
+    // Throttle native 100 ms (P1-9): tunggu jendela lewat supaya panggilan
+    // kedua jadi leading lagi, bukan trailing yang tertunda.
+    await new Promise((r) => setTimeout(r, 120));
     await store.getState().setMasterGain(-1);
     expect(store.getState().masterGain).toBeCloseTo(0.251, 3);
     expect(native().setMasterGain).toHaveBeenLastCalledWith(
@@ -454,5 +457,84 @@ describe("resetToDefault + penanda DSP Guard (clean-cozy 2026-11-19)", () => {
       "eqEnabledBeforeBitPerfect",
       true,
     );
+  });
+});
+
+describe("setEQEnabled mendorong flag P0 ke native (clean-cozy)", () => {
+  const native = () =>
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("@/features/equalizer/api/nativeInterface").NativeDSPModule as {
+      setEqEnabled: jest.Mock;
+      setFullEqualizer: jest.Mock;
+      releaseAllFX: jest.Mock;
+    };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("EQ ON -> setEqEnabled(true) lalu apply; EQ OFF -> setEqEnabled(false), tanpa releaseAllFX", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+
+    await store.getState().setEQEnabled(true);
+    const n = native();
+    expect(n.setEqEnabled).toHaveBeenCalledWith(true, 7);
+    expect(n.setFullEqualizer).toHaveBeenCalled();
+    expect(n.releaseAllFX).not.toHaveBeenCalled();
+
+    jest.clearAllMocks();
+    await store.getState().setEQEnabled(false);
+    expect(n.setEqEnabled).toHaveBeenCalledWith(false, 7);
+    expect(n.releaseAllFX).not.toHaveBeenCalled();
+  });
+});
+
+describe("setMasterGain throttle native (P1-9, clean-cozy)", () => {
+  const native = () =>
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("@/features/equalizer/api/nativeInterface").NativeDSPModule as {
+      setMasterGain: jest.Mock;
+    };
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it("tick pertama langsung ke native, tick dalam jendela digabung ke trailing dengan nilai terakhir", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    await store.getState().setEQEnabled(true);
+    const n = native();
+    jest.clearAllMocks();
+
+    // Leading: state + native langsung.
+    await store.getState().setMasterGain(1.2);
+    expect(store.getState().masterGain).toBe(1.2);
+    expect(n.setMasterGain).toHaveBeenCalledTimes(1);
+    expect(n.setMasterGain).toHaveBeenCalledWith(1.2);
+
+    // Dalam jendela: state langsung, native belum.
+    await store.getState().setMasterGain(1.3);
+    await store.getState().setMasterGain(1.4);
+    expect(store.getState().masterGain).toBe(1.4);
+    expect(n.setMasterGain).toHaveBeenCalledTimes(1);
+
+    // Trailing flush: hanya nilai terakhir yang terkirim.
+    await jest.advanceTimersByTimeAsync(100);
+    expect(n.setMasterGain).toHaveBeenCalledTimes(2);
+    expect(n.setMasterGain).toHaveBeenLastCalledWith(1.4);
+  });
+
+  it("EQ mati -> tidak ada dorongan native, state tetap tersimpan", async () => {
+    const store = loadStore();
+    await store.getState().setMasterGain(1.5);
+    expect(store.getState().masterGain).toBe(1.5);
+    expect(native().setMasterGain).not.toHaveBeenCalled();
   });
 });

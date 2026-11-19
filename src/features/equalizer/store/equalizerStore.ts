@@ -197,9 +197,10 @@ finalSessionId = sessionResult?.sessionId ?? 0;
     ["setReverbPreset", () => NativeDSPModule.setReverbPreset(reverb, finalSessionId)],
     // HRTF (2026-11-19): flag dari hrtfStore — di luar preset.
     ["setHrtfEnabled", () => NativeDSPModule.setHrtfEnabled(hrtf, finalSessionId)],
-    // Master gain: panggilan native sinkron (void, tanpa sessionId —
-    // engine global, F7) jadi dibungkus supaya masuk Promise.all yang
-    // sama. `?.()` supaya JS lama tetap jalan lawan modul native yang
+    // Master gain: Promise<boolean> sejak P1-9 (2026-11-19) — tanpa
+    // sessionId (engine global, F7). Dibungkus supaya masuk Promise.all
+    // yang sama + hasil false tercatat sebagai gagal oleh wrapper di
+    // bawah. `?.()` supaya JS lama tetap jalan lawan modul native yang
     // belum punya metode ini (mirip guard `?.setFullEqualizer` di
     // applyEqThrottled); tanpa itu TypeError membuat apply gagal total.
     ["setMasterGain", async () => NativeDSPModule?.setMasterGain?.(gain)],
@@ -326,6 +327,52 @@ let _eqStoreLastAt = 0;
 let _eqStoreTimer: ReturnType<typeof setTimeout> | null = null;
 let _eqStorePendingBands: any[] | null = null;
 
+// P1-9 (2026-11-19): throttle dorongan setMasterGain ke native (leading +
+// trailing, 100 ms — pola applyEqThrottled J1-2). Slider gain dipanggil
+// tiap tick drag; tanpa ini tiap tick = satu panggilan bridge. State
+// store tetap di-update langsung tiap tick; hanya panggilan native yang
+// dibatasi. Nilai terakhir selalu terkirim (trailing).
+const MASTER_GAIN_NATIVE_THROTTLE_MS = 100;
+let _masterGainLastAt = 0;
+let _masterGainTimer: ReturnType<typeof setTimeout> | null = null;
+let _masterGainPending: number | null = null;
+
+const pushMasterGainThrottled = (gain: number) => {
+  const fire = async () => {
+    _masterGainLastAt = Date.now();
+    _masterGainTimer = null;
+    const value = _masterGainPending ?? gain;
+    _masterGainPending = null;
+    // setMasterGain kini Promise<boolean> (P1-9): false = native menolak.
+    // fire-and-forget (N23) tapi rejection dicatat — jangan jadi unhandled.
+    try {
+      const ok = await NativeDSPModule?.setMasterGain?.(value);
+      if (ok === false) {
+        console.warn("[EQ Store] setMasterGain ditolak native");
+      }
+    } catch (e) {
+      console.error("[EQ Store] setMasterGain gagal:", e);
+    }
+  };
+  const now = Date.now();
+  if (now - _masterGainLastAt >= MASTER_GAIN_NATIVE_THROTTLE_MS) {
+    if (_masterGainTimer) {
+      clearTimeout(_masterGainTimer);
+      _masterGainTimer = null;
+    }
+    _masterGainPending = null;
+    void fire();
+  } else if (!_masterGainTimer) {
+    _masterGainPending = gain;
+    _masterGainTimer = setTimeout(
+      () => void fire(),
+      MASTER_GAIN_NATIVE_THROTTLE_MS - (now - _masterGainLastAt),
+    );
+  } else {
+    _masterGainPending = gain;
+  }
+};
+
 // N29: counter penambah keunikan id preset custom (lihat saveCustomPreset).
 let _customPresetSeq = 0;
 
@@ -378,6 +425,19 @@ export const useEqualizerStore = create<EqualizerStore>()(
           const sessionId = await getCurrentSessionId();
           set({ audioSessionId: sessionId, isInitialized: true });
 
+          // P0: samakan flag native dengan isEQEnabled yang dipersist —
+          // native default eqEnabled=true, jadi boot dengan EQ mati harus
+          // mendorong false (kalau tidak, rantai memproses walau UI bilang
+          // mati — walau dengan parameter default yang netral).
+          try {
+            await NativeDSPModule?.setEqEnabled?.(
+              get().isEQEnabled,
+              sessionId,
+            );
+          } catch (e) {
+            console.error("[EQ Store] setEqEnabled gagal:", e);
+          }
+
           if (get().isEQEnabled && sessionId !== -1) {
             await applyAllEffectsToNative(get(), "initialize");
           }
@@ -400,10 +460,19 @@ export const useEqualizerStore = create<EqualizerStore>()(
 
       setEQEnabled: async (enabled: boolean) => {
         set({ isEQEnabled: enabled });
-        if (enabled && get().audioSessionId !== -1) {
+        const sessionId = get().audioSessionId;
+        // P0 (2026-11-19): dorong flag eqEnabled ke native — inilah yang
+        // benar-benar membypass rantai DSP saat OFF (DSPConfig.enabled).
+        // releaseAllFX lama (no-op yang hanya resolve true) tidak lagi
+        // dipanggil; flag ini satu-satunya mekanisme bypass. sessionId
+        // diterima API tapi diabaikan native (F7: satu stream global).
+        try {
+          await NativeDSPModule?.setEqEnabled?.(enabled, sessionId);
+        } catch (e) {
+          console.error("[EQ Store] setEqEnabled gagal:", e);
+        }
+        if (enabled && sessionId !== -1) {
           await applyAllEffectsToNative(get(), "setEQEnabled");
-        } else if (!enabled && NativeDSPModule?.releaseAllFX) {
-          await NativeDSPModule.releaseAllFX();
         }
       },
 
@@ -504,11 +573,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
         const clamped = clampMasterGain(gain);
         set({ masterGain: clamped });
         if (get().isEQEnabled) {
-          try {
-            NativeDSPModule?.setMasterGain?.(clamped);
-          } catch (e) {
-            console.error("[EQ Store] setMasterGain gagal:", e);
-          }
+          pushMasterGainThrottled(clamped);
         }
       },
 
