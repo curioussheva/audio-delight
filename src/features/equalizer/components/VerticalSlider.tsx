@@ -198,7 +198,11 @@ export const VerticalSlider = ({
       <Text
         style={[
           styles.valueText,
-          { color: disabled ? colors.text.tertiary : color },
+          // Nilai pakai warna teks (seragam untuk ketiga efek), bukan
+          // warna efek: "−12 dB" hijau vs "0 dB"/"×1.00" gelap terlihat
+          // tidak rapi (screenshot 2026-11-20 00:27). Warna efek tetap
+          // hidup di fill + thumb.
+          { color: disabled ? colors.text.tertiary : colors.text.primary },
         ]}
       >
         {displayText}
@@ -217,6 +221,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     letterSpacing: 2.5,
     textTransform: "uppercase",
+    // Tinggi dicadangkan dua baris (13 × 2): "PELEBAR STEREO" melipat
+    // jadi dua baris dan mendorong kolomnya ke bawah — nilai "×1.00"
+    // jadi lebih rendah dari "0 dB" (screenshot 2026-11-20 00:27).
+    // Dengan tinggi tetap, ketiga track mulai di garis yang sama.
+    minHeight: 26,
+    lineHeight: 13,
+    textAlign: "center",
   },
   faderTrack: {
     width: TRACK_WIDTH,
@@ -248,6 +259,11 @@ const styles = StyleSheet.create({
     height: THUMB_HEIGHT,
     borderRadius: 4,
     position: "absolute",
+    // WAJIB `top: 0` — lihat Band.tsx: thumb satu-satunya anak
+    // absolute track tanpa jangkar vertikal (tick pakai absoluteFill,
+    // fill pakai bottom: 0). Tanpa ini thumb terlempar ke bawah track
+    // dan tidak terlihat di dalam track (screenshot 2026-11-20 00:27).
+    top: 0,
     left: 1,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.25)",
