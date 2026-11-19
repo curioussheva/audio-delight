@@ -504,6 +504,68 @@ export class LibraryScanner {
   }
 
   /**
+   * B2 (follow-up logcat-4): NativeSong dari SQLite, bukan dari MediaStore.
+   *
+   * Scan sudah menulis sampleRate/bitDepth/bitrate ke tabel songs
+   * (saveBasicSongInfo → saveToDatabase), jadi warm cache enrichment
+   * tidak perlu mengulang query MediaStore + MediaMetadataRetriever
+   * per-baris (≈89 ms/file × 289 = 25,7 dtk). Satu SELECT lokal,
+   * milidetik. Semua baris dimasukkan — termasuk yang field teknisnya 0
+   * (retriever gagal saat scan, mis. 12 file yang ditolak MediaProvider):
+   * mengeluarkannya justru memicu fallback extract(uri) per lagu, yaitu
+   * query penuh MediaStore per lagu — jauh lebih mahal daripada 0.
+   */
+  static getNativeSongsFromDb(): NativeSong[] {
+    try {
+      const result = db.execute(
+        `SELECT id, uri, filename, title, artist, album, genre, folder,
+                artwork, duration, sampleRate, bitDepth, codec, bitrate,
+                fileSize, channels, year, trackNumber, discNumber,
+                dateAdded, playCount, isEnriched, isFavorite
+         FROM songs WHERE uri IS NOT NULL AND uri != ''`,
+      );
+      const rows = result.rows?._array ?? [];
+      return rows
+        .filter((r: any) => r?.uri && r?.id)
+        .map(
+          (r: any): NativeSong => ({
+            id: String(r.id),
+            uri: r.uri,
+            filename: r.filename || "",
+            title: r.title || "",
+            artist: r.artist || "",
+            album: r.album || "",
+            albumId: 0,
+            artwork: r.artwork || "",
+            artworkUri: r.artwork || "",
+            folder: r.folder || "",
+            genre: r.genre || "",
+            codec: r.codec || "",
+            mimeType: "",
+            duration: Number(r.duration) || 0,
+            dateAdded: Number(r.dateAdded) || 0,
+            fileSize: Number(r.fileSize) || 0,
+            year: Number(r.year) || 0,
+            trackNumber: Number(r.trackNumber) || 0,
+            discNumber: Number(r.discNumber) || 0,
+            bitrate: Number(r.bitrate) || 0,
+            sampleRate: Number(r.sampleRate) || 0,
+            bitDepth: Number(r.bitDepth) || 0,
+            isEnriched: Boolean(r.isEnriched),
+            isFavorite: Boolean(r.isFavorite),
+            playCount: Number(r.playCount) || 0,
+          }),
+        );
+    } catch (error) {
+      console.error(
+        "[LibraryScanner] Get native songs from DB failed:",
+        error,
+      );
+      return [];
+    }
+  }
+
+  /**
    * J2-2: SATU query untuk semua ukuran file (uri -> fileSize), dipakai
    * computeDiff. Dulu callback `(uri) => getSongByUri(uri)?.fileSize`
    * menjalankan satu SELECT * sinkron per lagu yang sudah ada (285 lagu

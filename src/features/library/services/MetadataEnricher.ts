@@ -91,9 +91,16 @@ export class MetadataEnricher {
   }
 
   /**
-   * J2-1: satu query MediaStore untuk seluruh run. Gagal -> cache tetap
+   * J2-1: satu query untuk seluruh run. Gagal -> cache tetap
    * null dan tiap item fallback ke extract(uri); enrichment tetap jalan,
    * hanya tanpa hemat query.
+   *
+   * B2 (follow-up logcat-4): cache dibangun dari SQLite, bukan dari
+   * MediaStore. Scan sudah menulis sampleRate/bitDepth/bitrate ke tabel
+   * songs, jadi query MediaStore + MediaMetadataRetriever per-baris
+   * (≈89 ms/file × 289 = 25,7 dtk) tidak perlu diulang — satu SELECT
+   * lokal, milidetik. Fallback ke query native HANYA bila DB kosong
+   * (scan belum pernah jalan); perilaku lama dipertahankan persis.
    */
   private static async warmNativeSongCache(): Promise<void> {
     // Follow-up logcat: start worker 22 → 38,7 → 27,7 dtk di tiga sesi —
@@ -101,14 +108,19 @@ export class MetadataEnricher {
     // tunggu kunci dari waktu query (lihat log "lock acquired" di bawah).
     const startedAt = Date.now();
     try {
-      const songs = await MediaStore.queryAudioFiles();
+      let songs: NativeSong[] = LibraryScanner.getNativeSongsFromDb();
+      let source = "sqlite";
+      if (songs.length === 0) {
+        songs = await MediaStore.queryAudioFiles();
+        source = "mediastore";
+      }
       const map = new Map<string, NativeSong>();
       for (const song of songs) {
         if (song?.uri) map.set(song.uri, song);
       }
       this.nativeSongCache = map;
       console.log(
-        `[MetadataEnricher] NativeSong cache warmed: ${map.size} songs (1 query, ${Date.now() - startedAt} ms)`,
+        `[MetadataEnricher] NativeSong cache warmed: ${map.size} songs (${source}, ${Date.now() - startedAt} ms)`,
       );
     } catch (error) {
       console.warn(
