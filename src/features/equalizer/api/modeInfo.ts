@@ -20,7 +20,7 @@ export const MODE_INFO: Record<AudioMode, ModeInfo> = {
     label: "DSP",
     hint: "EQ & efek",
     description:
-      "EQ, bass boost, pelebar stereo dan koreksi headphone aktif.",
+      "EQ, bass boost, pelebar stereo, reverb, HRTF, dan koreksi headphone aktif; master gain mengatur level akhir.",
   },
   immersive: {
     label: "Solfeggio",

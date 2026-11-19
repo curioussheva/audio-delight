@@ -43,7 +43,8 @@ export interface EqualizerStore {
   bassStrength: number;
   virtualizerLevel: number;
   reverbPreset: number;
-  // Master gain linear 0..1.5 (1.0 = netral). Bukan bagian profil preset.
+  // Master gain linear 0,251..3,98 = skala dB -12..+12 (1.0 = netral, 0 dB).
+  // Bukan bagian profil preset.
   masterGain: number;
   audioSessionId: number;
   isInitialized: boolean;

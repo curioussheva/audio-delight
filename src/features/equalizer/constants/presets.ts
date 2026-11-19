@@ -60,9 +60,15 @@ export const ALL_PRESETS: Preset[] = [
   {
     id: "flat",
     name: "Flat",
-    description: "Output murni tanpa perubahan fasa.",
+    description:
+      "Kurva rata — bass boost, pelebar stereo, dan reverb ikut dimatikan.",
     isPremium: false,
     bands: makeBands([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    // Flat = benar-benar netral: applyPreset menerapkan field ini (bukan
+    // hanya kurva), jadi efek yang sedang aktif ikut dimatikan.
+    bassBoost: 0,
+    virtualizer: 0,
+    reverb: 0,
   },
   {
     id: "clarity",

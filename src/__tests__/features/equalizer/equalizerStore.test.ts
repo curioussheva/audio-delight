@@ -211,6 +211,29 @@ describe("N4 — applyAllEffectsToNative mengirim kelima efek", () => {
     expect(n.setVirtualizer).toHaveBeenCalledWith(300, 7);
     expect(n.setReverbPreset).toHaveBeenCalled();
   });
+
+  it("Flat benar-benar netral: kurva rata + bass/widener/reverb ikut 0", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    await store.getState().setBassBoost(500);
+    await store.getState().setVirtualizer(300);
+    await store.getState().setReverb(2);
+    await store.getState().setEQEnabled(true);
+    jest.clearAllMocks();
+
+    await store.getState().applyPreset("flat");
+
+    const s = store.getState();
+    expect(s.bands.every((b) => b.gain === 0)).toBe(true);
+    expect(s.bassStrength).toBe(0);
+    expect(s.virtualizerLevel).toBe(0);
+    expect(s.reverbPreset).toBe(0);
+    expect(s.activePresetId).toBe("flat");
+    const n = native();
+    expect(n.setBassBoost).toHaveBeenCalledWith(0, 7);
+    expect(n.setVirtualizer).toHaveBeenCalledWith(0, 7);
+    expect(n.setReverbPreset).toHaveBeenCalledWith(0, 7);
+  });
 });
 
 describe("Master gain (2026-11-19) — store + native + log [DSP] Applied", () => {
