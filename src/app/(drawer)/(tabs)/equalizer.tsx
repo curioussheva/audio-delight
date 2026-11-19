@@ -949,6 +949,15 @@ export default function EqualizerScreen() {
                       onChange={eq.setBassBoost}
                       color={bassColor}
                       disabled={!eq.isBassEnabled || eq.isDSPDisabled}
+                      // Tampil dB, bukan %: bass bersifat addition dalam dB
+                      // (low-shelf 100 Hz, 0..+12 dB — cerminkan
+                      // kMaxBassBoostDb di NativeDSPModule.kt). % menyesatkan
+                      // karena menyiratkan skala linear.
+                      formatValue={(v) =>
+                        v <= 0
+                          ? "0 dB"
+                          : `+${((v / 1000) * 12).toFixed(1)} dB`
+                      }
                     />
                   </View>
                   <View style={styles.sliderCol}>
