@@ -166,6 +166,14 @@ void EngineManager::start() {
     std::unique_lock<std::mutex>
         lock(mMutex);
 
+    // P0-1: cek ULANG flag sesudah lock (double-check). Cek di atas
+    // berjalan tanpa lock — usbDirectStart() bisa men-set flag true di
+    // antara cek itu dan lock ini; tanpa cek ulang, Oboe dibuka di
+    // samping USB yang sedang start (dua render thread).
+    if (mUsbDirectActive.load(std::memory_order_acquire)) {
+        return;
+    }
+
     if (
         mEngine.isRunning()
     ) {
@@ -879,6 +887,13 @@ void EngineManager::reopenStreamPreservingPlayback() {
     std::lock_guard<std::mutex>
         lock(mMutex);
 
+    // P0-1: cek ulang seperti di start() — flag bisa berubah di antara
+    // cek tanpa lock di atas dan lock ini (ReopenGuard tetap di-reset
+    // oleh destruktor bila kembali lebih awal di sini).
+    if (mUsbDirectActive.load(std::memory_order_acquire)) {
+        return;
+    }
+
     // Posisi & status pemutaran diselamatkan DULU: stop() + loadTrack()
     // me-reset keduanya, dan tanpa menyimpannya audio akan melompat ke awal
     // setiap kali kabel headset tersentuh.
@@ -1530,6 +1545,16 @@ bool EngineManager::usbDirectStart() {
     }
     mUsbDirectWasRunning = wasRunning;
 
+    // P0-1: flag di-set DI DALAM lock, SEBELUM lock dilepas dan SEBELUM
+    // start() jalan. Sebelumnya flag baru true sesudah start() sukses —
+    // di jendela itu start()/reopen() dari thread lain melihat false dan
+    // membuka Oboe di samping worker USB (dua render thread).
+    // Alasan lock tetap dilepas sebelum start() (pola B1) tidak berubah:
+    // start() bisa memanggil reopen() di jalur gagal (yang mengambil
+    // mMutex sendiri), dan stop()/close() dari thread lain tidak boleh
+    // tertahan di belakang lock ini.
+    mUsbDirectActive.store(true, std::memory_order_release);
+
     // LEPAS lock sebelum startStreaming (pola B1): worker USB memanggil
     // render tanpa mMutex, dan usbDirectStop()/close() dari thread lain
     // tidak boleh tertahan di belakang lock ini.
@@ -1539,6 +1564,14 @@ bool EngineManager::usbDirectStart() {
         mEngine.renderForUsbOutput(out, frames);
     };
     if (!mUsbOutput->start(std::move(render))) {
+        // Gagal start: bersihkan flag di dalam lock SEBELUM reopen Oboe
+        // (reopen mengecek flag dan akan kembali lebih awal bila true).
+        // Bila stop() menyela selama start() (ia menutup device), flag
+        // sudah false — store ulang ini tidak berbahaya.
+        {
+            std::lock_guard<std::mutex> lk(mMutex);
+            mUsbDirectActive.store(false, std::memory_order_release);
+        }
         // Gagal start sesudah Oboe ditutup: jangan tinggalkan pengguna
         // tanpa suara — buka ulang Oboe bila tadi berjalan.
         if (wasRunning) {
@@ -1547,7 +1580,16 @@ bool EngineManager::usbDirectStart() {
         return false;
     }
 
-    mUsbDirectActive.store(true, std::memory_order_release);
+    // Stop() bisa menyela di antara start() sukses dan titik ini (ia
+    // membersihkan flag + close()). Bila flag sudah false, laporkan
+    // gagal — stop() sudah membuka ulang Oboe bila perlu — jangan
+    // laporkan true palsu ke pemanggil (JNI -> promise Kotlin).
+    {
+        std::lock_guard<std::mutex> lk(mMutex);
+        if (!mUsbDirectActive.load(std::memory_order_acquire)) {
+            return false;
+        }
+    }
     return true;
 }
 
@@ -1564,13 +1606,18 @@ void EngineManager::usbDirectStop() {
     }
 
     const bool wasRunning = mUsbDirectWasRunning;
-    mUsbDirectActive.store(false, std::memory_order_release);
     if (mUsbOutput) {
         // close() menggabung worker USB (stopStreaming di dalamnya)
         // sebelum melepas interface — render tidak lagi berjalan saat
         // fungsi ini kembali.
         mUsbOutput->close();
     }
+
+    // P0-1: flag baru dibersihkan SESUDAH close() menggabung worker,
+    // masih di dalam lock. Selama worker mungkin me-render, guard
+    // start()/reopen() melihat true dan tidak membuka Oboe.
+    // (Sebelumnya flag dibersihkan SEBELUM close().)
+    mUsbDirectActive.store(false, std::memory_order_release);
 
     // LEPAS lock dulu: reopen mengambil mMutex sendiri (B1, lihat
     // setExclusiveMode di atas).
