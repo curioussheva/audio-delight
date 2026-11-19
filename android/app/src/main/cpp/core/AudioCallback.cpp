@@ -379,6 +379,10 @@ void AudioCallback::updateParameters() {
     // HRTF (2026-11-19): virtual speaker ±30°.
     mParams.hrtfEnabled = mState.hrtfEnabled();
 
+    // Master EQ (P0-1, 2026-11-19): sakelar master "Pemrosesan DSP".
+    // false = DSPChain passthrough (lihat DSPConfig.enabled).
+    mParams.eqEnabled = mState.eqEnabled();
+
     // 🔥 FASE D (2026-10-10): preset koreksi headphone ikut dibaca.
     //
     // Yang disalin hanya POD (~272 byte), dan itu di luar loop sample.
@@ -537,9 +541,16 @@ void AudioCallback::applyPipeline(
     // callback ini tetap jadi satu-satunya limiter - jadi kondisi ini harus
     // memeriksa limiterEnabled, bukan sekadar mode. Mode Immersive tetap
     // lewat callback (processImmersive tidak menyentuh DSPChain).
+    //
+    // (P0-1, 2026-11-19): node limiter hanya jalan bila rantai DSP jalan
+    // — saat sakelar master EQ OFF, DSPChain passthrough dan node TIDAK
+    // berjalan, jadi callback ini harus tetap jadi backstop. Tanpa
+    // `mParams.eqEnabled` di sini, kondisi akan mengklaim node berjalan
+    // padahal tidak, dan TIDAK ADA limiter yang jalan sama sekali.
     const bool nodeLimiterRan =
         (mParams.processingMode == ProcessingMode::DSP) &&
-        mParams.limiterEnabled;
+        mParams.limiterEnabled &&
+        mParams.eqEnabled;
 
     for (int32_t offset = 0;
          offset < numFrames;
