@@ -37,6 +37,8 @@
 #include "JniGuard.h"
 #include "../manager/EngineManager.h"
 
+using namespace pristine;
+
 namespace {
 
 jstring toJString(JNIEnv* env, const char* s) {
