@@ -54,6 +54,8 @@ import { PresetChip } from "@/features/equalizer/components/PresetChip";
 import { SavePresetModal } from "@/features/equalizer/components/SavePresetModal";
 import { HeadphoneSection } from "@/features/headphone/components/HeadphoneSection";
 import { useHeadphoneCorrection } from "@/features/headphone/hooks/useHeadphoneCorrection";
+import { useHrtfGate } from "@/features/hrtf/hooks/useHrtfGate";
+import { useHrtfStore } from "@/features/hrtf/store/hrtfStore";
 import {
   combinedCurveGains,
   parseCorrectionPresetText,
@@ -374,6 +376,15 @@ export default function EqualizerScreen() {
   const { activeProfile, enabled: correctionEnabled } =
     useHeadphoneCorrection();
 
+  // HRTF — virtual speaker (langkah 7, 2026-11-19): toggle sendiri di
+  // luar preset; gate hook dipakai juga di sini supaya layar ini tahu
+  // perangkat aktif headphone atau bukan. Pemakaian kedua tidak masalah:
+  // efeknya idempotent (preseden useHeadphoneCorrection di atas);
+  // gate utama hidup di ThemedStack (_layout.tsx).
+  const { hrtfAllowed } = useHrtfGate();
+  const hrtfEnabled = useHrtfStore((s) => s.isHrtfEnabled);
+  const setHrtfEnabled = useHrtfStore((s) => s.setHrtfEnabled);
+
   // Kurva gabungan (koreksi + EQ) — dihitung dari teks preset profil
   // aktif. `HeadphoneProfile.filters` selalu kosong (importPreset
   // menyimpannya tanpa rincian), jadi parse dari presetText di sini;
@@ -447,6 +458,11 @@ export default function EqualizerScreen() {
   );
   const masterColor = accentOn(
     [colors.accent.green],
+    onCard,
+    accentTextFallback,
+  );
+  const hrtfColor = accentOn(
+    [colors.accent.primary],
     onCard,
     accentTextFallback,
   );
@@ -996,6 +1012,46 @@ export default function EqualizerScreen() {
                     />
                   </View>
                 </View>
+              </View>
+
+              {/* HRTF — VIRTUAL SPEAKER (langkah 7, 2026-11-19).
+                  BUKAN pelebar stereo: widener melebarkan sumbu L–R
+                  (tetap "di dalam kepala"), HRTF menaruh suara di ruang
+                  3D via HRIR — virtual speaker ±30° di depan. Toggle
+                  sendiri, di luar preset; hanya di headphone (gate:
+                  headset/usb/bluetooth — speaker/line_out dimatikan
+                  otomatis, lihat useHrtfGate). */}
+              <View
+                style={[
+                  styles.effectItem,
+                  {
+                    backgroundColor: colors.background.secondary,
+                    borderColor: colors.border.medium,
+                    paddingVertical: spacing.md,
+                  },
+                ]}
+              >
+                <MiniSwitch
+                  label="HRTF — VIRTUAL SPEAKER"
+                  value={hrtfEnabled}
+                  onValueChange={setHrtfEnabled}
+                  disabled={eq.isDSPDisabled || !hrtfAllowed}
+                  color={hrtfColor}
+                />
+                <Text
+                  style={[
+                    styles.disabledCaption,
+                    {
+                      color: colors.text.secondary,
+                      paddingHorizontal: spacing.md,
+                      marginTop: spacing.sm,
+                    },
+                  ]}
+                >
+                  {hrtfAllowed
+                    ? "Virtual speaker ±30° di depan — suara keluar dari kepala. Hanya di headphone."
+                    : "Hanya di headphone — colok headphone / DAC / TWS untuk menyalakan HRTF."}
+                </Text>
               </View>
 
               {/* REVERB PRESET SELECTOR — DIPULIHKAN 2026-11-19.
