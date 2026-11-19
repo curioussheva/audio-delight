@@ -677,7 +677,7 @@ export default function EqualizerScreen() {
           >
             <View style={styles.rowBetween}>
               <View style={{ flex: 1, marginRight: spacing.md }}>
-                <Text style={[styles.cardTitle, { color: colors.text.primary }]}>
+                <Text style={[styles.displayTitle, { color: colors.text.primary }]}>
                   Pemrosesan DSP
                 </Text>
                 <Text style={[styles.cardHint, { color: colors.text.secondary }]}>
@@ -1389,6 +1389,15 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   cardTitle: { fontSize: 14, fontFamily: FONT_FAMILY.bold },
+  // P2 audit BitPerfect/Solfeggio 2026-11-20: keluarga tab EQ nol
+  // Playfair — satu-satunya tanpa suara display. Satu jenjang display
+  // (h4, 20/28 — seperti statusValue Analyzer): hanya judul kartu utama
+  // ("Pemrosesan DSP") yang memakai displayBold, sisanya tetap Inter.
+  displayTitle: {
+    fontSize: 20,
+    fontFamily: FONT_FAMILY.displayBold,
+    lineHeight: 28,
+  },
   cardHint: {
     fontSize: 11,
     fontFamily: FONT_FAMILY.regular,

@@ -103,7 +103,7 @@ export function BitPerfectSubscreen() {
           },
         ]}
       >
-        <Text style={[styles.cardTitle, { color: colors.text.primary }]}>
+        <Text style={[styles.displayTitle, { color: colors.text.primary }]}>
           Jalur sinyal
         </Text>
 
@@ -243,6 +243,16 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 14,
     fontFamily: FONT_FAMILY.bold,
+    marginBottom: 12,
+  },
+  // P2 audit BitPerfect/Solfeggio 2026-11-20: keluarga tab EQ nol
+  // Playfair — satu-satunya tanpa suara display. Satu jenjang display
+  // (h4, 20/28 — seperti statusValue Analyzer): judul kartu utama tiap
+  // layar memakai displayBold, sisanya tetap Inter.
+  displayTitle: {
+    fontSize: 20,
+    fontFamily: FONT_FAMILY.displayBold,
+    lineHeight: 28,
     marginBottom: 12,
   },
   row: {

@@ -84,7 +84,7 @@ export function SolfeggioSubscreen() {
         ]}
       >
         <View style={styles.rowBetween}>
-          <Text style={[styles.cardTitle, { color: colors.text.primary }]}>
+          <Text style={[styles.displayTitle, { color: colors.text.primary }]}>
             Template Solfeggio
           </Text>
           <Text style={[styles.value, { color: accentOnSecondary }]}>
@@ -329,6 +329,16 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 14,
     fontFamily: FONT_FAMILY.bold,
+  },
+  // P2 audit BitPerfect/Solfeggio 2026-11-20: keluarga tab EQ nol
+  // Playfair — satu-satunya tanpa suara display. Satu jenjang display
+  // (h4, 20/28 — seperti statusValue Analyzer): judul kartu utama tiap
+  // layar memakai displayBold, sisanya tetap Inter. Di layar ini
+  // jangkarnya judul "Template Solfeggio".
+  displayTitle: {
+    fontSize: 20,
+    fontFamily: FONT_FAMILY.displayBold,
+    lineHeight: 28,
   },
   cardHint: {
     fontSize: 11,
