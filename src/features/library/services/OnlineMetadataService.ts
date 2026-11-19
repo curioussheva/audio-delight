@@ -13,6 +13,7 @@
  */
 
 import { db } from "@/shared/lib/sqlite";
+import { useLibraryStore } from "../store/libraryStore";
 
 // ─── Konstanta ───────────────────────────────────────────────────────────────
 
@@ -489,18 +490,59 @@ class OnlineMetadataService {
     }
   }
 
+  /**
+   * Kosongkan cache GAMBAR artis — bio (teks "Tentang Artis") TIDAK
+   * disentuh. Kolom gambar dan bio terpisah di kedua tabel, jadi
+   * pemisahan tidak butuh migrasi. Gambar artis tidak pernah diunduh
+   * ke disk (hanya URL remote dari Cover Art Archive yang dirender
+   * <Image> di [id].tsx) — jadi cukup DB + store, tanpa FileSystem.
+   *
+   * Tiga tempat yang disentuh:
+   *  1. artist_cache.image_url — tabel cache sumber (bio utuh).
+   *  2. songs.artist_image_url — salinan di tabel songs; [id].tsx dan
+   *     Analyzer membaca dari sini, bukan dari artist_cache. Tanpa
+   *     ini tombolnya tidak terlihat efeknya.
+   *  3. libraryStore.tracks di memori — [id].tsx membaca song dari
+   *     store, bukan dari DB. Satu setTracks (bukan per lagu) supaya
+   *     satu render; persist zustand ikut menyimpan keadaan kosong
+   *     ini, jadi gambar tetap hilang sesudah restart.
+   *
+   * Catatan perilaku: baris artist_cache yang image_url-nya kini NULL
+   * tetap dianggap cache hit oleh _getCachedArtist (selama belum
+   * expired 7 hari) — enrichment berikutnya mengembalikan bio dari
+   * cache tanpa menembak ulang foto; foto baru hanya datang dari
+   * enrichment manual berikutnya yang melewati TTL.
+   */
   static async clearArtistCache(): Promise<boolean> {
     try {
-      // Jika kamu pakai SQLite (contoh expo-sqlite):
-      // await db.runAsync("DELETE FROM artist_enrichment");
+      const cacheCleared =
+        db.execute(
+          `UPDATE artist_cache SET image_url = NULL WHERE image_url IS NOT NULL`,
+        ).rowsAffected ?? 0;
 
-      // Jika kamu hanya pakai cache folder:
-      // await FileSystem.deleteAsync(FileSystem.cacheDirectory + 'artist-images/', { idempotent: true });
+      const songsCleared =
+        db.execute(
+          `UPDATE songs SET artist_image_url = NULL WHERE artist_image_url IS NOT NULL`,
+        ).rowsAffected ?? 0;
 
-      console.log("[MetadataService] Cache cleared successfully");
+      const { tracks, setTracks } = useLibraryStore.getState();
+      let storeCleared = 0;
+      if (tracks.some((t) => t.artist_image_url)) {
+        setTracks(
+          tracks.map((t) => {
+            if (!t.artist_image_url) return t;
+            storeCleared++;
+            return { ...t, artist_image_url: undefined };
+          }),
+        );
+      }
+
+      console.log(
+        `[OnlineMetadata] Artist image cache cleared: ${cacheCleared} artist_cache, ${songsCleared} songs, ${storeCleared} in-memory tracks (bio dipertahankan)`,
+      );
       return true;
     } catch (e) {
-      console.error("[MetadataService] Failed to clear cache", e);
+      console.error("[OnlineMetadata] Failed to clear artist image cache", e);
       return false;
     }
   }
