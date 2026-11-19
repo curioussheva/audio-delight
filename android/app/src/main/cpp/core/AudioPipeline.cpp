@@ -408,6 +408,9 @@ bool dspConfigEquals(
     // dianggap sama, suara diam — bug senyap yang sama seperti koreksi
     // headphone di bawah).
     if (a.reverbPreset != b.reverbPreset) return false;
+    // HRTF (2026-11-19): flag WAJIB dibandingkan — alasan yang sama
+    // persis: tanpa ini toggle HRTF tidak terkirim ke rantai.
+    if (a.hrtfEnabled != b.hrtfEnabled) return false;
 
     for (int i = 0; i < 10; ++i) {
         if (a.eqGain[i] != b.eqGain[i]) return false;
@@ -518,6 +521,7 @@ void AudioPipeline::applyDSPConfig(
     mDspConfig.stereoWidth = params.stereoWidth;
     mDspConfig.bassBoost = params.bassBoostGain;
     mDspConfig.reverbPreset = params.reverbPreset;
+    mDspConfig.hrtfEnabled = params.hrtfEnabled;
 
     for (int i = 0; i < 10; ++i) {
         mDspConfig.eqGain[i] = params.eqGains[i];

@@ -73,6 +73,18 @@ struct DSPConfig {
     int reverbPreset =
         0;
 
+    // =============================================
+    // HRTF (2026-11-19)
+    // =============================================
+    //
+    // Virtual speaker ±30° (HRTFNode, sesudah reverb, sebelum gain).
+    // Toggle sendiri, DI LUAR preset EQ (keputusan user): preset
+    // adalah kurva nada, tidak boleh diam-diam menghidupkan efek
+    // spasial yang hanya bekerja di headphone.
+
+    bool hrtfEnabled =
+        false;
+
     // (Field immersiveEnabled/solfeggioFreq/brainwaveFreq/resonanceIntensity/
     // convolverEnabled dihapus 2026-11-10: tidak pernah dibaca — ImmersiveStage
     // membaca parameter langsung dari DSPParameters, bukan lewat DSPConfig.
@@ -113,6 +125,8 @@ struct DSPConfig {
         bassBoost = 0.0f;
 
         reverbPreset = 0;
+
+        hrtfEnabled = false;
 
         headphoneCorrectionEnabled =
             false;

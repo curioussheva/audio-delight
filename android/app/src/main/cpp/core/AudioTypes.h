@@ -191,6 +191,12 @@ struct DSPParameters {
     int reverbPreset =
         0;
 
+    // HRTF (2026-11-19): virtual speaker ±30°, toggle sendiri di luar
+    // preset EQ. Dibaca updateParameters() tiap buffer, sama seperti
+    // reverbPreset di atas.
+    bool hrtfEnabled =
+        false;
+
     // =============================================
     // OUTPUT
     // =============================================

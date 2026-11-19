@@ -503,6 +503,30 @@ public:
     }
 
     // =============================================
+    // HRTF (2026-11-19)
+    // =============================================
+    //
+    // Virtual speaker ±30° (HRTFNode). Boolean polos, tanpa clamp —
+    // pola yang sama dengan setLimiterEnabled di atas. Dibaca
+    // AudioCallback::updateParameters() tiap buffer.
+    inline void setHrtfEnabled(
+        bool value
+    ) {
+
+        mHrtfEnabled.store(
+            value,
+            std::memory_order_release
+        );
+    }
+
+    inline bool hrtfEnabled() const {
+
+        return mHrtfEnabled.load(
+            std::memory_order_acquire
+        );
+    }
+
+    // =============================================
     // HEADPHONE CORRECTION
     // =============================================
     //
@@ -789,6 +813,10 @@ private:
     // Reverb (2026-11-19): preset 0..6, 0 = Off.
     std::atomic<int>
         mReverbPreset{0};
+
+    // HRTF (2026-11-19): virtual speaker ±30°, toggle sendiri.
+    std::atomic<bool>
+        mHrtfEnabled{false};
 
     // =============================================
     // HEADPHONE CORRECTION (Fase D)

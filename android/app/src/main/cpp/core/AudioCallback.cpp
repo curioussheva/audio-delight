@@ -376,6 +376,9 @@ void AudioCallback::updateParameters() {
     // Reverb (2026-11-19): preset 0..6, 0 = Off.
     mParams.reverbPreset = mState.reverbPreset();
 
+    // HRTF (2026-11-19): virtual speaker ±30°.
+    mParams.hrtfEnabled = mState.hrtfEnabled();
+
     // 🔥 FASE D (2026-10-10): preset koreksi headphone ikut dibaca.
     //
     // Yang disalin hanya POD (~272 byte), dan itu di luar loop sample.
