@@ -302,11 +302,13 @@ export default function EqualizerScreen() {
     setResetDialogVisible(true);
   };
 
-  // FASE 4: terapkan preset + toast sukses. Guard sama dengan
-  // handleApplyPreset (DSP mati → diam, tanpa toast): chip juga
-  // disabled saat itu, jadi toast tidak pernah berbohong.
+  // FASE 4: terapkan preset + toast sukses. Toast hanya boleh muncul
+  // bila preset BENAR-BENAR diterapkan ke suara: saat sakelar master
+  // mati, chip sudah disabled (tidak bisa ditekan) — guard ini
+  // pertahanan kedua supaya tidak ada jalur yang men-toast bohong
+  // ("diterapkan" padahal rantai bypass).
   const handleApplyPresetWithToast = (id: string, name: string) => {
-    if (eq.isDSPDisabled) return;
+    if (eq.isDSPDisabled || !eq.isEQEnabled) return;
     eq.applyPreset(id);
     showToast(`Preset "${name}" diterapkan.`, "success");
   };
@@ -341,9 +343,10 @@ export default function EqualizerScreen() {
         ? "MESIN AKTIF"
         : "MESIN BYPASS";
 
-  // Tiga mode, masing-masing punya mesinnya sendiri. Pemrosesan DSP (EQ, bass,
-  // pelebar, koreksi headphone) HANYA hidup di mode `dsp`; Immersive memakai
-  // rantai resonansinya sendiri dan tidak memakai seksi di bawah.
+  // Tiga mode, masing-masing punya mesinnya sendiri. Pemrosesan DSP (EQ,
+  // bass, pelebar, reverb, HRTF, koreksi headphone, master gain) HANYA
+  // hidup di mode `dsp`; Immersive memakai rantai resonansinya sendiri
+  // dan tidak memakai seksi di bawah.
   const modes: Array<{ id: AudioMode; label: string; hint: string }> = [
     { id: "bit-perfect", label: "Bit-Perfect", hint: "tanpa DSP" },
     { id: "dsp", label: "DSP", hint: "EQ & efek" },
@@ -488,15 +491,17 @@ export default function EqualizerScreen() {
             actions={
               <TouchableOpacity
                 onPress={handleReset}
-                disabled={eq.isDSPDisabled}
+                disabled={eq.isDSPDisabled || !eq.isEQEnabled}
                 style={[
                   styles.resetBtn,
                   { padding: spacing.sm, minWidth: 44, minHeight: 44 },
-                  eq.isDSPDisabled && { opacity: 0.4 },
+                  (eq.isDSPDisabled || !eq.isEQEnabled) && { opacity: 0.4 },
                 ]}
                 accessibilityRole="button"
                 accessibilityLabel="Reset DSP ke pengaturan netral"
-                accessibilityState={{ disabled: eq.isDSPDisabled }}
+                accessibilityState={{
+                  disabled: eq.isDSPDisabled || !eq.isEQEnabled,
+                }}
               >
                 <RotateCcw size={18} color={colors.text.secondary} />
               </TouchableOpacity>
@@ -677,8 +682,8 @@ export default function EqualizerScreen() {
                   Pemrosesan DSP
                 </Text>
                 <Text style={[styles.cardHint, { color: colors.text.secondary }]}>
-                  EQ, bass boost, pelebar stereo, dan koreksi headphone hanya
-                  berlaku saat ini menyala.
+                  EQ, bass boost, pelebar stereo, reverb, HRTF, koreksi
+                  headphone, dan master gain hanya berlaku saat ini menyala.
                 </Text>
               </View>
               {/* D6: sakelar master dibungkus Pressable 44×44 seperti
@@ -718,14 +723,16 @@ export default function EqualizerScreen() {
               EQ menyetel selera; menaruh kontrol EQ di atas akan menyesatkan
               tentang urutan yang sebenarnya. */}
           {visibleSections.headphone && (
-            <HeadphoneSection disabled={eq.isDSPDisabled} />
+            <HeadphoneSection
+              disabled={eq.isDSPDisabled || !eq.isEQEnabled}
+            />
           )}
 
-          {/* 2. KARTU GRAFIK — satu unit edit EQ (declutter 2026-11-18):
-              preset + grafik + detail band. Preset langsung mengubah
-              grafik, jadi chip-nya di dalam kartu yang sama, bukan seksi
-              terpisah. Grafik bisa diseret (edit utama); slider band
-              tinggal di "DETAIL BAND" yang bisa dilipat. */}
+          {/* 2. KARTU GRAFIK — hanya grafik (clean-cozy 2026-11-19):
+              preset dan detail band keluar jadi seksi sendiri (3 dan 4
+              di bawah) supaya kartu tidak bersarang dan toggle
+              PRESET/MIXER tetap berfungsi walau GRAFIK disembunyikan.
+              Grafik bisa diseret (edit utama). */}
           {visibleSections.graph && (
             <View
               style={[
@@ -739,86 +746,6 @@ export default function EqualizerScreen() {
                 },
               ]}
             >
-              {/* Preset — di atas grafik (kontrol dulu, baru hasilnya). */}
-              {visibleSections.preset && (
-                <View style={styles.graphPreset}>
-                  <View
-                    style={[
-                      styles.sectionHeader,
-                      { marginBottom: spacing.sm },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.sectionTitle,
-                        { color: colors.text.secondary },
-                      ]}
-                    >
-                      PROFIL SUARA
-                    </Text>
-                    {/* D5: tombol simpan berteks, bukan ikon saja. */}
-                    <TouchableOpacity
-                      onPress={() => setModalVisible(true)}
-                      disabled={eq.isDSPDisabled}
-                      accessibilityRole="button"
-                      accessibilityLabel="Simpan profil saat ini"
-                      style={[
-                        styles.iconBtn,
-                        eq.isDSPDisabled && { opacity: 0.4 },
-                      ]}
-                    >
-                      <Save size={18} color={colors.text.primary} />
-                      <Text
-                        style={[
-                          styles.saveBtnText,
-                          { color: colors.text.primary },
-                        ]}
-                      >
-                        Simpan
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                  {/* U-P2-45: hapus preset custom lewat long-press DULU
-                      tanpa petunjuk apa pun — user tidak bisa tahu
-                      aksinya ada. (Penghapusannya sendiri sudah benar:
-                      Alert konfirmasi + hanya untuk preset custom.) */}
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.presetScroll}
-                    contentContainerStyle={{ paddingRight: spacing.sm }}
-                  >
-                    {eq.allPresets.map((p) => (
-                      <PresetChip
-                        key={p.id}
-                        label={p.name}
-                        isActive={eq.activePresetId === p.id}
-                        onPress={() => handleApplyPresetWithToast(p.id, p.name)}
-                        onLongPress={() =>
-                          handlePresetLongPress(p.id, p.name, p.isCustom)
-                        }
-                        accessibilityHint={
-                          p.isCustom
-                            ? "Tekan lama untuk menghapus"
-                            : undefined
-                        }
-                        disabled={eq.isDSPDisabled}
-                      />
-                    ))}
-                  </ScrollView>
-                  <Text
-                    style={[
-                      styles.presetHint,
-                      {
-                        color: colors.text.tertiary,
-                        marginTop: spacing.xs,
-                      },
-                    ]}
-                  >
-                    Tekan lama untuk menghapus.
-                  </Text>
-                </View>
-              )}
               {/* GRAPH SECTION — B3: saat DSP bypass (mode non-DSP atau
                   sakelar master mati), graph meredup + label BYPASS supaya
                   kurva tidak terlihat seolah memproses. */}
@@ -831,6 +758,13 @@ export default function EqualizerScreen() {
                 onBandChange={(index, gain) =>
                   eq.updateBandGain(index, gain)
                 }
+                // Peringatan clip menghitung bass + gain juga (pill
+                // grafik): bass 0..+12 dB bila sakelarnya menyala,
+                // master gain −12..+12 dB.
+                bassBoostDb={
+                  eq.isBassEnabled ? (eq.bassStrength / 1000) * 12 : 0
+                }
+                masterGainDb={gainToDb(eq.masterGain)}
               />
               {(isDSPFrozen || !eq.isEQEnabled) && (
                 <Text
@@ -851,48 +785,162 @@ export default function EqualizerScreen() {
               >
                 {graphCaption}
               </Text>
-              {/* DETAIL BAND — slider band sebagai sub-bagian yang bisa
-                  dilipat (toggle MIXER). Grafik drag tetap edit utama;
-                  slider untuk presisi per band. */}
-              {visibleSections.mixer && (
+            </View>
+          )}
+
+          {/* 3. PROFIL SUARA — seksi sendiri (clean-cozy 2026-11-19):
+              dulu bersarang di dalam kartu GRAFIK, jadi toggle PRESET
+              tidak berfungsi bila GRAFIK disembunyikan. Chip menerapkan
+              preset ke suara (disabled saat sakelar master mati); tombol
+              Simpan hanya menyimpan racikan — tetap aktif. */}
+          {visibleSections.preset && (
+            <View
+              style={[
+                styles.graphCard,
+                {
+                  backgroundColor: colors.background.secondary,
+                  borderColor: colors.border.medium,
+                  marginHorizontal: spacing.md,
+                  marginBottom: spacing.md,
+                  padding: spacing.sm,
+                },
+              ]}
+            >
+              <View style={styles.graphPreset}>
                 <View
-                  style={[
-                    styles.bandDetail,
-                    { borderTopColor: colors.border.medium },
-                  ]}
+                  style={[styles.sectionHeader, { marginBottom: spacing.sm }]}
                 >
                   <Text
                     style={[
-                      styles.detailBandTitle,
+                      styles.sectionTitle,
                       { color: colors.text.secondary },
                     ]}
                   >
-                    DETAIL BAND
+                    PROFIL SUARA
                   </Text>
-                  {/* U-P2-53: daftar band lewat pola daftar bersama.
-                      Jalur yang dipilih tetap FlatList (horizontal +
-                      bersarang di ScrollView — lihat chooseListKind);
-                      `directionalLockEnabled` dipertahankan supaya tidak
-                      bentrok dengan scroll utama. */}
-                  <ScreenList
-                    horizontal
-                    nestedInScrollView
-                    showsHorizontalScrollIndicator={false}
-                    data={eq.currentBands}
-                    keyExtractor={(item) => item.frequency.toString()}
-                    renderItem={({ item, index }) => (
-                      <EqualizerBand
-                        frequency={item.frequency}
-                        gain={item.gain}
-                        onValueChange={(v) => eq.updateBandGain(index, v)}
-                        disabled={!eq.isEQEnabled || eq.isDSPDisabled}
-                      />
-                    )}
-                    contentContainerStyle={{ paddingHorizontal: spacing.sm }}
-                    directionalLockEnabled={true}
-                  />
+                  {/* D5: tombol simpan berteks, bukan ikon saja. */}
+                  <TouchableOpacity
+                    onPress={() => setModalVisible(true)}
+                    disabled={eq.isDSPDisabled}
+                    accessibilityRole="button"
+                    accessibilityLabel="Simpan profil saat ini"
+                    style={[
+                      styles.iconBtn,
+                      eq.isDSPDisabled && { opacity: 0.4 },
+                    ]}
+                  >
+                    <Save size={18} color={colors.text.primary} />
+                    <Text
+                      style={[
+                        styles.saveBtnText,
+                        { color: colors.text.primary },
+                      ]}
+                    >
+                      Simpan
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-              )}
+                {/* U-P2-45: hapus preset custom lewat long-press DULU
+                    tanpa petunjuk apa pun — user tidak bisa tahu
+                    aksinya ada. (Penghapusannya sendiri sudah benar:
+                    Alert konfirmasi + hanya untuk preset custom.) */}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.presetScroll}
+                  contentContainerStyle={{ paddingRight: spacing.sm }}
+                >
+                  {eq.allPresets.map((p) => (
+                    <PresetChip
+                      key={p.id}
+                      label={p.name}
+                      isActive={eq.activePresetId === p.id}
+                      onPress={() => handleApplyPresetWithToast(p.id, p.name)}
+                      onLongPress={() =>
+                        handlePresetLongPress(p.id, p.name, p.isCustom)
+                      }
+                      accessibilityHint={
+                        p.isCustom
+                          ? "Tekan lama untuk menghapus"
+                          : undefined
+                      }
+                      disabled={eq.isDSPDisabled || !eq.isEQEnabled}
+                    />
+                  ))}
+                </ScrollView>
+                <Text
+                  style={[
+                    styles.presetHint,
+                    {
+                      color: colors.text.tertiary,
+                      marginTop: spacing.xs,
+                    },
+                  ]}
+                >
+                  Tekan lama untuk menghapus.
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* 4. DETAIL BAND — seksi sendiri (clean-cozy 2026-11-19):
+              dulu sub-bagian di dalam kartu GRAFIK; sekarang toggle
+              MIXER berfungsi walau GRAFIK disembunyikan. Grafik drag
+              tetap edit utama; slider untuk presisi per band. */}
+          {visibleSections.mixer && (
+            <View
+              style={[
+                styles.graphCard,
+                {
+                  backgroundColor: colors.background.secondary,
+                  borderColor: colors.border.medium,
+                  marginHorizontal: spacing.md,
+                  marginBottom: spacing.md,
+                  padding: spacing.sm,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.bandDetail,
+                  {
+                    borderTopWidth: 0,
+                    marginTop: 0,
+                    paddingTop: 0,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.detailBandTitle,
+                    { color: colors.text.secondary },
+                  ]}
+                >
+                  DETAIL BAND
+                </Text>
+                {/* U-P2-53: daftar band lewat pola daftar bersama.
+                    Jalur yang dipilih tetap FlatList (horizontal +
+                    bersarang di ScrollView — lihat chooseListKind);
+                    `directionalLockEnabled` dipertahankan supaya tidak
+                    bentrok dengan scroll utama. */}
+                <ScreenList
+                  horizontal
+                  nestedInScrollView
+                  showsHorizontalScrollIndicator={false}
+                  data={eq.currentBands}
+                  keyExtractor={(item) => item.frequency.toString()}
+                  renderItem={({ item, index }) => (
+                    <EqualizerBand
+                      frequency={item.frequency}
+                      gain={item.gain}
+                      onValueChange={(v) => eq.updateBandGain(index, v)}
+                      disabled={!eq.isEQEnabled || eq.isDSPDisabled}
+                    />
+                  )}
+                  contentContainerStyle={{ paddingHorizontal: spacing.sm }}
+                  directionalLockEnabled={true}
+                />
+              </View>
             </View>
           )}
 
@@ -918,6 +966,23 @@ export default function EqualizerScreen() {
                   ]}
                 >
                   Nonaktif di mode ini — pindah ke DSP untuk menyetel.
+                </Text>
+              )}
+              {/* Sakelar master mati (mode DSP): semua efek di bawah tidak
+                  memproses — caption di tempatnya supaya tidak ada yang
+                  mengira slider yang redup masih berpengaruh. */}
+              {!eq.isEQEnabled && !eq.isDSPDisabled && (
+                <Text
+                  style={[
+                    styles.disabledCaption,
+                    {
+                      color: colors.text.tertiary,
+                      paddingHorizontal: spacing.md,
+                      marginBottom: spacing.sm,
+                    },
+                  ]}
+                >
+                  Sakelar master mati — semua efek di bawah tidak memproses.
                 </Text>
               )}
               {/* SLIDER VERTIKAL BASS + PELEBAR STEREO + MASTER GAIN —
@@ -955,7 +1020,7 @@ export default function EqualizerScreen() {
                       label="BASS BOOST"
                       value={eq.isBassEnabled}
                       onValueChange={eq.setBassEnabled}
-                      disabled={eq.isDSPDisabled}
+                      disabled={eq.isDSPDisabled || !eq.isEQEnabled}
                       color={bassColor}
                       stacked
                       hideLabel
@@ -965,7 +1030,11 @@ export default function EqualizerScreen() {
                       value={eq.bassStrength}
                       onChange={eq.setBassBoost}
                       color={bassColor}
-                      disabled={!eq.isBassEnabled || eq.isDSPDisabled}
+                      disabled={
+                        !eq.isBassEnabled ||
+                        eq.isDSPDisabled ||
+                        !eq.isEQEnabled
+                      }
                       // Tampil dB, bukan %: bass bersifat addition dalam dB
                       // (low-shelf 100 Hz, 0..+12 dB — cerminkan
                       // kMaxBassBoostDb di NativeDSPModule.kt). % menyesatkan
@@ -982,7 +1051,7 @@ export default function EqualizerScreen() {
                       label="PELEBAR STEREO"
                       value={eq.isVirtualizerEnabled}
                       onValueChange={eq.setVirtualizerEnabled}
-                      disabled={eq.isDSPDisabled}
+                      disabled={eq.isDSPDisabled || !eq.isEQEnabled}
                       color={widthColor}
                       stacked
                       hideLabel
@@ -993,8 +1062,14 @@ export default function EqualizerScreen() {
                       onChange={eq.setVirtualizer}
                       color={widthColor}
                       disabled={
-                        !eq.isVirtualizerEnabled || eq.isDSPDisabled
+                        !eq.isVirtualizerEnabled ||
+                        eq.isDSPDisabled ||
+                        !eq.isEQEnabled
                       }
+                      // Tampil pengali lebar, bukan %: width 1.0..2.0
+                      // (side ×1.00 = stereo asli). % menyesatkan karena
+                      // 0% terbaca "mati" padahal itu stereo asli.
+                      formatValue={(v) => `×${(1 + v / 1000).toFixed(2)}`}
                     />
                   </View>
                   <View style={styles.sliderCol}>
@@ -1005,7 +1080,7 @@ export default function EqualizerScreen() {
                         eq.setMasterGain(dbToGain(v + MASTER_GAIN_DB_MIN))
                       }
                       color={masterColor}
-                      disabled={eq.isDSPDisabled}
+                      disabled={eq.isDSPDisabled || !eq.isEQEnabled}
                       maxValue={MASTER_GAIN_DB_RANGE}
                       formatValue={(v) =>
                         formatMasterGainDb(v + MASTER_GAIN_DB_MIN)
@@ -1036,7 +1111,7 @@ export default function EqualizerScreen() {
                   label="HRTF — VIRTUAL SPEAKER"
                   value={hrtfEnabled}
                   onValueChange={setHrtfEnabled}
-                  disabled={eq.isDSPDisabled || !hrtfAllowed}
+                  disabled={eq.isDSPDisabled || !eq.isEQEnabled || !hrtfAllowed}
                   color={hrtfColor}
                 />
                 <Text
@@ -1050,7 +1125,7 @@ export default function EqualizerScreen() {
                   ]}
                 >
                   {hrtfAllowed
-                    ? "Virtual speaker ±30° di depan — suara keluar dari kepala. Hanya di headphone."
+                    ? "Virtual speaker ±30° di depan — suara keluar dari kepala. Hanya di headphone; di speaker Bluetooth tidak terdengar."
                     : "Hanya di headphone — colok headphone / DAC / TWS untuk menyalakan HRTF."}
                 </Text>
               </View>
@@ -1080,7 +1155,7 @@ export default function EqualizerScreen() {
                   label="REVERB LINGKUNGAN"
                   value={eq.isReverbEnabled}
                   onValueChange={eq.setReverbEnabled}
-                  disabled={eq.isDSPDisabled}
+                  disabled={eq.isDSPDisabled || !eq.isEQEnabled}
                   color={reverbColor}
                 />
                 {/* U-P2-40: kontrol reverb DULU hanya bisa maju — satu tombol
@@ -1101,14 +1176,20 @@ export default function EqualizerScreen() {
                         REVERB_LABELS.length;
                       eq.setReverb(prev);
                     }}
-                    disabled={!eq.isReverbEnabled || eq.isDSPDisabled}
+                    disabled={
+                      !eq.isReverbEnabled ||
+                      eq.isDSPDisabled ||
+                      !eq.isEQEnabled
+                    }
                     style={[
                       styles.reverbStepBtn,
                       {
                         backgroundColor: colors.background.tertiary,
                         borderColor: colors.border.medium,
                       },
-                      (!eq.isReverbEnabled || eq.isDSPDisabled) && {
+                      (!eq.isReverbEnabled ||
+                        eq.isDSPDisabled ||
+                        !eq.isEQEnabled) && {
                         opacity: 0.4,
                       },
                     ]}
@@ -1127,11 +1208,17 @@ export default function EqualizerScreen() {
                         minHeight: 44,
                         flex: 1,
                       },
-                      (!eq.isReverbEnabled || eq.isDSPDisabled) && {
+                      (!eq.isReverbEnabled ||
+                        eq.isDSPDisabled ||
+                        !eq.isEQEnabled) && {
                         opacity: 0.4,
                       },
                     ]}
-                    disabled={!eq.isReverbEnabled || eq.isDSPDisabled}
+                    disabled={
+                      !eq.isReverbEnabled ||
+                      eq.isDSPDisabled ||
+                      !eq.isEQEnabled
+                    }
                     onPress={() => {
                       const next =
                         (eq.reverbPreset + 1) % REVERB_LABELS.length;
@@ -1185,14 +1272,17 @@ export default function EqualizerScreen() {
       <ConfirmDialog
         visible={resetDialogVisible}
         title="Reset DSP"
-        message="Kembalikan ke pengaturan netral?"
+        message="Kembalikan ke pengaturan netral? Kurva, bass, pelebar, reverb, master gain, HRTF, dan koreksi headphone ikut direset."
         confirmLabel="Reset"
         onConfirm={() => {
           setResetDialogVisible(false);
           eq.resetToDefault();
           // FASE 4: reset tetap lewat ConfirmDialog — toast ini hanya
-          // umpan balik SESUDAH konfirmasi.
-          showToast("DSP direset ke pengaturan netral.", "info");
+          // umpan balik SESUDAH konfirmasi. Guard: toast hanya bila EQ
+          // menyala — saat sakelar mati tidak ada suara yang direset.
+          if (eq.isEQEnabled) {
+            showToast("DSP direset ke pengaturan netral.", "info");
+          }
         }}
         onCancel={() => setResetDialogVisible(false)}
       />
