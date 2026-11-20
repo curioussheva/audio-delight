@@ -12,6 +12,7 @@ import {
 import { SongQueries, db } from "@/shared/lib/sqlite";
 import NativePlaybackService from "@/specs/NativePlaybackService";
 import NativeDSPModule from "@/features/equalizer/api/nativeInterface";
+import { applyReplayGainForSong } from "@/features/replaygain/apply";
 import { clampTuningCents } from "@/features/player/utils/tuning";
 import { parseRepeatShuffleEvent } from "@/features/player/utils/repeatShuffle";
 import {
@@ -852,6 +853,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           }
         }, "loadLyrics");
 
+        // ReplayGain (2026-11-20): selesaikan tag lagu (DB -> cache ->
+        // baca file, sekali per lagu). Dorongan gain efektif ke native
+        // diurus langganan RG di equalizerStore (yang bereaksi pada
+        // perubahan tag aktif) — playerStore tidak mendorong gain
+        // sendiri. Fire-and-forget seperti lirik di atas — jangan blokir
+        // playback. Bila RG mati, applyForSong tidak melakukan I/O apa pun.
+        safeFireAndForget(async () => {
+          await applyReplayGainForSong(playableSong);
+        }, "replayGain");
+
         // 🔥 Seek ke restored position (setelah decoder siap)
         if (resumePosition > 0) {
           console.log(`[Player] 🔄 Resume from position: ${resumePosition}s`);
@@ -1071,6 +1082,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       if (cur && prevSong && cur.id !== prevSong.id) {
         SongQueries.incrementPlayCount?.(cur.id, 0);
         AsyncStorage.setItem(KEYS.LAST_SONG_ID, cur.id).catch(() => {});
+        // ReplayGain (2026-11-20): auto-advance / next / prev dari
+        // notifikasi juga ganti lagu — terapkan tag lagu baru seperti di
+        // playSong. Guard id di atas memastikan ini hanya jalan saat lagu
+        // benar-benar berganti.
+        safeFireAndForget(async () => {
+          await applyReplayGainForSong(cur);
+        }, "replayGain(sync)");
       }
       if (cur) {
         safeFireAndForget(
@@ -1615,6 +1633,13 @@ const getSongsByIds = (ids: string[]): Song[] => {
           bitDepth: Number(row.bitDepth) || undefined,
           bitrate: Number(row.bitrate) || undefined,
           isHiRes: isHiRes(row),
+          // ReplayGain (2026-11-20): restore antrean ikut membawa tag.
+          replaygainTrackGainDb:
+            row.replaygain_track_gain ?? undefined,
+          replaygainAlbumGainDb:
+            row.replaygain_album_gain ?? undefined,
+          replaygainTrackPeak: row.replaygain_track_peak ?? undefined,
+          replaygainAlbumPeak: row.replaygain_album_peak ?? undefined,
         }) as Song,
     );
   } catch (e) {
