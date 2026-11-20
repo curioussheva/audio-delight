@@ -60,7 +60,7 @@ export const LibraryTabBar = ({
   isEnriching = false,
   enrichProgress = 0,
   enrichTotal = 0,
-  trackCount,
+  trackCount: _trackCount,
   onRefresh,
 }: Props) => {
   const { theme } = useTheme();

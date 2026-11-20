@@ -3,7 +3,7 @@
  * Semua data diambil via NativePlaybackService, no native log needed.
  */
 
-import { NativeModules, Platform } from "react-native";
+import { NativeModules } from "react-native";
 
 const NativePlaybackService = NativeModules.NativePlaybackService;
 const NativePlaybackModule = NativeModules.NativePlaybackModule;

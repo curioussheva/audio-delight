@@ -390,11 +390,11 @@ function parseCustomAtom(
     const bodyStart = pos + 8;
     const bodyEnd = pos + size;
     if (type === "name") {
-      name = utf8(bytes, bodyStart, bodyEnd - bodyStart).replace(/\0/g, "");
+      name = utf8(bytes, bodyStart, bodyEnd - bodyStart).replace(/\0/g, ""); // eslint-disable-line no-control-regex -- NUL adalah terminator string di metadata biner (iTunSMPB/MP4); strip NUL disengaja
     } else if (type === "data" && bodyEnd - bodyStart >= 8) {
       // 4 byte type-indicator + 4 byte locale, lalu payload.
       value = utf8(bytes, bodyStart + 8, bodyEnd - bodyStart - 8).replace(
-        /\0/g,
+        /\0/g, // eslint-disable-line no-control-regex -- NUL adalah terminator string di metadata biner (iTunSMPB/MP4); strip NUL disengaja
         "",
       );
     }

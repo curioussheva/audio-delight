@@ -138,7 +138,7 @@ export function mergeTrackList<T extends { id: string }>(
   }
 
   let changed = prev.length !== next.length;
-  const merged: T[] = new Array(next.length);
+  const merged: T[] = Array.from<T>({ length: next.length });
   for (let i = 0; i < next.length; i++) {
     const incoming = next[i];
     const id = incoming?.id;

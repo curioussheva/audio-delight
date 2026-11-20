@@ -70,7 +70,7 @@ import type { Theme, ThemeId } from "@/constants/themes/types";
 import { DEFAULT_THEME } from "@/constants/theme";
 import OnlineMetadataService from "@/features/library/services/OnlineMetadataService";
 
-import { Zap, ShieldCheck, TriangleAlert } from "lucide-react-native";
+import { Zap, ShieldCheck } from "lucide-react-native";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
 import { useEqualizer } from "@/features/equalizer/hooks/useEqualizer";
 import { useHeadphoneStore } from "@/features/headphone/store/headphoneStore";

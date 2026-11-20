@@ -18,12 +18,10 @@ import {
   AudioLines,
   FileAudio,
   Heart,
-  MoreVertical,
 } from "lucide-react-native";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
-import type { MediaTrack } from "../store/libraryStore";
 import { formatTime } from "@/shared/utils/time";
 import { DURATION_FONT_FAMILY } from "@/shared/utils/typography";
 import QualityBadge from "@/shared/components/ui/QualityBadge";

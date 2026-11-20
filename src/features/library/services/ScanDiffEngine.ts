@@ -7,7 +7,6 @@ import {
   MediaStore,
   NativeSong,
 } from "@/features/library/native/MediaStoreModule";
-import MetadataExtractor from "@/features/library/api/metadata";
 import { useLibraryStore } from "../store/libraryStore";
 import { isHiRes } from "@/shared/utils/audioQuality";
 

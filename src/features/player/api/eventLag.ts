@@ -163,7 +163,7 @@ export function noteNativeEventHandled(
 export function notePositionTick(
   awaitMs: number,
   gapMs: number,
-  nowMs: number = performance.now(),
+  _nowMs: number = performance.now(),
 ): void {
   if (!isTempDiagEnabled()) return;
   positionTicks += 1;

@@ -64,7 +64,7 @@ jest.mock("../../../specs/NativeVisualizerBridge", () => ({
   default: {
     startVisualizer: jest.fn(async () => true),
     stopVisualizer: jest.fn(() => {}),
-    getFFTData: jest.fn(async () => new Array(128).fill(0)),
+    getFFTData: jest.fn(async () => Array.from({ length: 128 }, () => 0)),
   },
 }));
 

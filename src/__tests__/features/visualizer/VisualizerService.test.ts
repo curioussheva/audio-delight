@@ -19,7 +19,7 @@ jest.mock("react-native", () => ({
   Platform: { OS: "android" },
 }));
 
-const FFT_DATA = new Array(128).fill(0.5);
+const FFT_DATA = Array.from({ length: 128 }, () => 0.5);
 
 const mockStartVisualizer = jest.fn(async () => true);
 const mockStopVisualizer = jest.fn(() => {});

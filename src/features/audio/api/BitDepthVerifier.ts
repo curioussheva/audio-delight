@@ -44,10 +44,7 @@ export interface BitDepthAnalysis {
  */
 export const analyzeBitDepth = async (
   song: Song,
-  options: { sampleCount?: number } = {},
 ): Promise<BitDepthAnalysis> => {
-  const { sampleCount = 10000 } = options;
-
   try {
     // Gunakan existing analyzer untuk get detailed info
     const analysis = await audioAnalyzer.analyzeSong(song);

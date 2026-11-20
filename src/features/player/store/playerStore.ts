@@ -704,7 +704,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           if (shouldCorrectDuration(get().duration, songDur)) {
             set({ duration: songDur });
           }
-        } catch (e) {
+        } catch {
           // silent
         } finally {
           _posInFlight = false;

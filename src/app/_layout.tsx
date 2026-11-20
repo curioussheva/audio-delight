@@ -5,7 +5,6 @@ console.log("[BOOT] 0. _layout module loaded");
 // state timer-nya hidup di `global` supaya Fast Refresh tidak menumpuk
 // interval + listener (lihat jsLagMonitor.ts).
 startJsLagMonitor();
-const Platform = require("react-native").Platform;
 configureReanimatedLogger({ level: ReanimatedLogLevel.warn, strict: false });
 
 import React, { useState, useEffect, useRef, useCallback } from "react";

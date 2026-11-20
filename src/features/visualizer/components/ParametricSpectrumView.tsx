@@ -238,7 +238,7 @@ export const ParametricSpectrumView: React.FC<
 
     if (!raw || raw.length === 0) return Array(barCount).fill(0.1);
 
-    const result = new Array(barCount).fill(0);
+    const result = Array.from({ length: barCount }, () => 0);
     const falloff = 0.85;
 
     for (let i = 0; i < barCount; i++) {
@@ -283,7 +283,7 @@ export const ParametricSpectrumView: React.FC<
       const dtMs = last === 0 ? 100 : now - last;
       lastPeakMs.value = now;
       const p = peaks.value;
-      const next = new Array(barCount);
+      const next = Array.from<number>({ length: barCount });
       for (let i = 0; i < barCount; i++) {
         next[i] = nextPeakHold(
           p[i] ?? PEAK_HOLD_FLOOR,

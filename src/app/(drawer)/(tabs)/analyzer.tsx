@@ -17,7 +17,6 @@ import {
   FileAudio,
   Cpu,
   Info,
-  Mic2,
   BarChart3,
   Music,
 } from "lucide-react-native";

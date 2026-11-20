@@ -13,10 +13,7 @@ import {
   isHiRes,
   LOSSLESS_CODECS_SQL_LIST,
 } from "@/shared/utils/audioQuality";
-import {
-  MediaStore,
-  NativeSong,
-} from "@/features/library/native/MediaStoreModule";
+import { NativeSong } from "@/features/library/native/MediaStoreModule";
 
 /**
  * I3 (G2): field yang DITIMPA proses otomatis DAN bisa diedit user di

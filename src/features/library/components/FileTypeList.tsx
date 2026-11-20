@@ -11,7 +11,6 @@ import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
   Binary,
-  FileAudio,
   ChevronRight,
   ChevronLeft,
   Play,
@@ -22,7 +21,6 @@ import {
 import { useTheme } from "@/shared/context/ThemeContext";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
-import type { MediaTrack } from "../store/libraryStore";
 import { formatTime } from "@/shared/utils/time";
 import { DURATION_FONT_FAMILY } from "@/shared/utils/typography";
 import { isLosslessCodec } from "@/shared/utils/audioQuality";

@@ -483,7 +483,7 @@ export default function SongDetailScreen() {
       // FASE 4: simpan edit metadata kini ber-toast sukses (dulu hanya
       // haptic + keluar mode edit).
       showToast("Metadata disimpan.", "success");
-    } catch (error) {
+    } catch {
       showToast("Terjadi kesalahan saat menyimpan metadata.", "error");
     } finally {
       setIsSaving(false);

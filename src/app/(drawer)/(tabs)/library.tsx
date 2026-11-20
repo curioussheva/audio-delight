@@ -46,7 +46,6 @@ import { noteFlingStart, noteFlingEnd } from "@/features/library/api/flingDiag";
 import { useFavorites } from "@/features/favorites/hooks/useFavorites";
 import { useLibraryStore } from "@/features/library/store/libraryStore";
 import {
-  selectAlbums,
   selectArtists,
   selectFolders,
   selectGenres,
@@ -97,7 +96,6 @@ import {
 } from "@/features/playlist/utils/smartPlaylists";
 import {
   FLOATING_PLAYER_CLEARANCE,
-  FLOATING_PLAYER_HEIGHT,
 } from "@/features/player/layout";
 
 // Fase 4: satu pekerjaan refresh yang sedang jalan tidak diduplikasi —
@@ -309,7 +307,6 @@ export default function LibraryScreen() {
   }, [tracks, searchQuery, filterType]);
 
   // Tab data
-  const albums = useMemo(() => selectAlbums(filteredSource), [filteredSource]);
   const artists = useMemo(() => selectArtists(filteredSource), [filteredSource]);
   const folders = useMemo(
     () => selectFolders(filteredSource),

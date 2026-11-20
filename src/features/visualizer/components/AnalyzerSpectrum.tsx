@@ -416,7 +416,7 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
     const maxBin =
       freqToFraction(freqMaxSV.value, nyquist) * (raw.length - 1);
 
-    const result = new Array(barCount).fill(0);
+    const result = Array.from({ length: barCount }, () => 0);
     const falloff = 0.85;
 
     for (let i = 0; i < barCount; i++) {

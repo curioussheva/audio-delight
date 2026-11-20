@@ -9,7 +9,6 @@ SplashScreen.preventAutoHideAsync();
 
 export default function Index() {
   const { theme } = useTheme(); // Gunakan theme dari layout parent
-  const { colors } = theme;
   const [hasOnboarded, setHasOnboarded] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);

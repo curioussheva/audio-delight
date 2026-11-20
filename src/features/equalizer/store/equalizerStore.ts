@@ -6,7 +6,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const Platform = require("react-native").Platform;
 import { EqualizerStore, Preset } from "@/features/equalizer/types";
 import { ALL_PRESETS, makeBands } from "../constants/presets";
-import { audioEngine } from "@/features/player/api/engine";
 import { NativeDSPModule } from "@/features/equalizer/api/nativeInterface";
 import { useHrtfStore } from "@/features/hrtf/store/hrtfStore";
 import { useConvolverStore } from "@/features/convolver/store/convolverStore";
@@ -779,7 +778,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
           } catch (e) {
             console.error("[EQ Store] restore gapless gagal:", e);
           }
-        } catch (error) {
+        } catch {
           set({ isInitialized: true });
         }
       },

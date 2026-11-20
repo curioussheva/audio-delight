@@ -1,11 +1,6 @@
 // src/features/visualizer/services/VisualizerService.ts
 
-import {
-  AppState,
-  AppStateStatus,
-
-  Platform,
-} from "react-native";
+import { AppState, AppStateStatus } from "react-native";
 import type { SharedValue } from "react-native-reanimated";
 import NativeVisualizerBridgeSpec from "../../../specs/NativeVisualizerBridge";
 
@@ -388,14 +383,14 @@ class VisualizerService {
     // Kirim nol ke semua subscriber supaya tidak ada yang menampilkan
     // data basi. Subscriber tetap terdaftar — start() berikutnya
     // melanjutkan ke mereka.
-    const zeros = new Array(128).fill(0);
+    const zeros = Array.from({ length: 128 }, () => 0);
     for (const sv of this.sharedValues) {
       sv.value = [...zeros];
     }
     for (const cb of this.dataCallbacks) {
       try {
         cb([...zeros]);
-      } catch (_) {}
+      } catch {}
     }
   }
 
@@ -444,7 +439,7 @@ class VisualizerService {
           for (const handler of this.errorHandlers) {
             try {
               handler(error);
-            } catch (_) {}
+            } catch {}
           }
         }
       } finally {
@@ -494,7 +489,7 @@ class VisualizerService {
     }
 
     const { smoothingFactor = 0.3 } = this.config;
-    const smoothed = new Array(data.length);
+    const smoothed = Array.from<number>({ length: data.length });
 
     for (let i = 0; i < data.length; i++) {
       smoothed[i] =
