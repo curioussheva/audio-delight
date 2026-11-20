@@ -66,8 +66,7 @@ const DrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
 
   const version = readAppVersion();
 
-  // DEV TOOLS: buka DB Manager sebagai modal (pola yang sama dengan
-  // CustomDrawer yang mati — dipindah ke drawer yang benar-benar dirender).
+  // DEV TOOLS: buka DB Manager sebagai modal.
   const [showDB, setShowDB] = useState(false);
 
   return (
