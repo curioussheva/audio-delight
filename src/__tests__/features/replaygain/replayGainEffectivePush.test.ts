@@ -40,6 +40,19 @@ jest.mock("@/features/hrtf/store/hrtfStore", () => ({
   useHrtfStore: { getState: () => ({ isHrtfEnabled: false }) },
 }));
 
+// Convolver di-mock dengan alasan yang sama (2026-11-20): equalizerStore
+// memanggil restoreToNative() store ini di applyAllEffectsToNative, dan
+// store aslinya menarik spec TurboModule + DocumentPicker + FileSystem.
+jest.mock("@/features/convolver/store/convolverStore", () => ({
+  __esModule: true,
+  useConvolverStore: {
+    getState: () => ({
+      isConvolverEnabled: false,
+      restoreToNative: jest.fn(async () => {}),
+    }),
+  },
+}));
+
 jest.mock("@/features/headphone/store/headphoneStore", () => ({
   __esModule: true,
   useHeadphoneStore: { getState: () => ({ deactivate: jest.fn() }) },

@@ -61,6 +61,26 @@ jest.mock("@/features/hrtf/store/hrtfStore", () => ({
 // deactivate() dari store ini.
 const mockHeadphone = { deactivate: jest.fn(async () => {}) };
 
+// Convolver di-mock dengan alasan yang sama: convolverStore mengimpor
+// spec TurboModule langsung + DocumentPicker + FileSystem.
+// restoreToNative dipanggil applyAllEffectsToNative; setConvolverEnabled
+// dipanggil resetToDefault.
+const mockConvolverState = {
+  isConvolverEnabled: false,
+  ir: null as { name: string } | null,
+  setConvolverEnabled: jest.fn(async (v: boolean) => {
+    mockConvolverState.isConvolverEnabled = v;
+  }),
+  restoreToNative: jest.fn(async () => {}),
+};
+
+jest.mock("@/features/convolver/store/convolverStore", () => ({
+  __esModule: true,
+  useConvolverStore: {
+    getState: () => mockConvolverState,
+  },
+}));
+
 jest.mock("@/features/headphone/store/headphoneStore", () => ({
   __esModule: true,
   useHeadphoneStore: {
@@ -197,6 +217,16 @@ describe("N4 — applyAllEffectsToNative mengirim kelima efek", () => {
     } finally {
       mockHrtfState.isHrtfEnabled = false;
     }
+  });
+
+  it("convolver restore ikut terpanggil saat EQ dinyalakan (load IR + toggle)", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    jest.clearAllMocks();
+
+    await store.getState().setEQEnabled(true);
+
+    expect(mockConvolverState.restoreToNative).toHaveBeenCalled();
   });
 
   it("sakelar efek OFF -> efek itu dikirim 0, yang lain tetap nilainya", async () => {
@@ -422,6 +452,24 @@ describe("resetToDefault + penanda DSP Guard (clean-cozy 2026-11-19)", () => {
     expect(mockHrtfState.setHrtfEnabled).toHaveBeenCalledWith(false);
     expect(mockHrtfState.isHrtfEnabled).toBe(false);
     expect(mockHeadphone.deactivate).toHaveBeenCalled();
+  });
+
+  it("reset mematikan convolver (toggle OFF, IR tetap tersimpan)", async () => {
+    const store = loadStore();
+    mockConvolverState.isConvolverEnabled = true;
+    mockConvolverState.ir = { name: "Hall.wav" };
+    try {
+      await store.getState().resetToDefault();
+
+      expect(mockConvolverState.setConvolverEnabled).toHaveBeenCalledWith(
+        false,
+      );
+      expect(mockConvolverState.isConvolverEnabled).toBe(false);
+      expect(mockConvolverState.ir).toEqual({ name: "Hall.wav" });
+    } finally {
+      mockConvolverState.isConvolverEnabled = false;
+      mockConvolverState.ir = null;
+    }
   });
 
   it("reset saat EQ menyala -> native menerima hrtf=0 lewat apply", async () => {
