@@ -158,6 +158,19 @@ const applyAllEffectsToNative = async (state: any, trigger = "unknown") => {
     activePresetId,
   } = state;
 
+  // N24 (skalar, 2026-11-20, bagian 3): baca snapshot PENDING bila ada
+  // — drag yang masih dalam jendela throttle store belum flush ke
+  // `state`, tapi apply harus mengirim nilai terbaru, bukan nilai store
+  // yang basi (pola yang sama dengan _eqStorePendingBands untuk kurva
+  // di applyEqThrottled). Tanpa ini, preset yang diketuk <100 ms
+  // sesudah tick drag mengirim nilai drag lama ke native, lalu trailing
+  // flush hanya memperbaiki store tanpa apply ulang.
+  const effBassStrength = _eqScalarPending?.bassStrength ?? bassStrength;
+  const effVirtualizerLevel =
+    _eqScalarPending?.virtualizerLevel ?? virtualizerLevel;
+  const effReverbPreset = _eqScalarPending?.reverbPreset ?? reverbPreset;
+  const effMasterGain = _eqScalarPending?.masterGain ?? masterGain;
+
   if (!NativeDSPModule || !isEQEnabled) return false;
 
   // Gunakan ID yang sudah ada di state (yang dikirim dari playback.ts)
@@ -180,13 +193,13 @@ finalSessionId = sessionResult?.sessionId ?? 0;
   // Clamp efek juga di corong (state lama bisa membawa nilai di luar
   // rentang setter): bass/virtualizer 0..1000, reverb 0..6.
   const bass = isBassEnabled
-    ? Math.min(1000, Math.max(0, bassStrength ?? 0))
+    ? Math.min(1000, Math.max(0, effBassStrength ?? 0))
     : 0;
   const virtualizer = isVirtualizerEnabled
-    ? Math.min(1000, Math.max(0, virtualizerLevel ?? 0))
+    ? Math.min(1000, Math.max(0, effVirtualizerLevel ?? 0))
     : 0;
   const reverb = isReverbEnabled
-    ? Math.min(6, Math.max(0, reverbPreset ?? 0))
+    ? Math.min(6, Math.max(0, effReverbPreset ?? 0))
     : 0;
   // HRTF: flag dari store sendiri (bukan dari state EQ — di luar preset).
   const hrtf = useHrtfStore.getState().isHrtfEnabled;
@@ -209,7 +222,7 @@ finalSessionId = sessionResult?.sessionId ?? 0;
   // gain dihitung untuk native, jadi restore / preset / mode switch
   // tidak bisa menimpa RG diam-diam. RG mati / tanpa tag = gain user.
   const gain = getEffectiveMasterGain(
-    clampMasterGain(masterGain ?? MASTER_GAIN_DEFAULT),
+    clampMasterGain(effMasterGain ?? MASTER_GAIN_DEFAULT),
   );
 
   // Nilai efek yang dicetak di log "[DSP] Applied" (follow-up logcat
@@ -446,6 +459,84 @@ let _eqStoreLastAt = 0;
 let _eqStoreTimer: ReturnType<typeof setTimeout> | null = null;
 let _eqStorePendingBands: any[] | null = null;
 
+// (2026-11-20, fix logcat #9, bagian 3) — throttle set() untuk keempat
+// slider drag (bass/widener/reverb/master gain), pola Fix G yang sama
+// (leading + trailing, 100 ms). SATU jendela + SATU timer bersama: satu
+// set() sudah membawa semua field, jadi drag dua slider dalam satu
+// jendela tetap satu flush. Thumb TIDAK bergantung pada store ini
+// (Reanimated shared value di UI thread mengikuti jari), jadi yang
+// di-throttle hanya re-render layar + teks nilai — keduanya mengejar
+// nilai akhir via trailing flush. Yang TIDAK di-throttle: dorongan ke
+// native (pusher bagian 1 punya throttle sendiri dan dipanggil tiap tick
+// dengan nilai terbaru) — suara tetap mengikuti jari, hanya UI yang
+// mengejar ≤100 ms. Kategori [DRAG-DIAG] "store" yang sama dengan Fix G.
+type ScalarPatch = Partial<{
+  bassStrength: number;
+  virtualizerLevel: number;
+  reverbPreset: number;
+  masterGain: number;
+}>;
+let _eqScalarLastAt = 0;
+let _eqScalarTimer: ReturnType<typeof setTimeout> | null = null;
+let _eqScalarPending: ScalarPatch | null = null;
+
+const throttledScalarSet = (
+  setFn: (partial: ScalarPatch) => void,
+  patch: ScalarPatch,
+) => {
+  const now = Date.now();
+  if (now - _eqScalarLastAt >= EQ_STORE_THROTTLE_MS) {
+    if (_eqScalarTimer) {
+      clearTimeout(_eqScalarTimer);
+      _eqScalarTimer = null;
+    }
+    _eqScalarPending = null;
+    _eqScalarLastAt = now;
+    // [DRAG-DIAG] tick store yang langsung masuk (leading).
+    noteThrottleTick("store", "fired");
+    setFn(patch);
+  } else {
+    _eqScalarPending = { ..._eqScalarPending, ...patch };
+    if (!_eqScalarTimer) {
+      // [DRAG-DIAG] tick store yang dijadwalkan sebagai trailing flush.
+      noteThrottleTick("store", "trailing");
+      _eqScalarTimer = setTimeout(() => {
+        _eqScalarLastAt = Date.now();
+        _eqScalarTimer = null;
+        const pending = _eqScalarPending;
+        _eqScalarPending = null;
+        if (pending) setFn(pending);
+      }, EQ_STORE_THROTTLE_MS - (now - _eqScalarLastAt));
+    } else {
+      // [DRAG-DIAG] tick store yang digabung ke flush tertunda.
+      noteThrottleTick("store", "dropped");
+    }
+  }
+};
+
+/**
+ * Terapkan flush skalar yang masih tertunda SEKARANG (bukan menunggu
+ * timer) — dipakai aksi diskrit (preset) supaya store langsung
+ * menunjukkan nilai aksi itu, bukan nilai drag sebelumnya (paralel
+ * dengan applyPreset yang set bands langsung, bukan via setBandGain).
+ * Tanpa ini, preset yang diketuk <100 ms sesudah tick drag menampilkan
+ * nilai drag lama sampai trailing flush jalan.
+ */
+const flushPendingScalarSet = (
+  setFn: (partial: ScalarPatch) => void,
+) => {
+  if (_eqScalarTimer) {
+    clearTimeout(_eqScalarTimer);
+    _eqScalarTimer = null;
+  }
+  const pending = _eqScalarPending;
+  _eqScalarPending = null;
+  if (pending) {
+    _eqScalarLastAt = Date.now();
+    setFn(pending);
+  }
+};
+
 // P1-9 (2026-11-19): throttle dorongan setMasterGain ke native (leading +
 // trailing, 100 ms — pola applyEqThrottled J1-2). Slider gain dipanggil
 // tiap tick drag; tanpa ini tiap tick = satu panggilan bridge. State
@@ -518,8 +609,11 @@ const pushMasterGainThrottled = (gain: number) => {
 // dimatikan tetap terkirim (satu panggilan sia-sia — engine sudah
 // bypass, nilainya tidak terdengar; apply berikutnya mengirim ulang
 // semua) — itu diterima supaya pusher tetap logika murni tanpa `get()`.
-// Store `set()` di ronde ini MASIH langsung per tick (bagian 3 yang
-// memindahkannya ke `commit` pusher).
+// Store `set()` TIDAK lagi langsung per tick (bagian 3):
+// `throttledScalarSet` di atas men-throttle-nya (leading + trailing,
+// 100 ms, pola Fix G) — pusher tetap dipanggil tiap tick dengan nilai
+// terbaru, jadi suara mengikuti jari sementara re-render layar mengejar
+// ≤100 ms.
 const EFFECT_PUSH_THROTTLE_MS = 100;
 
 const pushBassBoostThrottled = createEffectPusher({
@@ -588,12 +682,19 @@ let _customPresetSeq = 0;
 // Batalkan update store yang masih tertunda (pending trailing flush).
 // Dipanggil aksi yang mengganti bands secara wholesale (preset, reset,
 // setBandsGain) supaya flush basi tidak menimpa bands baru mereka.
+// (2026-11-20, bagian 3): mencakup juga flush skalar tertunda
+// (bass/widener/reverb/gain) — alasan yang sama.
 const cancelPendingStoreUpdate = () => {
   if (_eqStoreTimer) {
     clearTimeout(_eqStoreTimer);
     _eqStoreTimer = null;
   }
   _eqStorePendingBands = null;
+  if (_eqScalarTimer) {
+    clearTimeout(_eqScalarTimer);
+    _eqScalarTimer = null;
+  }
+  _eqScalarPending = null;
 };
 
 export const useEqualizerStore = create<EqualizerStore>()(
@@ -755,7 +856,10 @@ export const useEqualizerStore = create<EqualizerStore>()(
 
       setBassBoost: async (strength: number) => {
         const clamped = Math.min(1000, Math.max(0, strength));
-        set({ bassStrength: clamped });
+        // (logcat #9, bagian 3) store set() di-throttle (leading +
+        // trailing, 100 ms) — layar + teks nilai mengejar ≤100 ms;
+        // dorongan native di bawah tetap tiap tick via pusher.
+        throttledScalarSet(set, { bassStrength: clamped });
         const { isEQEnabled, isBassEnabled, audioSessionId } = get();
         if (isEQEnabled && isBassEnabled && audioSessionId !== -1) {
           // (logcat #9) throttle + fire-and-forget — JANGAN await native
@@ -767,7 +871,8 @@ export const useEqualizerStore = create<EqualizerStore>()(
 
       setVirtualizer: async (level: number) => {
         const clamped = Math.min(1000, Math.max(0, level));
-        set({ virtualizerLevel: clamped });
+        // (logcat #9, bagian 3) store set() di-throttle — lihat setBassBoost.
+        throttledScalarSet(set, { virtualizerLevel: clamped });
         const { isEQEnabled, isVirtualizerEnabled, audioSessionId } = get();
         if (isEQEnabled && isVirtualizerEnabled && audioSessionId !== -1) {
           // (logcat #9) throttle + fire-and-forget — lihat setBassBoost.
@@ -786,7 +891,8 @@ export const useEqualizerStore = create<EqualizerStore>()(
       // komentar MASTER_GAIN_* di atas).
       setMasterGain: async (gain: number) => {
         const clamped = clampMasterGain(gain);
-        set({ masterGain: clamped });
+        // (logcat #9, bagian 3) store set() di-throttle — lihat setBassBoost.
+        throttledScalarSet(set, { masterGain: clamped });
         if (get().isEQEnabled) {
           pushMasterGainThrottled(clamped);
         }
@@ -794,7 +900,8 @@ export const useEqualizerStore = create<EqualizerStore>()(
 
       setReverb: async (preset: number) => {
         const clamped = Math.min(6, Math.max(0, preset));
-        set({ reverbPreset: clamped });
+        // (logcat #9, bagian 3) store set() di-throttle — lihat setBassBoost.
+        throttledScalarSet(set, { reverbPreset: clamped });
         const { isEQEnabled, isReverbEnabled, audioSessionId } = get();
         if (isEQEnabled && isReverbEnabled && audioSessionId !== -1) {
           // (logcat #9) throttle + fire-and-forget — lihat setBassBoost.
@@ -892,6 +999,12 @@ export const useEqualizerStore = create<EqualizerStore>()(
           }
           if (preset.reverb !== undefined)
             void get().setReverb(preset.reverb);
+          // (logcat #9, bagian 3): flush skalar tertunda SEKARANG —
+          // preset adalah aksi diskrit, store harus langsung menunjukkan
+          // nilai preset (bukan nilai drag sebelumnya sampai trailing
+          // flush jalan). Apply di bawah membaca state segar karenanya
+          // (jaring pengaman N24 skalar tetap ada untuk jalur lain).
+          flushPendingScalarSet(set);
           if (get().isEQEnabled && get().audioSessionId !== -1) {
             applyAllEffectsToNative(get(), "applyPreset");
           }

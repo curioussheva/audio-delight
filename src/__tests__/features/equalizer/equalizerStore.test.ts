@@ -415,6 +415,122 @@ describe("logcat #9 — batch applyDspEffects + fallback APK lama", () => {
   });
 });
 
+describe("logcat #9 — bagian 3: throttle store set() slider efek", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  const native = () =>
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("@/features/equalizer/api/nativeInterface").NativeDSPModule as unknown as Record<
+      string,
+      jest.Mock
+    >;
+
+  // Pasang metode batch di mock native SETELAH loadStore() — lihat
+  // describe batch di atas.
+  const installBatch = (
+    impl: (...args: unknown[]) => Promise<boolean> = async () => true,
+  ) => {
+    const mod = native();
+    mod.applyDspEffects = jest.fn(impl);
+    return mod.applyDspEffects;
+  };
+
+  it("leading: tick pertama langsung masuk store + native", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    await store.getState().setEQEnabled(true);
+    jest.clearAllMocks();
+    await store.getState().setBassBoost(500);
+    expect(store.getState().bassStrength).toBe(500);
+    expect(native().setBassBoost).toHaveBeenCalledWith(500, 7);
+  });
+
+  it("tick cepat dalam satu jendela digabung: store tidak update sampai trailing flush, nilai terakhir yang menang", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    await store.getState().setBassBoost(100); // leading
+    await store.getState().setBassBoost(200);
+    await store.getState().setBassBoost(300);
+    await store.getState().setBassBoost(400);
+    expect(store.getState().bassStrength).toBe(100); // belum update
+    jest.advanceTimersByTime(99);
+    expect(store.getState().bassStrength).toBe(100); // belum flush
+    jest.advanceTimersByTime(1);
+    expect(store.getState().bassStrength).toBe(400); // trailing: nilai terbaru
+  });
+
+  it("widener + gain ikut pola yang sama (satu jendela bersama)", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    await store.getState().setVirtualizer(100); // leading
+    await store.getState().setMasterGain(1.5); // ikut jendela yang sama
+    await store.getState().setVirtualizer(800);
+    expect(store.getState().virtualizerLevel).toBe(100);
+    expect(store.getState().masterGain).toBe(1);
+    jest.advanceTimersByTime(100);
+    expect(store.getState().virtualizerLevel).toBe(800);
+    expect(store.getState().masterGain).toBe(1.5);
+  });
+
+  it("native tetap menerima nilai terakhir via pusher walau store set() digabung", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    await store.getState().setEQEnabled(true);
+    jest.clearAllMocks();
+    await store.getState().setBassBoost(100); // leading: native (100, 7)
+    await store.getState().setBassBoost(400); // trailing pusher dijadwalkan
+    expect(native().setBassBoost).toHaveBeenCalledWith(100, 7);
+    jest.advanceTimersByTime(100);
+    expect(native().setBassBoost).toHaveBeenCalledWith(400, 7);
+  });
+
+  it("resetToDefault membatalkan flush skalar tertunda: nilai drag basi tidak menimpa reset", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    await store.getState().setEQEnabled(true);
+    jest.clearAllMocks();
+    await store.getState().setBassBoost(100); // leading
+    await store.getState().setBassBoost(900); // pending (store + pusher)
+    await store.getState().resetToDefault();
+    expect(store.getState().bassStrength).toBe(0);
+    jest.advanceTimersByTime(500);
+    expect(store.getState().bassStrength).toBe(0); // tetap 0, bukan 900
+    expect(native().setBassBoost).not.toHaveBeenCalledWith(900, 7);
+  });
+
+  it("applyPreset sesudah tick drag: apply mengirim nilai preset, bukan nilai drag basi (N24 skalar)", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    const batch = installBatch();
+    await store.getState().setEQEnabled(true);
+    jest.clearAllMocks();
+    await store.getState().setBassBoost(100); // leading
+    await store.getState().setBassBoost(900); // pending: store masih 100
+
+    store.getState().applyPreset("flat"); // flat: bass 0
+    // apply fire-and-forget: beri giliran microtask supaya batch terpanggil.
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+
+    expect(batch).toHaveBeenCalledWith(
+      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      0,
+      0,
+      0,
+      false,
+      0,
+      false,
+      1,
+      7,
+    );
+  });
+});
+
 describe("Master gain (2026-11-19) — store + native + log [DSP] Applied", () => {
   const native = () =>
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -697,14 +813,17 @@ describe("setMasterGain throttle native (P1-9, clean-cozy)", () => {
     expect(n.setMasterGain).toHaveBeenCalledTimes(1);
     expect(n.setMasterGain).toHaveBeenCalledWith(1.2);
 
-    // Dalam jendela: state langsung, native belum.
+    // Dalam jendela: state IKUT di-throttle (bagian 3, logcat #9) —
+    // dulu state langsung, native belum; sekarang keduanya mengejar
+    // lewat trailing flush yang sama.
     await store.getState().setMasterGain(1.3);
     await store.getState().setMasterGain(1.4);
-    expect(store.getState().masterGain).toBe(1.4);
+    expect(store.getState().masterGain).toBe(1.2);
     expect(n.setMasterGain).toHaveBeenCalledTimes(1);
 
-    // Trailing flush: hanya nilai terakhir yang terkirim.
+    // Trailing flush: hanya nilai terakhir yang terkirim (state + native).
     await jest.advanceTimersByTimeAsync(100);
+    expect(store.getState().masterGain).toBe(1.4);
     expect(n.setMasterGain).toHaveBeenCalledTimes(2);
     expect(n.setMasterGain).toHaveBeenLastCalledWith(1.4);
   });
@@ -752,10 +871,12 @@ describe("logcat #9 — tiga setter drag: throttle + fire-and-forget", () => {
     await store.getState().setVirtualizer(400); // dropped
     expect(n.setVirtualizer).toHaveBeenCalledTimes(1);
     expect(n.setVirtualizer).toHaveBeenLastCalledWith(100, 7);
-    // Ronde 1: store set() masih langsung per tick.
-    expect(store.getState().virtualizerLevel).toBe(400);
+    // (bagian 3, logcat #9): store set() IKUT di-throttle — dulu
+    // langsung per tick, sekarang mengejar lewat trailing flush.
+    expect(store.getState().virtualizerLevel).toBe(100);
 
     await jest.advanceTimersByTimeAsync(100);
+    expect(store.getState().virtualizerLevel).toBe(400);
     expect(n.setVirtualizer).toHaveBeenCalledTimes(2);
     expect(n.setVirtualizer).toHaveBeenLastCalledWith(400, 7);
   });
