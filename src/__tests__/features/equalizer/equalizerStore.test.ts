@@ -604,3 +604,90 @@ describe("setMasterGain throttle native (P1-9, clean-cozy)", () => {
     expect(native().setMasterGain).not.toHaveBeenCalled();
   });
 });
+
+describe("logcat #9 — tiga setter drag: throttle + fire-and-forget", () => {
+  const native = () =>
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("@/features/equalizer/api/nativeInterface").NativeDSPModule as {
+      setBassBoost: jest.Mock;
+      setVirtualizer: jest.Mock;
+      setReverbPreset: jest.Mock;
+    };
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  const enableEq = async (store: ReturnType<typeof loadStore>) => {
+    store.getState().setAudioSessionId(7);
+    await store.getState().setEQEnabled(true);
+    jest.clearAllMocks();
+  };
+
+  it("drag cepat: banyak tick -> leading + satu trailing, nilai terakhir yang terkirim", async () => {
+    const store = loadStore();
+    await enableEq(store);
+    const n = native();
+
+    await store.getState().setVirtualizer(100); // leading
+    await store.getState().setVirtualizer(200); // trailing
+    await store.getState().setVirtualizer(300); // dropped
+    await store.getState().setVirtualizer(400); // dropped
+    expect(n.setVirtualizer).toHaveBeenCalledTimes(1);
+    expect(n.setVirtualizer).toHaveBeenLastCalledWith(100, 7);
+    // Ronde 1: store set() masih langsung per tick.
+    expect(store.getState().virtualizerLevel).toBe(400);
+
+    await jest.advanceTimersByTimeAsync(100);
+    expect(n.setVirtualizer).toHaveBeenCalledTimes(2);
+    expect(n.setVirtualizer).toHaveBeenLastCalledWith(400, 7);
+  });
+
+  it("fire-and-forget: aksi kembali sebelum native resolve (tidak menggantung)", async () => {
+    const store = loadStore();
+    await enableEq(store);
+    const n = native();
+    // Native tidak pernah resolve — dulu: tiap tick await ini selamanya.
+    n.setVirtualizer.mockImplementation(() => new Promise(() => {}));
+    await store.getState().setVirtualizer(500);
+    expect(n.setVirtualizer).toHaveBeenCalledWith(500, 7);
+    expect(store.getState().virtualizerLevel).toBe(500);
+  });
+
+  it("reset membatalkan trailing: nilai drag basi tidak menimpa reset", async () => {
+    const store = loadStore();
+    await enableEq(store);
+    const n = native();
+
+    await store.getState().setVirtualizer(100); // leading
+    await store.getState().setVirtualizer(900); // trailing terjadwal
+    await store.getState().resetToDefault();
+    await jest.advanceTimersByTimeAsync(500);
+
+    // Leading 100 + apply reset 0 — trailing 900 TIDAK PERNAH terkirim.
+    expect(n.setVirtualizer).not.toHaveBeenCalledWith(900, 7);
+    expect(n.setVirtualizer).toHaveBeenLastCalledWith(0, 7);
+    expect(store.getState().virtualizerLevel).toBe(0);
+  });
+
+  it("bass + reverb ikut pola yang sama (throttle per setter)", async () => {
+    const store = loadStore();
+    await enableEq(store);
+    const n = native();
+
+    await store.getState().setBassBoost(100);
+    await store.getState().setBassBoost(900);
+    await store.getState().setReverb(1);
+    await store.getState().setReverb(6);
+    expect(n.setBassBoost).toHaveBeenCalledTimes(1);
+    expect(n.setReverbPreset).toHaveBeenCalledTimes(1);
+    await jest.advanceTimersByTimeAsync(100);
+    expect(n.setBassBoost).toHaveBeenLastCalledWith(900, 7);
+    expect(n.setReverbPreset).toHaveBeenLastCalledWith(6, 7);
+  });
+});

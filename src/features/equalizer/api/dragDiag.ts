@@ -32,7 +32,15 @@
 import { isTempDiagEnabled } from "@/shared/utils/diagGate";
 
 /** Throttle yang dipantau (satu per jalur drag di equalizerStore). */
-export type ThrottleName = "bands" | "store" | "gain";
+export type ThrottleName =
+  | "bands"
+  | "store"
+  | "gain"
+  // (logcat #9) tiga setter drag yang dulu tanpa throttle — kini lewat
+  // effectPusher (leading + trailing, 100 ms), satu nama per setter.
+  | "bass"
+  | "widener"
+  | "reverb";
 
 /** Hasil satu tick throttle. */
 export type ThrottleOutcome = "fired" | "trailing" | "dropped" | "skipped";
@@ -69,16 +77,25 @@ let throttleCounts: Record<ThrottleName, ThrottleCounts> = {
   bands: emptyCounts(),
   store: emptyCounts(),
   gain: emptyCounts(),
+  bass: emptyCounts(),
+  widener: emptyCounts(),
+  reverb: emptyCounts(),
 };
 let throttleActivitySinceSummary: Record<ThrottleName, boolean> = {
   bands: false,
   store: false,
   gain: false,
+  bass: false,
+  widener: false,
+  reverb: false,
 };
 let throttleLastSummaryAt: Record<ThrottleName, number> = {
   bands: 0,
   store: 0,
   gain: 0,
+  bass: 0,
+  widener: 0,
+  reverb: 0,
 };
 
 let setterInFlight: Record<DragSetterName, number> = {
@@ -208,6 +225,9 @@ export function getThrottleCounts(): Record<ThrottleName, ThrottleCounts> {
     bands: { ...throttleCounts.bands },
     store: { ...throttleCounts.store },
     gain: { ...throttleCounts.gain },
+    bass: { ...throttleCounts.bass },
+    widener: { ...throttleCounts.widener },
+    reverb: { ...throttleCounts.reverb },
   };
 }
 
@@ -228,9 +248,26 @@ export function resetDragDiagState(): void {
     bands: emptyCounts(),
     store: emptyCounts(),
     gain: emptyCounts(),
+    bass: emptyCounts(),
+    widener: emptyCounts(),
+    reverb: emptyCounts(),
   };
-  throttleActivitySinceSummary = { bands: false, store: false, gain: false };
-  throttleLastSummaryAt = { bands: 0, store: 0, gain: 0 };
+  throttleActivitySinceSummary = {
+    bands: false,
+    store: false,
+    gain: false,
+    bass: false,
+    widener: false,
+    reverb: false,
+  };
+  throttleLastSummaryAt = {
+    bands: 0,
+    store: 0,
+    gain: 0,
+    bass: 0,
+    widener: 0,
+    reverb: 0,
+  };
   setterInFlight = { setVirtualizer: 0, setBassBoost: 0, setReverb: 0 };
   setterOverlaps = { setVirtualizer: 0, setBassBoost: 0, setReverb: 0 };
   setterLastOverlapLogAt = {

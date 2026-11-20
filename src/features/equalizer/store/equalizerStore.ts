@@ -21,6 +21,9 @@ import {
   noteSetterStart,
   noteSetterEnd,
 } from "@/features/equalizer/api/dragDiag";
+// (logcat #9) throttle + fire-and-forget untuk tiga setter drag —
+// lihat effectPusher.ts.
+import { createEffectPusher } from "@/features/equalizer/api/effectPusher";
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -443,6 +446,83 @@ const pushMasterGainThrottled = (gain: number) => {
   }
 };
 
+// (logcat #9) — throttle + fire-and-forget untuk tiga setter drag yang
+// dulu TANPA throttle (`setBassBoost` / `setVirtualizer` / `setReverb`:
+// tiap tick langsung `await` native → 41 janji tak ter-resolve, overlap
+// depth 2 → 41). Pola sama seperti `pushMasterGainThrottled` di atas
+// (leading + trailing, 100 ms): nilai terakhir selalu terkirim via
+// trailing; panggilan native TIDAK PERNAH di-await — `send` menelan
+// rejection di dalam (pola N23), pusher memasang .catch pengaman.
+//
+// CATATAN gate: aksi di bawah memeriksa `isEQEnabled` / sakelar efek /
+// session SEBELUM push. Trailing fire yang jatuh sesudah master
+// dimatikan tetap terkirim (satu panggilan sia-sia — engine sudah
+// bypass, nilainya tidak terdengar; apply berikutnya mengirim ulang
+// semua) — itu diterima supaya pusher tetap logika murni tanpa `get()`.
+// Store `set()` di ronde ini MASIH langsung per tick (bagian 3 yang
+// memindahkannya ke `commit` pusher).
+const EFFECT_PUSH_THROTTLE_MS = 100;
+
+const pushBassBoostThrottled = createEffectPusher({
+  throttleName: "bass",
+  throttleMs: EFFECT_PUSH_THROTTLE_MS,
+  send: (value, sessionId) => {
+    void (async () => {
+      const h = noteSetterStart("setBassBoost");
+      try {
+        await NativeDSPModule.setBassBoost(value, sessionId);
+      } catch (e) {
+        console.error("[EQ Store] setBassBoost gagal:", e);
+      } finally {
+        noteSetterEnd(h);
+      }
+    })();
+  },
+});
+
+const pushVirtualizerThrottled = createEffectPusher({
+  throttleName: "widener",
+  throttleMs: EFFECT_PUSH_THROTTLE_MS,
+  send: (value, sessionId) => {
+    void (async () => {
+      const h = noteSetterStart("setVirtualizer");
+      try {
+        // DIAGNOSTIK SEMENTARA — bisa dicabut (audit setVirtualizer 2026-11-19, opsi B).
+        console.log(`[EQ-DIAG] setVirtualizer via setVirtualizer strength=${value}`);
+        await NativeDSPModule.setVirtualizer(value, sessionId);
+      } catch (e) {
+        console.error("[EQ Store] setVirtualizer gagal:", e);
+      } finally {
+        noteSetterEnd(h);
+      }
+    })();
+  },
+});
+
+const pushReverbThrottled = createEffectPusher({
+  throttleName: "reverb",
+  throttleMs: EFFECT_PUSH_THROTTLE_MS,
+  send: (value, sessionId) => {
+    void (async () => {
+      const h = noteSetterStart("setReverb");
+      try {
+        await NativeDSPModule.setReverbPreset(value, sessionId);
+      } catch (e) {
+        console.error("[EQ Store] setReverbPreset gagal:", e);
+      } finally {
+        noteSetterEnd(h);
+      }
+    })();
+  },
+});
+
+/** Batalkan trailing fire ketiga pusher di atas (lihat resetToDefault). */
+const cancelPendingEffectPushes = () => {
+  pushBassBoostThrottled.cancelPending();
+  pushVirtualizerThrottled.cancelPending();
+  pushReverbThrottled.cancelPending();
+};
+
 // N29: counter penambah keunikan id preset custom (lihat saveCustomPreset).
 let _customPresetSeq = 0;
 
@@ -619,16 +699,10 @@ export const useEqualizerStore = create<EqualizerStore>()(
         set({ bassStrength: clamped });
         const { isEQEnabled, isBassEnabled, audioSessionId } = get();
         if (isEQEnabled && isBassEnabled && audioSessionId !== -1) {
-          // [DRAG-DIAG] setter TANPA throttle: tiap tick drag langsung
-          // await native — ukur round-trip + overlap (lihat dragDiag.ts).
-          const h = noteSetterStart("setBassBoost");
-          try {
-            await NativeDSPModule.setBassBoost(clamped, audioSessionId);
-          } catch (e) {
-            console.error("[EQ Store] setBassBoost gagal:", e);
-          } finally {
-            noteSetterEnd(h);
-          }
+          // (logcat #9) throttle + fire-and-forget — JANGAN await native
+          // per tick (dulu: 41 janji tak ter-resolve). Aksi kembali
+          // segera; nilai terakhir dijamin trailing (lihat effectPusher).
+          pushBassBoostThrottled.push(clamped, audioSessionId);
         }
       },
 
@@ -637,18 +711,8 @@ export const useEqualizerStore = create<EqualizerStore>()(
         set({ virtualizerLevel: clamped });
         const { isEQEnabled, isVirtualizerEnabled, audioSessionId } = get();
         if (isEQEnabled && isVirtualizerEnabled && audioSessionId !== -1) {
-          // [DRAG-DIAG] setter TANPA throttle: tiap tick drag langsung
-          // await native — ukur round-trip + overlap (lihat dragDiag.ts).
-          const h = noteSetterStart("setVirtualizer");
-          try {
-            // DIAGNOSTIK SEMENTARA — bisa dicabut (audit setVirtualizer 2026-11-19, opsi B).
-            console.log(`[EQ-DIAG] setVirtualizer via setVirtualizer strength=${clamped}`);
-            await NativeDSPModule.setVirtualizer(clamped, audioSessionId);
-          } catch (e) {
-            console.error("[EQ Store] setVirtualizer gagal:", e);
-          } finally {
-            noteSetterEnd(h);
-          }
+          // (logcat #9) throttle + fire-and-forget — lihat setBassBoost.
+          pushVirtualizerThrottled.push(clamped, audioSessionId);
         }
       },
 
@@ -674,16 +738,8 @@ export const useEqualizerStore = create<EqualizerStore>()(
         set({ reverbPreset: clamped });
         const { isEQEnabled, isReverbEnabled, audioSessionId } = get();
         if (isEQEnabled && isReverbEnabled && audioSessionId !== -1) {
-          // [DRAG-DIAG] setter TANPA throttle: tiap tick drag langsung
-          // await native — ukur round-trip + overlap (lihat dragDiag.ts).
-          const h = noteSetterStart("setReverb");
-          try {
-            await NativeDSPModule.setReverbPreset(clamped, audioSessionId);
-          } catch (e) {
-            console.error("[EQ Store] setReverbPreset gagal:", e);
-          } finally {
-            noteSetterEnd(h);
-          }
+          // (logcat #9) throttle + fire-and-forget — lihat setBassBoost.
+          pushReverbThrottled.push(clamped, audioSessionId);
         }
       },
 
@@ -818,6 +874,9 @@ export const useEqualizerStore = create<EqualizerStore>()(
       resetToDefault: async () => {
         // Fix G: batalkan trailing flush setBandGain yang masih tertunda.
         cancelPendingStoreUpdate();
+        // (logcat #9) batalkan juga trailing fire ketiga pusher efek —
+        // nilai drag basi tidak boleh menimpa reset sesudahnya.
+        cancelPendingEffectPushes();
         // Reset mencakup HRTF + convolver + koreksi headphone
         // (2026-11-19, ronde clean-cozy; convolver 2026-11-20):
         // "netral" berarti semua pemrosesan DSP kembali netral, bukan
