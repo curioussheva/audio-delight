@@ -25,6 +25,7 @@ import {
   ArrowLeft,
   ChevronLeft,
   Music2,
+  Plus,
   Trash2,
   Search,
   ScanText,
@@ -81,6 +82,7 @@ import { FileTypeList } from "@/features/library/components/FileTypeList";
 import { PlaylistList, PlaylistItem } from "@/features/library/components/PlaylistList";
 import { usePlaylists } from "@/features/playlist/hooks/usePlaylists";
 import { CreatePlaylistModal } from "@/features/playlist/components/CreatePlaylistModal";
+import { AddSongsModal } from "@/features/playlist/components/AddSongsModal";
 import { parseM3U } from "@/features/library/api/m3u";
 import { formatTime } from "@/shared/utils/time";
 import type { Song } from "@/shared/types/audio";
@@ -199,8 +201,14 @@ export default function LibraryScreen() {
   // Wiring F: tab playlist dulu stub (playlists={[]}, handler no-op).
   // Data + aksi dari usePlaylists — hook/service yang sama dengan layar
   // drawer Playlist (src/app/(drawer)/playlist.tsx).
-  const { playlists, createPlaylist, deletePlaylist, importM3UPaths } =
-    usePlaylists();
+  const {
+    playlists,
+    createPlaylist,
+    deletePlaylist,
+    addToPlaylist,
+    removeFromPlaylist,
+    importM3UPaths,
+  } = usePlaylists();
   const [selectedPlaylist, setSelectedPlaylist] =
     useState<PlaylistItem | null>(null);
   // B2 (ronde 9): dialog nama playlist lintas-platform — dulu
@@ -209,6 +217,9 @@ export default function LibraryScreen() {
   // Fase 3 Library: hapus playlist lewat ConfirmDialog (satu-satunya
   // mekanisme konfirmasi), bukan Alert.alert.
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  // Item CRUD playlist di detail view: modal tambah lagu (pola B1 yang
+  // sama dengan layar drawer Playlist).
+  const [showAddModal, setShowAddModal] = useState(false);
 
   // U-P1-18: detail view (Album/Artist/Genre/Folder/Format) menerima
   // favoriteIds sebagai Set — dulu tidak pernah dioper, jadi semua hati
@@ -526,6 +537,48 @@ export default function LibraryScreen() {
     showToast(`Playlist "${name}" dihapus.`, "info");
   }, [selectedPlaylist, deletePlaylist, showToast]);
 
+  // Item CRUD playlist di detail view (pola yang sama dengan layar drawer
+  // Playlist): hapus lagu dari playlist — LANGSUNG + toast, tanpa dialog
+  // konfirmasi. Lagunya tetap ada di Library, jadi ini bukan destruktif
+  // permanen (aturan Fase 2: dialog hanya untuk destruktif). "Lagu
+  // Disukai" bukan playlist DB — tidak ada hapus item di sana (onRemove
+  // tidak diteruskan, lihat renderPlaylistSongItem).
+  const handleRemoveSong = useCallback(
+    async (song: Song) => {
+      if (!selectedPlaylist || selectedPlaylist.id === "favorites") return;
+      // N7: removeFromPlaylist kini melempar bila tulis DB gagal.
+      try {
+        await removeFromPlaylist(selectedPlaylist.id, song.id);
+      } catch (error) {
+        console.error("[Library] Gagal menghapus lagu dari playlist:", error);
+        showToast("Gagal menghapus lagu dari playlist.", "error");
+        return;
+      }
+      showToast(`"${song.title}" dihapus dari playlist.`, "info");
+    },
+    [selectedPlaylist, removeFromPlaylist, showToast],
+  );
+
+  // Item CRUD playlist di detail view (entry B1): tiap lagu yang ditekan
+  // di modal langsung ditambahkan + toast; modal tetap terbuka sampai
+  // "Selesai" supaya bisa tambah beberapa lagu sekaligus. Hook me-reload
+  // daftar setelah tulis, jadi barisnya langsung berubah jadi centang.
+  const handleAddSong = useCallback(
+    async (song: Song) => {
+      if (!selectedPlaylist || selectedPlaylist.id === "favorites") return;
+      // N7: addToPlaylist kini melempar bila tulis DB gagal.
+      try {
+        await addToPlaylist(selectedPlaylist.id, [song]);
+      } catch (error) {
+        console.error("[Library] Gagal menambah lagu ke playlist:", error);
+        showToast("Gagal menambah lagu ke playlist.", "error");
+        return;
+      }
+      showToast(`"${song.title}" ditambahkan ke playlist.`, "success");
+    },
+    [selectedPlaylist, addToPlaylist, showToast],
+  );
+
   const toggleSearch = () => {
     if (showSearch) {
       setSearchQuery("");
@@ -715,16 +768,31 @@ export default function LibraryScreen() {
                   : ""}
               </Text>
             </View>
+            {/* Ronde 9 (fix 3): sembunyikan tombol hapus untuk
+                "Lagu Disukai" — pola yang sama dengan layar drawer
+                Playlist. Tombol "+" (tambah lagu, entry B1) ikut
+                disembunyikan: "Lagu Disukai" bukan playlist DB. */}
             {selectedPlaylist.id !== "favorites" && (
-              <TouchableOpacity
-                onPress={handleDeletePlaylist}
-                style={s.backBtn}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Hapus playlist"
-              >
-                <Trash2 size={20} color={colors.status.error} />
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity
+                  onPress={() => setShowAddModal(true)}
+                  style={s.backBtn}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Tambah lagu ke playlist"
+                >
+                  <Plus size={22} color={colors.text.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleDeletePlaylist}
+                  style={s.backBtn}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Hapus playlist"
+                >
+                  <Trash2 size={20} color={colors.status.error} />
+                </TouchableOpacity>
+              </>
             )}
           </View>
 
@@ -967,6 +1035,13 @@ export default function LibraryScreen() {
           handleSongPress(item, selectedSongs);
         }}
         onToggleFavorite={toggleFavorite}
+        // Item CRUD playlist: tombol × hanya untuk playlist DB —
+        // "Lagu Disukai" bukan playlist, jadi tidak ada hapus item.
+        onRemove={
+          selectedPlaylist && selectedPlaylist.id !== "favorites"
+            ? () => void handleRemoveSong(item)
+            : undefined
+        }
       />
     ),
     [
@@ -976,6 +1051,8 @@ export default function LibraryScreen() {
       handleSongPress,
       toggleFavorite,
       selectedSongs,
+      selectedPlaylist,
+      handleRemoveSong,
     ],
   );
 
@@ -1091,6 +1168,18 @@ export default function LibraryScreen() {
         onConfirm={handleConfirmDeletePlaylist}
         onCancel={() => setShowDeleteDialog(false)}
       />
+
+      {/* Item CRUD playlist di detail view (entry B1): modal pilih lagu
+          dari Library — komponen yang sama dengan layar drawer Playlist. */}
+      {selectedPlaylist && (
+        <AddSongsModal
+          visible={showAddModal}
+          playlistName={selectedPlaylist.name}
+          existingSongIds={selectedFull?.songIds ?? []}
+          onAdd={(song) => void handleAddSong(song)}
+          onClose={() => setShowAddModal(false)}
+        />
+      )}
     </View>
   );
 }
