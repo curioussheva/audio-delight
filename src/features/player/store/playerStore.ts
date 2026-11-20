@@ -17,6 +17,7 @@ import {
 import NativePlaybackService from "@/specs/NativePlaybackService";
 import NativeDSPModule from "@/features/equalizer/api/nativeInterface";
 import { applyReplayGainForSong } from "@/features/replaygain/apply";
+import { visualizerService } from "@/features/visualizer/services/VisualizerService";
 import { clampTuningCents } from "@/features/player/utils/tuning";
 import { parseRepeatShuffleEvent } from "@/features/player/utils/repeatShuffle";
 // [EVENT-LAG] diagnostik sementara (logcat #8) — lihat eventLag.ts.
@@ -885,6 +886,26 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           });
           return false;
         }
+
+        // Visualizer arm (2026-11-20): persenjatai visualizer dari jalur
+        // audio — session di-arm begitu native play() sukses, supaya
+        // visualizer siap jalan bareng audio tanpa menunggu Player screen
+        // mount + efek start (dugaan "missing start" csheva). Fire-and-
+        // forget via safeFireAndForget: jangan blokir playback.
+        // start() tanpa subscriber hanya mengantre session (pendingSessionId
+        // di service); polling jalan begitu subscriber pertama mendaftar.
+        // Sumber session id = store dulu (nilai yang sama dipakai komponen
+        // UI untuk start — service dedupe session yang sama), fallback ke
+        // engine untuk race init (store belum ditulis). Guard id invalid
+        // di sini; dedupe sudah diurus service, jangan tambah guard ganda.
+        safeFireAndForget(() => {
+          const sessionId =
+            get().audioSessionId ?? audioEngine.getSessionId();
+          if (sessionId && sessionId > 0) {
+            return visualizerService.start(sessionId);
+          }
+          return undefined;
+        }, "armVisualizer");
 
         // ── 4. State update ────────────────────────────────
         // 🔥 RESTORE POSITION: kalau resume after restart

@@ -7,7 +7,12 @@
 // equalizerStore.test.ts (resetModules per test supaya state throttle
 // module-level selalu segar).
 
-jest.mock("react-native", () => ({ Platform: { OS: "ios" } }));
+jest.mock("react-native", () => ({
+  Platform: { OS: "ios" },
+  // playerStore kini mengimpor visualizerService (arm dari playSong);
+  // konstruktor service mendaftarkan AppState listener di import time.
+  AppState: { addEventListener: jest.fn(() => ({ remove: jest.fn() })) },
+}));
 
 jest.mock("@react-native-async-storage/async-storage", () => ({
   __esModule: true,
@@ -34,6 +39,18 @@ jest.mock("@/shared/lib/sqlite", () => ({ SongQueries: {}, db: {} }));
 jest.mock("@/specs/NativePlaybackService", () => ({
   __esModule: true,
   default: {},
+}));
+
+// playerStore kini mengimpor visualizerService (arm dari playSong); spec
+// TurboModule-nya memanggil getEnforcing di import time — mock di sini
+// supaya store bisa dimuat di env node.
+jest.mock("../../../specs/NativeVisualizerBridge", () => ({
+  __esModule: true,
+  default: {
+    startVisualizer: jest.fn(async () => true),
+    stopVisualizer: jest.fn(() => {}),
+    getFFTData: jest.fn(async () => new Array(128).fill(0)),
+  },
 }));
 
 const mockNative = {

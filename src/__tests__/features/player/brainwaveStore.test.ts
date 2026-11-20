@@ -56,6 +56,18 @@ jest.mock("@/specs/NativePlaybackService", () => ({
   default: {},
 }));
 
+// playerStore kini mengimpor visualizerService (arm dari playSong); spec
+// TurboModule-nya memanggil getEnforcing di import time — mock di sini
+// supaya store bisa dimuat di env node.
+jest.mock("../../../specs/NativeVisualizerBridge", () => ({
+  __esModule: true,
+  default: {
+    startVisualizer: jest.fn(async () => true),
+    stopVisualizer: jest.fn(() => {}),
+    getFFTData: jest.fn(async () => new Array(128).fill(0)),
+  },
+}));
+
 const mockNative = {
   setSolfeggioFreq: jest.fn(),
   setResonanceIntensity: jest.fn(),
