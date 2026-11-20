@@ -28,8 +28,8 @@ interface BandProps {
   disabled?: boolean;
 }
 
-const BAND_WIDTH = 65; // Ukuran lebar yang pas untuk scroll horizontal
-const SLIDER_HEIGHT = 160; // Tinggi area geser
+export const BAND_WIDTH = 65; // Ukuran lebar yang pas untuk scroll horizontal
+export const SLIDER_HEIGHT = 160; // Tinggi area geser
 
 export const EqualizerBand = ({
   frequency,
@@ -138,16 +138,24 @@ export const EqualizerBand = ({
             },
           ]}
         >
-          {/* Garis-garis Skala (Tick Marks) */}
+          {/* Garis-garis Skala (Tick Marks) — diposisikan di gainToY
+              supaya sejajar dengan posisi thumb di gain itu (+10 di
+              y=12, bukan di tepi atas 0) dan dengan label skala dB di
+              kolom kiri strip. Dulu space-between di seluruh tinggi
+              track: tick ujung meleset 12px dari thumb. */}
           <View style={styles.ticks}>
             {[10, 5, 0, -5, -10].map((v) => (
               <View
                 key={v}
                 style={[
                   styles.tickLine,
-                  { backgroundColor: colors.border.medium },
+                  {
+                    backgroundColor: colors.border.medium,
+                    top: gainToY(v, SLIDER_HEIGHT) - 0.5,
+                  },
                   v === 0 && {
                     width: 20,
+                    left: 5,
                     backgroundColor: colors.border.light ?? colors.border.medium,
                   },
                 ]}
@@ -195,11 +203,10 @@ const styles = StyleSheet.create({
   },
   ticks: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 0,
   },
   tickLine: {
+    position: "absolute",
+    left: 10,
     width: 10,
     height: 1,
   },
