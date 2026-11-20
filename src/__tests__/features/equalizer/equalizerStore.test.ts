@@ -72,6 +72,9 @@ const mockConvolverState = {
     mockConvolverState.isConvolverEnabled = v;
   }),
   restoreToNative: jest.fn(async () => {}),
+  // (2026-11-20, fix logcat #9): separuh pertama restoreToNative —
+  // muat IR tanpa toggle; dipakai jalur batch applyDspEffects.
+  preloadConvolverIr: jest.fn(async () => {}),
 };
 
 jest.mock("@/features/convolver/store/convolverStore", () => ({
@@ -300,6 +303,115 @@ describe("N4 — applyAllEffectsToNative mengirim kelima efek", () => {
     expect(n.setBassBoost).toHaveBeenCalledWith(0, 7);
     expect(n.setVirtualizer).toHaveBeenCalledWith(0, 7);
     expect(n.setReverbPreset).toHaveBeenCalledWith(0, 7);
+  });
+});
+
+describe("logcat #9 — batch applyDspEffects + fallback APK lama", () => {
+  const native = () =>
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("@/features/equalizer/api/nativeInterface").NativeDSPModule as unknown as Record<
+      string,
+      jest.Mock
+    >;
+
+  // Pasang metode batch di mock native SETELAH loadStore() — tiap
+  // loadStore() me-reset modul dan membuat objek mock baru, jadi pasang
+  // di beforeEach (objek lama) tidak akan terlihat store.
+  const installBatch = (
+    impl: (...args: unknown[]) => Promise<boolean> = async () => true,
+  ) => {
+    const mod = native();
+    mod.applyDspEffects = jest.fn(impl);
+    return mod.applyDspEffects;
+  };
+
+  it("batch dipakai bila tersedia: SATU panggilan, setter individual tidak dipanggil, IR di-preload", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    const batch = installBatch();
+    await store.getState().setBassBoost(500);
+    await store.getState().setVirtualizer(300);
+    await store.getState().setReverb(2);
+    jest.clearAllMocks();
+
+    await store.getState().setEQEnabled(true);
+
+    expect(batch).toHaveBeenCalledWith(
+      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      500,
+      300,
+      2,
+      false,
+      0,
+      false,
+      1,
+      7,
+    );
+    const n = native();
+    expect(n.setFullEqualizer).not.toHaveBeenCalled();
+    expect(n.setBassBoost).not.toHaveBeenCalled();
+    expect(n.setVirtualizer).not.toHaveBeenCalled();
+    expect(n.setReverbPreset).not.toHaveBeenCalled();
+    expect(n.setHrtfEnabled).not.toHaveBeenCalled();
+    expect(n.setMasterGain).not.toHaveBeenCalled();
+    // IR dimuat dulu (toggle ikut batch), restoreToNative TIDAK dipakai
+    // jalur ini.
+    expect(mockConvolverState.preloadConvolverIr).toHaveBeenCalled();
+    expect(mockConvolverState.restoreToNative).not.toHaveBeenCalled();
+  });
+
+  it("fallback: metode batch tidak ada (APK lama) -> setter individual jalan seperti dulu", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    expect(
+      (native() as Record<string, unknown>).applyDspEffects,
+    ).toBeUndefined();
+    await store.getState().setBassBoost(500);
+    jest.clearAllMocks();
+
+    await store.getState().setEQEnabled(true);
+
+    const n = native();
+    expect(n.setFullEqualizer).toHaveBeenCalledWith(
+      expect.arrayContaining([0]),
+      7,
+    );
+    expect(n.setBassBoost).toHaveBeenCalledWith(500, 7);
+    expect(mockConvolverState.restoreToNative).toHaveBeenCalled();
+  });
+
+  it("fallback: batch melempar -> setter individual menerapkan nilai yang sama (idempotent)", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    const batch = installBatch(async () => {
+      throw new Error("metode tidak ada di proxy");
+    });
+    await store.getState().setBassBoost(500);
+    jest.clearAllMocks();
+
+    await store.getState().setEQEnabled(true);
+
+    expect(batch).toHaveBeenCalled();
+    const n = native();
+    expect(n.setFullEqualizer).toHaveBeenCalledWith(
+      expect.arrayContaining([0]),
+      7,
+    );
+    expect(n.setBassBoost).toHaveBeenCalledWith(500, 7);
+  });
+
+  it("batch resolve false (engine menolak) TIDAK di-fallback — setter individual tetap diam", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    const batch = installBatch(async () => false);
+    jest.clearAllMocks();
+
+    await store.getState().setEQEnabled(true);
+
+    expect(batch).toHaveBeenCalled();
+    const n = native();
+    expect(n.setFullEqualizer).not.toHaveBeenCalled();
+    expect(n.setBassBoost).not.toHaveBeenCalled();
   });
 });
 

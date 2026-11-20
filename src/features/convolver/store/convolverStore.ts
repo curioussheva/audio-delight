@@ -60,6 +60,16 @@ export interface ConvolverStore {
    * yang dilempar — restore tidak boleh menggagalkan apply lain).
    */
   restoreToNative: () => Promise<void>;
+  /**
+   * Muat ulang IR dari file yang dipersist ke native, TANPA menyentuh
+   * toggle. (2026-11-20, fix logcat #9): separuh pertama
+   * `restoreToNative`, dipakai jalur batch `applyDspEffects` — batch
+   * itu sendiri yang mendorong toggle (convolverEnabled), jadi load
+   * dan toggle tidak lagi butuh dua panggilan native terpisah.
+   * Tanpa IR tersimpan = no-op. Tidak pernah melempar (file hilang =
+   * IR dibersihkan dari state, sama seperti restoreToNative).
+   */
+  preloadConvolverIr: () => Promise<void>;
 }
 
 export const useConvolverStore = create<ConvolverStore>()(
@@ -166,8 +176,8 @@ export const useConvolverStore = create<ConvolverStore>()(
         set({ ir: null, lastError: null });
       },
 
-      restoreToNative: async () => {
-        const { ir, isConvolverEnabled } = get();
+      preloadConvolverIr: async () => {
+        const { ir } = get();
         if (ir?.path) {
           try {
             const status = await NativeDSPModule.loadConvolverIr(ir.path);
@@ -185,6 +195,11 @@ export const useConvolverStore = create<ConvolverStore>()(
             set({ ir: null });
           }
         }
+      },
+
+      restoreToNative: async () => {
+        const { isConvolverEnabled } = get();
+        await get().preloadConvolverIr();
         try {
           const { sessionId } = await NativeDSPModule.createAudioSession();
           if (sessionId !== -1) {

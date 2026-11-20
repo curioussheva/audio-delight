@@ -228,4 +228,26 @@ describe("convolverStore", () => {
 
     expect(store.getState().ir).toBeNull();
   });
+
+  it("preloadConvolverIr dengan IR -> load ulang dari path TANPA menyentuh toggle", async () => {
+    const store = loadStore();
+    mockGetDocumentAsync.mockResolvedValue(pickedFile as any);
+    await store.getState().loadIr();
+    await store.getState().setConvolverEnabled(true);
+    jest.clearAllMocks();
+
+    await store.getState().preloadConvolverIr();
+
+    expect(mockLoadConvolverIr).toHaveBeenCalledWith(
+      "file:///doc/convolver/Hall Besar.wav",
+    );
+    expect(mockSetConvolverEnabled).not.toHaveBeenCalled();
+  });
+
+  it("preloadConvolverIr tanpa IR -> no-op", async () => {
+    const store = loadStore();
+    await store.getState().preloadConvolverIr();
+    expect(mockLoadConvolverIr).not.toHaveBeenCalled();
+    expect(mockSetConvolverEnabled).not.toHaveBeenCalled();
+  });
 });

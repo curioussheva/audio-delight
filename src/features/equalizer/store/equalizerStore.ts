@@ -212,6 +212,71 @@ finalSessionId = sessionResult?.sessionId ?? 0;
     clampMasterGain(masterGain ?? MASTER_GAIN_DEFAULT),
   );
 
+  // Nilai efek yang dicetak di log "[DSP] Applied" (follow-up logcat
+  // 14:47, 2026-11-19): nilai TERKIRIM ke native (sudah di-clamp;
+  // 0 bila sakelar efeknya OFF) + activePresetId — jadi logcat
+  // berikutnya menjawab N4 langsung.
+  const valueDetailFor = (conv: {
+    isConvolverEnabled: boolean;
+    ir?: { name: string } | null;
+  }) =>
+    `preset=${activePresetId ?? "?"} bass=${bass} widener=${virtualizer} reverb=${reverb} hrtf=${hrtf ? 1 : 0} conv=${conv.isConvolverEnabled ? 1 : 0}(${conv.ir?.name ?? "-"}) xf=${crossfade}s gain=${gain.toFixed(2)} gains=[${gains.join(",")}]`;
+
+  // (2026-11-20, fix logcat #9) — JALUR BATCH: satu panggilan native
+  // `applyDspEffects` untuk seluruh apply, pengganti Promise.all 8
+  // setter di bawah. Round-trip idle median ~1,2 dtk membuat 8
+  // round-trip per apply mahal; satu batch = satu round-trip.
+  // Kompatibilitas: APK lama (Dev run 44677261596, HEAD 83d1b488d)
+  // TIDAK punya metode ini — `typeof` check di bawah mengarahkan ke
+  // jalur legacy, jadi JS ini tetap jalan via Metro reload SEBELUM
+  // Dev build apa pun. Bila batch MELEMPAR (mis. metode ternyata
+  // tidak ada di proxy), fallback yang sama berjalan — nilai yang sama
+  // diterapkan ulang (idempotent), jadi tidak ada efek yang hilang
+  // walau batch sempat menerapkan sebagian sebelum melempar. Hanya
+  // `false` (engine menolak) yang TIDAK di-fallback — setter individual
+  // akan gagal dengan cara yang sama.
+  if (typeof NativeDSPModule.applyDspEffects === "function") {
+    const batchStartedAt = performance.now();
+    try {
+      // IR convolver dimuat dulu bila ada (toggle-nya ikut batch) —
+      // urutan wajib karena native melupakan IR saat engine mati.
+      await useConvolverStore.getState().preloadConvolverIr();
+      const conv = useConvolverStore.getState();
+      const ok = await NativeDSPModule.applyDspEffects(
+        gains,
+        bass,
+        virtualizer,
+        reverb,
+        hrtf,
+        crossfade,
+        conv.isConvolverEnabled,
+        gain,
+        finalSessionId,
+      );
+      const batchMs = performance.now() - batchStartedAt;
+      const detail = `(trigger: ${trigger}) in ${Math.round(batchMs)}ms (batch:${Math.round(batchMs)}ms) ${valueDetailFor(conv)}`;
+      if (ok) {
+        console.log(`[DSP] Applied to Session: ${finalSessionId} ${detail}`);
+      } else {
+        // Jujur: jangan klaim "Applied" kalau native menolak.
+        console.log(
+          `[DSP] Apply GAGAL SEBAGIAN to Session: ${finalSessionId} ${detail} — gagal: batch`,
+        );
+      }
+      // [BRIDGE-PROBE] (diagnostik SEMENTARA, logcat #8): satu sampel
+      // konteks "apply" per apply — durasi batch. Hapus baris ini saat
+      // probe dicabut.
+      noteBridgeProbeApply(batchMs);
+      return ok;
+    } catch (e) {
+      console.warn(
+        "[EQ Store] applyDspEffects gagal, fallback ke setter individual:",
+        e,
+      );
+      // Jatuh ke jalur legacy di bawah.
+    }
+  }
+
   const effects: Array<[string, () => Promise<unknown>]> = [
     ["setFullEqualizer", () => NativeDSPModule.setFullEqualizer(gains, finalSessionId)],
     ["setBassBoost", () => NativeDSPModule.setBassBoost(bass, finalSessionId)],
@@ -250,12 +315,6 @@ finalSessionId = sessionResult?.sessionId ?? 0;
   // timing log membuktikan/membantah dugaan "apply DSP lambat/berat" dari
   // logcat berikutnya. Murni log; urutan/perilaku tidak berubah, tanpa
   // debounce (debounce TIDAK diputuskan).
-  // Nilai efek dicetak juga (follow-up logcat 14:47, 2026-11-19): 5× apply
-  // membuktikan jalur restore jalan, tapi NOL log nilai efek sehingga N4
-  // (bass/widener > 0 saat toggle?) tetap tidak bisa dibuktikan dari logcat.
-  // Nilai yang dicetak adalah nilai TERKIRIM ke native (sudah di-clamp;
-  // 0 bila sakelar efeknya OFF) + activePresetId — jadi logcat berikutnya
-  // menjawab N4 langsung.
   const applyStartedAt = performance.now();
   const results = await Promise.all(
     effects.map(async ([name, apply]) => {
@@ -276,7 +335,7 @@ finalSessionId = sessionResult?.sessionId ?? 0;
   const perEffect = results
     .map((r) => `${r.name}:${Math.round(r.ms)}ms`)
     .join(" ");
-  const detail = `(trigger: ${trigger}) in ${Math.round(totalMs)}ms (${perEffect}) preset=${activePresetId ?? "?"} bass=${bass} widener=${virtualizer} reverb=${reverb} hrtf=${hrtf ? 1 : 0} conv=${convolver.isConvolverEnabled ? 1 : 0}(${convolver.ir?.name ?? "-"}) xf=${crossfade}s gain=${gain.toFixed(2)} gains=[${gains.join(",")}]`;
+  const detail = `(trigger: ${trigger}) in ${Math.round(totalMs)}ms (${perEffect}) ${valueDetailFor(convolver)}`;
   if (results.every((r) => r.ok)) {
     console.log(`[DSP] Applied to Session: ${finalSessionId} ${detail}`);
   } else {

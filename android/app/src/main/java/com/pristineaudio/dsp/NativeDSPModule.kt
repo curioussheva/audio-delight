@@ -450,6 +450,54 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     }
 
     @ReactMethod
+    fun applyDspEffects(
+        gains: ReadableArray,
+        bass: Float,
+        virtualizer: Float,
+        reverb: Int,
+        hrtf: Boolean,
+        crossfade: Float,
+        convolverEnabled: Boolean,
+        masterGain: Float,
+        sessionId: Int,
+        promise: Promise,
+    ) {
+        // (2026-11-20, fix drag pile-up logcat #9): SATU panggilan
+        // bridge untuk seluruh apply — pengganti Promise.all 8 setter di
+        // applyAllEffectsToNative. Round-trip idle median ~1,2 dtk membuat
+        // 8 round-trip per apply mahal; di sini 8 nilai diterapkan lewat
+        // JNI yang sama dengan setter individual (konversi satuan
+        // disalin persis: bass 0..1000 -> 0..kMaxBassBoostDb dB,
+        // virtualizer 0..1000 -> width 1.0..2.0, gains max 10 band).
+        // Urutan = urutan array effects di applyAllEffectsToNative.
+        // IR convolver TIDAK dimuat di sini — JS memuatnya dulu bila ada
+        // (preloadConvolverIr), lalu toggle-nya ikut batch ini.
+        // sessionId diterima demi kompatibilitas API tapi diabaikan
+        // native (F7: satu stream global), sama seperti setter lain.
+        val t0 = System.nanoTime()
+        if (!engineAvailable) {
+            Log.i(TAG, "[DSP-TIMING] applyDspEffects native=${(System.nanoTime() - t0) / 1_000_000}ms (engine unavailable)")
+            promise.resolve(false); return
+        }
+        try {
+            val count = minOf(gains.size(), 10)
+            val bands = FloatArray(count) { i -> gains.getDouble(i).toFloat() }
+            setNativeEqualizerBands(bands)
+            setNativeBassBoost(bass / 1000.0f * kMaxBassBoostDb)
+            setNativeStereoWide(1.0f + virtualizer / 1000.0f)
+            setNativeReverbPreset(reverb)
+            setNativeHrtfEnabled(hrtf)
+            setNativeCrossfadeSeconds(crossfade)
+            setNativeConvolverEnabled(convolverEnabled)
+            setNativeMasterGain(masterGain)
+            Log.i(TAG, "[DSP-TIMING] applyDspEffects native=${(System.nanoTime() - t0) / 1_000_000}ms")
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("DSP_ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
     fun setBalance(balance: Float) {
         if (engineAvailable) setNativeBalance(balance)
         else Log.w(TAG, "setBalance dibuang: engine native tidak tersedia")

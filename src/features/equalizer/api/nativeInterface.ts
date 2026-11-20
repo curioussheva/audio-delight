@@ -11,6 +11,19 @@ export interface NativeDSPInterface {
   // Ada di spec sejak langkah 5; antarmuka ini yang dipakai equalizerStore
   // (applyAllEffectsToNative) untuk memulihkan flag saat init/ganti session.
   setHrtfEnabled(enabled: boolean, sessionId: number): Promise<boolean>;
+  // applyDspEffects (2026-11-20, fix logcat #9): satu panggilan native
+  // untuk seluruh apply — lihat spec untuk kontrak + fallback APK lama.
+  applyDspEffects(
+    gains: number[],
+    bass: number,
+    virtualizer: number,
+    reverb: number,
+    hrtf: boolean,
+    crossfade: number,
+    convolverEnabled: boolean,
+    masterGain: number,
+    sessionId: number,
+  ): Promise<boolean>;
   // Master EQ (P0-1, 2026-11-19): sakelar master "Pemrosesan DSP".
   // false = DSPChain passthrough bit-exact (DSPConfig.enabled).
   setEqEnabled(enabled: boolean, sessionId: number): Promise<boolean>;

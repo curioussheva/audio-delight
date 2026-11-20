@@ -37,6 +37,35 @@ export interface Spec extends TurboModule {
   setVirtualizer(strength: number, sessionId: number): Promise<boolean>;
   setReverbPreset(preset: number, sessionId: number): Promise<boolean>;
   setHrtfEnabled(enabled: boolean, sessionId: number): Promise<boolean>;
+  /**
+   * applyDspEffects (2026-11-20, fix drag pile-up logcat #9): SATU
+   * panggilan native untuk seluruh apply — 7 setter murni (gains, bass,
+   * virtualizer, reverb, hrtf, crossfade, masterGain) + toggle
+   * convolver. IR convolver dimuat terpisah di JS sebelum batch bila
+   * ada (lihat preloadConvolverIr) — load file TIDAK termasuk di sini.
+   *
+   * Menggantikan `Promise.all` 8 setter di applyAllEffectsToNative:
+   * round-trip idle median ~1,2 dtk membuat 8 round-trip per apply
+   * mahal. sessionId diterima demi kompatibilitas API tapi diabaikan
+   * native (F7: satu stream global). Resolve false bila engine tidak
+   * tersedia (pola setter lain); pemanggil WAJIB memeriksa.
+   *
+   * KOMPATIBILITAS: APK lama (tanpa metode ini) tidak memilikinya di
+   * proxy TurboModule — pemanggil HARUS memeriksa
+   * `typeof applyDspEffects === "function"` dan fallback ke setter
+   * individual bila tidak ada (pola `?.setMasterGain` P1-9).
+   */
+  applyDspEffects(
+    gains: number[],
+    bass: number,
+    virtualizer: number,
+    reverb: number,
+    hrtf: boolean,
+    crossfade: number,
+    convolverEnabled: boolean,
+    masterGain: number,
+    sessionId: number,
+  ): Promise<boolean>;
   // Crossfade (2026-11-20): durasi transisi antar lagu, detik 0..12
   // (0 = mati = perilaku lama). Berlaku pada auto-advance di mode
   // processing (DSP/Solfeggio); di Bit-Perfect diabaikan native
