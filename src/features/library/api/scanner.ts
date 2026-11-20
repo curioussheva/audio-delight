@@ -6,6 +6,7 @@ import {
   INSERT_SONG_SQL,
   buildInsertParams,
   buildUpdateStatement,
+  classifyWriteBatch,
 } from "@/features/library/api/scanBatchWriter";
 import MetadataExtractor from "@/features/library/api/metadata";
 import {
@@ -232,6 +233,92 @@ export class LibraryScanner {
   }
 
   /**
+   * Simpan banyak lagu dalam SATU panggilan `db.executeBatch` — jalur
+   * tulis batch untuk quickDiff / runMediaStoreDiff.
+   *
+   * Menggantikan loop `saveToDatabase` per lagu (yang per lagu membayar
+   * satu SELECT by id + satu `db.execute` INSERT/UPDATE lewat JSI).
+   * Satu batch = SATU transaksi native (all-or-nothing, sama seperti
+   * transaksi luar `BEGIN/COMMIT` yang digantikan) — lihat header
+   * `scanBatchWriter.ts` soal kenapa batch TIDAK di-chunk dan TIDAK
+   * dipanggil di dalam transaksi luar.
+   *
+   * Perilaku yang dipertahankan: keputusan insert-vs-update by id
+   * (cerminan `saveToDatabase`), penghormatan `editedFields`, lagu
+   * tanpa id dilewati, gagal batch = tidak ada yang tertulis (native
+   * me-rollback) dan error diteruskan — sama seperti transaksi luar
+   * sebelumnya. Progres dilaporkan di awal (0) dan akhir (total) saja:
+   * satu batch tidak punya titik tengah untuk dilaporkan.
+   */
+  static async saveSongsBatched(
+    songs: Array<Partial<Song> | NativeSong>,
+    opts?: {
+      onProgress?: (written: number, total: number) => void;
+      abortCheck?: () => void;
+    },
+  ): Promise<{ inserted: number; updated: number; skipped: number }> {
+    const total = songs.length;
+    if (total === 0) return { inserted: 0, updated: 0, skipped: 0 };
+
+    opts?.abortCheck?.();
+
+    // 1. Klasifikasi by id — SATU query, cerminan saveToDatabase.
+    const existingIds = this.getExistingIds();
+
+    // 2. editedFields untuk lagu yang di-update — SATU query IN
+    // (di-chunk 500 supaya tidak menabrak batas variabel SQLite).
+    // Gagal query di sini DILEMPAR: melanjutkan tanpa editedFields
+    // akan menimpa field yang diedit user.
+    const updateIds = [
+      ...new Set(
+        songs
+          .map((s) => s.id?.toString())
+          .filter((id): id is string => Boolean(id) && existingIds.has(id)),
+      ),
+    ];
+    const editedById = new Map<string, string[] | undefined>();
+    for (let i = 0; i < updateIds.length; i += 500) {
+      const chunk = updateIds.slice(i, i + 500);
+      const placeholders = chunk.map(() => "?").join(",");
+      const result = db.execute(
+        `SELECT id, editedFields FROM songs WHERE id IN (${placeholders})`,
+        chunk,
+      );
+      for (const row of result.rows?._array ?? []) {
+        editedById.set(row.id, parseEditedFields(row.editedFields));
+      }
+    }
+
+    // 3. Klasifikasi murni (tanpa DB).
+    const { inserts, updates, skipped } = classifyWriteBatch(
+      songs,
+      existingIds,
+      editedById,
+    );
+
+    // 4. SATU batch = SATU transaksi native. Jangan panggil executeBatch
+    // dengan commands kosong — native mengembalikan error.
+    const commands: Array<[string, any[] | any[][]]> = [];
+    if (inserts.length > 0) commands.push([INSERT_SONG_SQL, inserts]);
+    for (const [sql, params] of updates) commands.push([sql, params]);
+    if (commands.length === 0) {
+      return { inserted: 0, updated: 0, skipped };
+    }
+
+    opts?.abortCheck?.();
+    opts?.onProgress?.(0, total);
+    const result = db.executeBatch(commands);
+    opts?.onProgress?.(total, total);
+
+    console.log(
+      `[LibraryScanner] Batch saved: +${inserts.length} inserted, ` +
+        `${updates.length} updated, ${skipped} skipped ` +
+        `(rowsAffected=${result.rowsAffected ?? "?"})`,
+    );
+    return { inserted: inserts.length, updated: updates.length, skipped };
+  }
+
+  /**
    * Save single song - PUBLIC API
    */
   static async saveToDatabase(song: Partial<Song> | NativeSong): Promise<void> {
@@ -429,6 +516,25 @@ export class LibraryScanner {
       console.error("[LibraryScanner] Get song by URI failed:", error);
       return null;
     }
+  }
+
+  /**
+   * Get all existing song IDs from database.
+   *
+   * Dipakai klasifikasi batch (insert vs update by id — PRIMARY KEY,
+   * cerminan keputusan `saveToDatabase` via `getSongById`). Predikat
+   * `uri IS NOT NULL` sama seperti `getSongById` supaya keputusannya
+   * identik. SATU query untuk seluruh batch, bukan satu SELECT per lagu.
+   *
+   * BEDA dari `getExistingUris`: gagal query di sini DILEMPAR, bukan
+   * dikembalikan sebagai set kosong — set kosong yang salah akan
+   * mengklasifikasi lagu lama sebagai INSERT dan menggagalkan batch
+   * dengan konflik PRIMARY KEY yang membingungkan.
+   */
+  static getExistingIds(): Set<string> {
+    const result = db.execute("SELECT id FROM songs WHERE uri IS NOT NULL");
+    const rows = result.rows?._array ?? [];
+    return new Set(rows.map((r: any) => r.id).filter(Boolean));
   }
 
   /**

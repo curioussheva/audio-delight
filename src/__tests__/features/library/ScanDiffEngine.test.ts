@@ -13,14 +13,14 @@ jest.mock("@/features/library/api/scanner", () => ({
     getFileSizeByUri: jest.fn(),
     deleteSongsByUris: jest.fn(),
     saveToDatabase: jest.fn(),
+    // Jalur tulis batch (opsi B): satu panggilan executeBatch per fase
+    // tulis — ganti loop saveToDatabase per lagu + BEGIN/COMMIT.
+    saveSongsBatched: jest.fn(),
   },
 }));
 jest.mock("@/features/library/api/metadata", () => ({}));
 jest.mock("@/features/library/store/libraryStore", () => ({
   useLibraryStore: { getState: jest.fn() },
-}));
-jest.mock("@/shared/lib/sqlite", () => ({
-  db: { execute: jest.fn() },
 }));
 
 import {
@@ -35,7 +35,6 @@ import type { NativeSong } from "@/features/library/native/MediaStoreModule";
 import { MediaStore } from "@/features/library/native/MediaStoreModule";
 import { LibraryScanner } from "@/features/library/api/scanner";
 import { useLibraryStore } from "@/features/library/store/libraryStore";
-import { db } from "@/shared/lib/sqlite";
 
 const song = (uri: string, fileSize = 1000): NativeSong =>
   ({ id: uri, uri, fileSize }) as NativeSong;
@@ -147,12 +146,20 @@ describe("quickDiff — J3-1: tidak bisa menggantikan refresh library", () => {
   const queryAudioFiles = MediaStore.queryAudioFiles as jest.Mock;
   const getExistingUris = LibraryScanner.getExistingUris as jest.Mock;
   const getFileSizeByUri = LibraryScanner.getFileSizeByUri as jest.Mock;
+  const saveSongsBatched = LibraryScanner.saveSongsBatched as jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
     // J2-2: ukuran file dibaca satu query; default: tidak ada ukuran
     // tercatat (lagu yang sudah ada tidak ditandai berubah).
     getFileSizeByUri.mockReturnValue(new Map());
+    // Jalur tulis batch: default sukses (0 tulis bila tidak ada perubahan
+    // — pemanggil hanya peduli tidak throw).
+    saveSongsBatched.mockResolvedValue({
+      inserted: 0,
+      updated: 0,
+      skipped: 0,
+    });
   });
 
   it("REGRESI: Auto Discovery mati (default OFF) -> hasil kosong TANPA menyentuh MediaStore", async () => {
@@ -217,9 +224,12 @@ describe("quickDiff — J3-1: tidak bisa menggantikan refresh library", () => {
   it("N16: hapus gagal sesudah tulis commit -> lagu baru tetap dilaporkan (deletedCount 0), supaya diantre enrichment", async () => {
     getState.mockReturnValue({ isAutoScanEnabled: true });
     const deleteSongsByUris = LibraryScanner.deleteSongsByUris as jest.Mock;
-    const saveToDatabase = LibraryScanner.saveToDatabase as jest.Mock;
     deleteSongsByUris.mockRejectedValue(new Error("delete gagal"));
-    saveToDatabase.mockResolvedValue(undefined);
+    saveSongsBatched.mockResolvedValue({
+      inserted: 1,
+      updated: 0,
+      skipped: 0,
+    });
     queryAudioFiles.mockResolvedValue([song("baru"), song("lama")]);
     getExistingUris.mockReturnValue(new Set(["lama", "hapus"]));
 
@@ -235,8 +245,11 @@ describe("quickDiff — J3-1: tidak bisa menggantikan refresh library", () => {
   it("J2-2: ukuran file dibaca SATU query (getFileSizeByUri), bukan satu getSongByUri per lagu", async () => {
     getState.mockReturnValue({ isAutoScanEnabled: true });
     const getSongByUri = LibraryScanner.getSongByUri as jest.Mock;
-    const saveToDatabase = LibraryScanner.saveToDatabase as jest.Mock;
-    saveToDatabase.mockResolvedValue(undefined);
+    saveSongsBatched.mockResolvedValue({
+      inserted: 0,
+      updated: 1,
+      skipped: 0,
+    });
     getFileSizeByUri.mockReturnValue(new Map([["lama", 1000]]));
     queryAudioFiles.mockResolvedValue([song("lama", 2000)]);
     getExistingUris.mockReturnValue(new Set(["lama"]));
@@ -256,20 +269,26 @@ describe("runMediaStoreDiff — N6: hapus sesudah tulis commit", () => {
   const getExistingUris = LibraryScanner.getExistingUris as jest.Mock;
   const getFileSizeByUri = LibraryScanner.getFileSizeByUri as jest.Mock;
   const deleteSongsByUris = LibraryScanner.deleteSongsByUris as jest.Mock;
-  const saveToDatabase = LibraryScanner.saveToDatabase as jest.Mock;
-  const dbExecute = db.execute as jest.Mock;
+  const saveSongsBatched = LibraryScanner.saveSongsBatched as jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
     // J2-2: ukuran file dibaca satu query; default: tidak ada ukuran
     // tercatat (lagu yang sudah ada tidak ditandai berubah).
     getFileSizeByUri.mockReturnValue(new Map());
+    // Jalur tulis batch: default sukses.
+    saveSongsBatched.mockResolvedValue({
+      inserted: 0,
+      updated: 0,
+      skipped: 0,
+    });
   });
 
-  it("REGRESI: deleteSongsByUris jalan SESUDAH COMMIT transaksi tulis", async () => {
+  it("REGRESI: deleteSongsByUris jalan SESUDAH tulis batch commit", async () => {
     const order: string[] = [];
-    dbExecute.mockImplementation((sql: string) => {
-      order.push(sql);
+    saveSongsBatched.mockImplementation(async () => {
+      order.push("BATCH");
+      return { inserted: 1, updated: 0, skipped: 0 };
     });
     deleteSongsByUris.mockImplementation(async () => {
       order.push("DELETE");
@@ -281,15 +300,22 @@ describe("runMediaStoreDiff — N6: hapus sesudah tulis commit", () => {
 
     expect(result.newCount).toBe(1);
     expect(result.deletedCount).toBe(1);
-    expect(order).toContain("COMMIT");
-    expect(order).toContain("DELETE");
-    expect(order.indexOf("COMMIT")).toBeLessThan(order.indexOf("DELETE"));
+    // Batch (transaksi native-nya) selesai dulu, baru hapus jalan —
+    // dulu dibuktikan lewat string "COMMIT" di db.execute; kini commit
+    // ada di dalam executeBatch (native), jadi urutan dibuktikan lewat
+    // resolve-nya saveSongsBatched.
+    expect(order).toEqual(["BATCH", "DELETE"]);
   });
 
   it("REGRESI: cancel di tengah tulis — tulisan tetap commit, hapus tidak jalan", async () => {
     const controller = new AbortController();
-    saveToDatabase.mockImplementation(async () => {
+    // Abort datang saat batch sedang jalan (jendela sinkron yang tak
+    // bisa diobservasi di tengah): batch commit, lalu checkpoint
+    // sebelum hapus melempar — sama seperti dulu (tulis commit di
+    // loop, abort baru ketahuan di checkpoint hapus).
+    saveSongsBatched.mockImplementation(async () => {
       controller.abort();
+      return { inserted: 1, updated: 0, skipped: 0 };
     });
     queryAudioFiles.mockResolvedValue([song("baru"), song("lama")]);
     getExistingUris.mockReturnValue(new Set(["lama", "hapus"]));
@@ -299,13 +325,31 @@ describe("runMediaStoreDiff — N6: hapus sesudah tulis commit", () => {
     ).rejects.toBeInstanceOf(ScanAbortedError);
     // Tulis sudah commit sebelum checkpoint hapus; penghapusan tidak
     // pernah jalan mendahului tulisan yang belum pasti (N6).
-    expect(dbExecute).toHaveBeenCalledWith("COMMIT");
+    expect(saveSongsBatched).toHaveBeenCalledTimes(1);
+    expect(deleteSongsByUris).not.toHaveBeenCalled();
+  });
+
+  it("REGRESI: abort sebelum batch — tidak ada yang tertulis, hapus tidak jalan", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    queryAudioFiles.mockResolvedValue([song("baru"), song("lama")]);
+    getExistingUris.mockReturnValue(new Set(["lama", "hapus"]));
+
+    await expect(
+      ScanDiffEngine.runMediaStoreDiff(undefined, controller.signal),
+    ).rejects.toBeInstanceOf(ScanAbortedError);
+    // abortCheck sebelum batch melempar: batch tidak pernah dipanggil.
+    expect(saveSongsBatched).not.toHaveBeenCalled();
     expect(deleteSongsByUris).not.toHaveBeenCalled();
   });
 
   it("N16 (saudara jalur manual): hapus gagal sesudah tulis commit -> lagu baru tetap dilaporkan (deletedCount 0), supaya diantre enrichment", async () => {
     deleteSongsByUris.mockRejectedValue(new Error("delete gagal"));
-    saveToDatabase.mockResolvedValue(undefined);
+    saveSongsBatched.mockResolvedValue({
+      inserted: 1,
+      updated: 0,
+      skipped: 0,
+    });
     queryAudioFiles.mockResolvedValue([song("baru"), song("lama")]);
     getExistingUris.mockReturnValue(new Set(["lama", "hapus"]));
 

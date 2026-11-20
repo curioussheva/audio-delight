@@ -9,7 +9,6 @@ import {
 } from "@/features/library/native/MediaStoreModule";
 import MetadataExtractor from "@/features/library/api/metadata";
 import { useLibraryStore } from "../store/libraryStore";
-import { db } from "@/shared/lib/sqlite";
 import { isHiRes } from "@/shared/utils/audioQuality";
 
 /* =============================================
@@ -177,8 +176,15 @@ function _getCodecFromFilename(filename: string): string {
    CORE PROCESSING FUNCTIONS
    ============================================= */
 
-async function saveBasicSongInfo(song: NativeSong): Promise<void> {
-  if (!song?.id) return;
+/**
+ * Bangun data dasar lagu dari NativeSong — TANPA menulis DB.
+ *
+ * Dipakai jalur batch: data dikumpulkan dulu, ditulis sekaligus oleh
+ * `LibraryScanner.saveSongsBatched`. `null` = tanpa id (dilewati,
+ * sama seperti early return `saveBasicSongInfo` dulu).
+ */
+function buildBasicSongInfo(song: NativeSong): Record<string, any> | null {
+  if (!song?.id) return null;
   const finalUri =
     song.uri || `content://media/external/audio/media/${song.id}`;
   // Codec dipakai dua kali: field codec + penentu isHiRes (U-P1-01).
@@ -196,7 +202,7 @@ async function saveBasicSongInfo(song: NativeSong): Promise<void> {
       ? `content://media/external/audio/albums/${song.albumId}/albumart`
       : null);
 
-  const basicData = {
+  return {
     id: song.id,
     uri: finalUri,
     filename: song.filename || "",
@@ -214,8 +220,16 @@ async function saveBasicSongInfo(song: NativeSong): Promise<void> {
     isEnriched: false,
     dateAdded: song.dateAdded || Date.now(),
   };
+}
 
-  await LibraryScanner.saveToDatabase(basicData);
+/** Kumpulkan data dasar untuk banyak lagu (lewati yang tanpa id). */
+function buildBasicSongInfos(songs: NativeSong[]): Record<string, any>[] {
+  const out: Record<string, any>[] = [];
+  for (const song of songs) {
+    const basic = buildBasicSongInfo(song);
+    if (basic) out.push(basic);
+  }
+  return out;
 }
 
 async function processQuickDiff(
@@ -255,25 +269,19 @@ async function processQuickDiff(
   }
   const finalDeleted = bolehHapus ? deletedUris : [];
 
-  // Tulis lagu baru. Sebelumnya ini dilakukan di dalam loop tanpa
-  // transaction, sehingga scan yang gagal di tengah meninggalkan database
-  // setengah terisi. Sekarang satu transaction, sama seperti full diff.
+  // Tulis lagu baru — SATU panggilan executeBatch (satu transaksi
+  // native, all-or-nothing). Dulunya loop saveToDatabase per lagu di
+  // dalam BEGIN/COMMIT; executeBatch MEMBUKA transaksinya sendiri
+  // (quick-sqlite cpp/sqlbatchexecutor.cpp:59), jadi tidak boleh
+  // dipanggil di dalam transaksi luar — lihat scanBatchWriter.ts.
+  // Gagal/abort sebelum batch = tidak ada yang tertulis, sama seperti
+  // rollback sebelumnya.
   const toWrite = [...newSongs, ...updatedSongs];
   if (toWrite.length > 0) {
     throwIfAborted(signal);
-    db.execute("BEGIN TRANSACTION");
-    try {
-      for (let i = 0; i < toWrite.length; i++) {
-        // J2-4: cancel di tengah loop tulis — berhenti sebelum menulis
-        // lebih banyak; catch di bawah me-rollback transaction.
-        if (i % 20 === 0) throwIfAborted(signal);
-        await saveBasicSongInfo(toWrite[i]);
-      }
-      db.execute("COMMIT");
-    } catch (err) {
-      db.execute("ROLLBACK");
-      throw err;
-    }
+    await LibraryScanner.saveSongsBatched(buildBasicSongInfos(toWrite), {
+      abortCheck: () => throwIfAborted(signal),
+    });
   }
 
   // N16: hapus gagal SESUDAH tulis commit — jangan buang hasil diff.
@@ -397,29 +405,20 @@ export const ScanDiffEngine = {
 
       const allChanges = [...newSongs, ...updatedSongs];
 
-      // 🔥 OPTIMASI: satu transaction untuk semua write, bukan commit
-      // terpisah per lagu (1196 commit → 1 commit). Ini biasanya jadi
-      // bottleneck utama untuk bulk insert SQLite.
+      // Tulis batch — SATU panggilan executeBatch (satu transaksi
+      // native, all-or-nothing). Dulunya loop saveToDatabase per lagu
+      // di dalam BEGIN/COMMIT (1196 commit → 1 commit); kini 289
+      // panggilan JSI + SELECT per lagu → 1 panggilan batch + 2 query
+      // klasifikasi. Progres dilaporkan batch di awal/akhir (lihat
+      // saveSongsBatched) — throttle per-20 tidak lagi relevan.
       throwIfAborted(signal);
-      db.execute("BEGIN TRANSACTION");
-      try {
-        const PROGRESS_THROTTLE = 20; // update UI tiap 20 lagu, bukan tiap 1
-        for (let i = 0; i < allChanges.length; i++) {
-          // J2-4: cancel di tengah loop tulis — berhenti + rollback.
-          if (i % PROGRESS_THROTTLE === 0) throwIfAborted(signal);
-          await saveBasicSongInfo(allChanges[i]);
-          if (
-            (i + 1) % PROGRESS_THROTTLE === 0 ||
-            i + 1 === allChanges.length
-          ) {
-            onProgress?.(i + 1, allChanges.length);
-          }
-        }
-        db.execute("COMMIT");
-      } catch (err) {
-        db.execute("ROLLBACK");
-        throw err;
-      }
+      await LibraryScanner.saveSongsBatched(
+        buildBasicSongInfos(allChanges),
+        {
+          onProgress,
+          abortCheck: () => throwIfAborted(signal),
+        },
+      );
 
       // N6: hapus SESUDAH tulis commit — seperti processQuickDiff.
       // Sebelumnya deleteSongsByUris jalan SEBELUM transaction tulis,
