@@ -80,6 +80,27 @@
             android:stopWithTask="false" />
 
         <!-- ===================== -->
+        <!-- HOME-SCREEN WIDGET (4x1) -->
+        <!-- ===================== -->
+        <!-- exported=false: hanya sistem + app sendiri yang bisa mengirim
+             APPWIDGET_UPDATE ke receiver ini (sesuai contoh resmi Android).
+             updatePeriodMillis=0 di XML: tidak ada polling — update hanya
+             dari MediaSessionManager lewat WidgetStateStore saat playback
+             berubah (battery saver HyperOS bisa membekukan timer app). -->
+
+        <receiver
+            android:name="com.pristineaudio.widget.PristineAudioWidgetProvider"
+            android:exported="false"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/pristine_audio_widget_info" />
+        </receiver>
+
+        <!-- ===================== -->
         <!-- MAIN ACTIVITY -->
         <!-- ===================== -->
 
