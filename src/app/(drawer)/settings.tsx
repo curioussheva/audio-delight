@@ -12,6 +12,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Slider from "@react-native-community/slider";
 import { useRouter } from "expo-router";
 
 // Lucide Icons
@@ -77,6 +78,13 @@ import {
 } from "@/features/replaygain/store/replayGainStore";
 import { resolveReplayGainDb } from "@/features/replaygain/replaygain";
 import { applyReplayGainForSong } from "@/features/replaygain/apply";
+import { useCrossfadeStore } from "@/features/crossfade/store/crossfadeStore";
+import {
+  CROSSFADE_MAX_SECONDS,
+  CROSSFADE_MIN_SECONDS,
+  CROSSFADE_STEP_SECONDS,
+  formatCrossfadeLabel,
+} from "@/features/crossfade/crossfade";
 
 // Versi dibaca dari app.json seperti About — sebelumnya hardcoded
 // "1.0.0 (Build 2026)" sementara app.json sudah 1.0.37.
@@ -358,6 +366,18 @@ export default function SettingsScreen() {
     rg.setReplayGainMode(mode);
     const cur = usePlayerStore.getState().currentSong;
     await applyReplayGainForSong(cur ?? null);
+  };
+
+  // Crossfade (2026-11-20): durasi transisi antar lagu, 0..12 dtk.
+  // Slider menulis draft lokal saat digeser (tanpa spam JNI), dan
+  // baru commit ke store + native saat jari dilepas.
+  const crossfadeSeconds = useCrossfadeStore((s) => s.crossfadeSeconds);
+  const [crossfadeDraft, setCrossfadeDraft] = useState<number | null>(null);
+  const crossfadeShown =
+    crossfadeDraft ?? crossfadeSeconds;
+  const handleCrossfadeComplete = async (value: number) => {
+    setCrossfadeDraft(null);
+    await useCrossfadeStore.getState().setCrossfadeSeconds(value);
   };
 
   const {
@@ -1419,6 +1439,69 @@ export default function SettingsScreen() {
               })}
             </View>
           )}
+
+
+          {/* ── 1d. Crossfade — transisi antar lagu ───────────────────────
+              Durasi fade-out ekor lagu pada auto-advance (0..12 dtk,
+              default Mati). Berlaku di mode DSP & Solfeggio; TIDAK
+              berlaku di Bit-Perfect (fade tetap 10 ms anti-klik).
+              Next/prev manual, resume, dan seek tidak kena fade
+              panjang. JUJUR: ini fade berurutan, bukan overlap dua
+              lagu — satu decoder, jadi jeda muat antar file tetap ada,
+              hanya ekornya yang memudar dulu. */}
+          <SettingRow colors={colors} spacing={spacing}>
+            <View style={{ flex: 1, marginRight: spacing.md }}>
+              <Text style={{ color: colors.text.primary, fontFamily: FONT_FAMILY.semiBold }}>
+                Crossfade — Transisi Antar Lagu
+              </Text>
+              <Text
+                style={{
+                  color: colors.text.secondary,
+                  fontSize: 11,
+                  marginTop: 2,
+                  lineHeight: 15,
+                }}
+              >
+                {crossfadeShown === 0
+                  ? "Mati — perilaku lama: ekor lagu memudar 0,5 dtk sebelum lagu berikutnya."
+                  : `Aktif — ekor lagu memudar selama ${formatCrossfadeLabel(crossfadeShown)} sebelum lagu berikutnya mulai (auto-advance).`}
+              </Text>
+              <Text
+                style={{
+                  color: colors.text.secondary,
+                  fontSize: 10,
+                  marginTop: 4,
+                }}
+              >
+                Tidak berlaku di mode Bit-Perfect. Bukan overlap dua lagu — jeda muat antar file tetap ada.
+              </Text>
+            </View>
+            <Text
+              style={{
+                color: colors.primary[500],
+                fontFamily: FONT_FAMILY.bold,
+                fontSize: 13,
+              }}
+            >
+              {formatCrossfadeLabel(crossfadeShown)}
+            </Text>
+          </SettingRow>
+          <View style={{ paddingHorizontal: spacing.md, paddingBottom: spacing.sm }}>
+            <Slider
+              style={{ width: "100%", height: 40 }}
+              minimumValue={CROSSFADE_MIN_SECONDS}
+              maximumValue={CROSSFADE_MAX_SECONDS}
+              step={CROSSFADE_STEP_SECONDS}
+              value={crossfadeShown}
+              onValueChange={setCrossfadeDraft}
+              onSlidingComplete={handleCrossfadeComplete}
+              minimumTrackTintColor={colors.primary[500]}
+              maximumTrackTintColor={colors.background.tertiary}
+              thumbTintColor={colors.primary[500]}
+              accessibilityLabel="Durasi crossfade antar lagu"
+              accessibilityRole="adjustable"
+            />
+          </View>
 
 
           {/* ── 2. Preset EQ Aktif ─────────────────────────────────────── */}
