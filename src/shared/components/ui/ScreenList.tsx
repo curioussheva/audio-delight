@@ -26,6 +26,13 @@ import {
 import { FlashList, type FlashListProps } from "@shopify/flash-list";
 import { chooseListKind } from "@/shared/utils/listPattern";
 
+/** Pegangan minimal daftar untuk scroll programatik (mis. tombol geser
+    strip DETAIL BAND Equalizer). FlatList maupun FlashList punya
+    scrollToOffset, jadi satu bentuk ini cukup untuk keduanya. */
+export interface ScrollableListHandle {
+  scrollToOffset: (params: { offset: number; animated?: boolean }) => void;
+}
+
 export interface ScreenListProps<T> {
   data: T[];
   renderItem: ListRenderItem<T>;
@@ -48,6 +55,9 @@ export interface ScreenListProps<T> {
   onContentSizeChange?: (width: number, height: number) => void;
   onLayout?: (event: LayoutChangeEvent) => void;
   scrollEventThrottle?: number;
+  /** Ref opsional ke daftar — untuk scroll programatik (tombol geser).
+      Pemanggil lain tidak berubah bila tidak diisi. */
+  listRef?: React.RefObject<ScrollableListHandle | null>;
 }
 
 export function ScreenList<T>({
@@ -68,12 +78,22 @@ export function ScreenList<T>({
   onContentSizeChange,
   onLayout,
   scrollEventThrottle,
+  listRef,
 }: ScreenListProps<T>) {
   const kind = chooseListKind({ horizontal, nestedInScrollView, boundedSmall });
+
+  // Teruskan ref lewat callback supaya satu bentuk pegangan
+  // (ScrollableListHandle) cukup untuk FlatList maupun FlashList.
+  const attachListRef = (instance: ScrollableListHandle | null) => {
+    if (listRef) {
+      listRef.current = instance;
+    }
+  };
 
   if (kind === "flash-list") {
     return (
       <FlashList
+        ref={attachListRef}
         data={data}
         // Cast beralasan: tipe renderItem FlashList tidak punya
         // `separators` (punya RN ListRenderItem), tapi tidak satu pun
@@ -101,6 +121,7 @@ export function ScreenList<T>({
 
   return (
     <FlatList
+      ref={attachListRef}
       data={data}
       renderItem={renderItem}
       keyExtractor={keyExtractor}
