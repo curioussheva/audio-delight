@@ -21,6 +21,7 @@ import {
   waitWhilePlaying,
 } from "./enrichmentPacing";
 import type { QueueItem, EnrichmentLevel } from "../types/scan";
+import { buildNativeSongMap } from "./nativeSongCache";
 import { Song } from "@/shared/types/audio";
 import { isHiRes } from "@/shared/utils/audioQuality";
 
@@ -38,8 +39,11 @@ export class MetadataEnricher {
 
   // J2-1: cache uri -> NativeSong, dibangun SEKALI per worker-run / batch
   // dari satu queryAudioFiles. Enrichment lookup di memori, bukan query
-  // MediaStore penuh per lagu. null = belum dibangun atau query gagal
-  // (processItem fallback ke extract(uri) per lagu seperti dulu).
+  // MediaStore penuh per lagu. null = belum dibangun atau query gagal.
+  // Sisa J2-1: lookup yang MISS tidak langsung jatuh ke extract(uri)
+  // per lagu — processItem merefresh cache dari SQLite dulu (DB-only,
+  // murah; lihat refreshNativeSongCacheFromDb). Hanya lagu yang memang
+  // tidak ada di DB yang tetap memakai extract(uri) seperti dulu.
   private static nativeSongCache: Map<string, NativeSong> | null = null;
 
   /**
@@ -114,10 +118,7 @@ export class MetadataEnricher {
         songs = await MediaStore.queryAudioFiles();
         source = "mediastore";
       }
-      const map = new Map<string, NativeSong>();
-      for (const song of songs) {
-        if (song?.uri) map.set(song.uri, song);
-      }
+      const map = buildNativeSongMap(songs);
       this.nativeSongCache = map;
       console.log(
         `[MetadataEnricher] NativeSong cache warmed: ${map.size} songs (${source}, ${Date.now() - startedAt} ms)`,
@@ -129,6 +130,52 @@ export class MetadataEnricher {
       );
       this.nativeSongCache = null;
     }
+  }
+
+  /**
+   * J2-1 (sisa): refresh cache dari SQLite saat lookup miss — DB-ONLY,
+   * TIDAK PERNAH memanggil MediaStore. Lagu yang diantre SELALU
+   * ditulis ke DB dulu oleh scan (saveSongsBatched sebelum queueSongs
+   * di semua jalur live), jadi lagu yang ketinggalan warm awal — diantre
+   * sesudah warm, atau warm sempat gagal — ada di sini, dan ketemu
+   * tanpa satu pun query MediaStore. Gagal baca -> cache tidak diubah
+   * (tetap map lama / null) dan pemanggil jatuh ke extract(uri).
+   */
+  private static refreshNativeSongCacheFromDb(): Map<
+    string,
+    NativeSong
+  > | null {
+    try {
+      const songs = LibraryScanner.getNativeSongsFromDb();
+      const map = buildNativeSongMap(songs);
+      this.nativeSongCache = map;
+      console.log(
+        `[MetadataEnricher] NativeSong cache refreshed from DB: ${map.size} songs`,
+      );
+      return map;
+    } catch (error) {
+      console.warn(
+        "[MetadataEnricher] Failed to refresh NativeSong cache from DB, falling back to per-song lookup:",
+        error,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * J2-1 (sisa): cache miss -> baca ulang DB sekali (SELECT lokal,
+   * milidetik), lookup lagi; hanya bila lagu memang tidak ada di DB,
+   * fallback ke extract(uri) = satu query MediaStore penuh, seperti
+   * dulu. Item antrean lama {id, uri} tanpa payload tetap jalan lewat
+   * fallback ini — tidak ada perubahan format antrean.
+   */
+  private static async extractWithCacheRefresh(
+    uri: string,
+  ): Promise<Partial<Song> | null> {
+    const refreshed = this.refreshNativeSongCacheFromDb();
+    const refetched = refreshed?.get(uri);
+    if (refetched) return MetadataExtractor.extractFromNative(refetched);
+    return MetadataExtractor.extract(uri);
   }
 
   /**
@@ -268,13 +315,14 @@ export class MetadataEnricher {
 
     try {
       // === LEVEL 1 & 2: Technical Metadata & Basic Tags ===
-      // J2-1: pakai NativeSong dari cache run (1 query per run); fallback
-      // ke extract(uri) = 1 query penuh, hanya kalau lagu tidak ada di
-      // cache (mis. ditambahkan setelah cache dibangun / query gagal).
+      // J2-1: pakai NativeSong dari cache run (1 query per run); lookup
+      // MISS merefresh cache dari SQLite dulu (lagu diantre sesudah
+      // warm / warm sempat gagal) — extract(uri) = 1 query penuh hanya
+      // kalau lagu memang tidak ada di DB.
       const cachedNative = this.nativeSongCache?.get(uri);
       const metadata = cachedNative
         ? MetadataExtractor.extractFromNative(cachedNative)
-        : await MetadataExtractor.extract(uri);
+        : await this.extractWithCacheRefresh(uri);
 
       if (metadata) {
         // === LEVEL 3: Deep Verification (Pristine Engine) ===

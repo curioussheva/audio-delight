@@ -24,7 +24,10 @@ jest.mock("@/features/library/api/metadata", () => ({
   },
 }));
 jest.mock("@/features/library/api/scanner", () => ({
-  LibraryScanner: { updateMetadata: jest.fn() },
+  LibraryScanner: {
+    updateMetadata: jest.fn(),
+    getNativeSongsFromDb: jest.fn(),
+  },
 }));
 jest.mock("@/features/library/store/libraryStore", () => ({
   useLibraryStore: { getState: jest.fn() },
@@ -53,6 +56,7 @@ import { MetadataEnricher } from "@/features/library/services/MetadataEnricher";
 import { ScanQueue } from "@/features/library/services/ScanQueue";
 import MetadataExtractor from "@/features/library/api/metadata";
 import { LibraryScanner } from "@/features/library/api/scanner";
+import { MediaStore } from "@/features/library/native/MediaStoreModule";
 import { useLibraryStore } from "@/features/library/store/libraryStore";
 import OnlineMetadataService from "@/features/library/services/OnlineMetadataService";
 import * as FileSystem from "expo-file-system/legacy";
@@ -64,7 +68,12 @@ const getAssetMock = MediaLibrary.getAssetInfoAsync as jest.Mock;
 
 const shiftMock = ScanQueue.shift as jest.Mock;
 const extractMock = (MetadataExtractor as any).extract as jest.Mock;
+const extractFromNativeMock = (MetadataExtractor as any)
+  .extractFromNative as jest.Mock;
 const updateMetadataMock = LibraryScanner.updateMetadata as jest.Mock;
+const getNativeSongsFromDbMock =
+  LibraryScanner.getNativeSongsFromDb as jest.Mock;
+const queryAudioFilesMock = MediaStore.queryAudioFiles as jest.Mock;
 const getArtistEnrichmentMock =
   OnlineMetadataService.getArtistEnrichment as jest.Mock;
 
@@ -92,6 +101,9 @@ describe("I2-revisi (a) — enrichment lokal saja", () => {
         retryCount: 0,
       })
       .mockResolvedValue(null);
+    // J2-1: warm awal membaca DB (default: kosong di tes ini — lagu
+    // hanya ketemu lewat extract / refresh per-test).
+    getNativeSongsFromDbMock.mockReturnValue([]);
     // L1 default: tidak ada file .lrc berdampingan.
     getAssetMock.mockResolvedValue({ localUri: null, uri: null });
     getInfoMock.mockResolvedValue({ exists: false });
@@ -102,6 +114,44 @@ describe("I2-revisi (a) — enrichment lokal saja", () => {
 
     expect(updateMetadataMock).toHaveBeenCalled();
     expect(getArtistEnrichmentMock).not.toHaveBeenCalled();
+  });
+
+  it("J2-1 (sisa): cache miss -> refresh DB sekali, tanpa query MediaStore per lagu", async () => {
+    // Warm awal: DB kosong -> fallback MediaStore (mock []) -> cache
+    // map kosong. Refresh saat miss: DB sudah berisi lagu -> ketemu
+    // tanpa query MediaStore.
+    const native = {
+      id: "1",
+      uri: "content://media/external/audio/media/1",
+      filename: "song.mp3",
+      title: "Lagu",
+      artist: "Artis Nyata",
+      album: "Album",
+      duration: 200,
+    };
+    getNativeSongsFromDbMock
+      .mockReturnValueOnce([])
+      .mockReturnValueOnce([native]);
+    extractFromNativeMock.mockReturnValue({
+      artist: "Artis Nyata",
+      title: "Lagu",
+      duration: 200,
+    });
+
+    await MetadataEnricher.startBackgroundWorker();
+
+    expect(updateMetadataMock).toHaveBeenCalled();
+    expect(extractFromNativeMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        uri: "content://media/external/audio/media/1",
+      }),
+    );
+    // Jalur mahal yang dihapus J2-1: extract(uri) = satu query
+    // MediaStore penuh per lagu — tidak boleh terpanggil di sini.
+    expect(extractMock).not.toHaveBeenCalled();
+    // Satu-satunya query MediaStore di run ini adalah fallback warm
+    // awal (DB kosong); refresh-nya DB-only.
+    expect(queryAudioFilesMock).toHaveBeenCalledTimes(1);
   });
 
   it("L1: .lrc berdampingan masuk ke lyrics_synced (tanpa online)", async () => {
