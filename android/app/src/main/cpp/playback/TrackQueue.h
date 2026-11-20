@@ -70,6 +70,20 @@ public:
     // 🔥 DIPANGKAS (2026-11-10, dead-code playback): peeker next() /
     // previous() / peek() / hasNext() / hasPrevious() dihapus — 0 pemakai
     // (navigasi hidup: advance/advanceManual/retreat/jumpTo/current).
+    //
+    // Gapless (2026-11-20): peekNext() dihidupkan lagi — SATU-SATUNYA
+    // peeker yang kembali, dan hanya untuk pre-roll: PlaybackController
+    // perlu tahu lagu BERIKUTNYA sebelum lagu ini habis, tanpa
+    // menggeser indeks. Semantik PERSIS advance() (auto, bukan manual):
+    // Repeat One -> trek yang sama; Repeat All -> wrap ke 0 di ujung;
+    // Repeat Off -> nullopt di ujung; queue kosong -> nullopt. Read-only
+    // (tanpa step), satu lock — tidak ada jendela TOCTOU dengan
+    // advanceAndGet() karena pemanggil (processAdvance) memverifikasi
+    // ulang URI-nya saat handoff.
+    [[nodiscard]]
+    std::optional<TrackInfo>
+    peekNext() const;
+
     bool advance();
 
     // Manual next (tombol Next): SELALU maju satu langkah, apa pun repeat

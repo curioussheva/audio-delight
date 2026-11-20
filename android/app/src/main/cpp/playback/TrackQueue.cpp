@@ -181,6 +181,39 @@ TrackQueue::current() const {
     return activeAt(mCurrentIndex);
 }
 
+// Gapless (2026-11-20): lihat deklarasi di header — peeker read-only
+// untuk pre-roll. Semantik = advance() tanpa step (lihat
+// stepForwardLocked(false) di bawah): Repeat One mengembalikan trek
+// yang sama, Repeat All wrap ke 0, Repeat Off nullopt di ujung.
+std::optional<TrackInfo>
+TrackQueue::peekNext() const {
+
+    std::lock_guard lock(mMutex);
+
+    if (mTracks.empty()) {
+        return std::nullopt;
+    }
+
+    const size_t n = activeSizeLocked();
+
+    switch (mRepeatMode) {
+
+    case RepeatMode::One:
+        return activeAt(mCurrentIndex);
+
+    case RepeatMode::All:
+        return activeAt(mCurrentIndex + 1 >= n ? 0 : mCurrentIndex + 1);
+
+    case RepeatMode::Off:
+        if (mCurrentIndex + 1 >= n) {
+            return std::nullopt;
+        }
+        return activeAt(mCurrentIndex + 1);
+    }
+
+    return std::nullopt;
+}
+
 bool TrackQueue::advance() {
 
     std::lock_guard lock(mMutex);
