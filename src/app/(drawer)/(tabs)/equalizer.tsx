@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Save,
+  Share2,
   Zap,
   RotateCcw,
   Eye,
@@ -89,6 +90,8 @@ import {
   type VisibleSections,
 } from "@/features/equalizer/utils/visibleSections";
 import { FLOATING_PLAYER_CLEARANCE } from "@/features/player/layout";
+// Bagikan preset EQ sebagai file (2026-11-20, item 8 deep-insight).
+import { sharePresetFile } from "@/features/settings/backupIO";
 
 const { width } = Dimensions.get("window");
 
@@ -375,6 +378,29 @@ export default function EqualizerScreen() {
     if (!isCustom) return;
 
     setDeletePresetTarget({ id, name });
+  };
+
+  // Bagikan preset yang sedang AKTIF sebagai file JSON — yang dibagikan
+  // adalah bunyinya saat ini (kurva + bass/widener/reverb yang sedang
+  // berlaku), bukan salinan preset tersimpan. Berbagi tidak mengubah
+  // suara, jadi tombol ini tidak ikut dibekukan saat DSP mati (berbeda
+  // dari Simpan/Terapkan yang mengubah state audio).
+  const handleSharePreset = async () => {
+    const presetName =
+      eq.allPresets.find((p) => p.id === eq.activePresetId)?.name ??
+      "Preset Kustom";
+    const result = await sharePresetFile({
+      name: presetName,
+      bands: eq.currentBands,
+      bassBoost: eq.bassStrength,
+      virtualizer: eq.virtualizerLevel,
+      reverb: eq.reverbPreset,
+    });
+    if (result.kind === "exported") {
+      showToast("Preset siap dibagikan.", "success");
+    } else {
+      showToast(result.error, "error");
+    }
   };
 
   const modeLabel =
@@ -925,6 +951,25 @@ export default function EqualizerScreen() {
                       ]}
                     >
                       Simpan
+                    </Text>
+                  </TouchableOpacity>
+                  {/* Bagikan preset aktif sebagai file (item 8
+                      deep-insight, 2026-11-20): tidak mengubah suara,
+                      jadi tetap aktif walau DSP mati. */}
+                  <TouchableOpacity
+                    onPress={() => void handleSharePreset()}
+                    accessibilityRole="button"
+                    accessibilityLabel="Bagikan profil aktif sebagai file"
+                    style={styles.iconBtn}
+                  >
+                    <Share2 size={18} color={colors.text.primary} />
+                    <Text
+                      style={[
+                        styles.saveBtnText,
+                        { color: colors.text.primary },
+                      ]}
+                    >
+                      Bagikan
                     </Text>
                   </TouchableOpacity>
                 </View>
