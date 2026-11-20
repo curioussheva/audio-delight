@@ -130,13 +130,31 @@ const songKeyExtractor = (item: Song) => item.id;
 // overrideItemLayout hanya mengubah span kolom, bukan ukuran. Satu-satunya
 // tuas overscan adalah drawDistance: buffer (dp) di TIAP sisi viewport
 // (total buffer = 2× drawDistance); default vendor 250.
-// Naik ke 500 (≈ satu layar ekstra tiap sisi: total render ±20 baris dari
-// ±14 — baris lagu ±77dp, viewport ±560dp) supaya fling cepat tidak
-// melampaui jendela render dan menampilkan baris kosong ("ompong").
-// Sengaja MODEST: tiap baris ekstra = artwork + teks yang harus di-mount
-// thread JS per frame, dan app ini sudah melawan stall thread JS (freeze:
-// fling + playback; 2 lag terbesar logcat-6 dari drag slider). Jangan boros.
-const LIBRARY_DRAW_DISTANCE_DP = 500;
+//
+// ANGKA TERVERIFIKASI (bukan tebakan):
+// - Baris SongListItem ±77dp — dari styles: konten tertinggi ±53dp
+//   (artwork 48 + marginTop 2, atau 3 baris teks ±19+15+13 + gap 3×2)
+//   + paddingVertical 20 + marginVertical 4.
+// - Viewport daftar ±560dp — layar POCO M6 360×800dp dikurangi header,
+//   tab bar, dan floating player.
+// - Jendela render total = (viewport + 2×drawDistance) / 77.
+//
+// RIWAYAT: 500 → total (560+1000)/77 ≈ 20 baris (fling cepat masih bisa
+// "ompong"); 2026-11-20 14:54 user minta 50/100 baris — untuk offline
+// player, daftar 1000++ lagu itu wajar, dan 15–20 baris terasa sangat
+// kurang. Dipilih 50: drawDistance = (50×77 − 560)/2 = 1645 → 1650,
+// total (560+3300)/77 ≈ 50 baris.
+//
+// TRADE-OFF (baca sebelum menaikkan lagi): tiap baris ekstra = artwork +
+// teks yang harus di-mount thread JS; app ini sudah melawan stall thread
+// JS (freeze: fling + playback; 2 lag terbesar logcat-6 dari drag slider).
+// Kalau HP terasa lebih berat atau freeze memburuk, tersangka pertama
+// adalah nilai ini — fallback ke 500 (≈20 baris) atau 350. 100 baris
+// SENGAJA TIDAK DIPILIH: butuh drawDistance ±3570 dan 100 SongListItem +
+// fetch artwork sekaligus di thread JS — terlalu berat di HP dengan
+// riwayat freeze; 50 adalah langkah terukur, 100 tetap tersedia bila 50
+// terbukti ringan.
+const LIBRARY_DRAW_DISTANCE_DP = 1650;
 
 export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
