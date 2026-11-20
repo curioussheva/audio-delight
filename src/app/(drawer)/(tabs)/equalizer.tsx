@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -29,6 +29,7 @@ import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
 import { ConfirmDialog } from "@/shared/components/ui/ConfirmDialog";
 import { ScreenHeader } from "@/shared/components/ui/ScreenHeader";
 import { ScreenList } from "@/shared/components/ui/ScreenList";
+import type { ScrollableListHandle } from "@/shared/components/ui/ScreenList";
 import { useEqualizer } from "@/features/equalizer/hooks/useEqualizer";
 import { useToastStore } from "@/shared/store/toastStore";
 import {
@@ -41,11 +42,20 @@ import {
   type AudioMode,
 } from "@/features/player/store/playerStore";
 import { FrequencyGraph } from "@/features/equalizer/components/Graph";
-import { EqualizerBand } from "@/features/equalizer/components/Band";
+import {
+  EqualizerBand,
+  BAND_WIDTH,
+} from "@/features/equalizer/components/Band";
+import { BandScale } from "@/features/equalizer/components/BandScale";
 import { VerticalSlider } from "@/features/equalizer/components/VerticalSlider";
 import {
+  canScrollLeft,
+  canScrollRight,
   computeScrollIndicator,
   formatBandFrequency,
+  formatBandFrequencyFull,
+  pageScrollOffset,
+  visibleBandRange,
 } from "@/features/equalizer/utils/scrollIndicator";
 import {
   dbToGain,
@@ -281,6 +291,30 @@ export default function EqualizerScreen() {
   const bandIndicator = computeScrollIndicator(bandScroll);
   const firstBandFreq = eq.currentBands[0]?.frequency;
   const lastBandFreq = eq.currentBands[eq.currentBands.length - 1]?.frequency;
+
+  // Tombol geser ‹ › strip DETAIL BAND (2026-11-20): bar indikator saja
+  // tidak cukup — strip tetap dikira cuma 5 slider (screenshot HP 08:05).
+  // Ref ke FlatList lewat ScreenList.listRef; geser satu halaman
+  // (selebar area tampak), nonaktif di ujung.
+  const bandListRef = useRef<ScrollableListHandle | null>(null);
+  const canBandScrollLeft = canScrollLeft(bandScroll);
+  const canBandScrollRight = canScrollRight(bandScroll);
+  const scrollBandPage = (direction: -1 | 1) => {
+    const next = pageScrollOffset(bandScroll, direction);
+    bandListRef.current?.scrollToOffset({ offset: next, animated: true });
+  };
+
+  // Legenda hidup: band mana yang tampak sekarang ("Band 1–5 dari 10").
+  const bandRange = visibleBandRange({
+    ...bandScroll,
+    bandCount: eq.currentBands.length,
+    bandWidth: BAND_WIDTH,
+    contentPadding: spacing.sm,
+  });
+  const visibleFirstBandFreq =
+    eq.currentBands[bandRange.firstIndex]?.frequency;
+  const visibleLastBandFreq =
+    eq.currentBands[bandRange.lastIndex]?.frequency;
 
   // U-P2-44: pilihan tampil/sembunyi DULU reset tiap kali layar dibuka
   // ulang. Sekarang dimuat dari AsyncStorage saat mount dan disimpan tiap
@@ -934,68 +968,99 @@ export default function EqualizerScreen() {
                 >
                   DETAIL BAND
                 </Text>
-                {/* Petunjuk geser: hanya 5 dari 10 band yang muat di
-                    layar; strip horizontal tanpa indikator membuat 5
-                    band sisanya (1k–16k) tidak ketahuan (screenshot
-                    2026-11-20 00:27). */}
+                {/* Legenda: apa strip ini — EQ parametrik 10 band,
+                    tiap band ±10 dB, 0 dB = netral. Dulu hanya petunjuk
+                    "10 band · geser untuk 1k–16k": cukup sebagai
+                    petunjuk geser, tapi tidak menjelaskan apa yang
+                    disetel (screenshot 2026-11-20 08:05). Rentang band
+                    yang tampak ada di baris legenda hidup di bawah bar
+                    indikator. */}
                 <Text
                   style={[
                     styles.bandHint,
                     { color: colors.text.tertiary },
                   ]}
                 >
-                  10 band · geser untuk 1k–16k
+                  EQ parametrik 10 band · tiap band ±10 dB · 0 dB = netral
                 </Text>
-                {/* U-P2-53: daftar band lewat pola daftar bersama.
-                    Jalur yang dipilih tetap FlatList (horizontal +
-                    bersarang di ScrollView — lihat chooseListKind);
-                    `directionalLockEnabled` dipertahankan supaya tidak
-                    bentrok dengan scroll utama. */}
-                <ScreenList
-                  horizontal
-                  nestedInScrollView
-                  // Indikator bawaan dimatikan: tipis + memudar di Android,
-                  // itu sebabnya strip dikira cuma 5 slider — bar indikator
-                  // permanen di bawah strip yang menggantikannya.
-                  showsHorizontalScrollIndicator={false}
-                  data={eq.currentBands}
-                  keyExtractor={(item) => item.frequency.toString()}
-                  renderItem={({ item, index }) => (
-                    <EqualizerBand
-                      frequency={item.frequency}
-                      gain={item.gain}
-                      onValueChange={(v) => eq.updateBandGain(index, v)}
-                      disabled={!eq.isEQEnabled || eq.isDSPDisabled}
+                {/* Skala dB di kiri strip + daftar band. Skala satu kolom
+                    untuk seluruh strip (semua fader ±10 dB, geometri
+                    sama); daftar menyusut selebar kolom (~28dp) — harga
+                    skala, band yang tampak jadi ~4,2 bukan 5. */}
+                <View style={styles.bandStripRow}>
+                  <BandScale
+                    dimmed={!eq.isEQEnabled || eq.isDSPDisabled}
+                  />
+                  <View style={styles.bandStripList}>
+                    {/* U-P2-53: daftar band lewat pola daftar bersama.
+                        Jalur yang dipilih tetap FlatList (horizontal +
+                        bersarang di ScrollView — lihat chooseListKind);
+                        `directionalLockEnabled` dipertahankan supaya
+                        tidak bentrok dengan scroll utama. */}
+                    <ScreenList
+                      horizontal
+                      nestedInScrollView
+                      listRef={bandListRef}
+                      // Indikator bawaan dimatikan: tipis + memudar di
+                      // Android, itu sebabnya strip dikira cuma 5 slider
+                      // — bar indikator permanen di bawah strip yang
+                      // menggantikannya.
+                      showsHorizontalScrollIndicator={false}
+                      data={eq.currentBands}
+                      keyExtractor={(item) => item.frequency.toString()}
+                      renderItem={({ item, index }) => (
+                        <EqualizerBand
+                          frequency={item.frequency}
+                          gain={item.gain}
+                          onValueChange={(v) => eq.updateBandGain(index, v)}
+                          disabled={!eq.isEQEnabled || eq.isDSPDisabled}
+                        />
+                      )}
+                      contentContainerStyle={{ paddingHorizontal: spacing.sm }}
+                      directionalLockEnabled={true}
+                      scrollEventThrottle={16}
+                      onScroll={(e) =>
+                        setBandScroll((s) => ({
+                          ...s,
+                          offsetX: e.nativeEvent.contentOffset.x,
+                        }))
+                      }
+                      onContentSizeChange={(w) =>
+                        setBandScroll((s) => ({ ...s, contentWidth: w }))
+                      }
+                      onLayout={(e) =>
+                        setBandScroll((s) => ({
+                          ...s,
+                          layoutWidth: e.nativeEvent.layout.width,
+                        }))
+                      }
                     />
-                  )}
-                  contentContainerStyle={{ paddingHorizontal: spacing.sm }}
-                  directionalLockEnabled={true}
-                  scrollEventThrottle={16}
-                  onScroll={(e) =>
-                    setBandScroll((s) => ({
-                      ...s,
-                      offsetX: e.nativeEvent.contentOffset.x,
-                    }))
-                  }
-                  onContentSizeChange={(w) =>
-                    setBandScroll((s) => ({ ...s, contentWidth: w }))
-                  }
-                  onLayout={(e) =>
-                    setBandScroll((s) => ({
-                      ...s,
-                      layoutWidth: e.nativeEvent.layout.width,
-                    }))
-                  }
-                />
-                {/* Bar indikator geser horizontal: label ujung = frekuensi
-                    band pertama/terakhir (format sama dengan label di
-                    bawah fader), thumb = porsi tampak + posisi scroll.
-                    Dekoratif saja — strip tetap di-scroll dengan drag. */}
-                <View
-                  style={styles.bandScrollIndicator}
-                  accessibilityElementsHidden
-                  importantForAccessibility="no-hide-descendants"
-                >
+                  </View>
+                </View>
+                {/* Bar indikator geser horizontal + tombol geser ‹ ›:
+                    label ujung = frekuensi band pertama/terakhir (format
+                    sama dengan label di bawah fader), thumb = porsi
+                    tampak + posisi scroll. Tombol menggeser satu halaman
+                    dan nonaktif di ujung. Baris ini bukan lagi dekoratif
+                    murni (tombolnya kontrol) — hanya track-nya yang
+                    disembunyikan dari aksesibilitas. */}
+                <View style={styles.bandScrollIndicator}>
+                  <TouchableOpacity
+                    onPress={() => scrollBandPage(-1)}
+                    disabled={!canBandScrollLeft}
+                    hitSlop={6}
+                    accessibilityRole="button"
+                    accessibilityLabel="Geser band ke kiri"
+                    accessibilityState={{ disabled: !canBandScrollLeft }}
+                    style={[
+                      styles.bandScrollButton,
+                      { borderColor: colors.border.medium },
+                      !canBandScrollLeft &&
+                        styles.bandScrollButtonDisabled,
+                    ]}
+                  >
+                    <ChevronLeft size={18} color={colors.text.secondary} />
+                  </TouchableOpacity>
                   <Text
                     style={[
                       styles.bandScrollLabel,
@@ -1011,6 +1076,8 @@ export default function EqualizerScreen() {
                       styles.bandScrollTrack,
                       { backgroundColor: colors.border.medium },
                     ]}
+                    accessibilityElementsHidden
+                    importantForAccessibility="no-hide-descendants"
                   >
                     <View
                       style={[
@@ -1033,7 +1100,40 @@ export default function EqualizerScreen() {
                       ? formatBandFrequency(lastBandFreq)
                       : ""}
                   </Text>
+                  <TouchableOpacity
+                    onPress={() => scrollBandPage(1)}
+                    disabled={!canBandScrollRight}
+                    hitSlop={6}
+                    accessibilityRole="button"
+                    accessibilityLabel="Geser band ke kanan"
+                    accessibilityState={{ disabled: !canBandScrollRight }}
+                    style={[
+                      styles.bandScrollButton,
+                      { borderColor: colors.border.medium },
+                      !canBandScrollRight &&
+                        styles.bandScrollButtonDisabled,
+                    ]}
+                  >
+                    <ChevronRight size={18} color={colors.text.secondary} />
+                  </TouchableOpacity>
                 </View>
+                {/* Legenda hidup: band mana yang tampak sekarang —
+                    diperbarui mengikuti scroll ("Band 1–5 dari 10"). */}
+                {visibleFirstBandFreq !== undefined &&
+                  visibleLastBandFreq !== undefined && (
+                    <Text
+                      style={[
+                        styles.bandLegend,
+                        { color: colors.text.tertiary },
+                      ]}
+                    >
+                      Band {bandRange.firstIndex + 1}–
+                      {bandRange.lastIndex + 1} dari{" "}
+                      {eq.currentBands.length} ·{" "}
+                      {formatBandFrequencyFull(visibleFirstBandFreq)}–
+                      {formatBandFrequencyFull(visibleLastBandFreq)}
+                    </Text>
+                  )}
               </View>
             </View>
           )}
@@ -1548,13 +1648,40 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 4,
   },
+  // Baris strip DETAIL BAND: kolom skala dB di kiri + daftar band.
+  bandStripRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+  },
+  bandStripList: {
+    flex: 1,
+  },
   // Bar indikator geser horizontal strip DETAIL BAND: satu baris,
-  // label ujung mengapit track; thumb bergerak mengikuti scroll.
+  // tombol geser mengapit label ujung + track; thumb bergerak mengikuti
+  // scroll.
   bandScrollIndicator: {
     flexDirection: "row",
     alignItems: "center",
     marginTop: 6,
     paddingHorizontal: 8,
+  },
+  // Tombol geser ‹ ›: lingkaran 32dp, target sentuh 44 lewat hitSlop 6.
+  bandScrollButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bandScrollButtonDisabled: {
+    opacity: 0.35,
+  },
+  // Legenda hidup di bawah bar indikator: band yang tampak sekarang.
+  bandLegend: {
+    fontSize: 10,
+    textAlign: "center",
+    marginTop: 4,
   },
   bandScrollLabel: {
     fontSize: 10,
