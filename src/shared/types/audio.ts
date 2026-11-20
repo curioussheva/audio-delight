@@ -54,6 +54,15 @@ export interface Song {
   isEnriched?: boolean;
   lastEnrichedAt?: number;
   lastSeenAt?: number;
+  // ReplayGain (2026-11-20): tag loudness dari file — dibaca lazy saat
+  // lagu diputar (reader), lalu dipersist ke kolom DB
+  // `replaygain_track_gain` dkk. BUKAN dari parser @missingcore (parser
+  // itu tidak pernah mengembalikan field ini). undefined = belum dibaca /
+  // file tidak punya tag; null TIDAK dipakai.
+  replaygainTrackGainDb?: number;
+  replaygainAlbumGainDb?: number;
+  replaygainTrackPeak?: number;
+  replaygainAlbumPeak?: number;
   mood?: string;
   tempo?: number;
   artistImageUrl?: string;

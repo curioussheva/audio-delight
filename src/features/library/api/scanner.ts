@@ -978,6 +978,27 @@ export class LibraryScanner {
       // L1: lirik lokal (kosong = belum ada sumbernya).
       lyrics: row.lyrics || undefined,
       lyricsSynced: row.lyrics_synced || undefined,
+      // ReplayGain (2026-11-20): undefined = belum dibaca / tanpa tag.
+      replaygainTrackGainDb:
+        row.replaygain_track_gain !== null &&
+        row.replaygain_track_gain !== undefined
+          ? Number(row.replaygain_track_gain)
+          : undefined,
+      replaygainAlbumGainDb:
+        row.replaygain_album_gain !== null &&
+        row.replaygain_album_gain !== undefined
+          ? Number(row.replaygain_album_gain)
+          : undefined,
+      replaygainTrackPeak:
+        row.replaygain_track_peak !== null &&
+        row.replaygain_track_peak !== undefined
+          ? Number(row.replaygain_track_peak)
+          : undefined,
+      replaygainAlbumPeak:
+        row.replaygain_album_peak !== null &&
+        row.replaygain_album_peak !== undefined
+          ? Number(row.replaygain_album_peak)
+          : undefined,
 
       // Timestamp
       dateAdded: Number(row.dateAdded) || Date.now(),

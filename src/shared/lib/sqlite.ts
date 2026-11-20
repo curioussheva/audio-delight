@@ -58,6 +58,13 @@ const SQLiteService = {
           artist_bio          TEXT,   -- Dari Wikipedia via MusicBrainz
           album_artwork       TEXT,
           
+          -- ReplayGain (2026-11-20): tag loudness dari file (dB / peak
+          -- linear). Dibaca lazy saat lagu diputar, bukan saat scan.
+          replaygain_track_gain REAL,
+          replaygain_album_gain REAL,
+          replaygain_track_peak REAL,
+          replaygain_album_peak REAL,
+
           -- User Data
           playCount           INTEGER DEFAULT 0,
           lastPlayedAt        INTEGER DEFAULT 0,
@@ -232,6 +239,14 @@ const runMigrations = () => {
 
     // v6: I3 (G2) — penanda field yang pernah diedit user di [id].tsx.
     `ALTER TABLE songs ADD COLUMN edited_fields TEXT;`,
+
+    // v7: ReplayGain (2026-11-20) — tag loudness dari file, dibaca lazy
+    // saat lagu diputar (bukan saat scan); rescan tidak menyentuhnya
+    // (updateExistingSong hanya menulis kolom yang didaftar).
+    `ALTER TABLE songs ADD COLUMN replaygain_track_gain REAL;`,
+    `ALTER TABLE songs ADD COLUMN replaygain_album_gain REAL;`,
+    `ALTER TABLE songs ADD COLUMN replaygain_track_peak REAL;`,
+    `ALTER TABLE songs ADD COLUMN replaygain_album_peak REAL;`,
   ];
 
   for (const sql of migrations) {
@@ -250,6 +265,35 @@ runMigrations();
 // ─── Utility Queries ──────────────────────────────────────────────────────────
 
 export const SongQueries = {
+  // ReplayGain (2026-11-20): simpan tag loudness hasil baca file (lazy
+  // saat lagu diputar). Hanya kolom RG yang ditulis — rescan / update lain
+  // tidak pernah menyentuhnya.
+  updateReplayGain: (
+    songId: string,
+    tags: {
+      trackGainDb?: number;
+      albumGainDb?: number;
+      trackPeak?: number;
+      albumPeak?: number;
+    },
+  ) => {
+    db.execute(
+      `UPDATE songs SET
+         replaygain_track_gain = ?,
+         replaygain_album_gain = ?,
+         replaygain_track_peak = ?,
+         replaygain_album_peak = ?
+       WHERE id = ?`,
+      [
+        tags.trackGainDb ?? null,
+        tags.albumGainDb ?? null,
+        tags.trackPeak ?? null,
+        tags.albumPeak ?? null,
+        songId,
+      ],
+    );
+  },
+
   incrementPlayCount: (songId: string, duration: number) => {
     db.execute(
       `UPDATE songs SET playCount = playCount + 1, lastPlayedAt = ? WHERE id = ?`,

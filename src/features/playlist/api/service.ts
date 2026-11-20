@@ -390,6 +390,13 @@ class PlaylistService {
       isEnriched: false,
       lastSeenAt: Date.now(),
       isFavorite: false,
+      // ReplayGain (2026-11-20).
+      replaygainTrackGainDb:
+        row.replaygain_track_gain ?? undefined,
+      replaygainAlbumGainDb:
+        row.replaygain_album_gain ?? undefined,
+      replaygainTrackPeak: row.replaygain_track_peak ?? undefined,
+      replaygainAlbumPeak: row.replaygain_album_peak ?? undefined,
     };
   }
 
