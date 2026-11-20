@@ -21,6 +21,12 @@ import { ThemeProvider, useTheme } from "@/shared/context/ThemeContext";
 import { accentOn } from "@/shared/utils/contrast";
 import { loadAppFonts } from "@/shared/utils/fonts";
 import LoadingScreen from "@/shared/components/ui/LoadingScreen";
+import SplashImageScreen from "@/shared/components/ui/SplashImageScreen";
+import {
+  SPLASH_HOLD_MS,
+  SPLASH_IMAGE_MS,
+  SPLASH_READY_DELAY_MS,
+} from "@/shared/utils/splashTiming";
 import { AudioPropertyToast } from "@/features/player/components/AudioPropertyToast";
 import { GlobalToast } from "@/shared/components/ui/GlobalToast";
 
@@ -50,7 +56,12 @@ import { runAudioTestMatrix } from "@/features/player/api/testMatrix";
  
 SplashScreen.preventAutoHideAsync();
 
-type AppInitState = "initializing" | "loading" | "ready" | "error";
+type AppInitState =
+  | "initializing"
+  | "loading"
+  | "splash-image"
+  | "ready"
+  | "error";
 
 const DIAGNOSTIC_INTERVAL_MS = 5000;
 
@@ -186,6 +197,16 @@ export default function RootLayout() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const diagRef = useRef<AudioDiagnosticsHandle | null>(null);
+  // Penahan splash native — dibersihkan saat unmount supaya timer tidak
+  // memanggil setAppState setelah RootLayout tidak ada.
+  const splashHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (splashHoldTimer.current !== null) {
+        clearTimeout(splashHoldTimer.current);
+      }
+    };
+  }, []);
 
   const initStore = usePlayerStore((s) => s.initStore);
   const setAudioMode = usePlayerStore((s) => s.setAudioMode);
@@ -570,18 +591,36 @@ const performInitialization = useCallback(async () => {
     };
   }, [appState]);
 
-  // Handle loading complete
+  // Handle loading complete — SEBELUM: splash native langsung hilang di
+  // sini (hideAsync segera setelah animasi keluar LoadingScreen selesai),
+  // lalu ready 200 ms kemudian. SESUDAH: splash native ditahan
+  // SPLASH_HOLD_MS dulu supaya gambarnya sempat terlihat, baru hilang
+  // dan masuk fase "splash-image" (splash.png tampil lagi sebagai
+  // interstitial in-app sebelum rute tampil).
   const handleLoadingComplete = useCallback(() => {
-    SplashScreen.hideAsync().catch(() => {});
-    setTimeout(() => {
+    splashHoldTimer.current = setTimeout(() => {
+      SplashScreen.hideAsync().catch(() => {});
+      setAppState("splash-image");
+    }, SPLASH_HOLD_MS);
+  }, []);
+
+  // Fase "splash-image" → ready: interstitial splash.png tampil
+  // SPLASH_IMAGE_MS, lalu jeda lama 200 ms dan fade-in konten 500 ms
+  // seperti sebelumnya. Rute baru tampil setelah ini (index Redirect →
+  // onboarding untuk pengguna baru, Library untuk yang sudah onboarded —
+  // guard onboarding tidak disentuh).
+  useEffect(() => {
+    if (appState !== "splash-image") return;
+    const timer = setTimeout(() => {
       setAppState("ready");
       Animated.timing(contentOpacity, {
         toValue: 1,
         duration: 500,
         useNativeDriver: true,
       }).start();
-    }, 200);
-  }, [contentOpacity]);
+    }, SPLASH_IMAGE_MS + SPLASH_READY_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [appState, contentOpacity]);
 
   // ── UI STATE: ERROR ──────────────────────────────
   if (appState === "error") {
@@ -617,6 +656,20 @@ const performInitialization = useCallback(async () => {
             onLoadingComplete={handleLoadingComplete}
             finishing={appState === "loading"}
           />
+        </ThemeProvider>
+      </GestureHandlerRootView>
+    );
+  }
+
+  // ── UI STATE: SPLASH IMAGE ─────────────────────
+  // Interstitial splash.png (contain, latar tema) antara splash native
+  // dan rute pertama. Tampil untuk pengguna baru maupun lama — rutenya
+  // yang berbeda (onboarding vs Library), ditentukan index + guard.
+  if (appState === "splash-image") {
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <ThemeProvider>
+          <SplashImageScreen />
         </ThemeProvider>
       </GestureHandlerRootView>
     );
