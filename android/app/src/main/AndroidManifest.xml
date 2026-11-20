@@ -100,6 +100,22 @@
                 android:resource="@xml/pristine_audio_widget_info" />
         </receiver>
 
+        <!-- Widget BESAR (target 4x4): provider kedua, label berbeda supaya
+             pemilih widget menampilkan keduanya ("PristineAudio" 4x1 dan
+             "PristineAudio Besar"). Aturan yang sama: exported=false,
+             updatePeriodMillis=0 (tanpa polling). -->
+        <receiver
+            android:name="com.pristineaudio.widget.PristineAudioWidgetLargeProvider"
+            android:exported="false"
+            android:label="@string/widget_large_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/pristine_audio_widget_large_info" />
+        </receiver>
+
         <!-- ===================== -->
         <!-- MAIN ACTIVITY -->
         <!-- ===================== -->

@@ -2,6 +2,8 @@
   <string name="app_name">PristineAudio</string>
   <string name="widget_description">Kontrol pemutaran PristineAudio: artwork, judul, play/pause, next.</string>
   <string name="widget_artwork_description">Artwork album</string>
+  <string name="widget_large_label">PristineAudio Besar</string>
+  <string name="widget_large_description">Widget besar PristineAudio: artwork besar, judul, progress lagu, kontrol previous/play/next.</string>
   <string name="expo_splash_screen_resize_mode" translatable="false">cover</string>
   <string name="expo_splash_screen_status_bar_translucent" translatable="false">false</string>
 </resources>

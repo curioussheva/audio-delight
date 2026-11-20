@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget BESAR PristineAudio (target 4x4, resize horizontal+vertical):
+     artwork dominan + judul (2 baris) + artis + progress bar + transport
+     lengkap (previous / play-pause / next). RemoteViews hanya mendukung
+     view dasar — tidak ada custom view, tidak ada data binding di sini.
+     Artwork memakai layout_weight supaya mengisi sisa tinggi widget saat
+     di-resize; judul/artis/progress/transport punya tinggi tetap. Latar
+     sama dengan widget 4x1 (panel gelap tembus pandang) supaya terbaca di
+     wallpaper apa pun. Progress bar hanya tampil (bukan seek) — RemoteViews
+     ProgressBar tidak bisa di-drag. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_large_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="@drawable/widget_background">
+
+    <ImageView
+        android:id="@+id/widget_large_artwork"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:scaleType="centerCrop"
+        android:contentDescription="@string/widget_artwork_description" />
+
+    <TextView
+        android:id="@+id/widget_large_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:textColor="@android:color/white"
+        android:textSize="17sp"
+        android:textStyle="bold"
+        android:maxLines="2"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/widget_large_artist"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textColor="#CCFFFFFF"
+        android:textSize="13sp"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <LinearLayout
+        android:id="@+id/widget_large_progress_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/widget_large_position"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#CCFFFFFF"
+            android:textSize="11sp"
+            android:text="0:00" />
+
+        <ProgressBar
+            android:id="@+id/widget_large_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:max="100"
+            android:progress="0"
+            android:progressTint="#B7791F"
+            android:progressBackgroundTint="#44FFFFFF" />
+
+        <TextView
+            android:id="@+id/widget_large_duration"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#CCFFFFFF"
+            android:textSize="11sp"
+            android:text="0:00" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:orientation="horizontal"
+        android:gravity="center">
+
+        <ImageButton
+            android:id="@+id/widget_large_previous"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@android:color/transparent"
+            android:src="@android:drawable/ic_media_previous"
+            android:contentDescription="Previous" />
+
+        <ImageButton
+            android:id="@+id/widget_large_play_pause"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:background="@android:color/transparent"
+            android:src="@android:drawable/ic_media_play"
+            android:contentDescription="Play" />
+
+        <ImageButton
+            android:id="@+id/widget_large_next"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@android:color/transparent"
+            android:src="@android:drawable/ic_media_next"
+            android:contentDescription="Next" />
+
+    </LinearLayout>
+
+</LinearLayout>
