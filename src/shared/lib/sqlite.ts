@@ -157,6 +157,27 @@ const SQLiteService = {
         );
       `);
 
+      // ── Tabel `daily_listening` (2026-11-20, item 10 deep-insight:
+      // statistik mendengarkan) — akumulasi DETIK YANG BENAR-BENAR
+      // DIDENGARKAN per hari kalender lokal ('YYYY-MM-DD').
+      //
+      // Kenapa tabel baru, bukan kolom recent_plays.play_duration?
+      // play_duration selalu ditulis 0 oleh semua pemanggil
+      // incrementPlayCount (playSong + syncFromNative mengoper 0) —
+      // satu baris recent_plays = satu lagu MULAI diputar, bukan satu
+      // lagu selesai didengarkan. Mengisi play_duration dari posisi
+      // akan tetap salah (posisi saat ganti trek ≠ durasi didengar
+      // kalau user seek). Jadi jam didengarkan diakumulasi terpisah
+      // dari delta posisi (lihat StatsService.notePlaybackPosition) —
+      // satu baris per hari, bukan per lagu, supaya tulisannya murah
+      // (satu UPDATE per ~30 detik pemutaran).
+      db.execute(`
+        CREATE TABLE IF NOT EXISTS daily_listening (
+          day     TEXT PRIMARY KEY,
+          seconds INTEGER DEFAULT 0
+        );
+      `);
+
       const indexes = [
         `CREATE INDEX IF NOT EXISTS idx_songs_folder       ON songs(folder);`,
         `CREATE INDEX IF NOT EXISTS idx_songs_artist       ON songs(artist);`,
