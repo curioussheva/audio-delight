@@ -85,6 +85,13 @@ import {
   CROSSFADE_STEP_SECONDS,
   formatCrossfadeLabel,
 } from "@/features/crossfade/crossfade";
+import { useOutputProfileStore } from "@/features/outputprofile/store/outputProfileStore";
+import {
+  CONFIGURABLE_OUTPUT_CATEGORIES,
+  OUTPUT_CATEGORY_LABELS,
+  presetNameById,
+  type ConfigurableOutputCategory,
+} from "@/features/outputprofile/outputProfile";
 
 // Versi dibaca dari app.json seperti About — sebelumnya hardcoded
 // "1.0.0 (Build 2026)" sementara app.json sudah 1.0.37.
@@ -325,6 +332,17 @@ export default function SettingsScreen() {
   const dspGate = useDSPProcessingGate();
 
   const [showEQPicker, setShowEQPicker] = useState(false);
+
+  // Profil per Output (2026-11-20): kategori mana yang sedang dipilih
+  // preset-nya di modal picker (null = modal tertutup). Modalnya hanya
+  // MENYIMPAN pemetaan — tidak menerapkan preset langsung (berbeda dari
+  // showEQPicker di atas yang memanggil applyPresetGuarded).
+  const [profilePickerCategory, setProfilePickerCategory] =
+    useState<ConfigurableOutputCategory | null>(null);
+
+  // Profil per Output: sakelar utama + pemetaan (store persist sendiri).
+  const outputProfilesEnabled = useOutputProfileStore((s) => s.enabled);
+  const outputProfileMapping = useOutputProfileStore((s) => s.mapping);
 
   const { activePresetId, applyPreset, setEQEnabled, resetToDefault } =
     useEqualizerStore();
@@ -1504,6 +1522,120 @@ export default function SettingsScreen() {
           </View>
 
 
+          {/* ── 1e. Profil per Output — preset EQ otomatis per jalur ────
+              Default MATI (opt-in): menyalakan fitur tidak mengubah suara
+              yang sedang berjalan. Saat ON dan output berpindah kategori
+              (jack/DAC/Bluetooth/speaker/line-out), preset yang dipetakan
+              diterapkan otomatis + toast menamainya. "Tetap seperti
+              sekarang" = tanpa perubahan untuk kategori itu. Default
+              pemetaan: speaker -> Flat, sisanya tanpa perubahan.
+              JUJUR: Bluetooth adalah SATU kategori — TWS dan head unit
+              mobil tidak bisa dibedakan dari kode yang ada (lihat
+              outputProfile.ts §3), jadi keduanya memakai preset yang
+              sama. Hanya jalan saat EQ menyala (mode DSP); di mode
+              Bit-Perfect/Immersive, atau saat EQ mati, tidak ada yang
+              diterapkan — dan EQ tidak pernah dinyalakan diam-diam.
+              Pilihan EQ manual user setelah auto-switch TIDAK pernah
+              ditimpa ulang sampai output benar-benar berpindah lagi. */}
+          <SettingRow colors={colors} spacing={spacing}>
+            <View style={{ flex: 1, marginRight: spacing.md }}>
+              <Text style={{ color: colors.text.primary, fontFamily: FONT_FAMILY.semiBold }}>
+                Profil per Output
+              </Text>
+              <Text
+                style={{
+                  color: colors.text.secondary,
+                  fontSize: 11,
+                  marginTop: 2,
+                  lineHeight: 15,
+                }}
+              >
+                {outputProfilesEnabled
+                  ? "Aktif — preset EQ berganti otomatis saat jalur output berubah (dengan toast)."
+                  : "Mati — preset tidak pernah berganti sendiri. Nyalakan untuk memilih preset per output."}
+              </Text>
+              <Text
+                style={{
+                  color: colors.text.secondary,
+                  fontSize: 10,
+                  marginTop: 4,
+                }}
+              >
+                Hanya saat EQ menyala (mode DSP). Bluetooth TWS dan mobil memakai preset yang sama — keduanya tidak bisa dibedakan.
+              </Text>
+            </View>
+            <Switch
+              value={outputProfilesEnabled}
+              onValueChange={(value) =>
+                useOutputProfileStore.getState().setEnabled(value)
+              }
+              trackColor={{
+                false: colors.background.tertiary,
+                true: colors.primary[500],
+              }}
+              thumbColor={
+                outputProfilesEnabled
+                  ? colors.text.primary
+                  : colors.text.secondary
+              }
+              accessibilityLabel="Profil per Output"
+            />
+          </SettingRow>
+          {outputProfilesEnabled &&
+            CONFIGURABLE_OUTPUT_CATEGORIES.map((category) => {
+              const mappedId = outputProfileMapping[category];
+              const mappedName =
+                presetNameById(allPresets, mappedId) ??
+                "Tetap seperti sekarang";
+              return (
+                <SettingRow key={category} colors={colors} spacing={spacing}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.text.primary, fontFamily: FONT_FAMILY.semiBold }}>
+                      {OUTPUT_CATEGORY_LABELS[category]}
+                    </Text>
+                    <Text
+                      style={{
+                        color: colors.text.secondary,
+                        fontSize: 11,
+                        marginTop: 2,
+                      }}
+                    >
+                      Preset yang diterapkan saat output pindah ke sini.
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setProfilePickerCategory(category)}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 4,
+                      paddingVertical: 4,
+                      paddingHorizontal: 8,
+                      borderRadius: 8,
+                      backgroundColor: colors.background.tertiary,
+                    }}
+                    accessibilityLabel={`Preset untuk ${OUTPUT_CATEGORY_LABELS[category]}`}
+                  >
+                    <Text
+                      style={{
+                        color: accentOnTertiary,
+                        fontFamily: FONT_FAMILY.bold,
+                        fontSize: 13,
+                      }}
+                    >
+                      {mappedName}
+                    </Text>
+                    <ChevronRight
+                      size={14}
+                      color={accentOnTertiary}
+                      strokeWidth={2.5}
+                    />
+                  </TouchableOpacity>
+                </SettingRow>
+              );
+            })}
+
+
           {/* ── 2. Preset EQ Aktif ─────────────────────────────────────── */}
           <SettingRow colors={colors} spacing={spacing}>
             <View style={{ flex: 1 }}>
@@ -1790,6 +1922,135 @@ export default function SettingsScreen() {
                   )}
                 </TouchableOpacity>
               )}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Profil per Output Picker Modal ─────────────────────────────
+          Hanya MENYIMPAN pemetaan kategori -> preset (tidak menerapkan
+          preset langsung — tidak ada applyPreset di sini). Opsi pertama
+          "Tetap seperti sekarang" menyimpan null = tanpa perubahan saat
+          output pindah ke kategori ini. */}
+      <Modal
+        visible={profilePickerCategory !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setProfilePickerCategory(null)}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "flex-end",
+            backgroundColor: "rgba(0,0,0,0.6)",
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: colors.background.secondary,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              paddingBottom: 32,
+              maxHeight: "60%",
+            }}
+          >
+            {/* Handle bar */}
+            <View
+              style={{
+                width: 40,
+                height: 4,
+                borderRadius: 2,
+                backgroundColor: colors.text.disabled,
+                alignSelf: "center",
+                marginTop: 12,
+                marginBottom: 16,
+              }}
+            />
+
+            <Text
+              style={{
+                color: colors.text.primary,
+                fontSize: 16,
+                fontFamily: FONT_FAMILY.bold,
+                paddingHorizontal: 20,
+                marginBottom: 8,
+              }}
+            >
+              {profilePickerCategory
+                ? `Preset untuk ${OUTPUT_CATEGORY_LABELS[profilePickerCategory]}`
+                : "Preset untuk output"}
+            </Text>
+
+            <FlatList
+              data={[
+                { id: "__keep__", name: "Tetap seperti sekarang", description: "Tanpa perubahan saat output pindah ke sini." },
+                ...allPresets,
+              ]}
+              keyExtractor={(p) => p.id}
+              renderItem={({ item }) => {
+                const isSelected =
+                  profilePickerCategory !== null &&
+                  (item.id === "__keep__"
+                    ? outputProfileMapping[profilePickerCategory] === null
+                    : outputProfileMapping[profilePickerCategory] === item.id);
+                return (
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (profilePickerCategory === null) return;
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      useOutputProfileStore
+                        .getState()
+                        .setProfileForCategory(
+                          profilePickerCategory,
+                          item.id === "__keep__" ? null : item.id,
+                        );
+                      setProfilePickerCategory(null);
+                    }}
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      paddingVertical: 14,
+                      paddingHorizontal: 20,
+                      borderBottomWidth: 1,
+                      borderBottomColor: colors.background.tertiary,
+                      backgroundColor: isSelected
+                        ? colors.primary[500] + "18"
+                        : "transparent",
+                    }}
+                  >
+                    <View>
+                      <Text
+                        style={{
+                          color: colors.text.primary,
+                          fontFamily: isSelected ? FONT_FAMILY.bold : FONT_FAMILY.medium,
+                          fontSize: 14,
+                        }}
+                      >
+                        {item.name}
+                      </Text>
+                      {item.description && (
+                        <Text
+                          style={{
+                            color: colors.text.secondary,
+                            fontSize: 11,
+                            marginTop: 2,
+                          }}
+                        >
+                          {item.description}
+                        </Text>
+                      )}
+                    </View>
+                    {isSelected && (
+                      <CheckCircle
+                        size={18}
+                        color={accentOnSecondary}
+                        strokeWidth={2.5}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
             />
           </View>
         </View>
