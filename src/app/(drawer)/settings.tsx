@@ -29,6 +29,7 @@ import {
   Sparkles,
   Database,
   Image as ImageIcon,
+  Volume2,
 } from "lucide-react-native";
 import { useLibraryStore } from "@/features/library/store/libraryStore"; // Pastikan path benar
 import { BackgroundScanTask } from "@/features/library/services/BackgroundScanTask";
@@ -70,6 +71,12 @@ import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
 import { useEqualizer } from "@/features/equalizer/hooks/useEqualizer";
 import { useHeadphoneStore } from "@/features/headphone/store/headphoneStore";
 import Constants from "expo-constants";
+import {
+  useReplayGainStore,
+  type ReplayGainMode,
+} from "@/features/replaygain/store/replayGainStore";
+import { resolveReplayGainDb } from "@/features/replaygain/replaygain";
+import { applyReplayGainForSong } from "@/features/replaygain/apply";
 
 // Versi dibaca dari app.json seperti About — sebelumnya hardcoded
 // "1.0.0 (Build 2026)" sementara app.json sudah 1.0.37.
@@ -326,6 +333,32 @@ export default function SettingsScreen() {
   } = useEqualizer();
 
   const { resetAll: resetHeadphoneAll } = useHeadphoneStore();
+
+  // ReplayGain (2026-11-20): samakan volume antar lagu dari tag file.
+  // Default OFF — tidak mengubah loudness user lama secara diam-diam.
+  const {
+    isReplayGainEnabled,
+    replayGainMode,
+    currentTags: replayGainCurrentTags,
+    currentSongId: replayGainCurrentSongId,
+  } = useReplayGainStore();
+  const replayGainCurrentSong = usePlayerStore((s) => s.currentSong);
+  // Toggle / ganti mode langsung berlaku ke lagu yang sedang diputar
+  // (tanpa restart): selesaikan tag lagu aktif; dorongan gain efektif
+  // ke native diurus langganan RG di equalizerStore.
+  const handleToggleReplayGain = async (value: boolean) => {
+    const rg = useReplayGainStore.getState();
+    rg.setReplayGainEnabled(value);
+    const cur = usePlayerStore.getState().currentSong;
+    await applyReplayGainForSong(cur ?? null);
+  };
+  const handleSelectReplayGainMode = async (mode: ReplayGainMode) => {
+    const rg = useReplayGainStore.getState();
+    if (rg.replayGainMode === mode) return;
+    rg.setReplayGainMode(mode);
+    const cur = usePlayerStore.getState().currentSong;
+    await applyReplayGainForSong(cur ?? null);
+  };
 
   const {
     playbackSpeed,
@@ -1247,6 +1280,144 @@ export default function SettingsScreen() {
                 }
               />
             </SettingRow>
+          )}
+
+
+          {/* ── 1c. ReplayGain — samakan volume antar lagu ────────────────
+              Tag ReplayGain di file (FLAC Vorbis comment / ID3v2 TXXX /
+              MP4 custom atom). Default OFF. Berlaku langsung ke lagu yang
+              sedang diputar, tanpa restart. TIDAK berlaku di mode
+              Bit-Perfect (GainNode tidak ada di jalur itu). Koreksi
+              di-clamp ±12 dB dan dibatasi peak supaya tidak clip. */}
+          <SettingRow colors={colors} spacing={spacing}>
+            <View style={{ flex: 1, marginRight: spacing.md }}>
+              <Text style={{ color: colors.text.primary, fontFamily: FONT_FAMILY.semiBold }}>
+                ReplayGain — Samakan Volume
+              </Text>
+              <Text
+                style={{
+                  color: colors.text.secondary,
+                  fontSize: 11,
+                  marginTop: 2,
+                  lineHeight: 15,
+                }}
+              >
+                {isReplayGainEnabled
+                  ? "Aktif — album dari era/mastering berbeda diputar dengan volume yang sama, mengikuti tag di file."
+                  : "Mati — perilaku lama. Nyalakan supaya lagu keras dan lagu pelan tidak lompat volume."}
+              </Text>
+              {isReplayGainEnabled && (
+                <Text
+                  style={{
+                    color: colors.text.secondary,
+                    fontSize: 11,
+                    marginTop: 4,
+                    lineHeight: 15,
+                  }}
+                >
+                  {(() => {
+                    const resolved = resolveReplayGainDb(
+                      replayGainCurrentTags,
+                      replayGainMode,
+                    );
+                    if (!replayGainCurrentSong) {
+                      return "Belum ada lagu yang diputar.";
+                    }
+                    if (!resolved) {
+                      return "Lagu ini tidak punya tag ReplayGain — volume tidak diubah.";
+                    }
+                    const sign = resolved.gainDb > 0 ? "+" : "";
+                    return `Diterapkan: ${sign}${resolved.gainDb.toFixed(1)} dB (${replayGainMode === "album" ? "per album" : "per track"})${replayGainCurrentSongId === replayGainCurrentSong.id ? "" : " — lagu baru, menunggu baca tag"}.`;
+                  })()}
+                </Text>
+              )}
+              <Text
+                style={{
+                  color: colors.text.secondary,
+                  fontSize: 10,
+                  marginTop: 4,
+                }}
+              >
+                Tidak berlaku di mode Bit-Perfect. Tag dibaca sekali per lagu, lalu disimpan.
+              </Text>
+            </View>
+            <Switch
+              value={isReplayGainEnabled}
+              onValueChange={handleToggleReplayGain}
+              trackColor={{
+                false: colors.background.tertiary,
+                true: colors.primary[500],
+              }}
+              thumbColor={
+                isReplayGainEnabled ? colors.text.primary : colors.text.secondary
+              }
+            />
+          </SettingRow>
+
+          {isReplayGainEnabled && (
+            <View style={{ paddingHorizontal: spacing.md, paddingBottom: spacing.sm }}>
+              {(
+                [
+                  {
+                    id: "track" as ReplayGainMode,
+                    label: "Per track",
+                    hint: "Pakai replaygain_track_gain — tiap lagu disamakan sendiri.",
+                  },
+                  {
+                    id: "album" as ReplayGainMode,
+                    label: "Per album",
+                    hint: "Pakai replaygain_album_gain — satu album utuh dijaga dinamikanya. Tanpa tag album, jatuh ke track.",
+                  },
+                ]
+              ).map((m) => {
+                const isActive = replayGainMode === m.id;
+                return (
+                  <TouchableOpacity
+                    key={m.id}
+                    onPress={() => handleSelectReplayGainMode(m.id)}
+                    style={[
+                      styles.dacItem,
+                      isActive && {
+                        backgroundColor: colors.primary[500] + "25",
+                        borderColor: colors.primary[500],
+                      },
+                    ]}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <Volume2
+                        size={16}
+                        color={colors.primary[500]}
+                        strokeWidth={2.2}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={{ color: colors.text.primary, fontFamily: FONT_FAMILY.semiBold }}
+                        >
+                          {m.label}
+                        </Text>
+                        <Text
+                          style={{
+                            color: colors.text.secondary,
+                            fontSize: 11,
+                            marginTop: 2,
+                            lineHeight: 15,
+                          }}
+                        >
+                          {m.hint}
+                        </Text>
+                      </View>
+                      {isActive && (
+                        <CheckCircle
+                          size={20}
+                          color={accentOnSecondary}
+                          strokeWidth={2.5}
+                        />
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           )}
 
 
