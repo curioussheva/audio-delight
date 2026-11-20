@@ -6,6 +6,7 @@
 
 #include "PanLaw.h"
 
+#include <android/log.h>
 #include <algorithm>
 #include <cmath>
 
@@ -149,7 +150,21 @@ void AudioPipeline::noteMode(
         // hanya catat mode.
         mLastMode = mode;
         mModeSeen = true;
+        // DIAGNOSTIK SEMENTARA (2026-11-20, bug 01:24): mode awal pipeline
+        // sesudah prepare(). Satu baris per prepare — bukan per buffer.
+        // Hapus baris ini bila tes penentu selesai.
+        // 0=BitPerfect 1=DSP 2=Immersive (AudioTypes.h).
+        __android_log_print(ANDROID_LOG_INFO, "AudioPipeline",
+            "[MODE-DIAG] noteMode initial mode=%d", static_cast<int>(mode));
     } else if (mode != mLastMode) {
+        // DIAGNOSTIK SEMENTARA (2026-11-20, bug 01:24): pipeline
+        // BENAR-BENAR menerapkan mode baru — baris ini yang membuktikan
+        // switch immersive→DSP sampai ke rantai audio (atau tidak:
+        // kalau baris ini absen sesudah [DIAG] mode-switch, pipeline
+        // tidak pernah melihat mode baru). Hapus bila tes selesai.
+        __android_log_print(ANDROID_LOG_INFO, "AudioPipeline",
+            "[MODE-DIAG] noteMode from=%d to=%d (chain reset + fade-in)",
+            static_cast<int>(mLastMode), static_cast<int>(mode));
         onModeChanged(mode);
         mLastMode = mode;
     }
