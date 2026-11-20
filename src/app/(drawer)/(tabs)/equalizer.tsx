@@ -1102,21 +1102,30 @@ export default function EqualizerScreen() {
                       contentContainerStyle={{ paddingHorizontal: spacing.sm }}
                       directionalLockEnabled={true}
                       scrollEventThrottle={16}
-                      onScroll={(e) =>
+                      onScroll={(e) => {
+                        // Nilai event DITANGKAP dulu di sini: React Native
+                        // mendaur-ulang synthetic event — membaca
+                        // e.nativeEvent di dalam updater setState bisa
+                        // berjalan sesudah event dilepas (nativeEvent null)
+                        // dan melempar TypeError (Metro, sesi 80289).
+                        const offsetX = e.nativeEvent.contentOffset.x;
                         setBandScroll((s) => ({
                           ...s,
-                          offsetX: e.nativeEvent.contentOffset.x,
-                        }))
-                      }
+                          offsetX,
+                        }));
+                      }}
                       onContentSizeChange={(w) =>
                         setBandScroll((s) => ({ ...s, contentWidth: w }))
                       }
-                      onLayout={(e) =>
+                      onLayout={(e) => {
+                        // Sama seperti onScroll di atas: tangkap dulu
+                        // sebelum setState (synthetic event didaur ulang).
+                        const layoutWidth = e.nativeEvent.layout.width;
                         setBandScroll((s) => ({
                           ...s,
-                          layoutWidth: e.nativeEvent.layout.width,
-                        }))
-                      }
+                          layoutWidth,
+                        }));
+                      }}
                     />
                   </View>
                 </View>
