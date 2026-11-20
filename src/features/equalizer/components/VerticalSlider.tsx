@@ -21,7 +21,7 @@
 //
 // ControlKnob sudah tidak ada lagi (dihapus di ronde dead-code); ketiga
 // pemakainya kini fader vertikal.
-import React from "react";
+import React, { memo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 
 import { GestureDetector, Gesture } from "react-native-gesture-handler";
@@ -59,7 +59,7 @@ const TRACK_WIDTH = 30;
 const THUMB_WIDTH = 26;
 const THUMB_HEIGHT = 24;
 
-export const VerticalSlider = ({
+export const VerticalSlider = memo(({
   label,
   value,
   onChange,
@@ -227,7 +227,7 @@ export const VerticalSlider = ({
       </Text>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 
 import { GestureDetector, Gesture } from "react-native-gesture-handler";
@@ -22,7 +22,11 @@ import { gainToY, yToGain } from "@/features/equalizer/api/bandThumbMath";
 interface BandProps {
   frequency: number;
   gain: number;
-  onValueChange: (gain: number) => void;
+  /** Indeks band di store — onValueChange menerima (index, gain) supaya
+      pemanggil bisa meneruskan callback stabil (updateBandGain) dan
+      React.memo tidak batal oleh closure inline per item. */
+  index: number;
+  onValueChange: (index: number, gain: number) => void;
   color?: string;
   disabled?: boolean;
 }
@@ -30,9 +34,10 @@ interface BandProps {
 export const BAND_WIDTH = 65; // Ukuran lebar yang pas untuk scroll horizontal
 export const SLIDER_HEIGHT = 160; // Tinggi area geser
 
-export const EqualizerBand = ({
+export const EqualizerBand = memo(({
   frequency,
   gain,
+  index,
   onValueChange,
   color,
   disabled,
@@ -85,7 +90,7 @@ export const EqualizerBand = ({
 
       translateY.value = nextY;
       const newGain = yToGain(nextY, SLIDER_HEIGHT);
-      runOnJS(onValueChange)(parseFloat(newGain.toFixed(1)));
+      runOnJS(onValueChange)(index, parseFloat(newGain.toFixed(1)));
     })
     .onFinalize(() => {
       isDragging.value = false;
@@ -146,9 +151,9 @@ export const EqualizerBand = ({
       onAccessibilityAction={(event) => {
         if (disabled) return;
         if (event.nativeEvent.actionName === "increment") {
-          onValueChange(stepGain(1));
+          onValueChange(index, stepGain(1));
         } else if (event.nativeEvent.actionName === "decrement") {
-          onValueChange(stepGain(-1));
+          onValueChange(index, stepGain(-1));
         }
       }}
     >
@@ -208,7 +213,7 @@ export const EqualizerBand = ({
       </Text>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

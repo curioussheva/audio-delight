@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 import {
   View,
   Text,
@@ -34,7 +34,9 @@ interface TuningControlProps {
  * stepper ±5 sen, rentang ±100 sen (clamp di store). Nonaktif di mode
  * Bit-Perfect — aturan yang sama dengan settings.
  */
-export function TuningControl({ style }: TuningControlProps) {
+export const TuningControl = memo(function TuningControl({
+  style,
+}: TuningControlProps) {
   const { theme } = useTheme();
   const { colors } = theme;
   const tuningCents = usePlayerStore((s) => s.tuningCents);
@@ -162,7 +164,7 @@ export function TuningControl({ style }: TuningControlProps) {
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrap: {

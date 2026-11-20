@@ -1,4 +1,11 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+  useCallback,
+  memo,
+} from "react";
 import {
   View,
   Text,
@@ -116,6 +123,16 @@ const REVERB_LABELS = [
   "Plate",
 ];
 
+// Format nilai slider efek — fungsi MODUL (referensi stabil) supaya
+// React.memo VerticalSlider tidak batal tiap render oleh closure inline.
+// Murni dari v, tanpa closure; tampilan akhir tidak berubah.
+const formatBassBoostDb = (v: number): string =>
+  v <= 0 ? "0 dB" : `+${((v / 1000) * 12).toFixed(1)} dB`;
+const formatWidthMultiplier = (v: number): string =>
+  `×${(1 + v / 1000).toFixed(2)}`;
+const formatMasterGainSliderValue = (v: number): string =>
+  formatMasterGainDb(v + MASTER_GAIN_DB_MIN);
+
 // ─── MINI COMPONENTS ─────────────────────────────────────────────────────
 
 interface MiniSwitchProps {
@@ -130,7 +147,7 @@ interface MiniSwitchProps {
   hideLabel?: boolean;
 }
 
-const MiniSwitch = ({
+const MiniSwitch = memo(({
   value,
   onValueChange,
   disabled,
@@ -193,7 +210,7 @@ const MiniSwitch = ({
       </Pressable>
     </View>
   );
-};
+});
 
 interface SectionToggleProps {
   label: string;
@@ -356,6 +373,19 @@ export default function EqualizerScreen() {
   const handleReset = () => {
     setResetDialogVisible(true);
   };
+
+  // Callback stabil untuk anak yang di-memo: meneruskan callback inline
+  // dari render akan membatalkan React.memo tiap render. eq.setMasterGain
+  // / eq.updateBandGain sudah useCallback stabil di hook, jadi wrapper
+  // ini juga stabil.
+  const handleMasterGainChange = useCallback(
+    (v: number) => eq.setMasterGain(dbToGain(v + MASTER_GAIN_DB_MIN)),
+    [eq.setMasterGain],
+  );
+  const handleGraphBandChange = useCallback(
+    (index: number, gain: number) => eq.updateBandGain(index, gain),
+    [eq.updateBandGain],
+  );
 
   // FASE 4: terapkan preset + toast sukses. Toast hanya boleh muncul
   // bila preset BENAR-BENAR diterapkan ke suara: saat sakelar master
@@ -869,9 +899,7 @@ export default function EqualizerScreen() {
                 width={width - spacing.md * 2 - spacing.sm * 2 - 2}
                 height={140}
                 disabled={isDSPFrozen || !eq.isEQEnabled}
-                onBandChange={(index, gain) =>
-                  eq.updateBandGain(index, gain)
-                }
+                onBandChange={handleGraphBandChange}
                 // Peringatan clip menghitung bass + gain juga (pill
                 // grafik): bass 0..+12 dB bila sakelarnya menyala,
                 // master gain −12..+12 dB.
@@ -1095,7 +1123,8 @@ export default function EqualizerScreen() {
                         <EqualizerBand
                           frequency={item.frequency}
                           gain={item.gain}
-                          onValueChange={(v) => eq.updateBandGain(index, v)}
+                          index={index}
+                          onValueChange={eq.updateBandGain}
                           disabled={!eq.isEQEnabled || eq.isDSPDisabled}
                         />
                       )}
@@ -1325,11 +1354,7 @@ export default function EqualizerScreen() {
                       // (low-shelf 100 Hz, 0..+12 dB — cerminkan
                       // kMaxBassBoostDb di NativeDSPModule.kt). % menyesatkan
                       // karena menyiratkan skala linear.
-                      formatValue={(v) =>
-                        v <= 0
-                          ? "0 dB"
-                          : `+${((v / 1000) * 12).toFixed(1)} dB`
-                      }
+                      formatValue={formatBassBoostDb}
                     />
                   </View>
                   <View style={styles.sliderCol}>
@@ -1355,7 +1380,7 @@ export default function EqualizerScreen() {
                       // Tampil pengali lebar, bukan %: width 1.0..2.0
                       // (side ×1.00 = stereo asli). % menyesatkan karena
                       // 0% terbaca "mati" padahal itu stereo asli.
-                      formatValue={(v) => `×${(1 + v / 1000).toFixed(2)}`}
+                      formatValue={formatWidthMultiplier}
                     />
                   </View>
                   <View style={styles.sliderCol}>
@@ -1370,15 +1395,11 @@ export default function EqualizerScreen() {
                     <VerticalSlider
                       label="MASTER GAIN"
                       value={gainToDb(eq.masterGain) - MASTER_GAIN_DB_MIN}
-                      onChange={(v) =>
-                        eq.setMasterGain(dbToGain(v + MASTER_GAIN_DB_MIN))
-                      }
+                      onChange={handleMasterGainChange}
                       color={masterColor}
                       disabled={eq.isDSPDisabled || !eq.isEQEnabled}
                       maxValue={MASTER_GAIN_DB_RANGE}
-                      formatValue={(v) =>
-                        formatMasterGainDb(v + MASTER_GAIN_DB_MIN)
-                      }
+                      formatValue={formatMasterGainSliderValue}
                     />
                   </View>
                 </View>

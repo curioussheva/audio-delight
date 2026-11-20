@@ -6,7 +6,7 @@
 // koreksi menetralkan alat dulu, baru EQ menyetel selera. Menaruh kontrol EQ
 // di atas akan menyesatkan tentang urutan yang sebenarnya.
 
-import React, { useMemo, useState } from "react";
+import React, { memo, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -44,11 +44,11 @@ interface Props {
   inCard?: boolean;
 }
 
-export const HeadphoneSection: React.FC<Props> = ({
+export const HeadphoneSection = memo(({
   accent,
   disabled,
   inCard,
-}) => {
+}: Props) => {
   const { theme } = useTheme();
 
   const colors = theme.colors;
@@ -626,7 +626,7 @@ export const HeadphoneSection: React.FC<Props> = ({
       />
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   // Angka spacing diambil dari token tema (`theme.spacing`), bukan literal -

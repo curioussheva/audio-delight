@@ -10,7 +10,7 @@
 // 160, label frekuensi) supaya area skala mulai tepat di atas track
 // tanpa angka ajaib: spacer-nya spasi nir-putus dengan gaya font yang
 // sama dengan label fader, jadi tingginya sama persis.
-import React from "react";
+import React, { memo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 
 import { useTheme } from "@/shared/context/ThemeContext";
@@ -32,7 +32,7 @@ interface BandScaleProps {
   dimmed?: boolean;
 }
 
-export const BandScale = ({ dimmed }: BandScaleProps) => {
+export const BandScale = memo(({ dimmed }: BandScaleProps) => {
   const { theme } = useTheme();
   const colors = theme.colors;
 
@@ -67,7 +67,7 @@ export const BandScale = ({ dimmed }: BandScaleProps) => {
       <Text style={styles.freqSpacer}>{"\u00A0"}</Text>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

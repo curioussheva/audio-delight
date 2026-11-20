@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { memo, useMemo, useState } from "react";
 import { View, StyleSheet, Text } from "react-native";
 
 import {
@@ -27,6 +27,7 @@ import { useTheme } from "@/shared/context/ThemeContext";
 import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
 import { accentOn } from "@/shared/utils/contrast";
 import { bandPoint, pointToBand } from "@/features/equalizer/api/graphDragMath";
+import { areFrequencyGraphPropsEqual } from "@/features/equalizer/api/graphProps";
 import {
   BOOST_WARN_DB,
   GRAPH_CLIP_RED,
@@ -72,7 +73,7 @@ interface Props {
 // Tinggi strip label Hz di bawah canvas.
 const HZ_STRIP = 16;
 
-export const FrequencyGraph: React.FC<Props> = ({
+export const FrequencyGraph = memo(({
   bands,
   combinedGains,
   width = 340,
@@ -81,7 +82,7 @@ export const FrequencyGraph: React.FC<Props> = ({
   onBandChange,
   bassBoostDb = 0,
   masterGainDb = 0,
-}) => {
+}: Props) => {
   const { theme } = useTheme();
 
   // Dimensi & Skala Konstan
@@ -456,7 +457,7 @@ export const FrequencyGraph: React.FC<Props> = ({
       </View>
     </View>
   );
-};
+}, areFrequencyGraphPropsEqual);
 
 const styles = StyleSheet.create({
   container: {
