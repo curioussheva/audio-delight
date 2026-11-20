@@ -10,6 +10,10 @@ import {
   loadLyricsForSong,
 } from "@/features/library/services/lyricsSource";
 import { SongQueries, db } from "@/shared/lib/sqlite";
+import {
+  flushListenedSeconds,
+  notePlaybackPosition,
+} from "@/features/stats/api/statsService";
 import NativePlaybackService from "@/specs/NativePlaybackService";
 import NativeDSPModule from "@/features/equalizer/api/nativeInterface";
 import { applyReplayGainForSong } from "@/features/replaygain/apply";
@@ -615,6 +619,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           const posMs = await NativePlaybackService.getPosition();
           const newPos = posMs / 1000;
 
+          // Statistik (item 10): catat posisi untuk akumulasi detik
+          // didengarkan (daily_listening). Murah (beberapa perbandingan
+          // per tick; tulis DB hanya tiap ≥30 dtk) dan tidak pernah
+          // melempar — lihat notePlaybackPosition.
+          notePlaybackPosition(s.currentSong?.id ?? null, newPos);
+
           // Sync posisi ke Zustand (throttle: hanya update kalau berubah >0.1s)
           if (Math.abs(newPos - get().position) > 0.1) {
             set({ position: newPos });
@@ -830,6 +840,17 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           state.currentSong?.id === playableSong.id && state.position > 0;
 
         const resumePosition = isResumeAfterRestart ? state.position : 0;
+
+        // Statistik (item 10): tutup sesi dengar lagu lama sebelum
+        // ganti — detiknya ditulis ke daily_listening, bukan hilang.
+        // Lagu yang sama (resume after restart) tidak di-flush: itu
+        // satu sesi yang sama, posisinya sudah tercatat.
+        if (
+          state.currentSong &&
+          state.currentSong.id !== playableSong.id
+        ) {
+          flushListenedSeconds();
+        }
 
         set({
           currentSong: playableSong,
@@ -1080,6 +1101,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       // diputar lewat auto-advance tidak pernah tercatat (ronde 2/3 emulator).
       // Guard id berbeda mencegah hitung ganda dari sync berulang lagu sama.
       if (cur && prevSong && cur.id !== prevSong.id) {
+        // Statistik (item 10): tutup sesi dengar lagu lama (auto-advance
+        // / next / prev dari notifikasi) sebelum mencatat lagu baru.
+        flushListenedSeconds();
         SongQueries.incrementPlayCount?.(cur.id, 0);
         AsyncStorage.setItem(KEYS.LAST_SONG_ID, cur.id).catch(() => {});
         // ReplayGain (2026-11-20): auto-advance / next / prev dari
@@ -1303,6 +1327,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         await timedCall("pause", () => NativePlaybackService.pause());
       }
       set({ isPlaying });
+
+      // Statistik (item 10): pause → tulis detik yang sudah didengarkan
+      // (kalau tidak, detik sejak flush terakhir hilang saat app
+      // dimatikan sebelum lagu berganti).
+      if (!isPlaying) flushListenedSeconds();
 
       // 🔥 FIX: sync playback state ke MediaSession (safe)
       const pos = get().position;
