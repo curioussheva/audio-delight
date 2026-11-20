@@ -13,6 +13,8 @@ import { useConvolverStore } from "@/features/convolver/store/convolverStore";
 import { useCrossfadeStore } from "@/features/crossfade/store/crossfadeStore";
 import { useHeadphoneStore } from "@/features/headphone/store/headphoneStore";
 import { getEffectiveMasterGain, useReplayGainStore } from "@/features/replaygain/store/replayGainStore";
+// [BRIDGE-PROBE] diagnostik sementara (logcat #8) — lihat bridgeProbe.ts.
+import { noteBridgeProbeApply } from "@/features/player/api/bridgeProbe";
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -279,6 +281,12 @@ finalSessionId = sessionResult?.sessionId ?? 0;
       `[DSP] Apply GAGAL SEBAGIAN to Session: ${finalSessionId} ${detail} — gagal: ${failed}`,
     );
   }
+  // [BRIDGE-PROBE] (diagnostik SEMENTARA, logcat #8): satu sampel konteks
+  // "apply" per apply — setter terlambat yang sudah terukur di atas, TANPA
+  // panggilan native tambahan. Hapus baris ini saat probe dicabut.
+  noteBridgeProbeApply(
+    results.length > 0 ? Math.max(...results.map((r) => r.ms)) : 0,
+  );
   return results.every((r) => r.ok);
 };
 

@@ -54,6 +54,10 @@ import {
   type AudioDiagnosticsHandle,
 } from "@/features/player/api/diagnostics";
 import { runAudioTestMatrix } from "@/features/player/api/testMatrix";
+// [BRIDGE-PROBE] diagnostik sementara (logcat #8) — lihat bridgeProbe.ts.
+import { startBridgeProbe } from "@/features/player/api/bridgeProbe";
+import { useCrossfadeStore } from "@/features/crossfade/store/crossfadeStore";
+import NativeDSPModule from "@/specs/NativeDSPModule";
  
 SplashScreen.preventAutoHideAsync();
 
@@ -590,8 +594,26 @@ const performInitialization = useCallback(async () => {
       "[DIAG] Available: __audioSnapshot(), __audioReport(), __audioTestMatrix()",
     );
 
+    // [BRIDGE-PROBE] (diagnostik SEMENTARA, logcat #8): sampler round-trip
+    // bridge 1/detik — jalan di efek dev-only yang sama dengan monitor di
+    // atas. Cabut start/stop ini + modul bridgeProbe.ts bila sudah terjawab.
+    const probe = startBridgeProbe({
+      getAudioMode: () => usePlayerStore.getState().audioMode,
+      getCrossfadeSeconds: () =>
+        useCrossfadeStore.getState().crossfadeSeconds,
+      // Panggilan native diinjeksikan di sini (composition root) supaya
+      // modul probe tetap logika murni tanpa impor spec TurboModule.
+      callNative: (seconds, sessionId) =>
+        NativeDSPModule.setCrossfadeSeconds(seconds, sessionId),
+      createSession: async () => {
+        const r = await NativeDSPModule.createAudioSession();
+        return r?.sessionId ?? 0;
+      },
+    });
+
     return () => {
       console.log("[DIAG] 🛑 Stopping diagnostics monitor");
+      probe.stop();
       diag.stop();
       diagRef.current = null;
       delete (global as any).__audioDiag;
