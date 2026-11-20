@@ -13,6 +13,8 @@ import android.support.v4.media.session.PlaybackStateCompat
 import androidx.core.app.NotificationCompat
 import androidx.media.app.NotificationCompat.MediaStyle
 import com.pristineaudio.app.R
+import com.pristineaudio.widget.WidgetPlaybackState
+import com.pristineaudio.widget.WidgetStateStore
 
 class MediaSessionManager(private val service: PlaybackService) {
 
@@ -152,10 +154,43 @@ class MediaSessionManager(private val service: PlaybackService) {
     private fun notifyPlaybackStateChanged() {
         try {
             val isPlaying = PlaybackNativeBridge.isPlaying()
+            // Widget (dan tombol notifikasi) butuh nilai ini juga saat JS
+            // mati: play/pause dari lock screen / headset sebelumnya tidak
+            // memperbarui lastIsPlaying, jadi tombol bisa menampilkan
+            // ikon yang salah sampai JS sync berikutnya.
+            lastIsPlaying = isPlaying
             PlaybackNativeBridge.emitPlaybackStateChanged(isPlaying)
             refreshNotification()
+            publishWidgetState(isPlaying = isPlaying)
         } catch (e: Exception) {
             android.util.Log.w("MediaSessionManager", "notifyPlaybackStateChanged: ${e.message}")
+        }
+    }
+
+    // Widget home screen (4x1): satu-satunya sumber update widget adalah
+    // state/callback MediaSession di sini — BUKAN timer polling (HyperOS
+    // battery saver bisa membekukan proses app; service foreground +
+    // callback MediaSession tetap jalan selama playback). WidgetStateStore
+    // menahan update kalau tidak ada yang berubah, jadi pemanggilan dari
+    // jalur yang sering (updatePlaybackState ~1/detik) tidak membanjiri
+    // launcher dengan IPC. Artwork dikirim sebagai bitmap hasil decode
+    // (store yang downscale ke 128px + menyalin), BUKAN content URI —
+    // launcher tidak bisa membaca file privat app / URI MediaStore.
+    // publish() tidak boleh throw ke pemanggil (jalur notifikasi).
+    private fun publishWidgetState(
+        isPlaying: Boolean = lastIsPlaying,
+        artwork: android.graphics.Bitmap? = null,
+        artworkChanged: Boolean = false,
+    ) {
+        try {
+            WidgetStateStore.publish(
+                context,
+                WidgetPlaybackState(lastTitle, lastArtist, isPlaying),
+                artwork,
+                artworkChanged,
+            )
+        } catch (e: Exception) {
+            android.util.Log.w("MediaSessionManager", "publishWidgetState: ${e.message}")
         }
     }
 
@@ -335,12 +370,19 @@ class MediaSessionManager(private val service: PlaybackService) {
         }
 
         refreshNotification()
+        // Track baru: artwork lama dibuang store (publish tanpa artwork
+        // baru); artwork track ini menyusul dari loadArtwork().
+        publishWidgetState()
     }
 
     // 🔥 NEW: update playback state (playing/paused, posisi) untuk slider lock screen
     fun updatePlaybackState(isPlaying: Boolean, positionMs: Long) {
+        val changed = isPlaying != lastIsPlaying
         lastIsPlaying = isPlaying
         applyPlaybackState(isPlaying, positionMs)
+        // Hanya saat play/pause berbalik — position watcher menembak
+        // ~1/detik dan widget tidak menampilkan posisi.
+        if (changed) publishWidgetState()
     }
 
     // 🔥 NEW: shuffle/repeat di MediaSession supaya lock screen ikut.
@@ -475,6 +517,12 @@ class MediaSessionManager(private val service: PlaybackService) {
 
                     mediaSession.setMetadata(metadata)
                 }
+
+                // Artwork track ini selesai di-decode: kirim bitmap ke
+                // widget (store menyalin + downscale ke 128px; bitmap ini
+                // tetap milik MediaSessionManager dan bisa di-recycle saat
+                // track berganti).
+                publishWidgetState(artwork = bmp, artworkChanged = true)
 
                 // Refresh notifikasi di main thread (notifikasi + UI lockscreen).
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
