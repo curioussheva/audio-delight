@@ -9,10 +9,10 @@ import java.io.FileOutputStream
 // Satu-satunya tempat state widget disimpan.
 //
 // Alur: MediaSessionManager memublikasikan state playback (judul/artis/
-// isPlaying + bitmap artwork hasil decode) ke sini; store memutuskan
-// apakah ada yang berubah, menyimpan salinannya (SharedPreferences +
-// file PNG kecil di cache), lalu meminta provider menggambar ulang.
-// Provider membaca lewat withSnapshot().
+// isPlaying + posisi/durasi + bitmap artwork hasil decode) ke sini; store
+// memutuskan apakah ada yang berubah, menyimpan salinannya (SharedPreferences
+// + file PNG kecil di cache), lalu meminta provider menggambar ulang.
+// Provider membaca lewat withSnapshot() / withLargeSnapshot().
 //
 // Kenapa bitmap, bukan URI: RemoteViews jalan di proses launcher (widget
 // host). Host tidak bisa membaca file privat app, dan content URI MediaStore
@@ -24,17 +24,31 @@ import java.io.FileOutputStream
 // Kenapa ada persistensi: proses app bisa mati (sistem / battery saver)
 // sementara widget tetap terpasang. onUpdate() setelah proses mati harus
 // tetap bisa merender state terakhir yang diketahui, bukan widget kosong.
+//
+// Dua ukuran artwork: widget 4x1 cukup 128px (artwork tampil 48dp), widget
+// besar butuh 512px (artwork dominan ~300dp). Keduanya dibuat dari bitmap
+// sumber yang sama di replaceArtwork() — satu sumber kebenaran, tidak ada
+// jalur update kedua. Posisi TIDAK dipersist (berubah tiap detik saat lagu
+// jalan; yang dipersist hanya identitas: judul/artis/isPlaying/durasi).
 object WidgetStateStore {
 
     private const val PREFS_NAME = "pristine_widget"
     private const val KEY_TITLE = "title"
     private const val KEY_ARTIST = "artist"
     private const val KEY_IS_PLAYING = "is_playing"
+    private const val KEY_DURATION_MS = "duration_ms"
     private const val ARTWORK_FILE_NAME = "widget_artwork.png"
+    private const val ARTWORK_LARGE_FILE_NAME = "widget_artwork_large.png"
 
-    // Artwork widget cukup 128px di sisi terpanjang — parcel bitmap ke
+    // Artwork widget 4x1 cukup 128px di sisi terpanjang — parcel bitmap ke
     // launcher harus kecil; bitmap metadata 1024px boros IPC + memori host.
     private const val ARTWORK_MAX_DIM = 128
+
+    // Artwork widget besar: 512px di sisi terpanjang. Pada layar ~2.5x
+    // (POCO M6) artwork ~300dp butuh ~750px untuk tajam sempurna; 512px
+    // adalah kompromi (sedikit lembut, tapi parcel PNG foto album biasanya
+    // 100–400 KB — aman di bawah batas binder ~1 MB per transaksi).
+    private const val ARTWORK_LARGE_MAX_DIM = 512
 
     private val lock = Any()
 
@@ -46,6 +60,9 @@ object WidgetStateStore {
     @Volatile
     private var cachedArtwork: Bitmap? = null
 
+    @Volatile
+    private var cachedArtworkLarge: Bitmap? = null
+
     // Publikasikan state baru. updateAll() ke provider hanya dipanggil
     // kalau state berubah atau ada artwork baru — pemanggil yang menembak
     // sering (updatePlaybackState ~1/detik) tidak membanjiri launcher
@@ -53,6 +70,9 @@ object WidgetStateStore {
     //
     // Kalau state berubah (mis. ganti track) tanpa artwork baru, artwork
     // lama dibuang supaya widget tidak menampilkan cover lagu sebelumnya.
+    //
+    // Posisi: berubah tiap detik saat lagu jalan — update cache memori +
+    // gambar ulang, tapi TIDAK dipersist dan TIDAK membuang artwork.
     fun publish(
         context: Context,
         state: WidgetPlaybackState,
@@ -62,19 +82,28 @@ object WidgetStateStore {
         val changed = synchronized(lock) {
             val stateChanged = widgetStateChanged(cachedState, state)
             if (!stateChanged && !artworkChanged) return@synchronized false
-            if (stateChanged) {
+            if (widgetIdentityChanged(cachedState, state)) {
                 cachedState = state
                 persistState(context, state)
-            }
-            if (artworkChanged) {
+                if (artworkChanged) {
+                    replaceArtwork(context, artwork)
+                } else {
+                    clearArtwork(context)
+                }
+            } else if (artworkChanged) {
+                // Artwork saja yang baru (state identik): ganti artwork,
+                // tanpa persist ulang dan tanpa membuang apa pun.
                 replaceArtwork(context, artwork)
-            } else if (stateChanged) {
-                clearArtwork(context)
+            } else {
+                // Hanya posisi yang bergerak: perbarui cache, tanpa
+                // persist dan tanpa menyentuh artwork.
+                cachedState = state
             }
             true
         }
         if (changed) {
             PristineAudioWidgetProvider.updateAll(context)
+            PristineAudioWidgetLargeProvider.updateAll(context)
         }
     }
 
@@ -91,12 +120,23 @@ object WidgetStateStore {
         }
     }
 
+    // Snapshot untuk widget besar: state yang sama, artwork 512px.
+    fun <T> withLargeSnapshot(context: Context, block: (WidgetPlaybackState, Bitmap?) -> T): T {
+        synchronized(lock) {
+            if (cachedState == null) {
+                loadPersisted(context)
+            }
+            return block(cachedState ?: WidgetPlaybackState.EMPTY, cachedArtworkLarge)
+        }
+    }
+
     private fun persistState(context: Context, state: WidgetPlaybackState) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_TITLE, state.title)
             .putString(KEY_ARTIST, state.artist)
             .putBoolean(KEY_IS_PLAYING, state.isPlaying)
+            .putLong(KEY_DURATION_MS, state.durationMs)
             .apply()
     }
 
@@ -109,34 +149,49 @@ object WidgetStateStore {
         if (title == null) {
             cachedState = WidgetPlaybackState.EMPTY
             cachedArtwork = null
+            cachedArtworkLarge = null
             return
         }
         cachedState = WidgetPlaybackState(
             title = title,
             artist = prefs.getString(KEY_ARTIST, "").orEmpty(),
             isPlaying = prefs.getBoolean(KEY_IS_PLAYING, false),
+            // Posisi tidak dipersist: sesudah proses mati, progress mulai
+            // dari 0 sampai watcher posisi berikutnya (<1 detik saat jalan).
+            positionMs = 0L,
+            durationMs = prefs.getLong(KEY_DURATION_MS, 0L),
         )
-        cachedArtwork = loadArtworkFile(context)
+        cachedArtwork = loadArtworkFile(context, ARTWORK_FILE_NAME)
+        cachedArtworkLarge = loadArtworkFile(context, ARTWORK_LARGE_FILE_NAME)
     }
 
-    private fun artworkFile(context: Context): File =
-        File(context.cacheDir, ARTWORK_FILE_NAME)
+    private fun artworkFile(context: Context, name: String): File =
+        File(context.cacheDir, name)
 
     private fun replaceArtwork(context: Context, artwork: Bitmap?) {
         val old = cachedArtwork
+        val oldLarge = cachedArtworkLarge
         cachedArtwork = null
+        cachedArtworkLarge = null
         old?.takeIf { !it.isRecycled }?.recycle()
+        oldLarge?.takeIf { !it.isRecycled }?.recycle()
         if (artwork == null || artwork.isRecycled) {
-            artworkFile(context).delete()
+            artworkFile(context, ARTWORK_FILE_NAME).delete()
+            artworkFile(context, ARTWORK_LARGE_FILE_NAME).delete()
             return
         }
         // Downscale + salin: salinan ini milik store, sumbernya bebas
         // di-recycle MediaSessionManager kapan pun.
-        val owned = ownDownscaledCopy(artwork)
+        val owned = ownDownscaledCopy(artwork, ARTWORK_MAX_DIM)
         cachedArtwork = owned
+        val ownedLarge = ownDownscaledCopy(artwork, ARTWORK_LARGE_MAX_DIM)
+        cachedArtworkLarge = ownedLarge
         try {
-            FileOutputStream(artworkFile(context)).use { out ->
+            FileOutputStream(artworkFile(context, ARTWORK_FILE_NAME)).use { out ->
                 owned.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            FileOutputStream(artworkFile(context, ARTWORK_LARGE_FILE_NAME)).use { out ->
+                ownedLarge.compress(Bitmap.CompressFormat.PNG, 100, out)
             }
         } catch (e: Exception) {
             android.util.Log.w("WidgetStateStore", "simpan artwork widget: ${e.message}")
@@ -145,13 +200,17 @@ object WidgetStateStore {
 
     private fun clearArtwork(context: Context) {
         val old = cachedArtwork
+        val oldLarge = cachedArtworkLarge
         cachedArtwork = null
+        cachedArtworkLarge = null
         old?.takeIf { !it.isRecycled }?.recycle()
-        artworkFile(context).delete()
+        oldLarge?.takeIf { !it.isRecycled }?.recycle()
+        artworkFile(context, ARTWORK_FILE_NAME).delete()
+        artworkFile(context, ARTWORK_LARGE_FILE_NAME).delete()
     }
 
-    private fun loadArtworkFile(context: Context): Bitmap? {
-        val file = artworkFile(context)
+    private fun loadArtworkFile(context: Context, name: String): Bitmap? {
+        val file = artworkFile(context, name)
         if (!file.exists()) return null
         return try {
             BitmapFactory.decodeFile(file.absolutePath)
@@ -161,15 +220,15 @@ object WidgetStateStore {
         }
     }
 
-    private fun ownDownscaledCopy(src: Bitmap): Bitmap {
+    private fun ownDownscaledCopy(src: Bitmap, maxDim: Int): Bitmap {
         val maxSide = maxOf(src.width, src.height).coerceAtLeast(1)
         val targetWidth: Int
         val targetHeight: Int
-        if (maxSide <= ARTWORK_MAX_DIM) {
+        if (maxSide <= maxDim) {
             targetWidth = src.width
             targetHeight = src.height
         } else {
-            val scale = ARTWORK_MAX_DIM.toFloat() / maxSide
+            val scale = maxDim.toFloat() / maxSide
             targetWidth = (src.width * scale).toInt().coerceAtLeast(1)
             targetHeight = (src.height * scale).toInt().coerceAtLeast(1)
         }
