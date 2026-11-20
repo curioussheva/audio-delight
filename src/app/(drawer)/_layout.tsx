@@ -16,10 +16,11 @@
 // manual setiap rilis - dan tidak akan pernah menyimpang dari APK yang
 // benar-benar terpasang.
 
-import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import React, { useState } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, Modal } from "react-native";
 import { Image } from "expo-image";
 import Constants from "expo-constants";
+import { Ionicons } from "@expo/vector-icons";
 
 import { Drawer } from "expo-router/drawer";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -31,6 +32,7 @@ import {
 
 import { useTheme } from "@/shared/context/ThemeContext";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+import DevDBManager from "@/features/library/components/DevDBManager";
 
 // Pengembang. Satu tempat saja supaya tidak tersebar di beberapa file.
 const DEVELOPER = "curioussheva";
@@ -64,12 +66,17 @@ const DrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
 
   const version = readAppVersion();
 
+  // DEV TOOLS: buka DB Manager sebagai modal (pola yang sama dengan
+  // CustomDrawer yang mati — dipindah ke drawer yang benar-benar dirender).
+  const [showDB, setShowDB] = useState(false);
+
   return (
-    <DrawerContentScrollView
-      {...props}
-      contentContainerStyle={styles.scrollContent}
-      style={{ backgroundColor: colors.background.secondary }}
-    >
+    <>
+      <DrawerContentScrollView
+        {...props}
+        contentContainerStyle={styles.scrollContent}
+        style={{ backgroundColor: colors.background.secondary }}
+      >
       {/* HEADER: logo + nama + versi */}
       <View
         style={[
@@ -102,6 +109,39 @@ const DrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
         <DrawerItemList {...props} />
       </View>
 
+      {/* DEV TOOLS — hanya di build dev (__DEV__). Dev APK CI adalah debug
+          build (__DEV__ true); Preview release (__DEV__ false) tidak pernah
+          melihat entri ini. Dibuka sebagai modal, bukan route. */}
+      {__DEV__ && (
+        <View
+          style={[
+            styles.devSection,
+            {
+              paddingHorizontal: spacing.md,
+              paddingTop: spacing.md,
+              borderTopColor: colors.border.medium,
+            },
+          ]}
+        >
+          <Text style={[styles.devLabel, { color: colors.text.tertiary }]}>
+            DEV TOOLS
+          </Text>
+          <TouchableOpacity
+            style={styles.devItem}
+            onPress={() => setShowDB(true)}
+          >
+            <Ionicons
+              name="server-outline"
+              size={20}
+              color={colors.primary[500]}
+            />
+            <Text style={[styles.devItemText, { color: colors.primary[400] }]}>
+              Dev DB
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* FOOTER: pengembang */}
       <View
         style={[
@@ -122,7 +162,19 @@ const DrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
           {DEVELOPER}
         </Text>
       </View>
-    </DrawerContentScrollView>
+      </DrawerContentScrollView>
+
+      {/* DB MANAGER MODAL — hanya di build dev (__DEV__) */}
+      {__DEV__ && (
+        <Modal
+          visible={showDB}
+          animationType="slide"
+          onRequestClose={() => setShowDB(false)}
+        >
+          <DevDBManager onClose={() => setShowDB(false)} />
+        </Modal>
+      )}
+    </>
   );
 };
 
@@ -213,6 +265,14 @@ const styles = StyleSheet.create({
   version: { fontSize: 11, fontWeight: "700", marginTop: 2, letterSpacing: 0.5 },
   items: { flex: 1 },
   footer: { borderTopWidth: 1, alignItems: "center" },
+  devSection: { borderTopWidth: 1 },
+  devItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 10,
+  },
+  devItemText: { fontSize: 14, fontWeight: "600", letterSpacing: 0.3 },
   devLabel: { fontSize: 9, fontWeight: "800", letterSpacing: 1.5 },
   devName: { fontSize: 13, fontWeight: "700", marginTop: 4, letterSpacing: 0.5 },
 });
