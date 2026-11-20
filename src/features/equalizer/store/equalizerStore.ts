@@ -10,6 +10,7 @@ import { audioEngine } from "@/features/player/api/engine";
 import { NativeDSPModule } from "@/features/equalizer/api/nativeInterface";
 import { useHrtfStore } from "@/features/hrtf/store/hrtfStore";
 import { useHeadphoneStore } from "@/features/headphone/store/headphoneStore";
+import { getEffectiveMasterGain, useReplayGainStore } from "@/features/replaygain/store/replayGainStore";
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -181,7 +182,13 @@ finalSessionId = sessionResult?.sessionId ?? 0;
   // −12 dB = 0,25× (bukan senyap). Yang di-gate hanya pengiriman ke
   // native (isEQEnabled di atas): rantai DSP yang membawa GainNode
   // hanya hidup di mode DSP saat EQ menyala.
-  const gain = clampMasterGain(masterGain ?? MASTER_GAIN_DEFAULT);
+  // ReplayGain (2026-11-20): yang dikirim adalah gain EFEKTIF
+  // (user × faktor RG lagu aktif) — satu-satunya tempat nilai master
+  // gain dihitung untuk native, jadi restore / preset / mode switch
+  // tidak bisa menimpa RG diam-diam. RG mati / tanpa tag = gain user.
+  const gain = getEffectiveMasterGain(
+    clampMasterGain(masterGain ?? MASTER_GAIN_DEFAULT),
+  );
 
   const effects: Array<[string, () => Promise<unknown>]> = [
     ["setFullEqualizer", () => NativeDSPModule.setFullEqualizer(gains, finalSessionId)],
@@ -343,10 +350,16 @@ const pushMasterGainThrottled = (gain: number) => {
     _masterGainTimer = null;
     const value = _masterGainPending ?? gain;
     _masterGainPending = null;
+    // ReplayGain (2026-11-20): `value` di sini masih gain USER (slider);
+    // yang dikirim ke native adalah gain EFEKTIF (user × faktor RG lagu
+    // aktif). Konversi di sini (bukan di pemanggil) supaya SEMUA pemanggil
+    // — slider, restore, toggle RG — otomatis konsisten, dan nilai
+    // terakhir selalu terkirim (trailing) dengan faktor RG terbaru.
+    const effective = getEffectiveMasterGain(value);
     // setMasterGain kini Promise<boolean> (P1-9): false = native menolak.
     // fire-and-forget (N23) tapi rejection dicatat — jangan jadi unhandled.
     try {
-      const ok = await NativeDSPModule?.setMasterGain?.(value);
+      const ok = await NativeDSPModule?.setMasterGain?.(effective);
       if (ok === false) {
         console.warn("[EQ Store] setMasterGain ditolak native");
       }
@@ -793,3 +806,41 @@ if (require("react-native").Platform.OS === "android") {
     useEqualizerStore.getState().initialize();
   }, 1000);
 }
+
+// ReplayGain (2026-11-20): langganan perubahan state RG — SETIAP
+// perubahan (toggle, ganti mode, tag lagu aktif) menghitung ulang gain
+// efektif dan mendorongnya ke native bila berubah. Ini yang membuat
+// toggle berlaku ke lagu yang sedang diputar tanpa restart, dan yang
+// membuat playerStore/Settings tidak perlu mendorong gain sendiri
+// (mereka hanya mengubah state RG / memanggil applyReplayGainForSong).
+// Di-gate isEQEnabled seperti setMasterGain: di bit-perfect / EQ mati,
+// GainNode memang tidak hidup, jadi tidak ada yang didorong. Nilai
+// terakhir yang didorong dicatat supaya perubahan state RG yang tidak
+// mengubah gain efektif tidak membanjiri bridge.
+let _rgLastPushedEffective: number | null = null;
+useReplayGainStore.subscribe((state, prev) => {
+  // Abaikan perubahan no-op (mis. rehydrate persist yang menulis ulang
+  // nilai yang sama persis): tanpanya, rehydrate saat boot ikut memanggil
+  // pushMasterGainThrottled dan "memakan" jendela throttle 100 ms —
+  // setMasterGain pertama sesudahnya jadi trailing, bukan leading.
+  if (
+    state.isReplayGainEnabled === prev.isReplayGainEnabled &&
+    state.replayGainMode === prev.replayGainMode &&
+    state.currentTags === prev.currentTags &&
+    state.currentSongId === prev.currentSongId
+  ) {
+    return;
+  }
+  const { masterGain, isEQEnabled } = useEqualizerStore.getState();
+  if (!isEQEnabled) return;
+  const userGain = clampMasterGain(masterGain ?? MASTER_GAIN_DEFAULT);
+  const effective = getEffectiveMasterGain(userGain);
+  if (
+    _rgLastPushedEffective !== null &&
+    Math.abs(effective - _rgLastPushedEffective) < 1e-6
+  ) {
+    return;
+  }
+  _rgLastPushedEffective = effective;
+  pushMasterGainThrottled(userGain);
+});
