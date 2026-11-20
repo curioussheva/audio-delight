@@ -48,6 +48,27 @@ void FadeEngine::generateCurve(
     }
 }
 
+uint32_t FadeEngine::secondsToFrames(
+    uint32_t sampleRate,
+    float seconds
+) noexcept {
+    if (sampleRate == 0 || !(seconds > 0.0f)) {
+        return 0;
+    }
+    // Batas setting crossfade: 0..12 dtk (lihat crossfade.ts JS +
+    // PlaybackController::setCrossfadeSeconds). Clamp di sini juga
+    // supaya pemanggil C++ lain tidak bisa meminta kurva 60 dtk.
+    if (seconds > 12.0f) {
+        seconds = 12.0f;
+    }
+    const double frames =
+        static_cast<double>(sampleRate) * static_cast<double>(seconds);
+    if (frames >= 4294967295.0) {
+        return 0xFFFFFFFFu;
+    }
+    return static_cast<uint32_t>(frames);
+}
+
 void FadeEngine::reset() {
 
     fadeInCurve_.clear();
@@ -313,7 +334,7 @@ void FadeEngine::buildLogarithmic() {
             / denom;
 
         const float in =
-            std::log10f(
+            std::log10(
                 1.0f + 9.0f * t
             );
 

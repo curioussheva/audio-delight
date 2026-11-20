@@ -1320,6 +1320,23 @@ void EngineManager::setHrtfEnabled(
 }
 
 // =====================================================
+// CROSSFADE (2026-11-20)
+// =====================================================
+//
+// Durasi transisi antar lagu (0..12 dtk, 0 = mati). Diteruskan
+// langsung ke PlaybackController — fade track hidup di sana, bukan
+// di DSPChain. Clamp/validasi di PlaybackController::setCrossfadeSeconds.
+
+void EngineManager::setCrossfadeSeconds(
+    float seconds
+) {
+
+    mPlayback.setCrossfadeSeconds(
+        seconds
+    );
+}
+
+// =====================================================
 // CONVOLVER — IMPULSE RESPONSE (2026-11-20)
 // =====================================================
 

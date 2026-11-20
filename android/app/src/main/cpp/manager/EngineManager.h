@@ -198,6 +198,10 @@ public:
     void setBassBoost(float gainDb);
     void setReverbPreset(int preset);
     void setHrtfEnabled(bool enabled);
+    // Crossfade (2026-11-20): detik 0..12, diteruskan langsung ke
+    // PlaybackController (bukan DSPChain/AudioState — fade track
+    // hidup di controller, bukan di rantai efek).
+    void setCrossfadeSeconds(float seconds);
     void setEqEnabled(bool enabled);
 
     // Convolver — IR (2026-11-20). loadConvolverIr return status

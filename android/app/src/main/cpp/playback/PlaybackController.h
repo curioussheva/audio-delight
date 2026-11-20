@@ -37,7 +37,11 @@ public:
     bool isInitialized() const noexcept;
 
     // Transport
-    bool loadTrack(const TrackInfo& track);
+    // Crossfade (2026-11-20): `autoAdvance` = true HANYA dari
+    // processAdvance() (EOF worker) — loadTrack() manual (next/prev/
+    // play/JNI/restore) selalu false. Dipakai memilih durasi fade-out
+    // (lihat setCrossfadeSeconds di bawah).
+    bool loadTrack(const TrackInfo& track, bool autoAdvance = false);
     bool play();
     bool pause();
     bool stop();
@@ -58,6 +62,24 @@ public:
     // ada race dengan audio thread. Rate 1.0 = bypass (nol overhead).
     void setPlaybackRate(float rate) noexcept;
     [[nodiscard]] float playbackRate() const noexcept;
+
+    // Crossfade (2026-11-20): durasi transisi antar lagu, 0..12 dtk.
+    // 0 = MATI = perilaku lama (fade-out 500 ms / fade-in 300 ms di
+    // mode processing, 10 ms anti-klik di bit-perfect). > 0 = fade-out
+    // ekor lagu yang berakhir sepanjang nilai ini — HANYA pada
+    // auto-advance (EOF), dan HANYA di mode processing (DSP/Solfeggio):
+    // bit-perfect tetap 10 ms anti-klik (fade detik-detik adalah
+    // processing, melanggar janji bit-perfect). Fade-in lagu baru
+    // TETAP 300 ms / 10 ms — fade-in panjang akan menghukum resume
+    // (play() me-reset framesSinceLoad_), seek, dan next manual
+    // dengan ramp multi-detik; dan tanpa decoder kedua tidak ada
+    // overlap yang sesungguhnya (lihat docs/
+    // CROSSFADE_GAPLESS_VERIFICATION_2026-11-20.md): ini transisi
+    // fade berurutan, BUKAN crossfade overlap. Disimpan atomic
+    // (pola setPlaybackRate); dibaca loadTrack() saat membangun
+    // kurva — tanpa alokasi di audio thread.
+    void setCrossfadeSeconds(float seconds) noexcept;
+    [[nodiscard]] float crossfadeSeconds() const noexcept;
 
     // 🔥 FASE R (2026-11-11): retune — phase vocoder pitch shift (PitchShifter).
     // Pola yang SAMA dengan setPlaybackRate (P-M9): rasio disimpan atomic dan
@@ -258,6 +280,9 @@ private:
     FadeEngine fadeOutProcessing_;
     FadeEngine fadeInBitPerfect_;
     FadeEngine fadeOutBitPerfect_;
+    // Crossfade (2026-11-20): durasi transisi antar lagu, detik,
+    // 0..12 (0 = mati). Lihat setter di atas.
+    std::atomic<float> crossfadeSeconds_{0.0f};
     // PB6-W4 (2026-11-12): fade-out saat pause — 15 ms, S-curve.
     //
     // pause() dulu memotong langsung: playing_=false lalu render

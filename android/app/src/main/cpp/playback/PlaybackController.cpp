@@ -262,6 +262,32 @@ float PlaybackController::playbackRate() const noexcept {
     return playbackRate_.load(std::memory_order_acquire);
 }
 
+// Crossfade (2026-11-20): durasi transisi antar lagu, detik, 0..12.
+// 0 = mati = perilaku lama. Hanya atomic store (pola setPlaybackRate);
+// loadTrack() yang membaca dan membangun kurva fade-out — tanpa
+// alokasi di audio thread. Di luar rentang / non-finite diabaikan
+// (nilai lama dipertahankan), bukan di-clamp diam-diam: JS sudah
+// clamp 0..12, jadi nilai liar di sini = bug pemanggil.
+void PlaybackController::setCrossfadeSeconds(float seconds) noexcept {
+    if (!std::isfinite(seconds) || seconds < 0.0f || seconds > 12.0f) {
+        __android_log_print(ANDROID_LOG_WARN, "PlaybackController",
+                            "setCrossfadeSeconds: %.2f di luar 0-12, "
+                            "diabaikan", seconds);
+        return;
+    }
+    const float old =
+        crossfadeSeconds_.exchange(seconds, std::memory_order_acq_rel);
+    if (old != seconds) {
+        __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                            "setCrossfadeSeconds: %.1f dtk (sebelumnya "
+                            "%.1f dtk)", seconds, old);
+    }
+}
+
+float PlaybackController::crossfadeSeconds() const noexcept {
+    return crossfadeSeconds_.load(std::memory_order_acquire);
+}
+
 // 🔥 FASE R (2026-11-11): retune (phase vocoder pitch shift).
 //
 // Hanya menyimpan target ke atomic — penerapan (reset buffer pitch
@@ -302,7 +328,8 @@ void PlaybackController::setProcessingAllowed(bool allowed) noexcept {
 // TRANSPORT
 // =====================================================
 
-bool PlaybackController::loadTrack(const TrackInfo& track) {
+bool PlaybackController::loadTrack(const TrackInfo& track,
+                                   bool autoAdvance) {
     // 🔥 FIX (2026-11-11, D-M3): batalkan advance DULU, sebelum mengambil
     // loadTrackMutex_. Flag ini harus terlihat oleh iterasi skip-loop
     // advance thread SEBELUM thread ini mengambil lock untuk muatan
@@ -423,14 +450,39 @@ bool PlaybackController::loadTrack(const TrackInfo& track) {
         uint32_t fadeRate = streamSampleRate();
         if (fadeRate == 0) fadeRate = track.sampleRate;
         if (fadeRate == 0) fadeRate = 48000;
+        // Crossfade (2026-11-20): durasi fade-out ekor lagu = setting
+        // crossfade — HANYA bila load ini auto-advance (EOF) dan
+        // setting > 0. Manual next/prev/play TIDAK kena: antrean lama
+        // langsung di-clear, tidak ada ekor yang bisa di-fade. Fade-in
+        // TETAP 300 ms (processing) — fade-in panjang akan menghukum
+        // resume/seek/next manual dengan ramp multi-detik (play() dan
+        // seek() me-reset framesSinceLoad_). Set bit-perfect TETAP
+        // 10 ms anti-klik apa pun settingnya: crossfade adalah
+        // processing dan tidak boleh mengubah amplitudo di bit-perfect.
+        // Mekanisme fade-out-nya sendiri tidak berubah: applyTrackFades()
+        // baru meramp saat sisa queue <= durasi kurva dan decoder sudah
+        // selesai baca (decoderFinished_) — jadi fade-out D dtk mulai
+        // tepat D dtk sebelum ekor habis terdengar.
+        const float xfSeconds =
+            crossfadeSeconds_.load(std::memory_order_acquire);
+        const uint32_t fadeOutFrames =
+            (autoAdvance && xfSeconds > 0.0f)
+                ? FadeEngine::secondsToFrames(fadeRate, xfSeconds)
+                : fadeRate * 500 / 1000;
         fadeInProcessing_.generateCurve(FadeCurve::SCurve,
                                         fadeRate * 300 / 1000);
         fadeOutProcessing_.generateCurve(FadeCurve::SCurve,
-                                         fadeRate * 500 / 1000);
+                                         fadeOutFrames);
         fadeInBitPerfect_.generateCurve(FadeCurve::SCurve,
                                         fadeRate * 10 / 1000);
         fadeOutBitPerfect_.generateCurve(FadeCurve::SCurve,
                                          fadeRate * 10 / 1000);
+        if (autoAdvance && xfSeconds > 0.0f) {
+            __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                                "loadTrack: crossfade %.1f dtk — fade-out "
+                                "ekor %u frame @%u Hz (mode processing)",
+                                xfSeconds, fadeOutFrames, fadeRate);
+        }
     }
     framesSinceLoad_.store(0, std::memory_order_release);
     // B8-P4: reset throttle self-heal durasi — callback pertama track
@@ -2170,7 +2222,12 @@ std::optional<std::string> PlaybackController::processAdvance(
             ANDROID_LOG_INFO, "PlaybackController",
             "advance: next track uri=%s (attempt %zu/%zu)",
             nextTrack->uri.c_str(), attempt + 1, maxAttempts);
-        if (loadTrack(*nextTrack)) {
+        // Crossfade (2026-11-20): load dari worker advance = auto-advance
+        // — satu-satunya jalur yang memakai durasi crossfade untuk
+        // fade-out ekor (lihat loadTrack()). Retry P-M10 ke trek
+        // berikutnya juga auto-advance (trek gagal tidak berbunyi,
+        // jadi tidak ada ekor yang ter-fade).
+        if (loadTrack(*nextTrack, true)) {
             loaded = true;
             break;
         }

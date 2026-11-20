@@ -158,6 +158,26 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeHrtfEnabled(
 }
 
 // =====================================================
+// CROSSFADE (2026-11-20)
+// =====================================================
+//
+// Nama HARUS cocok dengan `external fun` di Kotlin: salah nama =
+// UnsatisfiedLinkError.
+
+JNIEXPORT void JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_setNativeCrossfadeSeconds(
+    JNIEnv* env,
+    jobject,
+    jfloat seconds
+) {
+    pristine::jni::guardedVoid(env, "setNativeCrossfadeSeconds", [&] {
+
+    EngineManager::get()
+        .setCrossfadeSeconds(static_cast<float>(seconds));
+    });
+}
+
+// =====================================================
 // CONVOLVER — IMPULSE RESPONSE (2026-11-20)
 // =====================================================
 //

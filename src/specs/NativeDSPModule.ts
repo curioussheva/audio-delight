@@ -37,6 +37,12 @@ export interface Spec extends TurboModule {
   setVirtualizer(strength: number, sessionId: number): Promise<boolean>;
   setReverbPreset(preset: number, sessionId: number): Promise<boolean>;
   setHrtfEnabled(enabled: boolean, sessionId: number): Promise<boolean>;
+  // Crossfade (2026-11-20): durasi transisi antar lagu, detik 0..12
+  // (0 = mati = perilaku lama). Berlaku pada auto-advance di mode
+  // processing (DSP/Solfeggio); di Bit-Perfect diabaikan native
+  // (fade tetap 10 ms anti-klik). sessionId diterima demi
+  // kompatibilitas API tapi diabaikan native (F7: satu stream global).
+  setCrossfadeSeconds(seconds: number, sessionId: number): Promise<boolean>;
   // Convolver — IR (2026-11-20): toggle sendiri, DI LUAR preset EQ
   // (keputusan yang sama dengan HRTF). loadConvolverIr resolve status
   // kLoad* ConvolverNode — lihat ConvolverIrStatus di bawah; pemanggil

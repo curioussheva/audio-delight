@@ -55,6 +55,10 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     private external fun setNativeBassBoost(gain: Float)
     private external fun setNativeReverbPreset(preset: Int)
     private external fun setNativeHrtfEnabled(enabled: Boolean)
+    // Crossfade (2026-11-20): detik 0..12, 0 = mati. Nama HARUS cocok
+    // dengan JNI di NativeDSPModule.cpp (lihat setNativeHrtfEnabled
+    // di atas).
+    private external fun setNativeCrossfadeSeconds(seconds: Float)
     // Convolver — IR (2026-11-20): nama HARUS cocok dengan JNI di
     // NativeDSPModule.cpp (lihat setNativeHrtfEnabled di atas).
     private external fun setNativeConvolverEnabled(enabled: Boolean)
@@ -270,6 +274,27 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
         try {
             setNativeHrtfEnabled(enabled)
             Log.i(TAG, "[DSP-TIMING] setHrtfEnabled enabled=$enabled native=${(System.nanoTime() - t0) / 1_000_000}ms")
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("DSP_ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun setCrossfadeSeconds(seconds: Float, sessionId: Int, promise: Promise) {
+        // Crossfade (2026-11-20): durasi transisi antar lagu, detik
+        // 0..12 (0 = mati). Diteruskan ke PlaybackController via JNI —
+        // fade track hidup di sana, bukan di rantai DSP. sessionId
+        // diterima demi kompatibilitas API tapi diabaikan native (F7:
+        // satu stream global), sama seperti setHrtfEnabled di atas.
+        val t0 = System.nanoTime()
+        if (!engineAvailable) {
+            Log.i(TAG, "[DSP-TIMING] setCrossfadeSeconds seconds=$seconds native=${(System.nanoTime() - t0) / 1_000_000}ms (engine unavailable)")
+            promise.resolve(false); return
+        }
+        try {
+            setNativeCrossfadeSeconds(seconds)
+            Log.i(TAG, "[DSP-TIMING] setCrossfadeSeconds seconds=$seconds native=${(System.nanoTime() - t0) / 1_000_000}ms")
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("DSP_ERROR", e.message)

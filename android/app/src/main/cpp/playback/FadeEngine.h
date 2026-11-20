@@ -22,6 +22,16 @@ public:
         uint32_t durationFrames
     );
 
+    // Crossfade (2026-11-20): detik -> frame pada laju stream, dengan
+    // clamp 0..12 dtk (batas setting crossfade). Dipakai loadTrack()
+    // untuk menghitung kurva fade-out; 64-bit di dalam supaya
+    // rate * detik tidak overflow uint32 (768 kHz * 12 dtk = 9,2e9).
+    [[nodiscard]]
+    static uint32_t secondsToFrames(
+        uint32_t sampleRate,
+        float seconds
+    ) noexcept;
+
     void reset();
 
     [[nodiscard]]
