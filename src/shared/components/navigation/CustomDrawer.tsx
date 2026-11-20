@@ -33,7 +33,10 @@ export default function CustomDrawer(props: DrawerContentComponentProps) {
         contentContainerStyle={{ paddingTop: 0 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* HEADER */}
+        {/* HEADER — identitas drawer: banner Curious Sheva (1600×427,
+            rasio 3,75). `contain` + aspectRatio supaya teks banner tidak
+            terpotong; dulu logo.png kotak (1024×1024) di kotak 280×160.
+            Badge PRISTINE AUDIO di bawahnya dipertahankan. */}
         <View
           style={[
             styles.header,
@@ -44,9 +47,10 @@ export default function CustomDrawer(props: DrawerContentComponentProps) {
           ]}
         >
           <Image
-            source={require("../../../../assets/images/logo.png")}
-            style={styles.logo}
+            source={require("../../../../assets/images/curious-sheva-banner.png")}
+            style={styles.banner}
             contentFit="contain"
+            accessibilityLabel="Banner Curious Sheva"
           />
           <View style={styles.versionBadge}>
             <Text style={[styles.versionText, { color: colors.primary[500] }]}>
@@ -166,17 +170,20 @@ export default function CustomDrawer(props: DrawerContentComponentProps) {
   );
 }
 
-// styles tidak berubah sama sekali
+// styles — banner menggantikan logo kotak (lihat HEADER di atas)
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
     paddingBottom: 30,
+    paddingHorizontal: 20,
     alignItems: "center",
     justifyContent: "center",
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
   },
-  logo: { width: 280, height: 160 },
+  // Banner 1600×427 (rasio 3,75): lebar penuh header, tinggi mengikuti
+  // aspectRatio (~70dp di drawer 304dp) — teks "Curious Sheva" utuh.
+  banner: { width: "100%", aspectRatio: 1600 / 427 },
   versionBadge: {
     marginTop: 15,
     paddingHorizontal: 10,
