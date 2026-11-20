@@ -55,6 +55,15 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     private external fun setNativeBassBoost(gain: Float)
     private external fun setNativeReverbPreset(preset: Int)
     private external fun setNativeHrtfEnabled(enabled: Boolean)
+    // Convolver — IR (2026-11-20): nama HARUS cocok dengan JNI di
+    // NativeDSPModule.cpp (lihat setNativeHrtfEnabled di atas).
+    private external fun setNativeConvolverEnabled(enabled: Boolean)
+    // Return status kLoad* ConvolverNode (0 = Ok, 1 = FileError,
+    // 2 = FormatError, 3 = TooLong, 4 = Silent, 5 = RateError).
+    private external fun nativeLoadConvolverIr(path: String): Int
+    private external fun nativeClearConvolverIr()
+    // IntArray 4 elemen: {loaded 0/1, sampleRateHz, taps, durationMs}.
+    private external fun nativeGetConvolverIrInfo(): IntArray
     private external fun setNativeEqEnabled(enabled: Boolean)
     private external fun setNativeBalance(balance: Float)
     private external fun toggleNativeExclusiveMode(enabled: Boolean)
@@ -262,6 +271,76 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
             setNativeHrtfEnabled(enabled)
             Log.i(TAG, "[DSP-TIMING] setHrtfEnabled enabled=$enabled native=${(System.nanoTime() - t0) / 1_000_000}ms")
             promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("DSP_ERROR", e.message)
+        }
+    }
+
+    // ===================== CONVOLVER — IMPULSE RESPONSE (2026-11-20) =====================
+    // IR .wav pilihan user (ConvolverNode sesudah reverb, sebelum HRTF).
+    // Toggle sendiri, DI LUAR preset EQ — pola setHrtfEnabled.
+    // loadConvolverIr resolve status kLoad* ConvolverNode (0 = Ok,
+    // 1 = FileError, 2 = FormatError, 3 = TooLong, 4 = Silent,
+    // 5 = RateError); pemanggil WAJIB memeriksa.
+    @ReactMethod
+    fun setConvolverEnabled(enabled: Boolean, sessionId: Int, promise: Promise) {
+        val t0 = System.nanoTime()
+        if (!engineAvailable) {
+            Log.i(TAG, "[DSP-TIMING] setConvolverEnabled enabled=$enabled native=${(System.nanoTime() - t0) / 1_000_000}ms (engine unavailable)")
+            promise.resolve(false); return
+        }
+        try {
+            setNativeConvolverEnabled(enabled)
+            Log.i(TAG, "[DSP-TIMING] setConvolverEnabled enabled=$enabled native=${(System.nanoTime() - t0) / 1_000_000}ms")
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("DSP_ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun loadConvolverIr(path: String, promise: Promise) {
+        if (!engineAvailable) {
+            promise.resolve(1); return
+        }
+        try {
+            promise.resolve(nativeLoadConvolverIr(path))
+        } catch (e: Exception) {
+            promise.reject("DSP_ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun clearConvolverIr(promise: Promise) {
+        if (!engineAvailable) {
+            promise.resolve(false); return
+        }
+        try {
+            nativeClearConvolverIr()
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("DSP_ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun getConvolverIrInfo(promise: Promise) {
+        if (!engineAvailable) {
+            val empty = Arguments.createMap()
+            empty.putBoolean("loaded", false)
+            empty.putInt("sampleRateHz", 0)
+            empty.putInt("taps", 0)
+            empty.putInt("durationMs", 0)
+            promise.resolve(empty); return
+        }
+        try {
+            val info = nativeGetConvolverIrInfo()
+            val result = Arguments.createMap()
+            result.putBoolean("loaded", info.size > 0 && info[0] != 0)
+            result.putInt("sampleRateHz", if (info.size > 1) info[1] else 0)
+            result.putInt("taps", if (info.size > 2) info[2] else 0)
+            result.putInt("durationMs", if (info.size > 3) info[3] else 0)
+            promise.resolve(result)
         } catch (e: Exception) {
             promise.reject("DSP_ERROR", e.message)
         }

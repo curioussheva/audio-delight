@@ -37,6 +37,22 @@ export interface Spec extends TurboModule {
   setVirtualizer(strength: number, sessionId: number): Promise<boolean>;
   setReverbPreset(preset: number, sessionId: number): Promise<boolean>;
   setHrtfEnabled(enabled: boolean, sessionId: number): Promise<boolean>;
+  // Convolver — IR (2026-11-20): toggle sendiri, DI LUAR preset EQ
+  // (keputusan yang sama dengan HRTF). loadConvolverIr resolve status
+  // kLoad* ConvolverNode — lihat ConvolverIrStatus di bawah; pemanggil
+  // WAJIB memeriksa (IR cacat ditolak, bukan diterapkan sebagian).
+  setConvolverEnabled(
+    enabled: boolean,
+    sessionId: number,
+  ): Promise<boolean>;
+  loadConvolverIr(path: string): Promise<number>;
+  clearConvolverIr(): Promise<boolean>;
+  getConvolverIrInfo(): Promise<{
+    loaded: boolean;
+    sampleRateHz: number;
+    taps: number;
+    durationMs: number;
+  }>;
   // Master EQ (P0-1, 2026-11-19): sakelar master "Pemrosesan DSP".
   // false = DSPChain passthrough bit-exact (DSPConfig.enabled).
   setEqEnabled(enabled: boolean, sessionId: number): Promise<boolean>;
@@ -170,5 +186,23 @@ export const ProcessingModeValue = {
 /** Tipe nilai enum di atas - untuk pemakaian JS/TS, BUKAN di signature spec. */
 export type ProcessingModeValueType =
   (typeof ProcessingModeValue)[keyof typeof ProcessingModeValue];
+
+/**
+ * Status load IR convolver (`IrLoadStatus` di C++,
+ * `dsp/convolution/IRLoader.h`, dan kLoad* di `ConvolverNode.h`).
+ * Jangan diacak - nomor ini dipakai langsung sebagai `jint` di JNI.
+ */
+export const ConvolverIrStatus = {
+  Ok: 0,
+  FileError: 1,
+  FormatError: 2,
+  TooLong: 3,
+  Silent: 4,
+  RateError: 5,
+} as const;
+
+/** Tipe nilai enum di atas - untuk pemakaian JS/TS, BUKAN di signature spec. */
+export type ConvolverIrStatusType =
+  (typeof ConvolverIrStatus)[keyof typeof ConvolverIrStatus];
 
 export default TurboModuleRegistry.getEnforcing<Spec>('NativeDSPModule');

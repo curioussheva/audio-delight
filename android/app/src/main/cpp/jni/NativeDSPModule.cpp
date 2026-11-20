@@ -158,6 +158,106 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeHrtfEnabled(
 }
 
 // =====================================================
+// CONVOLVER — IMPULSE RESPONSE (2026-11-20)
+// =====================================================
+//
+// Nama HARUS cocok dengan `external fun` di Kotlin: salah nama =
+// UnsatisfiedLinkError.
+//
+// nativeLoadConvolverIr mengembalikan status kLoad* ConvolverNode
+// (angka sama dengan IrLoadStatus / ConvolverIrStatus JS): 0 = Ok,
+// 1 = FileError, 2 = FormatError, 3 = TooLong, 4 = Silent,
+// 5 = RateError. Pemanggil WAJIB memeriksa.
+// nativeGetConvolverIrInfo mengembalikan jintArray 4 elemen:
+// {loaded 0/1, sampleRateHz, taps, durationMs} pada laju stream
+// saat ini (0 semua bila tidak ada IR).
+
+JNIEXPORT void JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_setNativeConvolverEnabled(
+    JNIEnv* env,
+    jobject,
+    jboolean enabled
+) {
+    pristine::jni::guardedVoid(env, "setNativeConvolverEnabled", [&] {
+
+    EngineManager::get()
+        .setConvolverEnabled(enabled == JNI_TRUE);
+    });
+}
+
+JNIEXPORT jint JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_nativeLoadConvolverIr(
+    JNIEnv* env,
+    jobject,
+    jstring path
+) {
+    return pristine::jni::guarded<jint>(env, "nativeLoadConvolverIr", 1, [&]() -> jint {
+
+    if (path == nullptr) {
+        return static_cast<jint>(1);
+    }
+
+    const char* chars =
+        env->GetStringUTFChars(path, nullptr);
+
+    if (chars == nullptr) {
+        return static_cast<jint>(1);
+    }
+
+    const int status =
+        EngineManager::get().loadConvolverIr(
+            std::string(chars)
+        );
+
+    env->ReleaseStringUTFChars(path, chars);
+
+    return static_cast<jint>(status);
+    });
+}
+
+JNIEXPORT void JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_nativeClearConvolverIr(
+    JNIEnv* env,
+    jobject
+) {
+    pristine::jni::guardedVoid(env, "nativeClearConvolverIr", [&] {
+
+    EngineManager::get()
+        .clearConvolverIr();
+    });
+}
+
+JNIEXPORT jintArray JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_nativeGetConvolverIrInfo(
+    JNIEnv* env,
+    jobject
+) {
+    return pristine::jni::guarded<jintArray>(env, "nativeGetConvolverIrInfo", nullptr, [&]() -> jintArray {
+
+    jint info[4] = {
+        EngineManager::get().convolverIrLoaded() ? 1 : 0,
+        static_cast<jint>(
+            EngineManager::get().convolverIrSampleRateHz()
+        ),
+        static_cast<jint>(
+            EngineManager::get().convolverIrTaps()
+        ),
+        static_cast<jint>(
+            EngineManager::get().convolverIrDurationMs()
+        ),
+    };
+
+    jintArray result = env->NewIntArray(4);
+    if (result == nullptr) {
+        return static_cast<jintArray>(nullptr);
+    }
+
+    env->SetIntArrayRegion(result, 0, 4, info);
+    return result;
+    });
+}
+
+// =====================================================
 // MASTER EQ (P0-1, 2026-11-19)
 // =====================================================
 //
