@@ -3,8 +3,15 @@ import {
   Playlist,
   CreatePlaylistDTO,
   UpdatePlaylistDTO,
+  SmartPlaylistSummary,
 } from "@/features/playlist/types";
 import { Song } from "@/shared/types/audio";
+import {
+  SMART_PLAYLIST_DEFS,
+  SMART_PLAYLIST_LIMITS,
+  SmartPlaylistId,
+} from "@/features/playlist/utils/smartPlaylists";
+import { LOSSLESS_CODECS_SQL_LIST } from "@/shared/utils/audioQuality";
 
 class PlaylistService {
   // Cache promise inisialisasi supaya PRAGMA tidak diulang di setiap
@@ -455,6 +462,11 @@ class PlaylistService {
   }
 
   // ===== SMART PLAYLIST =====
+  // LEGACY (2026-11-20): createSmartPlaylist di bawah membuat SNAPSHOT
+  // statis sekali jalan (playlist DB biasa) — isinya basi begitu library
+  // berubah. JANGAN dipakai untuk auto-playlist baru; yang live adalah
+  // getSmartPlaylist/getSmartPlaylistSummaries di seksi STATISTIK.
+  // Method ini dipertahankan supaya perilaku lama tidak berubah.
 
   async createSmartPlaylist(
     name: string,
@@ -531,9 +543,20 @@ class PlaylistService {
     return result.rows?._array[0]?.total || 0;
   }
 
+  // Smart playlist LIVE (virtual — bukan baris `playlists`): tiap
+  // pemanggilan membaca SQLite saat itu juga, jadi isi selalu segar
+  // mengikuti library + riwayat putar. Aturan di sini adalah cermin SQL
+  // dari selector murni di utils/smartPlaylists.ts — ubah berpasangan.
+  //
+  // PERBAIKAN 2026-11-20: getMostPlayed lama mengurutkan pakai kolom
+  // `lastPlayed` yang TIDAK ADA di skema (kolomnya `lastPlayedAt`,
+  // lihat shared/lib/sqlite.ts) — query itu pasti melempar begitu
+  // dipanggil; selama ini tidak ada pemanggil sehingga tidak ketahuan.
+  // Sekaligus: hanya lagu yang pernah diputar (playCount > 0) yang
+  // masuk — selaras dengan SongQueries.getTopPlayed.
   async getMostPlayed(limit: number = 10): Promise<Song[]> {
     const result = db.execute(
-      "SELECT * FROM songs ORDER BY playCount DESC, lastPlayed DESC LIMIT ?",
+      "SELECT * FROM songs WHERE playCount > 0 ORDER BY playCount DESC, lastPlayedAt DESC LIMIT ?",
       [limit],
     );
     const rows = result.rows?._array || [];
@@ -547,6 +570,119 @@ class PlaylistService {
     );
     const rows = result.rows?._array || [];
     return rows.map((row) => this.mapRowToSong(row));
+  }
+
+  // Lossless ditentukan codec saja (LOSSLESS_CODECS_SQL_LIST — daftar
+  // yang sama dengan isLosslessCodec di audioQuality.ts). UPPER(codec)
+  // supaya codec yang tersimpan huruf kecil tetap ketemu — SQL `IN`
+  // case-sensitive, sementara helper murni menormalkan huruf besar.
+  async getLosslessSongs(limit?: number): Promise<Song[]> {
+    const sql =
+      `SELECT * FROM songs WHERE UPPER(codec) IN (${LOSSLESS_CODECS_SQL_LIST}) ORDER BY title ASC` +
+      (limit !== undefined ? " LIMIT ?" : "");
+    const result = db.execute(
+      sql,
+      limit !== undefined ? [limit] : [],
+    );
+    const rows = result.rows?._array || [];
+    return rows.map((row) => this.mapRowToSong(row));
+  }
+
+  async getNeverPlayedSongs(limit?: number): Promise<Song[]> {
+    const sql =
+      "SELECT * FROM songs WHERE playCount IS NULL OR playCount = 0 ORDER BY dateAdded DESC, title ASC" +
+      (limit !== undefined ? " LIMIT ?" : "");
+    const result = db.execute(
+      sql,
+      limit !== undefined ? [limit] : [],
+    );
+    const rows = result.rows?._array || [];
+    return rows.map((row) => this.mapRowToSong(row));
+  }
+
+  // Satu smart playlist lengkap (dipakai detail view saat user tap
+  // barisnya). `createdAt`/`updatedAt` 0: virtual, bukan dibuat user.
+  async getSmartPlaylist(id: SmartPlaylistId): Promise<Playlist> {
+    await this.ensureInitialized();
+
+    const def = SMART_PLAYLIST_DEFS[id];
+    let songs: Song[];
+    switch (id) {
+      case "smart:recent":
+        songs = await this.getRecentlyAdded(
+          SMART_PLAYLIST_LIMITS["smart:recent"],
+        );
+        break;
+      case "smart:most-played":
+        songs = await this.getMostPlayed(
+          SMART_PLAYLIST_LIMITS["smart:most-played"],
+        );
+        break;
+      case "smart:lossless":
+        songs = await this.getLosslessSongs();
+        break;
+      case "smart:never-played":
+        songs = await this.getNeverPlayedSongs();
+        break;
+    }
+
+    return {
+      id,
+      name: def.name,
+      description: def.description,
+      songs,
+      songIds: songs.map((s) => s.id),
+      createdAt: 0,
+      updatedAt: 0,
+      songCount: songs.length,
+      duration: songs.reduce((sum, s) => sum + s.duration, 0),
+      isSmart: true,
+    };
+  }
+
+  // Hitungan tiap smart playlist untuk baris daftar (COUNT(*) saja —
+  // tanpa memuat lagu). Count recent/most-played dibatasi limit
+  // tampilannya, supaya angka di baris = jumlah lagu yang akan dibuka.
+  async getSmartPlaylistSummaries(): Promise<SmartPlaylistSummary[]> {
+    await this.ensureInitialized();
+
+    const count = (sql: string, params: unknown[] = []): number => {
+      const result = db.execute(sql, params);
+      return result.rows?._array[0]?.count || 0;
+    };
+
+    const recentTotal = count("SELECT COUNT(*) as count FROM songs");
+    const mostPlayedTotal = count(
+      "SELECT COUNT(*) as count FROM songs WHERE playCount > 0",
+    );
+    const losslessTotal = count(
+      `SELECT COUNT(*) as count FROM songs WHERE UPPER(codec) IN (${LOSSLESS_CODECS_SQL_LIST})`,
+    );
+    const neverPlayedTotal = count(
+      "SELECT COUNT(*) as count FROM songs WHERE playCount IS NULL OR playCount = 0",
+    );
+
+    const counts: Record<SmartPlaylistId, number> = {
+      "smart:recent": Math.min(
+        recentTotal,
+        SMART_PLAYLIST_LIMITS["smart:recent"],
+      ),
+      "smart:most-played": Math.min(
+        mostPlayedTotal,
+        SMART_PLAYLIST_LIMITS["smart:most-played"],
+      ),
+      "smart:lossless": losslessTotal,
+      "smart:never-played": neverPlayedTotal,
+    };
+
+    return (Object.keys(SMART_PLAYLIST_DEFS) as SmartPlaylistId[]).map(
+      (id) => ({
+        id,
+        name: SMART_PLAYLIST_DEFS[id].name,
+        description: SMART_PLAYLIST_DEFS[id].description,
+        count: counts[id],
+      }),
+    );
   }
 }
 
