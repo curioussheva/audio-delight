@@ -80,7 +80,6 @@ add_executable(test_pipeline_eq_bypass
   ${DSP_CHAIN_SOURCES}
   ${PRISTINE_CPP}/core/AudioPipeline.cpp
   ${PRISTINE_CPP}/core/ImmersiveStage.cpp
-  ${PRISTINE_CPP}/dsp/immersive/BinauralRenderer.cpp
   ${PRISTINE_CPP}/dsp/immersive/BrainwaveGenerator.cpp
   ${PRISTINE_CPP}/dsp/immersive/FFTResonanceAnalyzer.cpp
   ${PRISTINE_CPP}/dsp/immersive/HarmonicExciter.cpp

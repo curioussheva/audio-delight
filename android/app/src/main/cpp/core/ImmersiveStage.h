@@ -17,7 +17,6 @@
 #include "../dsp/immersive/BrainwaveGenerator.h"
 #include "../dsp/immersive/HarmonicExciter.h"
 #include "../dsp/immersive/SpatialFieldProcessor.h"
-#include "../dsp/immersive/BinauralRenderer.h"
 
 namespace pristine {
 
@@ -37,10 +36,6 @@ namespace pristine {
 //   2. Harmonic exciter     - menambah harmonisa
 //   3. Spatial field        - pelebaran stereo
 //   4. Brainwave generator  - binaural beat (ditambahkan ke sinyal)
-//
-// BinauralRenderer sengaja TIDAK aktif: ia butuh input mono dan hanya masuk
-// akal untuk headphone. Sama seperti kelas lamanya, ini disimpan untuk dipakai
-// nanti, bukan dihapus.
 class ImmersiveStage final {
 public:
 
@@ -79,9 +74,6 @@ private:
     dsp::HarmonicExciter mHarmonic;
 
     dsp::SpatialFieldProcessor mSpatial;
-
-    // Belum dipakai di process() - lihat catatan di atas.
-    dsp::BinauralRenderer mBinaural;
 
     int32_t mSampleRate = 48000;
 

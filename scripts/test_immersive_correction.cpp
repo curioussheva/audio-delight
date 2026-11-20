@@ -66,7 +66,6 @@
 //     android/app/src/main/cpp/dsp/immersive/BrainwaveGenerator.cpp \
 //     android/app/src/main/cpp/dsp/immersive/HarmonicExciter.cpp \
 //     android/app/src/main/cpp/dsp/immersive/SpatialFieldProcessor.cpp \
-//     android/app/src/main/cpp/dsp/immersive/BinauralRenderer.cpp \
 //     -o /tmp/test_immersive_correction && /tmp/test_immersive_correction
 
 #include <cmath>

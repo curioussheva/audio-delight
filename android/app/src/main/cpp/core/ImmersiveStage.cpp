@@ -145,7 +145,6 @@ void ImmersiveStage::reset() {
     mBrainwave.reset();
     mHarmonic.reset();
     mSpatial.reset();
-    mBinaural.reset();
 }
 
 } // namespace pristine
