@@ -102,6 +102,15 @@ object WidgetStateStore {
             true
         }
         if (changed) {
+            // DIAGNOSTIK SEMENTARA (2026-11-20): satu baris per update
+            // widget yang benar-benar didorong ke launcher (playing,
+            // judul, posisi). Dev-only via BuildConfig.DEBUG; ~1 baris/
+            // detik saat lagu jalan (posisi bergerak), 0 saat pause.
+            // Hapus blok ini bila kebekuan widget sudah terjawab.
+            if (com.pristineaudio.app.BuildConfig.DEBUG) {
+                android.util.Log.d("WidgetStateStore",
+                    "[WIDGET] update playing=${state.isPlaying} track=\"${state.title}\" artist=\"${state.artist}\" pos=${state.positionMs / 1000}s/${state.durationMs / 1000}s art=${artworkChanged}")
+            }
             PristineAudioWidgetProvider.updateAll(context)
             PristineAudioWidgetLargeProvider.updateAll(context)
         }
