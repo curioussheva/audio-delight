@@ -10,6 +10,7 @@ import { audioEngine } from "@/features/player/api/engine";
 import { NativeDSPModule } from "@/features/equalizer/api/nativeInterface";
 import { useHrtfStore } from "@/features/hrtf/store/hrtfStore";
 import { useConvolverStore } from "@/features/convolver/store/convolverStore";
+import { useCrossfadeStore } from "@/features/crossfade/store/crossfadeStore";
 import { useHeadphoneStore } from "@/features/headphone/store/headphoneStore";
 import { getEffectiveMasterGain, useReplayGainStore } from "@/features/replaygain/store/replayGainStore";
 
@@ -178,6 +179,10 @@ finalSessionId = sessionResult?.sessionId ?? 0;
     : 0;
   // HRTF: flag dari store sendiri (bukan dari state EQ — di luar preset).
   const hrtf = useHrtfStore.getState().isHrtfEnabled;
+  // Crossfade (2026-11-20): durasi dari store sendiri (di luar preset,
+  // sama seperti HRTF). Hidup di PlaybackController, bukan rantai DSP —
+  // tapi dipulihkan di sini juga supaya satu apply menutup semua efek.
+  const crossfade = useCrossfadeStore.getState().crossfadeSeconds;
   // Convolver (2026-11-20): IR + toggle dari store sendiri (di luar
   // preset, sama seperti HRTF). Dipulihkan lewat restoreToNative di
   // entri efek di bawah — BUKAN di sini, karena restore harus
@@ -210,6 +215,11 @@ finalSessionId = sessionResult?.sessionId ?? 0;
     ["setReverbPreset", () => NativeDSPModule.setReverbPreset(reverb, finalSessionId)],
     // HRTF (2026-11-19): flag dari hrtfStore — di luar preset.
     ["setHrtfEnabled", () => NativeDSPModule.setHrtfEnabled(hrtf, finalSessionId)],
+    // Crossfade (2026-11-20): durasi dari crossfadeStore — di luar
+    // preset. restoreToNative mendorong nilai tersimpan (0 = mati =
+    // perilaku lama). Bukan lewat NativeDSPModule langsung di sini
+    // supaya logika push (createAudioSession + clamp) satu tempat.
+    ["setCrossfadeSeconds", () => useCrossfadeStore.getState().restoreToNative()],
     // Convolver (2026-11-20): IR + toggle dari convolverStore — di
     // luar preset. SATU entri gabungan (bukan dua entri Promise.all):
     // load IR dulu, baru toggle — urutan wajib karena native
@@ -255,7 +265,7 @@ finalSessionId = sessionResult?.sessionId ?? 0;
   const perEffect = results
     .map((r) => `${r.name}:${Math.round(r.ms)}ms`)
     .join(" ");
-  const detail = `(trigger: ${trigger}) in ${Math.round(totalMs)}ms (${perEffect}) preset=${activePresetId ?? "?"} bass=${bass} widener=${virtualizer} reverb=${reverb} hrtf=${hrtf ? 1 : 0} conv=${convolver.isConvolverEnabled ? 1 : 0}(${convolver.ir?.name ?? "-"}) gain=${gain.toFixed(2)} gains=[${gains.join(",")}]`;
+  const detail = `(trigger: ${trigger}) in ${Math.round(totalMs)}ms (${perEffect}) preset=${activePresetId ?? "?"} bass=${bass} widener=${virtualizer} reverb=${reverb} hrtf=${hrtf ? 1 : 0} conv=${convolver.isConvolverEnabled ? 1 : 0}(${convolver.ir?.name ?? "-"}) xf=${crossfade}s gain=${gain.toFixed(2)} gains=[${gains.join(",")}]`;
   if (results.every((r) => r.ok)) {
     console.log(`[DSP] Applied to Session: ${finalSessionId} ${detail}`);
   } else {
@@ -466,6 +476,18 @@ export const useEqualizerStore = create<EqualizerStore>()(
 
           if (get().isEQEnabled && sessionId !== -1) {
             await applyAllEffectsToNative(get(), "initialize");
+          }
+
+          // Crossfade (2026-11-20): restore DI LUAR gate EQ — nilai
+          // ini hidup di PlaybackController (fade track), bukan di
+          // rantai DSP, jadi harus pulih walau EQ master mati (mode
+          // DSP dengan EQ mati tetap mem-fade ekor lagu). applyAll
+          // di atas juga mendorongnya bila EQ menyala; pemulihan di
+          // sini menutup kasus EQ mati.
+          try {
+            await useCrossfadeStore.getState().restoreToNative();
+          } catch (e) {
+            console.error("[EQ Store] restore crossfade gagal:", e);
           }
         } catch (error) {
           set({ isInitialized: true });
