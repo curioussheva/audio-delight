@@ -1,5 +1,5 @@
 /**
- * autoEnrichingGuard — gerbang Auto Enriching (toggle baru, default ON).
+ * autoEnrichingGuard — gerbang Auto Enriching (toggle, default OFF sejak 2026-11-20).
  *
  * Start OTOMATIS worker enrichment (pasca initial/resume scan,
  * background task, autoScan) hanya bila toggle ON. Aksi eksplisit user
@@ -9,7 +9,7 @@
 import { shouldAutoStartEnrichmentWorker } from "../../../features/library/services/autoEnrichingGuard";
 
 describe("shouldAutoStartEnrichmentWorker", () => {
-  it("ON (default) -> worker otomatis boleh jalan", () => {
+  it("ON -> worker otomatis boleh jalan", () => {
     expect(
       shouldAutoStartEnrichmentWorker({ isAutoEnrichingEnabled: true }),
     ).toBe(true);

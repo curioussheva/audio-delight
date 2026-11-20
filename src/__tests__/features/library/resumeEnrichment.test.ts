@@ -6,7 +6,7 @@
  * di sini mengikuti pola ScanDiffEngine.test.ts.
  *
  * Auto Enriching (2026-11-18): start OTOMATIS worker digerbang toggle
- * Auto Enriching (default ON). OFF = lagu baru tetap diantre, worker
+ * Auto Enriching (default OFF sejak 2026-11-20). OFF = lagu baru tetap diantre, worker
  * tidak di-start.
  */
 jest.mock("../../../features/library/services/MetadataEnricher", () => ({
