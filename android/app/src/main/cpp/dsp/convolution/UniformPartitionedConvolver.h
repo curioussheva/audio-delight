@@ -163,8 +163,6 @@ public:
         return mKernelGeneration;
     }
 
-private:
-
     // Pasang kernel yang diumumkan setKernelPartitioned (bila ada):
     // balik slot aktif + ganti FDL bila sudah disiapkan + bersihkan
     // tail dan FDL (state kernel lama tidak berlaku untuk kernel
@@ -172,7 +170,16 @@ private:
     // No-op bila tidak ada yang pending. Dipanggil di awal
     // process() (audio thread) dan di akhir prepare() (sebelum audio
     // jalan). Tanpa alokasi.
+    //
+    // PUBLIK supaya ConvolverNode bisa memasang kernel SEBELUM
+    // membaca kernelGeneration() di process()-nya: bila install
+    // hanya terjadi di dalam process() convolver (sesudah node
+    // membaca generasi), node melihat generasi baru satu panggilan
+    // terlambat — wet yang sudah settle ke 1 ditenggelamkan lagi
+    // tanpa sebab (bug nyata, tertangkap host test 2026-11-20).
     bool installPendingKernel();
+
+private:
 
     // Proses SATU blok penuh dari depan FIFO input; hasilnya (256
     // sampel, sudah overlap-add dengan tail) ditambahkan ke FIFO

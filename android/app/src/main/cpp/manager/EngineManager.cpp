@@ -1319,6 +1319,53 @@ void EngineManager::setHrtfEnabled(
     );
 }
 
+// =====================================================
+// CONVOLVER — IMPULSE RESPONSE (2026-11-20)
+// =====================================================
+
+void EngineManager::setConvolverEnabled(
+    bool enabled
+) {
+
+    mEngine.setConvolverEnabled(
+        enabled
+    );
+}
+
+int EngineManager::loadConvolverIr(
+    const std::string& path
+) {
+
+    return mEngine.loadConvolverIr(
+        path
+    );
+}
+
+void EngineManager::clearConvolverIr() {
+
+    mEngine.clearConvolverIr();
+}
+
+bool EngineManager::convolverIrLoaded() const {
+
+    return mEngine.convolverIrLoaded();
+}
+
+int EngineManager::convolverIrSampleRateHz() const {
+
+    return mEngine.convolverIrSampleRateHz();
+}
+
+int EngineManager::convolverIrTaps() const {
+
+    return mEngine.convolverIrTaps();
+}
+
+int EngineManager::convolverIrDurationMs() const {
+
+    return mEngine.convolverIrDurationMs();
+}
+
 void EngineManager::setEqEnabled(
     bool enabled
 ) {

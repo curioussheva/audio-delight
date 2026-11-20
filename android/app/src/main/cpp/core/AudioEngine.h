@@ -191,6 +191,30 @@ public:
         bool enabled
     );
 
+    // Convolver (2026-11-20): impulse response loader (ConvolverNode).
+    // Toggle disimpan di AudioState, dibaca tiap buffer oleh
+    // updateParameters(). IR-nya dimuat lewat loadConvolverIr()
+    // (parse WAV di thread pemanggil, diteruskan AudioPipeline ->
+    // DSPChain -> node). Return status kLoad* ConvolverNode — pemanggil
+    // WAJIB memeriksa: IR cacat ditolak, bukan diterapkan sebagian.
+    void setConvolverEnabled(
+        bool enabled
+    );
+
+    int loadConvolverIr(
+        const std::string& path
+    );
+
+    void clearConvolverIr();
+
+    bool convolverIrLoaded() const;
+
+    int convolverIrSampleRateHz() const;
+
+    int convolverIrTaps() const;
+
+    int convolverIrDurationMs() const;
+
     // Master EQ (P0-1, 2026-11-19): sakelar master "Pemrosesan DSP".
     // Disimpan di AudioState, dibaca tiap buffer oleh updateParameters(),
     // diteruskan AudioPipeline -> DSPConfig.enabled.

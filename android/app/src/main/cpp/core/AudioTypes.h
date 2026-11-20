@@ -197,6 +197,14 @@ struct DSPParameters {
     bool hrtfEnabled =
         false;
 
+    // Convolver (2026-11-20): impulse response loader, toggle sendiri
+    // di luar preset EQ (keputusan yang sama dengan HRTF). Dibaca
+    // updateParameters() tiap buffer, sama seperti hrtfEnabled di
+    // atas. IR-nya sendiri tinggal di DSPChain (loadConvolverIr),
+    // bukan di sini.
+    bool convolverEnabled =
+        false;
+
     // Master EQ (P0-1, 2026-11-19): sakelar master "Pemrosesan DSP".
     // true = rantai DSP jalan normal; false = DSPChain passthrough
     // (DSPConfig.enabled = false). Default true = perilaku sekarang

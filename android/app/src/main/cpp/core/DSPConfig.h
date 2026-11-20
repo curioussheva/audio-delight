@@ -85,8 +85,28 @@ struct DSPConfig {
     bool hrtfEnabled =
         false;
 
+    // =============================================
+    // CONVOLVER (2026-11-20)
+    // =============================================
+    //
+    // Impulse response loader (ConvolverNode, sesudah reverb, sebelum
+    // HRTF — lihat DSPChain::buildGraph). Toggle sendiri, DI LUAR
+    // preset EQ (keputusan yang sama dengan HRTF): preset adalah
+    // kurva nada, tidak boleh diam-diam menghidupkan efek ruang.
+    // IR-nya sendiri TIDAK di sini (terlalu besar) — ia tinggal di
+    // DSPChain dan dimuat lewat loadConvolverIr().
+    //
+    // Catatan nama: field `convolverEnabled` PERNAH ada di struct ini
+    // dan dihapus 2026-11-10 karena tidak pernah dibaca (komentar lama
+    // di bawah menyebutnya). Field ini BUKAN yang lama dihidupkan
+    // kembali tanpa arti — sekarang ia DIBACA ConvolverNode::
+    // applyConfig, jadi penghapusan lama itu tidak berlaku lagi.
+
+    bool convolverEnabled =
+        false;
+
     // (Field immersiveEnabled/solfeggioFreq/brainwaveFreq/resonanceIntensity/
-    // convolverEnabled dihapus 2026-11-10: tidak pernah dibaca — ImmersiveStage
+    // dihapus 2026-11-10: tidak pernah dibaca — ImmersiveStage
     // membaca parameter langsung dari DSPParameters, bukan lewat DSPConfig.
     // Lihat dspConfigEquals yang memang sengaja tidak membandingkannya.)
 
@@ -127,6 +147,8 @@ struct DSPConfig {
         reverbPreset = 0;
 
         hrtfEnabled = false;
+
+        convolverEnabled = false;
 
         headphoneCorrectionEnabled =
             false;

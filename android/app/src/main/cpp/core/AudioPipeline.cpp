@@ -411,6 +411,9 @@ bool dspConfigEquals(
     // HRTF (2026-11-19): flag WAJIB dibandingkan — alasan yang sama
     // persis: tanpa ini toggle HRTF tidak terkirim ke rantai.
     if (a.hrtfEnabled != b.hrtfEnabled) return false;
+    // Convolver (2026-11-20): flag WAJIB dibandingkan — alasan yang
+    // sama persis: tanpa ini toggle convolver tidak terkirim ke rantai.
+    if (a.convolverEnabled != b.convolverEnabled) return false;
 
     for (int i = 0; i < 10; ++i) {
         if (a.eqGain[i] != b.eqGain[i]) return false;
@@ -526,6 +529,7 @@ void AudioPipeline::applyDSPConfig(
     mDspConfig.bassBoost = params.bassBoostGain;
     mDspConfig.reverbPreset = params.reverbPreset;
     mDspConfig.hrtfEnabled = params.hrtfEnabled;
+    mDspConfig.convolverEnabled = params.convolverEnabled;
 
     for (int i = 0; i < 10; ++i) {
         mDspConfig.eqGain[i] = params.eqGains[i];
@@ -560,6 +564,42 @@ void AudioPipeline::applyDSPConfig(
 
     mAppliedConfig = mDspConfig;
     mConfigApplied = true;
+}
+
+// =====================================================
+// CONVOLVER — IMPULSE RESPONSE (2026-11-20)
+// =====================================================
+
+int AudioPipeline::loadConvolverIr(
+    const std::string& path
+) {
+
+    return mDSP.loadConvolverIr(path);
+}
+
+void AudioPipeline::clearConvolverIr() {
+
+    mDSP.clearConvolverIr();
+}
+
+bool AudioPipeline::convolverIrLoaded() const {
+
+    return mDSP.convolverIrLoaded();
+}
+
+int AudioPipeline::convolverIrSampleRateHz() const {
+
+    return mDSP.convolverIrSampleRateHz();
+}
+
+int AudioPipeline::convolverIrTaps() const {
+
+    return mDSP.convolverIrTaps();
+}
+
+int AudioPipeline::convolverIrDurationMs() const {
+
+    return mDSP.convolverIrDurationMs();
 }
 
 // =====================================================

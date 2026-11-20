@@ -48,6 +48,27 @@ public:
     // satu implementasi, dua pemanggil.
     void noteMode(ProcessingMode mode) noexcept;
 
+    // =============================================
+    // CONVOLVER — IMPULSE RESPONSE (2026-11-20)
+    // =============================================
+    //
+    // Teruskan ke DSPChain (mDSP). loadConvolverIr return status
+    // kLoad* ConvolverNode (angka sama dengan IrLoadStatus /
+    // ConvolverIrStatus JS).
+    int loadConvolverIr(
+        const std::string& path
+    );
+
+    void clearConvolverIr();
+
+    bool convolverIrLoaded() const;
+
+    int convolverIrSampleRateHz() const;
+
+    int convolverIrTaps() const;
+
+    int convolverIrDurationMs() const;
+
 private:
 
     // =============================================

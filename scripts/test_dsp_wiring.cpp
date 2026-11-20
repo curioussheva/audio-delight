@@ -18,6 +18,12 @@
 //     android/app/src/main/cpp/dsp/graph/DSPGraph.cpp \
 //     android/app/src/main/cpp/dsp/tone/EQNode.cpp \
 //     android/app/src/main/cpp/dsp/tone/GainNode.cpp \
+//     android/app/src/main/cpp/dsp/tone/ReverbNode.cpp \
+//     android/app/src/main/cpp/dsp/hrtf/HRTFNode.cpp \
+//     android/app/src/main/cpp/dsp/convolution/ConvolverNode.cpp \
+//     android/app/src/main/cpp/dsp/convolution/IRLoader.cpp \
+//     android/app/src/main/cpp/dsp/convolution/UniformPartitionedConvolver.cpp \
+//     android/app/src/main/cpp/fft/FFTPlan.cpp \
 //     android/app/src/main/cpp/dsp/spatial/StereoWidenerNode.cpp \
 //     android/app/src/main/cpp/dsp/dynamics/LimiterNode.cpp \
 //     android/app/src/main/cpp/dsp/EQProcessor.cpp \
@@ -25,6 +31,9 @@
 //     android/app/src/main/cpp/dsp/headphone/HeadphoneCorrectionNode.cpp \
 //     android/app/src/main/cpp/dsp/BiquadCascade.cpp \
 //     -o "$TMPDIR/test_dsp_wiring"
+// (2026-11-20: daftar ini sempat basi — ReverbNode/HRTFNode tidak
+// tercantum sejak ditambahkan ke rantai, jadi build per komentar ini
+// gagal link; dilengkapi lagi bersama ConvolverNode.)
 
 #include <cmath>
 #include <cstdio>

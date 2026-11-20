@@ -495,6 +495,56 @@ void AudioEngine::setHrtfEnabled(
 }
 
 // =====================================================
+// CONVOLVER — IMPULSE RESPONSE (2026-11-20)
+// =====================================================
+//
+// IR .wav pilihan user (ConvolverNode, sesudah reverb, sebelum
+// HRTF). Toggle disimpan di AudioState dan dibaca
+// `AudioCallback::updateParameters()` tiap buffer, lalu diteruskan
+// AudioPipeline -> DSPChain -> ConvolverNode. IR-nya dimuat lewat
+// loadConvolverIr(): parse WAV di thread pemanggil, diteruskan
+// AudioPipeline -> DSPChain (master copy) -> node.
+
+void AudioEngine::setConvolverEnabled(
+    bool enabled
+) {
+
+    mState.setConvolverEnabled(enabled);
+}
+
+int AudioEngine::loadConvolverIr(
+    const std::string& path
+) {
+
+    return mPipeline.loadConvolverIr(path);
+}
+
+void AudioEngine::clearConvolverIr() {
+
+    mPipeline.clearConvolverIr();
+}
+
+bool AudioEngine::convolverIrLoaded() const {
+
+    return mPipeline.convolverIrLoaded();
+}
+
+int AudioEngine::convolverIrSampleRateHz() const {
+
+    return mPipeline.convolverIrSampleRateHz();
+}
+
+int AudioEngine::convolverIrTaps() const {
+
+    return mPipeline.convolverIrTaps();
+}
+
+int AudioEngine::convolverIrDurationMs() const {
+
+    return mPipeline.convolverIrDurationMs();
+}
+
+// =====================================================
 // MASTER EQ (P0-1, 2026-11-19)
 // =====================================================
 //

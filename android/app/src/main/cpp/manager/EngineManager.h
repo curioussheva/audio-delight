@@ -200,6 +200,17 @@ public:
     void setHrtfEnabled(bool enabled);
     void setEqEnabled(bool enabled);
 
+    // Convolver — IR (2026-11-20). loadConvolverIr return status
+    // kLoad* ConvolverNode (angka sama dengan IrLoadStatus /
+    // ConvolverIrStatus JS).
+    void setConvolverEnabled(bool enabled);
+    int loadConvolverIr(const std::string& path);
+    void clearConvolverIr();
+    bool convolverIrLoaded() const;
+    int convolverIrSampleRateHz() const;
+    int convolverIrTaps() const;
+    int convolverIrDurationMs() const;
+
     // =============================================
     // KOREKSI HEADPHONE (Fase D)
     // =============================================

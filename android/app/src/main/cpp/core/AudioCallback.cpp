@@ -379,6 +379,9 @@ void AudioCallback::updateParameters() {
     // HRTF (2026-11-19): virtual speaker ±30°.
     mParams.hrtfEnabled = mState.hrtfEnabled();
 
+    // Convolver (2026-11-20): impulse response loader.
+    mParams.convolverEnabled = mState.convolverEnabled();
+
     // Master EQ (P0-1, 2026-11-19): sakelar master "Pemrosesan DSP".
     // false = DSPChain passthrough (lihat DSPConfig.enabled).
     mParams.eqEnabled = mState.eqEnabled();

@@ -527,6 +527,32 @@ public:
     }
 
     // =============================================
+    // CONVOLVER (2026-11-20)
+    // =============================================
+    //
+    // Impulse response loader (ConvolverNode). Boolean polos, tanpa
+    // clamp — pola yang sama dengan setHrtfEnabled di atas. Dibaca
+    // AudioCallback::updateParameters() tiap buffer. IR-nya sendiri
+    // TIDAK lewat sini (terlalu besar untuk atomic/seqlock) — ia
+    // tinggal di DSPChain dan dimuat lewat loadConvolverIr().
+    inline void setConvolverEnabled(
+        bool value
+    ) {
+
+        mConvolverEnabled.store(
+            value,
+            std::memory_order_release
+        );
+    }
+
+    inline bool convolverEnabled() const {
+
+        return mConvolverEnabled.load(
+            std::memory_order_acquire
+        );
+    }
+
+    // =============================================
     // MASTER EQ (P0-1, 2026-11-19)
     // =============================================
     //
@@ -847,6 +873,10 @@ private:
     // HRTF (2026-11-19): virtual speaker ±30°, toggle sendiri.
     std::atomic<bool>
         mHrtfEnabled{false};
+
+    // Convolver (2026-11-20): IR loader, toggle sendiri.
+    std::atomic<bool>
+        mConvolverEnabled{false};
 
     // Master EQ (P0-1, 2026-11-19): sakelar master "Pemrosesan DSP".
     // Default true = rantai DSP jalan (perilaku sekarang).
