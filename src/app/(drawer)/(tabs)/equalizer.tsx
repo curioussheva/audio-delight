@@ -76,6 +76,7 @@ import {
 } from "@/features/equalizer/api/correctionResponse";
 import { MODE_INFO } from "@/features/equalizer/api/modeInfo";
 import { SolfeggioSubscreen } from "@/features/equalizer/components/SolfeggioSubscreen";
+import { TuningControl } from "@/features/player/components/TuningControl";
 import { BitPerfectSubscreen } from "@/features/equalizer/components/BitPerfectSubscreen";
 import { useBitPerfectStatus } from "@/features/player/hooks/useBitPerfectStatus";
 import { describeBitPerfectPath } from "@/features/player/api/bitPerfectPath";
@@ -1449,6 +1450,44 @@ export default function EqualizerScreen() {
               </View>
             </View>
           )}
+
+          {/* 6. TUNING (NADA DASAR) — kontrol yang sama dengan Solfeggio
+              (TuningControl bersama, tanpa state baru): preset A=440 /
+              A=432, stepper ±5 sen, rentang ±100 sen. Retune GLOBAL
+              (playerStore.tuningCents): berlaku di DSP + Solfeggio dan
+              TIDAK ikut sakelar master di atas (setTuningCents →
+              setPitchRatio tidak memeriksa isEQEnabled). Diletakkan di
+              luar seksi EFEK supaya tidak dikira efek yang mati saat
+              master OFF. Bit-Perfect: tab DSP ini tidak tampil di sana
+              (BitPerfectSubscreen yang tampil), dan TuningControl
+              sendiri juga nonaktif bila audioMode bit-perfect. */}
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: colors.background.secondary,
+                borderColor: colors.border.medium,
+                marginHorizontal: spacing.md,
+                padding: spacing.md,
+                marginBottom: spacing.md,
+              },
+            ]}
+          >
+            <Text style={[styles.cardTitle, { color: colors.text.primary }]}>
+              Tuning (Nada Dasar)
+            </Text>
+            <Text
+              style={[
+                styles.cardHint,
+                { color: colors.text.tertiary, marginBottom: spacing.sm },
+              ]}
+            >
+              Tinggi nada lagu tanpa mengubah tempo (A=440 standar, A=432
+              Verdi). Berlaku di DSP dan Solfeggio — tidak ikut sakelar
+              master.
+            </Text>
+            <TuningControl />
+          </View>
 
             </>
           )}

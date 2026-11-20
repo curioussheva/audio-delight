@@ -26,9 +26,9 @@ interface TuningControlProps {
 }
 
 /**
- * Kontrol tuning (retune) bersama — dipakai settings DAN subscreen
- * Solfeggio. Satu-satunya sumber UI tuning; state tetap di playerStore
- * (tuningCents/setTuningCents), tidak ada state lokal.
+ * Kontrol tuning (retune) bersama — dipakai settings, subscreen
+ * Solfeggio, DAN tab DSP. Satu-satunya sumber UI tuning; state tetap di
+ * playerStore (tuningCents/setTuningCents), tidak ada state lokal.
  *
  * FASE R (2026-11-11): preset A=440 (0 sen) / A=432 Verdi (−31,77 sen),
  * stepper ±5 sen, rentang ±100 sen (clamp di store). Nonaktif di mode

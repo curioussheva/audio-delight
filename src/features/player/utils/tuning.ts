@@ -1,7 +1,7 @@
 /**
  * Matematika tuning (retune) murni — tanpa dependensi React, store, atau
- * native. Dipakai TuningControl (settings + subscreen Solfeggio) dan
- * playerStore (clamp yang sama dengan UI).
+ * native. Dipakai TuningControl (settings + subscreen Solfeggio + tab DSP)
+ * dan playerStore (clamp yang sama dengan UI).
  */
 
 // Rentang tuning store: ±100 sen (jangan diubah — native phase vocoder
