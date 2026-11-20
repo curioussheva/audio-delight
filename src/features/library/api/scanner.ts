@@ -2,6 +2,11 @@
 
 import { db } from "@/shared/lib/sqlite";
 import { Song } from "@/shared/types/audio";
+import {
+  INSERT_SONG_SQL,
+  buildInsertParams,
+  buildUpdateStatement,
+} from "@/features/library/api/scanBatchWriter";
 import MetadataExtractor from "@/features/library/api/metadata";
 import {
   isHiRes,
@@ -174,6 +179,9 @@ export class LibraryScanner {
 
   /**
    * INSERT new song (initial scan)
+   *
+   * SQL + param dibangun `scanBatchWriter.buildInsertParams` (satu sumber
+   * dengan jalur batch) — jangan kembalikan duplikasi inline di sini.
    */
   private static async insertNewSong(
     song: Partial<Song> | NativeSong,
@@ -184,51 +192,11 @@ export class LibraryScanner {
       return;
     }
 
-    const finalUri = song.uri || `content://media/external/audio/media/${id}`;
-    const now = Date.now();
-
-    const sql = `
-      INSERT INTO songs (
-        id, title, artist, album, genre, folder, filename,
-        uri, originalUri, artwork, duration, sampleRate, bitDepth,
-        codec, bitrate, fileSize, channels,
-        year, trackNumber, discNumber,
-        isEnriched, isFavorite, playCount, rating,
-        dateAdded, lastSeenAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    const params = [
-      id,
-      song.title || "Unknown Title",
-      song.artist || "Unknown Artist",
-      song.album || "Unknown Album",
-      song.genre || "Unknown Genre",
-      (song as any).folder || "Music",
-      (song as any).filename || "Unknown File",
-      finalUri,
-      (song as any).originalUri || finalUri,
-      (song as any).artwork || (song as any).artworkUri || null,
-      song.duration || 0,
-      song.sampleRate || 0,
-      song.bitDepth || 0,
-      song.codec || "UNKNOWN",
-      song.bitrate || 0,
-      song.fileSize || 0,
-      (song as any).channels || 2,
-      (song as any).year || 0,
-      (song as any).trackNumber || 0,
-      (song as any).discNumber || 0,
-      0, // isEnriched
-      0, // isFavorite
-      0, // playCount
-      0, // rating
-      song.dateAdded || now,
-      now, // lastSeenAt
-    ];
+    const params = buildInsertParams(song);
+    if (!params) return;
 
     try {
-      db.execute(sql, params);
+      db.execute(INSERT_SONG_SQL, params);
       console.log(`[DB] Inserted new song: ${id}`);
     } catch (error) {
       console.error(`[LibraryScanner] Insert failed for ${id}:`, error);
@@ -251,38 +219,14 @@ export class LibraryScanner {
     const id = song.id?.toString();
     if (!id) return;
 
-    const now = Date.now();
-
-    const edited = new Set(this.getSongById(id)?.editedFields ?? []);
-
-    const assignments: Array<[string, any]> = [
-      ["title", song.title || "Unknown Title"],
-      ["artist", song.artist || "Unknown Artist"],
-      ["album", song.album || "Unknown Album"],
-      ["genre", song.genre || "Unknown Genre"],
-      ["folder", (song as any).folder || "Music"],
-      ["filename", (song as any).filename || "Unknown File"],
-      ["uri", song.uri || `content://media/external/audio/media/${id}`],
-      ["originalUri", (song as any).originalUri || song.uri],
-      ["artwork", song.artwork || null],
-      ["duration", song.duration || 0],
-      ["sampleRate", song.sampleRate || 0],
-      ["bitDepth", song.bitDepth || 0],
-      ["codec", song.codec || "UNKNOWN"],
-      ["bitrate", song.bitrate || 0],
-      ["fileSize", song.fileSize || 0],
-      ["channels", (song as any).channels || 2],
-      ["year", (song as any).year || 0],
-      ["trackNumber", (song as any).trackNumber || 0],
-      ["discNumber", (song as any).discNumber || 0],
-    ];
-
-    const kept = assignments.filter(([field]) => !edited.has(field));
-    const setClauses = kept.map(([field]) => `${field} = ?`);
-    setClauses.push("lastSeenAt = ?");
-
-    const sql = `UPDATE songs SET ${setClauses.join(", ")} WHERE id = ?`;
-    const params = [...kept.map(([, value]) => value), now, id];
+    // Statement dibangun `scanBatchWriter.buildUpdateStatement` (satu
+    // sumber dengan jalur batch) — jangan kembalikan duplikasi inline.
+    const stmt = buildUpdateStatement(
+      song,
+      this.getSongById(id)?.editedFields,
+    );
+    if (!stmt) return;
+    const [sql, params] = stmt;
 
     db.execute(sql, params);
   }
