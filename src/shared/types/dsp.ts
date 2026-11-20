@@ -203,5 +203,3 @@ export interface FrequencyData {
   timestamp: number; // Capture timestamp
   maxFrequency: number;
 }
-
-// ... rest of file

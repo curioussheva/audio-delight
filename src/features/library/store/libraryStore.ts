@@ -186,7 +186,6 @@ export const useLibraryStore = create<LibraryState>()(
 
       setInitialScanCompleted: () => set({ hasCompletedInitialScan: true }), // 👈 NEW: Implementasi
 
-      // ... (Action updateTrack, toggleFavorite, startAutoScan, dll biarkan sama persis seperti sebelumnya) ...
       updateTrack: (trackId, updatedData) =>
         set((state) => {
           const newTracks = state.tracks.map((t) =>

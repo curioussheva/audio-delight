@@ -89,5 +89,3 @@ export interface ScanStoreActions {
   setUnenrichedCount: (count: number) => void;
   setPendingArtistImages: (count: number) => void;
 }
-
-// Hapus blok export { ... } di bawah jika sebelumnya menyebabkan konflik duplicate identifier
