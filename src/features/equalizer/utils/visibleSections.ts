@@ -3,18 +3,23 @@
 // Visibilitas seksi layar EQ (GRAFIK / PRESET / MIXER / HEADPHONE / EFEK).
 // Disimpan di AsyncStorage sebagai JSON.
 //
-// Format v2 (2026-11-19, ronde clean-cozy):
-//   {"version":2,"sections":{"graph":true,"preset":false,"mixer":false,
-//    "headphone":false,"effects":true}}
+// Format v3 (2026-11-20, atas permintaan csheva):
+//   {"version":3,"sections":{"graph":true,"preset":true,"mixer":true,
+//    "headphone":true,"effects":true}}
 //
-// Default baru: hanya GRAFIK + EFEK yang tampil. Layar dinilai "masih terlalu
-// ramai" (2026-11-18, semua 5 seksi tampil) — PRESET, MIXER, dan HEADPHONE
-// disembunyikan secara default, bisa ditampilkan lewat tombol pengalih.
+// Default baru: kelima seksi tampil. Default v2 (hanya GRAFIK + EFEK,
+// karena layar dinilai "masih terlalu ramai" 2026-11-18) DICABUT atas
+// keputusan csheva 2026-11-20: HEADPHONE, MIXER, dan PRESET harus langsung
+// terlihat, bukan tersembunyi di balik tombol pengalih. Tombol pengalih
+// tetap ada — pengguna tetap bisa menyembunyikan seksi bila mau.
 //
-// Migrasi: payload format lama (tanpa `version`, semua kunci boolean di root)
-// TIDAK dikenali dan jatuh ke default baru. Ini disengaja: default declutter
-// harus mencapai pengguna LAMA juga, bukan hanya instalasi baru. Pilihan
-// pengguna sesudah migrasi tersimpan dalam format v2 dan dihormati.
+// Migrasi: payload format v2 (atau lebih lama, tanpa `version`) TIDAK
+// dikenali dan jatuh ke default baru. Ini disengaja, mengikuti pola yang
+// sama seperti migrasi v2: default baru harus mencapai pengguna LAMA juga,
+// bukan hanya instalasi baru. Trade-off yang sama seperti v2: pengguna yang
+// sengaja menyembunyikan seksi di v2 akan melihat semuanya tampil lagi
+// sekali, lalu pilihannya yang baru tersimpan dalam format v3 dan dihormati.
+// Pilihan pengguna sesudah migrasi tersimpan dalam format v3 dan dihormati.
 
 export interface VisibleSections {
   graph: boolean;
@@ -26,14 +31,14 @@ export interface VisibleSections {
 
 export type SectionId = keyof VisibleSections;
 
-export const VISIBLE_SECTIONS_VERSION = 2;
+export const VISIBLE_SECTIONS_VERSION = 3;
 
-/** Default seksi: hanya GRAFIK + EFEK. */
+/** Default seksi: kelima seksi tampil (2026-11-20, atas permintaan csheva). */
 export const DEFAULT_VISIBLE_SECTIONS: VisibleSections = {
   graph: true,
-  preset: false,
-  mixer: false,
-  headphone: false,
+  preset: true,
+  mixer: true,
+  headphone: true,
   effects: true,
 };
 
@@ -86,7 +91,7 @@ export function parseVisibleSections(raw: string | null): VisibleSections {
   }
 }
 
-/** Serialisasi untuk disimpan (format v2). */
+/** Serialisasi untuk disimpan (format v3). */
 export function serializeVisibleSections(sections: VisibleSections): string {
   return JSON.stringify({ version: VISIBLE_SECTIONS_VERSION, sections });
 }
