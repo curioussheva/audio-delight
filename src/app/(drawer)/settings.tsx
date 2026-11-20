@@ -31,6 +31,9 @@ import {
   Database,
   Image as ImageIcon,
   Volume2,
+  Download,
+  Upload,
+  Save,
 } from "lucide-react-native";
 import { useLibraryStore } from "@/features/library/store/libraryStore"; // Pastikan path benar
 import { BackgroundScanTask } from "@/features/library/services/BackgroundScanTask";
@@ -63,7 +66,7 @@ import { usePlayerStore } from "@/features/player/store/playerStore";
 import { TuningControl } from "@/features/player/components/TuningControl";
 import { useBitPerfectStatus } from "@/features/player/hooks/useBitPerfectStatus";
 import { ThemePicker } from "@/shared/components/ui/ThemePicker";
-import type { Theme } from "@/constants/themes/types";
+import type { Theme, ThemeId } from "@/constants/themes/types";
 import { DEFAULT_THEME } from "@/constants/theme";
 import OnlineMetadataService from "@/features/library/services/OnlineMetadataService";
 
@@ -92,6 +95,12 @@ import {
   presetNameById,
   type ConfigurableOutputCategory,
 } from "@/features/outputprofile/outputProfile";
+// Cadangan & berbagi (2026-11-20, item 8 deep-insight): ekspor/impor
+// pengaturan + preset EQ sebagai file JSON (lihat backup.ts/backupIO.ts).
+import {
+  exportSettingsBackup,
+  importSettingsFile,
+} from "@/features/settings/backupIO";
 
 // Versi dibaca dari app.json seperti About — sebelumnya hardcoded
 // "1.0.0 (Build 2026)" sementara app.json sudah 1.0.37.
@@ -310,6 +319,9 @@ export default function SettingsScreen() {
   const [showClearCacheConfirm, setShowClearCacheConfirm] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showBitPerfectConfirm, setShowBitPerfectConfirm] = useState(false);
+  // Cadangan & berbagi: konfirmasi impor + kunci tap ganda.
+  const [showImportConfirm, setShowImportConfirm] = useState(false);
+  const [isBackupBusy, setIsBackupBusy] = useState(false);
 
   // Jalur output audio yang sebenarnya: SEMUA perangkat (speaker, jack, USB
   // DAC, Bluetooth, HDMI). Modul lama yang hanya melihat USB DAC
@@ -498,6 +510,72 @@ export default function SettingsScreen() {
     } catch (e) {
       console.warn("[Settings] Reset All gagal:", e);
       showToast("Sebagian pengaturan gagal direset. Coba lagi.", "error");
+    }
+  };
+
+  // ─── Cadangan & Berbagi (2026-11-20, item 8 deep-insight) ──────────────
+  //
+  // Ekspor: semua pengaturan + preset EQ + profil headphone ke satu file
+  // JSON, lalu share sheet (pola DevDBManager). Impor: pilih file,
+  // validasi, terapkan (merge — lihat backup.ts). File preset EQ tunggal
+  // juga bisa diimpor dari sini (presetnya ditambahkan ke daftar profil).
+  const handleExportBackup = async () => {
+    if (isBackupBusy) return;
+    setIsBackupBusy(true);
+    try {
+      const result = await exportSettingsBackup(theme.id);
+      if (result.kind === "exported") {
+        showToast("File cadangan siap dibagikan.", "success");
+      } else {
+        showToast(result.error, "error");
+      }
+    } finally {
+      setIsBackupBusy(false);
+    }
+  };
+
+  const handleImportBackup = () => {
+    if (isBackupBusy) return;
+    setShowImportConfirm(true);
+  };
+
+  const doImportBackup = async () => {
+    setShowImportConfirm(false);
+    if (isBackupBusy) return;
+    setIsBackupBusy(true);
+    try {
+      const result = await importSettingsFile({
+        applyThemeId: async (id) => {
+          await setTheme(id as ThemeId);
+        },
+      });
+      if (result.kind === "canceled") return;
+      if (result.kind === "error") {
+        showToast(result.error, "error");
+        return;
+      }
+      if (result.warnings.length > 0) {
+        console.warn("[Settings] Impor dengan peringatan:", result.warnings);
+      }
+      if (result.kind === "preset") {
+        showToast(
+          `Preset "${result.presetName}" ditambahkan ke daftar profil.` +
+            (result.warnings.length > 0 ? " (Ada catatan — lihat log.)" : ""),
+          "success",
+        );
+        return;
+      }
+      showToast(
+        result.applied.length > 0
+          ? `Pengaturan dipulihkan (${result.applied.join(", ")}).` +
+              (result.warnings.length > 0
+                ? " Sebagian dilewati — lihat log."
+                : "")
+          : "File valid, tapi tidak ada pengaturan yang dipulihkan.",
+        "success",
+      );
+    } finally {
+      setIsBackupBusy(false);
     }
   };
 
@@ -2200,6 +2278,78 @@ export default function SettingsScreen() {
     </SectionCard>
   );
 
+  // ─── Cadangan & Berbagi (2026-11-20, item 8 deep-insight) ──────────────
+  //
+  // Ekspor semua pengaturan + preset EQ ke satu file JSON; impor
+  // memulihkannya (merge — yang tidak ada di file dibiarkan, preset
+  // digabung by id). File preset EQ tunggal juga bisa diimpor dari sini.
+  // QR belum ada di ronde ini (tidak ada pustaka QR di dependensi).
+  const renderBackup = () => (
+    <SectionCard style={sectionCardStyle}>
+      <SectionHeader
+        icon={<Save size={24} color={accentOnSecondary} strokeWidth={2.2} />}
+        title="Cadangan & Berbagi"
+        colors={colors}
+        spacing={spacing}
+      />
+
+      <View style={{ paddingBottom: spacing.sm }}>
+        <SettingRow colors={colors} spacing={spacing} bordered={false}>
+          <View style={{ flex: 1, marginRight: spacing.md }}>
+            <Text style={{ color: colors.text.primary, fontFamily: FONT_FAMILY.semiBold }}>
+              Ekspor Pengaturan
+            </Text>
+            <Text
+              style={{
+                color: colors.text.secondary,
+                fontSize: 11,
+                marginTop: 2,
+              }}
+            >
+              Simpan semua pengaturan + preset EQ ke satu file JSON — untuk
+              cadangan atau pindah perangkat.
+            </Text>
+          </View>
+          <PristineButton
+            label="Ekspor"
+            onPress={handleExportBackup}
+            variant="secondary"
+            surface={colors.background.secondary}
+            disabled={isBackupBusy}
+            icon={<Download size={16} color={accentOnSecondary} />}
+          />
+        </SettingRow>
+
+        <SettingRow colors={colors} spacing={spacing} bordered={false}>
+          <View style={{ flex: 1, marginRight: spacing.md }}>
+            <Text style={{ color: colors.text.primary, fontFamily: FONT_FAMILY.semiBold }}>
+              Impor Pengaturan
+            </Text>
+            <Text
+              style={{
+                color: colors.text.secondary,
+                fontSize: 11,
+                marginTop: 2,
+              }}
+            >
+              Pulihkan dari file cadangan (.json). Yang tidak ada di file
+              dibiarkan; preset digabung, bukan ditimpa. File preset EQ
+              tunggal juga bisa diimpor dari sini.
+            </Text>
+          </View>
+          <PristineButton
+            label="Impor"
+            onPress={handleImportBackup}
+            variant="secondary"
+            surface={colors.background.secondary}
+            disabled={isBackupBusy}
+            icon={<Upload size={16} color={accentOnSecondary} />}
+          />
+        </SettingRow>
+      </View>
+    </SectionCard>
+  );
+
   const renderAbout = () => (
     <SectionCard style={sectionCardStyle}>
       <SectionHeader
@@ -2275,6 +2425,7 @@ export default function SettingsScreen() {
       {renderAudioOutput()}
       {renderAudio()}
       {renderLibrary()}
+      {renderBackup()}
       {renderAbout()}
 
       <TouchableOpacity
@@ -2320,6 +2471,14 @@ export default function SettingsScreen() {
         confirmLabel="Reset"
         onConfirm={() => void doResetAll()}
         onCancel={() => setShowResetConfirm(false)}
+      />
+      <ConfirmDialog
+        visible={showImportConfirm}
+        title="Impor Pengaturan?"
+        message="Pengaturan saat ini akan diganti dengan isi file cadangan. Preset EQ dan profil headphone digabung (yang sama ditimpa, yang lain dipertahankan). Lanjutkan?"
+        confirmLabel="Impor"
+        onConfirm={() => void doImportBackup()}
+        onCancel={() => setShowImportConfirm(false)}
       />
       <ConfirmDialog
         visible={showBitPerfectConfirm}
