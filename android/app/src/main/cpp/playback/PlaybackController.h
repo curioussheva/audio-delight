@@ -81,6 +81,17 @@ public:
     void setCrossfadeSeconds(float seconds) noexcept;
     [[nodiscard]] float crossfadeSeconds() const noexcept;
 
+    // Gapless (2026-11-20): putar album bersambung tanpa jeda — pre-roll
+    // track berikutnya + trim priming/padding encoder (lihat
+    // FFmpegDecoder gaplessTrim). Default ON (perilaku yang diharapkan
+    // player audiophile); OFF = perilaku lama (jeda load + fade-out
+    // 500 ms). Disimpan atomic (pola setCrossfadeSeconds); dibaca
+    // buildDecoderWorker() (trim), maybeStartPreroll() (pre-roll),
+    // applyTrackFades() (kurva seam 10 ms). Crossfade > 0 MENANG atas
+    // gapless untuk transisi itu (lihat maybeStartPreroll).
+    void setGaplessEnabled(bool enabled) noexcept;
+    [[nodiscard]] bool gaplessEnabled() const noexcept;
+
     // 🔥 FASE R (2026-11-11): retune — phase vocoder pitch shift (PitchShifter).
     // Pola yang SAMA dengan setPlaybackRate (P-M9): rasio disimpan atomic dan
     // DITERAPKAN render() di audio thread (reset buffer di sana supaya tidak
@@ -194,6 +205,37 @@ private:
     bool startDecoder(const TrackInfo& track);
     void stopDecoder();
 
+    // Gapless (2026-11-20): bangun worker decoder untuk satu track
+    // (cfg + callback SADAR PERAN + start) — dipakai startDecoder()
+    // (publikasi ke decoderWorker_) DAN maybeStartPreroll() (publikasi
+    // ke prerolledWorker_). Callback EOF/error memutuskan perannya
+    // saat menyala (current vs pre-roll, lihat startDecoder) — jadi
+    // worker yang sama tetap benar sesudah handoff tanpa re-wire.
+    // Mengembalikan nullptr bila start() gagal (file tak bisa dibuka).
+    [[nodiscard]] std::shared_ptr<decoder::DecoderWorker> buildDecoderWorker(
+        const TrackInfo& track);
+    // Gapless (2026-11-20): mulai pre-roll track berikutnya bila semua
+    // syarat terpenuhi (gapless ON, crossfade 0, decoder A sudah EOF,
+    // ekor tinggal <= ~2 dtk, ada track berikut, laju file sama).
+    // Dipanggil dari drain-wait processAdvance (thread advance, BUKAN
+    // audio thread — open file + start thread di sini aman). finishedUri
+    // = URI track yang ekornya sedang di-drain (untuk verifikasi bahwa
+    // track aktif belum berganti selama build). Idempotent: no-op bila
+    // pre-roll sudah aktif / syarat tak terpenuhi.
+    void maybeStartPreroll(const std::string& finishedUri);
+    // Gapless (2026-11-20): batalkan pre-roll yang sedang berjalan
+    // (pindahkan worker keluar di bawah decoderMutex_, stop+join DI LUAR
+    // lock — pola stopDecoder). Dipanggil loadTrack()/seek()/stop()/
+    // shutdown()/setGaplessEnabled(false)/handoff-gagal. Idempotent.
+    void cancelPreroll();
+    // Gapless (2026-11-20): adopsi worker pre-roll sebagai decoder
+    // aktif (tanpa clear queue, tanpa loadTrack, tanpa reopen stream).
+    // Dipanggil processAdvance sesudah drain, di bawah loadTrackMutex_.
+    // Mengembalikan true bila handoff berhasil (next sudah diadopsi);
+    // false bila tidak ada pre-roll yang cocok (pemanggil lanjut ke
+    // loadTrack biasa, retry P-M10 tetap berlaku).
+    bool tryGaplessHandoff(const TrackInfo& next);
+
     // 🔥 Advance queue + loadTrack setelah EOF (dipanggil dari thread decoder).
     // PB6-W3: HANYA mem-post permintaan ke advance worker permanen (lihat
     // advanceWorkerLoop) — tanpa join, tanpa lock selain advanceMutex_.
@@ -227,6 +269,10 @@ private:
     // 🔥 FIX (2026-11-10, p-m12): tunggu in-flight render() selesai (maks
     // 100 ms) setelah clearing_ dikibarkan, sebelum pcmQueue_->clear().
     void waitForRenderIdle() noexcept;
+    // Gapless (2026-11-20): bangun kurva fade-in/out untuk satu track
+    // (dipakai loadTrack() dan tryGaplessHandoff() — satu implementasi).
+    // autoAdvance = load dari advance (crossfade hanya berlaku di sana).
+    void buildFadeCurves(const TrackInfo& track, bool autoAdvance);
     // 🔥 FIX (2026-11-10, P-M7): aplikasikan fade-in (awal track) dan
     // fade-out (ekor, saat decoderFinished_) ke buffer output render().
     // Dipanggil di akhir render(), setelah zero-fill dan clock.
@@ -283,6 +329,8 @@ private:
     // Crossfade (2026-11-20): durasi transisi antar lagu, detik,
     // 0..12 (0 = mati). Lihat setter di atas.
     std::atomic<float> crossfadeSeconds_{0.0f};
+    // Gapless (2026-11-20): default ON — lihat setter di atas.
+    std::atomic<bool> gaplessEnabled_{true};
     // PB6-W4 (2026-11-12): fade-out saat pause — 15 ms, S-curve.
     //
     // pause() dulu memotong langsung: playing_=false lalu render
@@ -410,6 +458,23 @@ private:
     // Pola cek-lalu-pakai unique_ptr tanpa lock sebelumnya adalah TOCTOU
     // (baca bisa mendarat di antara move-out dan reset → deref null).
     std::shared_ptr<decoder::DecoderWorker> decoderWorker_;
+
+    // Gapless pre-roll (2026-11-20): SATU decoder kedua yang memproduksi
+    // ke PCMQueue yang SAMA, di belakang ekor track aktif (FIFO menjaga
+    // urutan). Invarian SPSC queue tetap terjaga: pre-roll HANYA dimulai
+    // sesudah decoder A EOF-idle (tidak ada lagi produsen aktif), dan
+    // handoff terjadi sesudah drain (ekor A habis). Worker + track
+    // dilindungi decoderMutex_ (publikasi/pembatalan); flag EOF/gagal
+    // atomik (ditulis callback thread decoder, dibaca thread advance).
+    // prerolledWorker_ = worker B (null bila tak ada pre-roll aktif).
+    // prerolledTrack_ = track B (untuk verifikasi URI saat handoff).
+    // prerollEof_ = B sudah EOF sebelum handoff (handoff lalu langsung
+    // menjadwalkan advance berikutnya). prerollFailed_ = B error
+    // (handoff batal → fallback loadTrack + retry P-M10).
+    std::shared_ptr<decoder::DecoderWorker> prerolledWorker_;
+    TrackInfo prerolledTrack_;
+    std::atomic<bool> prerollEof_{false};
+    std::atomic<bool> prerollFailed_{false};
 
     // 🔥 FIX (2026-11-11, D-M3): serialisasi loadTrack() antar thread.
     //

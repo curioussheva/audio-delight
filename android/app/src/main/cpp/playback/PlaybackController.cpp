@@ -79,6 +79,10 @@ void PlaybackController::shutdown() {
     // render() lagi yang menguras queue).
     cancelPendingAdvance();
 
+    // Gapless (2026-11-20): batalkan pre-roll — worker B tidak boleh
+    // hidup melewati shutdown.
+    cancelPreroll();
+
     // PB6-W3: hentikan worker permanen — minta berhenti + notify + join
     // SEKALI. Join di sini (destruktor, thread pemilik EngineManager),
     // BUKAN dari thread decoder: satu-satunya pemanggil shutdown() adalah
@@ -288,6 +292,30 @@ float PlaybackController::crossfadeSeconds() const noexcept {
     return crossfadeSeconds_.load(std::memory_order_acquire);
 }
 
+// Gapless (2026-11-20): hanya atomic store (pola setCrossfadeSeconds).
+// OFF membatalkan pre-roll yang sedang berjalan — worker B yang sudah
+// decode di belakang ekor jadi sia-sia, tapi ekor A tetap terdengar
+// sampai habis dan advance berikutnya memakai jalur lama (drain +
+// loadTrack). ON tidak memicu apa-apa langsung; advance berikutnya
+// akan pre-roll.
+void PlaybackController::setGaplessEnabled(bool enabled) noexcept {
+    const bool old =
+        gaplessEnabled_.exchange(enabled, std::memory_order_acq_rel);
+    if (old != enabled) {
+        __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                            "setGaplessEnabled: %s (sebelumnya %s)",
+                            enabled ? "ON" : "OFF",
+                            old ? "ON" : "OFF");
+        if (!enabled) {
+            cancelPreroll();
+        }
+    }
+}
+
+bool PlaybackController::gaplessEnabled() const noexcept {
+    return gaplessEnabled_.load(std::memory_order_acquire);
+}
+
 // 🔥 FASE R (2026-11-11): retune (phase vocoder pitch shift).
 //
 // Hanya menyimpan target ke atomic — penerapan (reset buffer pitch
@@ -343,6 +371,10 @@ bool PlaybackController::loadTrack(const TrackInfo& track,
     // aman (belum ada lock lain yang dipegang di sini, mutex rekursif),
     // dan flag tetap terpasang sebelum lock muatan di bawah diambil.
     cancelPendingAdvance();
+
+    // Gapless (2026-11-20): batalkan pre-roll — track baru dimuat dari
+    // nol, worker B untuk track lama tidak berlaku lagi.
+    cancelPreroll();
 
     // 🔥 FIX (2026-11-11, D-M3): serialisasi loadTrack() antar thread JS +
     // advance (lihat loadTrackMutex_ di header). Lock dipegang sepanjang
@@ -424,66 +456,7 @@ bool PlaybackController::loadTrack(const TrackInfo& track,
     clock_->reset();
     if (state_) state_->setPosition(0);  // 🔥 FIX: reset posisi state juga
 
-    // 🔥 FIX (2026-11-10, P-M7): siapkan kurva fade untuk track baru —
-    // fade-in di awal track, fade-out di ekor (saat decoder selesai, lihat
-    // render()). Dibuat di sini (bukan audio thread) karena generateCurve
-    // mengalokasi vector. Laju: stream kalau sudah diketahui, kalau tidak
-    // laju file, kalau tidak 48000 — selisih beberapa ms tidak terdengar.
-    //
-    // PB6-W1 (2026-11-12): durasi fade sadar-mode. Di mode processing
-    // (DSP/Solfeggio) tetap 300 ms in / 500 ms out seperti sebelumnya.
-    // Di bit-perfect, fade HANYA anti-klik 10 ms in/out: fade 300/500 ms
-    // adalah processing — ia mengubah amplitudo ~0,8 detik audio yang
-    // seharusnya keluar apa adanya (dan memotong ekor/reverb tail).
-    // 10 ms dipilih, bukan 5 ms: 10 ms = satu periode callback @48 kHz,
-    // jadi fade-in selesai dalam callback pertama; ramp S-curve 480
-    // sampel cukup landai untuk transient keras, sementara 5 ms (240
-    // sampel) curamnya 2x tanpa manfaat — di bawah ~20 ms telinga tidak
-    // lagi mendengar ramp sebagai fade, hanya hilangnya klik.
-    // B8-M1 (2026-11-12): KEDUA set kurva dibangun di sini (bukan satu
-    // dari processingAllowed_ saat load) — applyTrackFades() memilih
-    // per callback dari processingAllowed_ saat itu, jadi track yang
-    // di-load di DSP lalu di-seek/di-play di BitPerfect memakai fade
-    // 10 ms, dan sebaliknya. Durasi tiap mode TIDAK berubah, hanya
-    // mekanisme pemilihannya.
-    {
-        uint32_t fadeRate = streamSampleRate();
-        if (fadeRate == 0) fadeRate = track.sampleRate;
-        if (fadeRate == 0) fadeRate = 48000;
-        // Crossfade (2026-11-20): durasi fade-out ekor lagu = setting
-        // crossfade — HANYA bila load ini auto-advance (EOF) dan
-        // setting > 0. Manual next/prev/play TIDAK kena: antrean lama
-        // langsung di-clear, tidak ada ekor yang bisa di-fade. Fade-in
-        // TETAP 300 ms (processing) — fade-in panjang akan menghukum
-        // resume/seek/next manual dengan ramp multi-detik (play() dan
-        // seek() me-reset framesSinceLoad_). Set bit-perfect TETAP
-        // 10 ms anti-klik apa pun settingnya: crossfade adalah
-        // processing dan tidak boleh mengubah amplitudo di bit-perfect.
-        // Mekanisme fade-out-nya sendiri tidak berubah: applyTrackFades()
-        // baru meramp saat sisa queue <= durasi kurva dan decoder sudah
-        // selesai baca (decoderFinished_) — jadi fade-out D dtk mulai
-        // tepat D dtk sebelum ekor habis terdengar.
-        const float xfSeconds =
-            crossfadeSeconds_.load(std::memory_order_acquire);
-        const uint32_t fadeOutFrames =
-            (autoAdvance && xfSeconds > 0.0f)
-                ? FadeEngine::secondsToFrames(fadeRate, xfSeconds)
-                : fadeRate * 500 / 1000;
-        fadeInProcessing_.generateCurve(FadeCurve::SCurve,
-                                        fadeRate * 300 / 1000);
-        fadeOutProcessing_.generateCurve(FadeCurve::SCurve,
-                                         fadeOutFrames);
-        fadeInBitPerfect_.generateCurve(FadeCurve::SCurve,
-                                        fadeRate * 10 / 1000);
-        fadeOutBitPerfect_.generateCurve(FadeCurve::SCurve,
-                                         fadeRate * 10 / 1000);
-        if (autoAdvance && xfSeconds > 0.0f) {
-            __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
-                                "loadTrack: crossfade %.1f dtk — fade-out "
-                                "ekor %u frame @%u Hz (mode processing)",
-                                xfSeconds, fadeOutFrames, fadeRate);
-        }
-    }
+    buildFadeCurves(track, autoAdvance);
     framesSinceLoad_.store(0, std::memory_order_release);
     // B8-P4: reset throttle self-heal durasi — callback pertama track
     // baru langsung mencoba heal (counter 0), baru sesudahnya tiap
@@ -784,6 +757,10 @@ bool PlaybackController::stop() {
     cancelPendingAdvance();
     waitForAdvanceIdle();
 
+    // Gapless (2026-11-20): batalkan pre-roll (sesudah advance idle —
+    // worker B tidak boleh decode ke queue yang akan di-clear).
+    cancelPreroll();
+
     // 🔥 FIX (2026-11-12, PB2-M1): lock loadTrackMutex_ HANYA SETELAH
     // advance selesai (waitForAdvanceIdle di atas). JANGAN pindahkan lock
     // ini ke awal fungsi: stop() yang memegang mutex lalu menunggu worker
@@ -854,6 +831,10 @@ bool PlaybackController::seek(double seconds) {
     // redundan-namun-aman, bukan lubang (ia block di belakang load yang
     // sama seperti seek sendiri).
     cancelPendingAdvance();
+    // Gapless (2026-11-20): batalkan pre-roll DULU — seek menghidupkan
+    // lagi decoder A (clear eof_), jadi B tidak boleh jadi produsen
+    // kedua di queue SPSC.
+    cancelPreroll();
     // 🔥 FIX (2026-11-12, PB2-M1): serialisasi terhadap loadTrack().
     // seek() menyentuh decoder/PCMQueue/clock yang sama dengan loadTrack()
     // — tanpa lock, seek dari thread JS bisa jalan bersamaan dengan
@@ -1519,16 +1500,106 @@ bool PlaybackController::reloadIfDecoderRateMismatch(uint32_t actualStreamRate) 
     return loadTrack(current);
 }
 
+// Gapless (2026-11-20): kurva fade per-track dipakai loadTrack()
+// DAN tryGaplessHandoff() — satu implementasi, bukan dua salinan.
+void PlaybackController::buildFadeCurves(const TrackInfo& track,
+                                         bool autoAdvance) {
+    // 🔥 FIX (2026-11-10, P-M7): siapkan kurva fade untuk track baru —
+    // fade-in di awal track, fade-out di ekor (saat decoder selesai, lihat
+    // render()). Dibuat di sini (bukan audio thread) karena generateCurve
+    // mengalokasi vector. Laju: stream kalau sudah diketahui, kalau tidak
+    // laju file, kalau tidak 48000 — selisih beberapa ms tidak terdengar.
+    //
+    // PB6-W1 (2026-11-12): durasi fade sadar-mode. Di mode processing
+    // (DSP/Solfeggio) tetap 300 ms in / 500 ms out seperti sebelumnya.
+    // Di bit-perfect, fade HANYA anti-klik 10 ms in/out: fade 300/500 ms
+    // adalah processing — ia mengubah amplitudo ~0,8 detik audio yang
+    // seharusnya keluar apa adanya (dan memotong ekor/reverb tail).
+    // 10 ms dipilih, bukan 5 ms: 10 ms = satu periode callback @48 kHz,
+    // jadi fade-in selesai dalam callback pertama; ramp S-curve 480
+    // sampel cukup landai untuk transient keras, sementara 5 ms (240
+    // sampel) curamnya 2x tanpa manfaat — di bawah ~20 ms telinga tidak
+    // lagi mendengar ramp sebagai fade, hanya hilangnya klik.
+    // B8-M1 (2026-11-12): KEDUA set kurva dibangun di sini (bukan satu
+    // dari processingAllowed_ saat load) — applyTrackFades() memilih
+    // per callback dari processingAllowed_ saat itu, jadi track yang
+    // di-load di DSP lalu di-seek/di-play di BitPerfect memakai fade
+    // 10 ms, dan sebaliknya. Durasi tiap mode TIDAK berubah, hanya
+    // mekanisme pemilihannya.
+    {
+        uint32_t fadeRate = streamSampleRate();
+        if (fadeRate == 0) fadeRate = track.sampleRate;
+        if (fadeRate == 0) fadeRate = 48000;
+        // Crossfade (2026-11-20): durasi fade-out ekor lagu = setting
+        // crossfade — HANYA bila load ini auto-advance (EOF) dan
+        // setting > 0. Manual next/prev/play TIDAK kena: antrean lama
+        // langsung di-clear, tidak ada ekor yang bisa di-fade. Fade-in
+        // TETAP 300 ms (processing) — fade-in panjang akan menghukum
+        // resume/seek/next manual dengan ramp multi-detik (play() dan
+        // seek() me-reset framesSinceLoad_). Set bit-perfect TETAP
+        // 10 ms anti-klik apa pun settingnya: crossfade adalah
+        // processing dan tidak boleh mengubah amplitudo di bit-perfect.
+        // Mekanisme fade-out-nya sendiri tidak berubah: applyTrackFades()
+        // baru meramp saat sisa queue <= durasi kurva dan decoder sudah
+        // selesai baca (decoderFinished_) — jadi fade-out D dtk mulai
+        // tepat D dtk sebelum ekor habis terdengar.
+        const float xfSeconds =
+            crossfadeSeconds_.load(std::memory_order_acquire);
+        const uint32_t fadeOutFrames =
+            (autoAdvance && xfSeconds > 0.0f)
+                ? FadeEngine::secondsToFrames(fadeRate, xfSeconds)
+                : fadeRate * 500 / 1000;
+        fadeInProcessing_.generateCurve(FadeCurve::SCurve,
+                                        fadeRate * 300 / 1000);
+        fadeOutProcessing_.generateCurve(FadeCurve::SCurve,
+                                         fadeOutFrames);
+        fadeInBitPerfect_.generateCurve(FadeCurve::SCurve,
+                                        fadeRate * 10 / 1000);
+        fadeOutBitPerfect_.generateCurve(FadeCurve::SCurve,
+                                         fadeRate * 10 / 1000);
+        if (autoAdvance && xfSeconds > 0.0f) {
+            __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                                "loadTrack: crossfade %.1f dtk — fade-out "
+                                "ekor %u frame @%u Hz (mode processing)",
+                                xfSeconds, fadeOutFrames, fadeRate);
+        }
+    }
+}
+
 bool PlaybackController::startDecoder(const TrackInfo& track) {
+    auto worker = buildDecoderWorker(track);
+    if (!worker) {
+        return false;
+    }
+
+    // Publikasikan di bawah lock: render() hanya membaca pointer lewat
+    // snapshot di bawah lock yang sama, jadi tidak pernah melihat
+    // setengah-bangun. (Menimpa worker lama di sini aman: shared_ptr
+    // lama tetap hidup di tangan siapa pun yang sudah menyalinnya, dan
+    // destructor-nya join sendiri saat referensi terakhir hilang.)
+    {
+        std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+        decoderWorker_ = worker;
+    }
+
+    return true;
+}
+
+// Gapless (2026-11-20): lihat deklarasi di header — pabrik worker
+// decoder yang dipakai startDecoder() (publikasi ke decoderWorker_)
+// dan maybeStartPreroll() (publikasi ke prerolledWorker_).
+std::shared_ptr<decoder::DecoderWorker> PlaybackController::buildDecoderWorker(
+    const TrackInfo& track) {
     try {
         // 🔥 FIX (2026-11-10, M3): JANGAN tahan decoderMutex_ melewati
         // start(). Dulu lock dipegang sepanjang fungsi, termasuk
         // worker->start() yang membuka file (FFmpeg I/O) — render() di audio
         // thread ikut ter-block di lock yang sama di tiap ganti track.
         // Sekarang worker dibangun + di-start DI LUAR lock; lock hanya
-        // dipakai sebentar saat publikasi pointer di bawah.
+        // publikasi pointer dilakukan pemanggil (startDecoder /
+        // maybeStartPreroll) di bawah lock.
         __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
-                            "startDecoder(): creating decoder for uri=%s",
+                            "buildDecoderWorker(): creating decoder for uri=%s",
                             track.uri.c_str());
 
         // DecodeConfig.targetSampleRate diisi dari laju STREAM, bukan default.
@@ -1577,8 +1648,13 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
         // maxConsecutiveErrors (default 3) beruntun; EAGAIN dari send_packet
         // bukan error (decoder penuh — drain dulu). Lihat FFmpegDecoder::onDecode.
         cfg.continueOnError = true;
+        // Gapless (2026-11-20): trim priming/padding encoder di decoder
+        // (FFmpegDecoder gaplessTrim) — berlaku untuk SEMUA track saat
+        // setting gapless ON, bukan cuma pre-roll: priming/padding adalah
+        // sifat FILE, bukan sifat transisi.
+        cfg.gaplessTrim = gaplessEnabled_.load(std::memory_order_acquire);
         __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
-            "startDecoder: targetSampleRate=%u (stream=%u file=%u) chunkFrames=%u",
+            "buildDecoderWorker: targetSampleRate=%u (stream=%u file=%u) chunkFrames=%u",
             cfg.targetSampleRate, rate, track.sampleRate, cfg.chunkFrames);
 
         // 🔥 FIX (2026-11-11, D-M2): catat target decoder supaya
@@ -1638,7 +1714,28 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
         const uint64_t decoderGen =
             loadGen_.load(std::memory_order_acquire);
 
-        worker->setEofCallback([this, decoderGen]() {
+        worker->setEofCallback([this, decoderGen,
+                                weakWorker = std::weak_ptr<decoder::DecoderWorker>(worker)]() {
+            // Gapless (2026-11-20): callback SADAR PERAN — worker yang
+            // sama bisa jadi pre-roll (belum current) atau current
+            // (sesudah handoff). Pre-roll: hanya tandai prerollEof_,
+            // JANGAN scheduleAdvance (URI/gen di sini milik track LAMA
+            // dan flood guard di bawah akan korup). Current: jalur lama
+            // (flood guard -> decoderFinished_ -> scheduleAdvance).
+            // Cek peran di bawah decoderMutex_ singkat: stopDecoder/
+            // cancelPreroll memindahkan pointer di bawah lock yang sama
+            // lalu join DI LUAR lock — callback tidak pernah menahan
+            // lock sambil menunggu thread decoder.
+            if (auto strong = weakWorker.lock()) {
+                std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+                if (strong == prerolledWorker_) {
+                    prerollEof_.store(true, std::memory_order_release);
+                    __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                        "gapless pre-roll: track berikutnya sudah EOF "
+                        "(handoff akan menjadwalkan advance)");
+                    return;
+                }
+            }
             __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
                                 "EOF callback: track ended, advancing queue");
 
@@ -1712,7 +1809,24 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
         // NotSupported workerLoop (lihat DecoderWorker::
         // setDecodeErrorCallback) — error start/seek tidak lewat sini,
         // jadi seek gagal TIDAK men-skip track.
-        worker->setDecodeErrorCallback([this, decoderGen](const std::string& message) {
+        worker->setDecodeErrorCallback([this, decoderGen,
+                                        weakWorker = std::weak_ptr<decoder::DecoderWorker>(worker)](
+            const std::string& message) {
+            // Gapless (2026-11-20): pre-roll yang error = pre-roll
+            // gagal, BUKAN EOF track aktif — tandai prerollFailed_;
+            // handoff batal dan processAdvance fallback ke loadTrack
+            // (retry P-M10 men-skip track korup itu).
+            if (auto strong = weakWorker.lock()) {
+                std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+                if (strong == prerolledWorker_) {
+                    prerollFailed_.store(true, std::memory_order_release);
+                    __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
+                        "gapless pre-roll: decode error pada track "
+                        "berikutnya (%s) — handoff batal",
+                        message.c_str());
+                    return;
+                }
+            }
             const std::string uri = [&]() {
                 std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
                 return currentTrack_.uri;
@@ -1905,39 +2019,252 @@ bool PlaybackController::startDecoder(const TrackInfo& track) {
 
         bool ok = worker->start(track.uri, 0.0);
         __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
-                            "startDecoder(): ok=%d, uri=%s",
+                            "buildDecoderWorker(): ok=%d, uri=%s",
                             ok ? 1 : 0, track.uri.c_str());
 
         if (!ok) {
             // start gagal: jangan publikasikan. Worker lokal dihancurkan di
             // sini — destructor-nya memanggil stop() (join) sendiri.
             __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
-                                "startDecoder(): FAILED, worker dibuang");
-            return false;
+                                "buildDecoderWorker(): FAILED, worker dibuang");
+            return nullptr;
         }
-
-        // Publikasikan di bawah lock: render() hanya membaca pointer lewat
-        // snapshot di bawah lock yang sama, jadi tidak pernah melihat
-        // setengah-bangun. (Menimpa worker lama di sini aman: shared_ptr
-        // lama tetap hidup di tangan siapa pun yang sudah menyalinnya, dan
-        // destructor-nya join sendiri saat referensi terakhir hilang.)
-        {
-            std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
-            decoderWorker_ = worker;
-        }
-
-        return true;
+        return worker;
     }
     catch (const std::exception& e) {
         __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
-                            "startDecoder(): exception: %s", e.what());
-        return false;
+                            "buildDecoderWorker(): exception: %s", e.what());
+        return nullptr;
     }
     catch (...) {
         __android_log_print(ANDROID_LOG_ERROR, "PlaybackController",
-                            "startDecoder(): unknown exception");
+                            "buildDecoderWorker(): unknown exception");
+        return nullptr;
+    }
+}
+
+// Gapless (2026-11-20): lihat deklarasi di header.
+void PlaybackController::maybeStartPreroll(const std::string& finishedUri) {
+    // Gerbang murah dulu (atomic load, tanpa lock): setting, crossfade,
+    // pre-roll sudah aktif, decoder A belum EOF.
+    if (!gaplessEnabled_.load(std::memory_order_acquire)) return;
+    if (crossfadeSeconds_.load(std::memory_order_acquire) > 0.0f) return;
+    {
+        std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+        if (prerolledWorker_) return;
+    }
+    if (!decoderFinished_.load(std::memory_order_acquire)) return;
+    if (!pcmQueue_ || !queue_) return;
+
+    // Ambang ~2 dtk ekor: cukup buat B membuka file + decode chunk
+    // pertama (decode >> realtime), tapi tidak terlalu awal (B tidak
+    // memenuhi queue jauh sebelum seam — backpressure 90% juga
+    // menahannya). availableSamples() = sampel interleaved stereo.
+    uint32_t rate = streamSampleRate();
+    if (rate == 0) rate = 48000;
+    const size_t remainingFrames = pcmQueue_->availableSamples() / 2;
+    if (remainingFrames > static_cast<size_t>(rate) * 2) return;
+
+    // Track berikut (read-only, tanpa step — step-nya nanti di
+    // processAdvance via advanceAndGet; URI diverifikasi ulang saat
+    // handoff, jadi perubahan queue di antaranya aman).
+    auto next = queue_->peekNext();
+    if (!next) return;
+
+    // Gate laju file (metadata): handoff TIDAK me-reopen stream (M1)
+    // — itu yang membuat seam tanpa jeda. Beda laju = fallback ke
+    // jalur lama (drain + loadTrack, yang me-reopen via listener).
+    // 0 = metadata tak diketahui = tidak bisa dibandingkan = fallback.
+    uint32_t currentRate = 0;
+    {
+        std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+        currentRate = currentTrack_.sampleRate;
+    }
+    if (currentRate == 0 || next->sampleRate == 0 ||
+        next->sampleRate != currentRate) {
+        __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+            "gapless pre-roll: dilewati (laju %u -> %u, butuh reopen)",
+            currentRate, next->sampleRate);
+        return;
+    }
+
+    // Kunci terhadap loadTrack manual (next/prev/stop) selama build +
+    // publikasi: tanpa ini, loadTrack track lain bisa menyela di antara
+    // build dan publikasi, dan B (untuk track lama) akan menulis ke
+    // queue yang sama dengan decoder track baru — DUA produsen di queue
+    // SPSC. Di bawah loadTrackMutex_, cek ulang syarat yang bisa berubah
+    // (pre-roll masih kosong, A masih EOF, track aktif masih finishedUri)
+    // lalu build + publikasi. Urutan lock loadTrackMutex_ -> decoderMutex_
+    // sama dengan loadTrack (tidak ada inversi). Build = open file
+    // sinkron (~100 ms) — JNI next() yang kebetulan menunggu hanya
+    // tertunda selama itu, sama seperti loadTrack biasa.
+    std::lock_guard<std::recursive_mutex> loadLock(loadTrackMutex_);
+    {
+        std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+        if (prerolledWorker_) return;
+        if (currentTrack_.uri != finishedUri) return;
+    }
+    if (!decoderFinished_.load(std::memory_order_acquire)) return;
+
+    auto worker = buildDecoderWorker(*next);
+    if (!worker) {
+        __android_log_print(ANDROID_LOG_WARN, "PlaybackController",
+            "gapless pre-roll: buildDecoderWorker gagal untuk %s",
+            next->uri.c_str());
+        return;
+    }
+
+    // Publikasikan SEBELUM worker sempat memanggil callback apa pun:
+    // worker sudah start (thread jalan) — callback EOF/error-nya
+    // membandingkan pointer ini untuk tahu perannya.
+    {
+        std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+        prerolledWorker_ = worker;
+        prerolledTrack_ = *next;
+    }
+    prerollEof_.store(false, std::memory_order_release);
+    prerollFailed_.store(false, std::memory_order_release);
+    __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                        "gapless pre-roll: mulai untuk %s (ekor ~%zu frame)",
+                        next->uri.c_str(), remainingFrames);
+}
+
+// Gapless (2026-11-20): lihat deklarasi di header.
+void PlaybackController::cancelPreroll() {
+    // Pola stopDecoder: pindahkan worker keluar di bawah lock, lalu
+    // stop (join) DI LUAR lock — callback thread decoder hanya menahan
+    // decoderMutex_ sebentar, jadi join di luar lock tidak bisa
+    // deadlock dengannya.
+    std::shared_ptr<decoder::DecoderWorker> worker;
+    {
+        std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+        worker = prerolledWorker_;
+        prerolledWorker_.reset();
+        prerolledTrack_ = TrackInfo{};
+    }
+    prerollEof_.store(false, std::memory_order_release);
+    prerollFailed_.store(false, std::memory_order_release);
+    if (worker) {
+        __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                            "gapless pre-roll: dibatalkan");
+        worker->stop();
+    }
+}
+
+// Gapless (2026-11-20): lihat deklarasi di header.
+bool PlaybackController::tryGaplessHandoff(const TrackInfo& next) {
+    // Dipanggil processAdvance di bawah loadTrackMutex_, sesudah drain
+    // (ekor A habis) dan sesudah advanceAndGet() (next sudah step).
+    std::shared_ptr<decoder::DecoderWorker> worker;  // B (diadopsi)
+    std::shared_ptr<decoder::DecoderWorker> stale;   // B (dibuang)
+    bool eof = false;
+    const char* rejectWhy = nullptr;
+    {
+        std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+        if (!prerolledWorker_) return false;  // tanpa pre-roll
+        if (prerolledTrack_.uri != next.uri) {
+            rejectWhy = "uri tidak cocok";
+            stale = prerolledWorker_;
+        } else if (prerollFailed_.load(std::memory_order_acquire)) {
+            rejectWhy = "pre-roll error";
+            stale = prerolledWorker_;
+        } else {
+            worker = prerolledWorker_;
+            eof = prerollEof_.load(std::memory_order_acquire);
+        }
+        // Slot pre-roll SELALU dikosongkan di sini — worker B tidak
+        // boleh tetap terdaftar sesudah diadopsi/dibuang.
+        prerolledWorker_.reset();
+        prerolledTrack_ = TrackInfo{};
+    }
+    prerollEof_.store(false, std::memory_order_release);
+    prerollFailed_.store(false, std::memory_order_release);
+    if (stale) {
+        __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+            "gapless handoff: batal (%s) — fallback loadTrack",
+            rejectWhy ? rejectWhy : "?");
+        stale->stop();  // di luar lock (pola stopDecoder)
         return false;
     }
+
+    // Adopsi: B sudah decode di belakang ekor A — queue TIDAK di-clear
+    // (audio B sudah antre di sana) dan stream TIDAK di-reopen (laju
+    // sama, gate di maybeStartPreroll). Yang diganti: worker aktif,
+    // track aktif, clock/posisi, kurva fade, flag selesai.
+    // Lindungi dari in-flight render seperti loadTrack (clearing_ +
+    // waitForRenderIdle) — render yang sedang copy slot basi tidak boleh
+    // melihat worker/clock baru di tengah jalan.
+    stopDecoder();  // matikan A (EOF-idle — join cepat)
+    clearing_.store(true, std::memory_order_seq_cst);
+    waitForRenderIdle();
+
+    {
+        std::lock_guard<std::recursive_mutex> lock(decoderMutex_);
+        currentTrack_ = next;
+        decoderWorker_ = worker;
+    }
+    setFileSampleRate(next.sampleRate);
+    // TIDAK pcmQueue_->clear() — audio B sudah antre di sana.
+    clock_->reset();
+    if (state_) state_->setPosition(0);
+
+    // Kurva fade untuk B (auto-advance; crossfade 0 di sini karena
+    // pre-roll mensyaratkan crossfade 0 — lihat buildFadeCurves).
+    buildFadeCurves(next, true);
+    framesSinceLoad_.store(0, std::memory_order_release);
+    // B8-P4: reset throttle self-heal durasi (seperti loadTrack).
+    durationHealCounter_.store(0, std::memory_order_release);
+    // 🔥 FIX (2026-11-10, P-M9): buang sisa WSOLA/pitch track lama.
+    rateProcessor_.reset();
+    pitchShifter_.reset();  // Fase R: buang sisa pitch shifter juga
+
+    // 🔥 FIX: set duration dari metadata track.
+    if (state_ && next.durationMs > 0) {
+        state_->setDuration(static_cast<uint64_t>(next.durationMs));
+    }
+
+    // B sudah selesai dibaca (EOF sebelum handoff) → advance berikutnya
+    // harus dijadwalkan SEKARANG (tidak ada lagi callback EOF yang akan
+    // datang dari B). Kalau tidak, playback berhenti diam-diam di akhir B.
+    decoderFinished_.store(eof, std::memory_order_release);
+
+    // stopDecoder() di atas me-reset decoderTargetRate_ ke 0 — pulihkan
+    // ke target B (sama dengan laju stream saat ini, atau laju file
+    // bila stream belum dibuka) supaya reloadIfDecoderRateMismatch()
+    // tetap bisa mendeteksi decoder yang dibuat saat stream masih 0.
+    {
+        uint32_t target = streamSampleRate();
+        if (target == 0) target = next.sampleRate;
+        decoderTargetRate_.store(target, std::memory_order_release);
+    }
+
+    clearing_.store(false, std::memory_order_release);
+
+    // 🔥 FIX (2026-11-10, P-M8): isi durationFrames clock dari worker B
+    // (seperti loadTrack) — durasi decoder paling akurat, fallback
+    // metadata track.
+    if (clock_) {
+        double durSec = worker->getDuration();
+        if (durSec <= 0.0 && next.durationMs > 0) {
+            durSec = static_cast<double>(next.durationMs) / 1000.0;
+        }
+        if (durSec > 0.0) {
+            uint32_t rate = streamSampleRate();
+            if (rate == 0) rate = next.sampleRate;
+            if (rate == 0) rate = 48000;
+            clock_->setDurationFrames(
+                static_cast<uint64_t>(durSec * rate));
+        }
+    }
+
+    __android_log_print(ANDROID_LOG_INFO, "PlaybackController",
+                        "gapless handoff: %s diadopsi (eof=%d)",
+                        next.uri.c_str(), eof ? 1 : 0);
+    if (eof) {
+        scheduleAdvance(next.uri,
+                        loadGen_.load(std::memory_order_acquire));
+    }
+    return true;
 }
 
 void PlaybackController::stopDecoder() {
@@ -2144,6 +2471,10 @@ std::optional<std::string> PlaybackController::processAdvance(
         }
         if (!pcmQueue_) return std::nullopt;
         if (pcmQueue_->availableSamples() == 0) break;
+        // Gapless (2026-11-20): pre-roll track berikutnya saat ekor
+        // tinggal ~2 dtk (cek + ambang di dalam maybeStartPreroll —
+        // panggilan tiap 20 ms ini murah bila syarat belum terpenuhi).
+        maybeStartPreroll(finishedUri);
         std::unique_lock<std::mutex> lock(advanceMutex_);
         advanceCv_.wait_for(lock, std::chrono::milliseconds(20), [this] {
             return advanceCancelled_.load(std::memory_order_acquire) ||
@@ -2227,6 +2558,14 @@ std::optional<std::string> PlaybackController::processAdvance(
         // fade-out ekor (lihat loadTrack()). Retry P-M10 ke trek
         // berikutnya juga auto-advance (trek gagal tidak berbunyi,
         // jadi tidak ada ekor yang ter-fade).
+        // Gapless (2026-11-20): coba adopsi worker pre-roll dulu —
+        // tanpa clear queue, tanpa loadTrack, tanpa reopen stream.
+        // Gagal (tanpa pre-roll / uri beda / pre-roll error) → jatuh
+        // ke loadTrack biasa di bawah (retry P-M10 tetap berlaku).
+        if (tryGaplessHandoff(*nextTrack)) {
+            loaded = true;
+            break;
+        }
         if (loadTrack(*nextTrack, true)) {
             loaded = true;
             break;
@@ -2346,9 +2685,21 @@ void PlaybackController::applyTrackFades(float* output, uint32_t frames,
     // increment-nya terjadi di blok clock advance setelah pemanggilan ini.)
     const bool processingAllowed =
         processingAllowed_.load(std::memory_order_acquire);
-    const FadeEngine& fadeIn = processingAllowed
+    // Gapless (2026-11-20): seam tanpa crossfade = kurva anti-klik
+    // 10 ms di SEMUA mode (bukan 300/500 ms processing) — fade 300/500 ms
+    // di seam adalah lembah ~0,8 dtk yang terdengar sebagai jeda.
+    // Crossfade > 0 MENANG: fade-out ekor = durasi crossfade (dibangun
+    // loadTrack), fade-in tetap 300 ms — perilaku crossfade hari ini
+    // tidak berubah. (Catatan: fade-out di seam gapless praktis tidak
+    // jalan — sisa queue menghitung juga audio B yang sudah di-pre-roll,
+    // jadi remainingFrames > durasi kurva; itu BENAR: seam tidak boleh
+    // di-fade. Fade-in 10 ms di awal B hanya anti-klik.)
+    const bool gaplessSeam =
+        gaplessEnabled_.load(std::memory_order_acquire) &&
+        crossfadeSeconds_.load(std::memory_order_acquire) == 0.0f;
+    const FadeEngine& fadeIn = (processingAllowed && !gaplessSeam)
         ? fadeInProcessing_ : fadeInBitPerfect_;
-    const FadeEngine& fadeOut = processingAllowed
+    const FadeEngine& fadeOut = (processingAllowed && !gaplessSeam)
         ? fadeOutProcessing_ : fadeOutBitPerfect_;
     const uint32_t sinceLoad =
         framesSinceLoad_.load(std::memory_order_acquire);
