@@ -202,6 +202,9 @@ public:
     // PlaybackController (bukan DSPChain/AudioState — fade track
     // hidup di controller, bukan di rantai efek).
     void setCrossfadeSeconds(float seconds);
+    // Gapless (2026-11-20): pre-roll + trim priming/padding,
+    // diteruskan langsung ke PlaybackController (bukan DSPChain).
+    void setGaplessEnabled(bool enabled);
     void setEqEnabled(bool enabled);
 
     // Convolver — IR (2026-11-20). loadConvolverIr return status

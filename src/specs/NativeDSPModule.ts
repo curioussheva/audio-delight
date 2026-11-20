@@ -72,6 +72,13 @@ export interface Spec extends TurboModule {
   // (fade tetap 10 ms anti-klik). sessionId diterima demi
   // kompatibilitas API tapi diabaikan native (F7: satu stream global).
   setCrossfadeSeconds(seconds: number, sessionId: number): Promise<boolean>;
+  // Gapless (2026-11-20): putar album bersambung tanpa jeda — pre-roll
+  // track berikutnya + trim priming/padding encoder di decoder.
+  // Default ON (setting gapless, persist "gapless-storage"). OFF =
+  // perilaku lama (jeda load + fade-out 500 ms). Crossfade > 0 MENANG
+  // atas gapless untuk transisi itu (native). sessionId diterima demi
+  // kompatibilitas API tapi diabaikan native (F7: satu stream global).
+  setGaplessEnabled(enabled: boolean, sessionId: number): Promise<boolean>;
   // Convolver — IR (2026-11-20): toggle sendiri, DI LUAR preset EQ
   // (keputusan yang sama dengan HRTF). loadConvolverIr resolve status
   // kLoad* ConvolverNode — lihat ConvolverIrStatus di bawah; pemanggil

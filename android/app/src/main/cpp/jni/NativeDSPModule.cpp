@@ -177,6 +177,19 @@ Java_com_pristineaudio_dsp_NativeDSPModule_setNativeCrossfadeSeconds(
     });
 }
 
+JNIEXPORT void JNICALL
+Java_com_pristineaudio_dsp_NativeDSPModule_setNativeGaplessEnabled(
+    JNIEnv* env,
+    jobject,
+    jboolean enabled
+) {
+    pristine::jni::guardedVoid(env, "setNativeGaplessEnabled", [&] {
+
+    EngineManager::get()
+        .setGaplessEnabled(static_cast<bool>(enabled));
+    });
+}
+
 // =====================================================
 // CONVOLVER — IMPULSE RESPONSE (2026-11-20)
 // =====================================================

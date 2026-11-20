@@ -1337,6 +1337,24 @@ void EngineManager::setCrossfadeSeconds(
 }
 
 // =====================================================
+// GAPLESS (2026-11-20)
+// =====================================================
+//
+// Pre-roll track berikutnya + trim priming/padding encoder.
+// Diteruskan langsung ke PlaybackController — pre-roll + trim hidup
+// di sana, bukan di DSPChain. OFF membatalkan pre-roll yang sedang
+// berjalan (lihat PlaybackController::setGaplessEnabled).
+
+void EngineManager::setGaplessEnabled(
+    bool enabled
+) {
+
+    mPlayback.setGaplessEnabled(
+        enabled
+    );
+}
+
+// =====================================================
 // CONVOLVER — IMPULSE RESPONSE (2026-11-20)
 // =====================================================
 
