@@ -162,3 +162,28 @@ tidak cukup. Pakai APK Dev/Preview terbaru dari HEAD ronde ini.
 - Crossfade overlap sejati (dua decoder + mix di `render()`).
 - Ukur load latency A di device (log timestamp drain-kosong →
   chunk pertama) untuk angka, bukan perkiraan.
+
+## 6. ADDENDUM — implementasi selesai 2026-11-20 (HEAD b26247346)
+
+Butir §5 nomor 1 (pre-roll) dan nomor 2 (trim priming/padding) SUDAH
+dikerjakan ronde ini — bukan lagi "kerja lanjutan". Detail lengkap di
+`~/workspace/audit-chain-2026-11-18/gapless-implementation-report.md`.
+
+- **Trim (celah D tertutup):** `decoder/GaplessInfo.h` (parser
+  Xing/LAME + iTunSMPB), `FFmpegDecoder.cpp` (side-data
+  `AV_FRAME_DATA_SKIP_SAMPLES` menang atas Xing; start-trim domain
+  output + end-trim; flush swr di EOF). Host test
+  `scripts/test_gapless.cpp`: 8 kasus, semua lulus.
+- **Pre-roll (celah A tertutup):** `PlaybackController.cpp`
+  `maybeStartPreroll()` (:2047) + `tryGaplessHandoff()` (:2155) —
+  decoder track berikut disiapkan saat ekor tinggal ~2 dtk, output
+  masuk antrean yang sama; handoff tanpa clear antrean / tanpa
+  reopen stream. `TrackQueue::peekNext()` baru.
+- **Seam (celah B):** `applyTrackFades()` — gapless ON + crossfade 0
+  memakai kurva anti-klik 10 ms di semua mode (bukan fade-out 500 ms
+  / fade-in 300 ms). Crossfade > 0 menang atas gapless.
+- **Setting:** toggle Settings §1e (default ON), store
+  `src/features/gapless/` (persist "gapless-storage"), bridge
+  `setGaplessEnabled` (spec → Kotlin → JNI → EngineManager).
+- **Belum terbukti:** kompilasi NDK (butuh Dev build CI — belum
+  ditrigger) + tes dengar di device (seam album bersambung).
