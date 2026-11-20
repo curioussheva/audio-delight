@@ -89,7 +89,7 @@ const DrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
         ]}
       >
         <Image
-          source={require("../../../assets/images/dev-logo.png")}
+          source={require("../../../assets/images/icon.png")}
           style={styles.logo}
           contentFit="contain"
         />
@@ -160,6 +160,13 @@ const DrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
         <Text style={[styles.devName, { color: colors.text.secondary }]}>
           {DEVELOPER}
         </Text>
+
+        <Image
+          source={require("../../../assets/images/curious-sheva-banner.png")}
+          style={styles.footerBanner}
+          contentFit="contain"
+          accessibilityLabel="Banner Curious Sheva"
+        />
       </View>
       </DrawerContentScrollView>
 
@@ -264,6 +271,7 @@ const styles = StyleSheet.create({
   version: { fontSize: 11, fontWeight: "700", marginTop: 2, letterSpacing: 0.5 },
   items: { flex: 1 },
   footer: { borderTopWidth: 1, alignItems: "center" },
+  footerBanner: { width: "100%", aspectRatio: 3.75, marginTop: 10 },
   devSection: { borderTopWidth: 1 },
   devItem: {
     flexDirection: "row",
