@@ -53,6 +53,19 @@ jest.mock("@/features/convolver/store/convolverStore", () => ({
   },
 }));
 
+// Crossfade di-mock dengan alasan yang sama (2026-11-20): equalizerStore
+// memanggil restoreToNative() store ini di applyAllEffectsToNative +
+// initialize, dan store aslinya menarik spec TurboModule langsung.
+jest.mock("@/features/crossfade/store/crossfadeStore", () => ({
+  __esModule: true,
+  useCrossfadeStore: {
+    getState: () => ({
+      crossfadeSeconds: 0,
+      restoreToNative: jest.fn(async () => {}),
+    }),
+  },
+}));
+
 jest.mock("@/features/headphone/store/headphoneStore", () => ({
   __esModule: true,
   useHeadphoneStore: { getState: () => ({ deactivate: jest.fn() }) },
