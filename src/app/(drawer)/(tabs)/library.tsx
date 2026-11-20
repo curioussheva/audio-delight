@@ -143,18 +143,22 @@ const songKeyExtractor = (item: Song) => item.id;
 // "ompong"); 2026-11-20 14:54 user minta 50/100 baris — untuk offline
 // player, daftar 1000++ lagu itu wajar, dan 15–20 baris terasa sangat
 // kurang. Dipilih 50: drawDistance = (50×77 − 560)/2 = 1645 → 1650,
-// total (560+3300)/77 ≈ 50 baris.
+// total (560+3300)/77 ≈ 50 baris. 2026-11-20 15:24 user minta naik ke 100
+// baris + periksa perbedaan kinerjanya nanti: drawDistance =
+// (100×77 − 560)/2 = 3570, total (560+7140)/77 ≈ 100 baris. Perbandingan
+// kinerja (50 vs 100) terjadi di device, sesudah ronde ini — catat saat
+// tes: kehalusan fling, baris kosong, berat saat fling + playback, dan
+// freeze (lihat laporan library-draw-distance-100-report.md).
 //
 // TRADE-OFF (baca sebelum menaikkan lagi): tiap baris ekstra = artwork +
 // teks yang harus di-mount thread JS; app ini sudah melawan stall thread
-// JS (freeze: fling + playback; 2 lag terbesar logcat-6 dari drag slider).
-// Kalau HP terasa lebih berat atau freeze memburuk, tersangka pertama
-// adalah nilai ini — fallback ke 500 (≈20 baris) atau 350. 100 baris
-// SENGAJA TIDAK DIPILIH: butuh drawDistance ±3570 dan 100 SongListItem +
-// fetch artwork sekaligus di thread JS — terlalu berat di HP dengan
-// riwayat freeze; 50 adalah langkah terukur, 100 tetap tersedia bila 50
-// terbukti ringan.
-const LIBRARY_DRAW_DISTANCE_DP = 1650;
+// JS (freeze: fling + playback; 2 lag terbesar logcat-6 dari drag slider;
+// logcat-7 kembali ≥10 dtk di tengah badai fling). 100 baris = 100
+// SongListItem + fetch artwork sekaligus di thread JS — ini eksperimen,
+// bukan nilai aman. Kalau HP terasa lebih berat atau freeze memburuk,
+// tersangka pertama adalah nilai ini — TANGGA FALLBACK: 1650 (≈50 baris)
+// → 500 (≈20 baris) → 350.
+const LIBRARY_DRAW_DISTANCE_DP = 3570;
 
 export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
