@@ -417,7 +417,7 @@ class VisualizerService {
   private startPolling(): void {
     if (this.pollingTimer) return;
 
-    const intervalMs = this.config.pollingIntervalMs ?? 100;
+    const intervalMs = this.config.pollingIntervalMs ?? 50;
     this.pollingTimer = setInterval(async () => {
       if (!this.isStarted) return;
       // J1-1: jangan tumpuk — lewati tick kalau poll sebelumnya belum selesai.
