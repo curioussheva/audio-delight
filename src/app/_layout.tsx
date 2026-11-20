@@ -598,7 +598,13 @@ const performInitialization = useCallback(async () => {
     // [BRIDGE-PROBE] (diagnostik SEMENTARA, logcat #8): sampler round-trip
     // bridge 1/detik — jalan di efek dev-only yang sama dengan monitor di
     // atas. Cabut start/stop ini + modul bridgeProbe.ts bila sudah terjawab.
-    const probe = startBridgeProbe({
+    //
+    // KONTROL TRACE 3 — probe-OFF satu sesi (pemisah termurah): sampler
+    // dimatikan, dragDiag + instrumen lain tetap jalan sebagai alat ukur.
+    // Kembalikan true sesudah sesi kontrol.
+    const BRIDGE_PROBE_ENABLED = false;
+
+    const probe = BRIDGE_PROBE_ENABLED ? startBridgeProbe({
       getAudioMode: () => usePlayerStore.getState().audioMode,
       getCrossfadeSeconds: () =>
         useCrossfadeStore.getState().crossfadeSeconds,
@@ -610,7 +616,8 @@ const performInitialization = useCallback(async () => {
         const r = await NativeDSPModule.createAudioSession();
         return r?.sessionId ?? 0;
       },
-    });
+    })
+      : null;
 
     // [DIAG-GATE] nyalakan semua log diagnostik sementara (event-lag,
     // drag-diag, fling-diag, mode-switch) — jalan di efek dev-only yang
@@ -619,7 +626,7 @@ const performInitialization = useCallback(async () => {
 
     return () => {
       console.log("[DIAG] 🛑 Stopping diagnostics monitor");
-      probe.stop();
+      probe?.stop();
       setTempDiagEnabled(false);
       diag.stop();
       diagRef.current = null;
