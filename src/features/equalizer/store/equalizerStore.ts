@@ -11,6 +11,7 @@ import { NativeDSPModule } from "@/features/equalizer/api/nativeInterface";
 import { useHrtfStore } from "@/features/hrtf/store/hrtfStore";
 import { useConvolverStore } from "@/features/convolver/store/convolverStore";
 import { useCrossfadeStore } from "@/features/crossfade/store/crossfadeStore";
+import { useGaplessStore } from "@/features/gapless/store/gaplessStore";
 import { useHeadphoneStore } from "@/features/headphone/store/headphoneStore";
 import { getEffectiveMasterGain, useReplayGainStore } from "@/features/replaygain/store/replayGainStore";
 // [BRIDGE-PROBE] diagnostik sementara (logcat #8) — lihat bridgeProbe.ts.
@@ -309,6 +310,11 @@ finalSessionId = sessionResult?.sessionId ?? 0;
     // perilaku lama). Bukan lewat NativeDSPModule langsung di sini
     // supaya logika push (createAudioSession + clamp) satu tempat.
     ["setCrossfadeSeconds", () => useCrossfadeStore.getState().restoreToNative()],
+    // Gapless (2026-11-20): flag dari gaplessStore — di luar preset.
+    // restoreToNative mendorong nilai tersimpan (default ON = pre-roll
+    // + trim). Bukan lewat NativeDSPModule langsung di sini supaya
+    // logika push (createAudioSession) satu tempat.
+    ["setGaplessEnabled", () => useGaplessStore.getState().restoreToNative()],
     // Convolver (2026-11-20): IR + toggle dari convolverStore — di
     // luar preset. SATU entri gabungan (bukan dua entri Promise.all):
     // load IR dulu, baru toggle — urutan wajib karena native
@@ -762,6 +768,16 @@ export const useEqualizerStore = create<EqualizerStore>()(
             await useCrossfadeStore.getState().restoreToNative();
           } catch (e) {
             console.error("[EQ Store] restore crossfade gagal:", e);
+          }
+
+          // Gapless (2026-11-20): restore DI LUAR gate EQ — sama
+          // seperti crossfade (hidup di PlaybackController, bukan di
+          // rantai DSP). applyAll di atas juga mendorongnya bila EQ
+          // menyala; pemulihan di sini menutup kasus EQ mati.
+          try {
+            await useGaplessStore.getState().restoreToNative();
+          } catch (e) {
+            console.error("[EQ Store] restore gapless gagal:", e);
           }
         } catch (error) {
           set({ isInitialized: true });

@@ -102,6 +102,24 @@ jest.mock("@/features/crossfade/store/crossfadeStore", () => ({
   },
 }));
 
+// Gapless di-mock dengan alasan yang sama: gaplessStore mengimpor
+// spec TurboModule langsung. restoreToNative dipanggil
+// applyAllEffectsToNative + initialize.
+const mockGaplessState = {
+  gaplessEnabled: true,
+  setGaplessEnabled: jest.fn(async (v: boolean) => {
+    mockGaplessState.gaplessEnabled = v;
+  }),
+  restoreToNative: jest.fn(async () => {}),
+};
+
+jest.mock("@/features/gapless/store/gaplessStore", () => ({
+  __esModule: true,
+  useGaplessStore: {
+    getState: () => mockGaplessState,
+  },
+}));
+
 jest.mock("@/features/headphone/store/headphoneStore", () => ({
   __esModule: true,
   useHeadphoneStore: {
@@ -248,6 +266,16 @@ describe("N4 — applyAllEffectsToNative mengirim kelima efek", () => {
     await store.getState().setEQEnabled(true);
 
     expect(mockConvolverState.restoreToNative).toHaveBeenCalled();
+  });
+
+  it("gapless restore ikut terpanggil saat EQ dinyalakan", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    jest.clearAllMocks();
+
+    await store.getState().setEQEnabled(true);
+
+    expect(mockGaplessState.restoreToNative).toHaveBeenCalled();
   });
 
   it("sakelar efek OFF -> efek itu dikirim 0, yang lain tetap nilainya", async () => {

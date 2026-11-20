@@ -66,6 +66,19 @@ jest.mock("@/features/crossfade/store/crossfadeStore", () => ({
   },
 }));
 
+// Gapless di-mock dengan alasan yang sama (2026-11-20): equalizerStore
+// memanggil restoreToNative() store ini di applyAllEffectsToNative +
+// initialize, dan store aslinya menarik spec TurboModule langsung.
+jest.mock("@/features/gapless/store/gaplessStore", () => ({
+  __esModule: true,
+  useGaplessStore: {
+    getState: () => ({
+      gaplessEnabled: true,
+      restoreToNative: jest.fn(async () => {}),
+    }),
+  },
+}));
+
 jest.mock("@/features/headphone/store/headphoneStore", () => ({
   __esModule: true,
   useHeadphoneStore: { getState: () => ({ deactivate: jest.fn() }) },

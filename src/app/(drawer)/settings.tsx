@@ -88,6 +88,8 @@ import {
   CROSSFADE_STEP_SECONDS,
   formatCrossfadeLabel,
 } from "@/features/crossfade/crossfade";
+import { useGaplessStore } from "@/features/gapless/store/gaplessStore";
+import { gaplessDescription } from "@/features/gapless/gapless";
 import { useOutputProfileStore } from "@/features/outputprofile/store/outputProfileStore";
 import {
   CONFIGURABLE_OUTPUT_CATEGORIES,
@@ -409,6 +411,9 @@ export default function SettingsScreen() {
     setCrossfadeDraft(null);
     await useCrossfadeStore.getState().setCrossfadeSeconds(value);
   };
+
+  // Gapless (2026-11-20): lagu bersambung tanpa jeda — default ON.
+  const gaplessEnabled = useGaplessStore((s) => s.gaplessEnabled);
 
   const {
     playbackSpeed,
@@ -1600,7 +1605,50 @@ export default function SettingsScreen() {
           </View>
 
 
-          {/* ── 1e. Profil per Output — preset EQ otomatis per jalur ────
+          {/* ── 1e. Gapless — lagu bersambung tanpa jeda ───────────────
+              Default ON: pre-roll track berikutnya saat ekor tinggal
+              ~2 dtk + trim priming/padding encoder (MP3 Xing/LAME,
+              MP4 iTunSMPB) + kurva seam anti-klik 10 ms. OFF = perilaku
+              lama (jeda muat antar lagu + fade-out 0,5 dtk). Crossfade
+              > 0 MENANG atas gapless untuk transisi itu (native).
+              JUJUR: butuh Dev build untuk efek suara — toggle-nya
+              hidup via Metro, tapi native lama mengabaikannya. */}
+          <SettingRow colors={colors} spacing={spacing}>
+            <View style={{ flex: 1, marginRight: spacing.md }}>
+              <Text style={{ color: colors.text.primary, fontFamily: FONT_FAMILY.semiBold }}>
+                Gapless — Lagu Bersambung Tanpa Jeda
+              </Text>
+              <Text
+                style={{
+                  color: colors.text.secondary,
+                  fontSize: 11,
+                  marginTop: 2,
+                  lineHeight: 15,
+                }}
+              >
+                {gaplessDescription(gaplessEnabled, crossfadeSeconds)}
+              </Text>
+            </View>
+            <Switch
+              value={gaplessEnabled}
+              onValueChange={(value) =>
+                useGaplessStore.getState().setGaplessEnabled(value)
+              }
+              trackColor={{
+                false: colors.background.tertiary,
+                true: colors.primary[500],
+              }}
+              thumbColor={
+                gaplessEnabled
+                  ? colors.text.primary
+                  : colors.text.secondary
+              }
+              accessibilityLabel="Gapless antar lagu"
+            />
+          </SettingRow>
+
+
+          {/* ── 1f. Profil per Output — preset EQ otomatis per jalur ────
               Default MATI (opt-in): menyalakan fitur tidak mengubah suara
               yang sedang berjalan. Saat ON dan output berpindah kategori
               (jack/DAC/Bluetooth/speaker/line-out), preset yang dipetakan
