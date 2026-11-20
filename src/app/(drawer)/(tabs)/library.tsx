@@ -19,11 +19,13 @@ import { FlashList } from "@shopify/flash-list";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import * as DocumentPicker from "expo-document-picker";
+import { useRouter } from "expo-router";
 
 // Icons
 import {
   ArrowLeft,
   ChevronLeft,
+  ChevronRight,
   Music2,
   Plus,
   Trash2,
@@ -32,6 +34,7 @@ import {
   SearchX,
   Filter,
   Sparkles,
+  TrendingUp,
 } from "lucide-react-native";
 
 // Context & Stores
@@ -139,6 +142,7 @@ export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { colors } = theme;
+  const router = useRouter();
 
   // ── Store States ───────────────────────────────────────────────────────────
   const { activeTab, setActiveTab, tracks, setTracks } = useLibraryStore();
@@ -1200,6 +1204,35 @@ export default function LibraryScreen() {
         onRefresh={onRefresh}
       />
 
+      {/* Statistik Mendengarkan (item 10): kartu ringkas → layar
+          statistik. Satu baris tetap di atas konten semua tab supaya
+          mudah ditemukan tanpa memakan tempat daftar. */}
+      <TouchableOpacity
+        style={[
+          s.statsCard,
+          {
+            backgroundColor: colors.background.secondary,
+            borderColor: colors.border.medium,
+          },
+        ]}
+        onPress={() => router.push("/(drawer)/stats")}
+        accessibilityRole="button"
+        accessibilityLabel="Buka Statistik Mendengarkan"
+      >
+        <TrendingUp size={20} color={colors.primary[500]} />
+        <View style={s.statsCardText}>
+          <Text
+            style={[s.statsCardTitle, { color: colors.text.primary }]}
+          >
+            Statistik Mendengarkan
+          </Text>
+          <Text style={[s.statsCardSub, { color: colors.text.tertiary }]}>
+            Artis & lagu teratas, jam dengar, streak
+          </Text>
+        </View>
+        <ChevronRight size={18} color={colors.text.secondary} />
+      </TouchableOpacity>
+
       {/* U-P1-39: daftar lama tetap tampil, tapi error refresh tidak lagi
           sunyi — banner jujur + tombol coba lagi. */}
       {libraryError && tracks.length > 0 && (
@@ -1406,6 +1439,29 @@ const createStyles = (colors: any) =>
     retryBtnText: {
       fontSize: 14,
       fontFamily: FONT_FAMILY.bold,
+    },
+    // Statistik Mendengarkan (item 10): kartu ringkas di atas konten —
+    // satu baris, ikon + judul + subjudul + chevron.
+    statsCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      marginHorizontal: 20,
+      marginBottom: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderRadius: BASE_RADIUS.md,
+      borderWidth: 1,
+    },
+    statsCardText: { flex: 1 },
+    statsCardTitle: {
+      fontSize: 15,
+      fontFamily: FONT_FAMILY.semiBold,
+    },
+    statsCardSub: {
+      fontSize: 12,
+      fontFamily: FONT_FAMILY.regular,
+      marginTop: 1,
     },
     // F: header detail playlist (pola yang sama dengan layar drawer
     // Playlist) — tombol kembali + judul + hapus.
