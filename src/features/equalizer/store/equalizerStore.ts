@@ -15,6 +15,12 @@ import { useHeadphoneStore } from "@/features/headphone/store/headphoneStore";
 import { getEffectiveMasterGain, useReplayGainStore } from "@/features/replaygain/store/replayGainStore";
 // [BRIDGE-PROBE] diagnostik sementara (logcat #8) — lihat bridgeProbe.ts.
 import { noteBridgeProbeApply } from "@/features/player/api/bridgeProbe";
+// [DRAG-DIAG] diagnostik sementara (logcat #8) — lihat dragDiag.ts.
+import {
+  noteThrottleTick,
+  noteSetterStart,
+  noteSetterEnd,
+} from "@/features/equalizer/api/dragDiag";
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -330,8 +336,11 @@ const applyEqThrottled = (
       !isEQEnabled ||
       audioSessionId === -1 ||
       !NativeDSPModule?.setFullEqualizer
-    )
+    ) {
+      // [DRAG-DIAG] fire yang tidak mengirim apa-apa (guard di atas).
+      noteThrottleTick("bands", "skipped");
       return;
+    }
     const gains = bands.map((b) => Math.min(10, Math.max(-10, b.gain)));
     void NativeDSPModule.setFullEqualizer(gains, audioSessionId);
   };
@@ -342,11 +351,21 @@ const applyEqThrottled = (
       _eqApplyTimer = null;
     }
     fire();
+    // [DRAG-DIAG] tick yang langsung fire (leading).
+    noteThrottleTick("bands", "fired");
   } else if (!_eqApplyTimer) {
+    // [DRAG-DIAG] tick yang dijadwalkan sebagai trailing fire.
+    noteThrottleTick("bands", "trailing");
     _eqApplyTimer = setTimeout(
       fire,
       EQ_APPLY_THROTTLE_MS - (now - _eqApplyLastAt),
     );
+  } else {
+    // [DRAG-DIAG] tick dalam jendela + trailing sudah terjadwal =
+    // digabung ke trailing fire (nilai akhir tetap terkirim lewat
+    // snapshot pending, tapi tick ini hilang) — hitung supaya logcat
+    // bisa membuktikan berapa tick yang hilang saat drag.
+    noteThrottleTick("bands", "dropped");
   }
 };
 
@@ -406,13 +425,20 @@ const pushMasterGainThrottled = (gain: number) => {
     }
     _masterGainPending = null;
     void fire();
+    // [DRAG-DIAG] tick yang langsung fire (leading).
+    noteThrottleTick("gain", "fired");
   } else if (!_masterGainTimer) {
+    // [DRAG-DIAG] tick yang dijadwalkan sebagai trailing fire.
+    noteThrottleTick("gain", "trailing");
     _masterGainPending = gain;
     _masterGainTimer = setTimeout(
       () => void fire(),
       MASTER_GAIN_NATIVE_THROTTLE_MS - (now - _masterGainLastAt),
     );
   } else {
+    // [DRAG-DIAG] tick dalam jendela + trailing sudah terjadwal =
+    // digabung ke trailing fire — lihat applyEqThrottled di atas.
+    noteThrottleTick("gain", "dropped");
     _masterGainPending = gain;
   }
 };
@@ -593,10 +619,15 @@ export const useEqualizerStore = create<EqualizerStore>()(
         set({ bassStrength: clamped });
         const { isEQEnabled, isBassEnabled, audioSessionId } = get();
         if (isEQEnabled && isBassEnabled && audioSessionId !== -1) {
+          // [DRAG-DIAG] setter TANPA throttle: tiap tick drag langsung
+          // await native — ukur round-trip + overlap (lihat dragDiag.ts).
+          const h = noteSetterStart("setBassBoost");
           try {
             await NativeDSPModule.setBassBoost(clamped, audioSessionId);
           } catch (e) {
             console.error("[EQ Store] setBassBoost gagal:", e);
+          } finally {
+            noteSetterEnd(h);
           }
         }
       },
@@ -606,12 +637,17 @@ export const useEqualizerStore = create<EqualizerStore>()(
         set({ virtualizerLevel: clamped });
         const { isEQEnabled, isVirtualizerEnabled, audioSessionId } = get();
         if (isEQEnabled && isVirtualizerEnabled && audioSessionId !== -1) {
+          // [DRAG-DIAG] setter TANPA throttle: tiap tick drag langsung
+          // await native — ukur round-trip + overlap (lihat dragDiag.ts).
+          const h = noteSetterStart("setVirtualizer");
           try {
             // DIAGNOSTIK SEMENTARA — bisa dicabut (audit setVirtualizer 2026-11-19, opsi B).
             console.log(`[EQ-DIAG] setVirtualizer via setVirtualizer strength=${clamped}`);
             await NativeDSPModule.setVirtualizer(clamped, audioSessionId);
           } catch (e) {
             console.error("[EQ Store] setVirtualizer gagal:", e);
+          } finally {
+            noteSetterEnd(h);
           }
         }
       },
@@ -638,10 +674,15 @@ export const useEqualizerStore = create<EqualizerStore>()(
         set({ reverbPreset: clamped });
         const { isEQEnabled, isReverbEnabled, audioSessionId } = get();
         if (isEQEnabled && isReverbEnabled && audioSessionId !== -1) {
+          // [DRAG-DIAG] setter TANPA throttle: tiap tick drag langsung
+          // await native — ukur round-trip + overlap (lihat dragDiag.ts).
+          const h = noteSetterStart("setReverb");
           try {
             await NativeDSPModule.setReverbPreset(clamped, audioSessionId);
           } catch (e) {
             console.error("[EQ Store] setReverbPreset gagal:", e);
+          } finally {
+            noteSetterEnd(h);
           }
         }
       },
@@ -663,10 +704,14 @@ export const useEqualizerStore = create<EqualizerStore>()(
     }
     _eqStorePendingBands = null;
     _eqStoreLastAt = now;
+    // [DRAG-DIAG] tick store yang langsung masuk (leading).
+    noteThrottleTick("store", "fired");
     set({ bands: newBands, activePresetId: "custom" });
   } else {
     _eqStorePendingBands = newBands;
     if (!_eqStoreTimer) {
+      // [DRAG-DIAG] tick store yang dijadwalkan sebagai trailing flush.
+      noteThrottleTick("store", "trailing");
       _eqStoreTimer = setTimeout(() => {
         _eqStoreLastAt = Date.now();
         _eqStoreTimer = null;
@@ -674,6 +719,9 @@ export const useEqualizerStore = create<EqualizerStore>()(
         _eqStorePendingBands = null;
         if (pending) set({ bands: pending, activePresetId: "custom" });
       }, EQ_STORE_THROTTLE_MS - (now - _eqStoreLastAt));
+    } else {
+      // [DRAG-DIAG] tick store yang digabung ke flush tertunda.
+      noteThrottleTick("store", "dropped");
     }
   }
 

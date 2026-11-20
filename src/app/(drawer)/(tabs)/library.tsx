@@ -41,6 +41,8 @@ import {
 import { useTheme } from "@/shared/context/ThemeContext";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { useLibrary } from "@/features/library/hooks/useLibrary";
+// [FLING] diagnostik sementara (drawDistance 100) — lihat flingDiag.ts.
+import { noteFlingStart, noteFlingEnd } from "@/features/library/api/flingDiag";
 import { useFavorites } from "@/features/favorites/hooks/useFavorites";
 import { useLibraryStore } from "@/features/library/store/libraryStore";
 import {
@@ -929,6 +931,14 @@ export default function LibraryScreen() {
               // Fling-blank fix: buffer render tiap sisi viewport
               // (lihat LIBRARY_DRAW_DISTANCE_DP).
               drawDistance={LIBRARY_DRAW_DISTANCE_DP}
+              // [FLING] diagnostik sementara (drawDistance 100): satu
+              // baris per fling (mulai/selesai momentum), bukan per scroll.
+              onMomentumScrollBegin={(e) =>
+                noteFlingStart("playlist", e.nativeEvent.contentOffset.y)
+              }
+              onMomentumScrollEnd={(e) =>
+                noteFlingEnd("playlist", e.nativeEvent.contentOffset.y)
+              }
             />
           )}
         </View>
@@ -1019,6 +1029,14 @@ export default function LibraryScreen() {
             // hasMore=false saat satu halaman kembali < limit.
             onEndReached={loadMore}
             onEndReachedThreshold={0.5}
+            // [FLING] diagnostik sementara (drawDistance 100): satu
+            // baris per fling (mulai/selesai momentum), bukan per scroll.
+            onMomentumScrollBegin={(e) =>
+              noteFlingStart("songs", e.nativeEvent.contentOffset.y)
+            }
+            onMomentumScrollEnd={(e) =>
+              noteFlingEnd("songs", e.nativeEvent.contentOffset.y)
+            }
           />
         );
       case "album":

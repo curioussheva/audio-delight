@@ -56,6 +56,8 @@ import {
 import { runAudioTestMatrix } from "@/features/player/api/testMatrix";
 // [BRIDGE-PROBE] diagnostik sementara (logcat #8) — lihat bridgeProbe.ts.
 import { startBridgeProbe } from "@/features/player/api/bridgeProbe";
+// [DIAG-GATE] sakelar diagnostik sementara (logcat #8) — lihat diagGate.ts.
+import { setTempDiagEnabled } from "@/shared/utils/diagGate";
 import { useCrossfadeStore } from "@/features/crossfade/store/crossfadeStore";
 import NativeDSPModule from "@/specs/NativeDSPModule";
  
@@ -611,9 +613,15 @@ const performInitialization = useCallback(async () => {
       },
     });
 
+    // [DIAG-GATE] nyalakan semua log diagnostik sementara (event-lag,
+    // drag-diag, fling-diag, mode-switch) — jalan di efek dev-only yang
+    // sama dengan monitor + probe di atas; mati di cleanup di bawah.
+    setTempDiagEnabled(true);
+
     return () => {
       console.log("[DIAG] 🛑 Stopping diagnostics monitor");
       probe.stop();
+      setTempDiagEnabled(false);
       diag.stop();
       diagRef.current = null;
       delete (global as any).__audioDiag;

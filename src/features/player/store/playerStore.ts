@@ -19,6 +19,13 @@ import NativeDSPModule from "@/features/equalizer/api/nativeInterface";
 import { applyReplayGainForSong } from "@/features/replaygain/apply";
 import { clampTuningCents } from "@/features/player/utils/tuning";
 import { parseRepeatShuffleEvent } from "@/features/player/utils/repeatShuffle";
+// [EVENT-LAG] diagnostik sementara (logcat #8) — lihat eventLag.ts.
+import {
+  noteNativeEventHandled,
+  notePositionTick,
+  notePositionTickSkipped,
+  noteModeSwitch,
+} from "@/features/player/api/eventLag";
 import {
   DEFAULT_SOLFEGEGGIO_FREQ,
   DEFAULT_SOLFEGEGGIO_TEMPLATE_ID,
@@ -469,6 +476,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       const subscription = nativeEmitter.addListener(
         "onPlaybackTrackEnded",
           async (uri: string) => {
+          // [EVENT-LAG] diagnostik sementara (logcat #8): t0 = saat event
+          // TIBA di JS; finally mencatat kapan penanganannya selesai.
+          const t0 = performance.now();
+          try {
           console.log(`[Player] 🎵 native track-ended event: ${uri}`);
           const s = get();
           if (!s.currentSong) return;
@@ -512,6 +523,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           // Jadi kita hanya perlu sync dari native — JANGAN panggil
           // NativePlaybackService.next() lagi (double-advance).
           await get().handleTrackChanged("track-ended");
+          } finally {
+            noteNativeEventHandled("track-ended", t0);
+          }
         },
       );
       (globalThis as any).__nativeTrackEndListener = subscription;
@@ -526,12 +540,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       const subscription = nativeEmitter.addListener(
         "onPlaybackStateChanged",
         async (isPlaying: boolean) => {
+          // [EVENT-LAG] diagnostik sementara (logcat #8) — lihat listener
+          // track-ended di atas: t0 = tiba, finally = selesai ditangani.
+          const t0 = performance.now();
+          try {
           console.log("[Player] ▶️ native playback-state event:", isPlaying);
           set({ isPlaying });
 
           // Sinkronkan juga posisi + trek supaya slider dan judul benar —
           // kalau seek dari notif, posisi UI harus ikut.
           await get().syncFromNative();
+          } finally {
+            noteNativeEventHandled("playback-state", t0);
+          }
         },
       );
       (globalThis as any).__nativePlaybackStateListener = subscription;
@@ -544,11 +565,18 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       const subscription = nativeEmitter.addListener(
         "onPlaybackTrackChanged",
         async (payload: { uri: string; index: number }) => {
+          // [EVENT-LAG] diagnostik sementara (logcat #8) — lihat listener
+          // track-ended di atas: t0 = tiba, finally = selesai ditangani.
+          const t0 = performance.now();
+          try {
           // Payload selalu WritableMap {uri, index} dari
           // PlaybackNativeBridge.emitTrackChanged (B15-K-b); dulu
           // androidx Pair yang ditolak Arguments.fromJavaArgs.
           console.log("[Player] 🔀 native track-changed event:", payload);
           await get().handleTrackChanged("track-changed");
+          } finally {
+            noteNativeEventHandled("track-changed", t0);
+          }
         },
       );
       (globalThis as any).__nativeTrackChangedListener = subscription;
@@ -566,6 +594,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       const subscription = nativeEmitter.addListener(
         "onPlaybackRepeatShuffleChanged",
         (payload: { repeatMode: string; shuffle: boolean }) => {
+          // [EVENT-LAG] diagnostik sementara (logcat #8) — lihat listener
+          // track-ended di atas: t0 = tiba, finally = selesai ditangani.
+          const t0 = performance.now();
+          try {
           // Payload selalu WritableMap {repeatMode, shuffle} dari
           // PlaybackNativeBridge.emitRepeatShuffleChanged; repeatMode
           // string "off"|"all"|"track" sesuai RepeatMode store.
@@ -579,6 +611,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           }
           console.log("[Player] 🔁 native repeat/shuffle event:", parsed);
           set({ repeat: parsed.repeat, shuffle: parsed.shuffle });
+          } finally {
+            noteNativeEventHandled("repeat-shuffle", t0);
+          }
         },
       );
       (globalThis as any).__nativeRepeatShuffleListener = subscription;
@@ -609,14 +644,28 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (!(globalThis as any).__positionWatcher) {
       let _posInFlight = false;
       let lastEmittedPos = -1; // 🔥 throttle untuk MediaSession sync
+      // [EVENT-LAG] diagnostik sementara (logcat #8): tick terakhir —
+      // celah antar tick = interval yang kelaparan (JS tidak sempat jalan).
+      let _posLastTickAt = 0;
       (globalThis as any).__positionWatcher = setInterval(async () => {
-        if (_posInFlight) return;
+        const tickStart = performance.now();
+        const gapMs =
+          _posLastTickAt === 0 ? 500 : tickStart - _posLastTickAt;
+        _posLastTickAt = tickStart;
+        if (_posInFlight) {
+          notePositionTickSkipped(tickStart);
+          return;
+        }
         const s = get();
         if (!s.currentSong) return;
 
         _posInFlight = true;
+        // -1 = getPosition gagal (catch diam-diam di bawah) — tetap dicatat.
+        let awaitMs = -1;
         try {
+          const awaitT0 = performance.now();
           const posMs = await NativePlaybackService.getPosition();
+          awaitMs = performance.now() - awaitT0;
           const newPos = posMs / 1000;
 
           // Statistik (item 10): catat posisi untuk akumulasi detik
@@ -658,6 +707,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           // silent
         } finally {
           _posInFlight = false;
+          // [EVENT-LAG] diagnostik sementara (logcat #8): durasi await
+          // getPosition + celah tick — lihat eventLag.ts.
+          notePositionTick(awaitMs, gapMs);
         }
       }, 500);
       console.log("[Player] 📊 Position watcher started (500ms)");
@@ -1587,6 +1639,18 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     } else if (previous === "bit-perfect") {
       await audioEngine.toggleExclusiveMode(false);
     }
+
+    // [DIAG] mode-switch — DIAGNOSTIK SEMENTARA (bug 01:24, 2026-11-20):
+    // satu baris per ganti mode (tes penentu yang disetujui csheva).
+    // toggleExclusiveMode stop+start stream, jadi restartExpected =
+    // exclusiveToggled. Restart yang BENAR-BENAR terjadi dibaca dari
+    // `AudioStreamController open:`; mode yang diterapkan pipeline dari
+    // `[MODE-DIAG] noteMode` (AudioPipeline.cpp).
+    noteModeSwitch(
+      previous,
+      mode,
+      mode === "bit-perfect" || previous === "bit-perfect",
+    );
   },
 
   setSleepTimer: (minutes: number | null) => {
