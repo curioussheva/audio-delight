@@ -9,6 +9,7 @@ import { ALL_PRESETS, makeBands } from "../constants/presets";
 import { audioEngine } from "@/features/player/api/engine";
 import { NativeDSPModule } from "@/features/equalizer/api/nativeInterface";
 import { useHrtfStore } from "@/features/hrtf/store/hrtfStore";
+import { useConvolverStore } from "@/features/convolver/store/convolverStore";
 import { useHeadphoneStore } from "@/features/headphone/store/headphoneStore";
 import { getEffectiveMasterGain, useReplayGainStore } from "@/features/replaygain/store/replayGainStore";
 
@@ -177,6 +178,11 @@ finalSessionId = sessionResult?.sessionId ?? 0;
     : 0;
   // HRTF: flag dari store sendiri (bukan dari state EQ — di luar preset).
   const hrtf = useHrtfStore.getState().isHrtfEnabled;
+  // Convolver (2026-11-20): IR + toggle dari store sendiri (di luar
+  // preset, sama seperti HRTF). Dipulihkan lewat restoreToNative di
+  // entri efek di bawah — BUKAN di sini, karena restore harus
+  // berurutan (load IR dulu, baru toggle).
+  const convolver = useConvolverStore.getState();
   // Master gain: nilai linear 0.251..3.98 (−12..+12 dB, 1.0 netral).
   // TIDAK digate sakelar efek — gain bukan efek yang bisa OFF; lantai
   // −12 dB = 0,25× (bukan senyap). Yang di-gate hanya pengiriman ke
@@ -204,6 +210,13 @@ finalSessionId = sessionResult?.sessionId ?? 0;
     ["setReverbPreset", () => NativeDSPModule.setReverbPreset(reverb, finalSessionId)],
     // HRTF (2026-11-19): flag dari hrtfStore — di luar preset.
     ["setHrtfEnabled", () => NativeDSPModule.setHrtfEnabled(hrtf, finalSessionId)],
+    // Convolver (2026-11-20): IR + toggle dari convolverStore — di
+    // luar preset. SATU entri gabungan (bukan dua entri Promise.all):
+    // load IR dulu, baru toggle — urutan wajib karena native
+    // melupakan IR saat engine mati. restoreToNative resolve
+    // undefined = berhasil (wrapper di bawah menilai r !== false).
+    // Tanpa IR tersimpan, restore hanya mendorong toggle (mati).
+    ["convolver", () => useConvolverStore.getState().restoreToNative()],
     // Master gain: Promise<boolean> sejak P1-9 (2026-11-19) — tanpa
     // sessionId (engine global, F7). Dibungkus supaya masuk Promise.all
     // yang sama + hasil false tercatat sebagai gagal oleh wrapper di
@@ -242,7 +255,7 @@ finalSessionId = sessionResult?.sessionId ?? 0;
   const perEffect = results
     .map((r) => `${r.name}:${Math.round(r.ms)}ms`)
     .join(" ");
-  const detail = `(trigger: ${trigger}) in ${Math.round(totalMs)}ms (${perEffect}) preset=${activePresetId ?? "?"} bass=${bass} widener=${virtualizer} reverb=${reverb} hrtf=${hrtf ? 1 : 0} gain=${gain.toFixed(2)} gains=[${gains.join(",")}]`;
+  const detail = `(trigger: ${trigger}) in ${Math.round(totalMs)}ms (${perEffect}) preset=${activePresetId ?? "?"} bass=${bass} widener=${virtualizer} reverb=${reverb} hrtf=${hrtf ? 1 : 0} conv=${convolver.isConvolverEnabled ? 1 : 0}(${convolver.ir?.name ?? "-"}) gain=${gain.toFixed(2)} gains=[${gains.join(",")}]`;
   if (results.every((r) => r.ok)) {
     console.log(`[DSP] Applied to Session: ${finalSessionId} ${detail}`);
   } else {
@@ -727,12 +740,17 @@ export const useEqualizerStore = create<EqualizerStore>()(
       resetToDefault: async () => {
         // Fix G: batalkan trailing flush setBandGain yang masih tertunda.
         cancelPendingStoreUpdate();
-        // Reset mencakup HRTF + koreksi headphone (2026-11-19, ronde
-        // clean-cozy): "netral" berarti semua pemrosesan DSP kembali
-        // netral, bukan hanya kurva + efek. HRTF dimatikan dulu supaya
-        // applyAllEffectsToNative di bawah mengirim hrtf=0; koreksi
-        // dimatikan lewat deactivate() (native + state headphoneStore).
+        // Reset mencakup HRTF + convolver + koreksi headphone
+        // (2026-11-19, ronde clean-cozy; convolver 2026-11-20):
+        // "netral" berarti semua pemrosesan DSP kembali netral, bukan
+        // hanya kurva + efek. HRTF dimatikan dulu supaya
+        // applyAllEffectsToNative di bawah mengirim hrtf=0; convolver
+        // dimatikan dengan cara yang sama (IR yang dimuat TETAP
+        // tersimpan — reset hanya mematikan toggle, file tidak dihapus);
+        // koreksi dimatikan lewat deactivate() (native + state
+        // headphoneStore).
         void useHrtfStore.getState().setHrtfEnabled(false);
+        void useConvolverStore.getState().setConvolverEnabled(false);
         await useHeadphoneStore.getState().deactivate();
         set({
           bands: makeBands([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
