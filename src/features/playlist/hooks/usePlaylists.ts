@@ -1,9 +1,17 @@
 // src/hooks/usePlaylists.ts
 import { useState, useEffect, useCallback } from "react";
 import PlaylistService from "@/features/playlist/api/service";
-import { Playlist, CreatePlaylistDTO } from "@/features/playlist/types";
+import {
+  Playlist,
+  CreatePlaylistDTO,
+  SmartPlaylistSummary,
+} from "@/features/playlist/types";
+import { SmartPlaylistId } from "@/features/playlist/utils/smartPlaylists";
 import { Song } from "@/shared/types/audio";
-import { shouldReloadPlaylistsOnBump } from "@/features/library/services/refreshPolicy";
+import {
+  shouldReloadPlaylistsOnBump,
+  shouldReloadSmartPlaylistsOnBump,
+} from "@/features/library/services/refreshPolicy";
 import { useRefreshStore } from "@/shared/store/refreshStore";
 
 // FASE 4: hook ini dipakai DUA layar (tab playlist Library + drawer
@@ -20,6 +28,12 @@ export const usePlaylists = () => {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Smart playlist (virtual): ringkasan (id + nama + hitungan) untuk
+  // baris daftar. Isi lagunya TIDAK disimpan di sini — dibaca dari
+  // SQLite saat baris ditekan (loadSmartPlaylist), jadi selalu segar.
+  const [smartPlaylists, setSmartPlaylists] = useState<
+    SmartPlaylistSummary[]
+  >([]);
   const [instanceId] = useState(
     () => `playlists-${nextPlaylistInstanceId++}`,
   );
@@ -36,6 +50,22 @@ export const usePlaylists = () => {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  // Smart playlist gagal muat tidak boleh merusak daftar playlist
+  // manual — baris otomatis hilang, sisanya tetap tampil.
+  const loadSmartPlaylists = useCallback(async () => {
+    try {
+      const data = await PlaylistService.getSmartPlaylistSummaries();
+      setSmartPlaylists(data);
+    } catch (err) {
+      console.error("[usePlaylists] Gagal memuat smart playlist:", err);
+    }
+  }, []);
+
+  // Isi satu smart playlist, dibaca dari SQLite saat ini juga.
+  const loadSmartPlaylist = useCallback(async (id: SmartPlaylistId) => {
+    return PlaylistService.getSmartPlaylist(id);
   }, []);
 
   const createPlaylist = useCallback(async (dto: CreatePlaylistDTO) => {
@@ -159,26 +189,34 @@ export const usePlaylists = () => {
 
   useEffect(() => {
     loadPlaylists();
-  }, []);
+    void loadSmartPlaylists();
+  }, [loadSmartPlaylists]);
 
   // FASE 4: berlangganan refreshKey — reload dari DB bila playlist
   // berubah di instance LAIN (tab Library vs drawer Playlist).
   // Bump sendiri dilewat (refreshPolicy): state lokal sudah benar.
   // Key 0 = belum ada bump: jangan reload dobel saat mount.
+  // Smart playlist ikut reload bila daftar lagu berubah (resume /
+  // manual-scan) — hitungannya mengikuti library terbaru.
   const refreshKey = useRefreshStore((s) => s.refreshKey);
   useEffect(() => {
     if (refreshKey === 0) return;
     const { lastReason, lastOrigin } = useRefreshStore.getState();
-    if (!shouldReloadPlaylistsOnBump(lastReason, lastOrigin, instanceId)) {
-      return;
+    if (shouldReloadPlaylistsOnBump(lastReason, lastOrigin, instanceId)) {
+      void loadPlaylists();
     }
-    void loadPlaylists();
-  }, [refreshKey, instanceId, loadPlaylists]);
+    if (shouldReloadSmartPlaylistsOnBump(lastReason)) {
+      void loadSmartPlaylists();
+    }
+  }, [refreshKey, instanceId, loadPlaylists, loadSmartPlaylists]);
 
   return {
     playlists,
     loading,
     error,
+    smartPlaylists,
+    loadSmartPlaylist,
+    refreshSmartPlaylists: loadSmartPlaylists,
     createPlaylist,
     addToPlaylist,
     removeFromPlaylist,

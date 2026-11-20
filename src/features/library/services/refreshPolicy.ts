@@ -34,6 +34,20 @@ export function shouldReloadPlaylistsOnBump(
   return reason === "playlist-change" && origin !== ownOrigin;
 }
 
+/** Apakah bump ini harus me-reload ringkasan smart playlist?
+ *  Isi smart playlist hanya bergantung pada tabel `songs` (dateAdded /
+ *  playCount / codec), jadi hanya bump yang mengubah daftar lagu
+ *  (resume / manual-scan) yang relevan. "playlist-change" TIDAK
+ *  mengubah isi smart playlist — playlist manual berubah, lagu tidak.
+ *  Perubahan playCount saat lagu diputar TIDAK me-bump refreshKey:
+ *  isi detail smart playlist tetap segar karena dibaca dari SQLite
+ *  saat barisnya ditekan (getSmartPlaylist), bukan dari ringkasan ini. */
+export function shouldReloadSmartPlaylistsOnBump(
+  reason: LibraryRefreshReason | null,
+): boolean {
+  return shouldRefreshLibraryOnBump(reason);
+}
+
 /** Apakah ada scan yang sedang berjalan (manual atau auto)? */
 export function isLibraryScanRunning(state: {
   isManualScanning: boolean;

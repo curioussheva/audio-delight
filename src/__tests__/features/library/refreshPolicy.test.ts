@@ -6,6 +6,7 @@ import {
   isLibraryScanRunning,
   shouldRefreshLibraryOnBump,
   shouldReloadPlaylistsOnBump,
+  shouldReloadSmartPlaylistsOnBump,
 } from "../../../features/library/services/refreshPolicy";
 
 describe("shouldRefreshLibraryOnBump", () => {
@@ -52,6 +53,21 @@ describe("shouldReloadPlaylistsOnBump", () => {
     expect(
       shouldReloadPlaylistsOnBump("manual-scan", "library", "playlists-1"),
     ).toBe(false);
+  });
+});
+
+describe("shouldReloadSmartPlaylistsOnBump", () => {
+  it("resume / manual-scan → reload (daftar lagu berubah)", () => {
+    expect(shouldReloadSmartPlaylistsOnBump("resume")).toBe(true);
+    expect(shouldReloadSmartPlaylistsOnBump("manual-scan")).toBe(true);
+  });
+
+  it("playlist-change → TIDAK reload (lagu tidak berubah, hanya playlist manual)", () => {
+    expect(shouldReloadSmartPlaylistsOnBump("playlist-change")).toBe(false);
+  });
+
+  it("null (belum ada bump) → tidak reload", () => {
+    expect(shouldReloadSmartPlaylistsOnBump(null)).toBe(false);
   });
 });
 
