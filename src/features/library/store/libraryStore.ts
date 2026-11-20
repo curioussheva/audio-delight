@@ -7,6 +7,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ScanStoreState, ScanStoreActions, LibraryTab } from "../types/scan";
 import { LibraryScanner } from "../api/scanner";
+import { mergeTrackList } from "./trackListMerge";
 
 // Definisi MediaTrack tetap sama seperti kode Anda...
 export interface MediaTrack {
@@ -144,11 +145,30 @@ export const useLibraryStore = create<LibraryState>()(
       isAutoEnrichingEnabled: false,
 
       // --- 2. CORE ACTIONS ---
-      setTracks: (tracks) =>
+      // Item 2 (spike completion scan): JANGAN ganti seluruh array
+      // bila isinya sama — `mergeTrackList` melewatkan `set()` bila
+      // `next` sama persis (id + urutan + semua field), dan memakai
+      // kembali referensi objek lama untuk lagu yang tidak berubah bila
+      // daftar benar-benar berubah. Tanpa ini, tiap scan selesai
+      // (termasuk resume TANPA lagu baru/hilang, dan set ganda
+      // refreshLibrary + reload) me-render ulang penuh LibraryScreen +
+      // FlashList ~100 baris. Merge DI LUAR `set()` (baca `get()`
+      // dulu) supaya saat tidak berubah `set()` tidak dipanggil sama
+      // sekali: bukan hanya subscriber tidak diberitahu (vanilla
+      // `Object.is`), tapi wrapper persist zustand juga tidak menulis
+      // AsyncStorage — wrapper itu memanggil setItem SETIAP `set()`,
+      // bahkan bila updater mengembalikan state yang sama. Daftar
+      // akhir (isi + urutan) identik dengan `setTracks` mentah —
+      // hanya identitas referensi yang dipertahankan.
+      setTracks: (tracks) => {
+        const merged = mergeTrackList(get().tracks, tracks);
+        if (!merged.changed) return;
         set({
-          tracks,
-          unenrichedCount: tracks.filter((t) => !t.isEnriched).length,
-        }),
+          tracks: merged.tracks,
+          unenrichedCount: merged.tracks.filter((t) => !t.isEnriched)
+            .length,
+        });
+      },
 
       setActiveTab: (activeTab) => set({ activeTab }),
       setSearchQuery: (searchQuery) => set({ searchQuery }),
