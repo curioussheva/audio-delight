@@ -17,6 +17,7 @@ extern "C" {
 #include <cerrno>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -216,6 +217,19 @@ bool FFmpegDecoder::onOpen(
         return false;
     }
 
+    // Gapless (2026-11-20): baca info delay/padding encoder — hanya
+    // bila gaplessTrim ON (setting gapless, default ON). OFF = perilaku
+    // lama persis, tanpa parsing tambahan.
+    if (config().gaplessTrim) {
+        AVStream* stream = formatCtx_->streams[audioStreamIndex_];
+        parseGaplessMetadata(
+            filename,
+            useAvio,
+            static_cast<int>(stream->codecpar->codec_id),
+            stream->codecpar->sample_rate,
+            stream->metadata);
+    }
+
     __android_log_print(ANDROID_LOG_DEBUG, "FFmpegDecoder",
                         "onOpen: success");
     return true;
@@ -248,6 +262,158 @@ DecodeResult FFmpegDecoder::onDecode(
     // menyebabkan pcmQueue_ starved -> pulsing/chipmunk.
     uint32_t outputFramesThisCall = 0;
 
+    // Gapless (2026-11-20): SATU-SATUNYA jalur append sampel decode
+    // (normal + flush EOF) — guard magnitudo/NaN + hitung + trim hidup
+    // di sini, bukan dua salinan. Trim di depan (sebelum guard): buang
+    // priming (gaplessSkipRemainingOut_, domain output) lalu potong ekor
+    // di batas total sampel audio (gaplessExpectedOutFrames_).
+    // inputFrames = frame input yang diwakili chunk ini (0 buat flush —
+    // sampel flush tidak punya frame input sendiri; framesDecoded tetap
+    // domain input, lihat invarian D-M1 di bawah).
+    auto appendConverted = [&](float* temp, int converted, int channels,
+                               uint32_t inputFrames) {
+        if (converted <= 0) return;
+
+        // --- trim awal: buang priming dari depan buffer ---
+        if (gaplessSkipRemainingOut_ > 0) {
+            const uint32_t drop =
+                gaplessSkipRemainingOut_ <
+                        static_cast<uint32_t>(converted)
+                    ? gaplessSkipRemainingOut_
+                    : static_cast<uint32_t>(converted);
+            const size_t dropSamples =
+                static_cast<size_t>(drop) * static_cast<size_t>(channels);
+            const size_t restSamples =
+                static_cast<size_t>(converted - drop) *
+                static_cast<size_t>(channels);
+            if (restSamples > 0) {
+                std::memmove(temp, temp + dropSamples,
+                             restSamples * sizeof(float));
+            }
+            converted -= static_cast<int>(drop);
+            gaplessSkipRemainingOut_ -= drop;
+        }
+
+        // --- trim akhir: potong di batas total sampel audio ---
+        if (gaplessExpectedOutFrames_ > 0 && converted > 0) {
+            const uint64_t produced =
+                currentFrame_.load(std::memory_order_relaxed);
+            if (produced >= gaplessExpectedOutFrames_) {
+                converted = 0;
+            } else if (produced + static_cast<uint64_t>(converted) >
+                       gaplessExpectedOutFrames_) {
+                converted = static_cast<int>(
+                    gaplessExpectedOutFrames_ - produced);
+            }
+        }
+        if (converted <= 0) return;
+
+
+        // 🔥 FIX (2026-10-06): guard magnitudo SEBELUM masuk queue.
+        // Bit pattern malloc garbage (1e18-1e32) lolos dari isnan/isinf.
+        // Buang di sini supaya queue hanya pernah berisi audio valid.
+        // B7-P2b (2026-11-12): ambang lama ±2.0 men-zero-kan peak float legit
+        // di atas 0 dBFS (mis. +6 dB → peak 2.0) per-sample → dropout.
+        // Sekarang hanya |v|>8 yang di-zero (garbage); sisanya di-clamp ke
+        // ±1.0 supaya sinyal tetap dalam rentang float PCM yang wajar.
+        {
+            int badCount = 0;
+            int clampedCount = 0;
+            const size_t total = static_cast<size_t>(converted) * channels;
+            for (size_t i = 0; i < total; ++i) {
+                float& v = temp[i];
+                if (std::isnan(v) || std::isinf(v) || v > 8.0f || v < -8.0f) {
+                    badCount++;
+                    v = 0.0f;
+                } else if (v > 1.0f) {
+                    clampedCount++;
+                    v = 1.0f;
+                } else if (v < -1.0f) {
+                    clampedCount++;
+                    v = -1.0f;
+                }
+            }
+            if (badCount > 0 || clampedCount > 0) {
+                __android_log_print(ANDROID_LOG_WARN, "FFmpegDecoder",
+                    "swr output guard: %zu/%zu samples out-of-range cleaned "
+                    "(zeroed=%d, clamped=%d)",
+                    (size_t)badCount, total, badCount, clampedCount);
+            }
+        }
+
+        // 🔥 FIX (2026-10-06, "96kHz masih cacat"): kGain 0.89 (-1 dB) diterapkan
+        // ke SEMUA sample. Ini menghianati mode bit-perfect: BitPerfectPipeline
+        // sengaja kosong ("no gain"), tapi decoder sudah memotong 1 dB lebih dulu.
+        // Untuk file hi-res 96kHz, ini merusak dynamics yang seharusnya utuh.
+        //
+        // Headroom 1 dB duluan diperlukan karena EQ/limiter di pipeline lain
+        // bisa memperkuat sinyal melewati 0 dBFS. Tapi bit-perfect tidak punya
+        // stage tersebut, jadi gain ini hanya merusak. Pindahkan ke pipeline
+        // yang benar-benar butuh headroom (ImmersivePipeline) — bukan di sini.
+        //
+        // Sekarang: TIDAK ADA gain di decoder. PCM keluar utuh dari swr_convert.
+        {
+            int nanCount = 0;
+            for (size_t i = 0; i < static_cast<size_t>(converted) * channels; ++i) {
+                float& v = temp[i];
+                if (std::isnan(v) || std::isinf(v)) {
+                    nanCount++;
+                    v = 0.0f;
+                }
+            }
+            static int totalNan = 0;
+            totalNan += nanCount;
+            if (nanCount > 0) {
+                __android_log_print(ANDROID_LOG_WARN, "FFmpegDecoder",
+                    "NaN/Inf detected: %d of %zu samples cleaned (total=%d)",
+                    nanCount, static_cast<size_t>(converted) * channels, totalNan);
+            }
+        }
+
+        result.samples.insert(
+            result.samples.end(),
+            temp,
+            temp + converted * channels);
+
+        // ✅ FIX: framesDecoded = input frames (44.1k), currentFrame_ = output frames (48k)
+        // ⚠️ INVARIAN (D-M1, 2026-11-11): framesDecoded SENGAJA domain input,
+        // sementara result.samples berisi frame domain OUTPUT (converted).
+        // Karena itu applyResampling() base class TIDAK BOLEH jalan untuk
+        // decoder ini — ia memakai framesDecoded sebagai jumlah frame buffer
+        // (lihat AudioDecoder::applyResampling) dan akan membaca melewati akhir
+        // buffer. needsResampling() di-override false di bawah; jangan hapus
+        // override itu tanpa memperbaiki domain framesDecoded dulu.
+        result.framesDecoded += inputFrames;
+        currentFrame_.fetch_add(
+            static_cast<uint64_t>(converted),
+            std::memory_order_relaxed);
+        // FIX (Prioritas 1): counter output lokal — INI yang dipakai exit condition
+        outputFramesThisCall += static_cast<uint32_t>(converted);
+
+        // 🔥 DEBUG: log min/max setiap ~4096 output frames
+        static int64_t totalOut = 0;
+        totalOut += converted;
+        if (totalOut % 4096 < static_cast<int64_t>(converted) && converted > 0) {
+            float minV = 1e9f, maxV = -1e9f;
+            double sumAbs = 0.0;
+            const size_t debugN = static_cast<size_t>(converted) * channels;
+            for (size_t i = 0; i < debugN; ++i) {
+                float v = temp[i];
+                if (v < minV) minV = v;
+                if (v > maxV) maxV = v;
+                sumAbs += (v < 0 ? -v : v);
+            }
+            float meanAbs = static_cast<float>(sumAbs / (static_cast<size_t>(converted) * channels));
+            static int resampleLogCount = 0;
+            resampleLogCount++;
+            if (resampleLogCount % 500 == 0) {
+                __android_log_print(ANDROID_LOG_INFO, "FFmpegDecoder",
+                    "resample out: min=%.4f max=%.4f mean=%.4f (frames=%d)",
+                    minV, maxV, meanAbs, converted);
+            }
+        }
+    };
+
     while (outputFramesThisCall < maxFrames) {
 
         int readResult = av_read_frame(
@@ -255,6 +421,35 @@ DecodeResult FFmpegDecoder::onDecode(
             packet_);
 
         if (readResult < 0) {
+            // Gapless (2026-11-20): flush swr di EOF — buang delay filter
+            // resampler (~128 sampel, ~2.7 ms) supaya trim akhir tepat;
+            // tanpa flush, tiap track berakhir ~2.7 ms lebih pendek dan
+            // seam pre-roll tetap berlubang kecil. Hanya bila gaplessTrim
+            // ON (OFF = perilaku lama persis). Sampel flush lewat
+            // appendConverted yang sama (guard + trim akhir + hitung),
+            // bukan jalur kedua. Flush yang menghasilkan sampel membuat
+            // panggilan ini Success (lihat override status di bawah) —
+            // worker mengantar ekor itu dulu, EOF bersih datang di
+            // panggilan berikut.
+            if (config().gaplessTrim && swrCtx_ &&
+                outputFramesThisCall < maxFrames) {
+                const int flushFrames = 4096;
+                const size_t flushNeed =
+                    static_cast<size_t>(flushFrames) * 2;
+                if (scratchBuffer_.size() < flushNeed * 4) {
+                    scratchBuffer_.resize(flushNeed * 4);
+                }
+                float* flushTemp = scratchBuffer_.data();
+                while (outputFramesThisCall < maxFrames) {
+                    uint8_t* out[] = {
+                        reinterpret_cast<uint8_t*>(flushTemp)
+                    };
+                    const int drained = swr_convert(
+                        swrCtx_, out, flushFrames, nullptr, 0);
+                    if (drained <= 0) break;
+                    appendConverted(flushTemp, drained, 2, 0);
+                }
+            }
             // EOF atau error
             result.status = DecodeStatus::EndOfStream;
             break;
@@ -333,6 +528,58 @@ DecodeResult FFmpegDecoder::onDecode(
             if (receiveResult < 0) {
                 result.status = DecodeStatus::Error;
                 return result;
+            }
+
+            // Gapless (2026-11-20): priming di awal track — side data
+            // AV_FRAME_DATA_SKIP_SAMPLES dari FFmpeg MENANG atas Xing;
+            // Xing delay hanya dipakai bila side data tak pernah datang.
+            // Sekali diterapkan, tidak diulang (dan tidak sesudah seek —
+            // onSeek menandai gaplessStartTrimApplied_ = true). Side data
+            // = 1× int32 little-endian (FFmpeg 6.1.2: decoder menulis
+            // AV_WL32); nilai di luar 0..100000 diabaikan sebagai korup.
+            // Konversi ke domain output (resample): skipOut = skipIn *
+            // outRate / inRate, galat < 1 sampel output.
+            if (config().gaplessTrim && !gaplessStartTrimApplied_) {
+                int skipIn = -1;
+                const char* trimSource = "xing";
+                if (AVFrameSideData* sd = av_frame_get_side_data(
+                        frame_, AV_FRAME_DATA_SKIP_SAMPLES)) {
+                    if (sd->size >= 4) {
+                        const uint8_t* d = sd->data;
+                        const int32_t v = static_cast<int32_t>(
+                            (static_cast<uint32_t>(d[0])) |
+                            (static_cast<uint32_t>(d[1]) << 8) |
+                            (static_cast<uint32_t>(d[2]) << 16) |
+                            (static_cast<uint32_t>(d[3]) << 24));
+                        if (v >= 0 && v <= 100000) {
+                            skipIn = v;
+                            trimSource = "side-data";
+                        }
+                    }
+                }
+                if (skipIn < 0 && !gaplessXingUsed_) {
+                    skipIn = static_cast<int>(gaplessInfo_.encoderDelay);
+                    gaplessXingUsed_ = true;
+                }
+                if (skipIn >= 0) {
+                    if (skipIn > 0) {
+                        const int inRate = frame_->sample_rate > 0
+                            ? frame_->sample_rate
+                            : static_cast<int>(
+                                  config().targetSampleRate);
+                        gaplessSkipRemainingOut_ = static_cast<uint32_t>(
+                            (static_cast<uint64_t>(skipIn) *
+                                 config().targetSampleRate +
+                             static_cast<uint64_t>(inRate) / 2) /
+                            static_cast<uint64_t>(inRate));
+                        __android_log_print(ANDROID_LOG_INFO, "FFmpegDecoder",
+                            "gapless trim awal: buang %d sampel input (%s) -> %u frame output",
+                            skipIn, trimSource, gaplessSkipRemainingOut_);
+                    }
+                    gaplessStartTrimApplied_ = true;
+                }
+                // skipIn < 0 = belum ada info di frame ini — coba lagi
+                // di frame berikut (side data bisa datang terlambat).
             }
 
             // 🔥 FIX (2026-11-12, B7-W4): parameter frame bisa berubah di
@@ -461,111 +708,9 @@ DecodeResult FFmpegDecoder::onDecode(
             }
 
             if (converted > 0) {
-
-    // 🔥 FIX (2026-10-06): guard magnitudo SEBELUM masuk queue.
-    // Bit pattern malloc garbage (1e18-1e32) lolos dari isnan/isinf.
-    // Buang di sini supaya queue hanya pernah berisi audio valid.
-    // B7-P2b (2026-11-12): ambang lama ±2.0 men-zero-kan peak float legit
-    // di atas 0 dBFS (mis. +6 dB → peak 2.0) per-sample → dropout.
-    // Sekarang hanya |v|>8 yang di-zero (garbage); sisanya di-clamp ke
-    // ±1.0 supaya sinyal tetap dalam rentang float PCM yang wajar.
-    {
-        int badCount = 0;
-        int clampedCount = 0;
-        const size_t total = static_cast<size_t>(converted) * channels;
-        for (size_t i = 0; i < total; ++i) {
-            float& v = temp[i];
-            if (std::isnan(v) || std::isinf(v) || v > 8.0f || v < -8.0f) {
-                badCount++;
-                v = 0.0f;
-            } else if (v > 1.0f) {
-                clampedCount++;
-                v = 1.0f;
-            } else if (v < -1.0f) {
-                clampedCount++;
-                v = -1.0f;
+                appendConverted(temp, converted, channels,
+                                frame_->nb_samples);
             }
-        }
-        if (badCount > 0 || clampedCount > 0) {
-            __android_log_print(ANDROID_LOG_WARN, "FFmpegDecoder",
-                "swr output guard: %zu/%zu samples out-of-range cleaned "
-                "(zeroed=%d, clamped=%d)",
-                (size_t)badCount, total, badCount, clampedCount);
-        }
-    }
-
-    // 🔥 FIX (2026-10-06, "96kHz masih cacat"): kGain 0.89 (-1 dB) diterapkan
-    // ke SEMUA sample. Ini menghianati mode bit-perfect: BitPerfectPipeline
-    // sengaja kosong ("no gain"), tapi decoder sudah memotong 1 dB lebih dulu.
-    // Untuk file hi-res 96kHz, ini merusak dynamics yang seharusnya utuh.
-    //
-    // Headroom 1 dB duluan diperlukan karena EQ/limiter di pipeline lain
-    // bisa memperkuat sinyal melewati 0 dBFS. Tapi bit-perfect tidak punya
-    // stage tersebut, jadi gain ini hanya merusak. Pindahkan ke pipeline
-    // yang benar-benar butuh headroom (ImmersivePipeline) — bukan di sini.
-    //
-    // Sekarang: TIDAK ADA gain di decoder. PCM keluar utuh dari swr_convert.
-    {
-        int nanCount = 0;
-        for (size_t i = 0; i < static_cast<size_t>(converted) * channels; ++i) {
-            float& v = temp[i];
-            if (std::isnan(v) || std::isinf(v)) {
-                nanCount++;
-                v = 0.0f;
-            }
-        }
-        static int totalNan = 0;
-        totalNan += nanCount;
-        if (nanCount > 0) {
-            __android_log_print(ANDROID_LOG_WARN, "FFmpegDecoder",
-                "NaN/Inf detected: %d of %zu samples cleaned (total=%d)",
-                nanCount, static_cast<size_t>(converted) * channels, totalNan);
-        }
-    }
-
-    result.samples.insert(
-        result.samples.end(),
-        temp,
-        temp + converted * channels);
-
-    // ✅ FIX: framesDecoded = input frames (44.1k), currentFrame_ = output frames (48k)
-    // ⚠️ INVARIAN (D-M1, 2026-11-11): framesDecoded SENGAJA domain input,
-    // sementara result.samples berisi frame domain OUTPUT (converted).
-    // Karena itu applyResampling() base class TIDAK BOLEH jalan untuk
-    // decoder ini — ia memakai framesDecoded sebagai jumlah frame buffer
-    // (lihat AudioDecoder::applyResampling) dan akan membaca melewati akhir
-    // buffer. needsResampling() di-override false di bawah; jangan hapus
-    // override itu tanpa memperbaiki domain framesDecoded dulu.
-    result.framesDecoded += frame_->nb_samples;
-    currentFrame_.fetch_add(
-        static_cast<uint64_t>(converted),
-        std::memory_order_relaxed);
-    // FIX (Prioritas 1): counter output lokal — INI yang dipakai exit condition
-    outputFramesThisCall += static_cast<uint32_t>(converted);
-
-    // 🔥 DEBUG: log min/max setiap ~4096 output frames
-    static int64_t totalOut = 0;
-    totalOut += converted;
-    if (totalOut % 4096 < static_cast<int64_t>(converted) && converted > 0) {
-        float minV = 1e9f, maxV = -1e9f;
-        double sumAbs = 0.0;
-        const size_t debugN = static_cast<size_t>(converted) * channels;
-        for (size_t i = 0; i < debugN; ++i) {
-            float v = temp[i];
-            if (v < minV) minV = v;
-            if (v > maxV) maxV = v;
-            sumAbs += (v < 0 ? -v : v);
-        }
-        float meanAbs = static_cast<float>(sumAbs / (static_cast<size_t>(converted) * channels));
-        static int resampleLogCount = 0;
-        resampleLogCount++;
-        if (resampleLogCount % 500 == 0) {
-            __android_log_print(ANDROID_LOG_INFO, "FFmpegDecoder",
-                "resample out: min=%.4f max=%.4f mean=%.4f (frames=%d)",
-                minV, maxV, meanAbs, converted);
-        }
-    }
-}
 
             if (outputFramesThisCall >= maxFrames)
                 break;
@@ -583,8 +728,13 @@ DecodeResult FFmpegDecoder::onDecode(
                             result.framesDecoded, (int)result.status);
     }
 
+    // Gapless (2026-11-20): sampel flush EOF ikut menentukan Success —
+    // tanpa ini, panggilan yang HANYA mengantar ekor flush (framesDecoded
+    // 0, sampel > 0) dilaporkan EndOfStream dan worker MEMBUANG ekor itu
+    // (decodeCallback_ tidak dipanggil pada EndOfStream). EOF bersih
+    // datang di panggilan berikut (tanpa sampel).
     result.status =
-        result.framesDecoded > 0
+        (result.framesDecoded > 0 || !result.samples.empty())
             ? DecodeStatus::Success
             : DecodeStatus::EndOfStream;
 
@@ -616,6 +766,15 @@ bool FFmpegDecoder::onSeek(
     }
 
     avcodec_flush_buffers(codecCtx_);
+
+    // Gapless (2026-11-20): trim awal TIDAK berlaku sesudah seek —
+    // posisi baru di tengah lagu, bukan awal file. Tandai diterapkan
+    // supaya frame pasca-seek tidak memangkas priming. Trim AKHIR
+    // (gaplessExpectedOutFrames_) tetap hidup: currentFrame_ di-reset
+    // ke posisi seek (absolut, domain output) di bawah, jadi hitung
+    // produced-vs-expected tetap benar.
+    gaplessSkipRemainingOut_ = 0;
+    gaplessStartTrimApplied_ = true;
 
     // 🔥 FIX (2026-11-12, B7-W1): posisi baru = konteks baru — error
     // kirim paket sebelum seek tidak boleh dihitung beruntun dengan
@@ -786,6 +945,75 @@ bool FFmpegDecoder::setupCodec() {
         codecCtx_,
         codec,
         nullptr) >= 0;
+}
+
+// Gapless (2026-11-20): lihat deklarasi di header. Urutan sumber:
+// iTunSMPB dulu (MP4/M4A — metadata stream, tanpa I/O file), lalu
+// Xing/LAME (MP3 — baca 64 KiB pertama). FLAC/WAV/OGG sample-accurate
+// dan TIDAK perlu trim — keduanya tidak menghasilkan info di sini.
+// pread(fd) tidak menggeser offset AVIO (posisi eksplisit), jadi aman
+// dipanggil sementara demuxer sudah buka file yang sama.
+void FFmpegDecoder::parseGaplessMetadata(
+    const std::string& filename,
+    bool useAvio,
+    int codecId,
+    int sampleRate,
+    AVDictionary* streamMeta) {
+
+    gaplessInfo_ = pristine::gapless::GaplessInfo{};
+    gaplessExpectedOutFrames_ = 0;
+
+    if (streamMeta) {
+        if (AVDictionaryEntry* e =
+                av_dict_get(streamMeta, "iTunSMPB", nullptr, 0)) {
+            pristine::gapless::parseItunSmpb(e->value, gaplessInfo_);
+        }
+    }
+
+    if (!gaplessInfo_.hasInfo() && codecId == AV_CODEC_ID_MP3) {
+        uint8_t buf[65536];
+        ssize_t n = -1;
+        if (useAvio && contentFd_ >= 0) {
+            do {
+                n = ::pread(contentFd_, buf, sizeof(buf), 0);
+            } while (n < 0 && errno == EINTR);
+        } else if (!useAvio) {
+            FILE* f = std::fopen(filename.c_str(), "rb");
+            if (f) {
+                n = static_cast<ssize_t>(
+                    std::fread(buf, 1, sizeof(buf), f));
+                std::fclose(f);
+            }
+        }
+        if (n > 0) {
+            pristine::gapless::parseXingLameHeader(
+                buf, static_cast<size_t>(n), gaplessInfo_);
+        }
+    }
+
+    if (gaplessInfo_.totalAudioSamples > 0 && sampleRate > 0) {
+        gaplessExpectedOutFrames_ = static_cast<uint64_t>(
+            (gaplessInfo_.totalAudioSamples *
+                 static_cast<uint64_t>(config().targetSampleRate)) /
+            static_cast<uint64_t>(sampleRate));
+    }
+
+    if (gaplessInfo_.hasInfo()) {
+        __android_log_print(ANDROID_LOG_INFO, "FFmpegDecoder",
+            "gapless: %s delay=%u padding=%u total=%llu sampel "
+            "(expected %llu frame @%uHz)",
+            gaplessInfo_.source ? gaplessInfo_.source : "?",
+            gaplessInfo_.encoderDelay, gaplessInfo_.padding,
+            static_cast<unsigned long long>(
+                gaplessInfo_.totalAudioSamples),
+            static_cast<unsigned long long>(
+                gaplessExpectedOutFrames_),
+            config().targetSampleRate);
+    } else {
+        __android_log_print(ANDROID_LOG_INFO, "FFmpegDecoder",
+            "gapless: tanpa info delay (codec=%d) — tanpa trim",
+            codecId);
+    }
 }
 
 bool FFmpegDecoder::setupResampler(
@@ -1021,6 +1249,13 @@ void FFmpegDecoder::cleanup() {
     // 🔥 FIX (2026-11-12, B7-W1): reset hitung error kirim paket supaya
     // trek baru tidak mewarisi error trek lama.
     consecutiveSendErrors_ = 0;
+    // Gapless (2026-11-20): reset state trim — trek baru mulai dari nol
+    // (info delay diisi ulang parseGaplessMetadata() saat open).
+    gaplessInfo_ = pristine::gapless::GaplessInfo{};
+    gaplessSkipRemainingOut_ = 0;
+    gaplessExpectedOutFrames_ = 0;
+    gaplessStartTrimApplied_ = false;
+    gaplessXingUsed_ = false;
     // 🔥 FIX (2026-11-12, B7-D4): reset cache atomik supaya getter tidak
     // melaporkan durasi/posisi trek lama sesudah close (perilaku lama:
     // formatCtx_ == nullptr → durasi 0, posisi 0).

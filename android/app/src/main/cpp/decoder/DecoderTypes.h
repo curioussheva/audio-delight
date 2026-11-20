@@ -169,6 +169,13 @@ struct DecodeConfig {
     bool fastSeek =
         false;
 
+    // Gapless (2026-11-20): trim priming/padding encoder (MP3 Xing/
+    // LAME, MP4 iTunSMPB) + flush delay filter swr di EOF. OFF = perilaku
+    // lama persis (priming ikut terputar, ekor kurang ~2.7 ms). Di-set
+    // PlaybackController::startDecoder dari setting gapless (default ON).
+    bool gaplessTrim =
+        false;
+
     uint32_t maxConsecutiveErrors =
         3;
 

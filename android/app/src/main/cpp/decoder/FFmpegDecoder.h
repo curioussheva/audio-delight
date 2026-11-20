@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AudioDecoder.h"
+#include "GaplessInfo.h"
 
 #include <atomic>
 #include <cstdint>
@@ -12,6 +13,7 @@ struct AVPacket;
 struct AVIOContext;
 struct SwrContext;
 struct AVChannelLayout;
+struct AVDictionary;
 
 namespace pristine::decoder {
 
@@ -87,6 +89,19 @@ private:
 
 
     bool setupCodec();
+    // Gapless (2026-11-20): baca info delay/padding encoder saat open —
+    // iTunSMPB dari metadata stream (MP4/M4A) atau Xing/LAME dari 64 KiB
+    // pertama file (MP3, via pread fd AVIO / fopen filename). Mengisi
+    // gaplessInfo_ + gaplessExpectedOutFrames_; hanya dipanggil bila
+    // config().gaplessTrim. Dipanggil di AKHIR onOpen (stream sudah
+    // ter-probe, codec + resampler sudah siap).
+    void parseGaplessMetadata(
+        const std::string& filename,
+        bool useAvio,
+        int codecId,
+        int sampleRate,
+        AVDictionary* streamMeta
+    );
     // 🔥 FIX (2026-11-12, B7-W4): setupResampler diparameterisasi supaya
     // jalur open dan jalur rebuild mid-stream memakai satu implementasi.
     // Saat open, input diambil dari codecCtx_; saat rebuild, dari frame_
@@ -194,6 +209,21 @@ private:
     // Hanya dipakai bila config().continueOnError; ambang batasnya
     // config().maxConsecutiveErrors (default 3).
     uint32_t consecutiveSendErrors_ = 0;
+
+    // Gapless (2026-11-20): trim priming/padding + flush swr di EOF.
+    // gaplessInfo_ diisi parseGaplessMetadata() saat open (Xing/LAME
+    // buat MP3, iTunSMPB buat MP4/M4A). gaplessSkipRemainingOut_ =
+    // priming yang masih harus dibuang, domain OUTPUT (setelah resample)
+    // — dihitung sekali di frame pertama (side data FFmpeg MENANG atas
+    // Xing). gaplessExpectedOutFrames_ = total sampel audio asli,
+    // domain output; 0 = tak diketahui (tanpa trim akhir). Trim awal
+    // TIDAK diterapkan sesudah seek (posisi tengah lagu) — onSeek
+    // menandai gaplessStartTrimApplied_ = true. Semua di-reset cleanup().
+    pristine::gapless::GaplessInfo gaplessInfo_;
+    uint32_t gaplessSkipRemainingOut_ = 0;
+    uint64_t gaplessExpectedOutFrames_ = 0;
+    bool gaplessStartTrimApplied_ = false;
+    bool gaplessXingUsed_ = false;
 
     uint64_t durationFrames_ = 0;
 
