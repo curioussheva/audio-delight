@@ -87,6 +87,10 @@ import { parseM3U } from "@/features/library/api/m3u";
 import { formatTime } from "@/shared/utils/time";
 import type { Song } from "@/shared/types/audio";
 import {
+  isSmartPlaylistId,
+  SmartPlaylistId,
+} from "@/features/playlist/utils/smartPlaylists";
+import {
   FLOATING_PLAYER_CLEARANCE,
   FLOATING_PLAYER_HEIGHT,
 } from "@/features/player/layout";
@@ -105,6 +109,12 @@ const hexToRGBA = (hex: string, opacity: number): string => {
   if (!rgb) return hex;
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity})`;
 };
+
+// Playlist virtual (bukan baris DB): "Lagu Disukai" + smart playlist —
+// tidak ada tambah/hapus lagu, tidak bisa dihapus. Dipakai semua guard
+// CRUD di detail view (tombol +, tong sampah, × per lagu).
+const isReadOnlyPlaylistId = (id: string): boolean =>
+  id === "favorites" || isSmartPlaylistId(id);
 
 // Lazyload-fix (butir 2): keyExtractor stabil level modul — dulu inline di
 // JSX tiap FlashList, jadi identitasnya baru tiap render layar dan FlashList
@@ -203,6 +213,9 @@ export default function LibraryScreen() {
   // drawer Playlist (src/app/(drawer)/playlist.tsx).
   const {
     playlists,
+    smartPlaylists,
+    loadSmartPlaylist,
+    refreshSmartPlaylists,
     createPlaylist,
     deletePlaylist,
     addToPlaylist,
@@ -220,6 +233,10 @@ export default function LibraryScreen() {
   // Item CRUD playlist di detail view: modal tambah lagu (pola B1 yang
   // sama dengan layar drawer Playlist).
   const [showAddModal, setShowAddModal] = useState(false);
+  // Smart playlist: lagunya dibaca dari SQLite saat baris ditekan
+  // (bukan dari daftar playlist manual) — lihat efek di bawah.
+  const [smartSongs, setSmartSongs] = useState<Song[]>([]);
+  const [smartLoading, setSmartLoading] = useState(false);
 
   // U-P1-18: detail view (Album/Artist/Genre/Folder/Format) menerima
   // favoriteIds sebagai Set — dulu tidak pernah dioper, jadi semua hati
@@ -287,6 +304,18 @@ export default function LibraryScreen() {
     [playlists],
   );
 
+  // Smart playlist (virtual) untuk seksi "Playlist Otomatis".
+  const smartItems: PlaylistItem[] = useMemo(
+    () =>
+      smartPlaylists.map((p) => ({
+        id: p.id,
+        name: p.name,
+        count: p.count,
+        isSmart: true,
+      })),
+    [smartPlaylists],
+  );
+
   // F: playlist lengkap (dengan `songs`) untuk detail view; "favorites"
   // bukan playlist DB — lagunya dari favoriteSongs.
   const selectedFull = useMemo(
@@ -300,9 +329,56 @@ export default function LibraryScreen() {
     () =>
       selectedPlaylist?.id === "favorites"
         ? favoriteSongs
-        : (selectedFull?.songs ?? []),
-    [selectedPlaylist, favoriteSongs, selectedFull],
+        : isSmartPlaylistId(selectedPlaylist?.id)
+          ? smartSongs
+          : (selectedFull?.songs ?? []),
+    [selectedPlaylist, favoriteSongs, selectedFull, smartSongs],
   );
+  // Durasi detail: playlist manual dari selectedFull; smart playlist
+  // dihitung dari lagunya (selectedFull undefined untuk virtual).
+  const selectedDuration = useMemo(
+    () =>
+      selectedPlaylist && isSmartPlaylistId(selectedPlaylist.id)
+        ? smartSongs.reduce((sum, s) => sum + (s.duration || 0), 0)
+        : (selectedFull?.duration ?? 0),
+    [selectedPlaylist, selectedFull, smartSongs],
+  );
+
+  // Smart playlist: baca ulang hitungan saat tab playlist dibuka —
+  // playCount berubah saat lagu diputar tanpa bump refreshKey, jadi
+  // masuk tab = momen yang tepat untuk membaca angka terbaru dari DB.
+  // (Isi detail selalu segar: dibaca saat baris ditekan, efek bawah.)
+  useEffect(() => {
+    if (activeTab !== "playlist") return;
+    void refreshSmartPlaylists();
+  }, [activeTab, refreshSmartPlaylists]);
+
+  // Smart playlist: isi dibaca dari SQLite saat baris ditekan.
+  // Cancel guard supaya tap cepat berurutan tidak menimpa hasil tap
+  // terakhir dengan hasil tap sebelumnya yang datang belakangan.
+  useEffect(() => {
+    if (!selectedPlaylist || !isSmartPlaylistId(selectedPlaylist.id)) {
+      setSmartSongs([]);
+      setSmartLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setSmartLoading(true);
+    void loadSmartPlaylist(selectedPlaylist.id as SmartPlaylistId)
+      .then((pl) => {
+        if (!cancelled) setSmartSongs(pl.songs);
+      })
+      .catch((err) => {
+        console.error("[Library] Gagal memuat smart playlist:", err);
+        if (!cancelled) setSmartSongs([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSmartLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPlaylist, loadSmartPlaylist]);
 
   // ── CORE LOGIC: Reactive Filtering + URI Safety ───────────────────────────
   // U-P2-03: dulu ada memo `validSongs` yang mem-filter filteredSource
@@ -514,7 +590,8 @@ export default function LibraryScreen() {
   }, []);
 
   const handleDeletePlaylist = useCallback(() => {
-    if (!selectedPlaylist || selectedPlaylist.id === "favorites") return;
+    if (!selectedPlaylist || isReadOnlyPlaylistId(selectedPlaylist.id))
+      return;
     setShowDeleteDialog(true);
   }, [selectedPlaylist]);
 
@@ -545,7 +622,8 @@ export default function LibraryScreen() {
   // tidak diteruskan, lihat renderPlaylistSongItem).
   const handleRemoveSong = useCallback(
     async (song: Song) => {
-      if (!selectedPlaylist || selectedPlaylist.id === "favorites") return;
+      if (!selectedPlaylist || isReadOnlyPlaylistId(selectedPlaylist.id))
+        return;
       // N7: removeFromPlaylist kini melempar bila tulis DB gagal.
       try {
         await removeFromPlaylist(selectedPlaylist.id, song.id);
@@ -565,7 +643,8 @@ export default function LibraryScreen() {
   // daftar setelah tulis, jadi barisnya langsung berubah jadi centang.
   const handleAddSong = useCallback(
     async (song: Song) => {
-      if (!selectedPlaylist || selectedPlaylist.id === "favorites") return;
+      if (!selectedPlaylist || isReadOnlyPlaylistId(selectedPlaylist.id))
+        return;
       // N7: addToPlaylist kini melempar bila tulis DB gagal.
       try {
         await addToPlaylist(selectedPlaylist.id, [song]);
@@ -763,16 +842,21 @@ export default function LibraryScreen() {
                 style={[s.detailSubtitle, { color: colors.text.secondary }]}
               >
                 {selectedSongs.length} track
-                {selectedFull?.duration
-                  ? ` • ${formatTime(selectedFull.duration)}`
+                {selectedDuration
+                  ? ` • ${formatTime(selectedDuration)}`
+                  : ""}
+                {selectedPlaylist &&
+                isSmartPlaylistId(selectedPlaylist.id)
+                  ? " • Otomatis"
                   : ""}
               </Text>
             </View>
             {/* Ronde 9 (fix 3): sembunyikan tombol hapus untuk
                 "Lagu Disukai" — pola yang sama dengan layar drawer
                 Playlist. Tombol "+" (tambah lagu, entry B1) ikut
-                disembunyikan: "Lagu Disukai" bukan playlist DB. */}
-            {selectedPlaylist.id !== "favorites" && (
+                disembunyikan: "Lagu Disukai" bukan playlist DB.
+                Smart playlist ikut disembunyikan (virtual, read-only). */}
+            {!isReadOnlyPlaylistId(selectedPlaylist.id) && (
               <>
                 <TouchableOpacity
                   onPress={() => setShowAddModal(true)}
@@ -796,7 +880,13 @@ export default function LibraryScreen() {
             )}
           </View>
 
-          {selectedSongs.length === 0 ? (
+          {selectedPlaylist &&
+          isSmartPlaylistId(selectedPlaylist.id) &&
+          smartLoading ? (
+            <View style={s.center}>
+              <ScreenLoading message="Memuat playlist otomatis..." />
+            </View>
+          ) : selectedSongs.length === 0 ? (
             <View style={s.center}>
               <EmptyState
                 title="Belum ada lagu di playlist ini."
@@ -963,6 +1053,7 @@ export default function LibraryScreen() {
         return (
           <PlaylistList
             playlists={playlistItems}
+            smartPlaylists={smartItems}
             favoriteCount={tracks.filter((t) => isFavorite(t.id)).length}
             onPlaylistPress={handlePlaylistPress}
             onCreateNew={handleCreatePlaylist}
@@ -1036,9 +1127,10 @@ export default function LibraryScreen() {
         }}
         onToggleFavorite={toggleFavorite}
         // Item CRUD playlist: tombol × hanya untuk playlist DB —
-        // "Lagu Disukai" bukan playlist, jadi tidak ada hapus item.
+        // "Lagu Disukai" + smart playlist bukan playlist, jadi tidak
+        // ada hapus item.
         onRemove={
-          selectedPlaylist && selectedPlaylist.id !== "favorites"
+          selectedPlaylist && !isReadOnlyPlaylistId(selectedPlaylist.id)
             ? () => void handleRemoveSong(item)
             : undefined
         }

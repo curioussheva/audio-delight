@@ -16,6 +16,7 @@ import {
   Layers,
   Sparkles,
   FileDown,
+  Wand2,
 } from "lucide-react-native";
 
 import { useTheme } from "@/shared/context/ThemeContext";
@@ -30,11 +31,15 @@ export interface PlaylistItem {
   name: string;
   count?: number;
   paths?: string[];
+  // Smart playlist (virtual): dihitung live dari library — tidak bisa
+  // tambah/hapus lagu atau dihapus (seperti "Lagu Disukai").
+  isSmart?: boolean;
 }
 
 interface PlaylistRowProps {
   item: PlaylistItem;
   isFavorite?: boolean;
+  isSmart?: boolean;
   onPress: (item: PlaylistItem) => void;
   colors: any;
 }
@@ -42,6 +47,9 @@ interface PlaylistRowProps {
 interface PlaylistListProps {
   playlists: PlaylistItem[];
   favoriteCount?: number;
+  // Ringkasan smart playlist (id `smart:*` + hitungan) — dirender di
+  // seksi "Playlist Otomatis" antara Favorit dan Playlist Saya.
+  smartPlaylists?: PlaylistItem[];
   onPlaylistPress: (playlist: PlaylistItem) => void;
   onCreateNew?: () => void;
   onImportM3U?: () => void;
@@ -49,7 +57,7 @@ interface PlaylistListProps {
 
 // ── Playlist Row (List Item) ─────────────────────────────────────────────────
 const PlaylistRow = memo(
-  ({ item, isFavorite = false, onPress, colors }: PlaylistRowProps) => {
+  ({ item, isFavorite = false, isSmart = false, onPress, colors }: PlaylistRowProps) => {
     const handlePress = () => {
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -79,6 +87,8 @@ const PlaylistRow = memo(
               color={colors.status.error}
               fill={colors.status.error}
             />
+          ) : isSmart ? (
+            <Wand2 size={26} color={colors.primary[500]} strokeWidth={2} />
           ) : (
             <ListMusic size={26} color={colors.primary[500]} strokeWidth={2} />
           )}
@@ -93,6 +103,7 @@ const PlaylistRow = memo(
           </Text>
           <Text style={[styles.playlistMeta, { color: colors.text.tertiary }]}>
             {item.count || 0} tracks
+            {isSmart ? " • Otomatis" : ""}
           </Text>
         </View>
 
@@ -108,6 +119,7 @@ PlaylistRow.displayName = "PlaylistRow";
 export const PlaylistList: React.FC<PlaylistListProps> = ({
   playlists = [],
   favoriteCount = 0,
+  smartPlaylists = [],
   onPlaylistPress,
   onCreateNew,
   onImportM3U,
@@ -151,8 +163,15 @@ export const PlaylistList: React.FC<PlaylistListProps> = ({
     []
   );
 
-  // Full Empty State (Jika tidak ada lagu favorit DAN tidak ada playlist buatan)
-  if (playlists.length === 0 && favoriteCount === 0) {
+  // Full Empty State (Jika tidak ada lagu favorit DAN tidak ada playlist
+  // buatan DAN tidak ada lagu di smart playlist — mis. library kosong).
+  // Smart playlist yang isinya 0 tetap dihitung 0: kalau library ada
+  // isinya, salah satu smart playlist pasti terisi, jadi daftar tampil.
+  const smartTotal = smartPlaylists.reduce(
+    (sum, p) => sum + (p.count || 0),
+    0,
+  );
+  if (playlists.length === 0 && favoriteCount === 0 && smartTotal === 0) {
     return (
       <View
         style={[
@@ -236,6 +255,42 @@ export const PlaylistList: React.FC<PlaylistListProps> = ({
               { backgroundColor: colors.background.tertiary },
             ]}
           />
+
+          {/* Section 1b: Smart Playlists (virtual — dihitung live dari
+              library; bukan playlist DB, jadi tidak bisa diedit/dihapus).
+              Hanya tampil bila ada ringkasannya (hook gagal muat = hilang
+              diam-diam, playlist manual tetap tampil). */}
+          {smartPlaylists.length > 0 && (
+            <>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionTitleRow}>
+                  <Wand2 size={16} color={colors.primary[500]} />
+                  <Text
+                    style={[styles.sectionTitle, { color: colors.text.primary }]}
+                  >
+                    Playlist Otomatis
+                  </Text>
+                </View>
+              </View>
+
+              {smartPlaylists.map((item) => (
+                <PlaylistRow
+                  key={item.id}
+                  item={item}
+                  isSmart
+                  onPress={onPlaylistPress}
+                  colors={colors}
+                />
+              ))}
+
+              <View
+                style={[
+                  styles.sectionDivider,
+                  { backgroundColor: colors.background.tertiary },
+                ]}
+              />
+            </>
+          )}
 
           {/* Section 2: User Playlists Header */}
           <View style={styles.sectionHeader}>
