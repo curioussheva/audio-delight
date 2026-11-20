@@ -1,5 +1,5 @@
 /**
- * autoEnrichingGuard.ts — gerbang Auto Enriching (toggle baru, default ON).
+ * autoEnrichingGuard.ts — gerbang Auto Enriching (toggle, default OFF sejak 2026-11-20).
  *
  * Fungsi murni (diuji jest), mengikuti pola `initialScanGuard` /
  * `refreshPolicy`: keputusan "boleh start OTOMATIS worker enrichment?"

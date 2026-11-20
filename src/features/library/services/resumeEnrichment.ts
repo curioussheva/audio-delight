@@ -21,7 +21,7 @@
  * tidak jadi unhandled rejection.
  *
  * Auto Enriching (2026-11-18): start OTOMATIS worker di sini digerbang
- * toggle Auto Enriching (default ON) — lihat autoEnrichingGuard.ts.
+ * toggle Auto Enriching (default OFF sejak 2026-11-20) — lihat autoEnrichingGuard.ts.
  * OFF = lagu baru tetap diantre (persisten), worker tidak di-start;
  * antrean terkuras lewat aksi eksplisit (modal manual / Rescan Library /
  * toggle ON di Settings). Worker yang di-start di sini juga jeda saat

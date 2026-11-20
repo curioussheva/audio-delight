@@ -78,11 +78,11 @@ type LibraryState = ScanStoreState &
 
     // `isAutoEnrichingEnabled` = gerbang Auto Enriching (start OTOMATIS
     // worker enrichment pasca scan — initial/resume/background task).
-    // Default ON (keputusan csheva 2026-11-18): enrichment tetap jalan
-    // otomatis buat instalasi lama/baru, tapi user bisa mematikannya
-    // supaya tidak ada kerja background otomatis. Aksi eksplisit
-    // (modal manual, Rescan Library, menyalakan toggle ON) TIDAK
-    // melewati gerbang ini — lihat autoEnrichingGuard.ts.
+    // Default OFF (keputusan csheva 2026-11-20): enrichment TIDAK
+    // jalan otomatis; user menyalakannya lewat Settings bila mau.
+    // Instalasi lama dimigrasikan ke OFF (persist v1→v2). Aksi
+    // eksplisit (modal manual, Rescan Library, menyalakan toggle ON)
+    // TIDAK melewati gerbang ini — lihat autoEnrichingGuard.ts.
     isAutoEnrichingEnabled: boolean;
 
     // --- Actions ---
@@ -139,9 +139,9 @@ export const useLibraryStore = create<LibraryState>()(
       // default saat fresh install — spek butir 1).
       isAutoScanEnabled: false, // 👈 FIX: Default OFF
       hasCompletedInitialScan: false, // 👈 FIX: Default belum pernah scan
-      // Auto Enriching default ON — enrichment otomatis tetap jalan
-      // (perilaku lama dipertahankan); user mematikan lewat Settings.
-      isAutoEnrichingEnabled: true,
+      // Auto Enriching default OFF (keputusan csheva 2026-11-20) —
+      // enrichment hanya jalan bila user menyalakannya lewat Settings.
+      isAutoEnrichingEnabled: false,
 
       // --- 2. CORE ACTIONS ---
       setTracks: (tracks) =>
@@ -315,8 +315,8 @@ export const useLibraryStore = create<LibraryState>()(
       // gerbangnya hasCompletedInitialScan (persist), bukan tracks.length
       // semata — instalasi lama yang sudah pernah scan tidak mengulang
       // scan perdana hanya karena tracks belum termuat.
-      version: 1,
-      migrate: (persistedState: any, _version: number) => {
+      version: 2,
+      migrate: (persistedState: any, version: number) => {
         if (!persistedState || typeof persistedState !== "object") {
           return persistedState;
         }
@@ -324,6 +324,13 @@ export const useLibraryStore = create<LibraryState>()(
         // tidak, rehydrate pertama sesudah update masih memuat daftar
         // basi dari storage lama.
         const { tracks: _dropped, ...rest } = persistedState;
+        // v1→v2 (2026-11-20, keputusan csheva): default Auto Enriching
+        // berubah ON → OFF. Instalasi lama yang tersimpan di v1 ikut
+        // dipindah ke OFF — enrichment mati kecuali user menyalakannya
+        // lagi lewat Settings. Yang sudah OFF eksplisit tetap OFF.
+        if (version < 2) {
+          return { ...rest, isAutoEnrichingEnabled: false };
+        }
         return rest;
       },
       partialize: (state) => ({
