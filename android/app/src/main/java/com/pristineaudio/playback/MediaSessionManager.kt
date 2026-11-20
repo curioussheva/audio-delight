@@ -28,6 +28,14 @@ class MediaSessionManager(private val service: PlaybackService) {
     private var lastTitle: String = "PristineAudio"
     private var lastArtist: String = "Playing..."
     private var lastIsPlaying: Boolean = false
+    // Durasi + posisi terakhir untuk widget BESAR (progress bar). Durasi
+    // diisi updateMetadata (satu-satunya tempat durasi diketahui);
+    // posisi diisi updatePlaybackState (~1/detik, watcher JS). Posisi
+    // terkuantisasi ke detik penuh saat dipublikasikan (lihat
+    // publishWidgetState) supaya state widget berubah paling sering
+    // 1/detik — watcher JS sendiri menembak tiap ~500 ms.
+    private var lastDurationMs: Long = 0L
+    private var lastPositionMs: Long = 0L
     // (Cleanup-4): nilai repeat/shuffle terakhir yang diketahui
     // MediaSession — payload event native→JS membawa kedua nilai, jadi
     // satu perubahan (mis. repeat dari lock screen) ikut mengirim shuffle
@@ -167,13 +175,15 @@ class MediaSessionManager(private val service: PlaybackService) {
         }
     }
 
-    // Widget home screen (4x1): satu-satunya sumber update widget adalah
-    // state/callback MediaSession di sini — BUKAN timer polling (HyperOS
-    // battery saver bisa membekukan proses app; service foreground +
+    // Widget home screen (4x1 dan besar): satu-satunya sumber update widget
+    // adalah state/callback MediaSession di sini — BUKAN timer polling
+    // (HyperOS battery saver bisa membekukan proses app; service foreground +
     // callback MediaSession tetap jalan selama playback). WidgetStateStore
     // menahan update kalau tidak ada yang berubah, jadi pemanggilan dari
     // jalur yang sering (updatePlaybackState ~1/detik) tidak membanjiri
-    // launcher dengan IPC. Artwork dikirim sebagai bitmap hasil decode
+    // launcher dengan IPC — kecuali posisi yang memang bergerak tiap detik
+    // saat lagu jalan (itu yang menggerakkan progress bar widget besar;
+    // saat pause posisi membeku dan tidak ada IPC). Artwork dikirim sebagai bitmap hasil decode
     // (store yang downscale ke 128px + menyalin), BUKAN content URI —
     // launcher tidak bisa membaca file privat app / URI MediaStore.
     // publish() tidak boleh throw ke pemanggil (jalur notifikasi).
@@ -183,9 +193,22 @@ class MediaSessionManager(private val service: PlaybackService) {
         artworkChanged: Boolean = false,
     ) {
         try {
+            // Posisi terkuantisasi ke detik penuh: watcher JS menembak
+            // tiap ~500 ms, tapi progress widget hanya butuh bergerak
+            // 1/detik. Dijepit ke durasi (posisi seek yang telat dari
+            // watcher tidak boleh melampaui total).
+            val positionSec = (lastPositionMs / 1000).coerceAtLeast(0L)
+            val durationSec = (lastDurationMs / 1000).coerceAtLeast(0L)
+            val positionMs = (if (durationSec > 0) minOf(positionSec, durationSec) else positionSec) * 1000
             WidgetStateStore.publish(
                 context,
-                WidgetPlaybackState(lastTitle, lastArtist, isPlaying),
+                WidgetPlaybackState(
+                    lastTitle,
+                    lastArtist,
+                    isPlaying,
+                    positionMs = positionMs,
+                    durationMs = lastDurationMs,
+                ),
                 artwork,
                 artworkChanged,
             )
@@ -335,6 +358,11 @@ class MediaSessionManager(private val service: PlaybackService) {
     ) {
         lastTitle = title
         lastArtist = artist
+        lastDurationMs = durationMs.coerceAtLeast(0L)
+        // Track baru: posisi kembali ke 0 (watcher berikutnya membawa
+        // posisi benar; tanpa reset, widget besar sempat menampilkan
+        // posisi lagu lama di atas durasi lagu baru).
+        lastPositionMs = 0L
 
         // Track baru belum tentu punya artwork: bersihkan artwork track lama
         // supaya tidak tampil di notifikasi/lock screen track ini. Metadata
@@ -377,12 +405,17 @@ class MediaSessionManager(private val service: PlaybackService) {
 
     // 🔥 NEW: update playback state (playing/paused, posisi) untuk slider lock screen
     fun updatePlaybackState(isPlaying: Boolean, positionMs: Long) {
-        val changed = isPlaying != lastIsPlaying
         lastIsPlaying = isPlaying
+        lastPositionMs = positionMs.coerceAtLeast(0L)
         applyPlaybackState(isPlaying, positionMs)
-        // Hanya saat play/pause berbalik — position watcher menembak
-        // ~1/detik dan widget tidak menampilkan posisi.
-        if (changed) publishWidgetState()
+        // Widget besar menampilkan progress: publikasikan tiap tick supaya
+        // bar bergerak (~1/detik, setelah kuantisasi di publishWidgetState).
+        // Widget 4x1 tidak terpengaruh: store menahan update bila state
+        // (judul/artis/isPlaying) tidak berubah — tapi posisi yang bergerak
+        // memang mengubah state, jadi widget 4x1 ikut menerima IPC 1/detik
+        // saat lagu jalan (biaya progress bar yang hidup; saat pause posisi
+        // membeku dan tidak ada IPC). Dulu hanya saat play/pause berbalik.
+        publishWidgetState()
     }
 
     // 🔥 NEW: shuffle/repeat di MediaSession supaya lock screen ikut.
