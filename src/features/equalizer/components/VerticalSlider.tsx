@@ -31,7 +31,6 @@ import Animated, {
   useSharedValue,
   interpolate,
   runOnJS,
-  withSpring,
 } from "react-native-reanimated";
 
 import { useTheme } from "@/shared/context/ThemeContext";
@@ -74,12 +73,19 @@ export const VerticalSlider = ({
 
   const translateY = useSharedValue(dspValueToY(value || 0, DSP_SLIDER_HEIGHT, 0, maxValue));
 
-  // Sync saat value prop berubah (mis. ganti preset / reset)
+  // Penanda drag (UI thread) — pola yang sama dengan Band.tsx: selama
+  // drag, sync dari prop dilewati supaya thumb tidak ditarik balik ke
+  // nilai store yang tertinggal (throttle 100 ms).
+  const isDragging = useSharedValue(false);
+
+  // Sync saat value prop berubah dari LUAR (mis. ganti preset / reset /
+  // aksesibilitas). Assignment langsung, bukan withSpring — nilai sync
+  // harus tracking, spring-lah yang membuat tarikan balik terlihat.
   React.useEffect(() => {
-    if (!isNaN(value)) {
-      translateY.value = withSpring(dspValueToY(value, DSP_SLIDER_HEIGHT, 0, maxValue));
+    if (!isNaN(value) && !isDragging.value) {
+      translateY.value = dspValueToY(value, DSP_SLIDER_HEIGHT, 0, maxValue);
     }
-  }, [value, maxValue]);
+  }, [value, maxValue, isDragging]);
 
   const gesture = Gesture.Pan()
     .enabled(!disabled)
@@ -87,6 +93,9 @@ export const VerticalSlider = ({
     // supaya ibu jari tidak harus tepat di track (knob lama memakai
     // hitSlop 20; fader band tidak memakai hitSlop sama sekali).
     .hitSlop({ left: 8, right: 8, top: 4, bottom: 4 })
+    .onBegin(() => {
+      isDragging.value = true;
+    })
     .onUpdate((e) => {
       // Travel thumb di-inset ke [12, SLIDER_HEIGHT - 12] (pola fader
       // band): di 0/1000 setengah thumb tidak menggantung di luar track.
@@ -96,6 +105,9 @@ export const VerticalSlider = ({
       translateY.value = nextY;
       const newValue = dspYToValue(nextY, DSP_SLIDER_HEIGHT, 0, maxValue);
       runOnJS(onChange)(newValue);
+    })
+    .onFinalize(() => {
+      isDragging.value = false;
     });
 
   const animatedThumbStyle = useAnimatedStyle(() => ({
@@ -104,10 +116,16 @@ export const VerticalSlider = ({
     shadowColor: color,
   }));
 
+  // Opacity fill mengikuti POSISI thumb (shared value), bukan prop value
+  // yang tertinggal ≤100 ms selama drag. Ujung travel: max → y=12,
+  // 0 → y=148 (inset absolut, tidak tergantung maxValue).
+  const fillTopY = dspValueToY(maxValue, DSP_SLIDER_HEIGHT, 0, maxValue);
+  const fillBottomY = dspValueToY(0, DSP_SLIDER_HEIGHT, 0, maxValue);
+
   const animatedFillStyle = useAnimatedStyle(() => ({
     height: DSP_SLIDER_HEIGHT - translateY.value,
     backgroundColor: color,
-    opacity: interpolate(value || 0, [0, maxValue], [0.2, 0.8]),
+    opacity: interpolate(translateY.value, [fillTopY, fillBottomY], [0.8, 0.2]),
   }));
 
   const displayValue = !isNaN(value) ? Math.round(value / 10) : 0;

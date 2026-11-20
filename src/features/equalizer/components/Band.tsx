@@ -8,7 +8,6 @@ import Animated, {
   useSharedValue,
   interpolate,
   runOnJS,
-  withSpring,
 } from "react-native-reanimated";
 
 import { useTheme } from "@/shared/context/ThemeContext";
@@ -52,13 +51,30 @@ export const EqualizerBand = ({
 
   const translateY = useSharedValue(gainToY(gain, SLIDER_HEIGHT));
 
-  // Sync saat gain berubah (misal ganti preset)
+  // Penanda drag (UI thread): true sejak jari menyentuh fader sampai
+  // gesture selesai. Dipakai efek sync di bawah supaya thumb tidak
+  // ditarik balik selama drag.
+  const isDragging = useSharedValue(false);
+
+  // Sync saat gain berubah dari LUAR (ganti preset / reset /
+  // aksesibilitas). Selama drag, thumb mengikuti jari lewat gesture —
+  // sync dari prop (yang tertinggal karena throttle store 100 ms) akan
+  // menarik thumb balik ke nilai lama (melawan balik), jadi dilewati.
+  // Nilai terakhir store (trailing) menyusul sesudah drag dan efek jalan
+  // lagi dengan isDragging false. Assignment langsung, bukan withSpring —
+  // nilai sync harus tracking, spring-lah yang membuat tarikan balik
+  // terlihat.
   React.useEffect(() => {
-    translateY.value = withSpring(gainToY(gain, SLIDER_HEIGHT));
-  }, [gain]);
+    if (!isDragging.value) {
+      translateY.value = gainToY(gain, SLIDER_HEIGHT);
+    }
+  }, [gain, isDragging]);
 
   const gesture = Gesture.Pan()
     .enabled(!disabled)
+    .onBegin(() => {
+      isDragging.value = true;
+    })
     .onUpdate((e) => {
       // Travel thumb di-inset ke [12, SLIDER_HEIGHT - 12] supaya di
       // +10/-10 setengah thumb (12px) tidak menggantung di luar track
@@ -70,6 +86,9 @@ export const EqualizerBand = ({
       translateY.value = nextY;
       const newGain = yToGain(nextY, SLIDER_HEIGHT);
       runOnJS(onValueChange)(parseFloat(newGain.toFixed(1)));
+    })
+    .onFinalize(() => {
+      isDragging.value = false;
     });
 
   const animatedThumbStyle = useAnimatedStyle(() => ({
@@ -78,10 +97,21 @@ export const EqualizerBand = ({
     shadowColor: accent,
   }));
 
+  // Ujung travel thumb (gain +10 → y=12, 0 → y=80, −10 → y=148):
+  // opacity fill mengikuti POSISI thumb (shared value), bukan prop gain
+  // yang tertinggal ≤100 ms selama drag.
+  const fillTopY = gainToY(10, SLIDER_HEIGHT);
+  const fillMidY = gainToY(0, SLIDER_HEIGHT);
+  const fillBottomY = gainToY(-10, SLIDER_HEIGHT);
+
   const animatedFillStyle = useAnimatedStyle(() => ({
     height: SLIDER_HEIGHT - translateY.value,
     backgroundColor: accent,
-    opacity: interpolate(Math.abs(gain), [0, 10], [0.2, 0.8]),
+    opacity: interpolate(
+      translateY.value,
+      [fillTopY, fillMidY, fillBottomY],
+      [0.8, 0.2, 0.8],
+    ),
   }));
 
   const freqLabel = frequency < 1000 ? `${frequency}` : `${frequency / 1000}k`;
