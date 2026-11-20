@@ -390,16 +390,18 @@ export default function SettingsScreen() {
       // 2026-11-20: tampilan sampul kembali ke default Utuh (contain).
       setArtworkFit("contain");
       // Reset mengembalikan Auto Discovery ke default OFF
-      // (+ batalkan background task) dan Auto Enriching ke default ON.
-      // Initial scan tidak punya toggle — reset tidak menyentuhnya.
+      // (+ batalkan background task) dan Auto Enriching ke default OFF
+      // (+ hentikan worker bila sedang jalan). Initial scan tidak punya
+      // toggle — reset tidak menyentuhnya.
       if (isAutoScanEnabled) {
         toggleAutoScanEnabled();
         await BackgroundScanTask.unregister().catch((err) =>
           console.warn("[Settings] BackgroundTask unregister failed:", err),
         );
       }
-      if (!isAutoEnrichingEnabled) {
+      if (isAutoEnrichingEnabled) {
         toggleAutoEnrichingEnabled();
+        MetadataEnricher.stop();
       }
       // I2-revisi: reset online/wifi tidak ada lagi — pengaturannya
       // dihapus (online hanya di [id].tsx).
@@ -476,7 +478,7 @@ export default function SettingsScreen() {
     }
   };
 
-  // Auto Enriching — toggle baru (default ON). ON = kuras antrean yang
+  // Auto Enriching — toggle (default OFF sejak 2026-11-20). ON = kuras antrean yang
   // terakumulasi selama OFF (worker keluar sendiri bila antrean kosong);
   // OFF = hentikan worker background yang sedang jalan (antrean
   // persisten — tidak hilang, terkuras lewat aksi eksplisit berikutnya:
@@ -1560,7 +1562,7 @@ export default function SettingsScreen() {
           {/* Settings berbahasa user (2026-11-18): toggle "Pindai
               Awal" DIHAPUS — initial scan jalan secara default saat
               instalasi baru, tanpa setting. Tiga opsi di seksi ini:
-              Auto Enriching (default ON — start otomatis worker),
+              Auto Enriching (default OFF — start otomatis worker bila ON),
               Auto Discovery (default OFF — deteksi perubahan),
               aksi Rescan (full scan manual). Struktur baris
               mengikuti Fase 3 Settings persis (judul token semiBold,
