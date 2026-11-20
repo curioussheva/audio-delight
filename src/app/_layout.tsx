@@ -42,6 +42,7 @@ import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
 import { useForegroundRefreshCoordinator } from "@/features/library/hooks/useForegroundRefreshCoordinator";
 import { useHrtfGate } from "@/features/hrtf/hooks/useHrtfGate";
 import { useHeadphoneCorrection } from "@/features/headphone/hooks/useHeadphoneCorrection";
+import { useOutputProfiles } from "@/features/outputprofile/hooks/useOutputProfiles";
 import { requestAudioPermissions } from "@/shared/utils/permissions";
 import { startJsLagMonitor } from "@/shared/utils/jsLagMonitor";
 
@@ -157,6 +158,15 @@ function ThemedStack({ contentOpacity }: { contentOpacity: Animated.Value }) {
   // ada (layar itu butuh return value-nya untuk caption grafik); hook
   // ini idempotent, jadi dua mount tidak saling mengganggu.
   useHeadphoneCorrection();
+
+  // Profil per Output (2026-11-20): preset EQ otomatis saat jalur output
+  // berubah — jack/DAC/Bluetooth/speaker — selama fitur diaktifkan user
+  // di Settings (default OFF). Berlapis DI ATAS auto-OFF koreksi di
+  // atas, bukan menggantinya: cabut jack tetap mematikan koreksi (di
+  // sana) dan menerapkan preset speaker (di sini). Hook ini idempotent
+  // (hanya bereaksi pada transisi kategori), jadi tidak melawan pilihan
+  // EQ manual user.
+  useOutputProfiles();
 
   return (
     <SafeAreaProvider>
