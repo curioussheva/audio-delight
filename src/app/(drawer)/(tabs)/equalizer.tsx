@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -70,6 +70,7 @@ import { HeadphoneSection } from "@/features/headphone/components/HeadphoneSecti
 import { useHeadphoneCorrection } from "@/features/headphone/hooks/useHeadphoneCorrection";
 import { useHrtfGate } from "@/features/hrtf/hooks/useHrtfGate";
 import { useHrtfStore } from "@/features/hrtf/store/hrtfStore";
+import { useConvolverStore } from "@/features/convolver/store/convolverStore";
 import {
   combinedCurveGains,
   parseCorrectionPresetText,
@@ -440,6 +441,35 @@ export default function EqualizerScreen() {
   const hrtfEnabled = useHrtfStore((s) => s.isHrtfEnabled);
   const setHrtfEnabled = useHrtfStore((s) => s.setHrtfEnabled);
 
+  // Convolver — impulse response (2026-11-20): toggle sendiri di luar
+  // preset (sama seperti HRTF). TANPA gate headphone: IR adalah ruang,
+  // bukan efek headphone-only — bekerja di speaker juga. Toggle menyala
+  // tanpa IR = passthrough (node inert, bukan bisu).
+  const convolverEnabled = useConvolverStore((s) => s.isConvolverEnabled);
+  const setConvolverEnabled = useConvolverStore(
+    (s) => s.setConvolverEnabled,
+  );
+  const convolverIr = useConvolverStore((s) => s.ir);
+  const loadConvolverIr = useConvolverStore((s) => s.loadIr);
+  const clearConvolverIr = useConvolverStore((s) => s.clearIr);
+
+  const handlePickIr = useCallback(async () => {
+    const result = await loadConvolverIr();
+    if (result.ok) {
+      showToast(
+        "IR dimuat — nyalakan convolver untuk mendengar ruangnya.",
+        "success",
+      );
+    } else if (!result.canceled && result.error) {
+      showToast(result.error, "error");
+    }
+  }, [loadConvolverIr, showToast]);
+
+  const handleClearIr = useCallback(async () => {
+    await clearConvolverIr();
+    showToast("IR dihapus.", "info");
+  }, [clearConvolverIr, showToast]);
+
   // Kurva gabungan (koreksi + EQ) — dihitung dari teks preset profil
   // aktif. `HeadphoneProfile.filters` selalu kosong (importPreset
   // menyimpannya tanpa rincian), jadi parse dari presetText di sini;
@@ -517,6 +547,13 @@ export default function EqualizerScreen() {
     accentTextFallback,
   );
   const hrtfColor = accentOn(
+    [colors.accent.primary],
+    onCard,
+    accentTextFallback,
+  );
+  // Convolver: satu keluarga aksen dengan HRTF (keduanya efek ruang /
+  // spasial, bukan nada).
+  const convolverColor = accentOn(
     [colors.accent.primary],
     onCard,
     accentTextFallback,
@@ -1333,6 +1370,132 @@ export default function EqualizerScreen() {
                 </Text>
               </View>
 
+              {/* CONVOLVER — IMPULSE RESPONSE (2026-11-20).
+                  File IR .wav pilihan user (concert hall, tube amp,
+                  karakter headphone) ala convolver ViPER4Android —
+                  "ruang" sebagai fitur, bukan sekadar efek. Toggle
+                  sendiri, di luar preset; TANPA gate headphone (IR
+                  bekerja di speaker juga). IR di-resample ke laju
+                  stream; maks ~2 detik sesudah resample. Tanpa IR,
+                  toggle menyala pun passthrough. */}
+              <View
+                style={[
+                  styles.effectItem,
+                  {
+                    backgroundColor: colors.background.secondary,
+                    borderColor: colors.border.medium,
+                    paddingVertical: spacing.md,
+                  },
+                ]}
+              >
+                <MiniSwitch
+                  label="CONVOLVER — IMPULSE RESPONSE"
+                  value={convolverEnabled}
+                  onValueChange={setConvolverEnabled}
+                  disabled={eq.isDSPDisabled || !eq.isEQEnabled}
+                  color={convolverColor}
+                />
+                <Text
+                  style={[
+                    styles.disabledCaption,
+                    {
+                      color: colors.text.secondary,
+                      paddingHorizontal: spacing.md,
+                      marginTop: spacing.sm,
+                    },
+                  ]}
+                >
+                  {convolverIr
+                    ? `${convolverIr.name} · ${(convolverIr.sampleRateHz / 1000).toLocaleString("id-ID", { maximumFractionDigits: 1 })} kHz · ${convolverIr.taps.toLocaleString("id-ID")} tap · ${(convolverIr.durationMs / 1000).toLocaleString("id-ID", { maximumFractionDigits: 1 })} dtk`
+                    : "Belum ada IR — pilih file .wav (ruang konser, ampli tabung, karakter headphone)."}
+                </Text>
+                <View
+                  style={[
+                    styles.reverbRow,
+                    { marginHorizontal: spacing.md, marginTop: spacing.sm },
+                  ]}
+                >
+                  <TouchableOpacity
+                    onPress={handlePickIr}
+                    disabled={eq.isDSPDisabled || !eq.isEQEnabled}
+                    style={[
+                      styles.reverbBox,
+                      {
+                        backgroundColor: colors.background.tertiary,
+                        borderColor: colors.border.medium,
+                        padding: spacing.md,
+                        minHeight: 44,
+                        flex: 1,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      },
+                      (eq.isDSPDisabled || !eq.isEQEnabled) && {
+                        opacity: 0.4,
+                      },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Pilih file IR (.wav)"
+                  >
+                    <Text
+                      style={{
+                        fontFamily: FONT_FAMILY.medium,
+                        fontSize: 13,
+                        color: colors.text.primary,
+                      }}
+                    >
+                      PILIH FILE IR (.WAV)
+                    </Text>
+                  </TouchableOpacity>
+                  {convolverIr ? (
+                    <TouchableOpacity
+                      onPress={handleClearIr}
+                      disabled={eq.isDSPDisabled || !eq.isEQEnabled}
+                      style={[
+                        styles.reverbBox,
+                        {
+                          backgroundColor: colors.background.tertiary,
+                          borderColor: colors.border.medium,
+                          padding: spacing.md,
+                          minHeight: 44,
+                          flex: 1,
+                          alignItems: "center",
+                          justifyContent: "center",
+                        },
+                        (eq.isDSPDisabled || !eq.isEQEnabled) && {
+                          opacity: 0.4,
+                        },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Hapus IR"
+                    >
+                      <Text
+                        style={{
+                          fontFamily: FONT_FAMILY.medium,
+                          fontSize: 13,
+                          color: colors.text.primary,
+                        }}
+                      >
+                        HAPUS
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+                <Text
+                  style={[
+                    styles.disabledCaption,
+                    {
+                      color: colors.text.secondary,
+                      paddingHorizontal: spacing.md,
+                      marginTop: spacing.sm,
+                    },
+                  ]}
+                >
+                  Convolver duduk sesudah reverb, sebelum HRTF — ekor IR
+                  ikut ter-spatialisasi. Biasanya pakai salah satu: IR
+                  atau reverb, bukan keduanya.
+                </Text>
+              </View>
+
               {/* REVERB PRESET SELECTOR — DIPULIHKAN 2026-11-19.
                   Disembunyikan 2026-11-18 karena engine reverb masih STUB
                   (keputusan 2026-11-14); syarat "sampai engine C++ ada"
@@ -1512,7 +1675,7 @@ export default function EqualizerScreen() {
       <ConfirmDialog
         visible={resetDialogVisible}
         title="Reset DSP"
-        message="Kembalikan ke pengaturan netral? Kurva, bass, pelebar, reverb, master gain, HRTF, dan koreksi headphone ikut direset."
+        message="Kembalikan ke pengaturan netral? Kurva, bass, pelebar, reverb, master gain, HRTF, convolver, dan koreksi headphone ikut direset."
         confirmLabel="Reset"
         onConfirm={() => {
           setResetDialogVisible(false);
