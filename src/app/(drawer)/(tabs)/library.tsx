@@ -109,6 +109,20 @@ const hexToRGBA = (hex: string, opacity: number): string => {
 // (PureComponent) melihat prop baru.
 const songKeyExtractor = (item: Song) => item.id;
 
+// ── FlashList drawDistance (fling-blank fix 2026-11-20) ────────────────────
+// @shopify/flash-list v2 (2.0.2) TIDAK PUNYA estimatedItemSize — prop itu
+// hanya ada di v1; di v2 tiap baris diukur otomatis saat mount, dan
+// overrideItemLayout hanya mengubah span kolom, bukan ukuran. Satu-satunya
+// tuas overscan adalah drawDistance: buffer (dp) di TIAP sisi viewport
+// (total buffer = 2× drawDistance); default vendor 250.
+// Naik ke 500 (≈ satu layar ekstra tiap sisi: total render ±20 baris dari
+// ±14 — baris lagu ±77dp, viewport ±560dp) supaya fling cepat tidak
+// melampaui jendela render dan menampilkan baris kosong ("ompong").
+// Sengaja MODEST: tiap baris ekstra = artwork + teks yang harus di-mount
+// thread JS per frame, dan app ini sudah melawan stall thread JS (freeze:
+// fling + playback; 2 lag terbesar logcat-6 dari drag slider). Jangan boros.
+const LIBRARY_DRAW_DISTANCE_DP = 500;
+
 export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -728,6 +742,9 @@ export default function LibraryScreen() {
               contentContainerStyle={listContentStyle}
               renderItem={renderPlaylistSongItem}
               extraData={currentSongId}
+              // Fling-blank fix: buffer render tiap sisi viewport
+              // (lihat LIBRARY_DRAW_DISTANCE_DP).
+              drawDistance={LIBRARY_DRAW_DISTANCE_DP}
             />
           )}
         </View>
@@ -802,6 +819,9 @@ export default function LibraryScreen() {
             contentContainerStyle={listContentStyle}
             renderItem={renderSongItem}
             extraData={currentSongId}
+            // Fling-blank fix: buffer render tiap sisi viewport
+            // (lihat LIBRARY_DRAW_DISTANCE_DP).
+            drawDistance={LIBRARY_DRAW_DISTANCE_DP}
             // U-P1-39: pull-to-refresh — RefreshControl diimpor tapi dulu
             // tidak pernah dipakai.
             refreshControl={songsRefreshControl}
