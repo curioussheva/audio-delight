@@ -599,10 +599,8 @@ const performInitialization = useCallback(async () => {
     // bridge 1/detik — jalan di efek dev-only yang sama dengan monitor di
     // atas. Cabut start/stop ini + modul bridgeProbe.ts bila sudah terjawab.
     //
-    // KONTROL TRACE 3 — probe-OFF satu sesi (pemisah termurah): sampler
-    // dimatikan, dragDiag + instrumen lain tetap jalan sebagai alat ukur.
-    // Kembalikan true sesudah sesi kontrol.
-    const BRIDGE_PROBE_ENABLED = false;
+    // KONTROL TRACE 3 selesai 21 Nov 2026 (log #13): probe kembali ON.
+    const BRIDGE_PROBE_ENABLED = true;
 
     const probe = BRIDGE_PROBE_ENABLED ? startBridgeProbe({
       getAudioMode: () => usePlayerStore.getState().audioMode,
