@@ -45,6 +45,12 @@ import {
   analyzeBitDepth,
   BitDepthAnalysis,
 } from "@/features/audio/api/BitDepthVerifier";
+import {
+  BIT_DEPTH_DEBOUNCE_MS,
+  getBitDepthCacheKey,
+  getCachedBitDepth,
+  setCachedBitDepth,
+} from "@/features/audio/api/bitDepthCache";
 import { AnalyzerSpectrum } from "@/features/visualizer/components/AnalyzerSpectrum";
 import { formatFreq } from "@/features/visualizer/api/analyzerSpectrum";
 import { cleanAnalyzerWarnings } from "@/features/visualizer/api/analyzerWarnings";
@@ -179,11 +185,20 @@ export default function AnalyzerScreen() {
     loadFromDB();
   }, [currentSong?.id]);
 
-  // Bit-depth analysis
+  // Bit-depth analysis — debounce + cache (item 8 optimasi render):
+  // pindah lagu cepat (skip beruntun / antrean baru) tidak lagi memicu
+  // analisis tiap lagu yang dilewati — analisis baru jalan ~400 ms
+  // sesudah lagu berganti, dan timer dibatalkan di cleanup bila lagu
+  // berganti lagi / tab di-unmount sebelum timer jalan. Hasil lama tetap
+  // dibersihkan segera saat lagu berganti (perilaku lama). Kalau hasil
+  // lagu ini sudah ada di cache, tampilkan SEGERA tanpa debounce dan
+  // tanpa analisis ulang. isAnalyzing hanya true saat analisis
+  // benar-benar berjalan, bukan selama menunggu debounce.
   useEffect(() => {
     if (!currentSong) {
       setBitDepthAnalysis(null);
       setAnalyzedSong(null);
+      setIsAnalyzing(false);
       return;
     }
 
@@ -192,14 +207,27 @@ export default function AnalyzerScreen() {
     // analisis baru gagal), tanpa label file yang dianalisis.
     setBitDepthAnalysis(null);
     setAnalyzedSong(null);
+    // Analisis lagu lama sudah dibatalkan (cleanup effect sebelumnya) —
+    // jangan biarkan spinner-nya nyangkut saat lagu baru cache-hit
+    // (tidak ada analisis baru yang akan mematikannya).
+    setIsAnalyzing(false);
+
+    const song = currentSong;
+    const cacheKey = getBitDepthCacheKey(song);
+    const cached = getCachedBitDepth(cacheKey);
+    if (cached) {
+      setBitDepthAnalysis(cached);
+      setAnalyzedSong({ id: song.id, title: song.title });
+      return;
+    }
 
     let cancelled = false;
-    const song = currentSong;
     const runAnalysis = async () => {
       setIsAnalyzing(true);
       try {
         const result = await analyzeBitDepth(song);
         if (cancelled) return;
+        setCachedBitDepth(cacheKey, result);
         setBitDepthAnalysis(result);
         setAnalyzedSong({ id: song.id, title: song.title });
       } catch (err) {
@@ -209,9 +237,10 @@ export default function AnalyzerScreen() {
       }
     };
 
-    runAnalysis();
+    const timer = setTimeout(runAnalysis, BIT_DEPTH_DEBOUNCE_MS);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
     // N33: dulu deps hanya [currentSong?.id] — lagu yang sama diputar
     // ulang sesudah metadata-nya berubah (edit di [id].tsx / rescan /
