@@ -35,6 +35,11 @@ export const useEqualizer = () => {
     setVirtualizerEnabled,
     setReverbEnabled,
     resetToDefault,
+    // (Item 7) Flush saat drag dilepas — lihat store.
+    flushBandDrag,
+    flushBassBoostDrag,
+    flushVirtualizerDrag,
+    flushMasterGainDrag,
   } = useEqualizerStore();
 
   // DUA mode mematikan mesin DSP, bukan satu.
@@ -134,6 +139,29 @@ export const useEqualizer = () => {
     resetToDefault();
   }, [isDSPDisabled, resetToDefault]);
 
+  // (Item 7) Flush nilai akhir drag saat release — guard DSP yang sama
+  // seperti setter-nya: di bit-perfect / immersive tidak ada drag yang
+  // bisa menaruh pending, jadi flush di sana no-op yang dilewati.
+  const handleFlushBandDrag = useCallback(() => {
+    if (isDSPDisabled) return;
+    flushBandDrag();
+  }, [isDSPDisabled, flushBandDrag]);
+
+  const handleFlushBassBoostDrag = useCallback(() => {
+    if (isDSPDisabled) return;
+    flushBassBoostDrag();
+  }, [isDSPDisabled, flushBassBoostDrag]);
+
+  const handleFlushVirtualizerDrag = useCallback(() => {
+    if (isDSPDisabled) return;
+    flushVirtualizerDrag();
+  }, [isDSPDisabled, flushVirtualizerDrag]);
+
+  const handleFlushMasterGainDrag = useCallback(() => {
+    if (isDSPDisabled) return;
+    flushMasterGainDrag();
+  }, [isDSPDisabled, flushMasterGainDrag]);
+
   const allPresets = useMemo(
     () => [...ALL_PRESETS, ...customPresets],
     [customPresets],
@@ -168,5 +196,10 @@ export const useEqualizer = () => {
     setVirtualizer: handleSetVirtualizer,
     setReverb: handleSetReverb,
     resetToDefault: handleResetToDefault,
+    // (Item 7) Flush saat drag dilepas.
+    flushBandDrag: handleFlushBandDrag,
+    flushBassBoostDrag: handleFlushBassBoostDrag,
+    flushVirtualizerDrag: handleFlushVirtualizerDrag,
+    flushMasterGainDrag: handleFlushMasterGainDrag,
   };
 };

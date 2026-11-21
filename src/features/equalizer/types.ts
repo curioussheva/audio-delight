@@ -75,6 +75,14 @@ export interface EqualizerStore {
   setBandGain: (index: number, gain: number) => void;
   setBandsGain: (gains: number[]) => Promise<void>; // Ditambahkan untuk Full EQ Apply
 
+  // (Item 7) Trailing flush saat drag dilepas — kirim nilai akhir drag
+  // SEKARANG, bukan menunggu timer trailing ≤100 ms. Idempotent +
+  // no-op bila tidak ada pending (tidak double-fire).
+  flushBandDrag: () => void;
+  flushBassBoostDrag: () => void;
+  flushVirtualizerDrag: () => void;
+  flushMasterGainDrag: () => void;
+
   // Preset Management
   applyPreset: (presetId: string) => void;
   saveCustomPreset: (name: string) => void;

@@ -141,4 +141,54 @@ describe("createEffectPusher", () => {
       logSpy.mockRestore();
     }
   });
+
+  describe("flush() (Item 7) — nilai akhir drag terkirim saat release", () => {
+    it("pending terkirim SEGERA saat flush, nilai terbaru yang menang", () => {
+      const commits: number[] = [];
+      pusher.push(100, 7, () => commits.push(100)); // leading
+      pusher.push(200, 7, () => commits.push(200)); // trailing
+      pusher.push(300, 7, () => commits.push(300)); // dropped -> pending
+      expect(send).toHaveBeenCalledTimes(1);
+      pusher.flush();
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(send).toHaveBeenLastCalledWith(300, 7); // nilai terbaru
+      expect(commits).toEqual([100, 300]); // commit lama tidak jalan
+    });
+
+    it("timer trailing sesudah flush tidak mengirim ulang nilai yang sama", () => {
+      pusher.push(100, 7); // leading
+      pusher.push(200, 7); // trailing terjadwal
+      pusher.flush();
+      expect(send).toHaveBeenCalledTimes(2);
+      jest.advanceTimersByTime(500);
+      expect(send).toHaveBeenCalledTimes(2); // tetap 2, bukan 3
+    });
+
+    it("flush dua kali berturut-turut: hanya satu kiriman (idempotent)", () => {
+      pusher.push(100, 7); // leading
+      pusher.push(200, 7); // trailing terjadwal
+      pusher.flush();
+      pusher.flush();
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(send).toHaveBeenLastCalledWith(200, 7);
+    });
+
+    it("no-op bila tidak ada pending: sesudah leading saja, dan sebelum push apa pun", () => {
+      pusher.flush(); // belum ada push — no-op, tidak melempar
+      expect(send).toHaveBeenCalledTimes(0);
+      pusher.push(100, 7); // leading, tidak ada trailing
+      pusher.flush();
+      expect(send).toHaveBeenCalledTimes(1); // tetap 1, bukan 2
+      expect(send).toHaveBeenLastCalledWith(100, 7);
+    });
+
+    it("no-op sesudah trailing fire sudah jalan sendiri", () => {
+      pusher.push(100, 7); // leading
+      pusher.push(200, 7); // trailing terjadwal
+      jest.advanceTimersByTime(100); // trailing fire jalan
+      expect(send).toHaveBeenCalledTimes(2);
+      pusher.flush();
+      expect(send).toHaveBeenCalledTimes(2); // tetap 2
+    });
+  });
 });

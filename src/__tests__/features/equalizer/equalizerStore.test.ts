@@ -559,6 +559,114 @@ describe("logcat #9 — bagian 3: throttle store set() slider efek", () => {
   });
 });
 
+describe("Item 7 — trailing flush saat drag dilepas", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  const native = () =>
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("@/features/equalizer/api/nativeInterface").NativeDSPModule as unknown as Record<
+      string,
+      jest.Mock
+    >;
+
+  // EQ nyala + session 7 supaya setter drag benar-benar mendorong native.
+  const enableEq = async (store: ReturnType<typeof loadStore>) => {
+    store.getState().setAudioSessionId(7);
+    await store.getState().setEQEnabled(true);
+    jest.clearAllMocks();
+  };
+
+  it("flushBandDrag: store + native langsung nilai akhir, timer tidak mengirim ulang", async () => {
+    const store = loadStore();
+    await enableEq(store);
+    store.getState().setBandGain(0, 1); // leading: store 1 + native [1,...]
+    store.getState().setBandGain(0, 4); // pending (store + apply)
+    expect(store.getState().bands[0]?.gain).toBe(1); // belum flush
+    store.getState().flushBandDrag();
+    expect(store.getState().bands[0]?.gain).toBe(4); // langsung nilai akhir
+    expect(native().setFullEqualizer).toHaveBeenCalledTimes(2);
+    expect(native().setFullEqualizer).toHaveBeenLastCalledWith(
+      [4, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      7,
+    );
+    jest.advanceTimersByTime(500);
+    expect(native().setFullEqualizer).toHaveBeenCalledTimes(2); // tetap 2
+  });
+
+  it("flushBandDrag no-op bila tick terakhir sudah terkirim leading", async () => {
+    const store = loadStore();
+    await enableEq(store);
+    store.getState().setBandGain(0, 3); // leading saja
+    store.getState().flushBandDrag();
+    expect(native().setFullEqualizer).toHaveBeenCalledTimes(1);
+    expect(native().setFullEqualizer).toHaveBeenLastCalledWith(
+      [3, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      7,
+    );
+    jest.advanceTimersByTime(500);
+    expect(native().setFullEqualizer).toHaveBeenCalledTimes(1);
+  });
+
+  it("flushBassBoostDrag: pusher + store langsung nilai akhir, tanpa kiriman ganda", async () => {
+    const store = loadStore();
+    await enableEq(store);
+    await store.getState().setBassBoost(100); // leading: native (100, 7)
+    await store.getState().setBassBoost(400); // pending (pusher + store)
+    expect(store.getState().bassStrength).toBe(100); // belum flush
+    store.getState().flushBassBoostDrag();
+    expect(store.getState().bassStrength).toBe(400); // langsung nilai akhir
+    expect(native().setBassBoost).toHaveBeenCalledTimes(2);
+    expect(native().setBassBoost).toHaveBeenLastCalledWith(400, 7);
+    jest.advanceTimersByTime(500);
+    expect(native().setBassBoost).toHaveBeenCalledTimes(2); // tetap 2
+    store.getState().flushBassBoostDrag(); // flush kedua: idempotent
+    expect(native().setBassBoost).toHaveBeenCalledTimes(2);
+  });
+
+  it("flushVirtualizerDrag: pola yang sama untuk pelebar stereo", async () => {
+    const store = loadStore();
+    await enableEq(store);
+    await store.getState().setVirtualizer(100); // leading
+    await store.getState().setVirtualizer(800); // pending
+    store.getState().flushVirtualizerDrag();
+    expect(store.getState().virtualizerLevel).toBe(800);
+    expect(native().setVirtualizer).toHaveBeenCalledTimes(2);
+    expect(native().setVirtualizer).toHaveBeenLastCalledWith(800, 7);
+    jest.advanceTimersByTime(500);
+    expect(native().setVirtualizer).toHaveBeenCalledTimes(2);
+  });
+
+  it("flushMasterGainDrag: native + store langsung nilai akhir, tanpa kiriman ganda", async () => {
+    const store = loadStore();
+    await enableEq(store);
+    await store.getState().setMasterGain(1.25); // leading: native 1.25
+    await store.getState().setMasterGain(2.0); // pending
+    expect(store.getState().masterGain).toBe(1.25); // belum flush
+    store.getState().flushMasterGainDrag();
+    expect(store.getState().masterGain).toBe(2.0); // langsung nilai akhir
+    expect(native().setMasterGain).toHaveBeenCalledTimes(2);
+    expect(native().setMasterGain).toHaveBeenLastCalledWith(2.0);
+    jest.advanceTimersByTime(500);
+    expect(native().setMasterGain).toHaveBeenCalledTimes(2); // tetap 2
+  });
+
+  it("flushMasterGainDrag no-op bila tick terakhir sudah terkirim leading", async () => {
+    const store = loadStore();
+    await enableEq(store);
+    await store.getState().setMasterGain(1.25); // leading saja
+    store.getState().flushMasterGainDrag();
+    expect(native().setMasterGain).toHaveBeenCalledTimes(1);
+    jest.advanceTimersByTime(500);
+    expect(native().setMasterGain).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("Master gain (2026-11-19) — store + native + log [DSP] Applied", () => {
   const native = () =>
     // eslint-disable-next-line @typescript-eslint/no-require-imports

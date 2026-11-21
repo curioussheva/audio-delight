@@ -391,6 +391,63 @@ const EQ_APPLY_THROTTLE_MS = 100;
 let _eqApplyLastAt = 0;
 let _eqApplyTimer: ReturnType<typeof setTimeout> | null = null;
 
+// (Item 7) Kirim bands TERKINI ke native sekali — dipakai leading /
+// trailing timer applyEqThrottled di bawah DAN flush saat drag dilepas.
+// Membaca snapshot PENDING store bila ada (N24), bukan hanya get().bands.
+const fireEqApply = (
+  get: () => {
+    bands: { gain: number }[];
+    isEQEnabled: boolean;
+    audioSessionId: number;
+  },
+) => {
+  _eqApplyLastAt = Date.now();
+  _eqApplyTimer = null;
+  // N24: apply membaca snapshot PENDING store bila ada, bukan hanya
+  // get().bands. Dua throttle (store + apply, masing-masing ~100 ms)
+  // dihitung dari lastAt yang berbeda dan bisa meleset beberapa ms —
+  // bila timer apply menang dari timer flush store, get().bands masih
+  // berisi bands pra-drag dan tidak ada apply susulan (apply hanya
+  // dipicu tick drag). Pending adalah snapshot bands TERBARU dari
+  // setBandGain, jadi nilai akhir selalu terkirim walau flush store
+  // belum jalan. (Flush store yang datang sesudahnya menulis bands
+  // yang sama persis, jadi tidak ada apply yang hilang.)
+  const { bands: storedBands, isEQEnabled, audioSessionId } = get();
+  const bands = _eqStorePendingBands ?? storedBands;
+  if (
+    !isEQEnabled ||
+    audioSessionId === -1 ||
+    !NativeDSPModule?.setFullEqualizer
+  ) {
+    // [DRAG-DIAG] fire yang tidak mengirim apa-apa (guard di atas).
+    noteThrottleTick("bands", "skipped");
+    return;
+  }
+  const gains = bands.map((b) => Math.min(10, Math.max(-10, b.gain)));
+  void NativeDSPModule.setFullEqualizer(gains, audioSessionId);
+};
+
+/**
+ * (Item 7) Flush apply band yang masih tertunda SEKARANG — dipakai
+ * flushBandDrag saat drag dilepas. Hanya bila timer trailing apply
+ * masih hidup: tanpa timer, tick terakhir sudah terkirim leading
+ * (fire membaca snapshot pending saat itu), jadi no-op dan tidak ada
+ * pengiriman ganda. Timer dibersihkan supaya nilai yang sama tidak
+ * terkirim ulang sesudahnya.
+ */
+const flushPendingEqApply = (
+  get: () => {
+    bands: { gain: number }[];
+    isEQEnabled: boolean;
+    audioSessionId: number;
+  },
+) => {
+  if (!_eqApplyTimer) return;
+  clearTimeout(_eqApplyTimer);
+  _eqApplyTimer = null;
+  fireEqApply(get);
+};
+
 const applyEqThrottled = (
   get: () => {
     bands: { gain: number }[];
@@ -398,46 +455,20 @@ const applyEqThrottled = (
     audioSessionId: number;
   },
 ) => {
-  const fire = () => {
-    _eqApplyLastAt = Date.now();
-    _eqApplyTimer = null;
-    // N24: apply membaca snapshot PENDING store bila ada, bukan hanya
-    // get().bands. Dua throttle (store + apply, masing-masing ~100 ms)
-    // dihitung dari lastAt yang berbeda dan bisa meleset beberapa ms —
-    // bila timer apply menang dari timer flush store, get().bands masih
-    // berisi bands pra-drag dan tidak ada apply susulan (apply hanya
-    // dipicu tick drag). Pending adalah snapshot bands TERBARU dari
-    // setBandGain, jadi nilai akhir selalu terkirim walau flush store
-    // belum jalan. (Flush store yang datang sesudahnya menulis bands
-    // yang sama persis, jadi tidak ada apply yang hilang.)
-    const { bands: storedBands, isEQEnabled, audioSessionId } = get();
-    const bands = _eqStorePendingBands ?? storedBands;
-    if (
-      !isEQEnabled ||
-      audioSessionId === -1 ||
-      !NativeDSPModule?.setFullEqualizer
-    ) {
-      // [DRAG-DIAG] fire yang tidak mengirim apa-apa (guard di atas).
-      noteThrottleTick("bands", "skipped");
-      return;
-    }
-    const gains = bands.map((b) => Math.min(10, Math.max(-10, b.gain)));
-    void NativeDSPModule.setFullEqualizer(gains, audioSessionId);
-  };
   const now = Date.now();
   if (now - _eqApplyLastAt >= EQ_APPLY_THROTTLE_MS) {
     if (_eqApplyTimer) {
       clearTimeout(_eqApplyTimer);
       _eqApplyTimer = null;
     }
-    fire();
+    fireEqApply(get);
     // [DRAG-DIAG] tick yang langsung fire (leading).
     noteThrottleTick("bands", "fired");
   } else if (!_eqApplyTimer) {
     // [DRAG-DIAG] tick yang dijadwalkan sebagai trailing fire.
     noteThrottleTick("bands", "trailing");
     _eqApplyTimer = setTimeout(
-      fire,
+      () => fireEqApply(get),
       EQ_APPLY_THROTTLE_MS - (now - _eqApplyLastAt),
     );
   } else {
@@ -542,6 +573,28 @@ const flushPendingScalarSet = (
   }
 };
 
+/**
+ * (Item 7) Terapkan flush bands Fix G yang masih tertunda SEKARANG —
+ * dipakai flushBandDrag saat drag band/kurva dilepas, supaya store
+ * langsung menunjukkan gain akhir (bukan menunggu timer trailing).
+ * Tanpa pending: no-op. Timer dibersihkan supaya snapshot yang sama
+ * tidak ditulis ulang sesudahnya.
+ */
+const flushPendingBandStoreSet = (
+  setFn: (partial: { bands: any[]; activePresetId: string }) => void,
+) => {
+  if (_eqStoreTimer) {
+    clearTimeout(_eqStoreTimer);
+    _eqStoreTimer = null;
+  }
+  const pending = _eqStorePendingBands;
+  _eqStorePendingBands = null;
+  if (pending) {
+    _eqStoreLastAt = Date.now();
+    setFn({ bands: pending, activePresetId: "custom" });
+  }
+};
+
 // P1-9 (2026-11-19): throttle dorongan setMasterGain ke native (leading +
 // trailing, 100 ms — pola applyEqThrottled J1-2). Slider gain dipanggil
 // tiap tick drag; tanpa ini tiap tick = satu panggilan bridge. State
@@ -552,29 +605,46 @@ let _masterGainLastAt = 0;
 let _masterGainTimer: ReturnType<typeof setTimeout> | null = null;
 let _masterGainPending: number | null = null;
 
-const pushMasterGainThrottled = (gain: number) => {
-  const fire = async () => {
-    _masterGainLastAt = Date.now();
-    _masterGainTimer = null;
-    const value = _masterGainPending ?? gain;
-    _masterGainPending = null;
-    // ReplayGain (2026-11-20): `value` di sini masih gain USER (slider);
-    // yang dikirim ke native adalah gain EFEKTIF (user × faktor RG lagu
-    // aktif). Konversi di sini (bukan di pemanggil) supaya SEMUA pemanggil
-    // — slider, restore, toggle RG — otomatis konsisten, dan nilai
-    // terakhir selalu terkirim (trailing) dengan faktor RG terbaru.
-    const effective = getEffectiveMasterGain(value);
-    // setMasterGain kini Promise<boolean> (P1-9): false = native menolak.
-    // fire-and-forget (N23) tapi rejection dicatat — jangan jadi unhandled.
-    try {
-      const ok = await NativeDSPModule?.setMasterGain?.(effective);
-      if (ok === false) {
-        console.warn("[EQ Store] setMasterGain ditolak native");
-      }
-    } catch (e) {
-      console.error("[EQ Store] setMasterGain gagal:", e);
+const fireMasterGain = async (gain: number) => {
+  _masterGainLastAt = Date.now();
+  _masterGainTimer = null;
+  const value = _masterGainPending ?? gain;
+  _masterGainPending = null;
+  // ReplayGain (2026-11-20): `value` di sini masih gain USER (slider);
+  // yang dikirim ke native adalah gain EFEKTIF (user × faktor RG lagu
+  // aktif). Konversi di sini (bukan di pemanggil) supaya SEMUA pemanggil
+  // — slider, restore, toggle RG — otomatis konsisten, dan nilai
+  // terakhir selalu terkirim (trailing) dengan faktor RG terbaru.
+  const effective = getEffectiveMasterGain(value);
+  // setMasterGain kini Promise<boolean> (P1-9): false = native menolak.
+  // fire-and-forget (N23) tapi rejection dicatat — jangan jadi unhandled.
+  try {
+    const ok = await NativeDSPModule?.setMasterGain?.(effective);
+    if (ok === false) {
+      console.warn("[EQ Store] setMasterGain ditolak native");
     }
-  };
+  } catch (e) {
+    console.error("[EQ Store] setMasterGain gagal:", e);
+  }
+};
+
+/**
+ * (Item 7) Kirim pending master gain SEKARANG — dipakai flushMasterGainDrag
+ * saat slider gain dilepas. Hanya bila timer trailing masih hidup: tanpa
+ * timer, tick terakhir sudah terkirim leading, jadi no-op dan tidak ada
+ * pengiriman ganda. Timer dibersihkan supaya nilai yang sama tidak
+ * terkirim ulang sesudahnya.
+ */
+const flushMasterGainPush = () => {
+  if (!_masterGainTimer) return;
+  clearTimeout(_masterGainTimer);
+  _masterGainTimer = null;
+  const pending = _masterGainPending;
+  _masterGainPending = null;
+  if (pending !== null) void fireMasterGain(pending);
+};
+
+const pushMasterGainThrottled = (gain: number) => {
   const now = Date.now();
   if (now - _masterGainLastAt >= MASTER_GAIN_NATIVE_THROTTLE_MS) {
     if (_masterGainTimer) {
@@ -582,7 +652,7 @@ const pushMasterGainThrottled = (gain: number) => {
       _masterGainTimer = null;
     }
     _masterGainPending = null;
-    void fire();
+    void fireMasterGain(gain);
     // [DRAG-DIAG] tick yang langsung fire (leading).
     noteThrottleTick("gain", "fired");
   } else if (!_masterGainTimer) {
@@ -590,7 +660,7 @@ const pushMasterGainThrottled = (gain: number) => {
     noteThrottleTick("gain", "trailing");
     _masterGainPending = gain;
     _masterGainTimer = setTimeout(
-      () => void fire(),
+      () => void fireMasterGain(gain),
       MASTER_GAIN_NATIVE_THROTTLE_MS - (now - _masterGainLastAt),
     );
   } else {
@@ -968,6 +1038,41 @@ export const useEqualizerStore = create<EqualizerStore>()(
   // selalu terkirim walau flush store belum jalan saat timer apply fire.
   applyEqThrottled(get);
 },
+
+      // (Item 7) Trailing flush saat drag band / kurva dilepas: tulis
+      // snapshot bands pending ke store SEKARANG, lalu kirim ke native
+      // SEKARANG (bukan menunggu timer trailing ≤100 ms). Urutan dijaga:
+      // store dulu, apply sesudahnya — apply membaca bands store yang
+      // sudah final. Tanpa pending, keduanya no-op (tidak ada kiriman
+      // ganda; tick terakhir sudah terkirim leading). Idempotent: flush
+      // kedua berturut-turut tidak mengirim apa-apa.
+      flushBandDrag: () => {
+        flushPendingBandStoreSet(set);
+        flushPendingEqApply(get);
+      },
+
+      // (Item 7) Trailing flush saat slider bass dilepas: pusher bass
+      // mengirim nilai pending SEKARANG + store skalar ikut di-flush
+      // supaya teks nilai langsung menunjukkan nilai akhir. Tanpa
+      // pending, no-op.
+      flushBassBoostDrag: () => {
+        pushBassBoostThrottled.flush();
+        flushPendingScalarSet(set);
+      },
+
+      // (Item 7) Sama seperti flushBassBoostDrag, untuk pelebar stereo.
+      flushVirtualizerDrag: () => {
+        pushVirtualizerThrottled.flush();
+        flushPendingScalarSet(set);
+      },
+
+      // (Item 7) Sama seperti flushBassBoostDrag, untuk master gain:
+      // dorongan native pending dikirim SEKARANG (gain efektif, faktor
+      // RG terbaru) + store skalar ikut di-flush.
+      flushMasterGainDrag: () => {
+        flushMasterGainPush();
+        flushPendingScalarSet(set);
+      },
 
       setBandsGain: async (gains: number[]) => {
         // Fix G: batalkan trailing flush setBandGain yang masih tertunda —

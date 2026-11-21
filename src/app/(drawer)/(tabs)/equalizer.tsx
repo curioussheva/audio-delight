@@ -900,6 +900,9 @@ export default function EqualizerScreen() {
                 height={140}
                 disabled={isDSPFrozen || !eq.isEQEnabled}
                 onBandChange={handleGraphBandChange}
+                // (Item 7) Drag kurva dilepas: flush nilai akhir band
+                // SEKARANG (store + native), tanpa tunggu trailing ≤100 ms.
+                onDragEnd={eq.flushBandDrag}
                 // Peringatan clip menghitung bass + gain juga (pill
                 // grafik): bass 0..+12 dB bila sakelarnya menyala,
                 // master gain −12..+12 dB.
@@ -1125,6 +1128,9 @@ export default function EqualizerScreen() {
                           gain={item.gain}
                           index={index}
                           onValueChange={eq.updateBandGain}
+                          // (Item 7) Drag fader dilepas: flush nilai akhir
+                          // band SEKARANG (store + native).
+                          onDragEnd={eq.flushBandDrag}
                           disabled={!eq.isEQEnabled || eq.isDSPDisabled}
                         />
                       )}
@@ -1344,6 +1350,9 @@ export default function EqualizerScreen() {
                       label="BASS BOOST"
                       value={eq.bassStrength}
                       onChange={eq.setBassBoost}
+                      // (Item 7) Drag dilepas: flush nilai akhir bass
+                      // SEKARANG (pusher + store), tanpa tunggu trailing.
+                      onDragEnd={eq.flushBassBoostDrag}
                       color={bassColor}
                       disabled={
                         !eq.isBassEnabled ||
@@ -1371,6 +1380,9 @@ export default function EqualizerScreen() {
                       label="PELEBAR STEREO"
                       value={eq.virtualizerLevel}
                       onChange={eq.setVirtualizer}
+                      // (Item 7) Drag dilepas: flush nilai akhir widener
+                      // SEKARANG (pusher + store), tanpa tunggu trailing.
+                      onDragEnd={eq.flushVirtualizerDrag}
                       color={widthColor}
                       disabled={
                         !eq.isVirtualizerEnabled ||
@@ -1396,6 +1408,9 @@ export default function EqualizerScreen() {
                       label="MASTER GAIN"
                       value={gainToDb(eq.masterGain) - MASTER_GAIN_DB_MIN}
                       onChange={handleMasterGainChange}
+                      // (Item 7) Drag dilepas: flush nilai akhir gain
+                      // SEKARANG (native + store), tanpa tunggu trailing.
+                      onDragEnd={eq.flushMasterGainDrag}
                       color={masterColor}
                       disabled={eq.isDSPDisabled || !eq.isEQEnabled}
                       maxValue={MASTER_GAIN_DB_RANGE}

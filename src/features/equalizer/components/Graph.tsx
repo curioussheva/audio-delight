@@ -61,6 +61,13 @@ interface Props {
    */
   onBandChange?: (index: number, gain: number) => void;
   /**
+   * (Item 7) Dipanggil SEKALI saat drag kurva dilepas (onFinalize) —
+   * pemanggil me-flush nilai akhir drag band (store + native) tanpa
+   * menunggu timer trailing ≤100 ms. Opsional: tanpa ini perilaku drag
+   * tidak berubah.
+   */
+  onDragEnd?: () => void;
+  /**
    * Boost yang TIDAK terlihat di kurva tapi ikut menaikkan puncak akhir:
    * bass boost (low-shelf 100 Hz, 0..+12 dB) dan master gain
    * (−12..+12 dB). Keduanya ditambahkan ke puncak kurva untuk
@@ -81,6 +88,7 @@ export const FrequencyGraph = memo(({
   height = 120,
   disabled,
   onBandChange,
+  onDragEnd,
   bassBoostDb = 0,
   masterGainDb = 0,
 }: Props) => {
@@ -146,6 +154,9 @@ export const FrequencyGraph = memo(({
       lastGain.value = Number.NaN;
       // Item 2: drag selesai — poll visualizer kembali 50 ms penuh.
       runOnJS(setDragActive)(false);
+      // Item 7: nilai akhir drag band di-flush SEKARANG (store +
+      // native), bukan menunggu timer trailing ≤100 ms.
+      if (onDragEnd) runOnJS(onDragEnd)();
     });
 
   // 1. Generate Path di UI Thread (Smooth Transition)

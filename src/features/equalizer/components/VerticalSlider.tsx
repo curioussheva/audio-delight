@@ -46,6 +46,12 @@ interface VerticalSliderProps {
   label: string;
   value: number; // 0 - maxValue (default 1000, sama seperti knob lama)
   onChange: (val: number) => void;
+  /**
+   * (Item 7) Dipanggil SEKALI saat drag dilepas (onFinalize) — pemanggil
+   * me-flush nilai akhir drag (store + native) tanpa menunggu timer
+   * trailing ≤100 ms. Opsional: tanpa ini perilaku drag tidak berubah.
+   */
+  onDragEnd?: () => void;
   color: string;
   disabled?: boolean;
   // Batas atas rentang (default 1000). Master gain memakai 24 (dB −12..+12).
@@ -64,6 +70,7 @@ export const VerticalSlider = memo(({
   label,
   value,
   onChange,
+  onDragEnd,
   color,
   disabled,
   maxValue = 1000,
@@ -114,6 +121,9 @@ export const VerticalSlider = memo(({
       isDragging.value = false;
       // Item 2: drag selesai — poll visualizer kembali 50 ms penuh.
       runOnJS(setDragActive)(false);
+      // Item 7: nilai akhir drag di-flush SEKARANG (store + native),
+      // bukan menunggu timer trailing ≤100 ms.
+      if (onDragEnd) runOnJS(onDragEnd)();
     });
 
   const animatedThumbStyle = useAnimatedStyle(() => ({

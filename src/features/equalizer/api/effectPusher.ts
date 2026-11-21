@@ -68,6 +68,14 @@ export interface EffectPusher {
    * nilai drag basi tidak menimpa state baru sesudahnya.
    */
   cancelPending(): void;
+  /**
+   * Kirim nilai pending SEKARANG (bukan menunggu timer trailing) —
+   * dipakai saat drag dilepas (onFinalize) supaya nilai akhir drag
+   * terkirim sekali saat release. Bila ada pending: commit + send
+   * seperti fire, lalu timer dibersihkan (tidak ada pengiriman ulang).
+   * Bila tidak ada pending: no-op (idempotent, tidak double-fire).
+   */
+  flush(): void;
 }
 
 /** Throttle 100 ms untuk nilai efek drag (lihat header modul). */
@@ -142,6 +150,20 @@ export function createEffectPusher(
         timer = null;
       }
       pending = null;
+    },
+
+    flush() {
+      // Tanpa timer trailing = tidak ada pending: no-op (nilai terakhir
+      // sudah terkirim leading, atau belum ada push sama sekali).
+      if (!timer) return;
+      clearTimeout(timer);
+      timer = null;
+      const p = pending;
+      pending = null;
+      // fire() membersihkan state + memajukan lastAt seperti trailing
+      // fire biasa — push berikutnya dalam jendela jadi trailing, dan
+      // timer yang sudah dibersihkan tidak mengirim ulang nilai ini.
+      if (p) fire(p.value, p.sessionId, p.commit);
     },
   };
 }

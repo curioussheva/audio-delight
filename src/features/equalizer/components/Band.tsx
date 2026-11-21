@@ -28,6 +28,12 @@ interface BandProps {
       React.memo tidak batal oleh closure inline per item. */
   index: number;
   onValueChange: (index: number, gain: number) => void;
+  /**
+   * (Item 7) Dipanggil SEKALI saat drag dilepas (onFinalize) — pemanggil
+   * me-flush nilai akhir drag (store + native) tanpa menunggu timer
+   * trailing ≤100 ms. Opsional: tanpa ini perilaku drag tidak berubah.
+   */
+  onDragEnd?: () => void;
   color?: string;
   disabled?: boolean;
 }
@@ -40,6 +46,7 @@ export const EqualizerBand = memo(({
   gain,
   index,
   onValueChange,
+  onDragEnd,
   color,
   disabled,
 }: BandProps) => {
@@ -100,6 +107,9 @@ export const EqualizerBand = memo(({
       isDragging.value = false;
       // Item 2: drag selesai — poll visualizer kembali 50 ms penuh.
       runOnJS(setDragActive)(false);
+      // Item 7: nilai akhir drag di-flush SEKARANG (store + native),
+      // bukan menunggu timer trailing ≤100 ms.
+      if (onDragEnd) runOnJS(onDragEnd)();
     });
 
   const animatedThumbStyle = useAnimatedStyle(() => ({
