@@ -43,6 +43,8 @@ import {
   AppState,
 } from "react-native";
 
+import { useIsFocused } from "@react-navigation/native";
+
 import {
   Canvas,
   Path,
@@ -241,7 +243,23 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
   // `isSuspendedSV` dicerminkan dari AppState; `cachedProcessed`
   // menyimpan referensi array processed terakhir supaya cabang suspend
   // di processedData bisa mengembalikan referensi yang SAMA.
-  const isSuspendedSV = useSharedValue(AppState.currentState !== "active");
+  //
+  // ITEM 6 (2026-11-21): suspend yang SAMA juga saat tab Analyzer
+  // tidak fokus — tab tidak di-unmount saat pindah tab, jadi tanpa ini
+  // Canvas tetap minta redraw walau tidak kelihatan. JANGAN gate
+  // kedua: suspend = AppState tidak active ATAU tab tidak fokus,
+  // digabung ke `isSuspendedSV` yang sama. `useIsFocused` aman di sini:
+  // komponen ini hanya dirender di analyzer.tsx (tab screen di
+  // (tabs)/_layout.tsx), jadi selalu di dalam navigator tab.
+  // Dua ref JS di bawah mencerminkan kedua sumber supaya tiap effect
+  // bisa menghitung gabungannya tanpa stale closure (listener AppState
+  // didaftarkan sekali, effect fokus jalan tiap perubahan fokus).
+  const isFocused = useIsFocused();
+  const appActiveRef = useRef(AppState.currentState === "active");
+  const focusedRef = useRef(isFocused);
+  const isSuspendedSV = useSharedValue(
+    AppState.currentState !== "active" || !isFocused,
+  );
   const cachedProcessed = useSharedValue<number[]>(
     Array(barCount).fill(0.1),
   );
@@ -276,18 +294,28 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
     isPlayingSV.value = isPlaying;
   }, [isPlaying]);
 
-  // ITEM 1: cerminkan AppState ke UI thread (suspend = apa pun selain
-  // "active", termasuk "inactive" sementara). Saat kembali foreground,
-  // loop jalan lagi normal dan data segar mengalir dari polling service
-  // yang di-resume (tidak ada bar basi yang ditahan — prevData/peakData
-  // dibiarkan apa adanya supaya falloff/smoothing normal tetap jalan
-  // dari nilai terakhir, sama seperti jeda biasa).
+  // ITEM 1 + ITEM 6: cerminkan AppState DAN fokus tab ke UI thread
+  // (suspend = AppState apa pun selain "active" ATAU tab tidak fokus).
+  // Saat kembali foreground / tab kembali aktif, loop jalan lagi normal
+  // dan data segar mengalir dari polling service yang di-resume (tidak
+  // ada bar basi yang ditahan — prevData/peakData dibiarkan apa adanya
+  // supaya falloff/smoothing normal tetap jalan dari nilai terakhir,
+  // sama seperti jeda biasa).
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
-      isSuspendedSV.value = nextState !== "active";
+      appActiveRef.current = nextState === "active";
+      isSuspendedSV.value = !appActiveRef.current || !focusedRef.current;
     });
     return () => subscription.remove();
   }, []);
+
+  // ITEM 6: cerminkan fokus tab ke `isSuspendedSV` yang sama (bukan
+  // gate kedua). Pindah tab = suspend; kembali ke tab Analyzer = resume
+  // seperti resume foreground di item 1.
+  useEffect(() => {
+    focusedRef.current = isFocused;
+    isSuspendedSV.value = !appActiveRef.current || !isFocused;
+  }, [isFocused]);
 
   useEffect(() => {
     sampleRateSV.value = sampleRate;
