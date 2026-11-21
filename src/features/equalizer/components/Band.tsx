@@ -18,6 +18,7 @@ import {
   AA_NORMAL,
 } from "@/shared/utils/contrast";
 import { gainToY, yToGain } from "@/features/equalizer/api/bandThumbMath";
+import { setDragActive } from "@/features/equalizer/api/dragState";
 
 interface BandProps {
   frequency: number;
@@ -79,6 +80,9 @@ export const EqualizerBand = memo(({
     .enabled(!disabled)
     .onBegin(() => {
       isDragging.value = true;
+      // Item 2: beri tahu poll visualizer supaya melambat (50 -> 100 ms)
+      // selama drag — poll dan setter drag berebut bridge yang sama.
+      runOnJS(setDragActive)(true);
     })
     .onUpdate((e) => {
       // Travel thumb di-inset ke [12, SLIDER_HEIGHT - 12] supaya di
@@ -94,6 +98,8 @@ export const EqualizerBand = memo(({
     })
     .onFinalize(() => {
       isDragging.value = false;
+      // Item 2: drag selesai — poll visualizer kembali 50 ms penuh.
+      runOnJS(setDragActive)(false);
     });
 
   const animatedThumbStyle = useAnimatedStyle(() => ({

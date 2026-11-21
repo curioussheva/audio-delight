@@ -37,6 +37,7 @@ jest.mock("../../../specs/NativeVisualizerBridge", () => ({
 }));
 
 import { visualizerService } from "../../../features/visualizer/services/VisualizerService";
+import { setDragActive } from "../../../features/equalizer/api/dragState";
 
 describe("VisualizerService (multi-subscriber)", () => {
   beforeEach(() => {
@@ -46,6 +47,8 @@ describe("VisualizerService (multi-subscriber)", () => {
 
   afterEach(() => {
     visualizerService.destroy();
+    // Item 2: flag drag module-level — jangan bocor ke test berikut.
+    setDragActive(false);
     jest.useRealTimers();
   });
 
@@ -68,6 +71,37 @@ describe("VisualizerService (multi-subscriber)", () => {
 
     expect(mockGetFFTData.mock.calls.length).toBe(2);
     expect(received.length).toBe(2);
+  });
+
+  // Item 2 (2026-11-21): poll melambat saat drag aktif — 50 ms -> 100 ms
+  // efektif (lewati tiap tick genap; spektrum tetap jalan 10 Hz, bukan
+  // beku), kembali penuh sesudah drag selesai. Interval 10 ms di sini:
+  // 100 ms drag = 10 tick -> ~5 poll (bukan ~10); 50 ms sesudah drag ->
+  // ~5 poll lagi. Rentang, bukan angka eksak — satu tick bisa bergeser
+  // oleh resolusi async getFFTData.
+  test("poll melambat saat drag aktif, kembali penuh sesudah drag", async () => {
+    visualizerService.setDataCallback(() => {}, {
+      pollingIntervalMs: 10,
+    });
+
+    const ok = await visualizerService.start(123);
+    expect(ok).toBe(true);
+
+    await frames(50);
+    const baseline = mockGetFFTData.mock.calls.length;
+    expect(baseline).toBeGreaterThanOrEqual(4);
+
+    setDragActive(true);
+    await frames(100);
+    const duringDrag = mockGetFFTData.mock.calls.length - baseline;
+    expect(duringDrag).toBeGreaterThanOrEqual(4);
+    expect(duringDrag).toBeLessThanOrEqual(6);
+
+    setDragActive(false);
+    await frames(50);
+    const afterDrag =
+      mockGetFFTData.mock.calls.length - baseline - duringDrag;
+    expect(afterDrag).toBeGreaterThanOrEqual(4);
   });
 
   test("fan-out: dua callback sama-sama menerima data", async () => {

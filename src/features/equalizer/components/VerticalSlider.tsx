@@ -40,6 +40,7 @@ import {
   dspValueToY,
   dspYToValue,
 } from "@/features/equalizer/api/verticalSliderMath";
+import { setDragActive } from "@/features/equalizer/api/dragState";
 
 interface VerticalSliderProps {
   label: string;
@@ -95,6 +96,9 @@ export const VerticalSlider = memo(({
     .hitSlop({ left: 8, right: 8, top: 4, bottom: 4 })
     .onBegin(() => {
       isDragging.value = true;
+      // Item 2: beri tahu poll visualizer supaya melambat (50 -> 100 ms)
+      // selama drag — poll dan setter drag berebut bridge yang sama.
+      runOnJS(setDragActive)(true);
     })
     .onUpdate((e) => {
       // Travel thumb di-inset ke [12, SLIDER_HEIGHT - 12] (pola fader
@@ -108,6 +112,8 @@ export const VerticalSlider = memo(({
     })
     .onFinalize(() => {
       isDragging.value = false;
+      // Item 2: drag selesai — poll visualizer kembali 50 ms penuh.
+      runOnJS(setDragActive)(false);
     });
 
   const animatedThumbStyle = useAnimatedStyle(() => ({

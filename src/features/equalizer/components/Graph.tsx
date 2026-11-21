@@ -27,6 +27,7 @@ import { useTheme } from "@/shared/context/ThemeContext";
 import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
 import { accentOn } from "@/shared/utils/contrast";
 import { bandPoint, pointToBand } from "@/features/equalizer/api/graphDragMath";
+import { setDragActive } from "@/features/equalizer/api/dragState";
 import { areFrequencyGraphPropsEqual } from "@/features/equalizer/api/graphProps";
 import {
   BOOST_WARN_DB,
@@ -116,6 +117,9 @@ export const FrequencyGraph = memo(({
     .activeOffsetX([-10, 10])
     .failOffsetY([-10, 10])
     .onStart((e) => {
+      // Item 2: drag kurva juga mengirim setter band (onBandChange) —
+      // beri tahu poll visualizer supaya melambat selama drag.
+      runOnJS(setDragActive)(true);
       const { index, gain } = pointToBand(e.x, e.y, width, height, bandCount);
       const pt = bandPoint(index, gain, width, height, bandCount);
       dotX.value = pt.x;
@@ -140,6 +144,8 @@ export const FrequencyGraph = memo(({
       dotR.value = 0;
       lastIndex.value = -1;
       lastGain.value = Number.NaN;
+      // Item 2: drag selesai — poll visualizer kembali 50 ms penuh.
+      runOnJS(setDragActive)(false);
     });
 
   // 1. Generate Path di UI Thread (Smooth Transition)

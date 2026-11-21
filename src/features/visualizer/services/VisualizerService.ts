@@ -3,6 +3,7 @@
 import { AppState, AppStateStatus } from "react-native";
 import type { SharedValue } from "react-native-reanimated";
 import NativeVisualizerBridgeSpec from "../../../specs/NativeVisualizerBridge";
+import { isDragActive } from "../../equalizer/api/dragState";
 
 // ============================================================================
 // Types
@@ -59,6 +60,13 @@ class VisualizerService {
   // datang saat poll masih jalan dilewati saja — data terbaru datang di
   // tick berikut.
   private pollInFlight = false;
+
+  // Item 2 (2026-11-21): penanda skip drag. Selama drag aktif (flag
+  // module-level dragState, ditulis gesture Band / VerticalSlider /
+  // Graph), tick poll dilewati setiap tick genap — efektif 100 ms
+  // (10 Hz), bukan beku total. Toggle dibalik tiap tick drag; saat drag
+  // selesai, tick berikutnya langsung jalan lagi (50 ms penuh).
+  private skipNextPollForDrag = false;
 
   // Status
   private isStarted: boolean = false;
@@ -415,6 +423,13 @@ class VisualizerService {
     const intervalMs = this.config.pollingIntervalMs ?? 50;
     this.pollingTimer = setInterval(async () => {
       if (!this.isStarted) return;
+      // Item 2: selama drag aktif, lewati setiap tick genap (efektif
+      // 100 ms). Interval normal tetap 50 ms, guard pollInFlight di
+      // bawah tidak berubah.
+      if (isDragActive()) {
+        this.skipNextPollForDrag = !this.skipNextPollForDrag;
+        if (this.skipNextPollForDrag) return;
+      }
       // J1-1: jangan tumpuk — lewati tick kalau poll sebelumnya belum selesai.
       if (this.pollInFlight) return;
       this.pollInFlight = true;
@@ -453,6 +468,9 @@ class VisualizerService {
       clearInterval(this.pollingTimer);
       this.pollingTimer = null;
     }
+    // Item 2: episode polling baru mulai dari keadaan bersih — tick
+    // drag pertama sesudah start (bila drag masih aktif) dilewati.
+    this.skipNextPollForDrag = false;
   }
 
   // ============================================================================
