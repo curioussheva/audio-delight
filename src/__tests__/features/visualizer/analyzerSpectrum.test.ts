@@ -22,6 +22,9 @@ import {
   parametricDbColor,
   parametricDbZone,
   PEAK_HOLD_FLOOR,
+  SPECTRUM_CHANGE_EPSILON,
+  anyPeakAboveBars,
+  arraysCloseEnough,
   valueToDb,
 } from "@/features/visualizer/api/analyzerSpectrum";
 
@@ -291,5 +294,34 @@ describe("nextPeakHold (peak hold main player, BERBASIS WAKTU)", () => {
     expect(nextPeakHold(0.06, 0.05, 100)).toBe(0.05);
     expect(nextPeakHold(0.05, 0.05, 1000)).toBe(0.05);
     expect(nextPeakHold(0.3, 0.05, 1000)).toBe(0.05);
+  });
+});
+
+describe("ITEM 4: arraysCloseEnough / anyPeakAboveBars", () => {
+  it("epsilon default 0.001 — selisih sub-epsilon dianggap sama", () => {
+    expect(SPECTRUM_CHANGE_EPSILON).toBe(0.001);
+    expect(arraysCloseEnough([0.5, 0.1], [0.5, 0.1])).toBe(true);
+    expect(arraysCloseEnough([0.5, 0.1], [0.5009, 0.1009])).toBe(true);
+    // Di dalam epsilon masih sama; di atasnya beda. (Batas persis
+    // 0.001 tidak dipakai — 0.501 - 0.5 = 0.0010000000000000009
+    // dalam float, jadi bukan titik uji yang stabil.)
+    expect(arraysCloseEnough([0.5], [0.5005])).toBe(true);
+    expect(arraysCloseEnough([0.5], [0.5011])).toBe(false);
+    // Panjang beda = beda (barCount berubah harus render ulang).
+    expect(arraysCloseEnough([0.5, 0.1], [0.5])).toBe(false);
+    // Perubahan kecil di SATU bin saja sudah cukup untuk render.
+    const a = Array(48).fill(0.2);
+    const b = [...a];
+    b[30] = 0.205;
+    expect(arraysCloseEnough(a, b)).toBe(false);
+  });
+
+  it("anyPeakAboveBars: peak di atas bar = belum settle, peak di bar = settle", () => {
+    expect(anyPeakAboveBars([0.8, 0.2], [0.5, 0.2])).toBe(true);
+    expect(anyPeakAboveBars([0.5, 0.2], [0.5, 0.2])).toBe(false);
+    // Selisih sub-epsilon dianggap sudah menyentuh bar.
+    expect(anyPeakAboveBars([0.5009, 0.2], [0.5, 0.2])).toBe(false);
+    // Peak di bawah bar (overshoot decay) = settle.
+    expect(anyPeakAboveBars([0.1, 0.2], [0.5, 0.2])).toBe(false);
   });
 });

@@ -4,6 +4,10 @@ import { AppState, AppStateStatus } from "react-native";
 import type { SharedValue } from "react-native-reanimated";
 import NativeVisualizerBridgeSpec from "../../../specs/NativeVisualizerBridge";
 import { isDragActive } from "../../equalizer/api/dragState";
+import {
+  arraysCloseEnough,
+  SPECTRUM_CHANGE_EPSILON,
+} from "../api/analyzerSpectrum";
 
 // ============================================================================
 // Types
@@ -122,6 +126,12 @@ class VisualizerService {
 
   // Data smoothing
   private previousData: number[] | null = null;
+
+  // ITEM 4 (2026-11-21): array terakhir yang di-fan-out ke subscriber.
+  // handleFftData membandingkan smoothed dengan ini (epsilon) dan
+  // melewati penulisan SharedValue + callback bila tidak berubah —
+  // sunyi/jeda antar lagu tidak lagi membanjiri UI thread 20x/detik.
+  private lastFannedOut: number[] | null = null;
 
   constructor() {
     this.setupAppStateListener();
@@ -384,6 +394,12 @@ class VisualizerService {
     this.pendingSessionId = 0;
     this.retryCount = 0;
     this.previousData = null;
+    this.lastFannedOut = null;
+    // ITEM 4: stop() mengirim nol ke subscriber, jadi cache fan-out
+    // harus ikut reset — kalau tidak, data pertama sesi berikut yang
+    // kebetulan ≈ array lama akan dilewati padahal subscriber memegang
+    // nol. (pause() TIDAK reset: subscriber tetap memegang nilai
+    // terakhir, jadi perbandingan saat resume tetap valid.)
 
     this.stopPolling();
     this.stopNativeVisualizer();
@@ -486,6 +502,25 @@ class VisualizerService {
     }
 
     const smoothed = this.applySmoothing(data);
+
+    // ITEM 4: data tidak berubah (dalam epsilon) -> lewati fan-out
+    // tick ini. Perbandingan terhadap array TERAKHIR YANG DI-FAN-OUT
+    // (bukan tick sebelumnya) supaya drift kumulatif tetap lolos
+    // begitu melewati epsilon. Smoothing tetap jalan tiap tick
+    // (previousData diperbarui di applySmoothing) sehingga nilai yang
+    // akhirnya di-fan-out sudah benar; polling native juga tetap jalan
+    // (getFFTData tetap dipanggil tiap tick).
+    if (
+      this.lastFannedOut &&
+      arraysCloseEnough(
+        this.lastFannedOut,
+        smoothed,
+        SPECTRUM_CHANGE_EPSILON,
+      )
+    ) {
+      return;
+    }
+    this.lastFannedOut = smoothed;
 
     // Fan-out ke SEMUA subscriber (multi-subscriber, 2026-11-10).
     for (const sv of this.sharedValues) {

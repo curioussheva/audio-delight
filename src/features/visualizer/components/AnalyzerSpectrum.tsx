@@ -74,6 +74,9 @@ import {
   ANALYZER_FIT_MAX_HZ,
   ANALYZER_FREQ_MIN,
   CLIP_DB,
+  SPECTRUM_CHANGE_EPSILON,
+  anyPeakAboveBars,
+  arraysCloseEnough,
   binCenterFreq,
   dbToValue,
   dbZone,
@@ -453,46 +456,62 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
     const raw = freqData.value;
     const useDummy = !hasRealData.value && isPlayingSV.value;
 
+    let result: number[];
     if (useDummy) {
-      return Array(barCount).fill(0.05);
+      result = Array(barCount).fill(0.05);
+    } else if (!raw || raw.length === 0) {
+      result = Array(barCount).fill(0.1);
+    } else {
+      // E: bar hanya memetakan bin sampai batas atas tampilan — bin di atas
+      // freqMax tidak digambar (zoom jujur, bukan sekadar relabel sumbu).
+      // freqMax == Nyquist -> maxBin == raw.length - 1 (perilaku lama).
+      const nyquist = sampleRateSV.value / 2;
+      const maxBin =
+        freqToFraction(freqMaxSV.value, nyquist) * (raw.length - 1);
+
+      result = Array.from({ length: barCount }, () => 0);
+      const falloff = 0.85;
+
+      for (let i = 0; i < barCount; i++) {
+        const t = i / (barCount - 1);
+        const logT = Math.pow(t, 1.2);
+        const startIdx = Math.floor(logT * maxBin);
+        const endIdx = Math.min(Math.floor(maxBin), startIdx + 8);
+
+        let sum = 0,
+          count = 0;
+        for (let j = startIdx; j <= endIdx && j < raw.length; j++) {
+          sum += raw[j] || 0;
+          count++;
+        }
+
+        let target = count > 0 ? sum / count : 0;
+        if (!flatResponse) {
+          target *= sensitivity;
+          target *= 1 + (i / barCount) * 0.5;
+        }
+        target = Math.max(0.05, Math.min(1.0, target));
+
+        const prev = prevData.value[i] || 0.05;
+        if (target < prev * falloff) target = prev * falloff;
+
+        result[i] = target;
+      }
     }
 
-    if (!raw || raw.length === 0) return Array(barCount).fill(0.1);
-
-    // E: bar hanya memetakan bin sampai batas atas tampilan — bin di atas
-    // freqMax tidak digambar (zoom jujur, bukan sekadar relabel sumbu).
-    // freqMax == Nyquist -> maxBin == raw.length - 1 (perilaku lama).
-    const nyquist = sampleRateSV.value / 2;
-    const maxBin =
-      freqToFraction(freqMaxSV.value, nyquist) * (raw.length - 1);
-
-    const result = Array.from({ length: barCount }, () => 0);
-    const falloff = 0.85;
-
-    for (let i = 0; i < barCount; i++) {
-      const t = i / (barCount - 1);
-      const logT = Math.pow(t, 1.2);
-      const startIdx = Math.floor(logT * maxBin);
-      const endIdx = Math.min(Math.floor(maxBin), startIdx + 8);
-
-      let sum = 0,
-        count = 0;
-      for (let j = startIdx; j <= endIdx && j < raw.length; j++) {
-        sum += raw[j] || 0;
-        count++;
-      }
-
-      let target = count > 0 ? sum / count : 0;
-      if (!flatResponse) {
-        target *= sensitivity;
-        target *= 1 + (i / barCount) * 0.5;
-      }
-      target = Math.max(0.05, Math.min(1.0, target));
-
-      const prev = prevData.value[i] || 0.05;
-      if (target < prev * falloff) target = prev * falloff;
-
-      result[i] = target;
+    // ITEM 4 (2026-11-21): sama seperti ParametricSpectrumView —
+    // hasil hitung yang sama (dalam epsilon, vs cachedProcessed item
+    // 1) mengembalikan referensi yang SAMA supaya derived tidak
+    // memicu reaction umpan-balik dan loop settle saat data FFT
+    // konstan; kecuali peak hold masih di atas bar (lihat komentar
+    // yang sama di Player — topi dibiarkan turun dulu sampai
+    // menyentuh bar).
+    const cached = cachedProcessed.value;
+    if (
+      arraysCloseEnough(cached, result, SPECTRUM_CHANGE_EPSILON) &&
+      !anyPeakAboveBars(peakData.value, result, SPECTRUM_CHANGE_EPSILON)
+    ) {
+      return cached;
     }
 
     return result;

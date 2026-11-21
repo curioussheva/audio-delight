@@ -49,6 +49,9 @@ import { visualizerService } from "@/features/visualizer/services/VisualizerServ
 import {
   PARAMETRIC_GRADIENT_STOPS,
   PEAK_HOLD_FLOOR,
+  SPECTRUM_CHANGE_EPSILON,
+  anyPeakAboveBars,
+  arraysCloseEnough,
   dbToValue,
   nextPeakHold,
 } from "@/features/visualizer/api/analyzerSpectrum";
@@ -314,36 +317,58 @@ export const ParametricSpectrumView: React.FC<
     const raw = freqData.value;
     const useDummy = !hasRealData.value && isPlayingSV.value;
 
+    let result: number[];
     if (useDummy) {
-      return Array(barCount).fill(0.05);
+      result = Array(barCount).fill(0.05);
+    } else if (!raw || raw.length === 0) {
+      result = Array(barCount).fill(0.1);
+    } else {
+      result = Array.from({ length: barCount }, () => 0);
+      const falloff = 0.85;
+
+      for (let i = 0; i < barCount; i++) {
+        const t = i / (barCount - 1);
+        const logT = Math.pow(t, 1.2);
+        const startIdx = Math.floor(logT * (raw.length - 1));
+        const endIdx = Math.min(raw.length - 1, startIdx + 8);
+
+        let sum = 0,
+          count = 0;
+        for (let j = startIdx; j <= endIdx && j < raw.length; j++) {
+          sum += raw[j] || 0;
+          count++;
+        }
+
+        let target = count > 0 ? (sum / count) * sensitivity : 0;
+        target *= 1 + (i / barCount) * 0.5;
+        target = Math.max(0.05, Math.min(1.0, target));
+
+        const prev = prevData.value[i] || 0.05;
+        if (target < prev * falloff) target = prev * falloff;
+
+        result[i] = target;
+      }
     }
 
-    if (!raw || raw.length === 0) return Array(barCount).fill(0.1);
-
-    const result = Array.from({ length: barCount }, () => 0);
-    const falloff = 0.85;
-
-    for (let i = 0; i < barCount; i++) {
-      const t = i / (barCount - 1);
-      const logT = Math.pow(t, 1.2);
-      const startIdx = Math.floor(logT * (raw.length - 1));
-      const endIdx = Math.min(raw.length - 1, startIdx + 8);
-
-      let sum = 0,
-        count = 0;
-      for (let j = startIdx; j <= endIdx && j < raw.length; j++) {
-        sum += raw[j] || 0;
-        count++;
-      }
-
-      let target = count > 0 ? (sum / count) * sensitivity : 0;
-      target *= 1 + (i / barCount) * 0.5;
-      target = Math.max(0.05, Math.min(1.0, target));
-
-      const prev = prevData.value[i] || 0.05;
-      if (target < prev * falloff) target = prev * falloff;
-
-      result[i] = target;
+    // ITEM 4 (2026-11-21): bila hasil hitung sama dengan array
+    // terakhir yang dikembalikan (dalam epsilon, vs cachedProcessed
+    // item 1 — cache yang sama, tidak ada cache kedua), kembalikan
+    // referensi yang SAMA. Reanimated 4.2.1 (valueSetter) melewatkan
+    // notifikasi mapper bila `mutable._value === value`, jadi
+    // useAnimatedReaction umpan-balik tidak jalan dan path-path Skia
+    // tidak dihitung ulang: loop processedData → reaction → prevData
+    // → processedData settle saat data FFT konstan (sunyi/jeda),
+    // bukan berputar ~60 Hz. Pengecualian: topi peak hold yang masih
+    // di atas bar — kembalikan array baru supaya reaction jalan satu
+    // putaran lagi dan menurunkan peak; settle hanya bila peak juga
+    // sudah menyentuh bar (kalau tidak, topi membeku di udara saat
+    // bar sudah di lantai).
+    const cached = cachedProcessed.value;
+    if (
+      arraysCloseEnough(cached, result, SPECTRUM_CHANGE_EPSILON) &&
+      !anyPeakAboveBars(peaks.value, result, SPECTRUM_CHANGE_EPSILON)
+    ) {
+      return cached;
     }
 
     return result;

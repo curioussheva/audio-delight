@@ -60,6 +60,9 @@ describe("VisualizerService (multi-subscriber)", () => {
   // HARUS jadi test pertama di file — subscribe dengan config di test lain
   // mengubah config singleton (merge), jadi default hanya terlihat sebelum
   // ada yang meng-override. Tanpa config, 100 ms = 2 tick (t=50, t=100).
+  // ITEM 4 (2026-11-21): data mock konstan 0.5 — tick ke-2 dilewati
+  // fan-out-nya (tidak berubah dalam epsilon), jadi yang mengukur
+  // interval polling adalah getFFTData (2×), bukan callback (1×).
   test("default polling interval 50 ms (E1)", async () => {
     const received: number[][] = [];
     visualizerService.setDataCallback((d) => received.push(d));
@@ -70,7 +73,40 @@ describe("VisualizerService (multi-subscriber)", () => {
     await frames(100);
 
     expect(mockGetFFTData.mock.calls.length).toBe(2);
-    expect(received.length).toBe(2);
+    expect(received.length).toBe(1);
+  });
+
+  // ITEM 4 (2026-11-21): fan-out dilewati bila data tidak berubah,
+  // jalan lagi begitu data berubah. Mock mengembalikan 0.5 konstan:
+  // smoothed = 0.5 persis sejak tick pertama, jadi hanya tick pertama
+  // yang sampai ke callback walau polling tetap jalan tiap 10 ms;
+  // begitu mock berubah ke 0.9, fan-out jalan lagi.
+  test("fan-out dilewati bila data tidak berubah, jalan lagi bila berubah", async () => {
+    const received: number[][] = [];
+    visualizerService.setDataCallback((d) => received.push(d), {
+      pollingIntervalMs: 10,
+    });
+
+    const ok = await visualizerService.start(123);
+    expect(ok).toBe(true);
+
+    await frames(100);
+
+    expect(mockGetFFTData.mock.calls.length).toBeGreaterThanOrEqual(5);
+    expect(received.length).toBe(1);
+    expect(received[0][0]).toBe(0.5);
+
+    mockGetFFTData.mockImplementation(async () =>
+      Array.from({ length: 128 }, () => 0.9),
+    );
+    await frames(50);
+
+    expect(received.length).toBeGreaterThan(1);
+    expect(received[received.length - 1][0]).toBeGreaterThan(0.5);
+
+    // Kembalikan mock ke data kanonik — mockImplementation tidak
+    // di-reset clearAllMocks di beforeEach, jangan bocor ke test berikut.
+    mockGetFFTData.mockImplementation(async () => [...FFT_DATA]);
   });
 
   // Item 2 (2026-11-21): poll melambat saat drag aktif — 50 ms -> 100 ms
@@ -127,6 +163,15 @@ describe("VisualizerService (multi-subscriber)", () => {
   });
 
   test("unsubscribe satu callback, yang lain tetap menerima data", async () => {
+    // ITEM 4 (2026-11-21): data mock default konstan 0.5 — fan-out
+    // tick ke-2 dst. dilewati (tidak berubah), jadi test ini butuh data
+    // yang BERUBAH tiap tick (0.5/0.6 bergantian) supaya callback
+    // yang tersisa benar-benar menerima data baru sesudah unsubscribe.
+    let toggle = false;
+    mockGetFFTData.mockImplementation(async () => {
+      toggle = !toggle;
+      return Array.from({ length: 128 }, () => (toggle ? 0.5 : 0.6));
+    });
     const receivedA: number[][] = [];
     const receivedB: number[][] = [];
     const unsubA = visualizerService.setDataCallback(
@@ -154,6 +199,9 @@ describe("VisualizerService (multi-subscriber)", () => {
 
     expect(receivedA.length).toBe(countA);
     expect(receivedB.length).toBeGreaterThan(countB);
+
+    // Kembalikan mock ke data kanonik (lihat test ITEM 4 di atas).
+    mockGetFFTData.mockImplementation(async () => [...FFT_DATA]);
   });
 
   test("subscriber terakhir pergi -> polling berhenti", async () => {

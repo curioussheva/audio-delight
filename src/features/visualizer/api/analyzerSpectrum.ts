@@ -220,6 +220,67 @@ export function nextPeakHold(
 }
 
 /**
+ * ITEM 4 (2026-11-21): epsilon perubahan spektrum — ambang di bawah
+ * mana dua nilai bin dianggap "tidak berubah". 0.001 pada skala 0..1
+ * = 0,08 dB (dB = -80 + v*80) ≈ 0,1 px pada bar 120 px — di bawah
+ * ambang terlihat, jadi bar yang dilewati redraw-nya tidak tampak
+ * beku; passage tenang tetap bergerak normal karena perubahan bin
+ * musik pelan yang nyata (> 0.001) tetap lolos.
+ */
+export const SPECTRUM_CHANGE_EPSILON = 0.001;
+
+/**
+ * ITEM 4: true bila dua array bin sama panjang dan tiap elemen berbeda
+ * paling banyak `epsilon`. Dipakai VisualizerService (lewati fan-out
+ * bila smoothed tidak berubah) dan processedData kedua komponen
+ * (kembalikan referensi array lama bila hasil hitung tidak berubah,
+ * supaya Reanimated tidak menganggap ada perubahan — valueSetter
+ * 4.2.1 melewatkan notifikasi mapper bila `mutable._value === value`).
+ * "worklet" supaya bisa dipanggil dari useDerivedValue (UI thread);
+ * pemanggilan dari JS thread (service/jest) tetap jalan — pola yang
+ * sama dengan dbToValue/nextPeakHold di file ini.
+ */
+export function arraysCloseEnough(
+  a: readonly number[],
+  b: readonly number[],
+  epsilon: number = SPECTRUM_CHANGE_EPSILON,
+): boolean {
+  "worklet";
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const av = a[i] ?? 0;
+    const bv = b[i] ?? 0;
+    if (av === bv) continue;
+    if (Math.abs(av - bv) > epsilon) return false;
+  }
+  return true;
+}
+
+/**
+ * ITEM 4: true bila ada topi peak hold yang masih di atas barnya lebih
+ * dari `epsilon`. Dipakai processedData sebagai pengecualian settle:
+ * bila bar sudah tidak berubah tapi topi masih melayang di atas bar,
+ * loop umpan-balik dibiarkan jalan satu putaran lagi supaya reaction
+ * bisa menurunkan peak — settle hanya bila peak juga sudah menyentuh
+ * bar (kalau tidak, topi akan membeku di udara saat bar sudah di
+ * lantai). Peak yang sudah di bawah bar (overshoot decay) dianggap
+ * settle — selisihnya sub-pixel dan reaction berikutnya akan
+ * menaikannya lagi ke bar saat data berubah.
+ */
+export function anyPeakAboveBars(
+  peaks: readonly number[],
+  bars: readonly number[],
+  epsilon: number = SPECTRUM_CHANGE_EPSILON,
+): boolean {
+  "worklet";
+  const n = Math.min(peaks.length, bars.length);
+  for (let i = 0; i < n; i++) {
+    if ((peaks[i] ?? 0) > (bars[i] ?? 0) + epsilon) return true;
+  }
+  return false;
+}
+
+/**
  * Label frekuensi yang ditampilkan untuk satu freqMax: label kanonik yang
  * <= freqMax, ditambah freqMax sendiri sebagai label ujung bila belum ada.
  */
