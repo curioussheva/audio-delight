@@ -121,6 +121,10 @@ export const ParametricSpectrumView: React.FC<
   // FIX: hasRealData dan isPlayingSV sebagai SharedValue agar bisa dibaca worklet
   const hasRealData = useSharedValue(false);
   const isPlayingSV = useSharedValue(isPlaying);
+  // Penghitung frame sunyi berturut-turut (pola AnalyzerSpectrum) —
+  // hasRealData baru false setelah > 10 frame sunyi, bukan pada frame
+  // sunyi pertama (bukan jeda antar-frame).
+  const silentFramesSV = useSharedValue(0);
 
   // ITEM 1 (2026-11-21): suspend loop gambar saat app background/
   // inactive. `VisualizerService.pause()` hanya menghentikan polling
@@ -151,7 +155,6 @@ export const ParametricSpectrumView: React.FC<
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const isStarted = useRef(false);
   const lastSessionId = useRef<number | null>(null);
-  const frameCount = useRef(0);
 
   // Sync isPlaying prop → SharedValue
   useEffect(() => {
@@ -188,26 +191,51 @@ export const ParametricSpectrumView: React.FC<
     },
   );
 
-  // Callback data — stabil (hanya memakai ref/SharedValue), jadi bisa
-  // dipakai ulang tiap kali effect start/stop subscribe ulang.
-  const handleData = useCallback((newData: number[]) => {
-    if (!newData || newData.length === 0) return;
-
-    frameCount.current++;
-    const maxVal = Math.max(...newData);
-    const isReal = maxVal > 0.01;
-    const shouldClear = !isReal && frameCount.current > 10;
-
-    runOnUI((data: number[], real: boolean, clear: boolean) => {
-      "worklet";
-      freqData.value = data;
-      if (real) {
-        hasRealData.value = true;
-      } else if (clear) {
-        hasRealData.value = false;
+  // Jalur data panas (item 3, 2026-11-21): sama seperti AnalyzerSpectrum —
+  // tiap kali VisualizerService menulis freqData (SharedValue), reaksi ini
+  // jalan DI UI THREAD — tanpa callback JS per frame, tanpa runOnUI hop.
+  // Yang dihitung di sini hanya hasRealData (bar hidup vs lantai):
+  // true bila maxVal > 0.01; false bila data sunyi > 10 frame
+  // berturut-turut (bukan jeda antar-frame). Cermin ke state JS tetap di
+  // useAnimatedReaction hasRealData di atas (runOnJS hanya bila berubah).
+  useAnimatedReaction(
+    () => freqData.value,
+    (data) => {
+      // ITEM 1: saat suspend, jangan hitung apa pun — tidak ada data
+      // baru yang masuk (polling service pause).
+      if (isSuspendedSV.value) {
+        return;
       }
-    })(newData, isReal, shouldClear);
-  }, []);
+      // Beda dari Analyzer: jangan hitung saat tidak playing. Nilai
+      // awal/reset freqData adalah fill 0.1 (placeholder, bukan data
+      // FFT) — maxVal 0.1 > 0.01 akan terbaca "real" oleh reaksi ini
+      // saat mount dan saat stop menulis ulang fill 0.1, sehingga
+      // hasRealData jadi true padahal tidak ada audio (bar idle/paused
+      // tampil full opacity, bukan redup seperti sekarang). Guard ini
+      // menjaga perilaku visual idle/paused tetap sama; saat playing,
+      // semantiknya identik dengan Analyzer.
+      if (!isPlayingSV.value) {
+        return;
+      }
+      if (!data || data.length === 0) return;
+
+      let maxVal = 0;
+      for (let i = 0; i < data.length; i++) {
+        const v = data[i] ?? 0;
+        if (v > maxVal) maxVal = v;
+      }
+      const isReal = maxVal > 0.01;
+      if (isReal) {
+        hasRealData.value = true;
+        silentFramesSV.value = 0;
+      } else {
+        // Data sunyi > 10 frame berturut-turut = sesi benar-benar
+        // tidak mengalirkan FFT (bukan jeda antar-frame).
+        silentFramesSV.value += 1;
+        if (silentFramesSV.value > 10) hasRealData.value = false;
+      }
+    },
+  );
 
   // Start/Stop berdasarkan isPlaying dan audioSessionId.
   //
@@ -222,15 +250,17 @@ export const ParametricSpectrumView: React.FC<
       if (!isStarted.current || lastSessionId.current !== audioSessionId) {
         console.log(`[ParametricSpectrumView] Starting session ${audioSessionId}`);
         unsubscribeRef.current?.();
+        // Item 3: langganan SharedValue langsung — VisualizerService
+        // menulis freqData.value tiap poll; tidak ada callback JS per frame.
         unsubscribeRef.current =
-          visualizerService.setDataCallback(handleData);
+          visualizerService.subscribeSharedValue(freqData);
         visualizerService.start(audioSessionId);
         isStarted.current = true;
         lastSessionId.current = audioSessionId;
-        frameCount.current = 0;
         runOnUI(() => {
           "worklet";
           hasRealData.value = false;
+          silentFramesSV.value = 0;
         })();
         setHasRealDataState(false);
         setFftError(false);
@@ -249,11 +279,12 @@ export const ParametricSpectrumView: React.FC<
           peaks.value = Array(barCount).fill(PEAK_HOLD_FLOOR);
           lastPeakMs.value = 0;
           hasRealData.value = false;
+          silentFramesSV.value = 0;
         })();
         setHasRealDataState(false);
       }
     }
-  }, [isPlaying, audioSessionId, barCount, handleData]);
+  }, [isPlaying, audioSessionId, barCount]);
 
   // Cleanup saat unmount: lepas subscription (bukan stop() global).
   useEffect(() => {
