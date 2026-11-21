@@ -48,7 +48,6 @@ import {
   Path,
   Skia,
   Group,
-  BlurMask,
 } from "@shopify/react-native-skia";
 
 import {
@@ -141,6 +140,16 @@ const PEAK_DECAY = 0.02;
 // Bar digambar setinggi maks 85% area (sama seperti SpectrumAnalyzer) —
 // jadi puncak 0 dB berada di 15% dari atas, tepat di garis grid 0 dB.
 const BAR_HEIGHT_FACTOR = 0.85;
+
+// Glow halo ala ParametricSpectrumView: bar yang sama, 2 px lebih lebar
+// (1 px tiap sisi), opacity rendah — halo lembut TANPA BlurMask.
+// BlurMask blur=2 di tiga path zona = blur pass per frame untuk 48 bar,
+// biaya GPU terbesar di jalur gambar Analyzer; halo duplikat hanya
+// tambah 3 fill path murah. Halo memakai warna zonanya sendiri supaya
+// tampilan tetap sama.
+const HALO_EXTRA_WIDTH = 2;
+const HALO_OPACITY = 0.22;
+const HALO_OPACITY_WAITING = 0.12;
 
 export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
   width = Dimensions.get("window").width - 40,
@@ -542,23 +551,30 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
     },
   );
 
-  // Bar per zona warna — tiga path terpisah supaya tiap zona punya warna
-  // sendiri. Zona dari dB bar itu (valueToDb): hijau < -12, kuning -12..-3,
-  // merah >= -3 dB. (Satu useDerivedValue per path: prop `path` Skia
-  // menerima SkPath atau SharedValue<SkPath>, bukan objek berisi path.)
+  // Bar per zona warna — tiga path solid terpisah supaya tiap zona punya
+  // warna sendiri, ditambah tiga path halo (di bawah) dengan warna zona
+  // yang sama. Zona dari dB bar itu (valueToDb): hijau < -12, kuning
+  // -12..-3, merah >= -3 dB. (Satu useDerivedValue per path: prop `path`
+  // Skia menerima SkPath atau SharedValue<SkPath>, bukan objek berisi
+  // path.)
   // Geometri bar (dipakai tiga path zona) — worklet karena dipanggil dari
   // useDerivedValue. Tanpa direktif ini, Reanimated throw di runtime
-  // (pelajaran ff5f12cd).
+  // (pelajaran ff5f12cd). `extraWidth` untuk halo glow (bar yang sama,
+  // sedikit lebih lebar, posisi x digeser setengahnya supaya tetap di
+  // tengah) — pola yang sama dengan ParametricSpectrumView.
   const barGeometry = useCallback(
-    (data: number[]) => {
+    (data: number[], extraWidth = 0) => {
       "worklet";
       const gap = 3;
       const barWidth = (contentWidth - (barCount - 1) * gap) / barCount;
       return data.map((amp, i) => {
         const barHeight = Math.max(4, amp * barsHeight * BAR_HEIGHT_FACTOR);
-        const x = i * (barWidth + gap);
+        const x = i * (barWidth + gap) - extraWidth / 2;
         const y = barsHeight - barHeight;
-        return { rect: Skia.XYWHRect(x, y, barWidth, barHeight), amp };
+        return {
+          rect: Skia.XYWHRect(x, y, barWidth + extraWidth, barHeight),
+          amp,
+        };
       });
     },
     [contentWidth, barCount, barsHeight],
@@ -587,6 +603,48 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
   const barsClipPath = useDerivedValue(() => {
     const path = Skia.Path.Make();
     for (const { rect, amp } of barGeometry(processedData.value)) {
+      if (dbZone(valueToDb(amp)) === "clip") {
+        path.addRRect(Skia.RRectXY(rect, 4, 4));
+      }
+    }
+    return path;
+  });
+
+  // Glow murah: bar yang sama, sedikit lebih lebar, opacity rendah, di
+  // belakang bar utama — TANPA BlurMask (mahal untuk 48 bar per frame).
+  // Satu halo per zona supaya warnanya tetap warna zona itu sendiri.
+  const barsLowHaloPath = useDerivedValue(() => {
+    const path = Skia.Path.Make();
+    for (const { rect, amp } of barGeometry(
+      processedData.value,
+      HALO_EXTRA_WIDTH,
+    )) {
+      if (dbZone(valueToDb(amp)) === "low") {
+        path.addRRect(Skia.RRectXY(rect, 4, 4));
+      }
+    }
+    return path;
+  });
+
+  const barsWarnHaloPath = useDerivedValue(() => {
+    const path = Skia.Path.Make();
+    for (const { rect, amp } of barGeometry(
+      processedData.value,
+      HALO_EXTRA_WIDTH,
+    )) {
+      if (dbZone(valueToDb(amp)) === "warn") {
+        path.addRRect(Skia.RRectXY(rect, 4, 4));
+      }
+    }
+    return path;
+  });
+
+  const barsClipHaloPath = useDerivedValue(() => {
+    const path = Skia.Path.Make();
+    for (const { rect, amp } of barGeometry(
+      processedData.value,
+      HALO_EXTRA_WIDTH,
+    )) {
       if (dbZone(valueToDb(amp)) === "clip") {
         path.addRRect(Skia.RRectXY(rect, 4, 4));
       }
@@ -722,30 +780,50 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
                   strokeWidth={1}
                   opacity={0.7}
                 />
+                {/* Glow: halo di belakang bar utama (opacity rendah),
+                    tanpa BlurMask. */}
+                <Path
+                  path={barsLowHaloPath}
+                  color={ANALYZER_COLOR_LOW}
+                  style="fill"
+                  opacity={
+                    hasRealDataState ? HALO_OPACITY : HALO_OPACITY_WAITING
+                  }
+                />
+                <Path
+                  path={barsWarnHaloPath}
+                  color={ANALYZER_COLOR_WARN}
+                  style="fill"
+                  opacity={
+                    hasRealDataState ? HALO_OPACITY : HALO_OPACITY_WAITING
+                  }
+                />
+                <Path
+                  path={barsClipHaloPath}
+                  color={ANALYZER_COLOR_CLIP}
+                  style="fill"
+                  opacity={
+                    hasRealDataState ? HALO_OPACITY : HALO_OPACITY_WAITING
+                  }
+                />
                 <Path
                   path={barsLowPath}
                   color={ANALYZER_COLOR_LOW}
                   style="fill"
                   opacity={hasRealDataState ? 1 : 0.5}
-                >
-                  <BlurMask blur={2} style="solid" />
-                </Path>
+                />
                 <Path
                   path={barsWarnPath}
                   color={ANALYZER_COLOR_WARN}
                   style="fill"
                   opacity={hasRealDataState ? 1 : 0.5}
-                >
-                  <BlurMask blur={2} style="solid" />
-                </Path>
+                />
                 <Path
                   path={barsClipPath}
                   color={ANALYZER_COLOR_CLIP}
                   style="fill"
                   opacity={hasRealDataState ? 1 : 0.5}
-                >
-                  <BlurMask blur={2} style="solid" />
-                </Path>
+                />
                 <Path
                   path={peakPath}
                   color="#FFFFFF"
