@@ -40,6 +40,7 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
+  AppState,
 } from "react-native";
 
 import {
@@ -217,6 +218,22 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
   const hasRealData = useSharedValue(false);
   const isPlayingSV = useSharedValue(isPlaying);
 
+  // ITEM 1 (2026-11-21): suspend loop gambar saat app background/
+  // inactive — pola yang sama dengan ParametricSpectrumView.
+  // `VisualizerService.pause()` hanya menghentikan polling data;
+  // loop umpan-balik (processedData → reaction → prevData/peakData →
+  // processedData) tetap jalan karena tiap evaluasi mengembalikan
+  // array BARU (referensi baru = perubahan baru bagi Reanimated),
+  // sehingga Canvas terus minta redraw ~60 Hz ke surface yang sudah
+  // lepas (sumber `updateAndRelease() failed` log #14).
+  // `isSuspendedSV` dicerminkan dari AppState; `cachedProcessed`
+  // menyimpan referensi array processed terakhir supaya cabang suspend
+  // di processedData bisa mengembalikan referensi yang SAMA.
+  const isSuspendedSV = useSharedValue(AppState.currentState !== "active");
+  const cachedProcessed = useSharedValue<number[]>(
+    Array(barCount).fill(0.1),
+  );
+
   // Cermin hasRealData di JS thread — dipakai render label "menunggu data"
   // + opacity (baca .value SharedValue langsung di JSX itu basi).
   const [hasRealDataState, setHasRealDataState] = useState(false);
@@ -246,6 +263,19 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
   useEffect(() => {
     isPlayingSV.value = isPlaying;
   }, [isPlaying]);
+
+  // ITEM 1: cerminkan AppState ke UI thread (suspend = apa pun selain
+  // "active", termasuk "inactive" sementara). Saat kembali foreground,
+  // loop jalan lagi normal dan data segar mengalir dari polling service
+  // yang di-resume (tidak ada bar basi yang ditahan — prevData/peakData
+  // dibiarkan apa adanya supaya falloff/smoothing normal tetap jalan
+  // dari nilai terakhir, sama seperti jeda biasa).
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      isSuspendedSV.value = nextState !== "active";
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     sampleRateSV.value = sampleRate;
@@ -277,6 +307,13 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
   useAnimatedReaction(
     () => freqData.value,
     (data) => {
+      // ITEM 1: saat suspend, jangan hitung apa pun — tidak ada data
+      // baru yang masuk (polling service pause), dan runOnJS ke state
+      // JS (frekuensi dominan, latch CLIP) tidak perlu jalan saat
+      // background.
+      if (isSuspendedSV.value) {
+        return;
+      }
       if (!data || data.length === 0) return;
 
       frameCountSV.value += 1;
@@ -400,6 +437,19 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
   // mentah ke barCount, falloff 0.85. flatResponse mematikan sensitivity
   // + treble tilt supaya bar mencerminkan dB apa adanya.)
   const processedData = useDerivedValue(() => {
+    // ITEM 1: saat suspend, kembalikan array TERAKHIR yang sama
+    // (referensi identik, dari cachedProcessed) — bukan array baru.
+    // Reanimated menganggap tidak ada perubahan, jadi reaction
+    // umpan-balik tidak jalan dan path-path Skia (yang membaca
+    // processedData/peakData) tidak dihitung ulang: Canvas tidak
+    // mendapat picture baru dan tidak minta redraw ke surface yang
+    // sudah lepas. Perubahan prop/State saat background (mis. laju,
+    // freqMax dari pergantian lagu) juga aman: evaluasi ini tetap
+    // mengembalikan referensi yang sama.
+    if (isSuspendedSV.value) {
+      return cachedProcessed.value;
+    }
+
     const raw = freqData.value;
     const useDummy = !hasRealData.value && isPlayingSV.value;
 
@@ -452,6 +502,16 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
   useAnimatedReaction(
     () => processedData.value,
     (current) => {
+      // ITEM 1: saat suspend, early-return TANPA menulis apa pun.
+      // Menulis prevData/peakData akan memicu processedData menghitung
+      // ulang, yang mengembalikan array baru, yang memicu reaction
+      // lagi — loop yang tidak pernah settle. Cache diperbarui di sini
+      // (bukan di dalam derived) supaya tidak ada derived yang menulis
+      // dependensinya sendiri.
+      if (isSuspendedSV.value) {
+        return;
+      }
+      cachedProcessed.value = current;
       prevData.value = [...current];
       const next = [...peakData.value];
       for (let i = 0; i < current.length; i++) {

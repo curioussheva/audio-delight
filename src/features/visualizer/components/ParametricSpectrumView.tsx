@@ -27,7 +27,13 @@
 // - Bar count 48 (sama seperti Analyzer), bukan 128.
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { View, StyleSheet, Dimensions, Text } from "react-native";
+import {
+  View,
+  StyleSheet,
+  Dimensions,
+  Text,
+  AppState,
+} from "react-native";
 
 import { Canvas, Path, Skia, Group, LinearGradient, vec } from "@shopify/react-native-skia";
 
@@ -116,6 +122,21 @@ export const ParametricSpectrumView: React.FC<
   const hasRealData = useSharedValue(false);
   const isPlayingSV = useSharedValue(isPlaying);
 
+  // ITEM 1 (2026-11-21): suspend loop gambar saat app background/
+  // inactive. `VisualizerService.pause()` hanya menghentikan polling
+  // data — loop umpan-balik di bawah (processedData → reaction →
+  // prevData → processedData) tetap jalan karena tiap evaluasi
+  // mengembalikan array BARU (referensi baru = perubahan baru bagi
+  // Reanimated), sehingga Canvas terus minta redraw ~60 Hz ke surface
+  // yang sudah lepas (sumber `updateAndRelease() failed` 1.525× log
+  // #14). `isSuspendedSV` dicerminkan dari AppState; `cachedProcessed`
+  // menyimpan referensi array processed terakhir supaya cabang suspend
+  // di processedData bisa mengembalikan referensi yang SAMA.
+  const isSuspendedSV = useSharedValue(AppState.currentState !== "active");
+  const cachedProcessed = useSharedValue<number[]>(
+    Array(barCount).fill(0.1),
+  );
+
   // Cermin hasRealData di JS thread — dipakai render label "menunggu data"
   // + opacity (baca .value SharedValue langsung di JSX itu basi).
   const [hasRealDataState, setHasRealDataState] = useState(false);
@@ -136,6 +157,24 @@ export const ParametricSpectrumView: React.FC<
   useEffect(() => {
     isPlayingSV.value = isPlaying;
   }, [isPlaying]);
+
+  // ITEM 1: cerminkan AppState ke UI thread (suspend = apa pun selain
+  // "active", termasuk "inactive" sementara). Saat kembali foreground,
+  // reset jam peak hold supaya timestamp basi selama background tidak
+  // dipakai sebagai dtMs decay; data segar mengalir lagi dari polling
+  // service yang di-resume (tidak ada bar basi yang ditahan — prevData/
+  // peaks dibiarkan apa adanya supaya falloff/smoothing normal tetap
+  // jalan dari nilai terakhir, sama seperti jeda biasa).
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      const suspended = nextState !== "active";
+      isSuspendedSV.value = suspended;
+      if (!suspended) {
+        lastPeakMs.value = 0;
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   // U-P1-29: JANGAN tampilkan animasi sinus palsu seolah spektrum live
   // saat FFT native tidak mengembalikan data. Bar diam di lantai (0.05)
@@ -229,6 +268,18 @@ export const ParametricSpectrumView: React.FC<
   // mentah ke barCount, falloff 0.85, sensitivity + treble tilt supaya
   // bar tetap hidup untuk konten tenang.)
   const processedData = useDerivedValue(() => {
+    // ITEM 1: saat suspend, kembalikan array TERAKHIR yang sama
+    // (referensi identik, dari cachedProcessed) — bukan array baru.
+    // Reanimated menganggap tidak ada perubahan, jadi reaction
+    // umpan-balik tidak jalan dan path-path Skia (yang membaca
+    // processedData/peaks) tidak dihitung ulang: Canvas tidak mendapat
+    // picture baru dan tidak minta redraw ke surface yang sudah lepas.
+    // Perubahan prop/State saat background (mis. isPlaying, laju) juga
+    // aman: evaluasi ini tetap mengembalikan referensi yang sama.
+    if (isSuspendedSV.value) {
+      return cachedProcessed.value;
+    }
+
     const raw = freqData.value;
     const useDummy = !hasRealData.value && isPlayingSV.value;
 
@@ -270,6 +321,16 @@ export const ParametricSpectrumView: React.FC<
   useAnimatedReaction(
     () => processedData.value,
     (current) => {
+      // ITEM 1: saat suspend, early-return TANPA menulis apa pun.
+      // Menulis prevData/peaks akan memicu processedData menghitung
+      // ulang, yang mengembalikan array baru, yang memicu reaction
+      // lagi — loop yang tidak pernah settle. Cache diperbarui di sini
+      // (bukan di dalam derived) supaya tidak ada derived yang menulis
+      // dependensinya sendiri.
+      if (isSuspendedSV.value) {
+        return;
+      }
+      cachedProcessed.value = current;
       prevData.value = [...current];
       // Peak hold BERBASIS WAKTU: naik instan ke nilai saat ini, turun
       // pelan (PEAK_HOLD_DECAY_RATE_PER_SEC × dtMs) bila nilainya di
