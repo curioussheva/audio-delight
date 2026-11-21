@@ -204,15 +204,23 @@ pnpm lint:check
 - [ ] Tes bit-perfect otomatis: dekode berkas uji → bandingkan PCM keluaran
       dengan referensi `ffmpeg -f s32le`, lewat hash. Bukti objektif untuk
       klaim "bit-perfect", jauh lebih kuat daripada status UI.
-      - Berkas uji chirp 24/96 ❓ **belum terverifikasi — cari nama
-        berkasnya**: pencarian `chirp` di `scripts/`, `src/`,
+      - Berkas uji chirp 24/96 ✅ **sudah dibuat** (21 Nov 2026, belum
+        commit): `scripts/test-fixtures/chirp-24bit-96k.wav` — WAV
+        `pcm_s24le`, 96 kHz, stereo, 10 dtk, sweep linear 20 Hz →
+        20 kHz, peak −6,1 dBFS; SHA-256
+        `14847271e90e530f43f0431935887238a1ac60360d9cef71e38518cdc4406905`
+        (detail + perintah regenerasi di
+        `scripts/test-fixtures/README.md`). Yang lama tidak ada:
+        pencarian `chirp` di `scripts/`, `src/`,
         `android/app/src/main/cpp/`, `.github/` tidak menemukan apa pun;
         tidak ada fixture `.wav`/`.pcm` milik repo (yang ada hanya aset
         contoh Oboe). Yang ada: spektrum sintetis 96 kHz di
         `scripts/test_audio_file_analyzer.cpp:42,56` (fixture matematika
         untuk `findCutoffHz`, bukan berkas audio) dan fixture metadata
         24-bit/96 kHz di `src/__tests__/features/audio/BitDepthVerifier.test.ts:42`.
-        Berkas chirp perlu dibuat sebelum tes ini bisa jalan.
+        Catatan: di POCO M6 + DAC CM108 (maks 48 kHz) berkas ini tidak
+        bisa bit-perfect — tes hash yang valid butuh jalur 96 kHz
+        (DAC UAC2 via USB Direct, atau harness host).
 - [ ] Ukur THD+N dan respons frekuensi dari rantai DSP (sinus + FFT) untuk
       preset netral; harus identik dengan masukan.
 
