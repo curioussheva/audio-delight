@@ -15,7 +15,7 @@
  * DINONAKTIFKAN 2026-11-18 dan tetap mati: pintu masuk enrichment tetap
  * ada di badge header Library (library.tsx).
  */
-import React from "react";
+import React, { memo } from "react";
 import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
 import {
   useAutoScanProgress,
@@ -45,7 +45,10 @@ export function useScanStatusVisible(): boolean {
   });
 }
 
-export function ScanStatusBar() {
+// Per-node render (2026-11-22): memo — chip tanpa prop; render ulang
+// induk (TabsLayout saat ganti lagu) tidak boleh ikut membangunkan chip.
+// Langganan progres auto/enrichment di dalam tetap jalan sendiri.
+export const ScanStatusBar = memo(function ScanStatusBar() {
   const { colors } = useTheme().theme;
   const { isAutoScanning, autoScanProgress } = useAutoScanProgress();
   const {
@@ -122,7 +125,7 @@ export function ScanStatusBar() {
       )}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   chip: {

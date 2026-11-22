@@ -1,5 +1,6 @@
 import { Tabs } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
+import { memo, useMemo } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePlayerStore } from "@/features/player/store/playerStore";
@@ -11,6 +12,37 @@ import {
 import { tabBarHeight } from "@/features/player/tabBarHeight";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
+
+// Per-node render (2026-11-22): ikon tab di level modul — dulu arrow
+// inline baru tiap render TabsLayout, jadi navigator menerima `options`
+// baru + me-render ulang tab bar tiap ganti lagu / tick status scan.
+const LibraryTabIcon = memo(function LibraryTabIcon({
+  color,
+  size,
+}: {
+  color: string;
+  size: number;
+}) {
+  return <MaterialIcons name="library-music" size={size} color={color} />;
+});
+const EqualizerTabIcon = memo(function EqualizerTabIcon({
+  color,
+  size,
+}: {
+  color: string;
+  size: number;
+}) {
+  return <MaterialIcons name="equalizer" size={size} color={color} />;
+});
+const AnalyzerTabIcon = memo(function AnalyzerTabIcon({
+  color,
+  size,
+}: {
+  color: string;
+  size: number;
+}) {
+  return <MaterialIcons name="graphic-eq" size={size} color={color} />;
+});
 
 export default function TabsLayout() {
   const { theme } = useTheme();
@@ -51,46 +83,47 @@ export default function TabsLayout() {
     AA_NORMAL,
   );
 
+  // Per-node render (2026-11-22): screenOptions dulu objek literal baru
+  // tiap render TabsLayout (ganti lagu / tick status scan) — navigator
+  // menerima identitas baru dan ikut me-render ulang tab bar. Sekarang
+  // useMemo: hanya berubah bila tema berganti (colors referensi statis).
+  const screenOptions = useMemo(
+    () => ({
+      headerShown: false,
+      tabBarStyle: {
+        backgroundColor: colors.background.secondary,
+        borderTopColor:
+          colors.border?.medium || colors.background.tertiary,
+        borderTopWidth: 1,
+      },
+      tabBarActiveTintColor: tabActiveTint,
+      tabBarInactiveTintColor: colors.text.secondary,
+    }),
+    [colors, tabActiveTint],
+  );
+
   return (
     <View style={{ flex: 1 }}>
-      <Tabs
-        screenOptions={{
-          headerShown: false,
-          tabBarStyle: {
-            backgroundColor: colors.background.secondary,
-            borderTopColor:
-              colors.border?.medium || colors.background.tertiary,
-            borderTopWidth: 1,
-          },
-          tabBarActiveTintColor: tabActiveTint,
-          tabBarInactiveTintColor: colors.text.secondary,
-        }}
-      >
+      <Tabs screenOptions={screenOptions}>
         <Tabs.Screen
           name="library"
           options={{
             title: "Library",
-            tabBarIcon: ({ color, size }) => (
-              <MaterialIcons name="library-music" size={size} color={color} />
-            ),
+            tabBarIcon: LibraryTabIcon,
           }}
         />
         <Tabs.Screen
           name="equalizer"
           options={{
             title: "Audio",
-            tabBarIcon: ({ color, size }) => (
-              <MaterialIcons name="equalizer" size={size} color={color} />
-            ),
+            tabBarIcon: EqualizerTabIcon,
           }}
         />
         <Tabs.Screen
           name="analyzer"
           options={{
             title: "Analyzer",
-            tabBarIcon: ({ color, size }) => (
-              <MaterialIcons name="graphic-eq" size={size} color={color} />
-            ),
+            tabBarIcon: AnalyzerTabIcon,
           }}
         />
       </Tabs>
