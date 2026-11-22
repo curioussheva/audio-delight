@@ -11,7 +11,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
   Platform,
   Keyboard,
   RefreshControl,
@@ -335,7 +334,13 @@ const LibraryHeader = memo(function LibraryHeader({
         >
           {isScanning ? (
             <View style={s.scanningIndicator}>
-              <ActivityIndicator size="small" color={colors.primary[500]} />
+              {/* 2026-11-23: ikon tombol AUTO/SCAN STATIS selama scan —
+                  dulu ActivityIndicator (spinner ke-3 saat scan awal,
+                  bareng bar "Discovering files…" + chip "Scanning
+                  library…"). Target maks 2 animasi: yang beranimasi
+                  tinggal bar + chip. Tombol tetap berfungsi: tap =
+                  batalkan scan (onCancelScan). */}
+              <ScanText size={16} color={colors.primary[500]} strokeWidth={2} />
               <Text style={s.scanningText}>
                 {isAutoScanning ? "AUTO" : "SCAN"}
               </Text>

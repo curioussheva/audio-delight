@@ -274,6 +274,17 @@ describe("library.tsx — layar tidak melanggan store utuh / progres", () => {
   it("guard enhance-metadata baca hitungan lewat getState(), bukan langganan", () => {
     expect(library).toContain("getState().unenrichedCount");
   });
+
+  it("tombol AUTO/SCAN statis selama scan — bukan spinner ke-3", () => {
+    // 2026-11-23 (koreksi csheva dari screenshot fresh install):
+    // saat scan awal ada 3 spinner — tombol AUTO pojok kanan atas,
+    // bar "Discovering files…" dan chip "Scanning library…".
+    // Target maks 2 animasi: tombol ini statis, yang beranimasi
+    // tinggal bar + chip.
+    expect(library).not.toContain("ActivityIndicator");
+    expect(library).toContain('"AUTO"');
+    expect(library).toContain('"SCAN"');
+  });
 });
 
 describe("useScanManager — hook flag/aksi vs hook progres terpisah", () => {
