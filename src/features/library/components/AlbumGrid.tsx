@@ -312,13 +312,19 @@ const AlbumSongRow = memo(
 
 // ─── AlbumGrid ────────────────────────────────────────────────────────────────
 
-export const AlbumGrid: React.FC<AlbumGridProps> = ({
+// memo (audit Library 2026-11-22): komparator default cukup — props
+// dari library.tsx stabil (array useMemo + primitif + useCallback),
+// dan `colors` BUKAN prop melainkan dari useTheme() internal (objek
+// tema statis ALL_THEMES, identitas stabil sampai tema berganti).
+// Tanpa memo, tiap ganti lagu (induk render ulang karena
+// currentSongId) ikut me-render ulang grid + menghitung ulang `albums`.
+export const AlbumGrid = memo(function AlbumGrid({
   tracks = [],
   currentTrackId,
   onSongPress,
   onToggleFavorite,
   isFavorite = () => false,
-}) => {
+}: AlbumGridProps) {
   const { theme } = useTheme();
   const { colors } = theme;
 
@@ -506,7 +512,7 @@ export const AlbumGrid: React.FC<AlbumGridProps> = ({
       />
     </View>
   );
-};
+});
 
 export default AlbumGrid;
 

@@ -186,14 +186,20 @@ interface ArtistListProps {
   onToggleFavorite?: (songId: string) => void | Promise<boolean>;
 }
 
-export const ArtistList: React.FC<ArtistListProps> = ({
+// memo (audit Library 2026-11-22): komparator default cukup — props
+// dari library.tsx stabil (array useMemo + primitif + useCallback +
+// Set favorit useMemo), `colors` dari useTheme() internal (objek tema
+// statis ALL_THEMES). Tanpa memo, tiap ganti lagu ikut me-render ulang
+// daftar + menghitung ulang turunan (`enrichedArtists`, `filteredSongs`
+// detail — lihat juga P3).
+export const ArtistList = memo(function ArtistList({
   tracks,
   artists,
   currentTrackId,
   favoriteIds = new Set(),
   onSongPress,
   onToggleFavorite,
-}) => {
+}: ArtistListProps) {
   const { theme } = useTheme();
   const { colors } = theme;
 
@@ -369,7 +375,7 @@ export const ArtistList: React.FC<ArtistListProps> = ({
       />
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   listContent: { paddingHorizontal: 16, paddingBottom: 100 },

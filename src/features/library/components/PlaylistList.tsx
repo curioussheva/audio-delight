@@ -115,15 +115,19 @@ const PlaylistRow = memo(
 
 PlaylistRow.displayName = "PlaylistRow";
 
-// ── Main PlaylistList ────────────────────────────────────────────────────────
-export const PlaylistList: React.FC<PlaylistListProps> = ({
+// memo (audit Library 2026-11-22): komparator default cukup — props
+// dari library.tsx stabil (array useMemo + primitif + useCallback),
+// `colors` dari useTheme() internal (objek tema statis ALL_THEMES).
+// Tanpa memo, tiap ganti lagu ikut me-render ulang daftar + header
+// inline di dalamnya (lihat juga P3).
+export const PlaylistList = memo(function PlaylistList({
   playlists = [],
   favoriteCount = 0,
   smartPlaylists = [],
   onPlaylistPress,
   onCreateNew,
   onImportM3U,
-}) => {
+}: PlaylistListProps) {
   const { theme } = useTheme();
   const { colors } = theme;
 
@@ -347,7 +351,7 @@ export const PlaylistList: React.FC<PlaylistListProps> = ({
       showsVerticalScrollIndicator={false}
     />
   );
-};
+});
 
 const styles = StyleSheet.create({
   listContent: { paddingBottom: 120 },

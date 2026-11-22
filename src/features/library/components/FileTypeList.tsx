@@ -180,15 +180,19 @@ const FileTypeSongRow = memo(
   },
 );
 
-// ── FileTypeList Main Component ──────────────────────────────────────────────
-export const FileTypeList: React.FC<any> = ({
+// memo (audit Library 2026-11-22): komparator default cukup — props
+// dari library.tsx stabil (array useMemo + primitif + useCallback +
+// Set favorit useMemo), `colors` dari useTheme() internal (objek tema
+// statis ALL_THEMES). Tanpa memo, tiap ganti lagu ikut me-render ulang
+// daftar + turunan di dalamnya.
+export const FileTypeList = memo(function FileTypeList({
   fileTypes,
   tracks,
   currentTrackId,
   favoriteIds = new Set(),
   onSongPress,
   onToggleFavorite,
-}) => {
+}: any) {
   const { theme } = useTheme();
   const { colors } = theme;
 
@@ -300,7 +304,7 @@ export const FileTypeList: React.FC<any> = ({
       />
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1 },

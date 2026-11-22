@@ -343,15 +343,20 @@ const GenreDetailHeader = memo(
   },
 );
 
-// ── GenreList ─────────────────────────────────────────────────────────────────
-export const GenreList: React.FC<GenreListProps> = ({
+// memo (audit Library 2026-11-22): komparator default cukup — props
+// dari library.tsx stabil (array useMemo + primitif + useCallback +
+// Set favorit useMemo), `colors` dari useTheme() internal (objek tema
+// statis ALL_THEMES). Baris lagu sudah dilindungi komparator kustom
+// (GenreSongRow) — memo ini melindungi komponen utamanya saat ganti
+// lagu. Tanpa memo, tiap ganti lagu ikut me-render ulang daftar.
+export const GenreList = memo(function GenreList({
   genres,
   tracks,
   currentTrackId,
   favoriteIds = new Set(),
   onSongPress,
   onToggleFavorite,
-}) => {
+}: GenreListProps) {
   const { theme } = useTheme();
   const { colors, spacing } = theme;
 
@@ -481,7 +486,7 @@ export const GenreList: React.FC<GenreListProps> = ({
       removeClippedSubviews
     />
   );
-};
+});
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
