@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { memo, useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -38,7 +38,17 @@ interface ModeCardProps {
   colors: any;
 }
 
-const ModeCard = ({
+// Per-node render (2026-11-22): ModeCard memo — pilih satu mode hanya
+// me-render ulang kartu yang `isSelected`-nya berubah. `tags` harus
+// referensi modul (lihat MODE_TAGS di bawah): array inline baru tiap
+// render membatalkan memo komparator default.
+const MODE_TAGS: Record<AudioMode, string[]> = {
+  "bit-perfect": ["LOSSLESS", "DAC"],
+  dsp: ["EQ", "FX"],
+  immersive: ["SPATIAL", "RESONANCE"],
+};
+
+const ModeCard = memo(function ModeCard({
   mode,
   isSelected,
   onSelect,
@@ -47,8 +57,9 @@ const ModeCard = ({
   icon,
   tags,
   colors,
-}: ModeCardProps) => (
-  <TouchableOpacity
+}: ModeCardProps) {
+  return (
+    <TouchableOpacity
     activeOpacity={0.7}
     accessibilityRole="button"
     accessibilityLabel={`${title}. ${description}`}
@@ -94,7 +105,8 @@ const ModeCard = ({
       </View>
     </View>
   </TouchableOpacity>
-);
+  );
+});
 
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
@@ -177,11 +189,13 @@ export default function OnboardingScreen() {
     return () => backHandler.remove();
   }, [isSubmitting, alreadyOnboarded, router]);
 
-  const handleSelectMode = (mode: AudioMode) => {
+  // Per-node render (2026-11-22): useCallback supaya memo ModeCard
+  // tidak batal oleh onSelect baru tiap render induk.
+  const handleSelectMode = useCallback((mode: AudioMode) => {
     console.log(`🔘 [Onboarding] Mode dipilih: ${mode}`);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSelectedMode(mode);
-  };
+  }, []);
 
   const handleFinish = async () => {
     if (!selectedMode || isSubmitting) return;
@@ -356,7 +370,7 @@ export default function OnboardingScreen() {
           title="Bit-Perfect Mode"
           description="Output lossless tanpa DSP. Terbaik untuk USB DAC & High-Res Audio."
           icon="lock-closed"
-          tags={["LOSSLESS", "DAC"]}
+          tags={MODE_TAGS["bit-perfect"]}
           isSelected={selectedMode === "bit-perfect"}
           onSelect={handleSelectMode}
           colors={colors}
@@ -367,7 +381,7 @@ export default function OnboardingScreen() {
           title="DSP Mode"
           description="Equalizer, visualizer, & pemrosesan audio tingkat lanjut."
           icon="pulse"
-          tags={["EQ", "FX"]}
+          tags={MODE_TAGS["dsp"]}
           isSelected={selectedMode === "dsp"}
           onSelect={handleSelectMode}
           colors={colors}
@@ -378,7 +392,7 @@ export default function OnboardingScreen() {
           title="Solfeggio Mode"
           description="DSP + resonansi solfeggio, harmonic exciter, & spatial field."
           icon="planet"
-          tags={["SPATIAL", "RESONANCE"]}
+          tags={MODE_TAGS["immersive"]}
           isSelected={selectedMode === "immersive"}
           onSelect={handleSelectMode}
           colors={colors}
