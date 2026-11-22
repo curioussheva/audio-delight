@@ -17,22 +17,25 @@
  */
 import React from "react";
 import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
-import { useScanProgress } from "../hooks/useScanManager";
+import {
+  useAutoScanProgress,
+  useEnrichmentProgress,
+} from "../hooks/useScanManager";
 import { Sparkles } from "lucide-react-native";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { isScanStatusVisible } from "../utils/scanStatus";
 
 export function useScanStatusVisible(): boolean {
   // Per-node render (2026-11-22): chip + wrapper layout-nya hanya
-  // melanggan potongan progres — tick progres membangunkan chip ini
-  // saja, bukan layar yang sedang tampil.
+  // melanggan potongan progres auto scan + enrichment — tick manual
+  // tidak membangunkan TabsLayout (dan FloatingPlayer di dalamnya).
+  const { isAutoScanning } = useAutoScanProgress();
   const {
-    isAutoScanning,
     isEnriching,
     enrichmentProgress,
     isBackgroundEnriching,
     enrichmentQueueSize,
-  } = useScanProgress();
+  } = useEnrichmentProgress();
   return isScanStatusVisible({
     isAutoScanning,
     isEnriching,
@@ -44,14 +47,13 @@ export function useScanStatusVisible(): boolean {
 
 export function ScanStatusBar() {
   const { colors } = useTheme().theme;
+  const { isAutoScanning, autoScanProgress } = useAutoScanProgress();
   const {
-    isAutoScanning,
-    autoScanProgress,
     isEnriching,
     enrichmentProgress,
     enrichmentQueueSize,
     isBackgroundEnriching,
-  } = useScanProgress();
+  } = useEnrichmentProgress();
 
   // Teks + ikon + fraksi progres per cabang (teks sama seperti banner lama).
   let icon: React.ReactNode = null;

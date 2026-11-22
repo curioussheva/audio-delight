@@ -263,7 +263,11 @@ describe("library.tsx — layar tidak melanggan store utuh / progres", () => {
 
   it("header dipisah jadi komponen memo yang melanggan potongannya sendiri", () => {
     expect(library).toContain("const LibraryHeader = memo(");
-    expect(library).toContain("useScanProgress()");
+    // Header hanya butuh flag + hitungan pending (tanpa objek progres,
+    // supaya tick enrichment tidak membangunkan header).
+    expect(library).toContain("useScanFlags()");
+    expect(library).toContain("useEnrichmentCounts()");
+    expect(library).not.toContain("useEnrichmentProgress()");
     expect(library).toContain("<LibraryHeader");
   });
 
@@ -279,14 +283,23 @@ describe("useScanManager — hook flag/aksi vs hook progres terpisah", () => {
     expect(hook).not.toContain("const store = useLibraryStore()");
   });
 
-  it("ada hook progres sendiri untuk node penampil angka", () => {
-    expect(hook).toContain("export function useScanProgress()");
+  it("ada hook progres per kelompok pemakai, bukan satu hook gabungan", () => {
+    expect(hook).toContain("export function useScanFlags()");
+    expect(hook).toContain("export function useManualScanProgress()");
+    expect(hook).toContain("export function useAutoScanProgress()");
+    expect(hook).toContain("export function useEnrichmentProgress()");
+    expect(hook).toContain("export function useEnrichmentCounts()");
+    // Hook gabungan lama dihapus: tidak ada pemakai yang memakai semua
+    // field-nya, dan satu hook 10 selector membangunkan semua pemakai
+    // pada tiap perubahan field mana pun.
+    expect(hook).not.toContain("export function useScanProgress()");
+    expect(hook).not.toContain("useScanProgress()");
   });
 
   it("badan useScanManager tidak menyentuh objek progres/hitungan", () => {
     const body = hook.slice(
       hook.indexOf("export function useScanManager()"),
-      hook.indexOf("export function useScanProgress()"),
+      hook.indexOf("export function useScanFlags()"),
     );
     expect(body).not.toContain("manualScanProgress");
     expect(body).not.toContain("enrichmentProgress");
@@ -301,10 +314,15 @@ describe("LibraryTabBar — node progres melanggan sendiri + memo", () => {
     "../../../features/library/components/LibraryTabBar.tsx",
   );
 
-  it("melanggan progres lewat useScanProgress (bukan prop dari layar)", () => {
-    expect(tabBar).toContain("useScanProgress()");
+  it("melanggan progres lewat hook per kelompok (bukan prop dari layar)", () => {
+    expect(tabBar).toContain("useScanFlags()");
+    expect(tabBar).toContain("useManualScanProgress()");
+    expect(tabBar).toContain("useEnrichmentProgress()");
     expect(tabBar).toContain("manualScanProgress");
     expect(tabBar).toContain("enrichmentProgress");
+    // Bar tidak menampilkan angka auto scan — tidak melanggan hook-nya.
+    expect(tabBar).not.toContain("useAutoScanProgress()");
+    expect(tabBar).not.toContain("autoScanProgress");
   });
 
   it("prop progres lama + trackCount tak terpakai sudah dihapus", () => {
@@ -361,14 +379,91 @@ describe("ScanStatusBar — chip memakai hook progres (bukan hook layar)", () =>
     "../../../features/library/components/ScanStatusBar.tsx",
   );
 
-  it("melanggan useScanProgress, bukan useScanManager", () => {
-    expect(chip).toContain("useScanProgress()");
+  it("melanggan hook per kelompok, bukan useScanManager", () => {
+    expect(chip).toContain("useAutoScanProgress()");
+    expect(chip).toContain("useEnrichmentProgress()");
     // "useScanManager" sebagai NAMA MODUL di path impor tetap ada
     // (hook-nya satu file) — yang diuji adalah pemanggilannya.
     expect(chip).not.toContain("useScanManager()");
+    // Chip tidak menampilkan progres manual — tidak melanggan hook-nya.
+    expect(chip).not.toContain("useManualScanProgress()");
+    expect(chip).not.toContain("manualScanProgress");
   });
 
   it("chip 'Scanning library...' tetap dipertahankan", () => {
     expect(chip).toContain("Scanning library...");
+  });
+});
+
+describe("useScanProgress dipecah — tiap pemakai hanya melanggan kelompoknya", () => {
+  // KOREKSI audit (2026-11-22): komentar lama mengklaim "tick manual
+  // tidak membangunkan subscriber enrichment" — salah: hook gabungan
+  // 10 selector melanggan semua pemakainya ke semua field. Pemecahan
+  // ini memisahkan LANGGANAN-nya; klaim lama tidak boleh muncul lagi
+  // (diuji dari sumber MENTAH, termasuk komentar).
+  const hookRaw = fs.readFileSync(
+    path.resolve(
+      __dirname,
+      "../../../features/library/hooks/useScanManager.ts",
+    ),
+    "utf8",
+  );
+  const hook = readSource("../../../features/library/hooks/useScanManager.ts");
+  const modal = readSource(
+    "../../../features/library/components/EnrichMetadataModal.tsx",
+  );
+
+  it("klaim salah 'tick manual tidak membangunkan subscriber enrichment' sudah dibetulkan", () => {
+    expect(hookRaw).not.toContain(
+      "tick manual tidak membangunkan subscriber enrichment",
+    );
+    expect(hookRaw).toContain("KOREKSI");
+    expect(hookRaw).toContain("useScanProgress` dihapus");
+  });
+
+  it("tiap hook kelompok hanya melanggan field kelompoknya (selector per nilai)", () => {
+    const manualBody = hook.slice(
+      hook.indexOf("export function useManualScanProgress()"),
+      hook.indexOf("export function useAutoScanProgress()"),
+    );
+    expect(manualBody).toContain("s.isManualScanning");
+    expect(manualBody).toContain("s.manualScanProgress");
+    expect(manualBody).not.toContain("s.enrichmentProgress");
+    expect(manualBody).not.toContain("s.autoScanProgress");
+    expect(manualBody).not.toContain("s.lastScanAt");
+
+    const enrichBody = hook.slice(
+      hook.indexOf("export function useEnrichmentProgress()"),
+      hook.indexOf("export function useEnrichmentCounts()"),
+    );
+    expect(enrichBody).toContain("s.isEnriching");
+    expect(enrichBody).toContain("s.enrichmentProgress");
+    expect(enrichBody).toContain("s.unenrichedCount");
+    expect(enrichBody).not.toContain("s.manualScanProgress");
+    expect(enrichBody).not.toContain("s.autoScanProgress");
+    expect(enrichBody).not.toContain("s.lastEnrichmentAt");
+
+    // Tidak ada lagi langganan ke penanda waktu: tidak satu pun hook
+    // kelompok membaca lastScanAt / lastEnrichmentAt.
+    expect(hook).not.toContain("lastScanAt");
+    expect(hook).not.toContain("lastEnrichmentAt");
+  });
+
+  it("EnrichMetadataModal hanya melanggan enrichment (bukan manual/auto)", () => {
+    expect(modal).toContain("useEnrichmentProgress()");
+    expect(modal).not.toContain("useManualScanProgress()");
+    expect(modal).not.toContain("useAutoScanProgress()");
+    expect(modal).not.toContain("useScanProgress()");
+  });
+
+  it("tidak ada lagi pemakai useScanProgress di layar/komponen Library", () => {
+    for (const rel of [
+      "../../../app/(drawer)/(tabs)/library.tsx",
+      "../../../features/library/components/LibraryTabBar.tsx",
+      "../../../features/library/components/ScanStatusBar.tsx",
+      "../../../features/library/components/EnrichMetadataModal.tsx",
+    ]) {
+      expect(readSource(rel)).not.toContain("useScanProgress()");
+    }
   });
 });

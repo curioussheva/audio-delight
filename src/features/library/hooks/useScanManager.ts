@@ -12,12 +12,27 @@
  *   isLocked) + aksi (manualRescan/enrichMetadata/cancelScan). Dipakai
  *   LibraryScreen: layar hanya bangun saat scan mulai/selesai, TIDAK
  *   tiap tick progres.
- * - `useScanProgress` — objek progres (manual/auto/enrichment) +
- *   hitungan (unenrichedCount, enrichmentQueueSize) + turunannya.
- *   Dipakai HANYA node yang menampilkan angka itu: LibraryTabBar
- *   (bar + pill progres), ScanStatusBar (chip), EnrichMetadataModal,
- *   LibraryHeader (badge pending). Tick progres hanya membangunkan
- *   node-node itu.
+ * - Hook progres per kelompok pemakai (di bawah) — tiap pemakai hanya
+ *   melanggan field yang ditampilkannya: `useManualScanProgress`
+ *   (LibraryTabBar), `useAutoScanProgress` (ScanStatusBar +
+ *   `useScanStatusVisible`), `useEnrichmentProgress`
+ *   (LibraryTabBar + ScanStatusBar + EnrichMetadataModal),
+ *   `useEnrichmentCounts` (LibraryHeader/badge — hanya hitungan, tanpa
+ *   objek progres), `useScanFlags` (hanya boolean mulai/selesai).
+ *
+ * KOREKSI (2026-11-22, audit Library): komentar lama di sini mengklaim
+ * "selector per nilai: tick manual tidak membangunkan subscriber
+ * enrichment" — klaim itu SALAH pada `useScanProgress` lama. Hook lama
+ * memanggil 10 selector sekaligus dan mengembalikannya dalam satu
+ * objek, jadi SEMUA pemakainya melanggan KE-10 field: tick manual
+ * membangunkan subscriber enrichment (dan sebaliknya), dan perubahan
+ * `lastScanAt`/`lastEnrichmentAt` membangunkan semua node progres.
+ * `useMemo` pada objek kembalian tidak menolong: pemicu render ulang
+ * adalah langganan selector, bukan identitas objek. Pemecahan di bawah
+ * memperbaikinya dengan memisahkan LANGGANAN per kelompok pemakai —
+ * bukan sekadar memisahkan field di dalam satu hook yang sama.
+ * `useScanProgress` dihapus: tidak ada pemakai yang memakai semua
+ * field-nya.
  *
  * Kembalian tiap hook di-`useMemo` (pola useEqualizer.ts opsi 2) supaya
  * identitas objeknya stabil selama potongannya tidak berubah.
@@ -195,7 +210,8 @@ export function useScanManager() {
 
   // Hanya flag + aksi — TIDAK ada objek progres/hitungan di sini:
   // pemakai hook ini (LibraryScreen) tidak boleh bangun tiap tick.
-  // Yang butuh angka progres memakai useScanProgress di bawah.
+  // Yang butuh angka progres memakai hook per kelompok di bawah
+  // (useManualScanProgress / useAutoScanProgress / useEnrichmentProgress).
   return useMemo(
     () => ({
       isAutoScanning,
@@ -221,56 +237,103 @@ export function useScanManager() {
 }
 
 /**
- * useScanProgress — potongan progres scan/enrichment, untuk node yang
- * MENAMPILKAN angka itu saja (LibraryTabBar, ScanStatusBar,
- * EnrichMetadataModal, LibraryHeader/badge pending). Tiap tick
- * `update*Progress` hanya membangunkan pemakai hook ini — LibraryScreen
- * tidak memakainya, jadi layar utuh + FlashList diam selama progres
- * berjalan. Selector per nilai: tick manual tidak membangunkan
- * subscriber enrichment, dan sebaliknya.
+ * useScanFlags — hanya boolean mulai/selesai scan/enrichment, tanpa
+ * angka progres. Pemakai: node yang hanya perlu tahu "sedang jalan
+ * atau tidak" (mis. LibraryHeader untuk tombol scan/badge).
  */
-export function useScanProgress() {
+export function useScanFlags() {
   const isManualScanning = useLibraryStore((s) => s.isManualScanning);
   const isAutoScanning = useLibraryStore((s) => s.isAutoScanning);
   const isEnriching = useLibraryStore((s) => s.isEnriching);
+
+  return useMemo(
+    () => ({ isManualScanning, isAutoScanning, isEnriching }),
+    [isManualScanning, isAutoScanning, isEnriching],
+  );
+}
+
+/**
+ * useManualScanProgress — progres manual scan saja. Pemakai:
+ * LibraryTabBar (bar + pill "Scanning N / M files"). Tick manual
+ * hanya membangunkan pemakai hook ini — subscriber enrichment dan
+ * subscriber auto scan tidak ikut bangun.
+ */
+export function useManualScanProgress() {
+  const isManualScanning = useLibraryStore((s) => s.isManualScanning);
   const manualScanProgress = useLibraryStore((s) => s.manualScanProgress);
-  const enrichmentProgress = useLibraryStore((s) => s.enrichmentProgress);
+
+  return useMemo(
+    () => ({ isManualScanning, manualScanProgress }),
+    [isManualScanning, manualScanProgress],
+  );
+}
+
+/**
+ * useAutoScanProgress — progres auto scan saja. Pemakai: ScanStatusBar
+ * (chip "Scanning library... N/M") + `useScanStatusVisible` (TabsLayout,
+ * hanya butuh flag-nya). Tick auto scan tidak membangunkan subscriber
+ * manual/enrichment.
+ */
+export function useAutoScanProgress() {
+  const isAutoScanning = useLibraryStore((s) => s.isAutoScanning);
   const autoScanProgress = useLibraryStore((s) => s.autoScanProgress);
+
+  return useMemo(
+    () => ({ isAutoScanning, autoScanProgress }),
+    [isAutoScanning, autoScanProgress],
+  );
+}
+
+/**
+ * useEnrichmentProgress — progres + antrean + hitungan enrichment.
+ * Pemakai: node yang MENAMPILKAN angka enrichment — LibraryTabBar
+ * (bar "Enriching N / M"), ScanStatusBar (chip + cabang background),
+ * EnrichMetadataModal (bar progres + hitungan). Tick enrichment
+ * membangunkan pemakai hook ini saja, bukan subscriber manual/auto.
+ * Node yang hanya butuh hitungan (bukan angka progres) memakai
+ * `useEnrichmentCounts` di bawah supaya tidak bangun tiap tick.
+ */
+export function useEnrichmentProgress() {
+  const isEnriching = useLibraryStore((s) => s.isEnriching);
+  const enrichmentProgress = useLibraryStore((s) => s.enrichmentProgress);
   const enrichmentQueueSize = useLibraryStore((s) => s.enrichmentQueueSize);
   const unenrichedCount = useLibraryStore((s) => s.unenrichedCount);
-  const lastScanAt = useLibraryStore((s) => s.lastScanAt);
-  const lastEnrichmentAt = useLibraryStore((s) => s.lastEnrichmentAt);
   const hasPendingEnrichment = unenrichedCount > 0 || enrichmentQueueSize > 0;
   const isBackgroundEnriching = enrichmentQueueSize > 0 && !isEnriching;
 
   return useMemo(
     () => ({
-      isAutoScanning,
-      isManualScanning,
       isEnriching,
-      manualScanProgress,
       enrichmentProgress,
-      autoScanProgress,
       enrichmentQueueSize,
       unenrichedCount,
-      lastScanAt,
-      lastEnrichmentAt,
       hasPendingEnrichment,
       isBackgroundEnriching,
     }),
     [
-      isAutoScanning,
-      isManualScanning,
       isEnriching,
-      manualScanProgress,
       enrichmentProgress,
-      autoScanProgress,
       enrichmentQueueSize,
       unenrichedCount,
-      lastScanAt,
-      lastEnrichmentAt,
       hasPendingEnrichment,
       isBackgroundEnriching,
     ],
+  );
+}
+
+/**
+ * useEnrichmentCounts — hanya hitungan enrichment, TANPA objek progres.
+ * Pemakai: LibraryHeader (teks "N pending" + badge Enhance) — hitungan
+ * berubah jauh lebih jarang daripada tick `enrichmentProgress`, jadi
+ * header tidak bangun tiap tick enrichment.
+ */
+export function useEnrichmentCounts() {
+  const enrichmentQueueSize = useLibraryStore((s) => s.enrichmentQueueSize);
+  const unenrichedCount = useLibraryStore((s) => s.unenrichedCount);
+  const hasPendingEnrichment = unenrichedCount > 0 || enrichmentQueueSize > 0;
+
+  return useMemo(
+    () => ({ enrichmentQueueSize, unenrichedCount, hasPendingEnrichment }),
+    [enrichmentQueueSize, unenrichedCount, hasPendingEnrichment],
   );
 }

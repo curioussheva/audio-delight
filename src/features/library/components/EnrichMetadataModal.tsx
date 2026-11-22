@@ -12,7 +12,7 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from "react-native";
-import { useScanManager, useScanProgress } from "../hooks/useScanManager";
+import { useScanManager, useEnrichmentProgress } from "../hooks/useScanManager";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { Sparkles, X, CheckCircle } from "lucide-react-native";
 
@@ -24,10 +24,11 @@ interface Props {
 export function EnrichMetadataModal({ visible, onClose }: Props) {
   const { colors } = useTheme().theme;
   // Per-node render (2026-11-22): aksi + flag dari useScanManager,
-  // angka progres/hitungan dari useScanProgress — modal ini node-nya
-  // sendiri, tick enrichment membangunkan modal, bukan LibraryScreen.
+  // angka progres/hitungan enrichment dari useEnrichmentProgress —
+  // modal ini node-nya sendiri; tick manual/auto scan TIDAK
+  // membangunkan modal (hook lama useScanProgress melanggan semuanya).
   const { enrichMetadata, isEnriching, cancelScan } = useScanManager();
-  const { unenrichedCount, enrichmentProgress } = useScanProgress();
+  const { unenrichedCount, enrichmentProgress } = useEnrichmentProgress();
 
   const [result, setResult] = useState<{
     processed: number;

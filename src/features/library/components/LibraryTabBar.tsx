@@ -22,7 +22,11 @@ import {
 
 import { useTheme } from "@/shared/context/ThemeContext";
 import type { LibraryTab } from "../types/scan";
-import { useScanProgress } from "../hooks/useScanManager";
+import {
+  useScanFlags,
+  useManualScanProgress,
+  useEnrichmentProgress,
+} from "../hooks/useScanManager";
 import { accentOn, pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
 
@@ -51,8 +55,10 @@ interface Props {
 // enrichProgress/...) dioper sebagai prop dari LibraryScreen — tiap tick
 // progres me-render ulang layar utuh (~1500 baris + FlashList) hanya
 // untuk memperbarui angka di bar ini. Sekarang TabBar melanggan
-// potongan progresnya SENDIRI lewat useScanProgress: tick hanya
-// membangunkan komponen ini. Prop yang tersisa (tab aktif, ganti tab,
+// potongan progresnya SENDIRI lewat hook per kelompok pemakai
+// (useManualScanProgress + useEnrichmentProgress + useScanFlags): tick
+// manual hanya membangunkan bar ini (bukan subscriber enrichment),
+// dan sebaliknya. Prop yang tersisa (tab aktif, ganti tab,
 // refresh) berubah jarang, dan komponen di-memo supaya ketikan di
 // pencarian / render ulang induk tidak ikut membangunkan TabBar.
 // `trackCount` lama dihapus: tidak pernah dipakai (dulu `_trackCount`).
@@ -65,14 +71,12 @@ export const LibraryTabBar = memo(function LibraryTabBar({
   const { colors } = theme;
   const scrollRef = useRef<ScrollView>(null);
 
-  // Langganan node ini sendiri — primitif + objek progres saja.
-  const {
-    isManualScanning,
-    isAutoScanning,
-    isEnriching,
-    manualScanProgress,
-    enrichmentProgress,
-  } = useScanProgress();
+  // Langganan node ini sendiri — flag + progres manual + progres
+  // enrichment, masing-masing dari hook kelompoknya (bukan satu hook
+  // gabungan: tick auto scan / lastScanAt tidak membangunkan bar ini).
+  const { isManualScanning, isAutoScanning, isEnriching } = useScanFlags();
+  const { manualScanProgress } = useManualScanProgress();
+  const { enrichmentProgress } = useEnrichmentProgress();
   const isScanning = isManualScanning || isAutoScanning;
   const scanProgress = manualScanProgress?.current ?? 0;
   const scanTotal = manualScanProgress?.total ?? 0;

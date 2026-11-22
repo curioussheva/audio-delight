@@ -57,7 +57,8 @@ import {
 // Scan System
 import {
   useScanManager,
-  useScanProgress,
+  useScanFlags,
+  useEnrichmentCounts,
 } from "@/features/library/hooks/useScanManager";
 import { ScanAlreadyRunningError } from "@/features/library/services/UnifiedScanService";
 import { createRefreshCoalescer } from "@/features/library/services/refreshCoalescer";
@@ -169,10 +170,12 @@ const LIBRARY_DRAW_DISTANCE_DP = 3570;
 // render layar (termasuk tiap tick progres scan) membangun ulang header.
 // Sekarang komponen `memo` sendiri yang melanggan potongannya sendiri:
 // - `tracks` → hitungan "N tracks • N artists" (selectLibraryStats);
-// - `unenrichedCount` + `enrichmentQueueSize` (via useScanProgress) → "N
-//   pending" + badge Enhance — berubah saat enrichment maju, dan HANYA
-//   header yang bangun karenanya;
-// - flag scan (via useScanProgress) → tombol scan AUTO/SCAN, badge
+// - `unenrichedCount` + `enrichmentQueueSize` (via useEnrichmentCounts,
+//   hanya hitungan — tanpa objek progres) → "N pending" + badge
+//   Enhance — berubah saat enrichment maju, dan HANYA header yang
+//   bangun karenanya (tick `enrichmentProgress` tidak membangunkan
+//   header);
+// - flag scan (via useScanFlags) → tombol scan AUTO/SCAN, badge
 //   disembunyikan + filter dimatikan saat scan jalan.
 // Prop dari layar hanya state lokal pencarian/filter (berubah saat user
 // mengetik/mengganti filter — saat itulah header memang harus bangun) +
@@ -209,12 +212,8 @@ const LibraryHeader = memo(function LibraryHeader({
 
   const tracks = useLibraryStore((st) => st.tracks);
   const stats = useMemo(() => selectLibraryStats(tracks), [tracks]);
-  const {
-    isManualScanning,
-    isAutoScanning,
-    unenrichedCount,
-    hasPendingEnrichment,
-  } = useScanProgress();
+  const { isManualScanning, isAutoScanning } = useScanFlags();
+  const { unenrichedCount, hasPendingEnrichment } = useEnrichmentCounts();
   const isScanning = isManualScanning || isAutoScanning;
   const { totalTracks = 0, artistsCount = 0 } = stats || {};
 
@@ -1319,7 +1318,7 @@ export default function LibraryScreen() {
       )}
 
       {/* Tab Bar — per-node render: angka progres dilanggan TabBar
-          sendiri (useScanProgress), bukan dioper dari layar. */}
+          sendiri (hook per kelompok pemakai), bukan dioper dari layar. */}
       <LibraryTabBar
         activeTab={activeTab}
         onTabChange={setActiveTab}
