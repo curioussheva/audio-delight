@@ -1,6 +1,6 @@
 // src/app/(drawer)/(tabs)/analyzer.tsx
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { memo, useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -102,22 +102,10 @@ export default function AnalyzerScreen() {
   const [enrichSource, setEnrichSource] = useState<"db" | null>(null);
   const [waitingForSession, setWaitingForSession] = useState(false);
 
-  // E: batas atas grafik Analyzer (Hz). null = Nyquist stream penuh
-  // (default, keputusan csheva 2026-11-17) — slider mengisinya saat
-  // digeser; nilainya dijepit ke Nyquist bila laju stream turun.
-  const [freqMaxHz, setFreqMaxHz] = useState<number | null>(null);
+  // Laju stream dipakai kartu spektrum (anak memo di bawah) — induk
+  // tidak lagi menyimpan freqMaxHz (lihat SpectrumCard).
   const streamRate =
     bpStatus.actualSampleRate > 0 ? bpStatus.actualSampleRate : 48000;
-  const streamNyquist = streamRate / 2;
-  const effectiveFreqMax = freqMaxHz ?? streamNyquist;
-
-  // Jepit nilai slider bila Nyquist stream turun (ganti file/laju) di
-  // bawah nilai yang dipilih — jangan tampilkan rentang yang tidak ada.
-  useEffect(() => {
-    setFreqMaxHz((prev) =>
-      prev == null ? null : Math.min(prev, streamNyquist),
-    );
-  }, [streamNyquist]);
 
   // U-P2-24: pola "tidak ada audio session" disamakan dengan tab
   // Visualizer — pesan yang sama + tombol retry yang benar-benar
@@ -378,134 +366,20 @@ export default function AnalyzerScreen() {
         style={{ paddingHorizontal: 0, paddingVertical: 0, marginBottom: 24 }}
       />
 
-      {/* 1. SPECTRUM VISUALIZER */}
-      {audioSessionId && audioSessionId > 0 ? (
-        <View
-          style={[
-            styles.card,
-            { backgroundColor: colors.background.secondary, padding: 16 },
-          ]}
-        >
-          <View style={[styles.cardHeader, { marginBottom: 12 }]}>
-            <BarChart3 size={16} color={colors.primary[500]} />
-            <Text style={[styles.label, { color: colors.primary[500] }]}>
-              SPECTRUM ANALYZER
-            </Text>
-          </View>
-          {/* Spektrum ala Neutron (keputusan csheva 2026-11-13): sumbu Hz
-              berlabel + skala dB + peak hold + frekuensi dominan.
-              Menggantikan SpectrumAnalyzer (bar polos) hanya di tab ini;
-              tab Visualizer sudah dihapus. Full scale 0 dB + Nyquist stream
-              + warna clip + scroll horizontal (keputusan 2026-11-14):
-              sensitivity 1 + flatResponse supaya bar mencerminkan dB apa
-              adanya; sampleRate = laju stream aktual (bukan deklarasi file). */}
-          <AnalyzerSpectrum
-            width={screenWidth - 64}
-            height={160}
-            barCount={48}
-            color={colors.primary[500]}
-            backgroundColor="transparent"
-            sensitivity={1}
-            flatResponse
-            sampleRate={streamRate}
-            freqMaxHz={effectiveFreqMax}
-            isPlaying={isPlaying}
-            audioSessionId={audioSessionId}
-          />
-          {/* E: slider batas atas grafik — default Nyquist penuh; geser
-              ke 20 kHz untuk fokus rentang terdengar, ke Nyquist untuk
-              memeriksa konten ultrasonik (hi-res asli vs upsample).
-              Bar + label Hz + grid mengikuti nilai slider. */}
-          <View style={{ marginTop: 12 }}>
-            <View style={styles.freqSliderRow}>
-              <Text
-                style={[
-                  styles.freqSliderLabel,
-                  { color: colors.text.secondary },
-                ]}
-              >
-                BATAS ATAS GRAFIK
-              </Text>
-              <Text
-                style={[
-                  styles.freqSliderValue,
-                  { color: colors.primary[500] },
-                ]}
-              >
-                {formatFreq(effectiveFreqMax)}
-              </Text>
-            </View>
-            <Slider
-              style={{ width: "100%", height: 40 }}
-              minimumValue={Math.min(20000, streamNyquist)}
-              maximumValue={streamNyquist}
-              step={50}
-              value={effectiveFreqMax}
-              onValueChange={setFreqMaxHz}
-              minimumTrackTintColor={colors.primary[500]}
-              maximumTrackTintColor={colors.background.tertiary}
-              thumbTintColor={colors.primary[500]}
-              accessibilityLabel="Batas atas frekuensi grafik"
-              accessibilityRole="adjustable"
-            />
-            <Text
-              style={[
-                styles.freqSliderHint,
-                { color: colors.text.tertiary },
-              ]}
-            >
-              20 kHz – {formatFreq(streamNyquist)} (Nyquist). Geser ke 20
-              kHz untuk fokus rentang terdengar; ke Nyquist untuk memeriksa
-              konten ultrasonik.
-            </Text>
-          </View>
-        </View>
-      ) : (
-        <View
-          style={[
-            styles.card,
-            { backgroundColor: colors.background.secondary },
-          ]}
-        >
-          <View style={styles.visualizerPlaceholder}>
-            {isPlaying ? (
-              <>
-                <ActivityIndicator color={colors.primary[500]} />
-                {waitingForSession ? (
-                  <>
-                    <Text
-                      style={{ color: colors.text.tertiary, marginTop: 12 }}
-                    >
-                      Audio session tidak tersedia. Coba restart lagu.
-                    </Text>
-                    {/* FASE 3 Analyzer: tombol retry memakai PristineButton
-                        sekunder (Fase 2) — permukaan kartu sebagai surface
-                        supaya warna aksen diukur di atas kartu. */}
-                    <PristineButton
-                      label="Coba lagi"
-                      onPress={handleRetrySession}
-                      disabled={isRetrying}
-                      variant="secondary"
-                      icon={<RefreshCw size={16} color={retryIconColor} />}
-                      surface={colors.background.secondary}
-                      style={{ marginTop: 12 }}
-                      accessibilityLabel="Coba pulihkan audio session"
-                    />
-                  </>
-                ) : (
-                  <Text style={{ color: colors.text.tertiary, marginTop: 12 }}>
-                    Mempersiapkan visualizer...
-                  </Text>
-                )}
-              </>
-            ) : (
-              <Text style={{ color: colors.text.tertiary, fontSize: 13 }}>
-                Putar lagu untuk melihat spektrum
-              </Text>
-            )}
-          </View>
-        </View>
-      )}
+      {/* 1. SPECTRUM VISUALIZER — kartu memo (SpectrumCard di bawah):
+          drag slider batas frekuensi hanya me-render ulang kartu ini,
+          bukan seluruh layar (dulu setFreqMaxHz di induk membangunkan
+          semua kartu + efek tiap tick drag). */}
+      <SpectrumCard
+        streamRate={streamRate}
+        isPlaying={isPlaying}
+        audioSessionId={audioSessionId}
+        colors={colors}
+        isRetrying={isRetrying}
+        waitingForSession={waitingForSession}
+        retryIconColor={retryIconColor}
+        onRetrySession={handleRetrySession}
+      />
 
       {/* 2. AUTHENTICITY STATUS */}
       <View
@@ -784,9 +658,182 @@ export default function AnalyzerScreen() {
   );
 }
 
+// ─── SpectrumCard ───────────────────────────────────────────────────────
+// Kartu spektrum + slider batas frekuensi, memo + state drag lokal.
+// freqMaxHz tinggal di sini (bukan di AnalyzerScreen) supaya tiap tick
+// drag slider hanya me-render ulang kartu ini — induk + kartu lain diam.
+// E: batas atas grafik (Hz). null = Nyquist stream penuh (default,
+// keputusan csheva 2026-11-17) — slider mengisinya saat digeser;
+// nilainya dijepit ke Nyquist bila laju stream turun.
+interface SpectrumCardProps {
+  streamRate: number;
+  isPlaying: boolean;
+  audioSessionId: number | null;
+  colors: any;
+  isRetrying: boolean;
+  waitingForSession: boolean;
+  retryIconColor: string;
+  onRetrySession: () => Promise<void>;
+}
+
+const SpectrumCard = memo(function SpectrumCard({
+  streamRate,
+  isPlaying,
+  audioSessionId,
+  colors,
+  isRetrying,
+  waitingForSession,
+  retryIconColor,
+  onRetrySession,
+}: SpectrumCardProps) {
+  const [freqMaxHz, setFreqMaxHz] = useState<number | null>(null);
+  const streamNyquist = streamRate / 2;
+  const effectiveFreqMax = freqMaxHz ?? streamNyquist;
+
+  // Jepit nilai slider bila Nyquist stream turun (ganti file/laju) di
+  // bawah nilai yang dipilih — jangan tampilkan rentang yang tidak ada.
+  useEffect(() => {
+    setFreqMaxHz((prev) =>
+      prev == null ? null : Math.min(prev, streamNyquist),
+    );
+  }, [streamNyquist]);
+
+  if (!(audioSessionId && audioSessionId > 0)) {
+    return (
+      <View
+        style={[
+          styles.card,
+          { backgroundColor: colors.background.secondary },
+        ]}
+      >
+        <View style={styles.visualizerPlaceholder}>
+          {isPlaying ? (
+            <>
+              <ActivityIndicator color={colors.primary[500]} />
+              {waitingForSession ? (
+                <>
+                  <Text
+                    style={{ color: colors.text.tertiary, marginTop: 12 }}
+                  >
+                    Audio session tidak tersedia. Coba restart lagu.
+                  </Text>
+                  {/* FASE 3 Analyzer: tombol retry memakai PristineButton
+                      sekunder (Fase 2) — permukaan kartu sebagai surface
+                      supaya warna aksen diukur di atas kartu. */}
+                  <PristineButton
+                    label="Coba lagi"
+                    onPress={onRetrySession}
+                    disabled={isRetrying}
+                    variant="secondary"
+                    icon={<RefreshCw size={16} color={retryIconColor} />}
+                    surface={colors.background.secondary}
+                    style={{ marginTop: 12 }}
+                    accessibilityLabel="Coba pulihkan audio session"
+                  />
+                </>
+              ) : (
+                <Text style={{ color: colors.text.tertiary, marginTop: 12 }}>
+                  Mempersiapkan visualizer...
+                </Text>
+              )}
+            </>
+          ) : (
+            <Text style={{ color: colors.text.tertiary, fontSize: 13 }}>
+              Putar lagu untuk melihat spektrum
+            </Text>
+          )}
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View
+      style={[
+        styles.card,
+        { backgroundColor: colors.background.secondary, padding: 16 },
+      ]}
+    >
+      <View style={[styles.cardHeader, { marginBottom: 12 }]}>
+        <BarChart3 size={16} color={colors.primary[500]} />
+        <Text style={[styles.label, { color: colors.primary[500] }]}>
+          SPECTRUM ANALYZER
+        </Text>
+      </View>
+      {/* Spektrum ala Neutron (keputusan csheva 2026-11-13): sumbu Hz
+          berlabel + skala dB + peak hold + frekuensi dominan.
+          Menggantikan SpectrumAnalyzer (bar polos) hanya di tab ini;
+          tab Visualizer sudah dihapus. Full scale 0 dB + Nyquist stream
+          + warna clip + scroll horizontal (keputusan 2026-11-14):
+          sensitivity 1 + flatResponse supaya bar mencerminkan dB apa
+          adanya; sampleRate = laju stream aktual (bukan deklarasi file). */}
+      <AnalyzerSpectrum
+        width={screenWidth - 64}
+        height={160}
+        barCount={48}
+        color={colors.primary[500]}
+        backgroundColor="transparent"
+        sensitivity={1}
+        flatResponse
+        sampleRate={streamRate}
+        freqMaxHz={effectiveFreqMax}
+        isPlaying={isPlaying}
+        audioSessionId={audioSessionId}
+      />
+      {/* E: slider batas atas grafik — default Nyquist penuh; geser
+          ke 20 kHz untuk fokus rentang terdengar, ke Nyquist untuk
+          memeriksa konten ultrasonik (hi-res asli vs upsample).
+          Bar + label Hz + grid mengikuti nilai slider. */}
+      <View style={{ marginTop: 12 }}>
+        <View style={styles.freqSliderRow}>
+          <Text
+            style={[
+              styles.freqSliderLabel,
+              { color: colors.text.secondary },
+            ]}
+          >
+            BATAS ATAS GRAFIK
+          </Text>
+          <Text
+            style={[
+              styles.freqSliderValue,
+              { color: colors.primary[500] },
+            ]}
+          >
+            {formatFreq(effectiveFreqMax)}
+          </Text>
+        </View>
+        <Slider
+          style={{ width: "100%", height: 40 }}
+          minimumValue={Math.min(20000, streamNyquist)}
+          maximumValue={streamNyquist}
+          step={50}
+          value={effectiveFreqMax}
+          onValueChange={setFreqMaxHz}
+          minimumTrackTintColor={colors.primary[500]}
+          maximumTrackTintColor={colors.background.tertiary}
+          thumbTintColor={colors.primary[500]}
+          accessibilityLabel="Batas atas frekuensi grafik"
+          accessibilityRole="adjustable"
+        />
+        <Text
+          style={[
+            styles.freqSliderHint,
+            { color: colors.text.tertiary },
+          ]}
+        >
+          20 kHz – {formatFreq(streamNyquist)} (Nyquist). Geser ke 20
+          kHz untuk fokus rentang terdengar; ke Nyquist untuk memeriksa
+          konten ultrasonik.
+        </Text>
+      </View>
+    </View>
+  );
+});
+
 // ─── Sub-components ─────────────────────────────────────────────────────────
 
-const InfoRow = ({ label, value, colors, isPath }: any) => (
+const InfoRow = memo(({ label, value, colors, isPath }: any) => (
   <View style={[styles.infoRow, { borderBottomColor: colors.border.light }]}>
     <Text style={[styles.infoLabel, { color: colors.text.tertiary }]}>
       {label}
@@ -799,7 +846,7 @@ const InfoRow = ({ label, value, colors, isPath }: any) => (
       {value || "-"}
     </Text>
   </View>
-);
+));
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 

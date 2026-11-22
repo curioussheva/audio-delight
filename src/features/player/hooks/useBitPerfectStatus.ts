@@ -117,6 +117,29 @@ const readStreamStatus = (): {
   }
 };
 
+/**
+ * Per-node render (2026-11-22): poll 2 detik saat playing memanggil
+ * setStatus dengan objek BARU tiap tick — React render ulang pemakai
+ * (Analyzer, Player, EQ, Settings) walau semua field sama. Bandingkan
+ * dulu; kembalikan referensi lama bila tidak ada yang berubah, supaya
+ * tick poll yang diam tidak membangunkan siapa pun. Nilai yang berubah
+ * tetap diteruskan apa adanya.
+ */
+const sameBitPerfectStatus = (
+  prev: BitPerfectStatus,
+  next: BitPerfectStatus,
+): boolean =>
+  prev.requested === next.requested &&
+  prev.streamExclusive === next.streamExclusive &&
+  prev.isBitPerfect === next.isBitPerfect &&
+  prev.exclusiveFailed === next.exclusiveFailed &&
+  prev.rateHonored === next.rateHonored &&
+  prev.rateMismatch === next.rateMismatch &&
+  prev.actualSampleRate === next.actualSampleRate &&
+  prev.hardwareSampleRate === next.hardwareSampleRate &&
+  prev.unavailable === next.unavailable &&
+  prev.stale === next.stale;
+
 export const useBitPerfectStatus = (
   /** Interval re-read (ms). Default 2000 — hanya untuk deteksi fallback
    *  diam-diam setelah user colok/cabut DAC. */
@@ -132,27 +155,30 @@ export const useBitPerfectStatus = (
         readStreamStatus();
       const requested = audioMode === "bit-perfect";
 
-      setStatus({
-        requested,
-        streamExclusive: exclusive,
-        // C3.3: syarat ketiga — laju stream harus sama dengan laju file.
-        // File 44,1 kHz di stream 48 kHz (decoder meresample) bukan
-        // bit-perfect meski exclusive diterima.
-        isBitPerfect: requested && exclusive && rateHonored,
-        // Jangan tuduh FALLBACK saat native belum siap: exclusive=false
-        // di situ artinya "belum tahu", bukan "ditolak" (U-P1-04).
-        exclusiveFailed: requested && available && !exclusive,
-        rateHonored,
-        // Exclusive diterima tapi laju berbeda — jangan tuduh exclusive
-        // gagal, yang berbeda lajunya.
-        rateMismatch: requested && available && exclusive && !rateHonored,
-        actualSampleRate: rate,
-        hardwareSampleRate: hardwareRate,
-        unavailable: !available,
-        // Saat pause polling berhenti — verdict yang tersisa bisa basi
-        // (mis. DAC dicabut saat pause). Pemakai harus menyembunyikan
-        // verdict live bila stale (U-P1-04).
-        stale: !isPlaying,
+      setStatus((prev) => {
+        const next: BitPerfectStatus = {
+          requested,
+          streamExclusive: exclusive,
+          // C3.3: syarat ketiga — laju stream harus sama dengan laju file.
+          // File 44,1 kHz di stream 48 kHz (decoder meresample) bukan
+          // bit-perfect meski exclusive diterima.
+          isBitPerfect: requested && exclusive && rateHonored,
+          // Jangan tuduh FALLBACK saat native belum siap: exclusive=false
+          // di situ artinya "belum tahu", bukan "ditolak" (U-P1-04).
+          exclusiveFailed: requested && available && !exclusive,
+          rateHonored,
+          // Exclusive diterima tapi laju berbeda — jangan tuduh exclusive
+          // gagal, yang berbeda lajunya.
+          rateMismatch: requested && available && exclusive && !rateHonored,
+          actualSampleRate: rate,
+          hardwareSampleRate: hardwareRate,
+          unavailable: !available,
+          // Saat pause polling berhenti — verdict yang tersisa bisa basi
+          // (mis. DAC dicabut saat pause). Pemakai harus menyembunyikan
+          // verdict live bila stale (U-P1-04).
+          stale: !isPlaying,
+        };
+        return sameBitPerfectStatus(prev, next) ? prev : next;
       });
     };
 

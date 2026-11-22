@@ -46,6 +46,42 @@ export interface UseAudioOutputReturn {
   clearSelection: () => Promise<boolean>;
 }
 
+// Per-node render (2026-11-22): syncStatus jalan tiap 3 detik dan
+// memanggil setStatus/setCurrentDevice dengan objek BARU dari native
+// walau nilainya sama — pemakai (Analyzer, Settings, dst.) render ulang
+// tiap 3 detik tanpa alasan. Bandingkan dulu; referensi lama dipertahankan
+// bila tidak ada yang berubah. Nilai yang berubah tetap diteruskan.
+const sameDevice = (
+  prev: AudioDeviceDescriptor | null,
+  next: AudioDeviceDescriptor | null,
+): boolean => {
+  if (prev === next) return true;
+  if (!prev || !next) return false;
+  return (
+    prev.id === next.id &&
+    prev.name === next.name &&
+    prev.type === next.type &&
+    prev.sampleRate === next.sampleRate &&
+    prev.exclusive === next.exclusive &&
+    prev.isUsb === next.isUsb
+  );
+};
+
+const sameStatus = (
+  prev: ActiveDeviceStatus | null,
+  next: ActiveDeviceStatus | null,
+): boolean => {
+  if (prev === next) return true;
+  if (!prev || !next) return false;
+  return (
+    prev.requested === next.requested &&
+    prev.actual === next.actual &&
+    prev.honored === next.honored &&
+    prev.pathLossy === next.pathLossy &&
+    prev.rateHonored === next.rateHonored
+  );
+};
+
 export const useAudioOutput = (): UseAudioOutputReturn => {
   const [devices, setDevices] = useState<AudioDeviceDescriptor[]>([]);
   const [currentDevice, setCurrentDevice] =
@@ -88,8 +124,10 @@ export const useAudioOutput = (): UseAudioOutputReturn => {
         AudioOutputService.getCurrentDevice(),
       ]);
       if (!mounted.current) return;
-      setStatus(nextStatus);
-      setCurrentDevice(nextDevice);
+      setStatus((prev) => (sameStatus(prev, nextStatus) ? prev : nextStatus));
+      setCurrentDevice((prev) =>
+        sameDevice(prev, nextDevice) ? prev : nextDevice,
+      );
 
       // Codec hanya relevan kalau perangkat aktifnya Bluetooth. Membacanya
       // memanggil BluetoothA2dp lewat profile proxy, dan itu tidak gratis -
