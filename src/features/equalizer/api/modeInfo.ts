@@ -9,6 +9,16 @@ export interface ModeInfo {
   description: string;
 }
 
+/**
+ * Derivasi murni (opsi 2): mode apa pun selain `dsp` mematikan mesin DSP
+ * — bit-perfect melewati pemrosesan, immersive memakai rantai resonansinya
+ * sendiri. Dipakai `useIsDSPDisabled` (useEqualizer.ts); ditaruh di sini
+ * (modul murni) supaya bisa diuji jest tanpa React.
+ */
+export const isDspDisabledForMode = (
+  audioMode: AudioMode | string | undefined,
+): boolean => audioMode === "bit-perfect" || audioMode === "immersive";
+
 export const MODE_INFO: Record<AudioMode, ModeInfo> = {
   "bit-perfect": {
     label: "Bit-Perfect",

@@ -38,13 +38,16 @@ import { ConfirmDialog } from "@/shared/components/ui/ConfirmDialog";
 import { ScreenHeader } from "@/shared/components/ui/ScreenHeader";
 import { ScreenList } from "@/shared/components/ui/ScreenList";
 import type { ScrollableListHandle } from "@/shared/components/ui/ScreenList";
-import { useEqualizer } from "@/features/equalizer/hooks/useEqualizer";
-import { useToastStore } from "@/shared/store/toastStore";
 import {
-  accentOn,
-  pickReadable,
-  AA_NORMAL,
-} from "@/shared/utils/contrast";
+  useEqBandListState,
+  useEqEffectsState,
+  useEqGraphState,
+  useEqMasterState,
+  useEqPresetState,
+  useIsDSPDisabled,
+} from "@/features/equalizer/hooks/useEqualizer";
+import { useToastStore } from "@/shared/store/toastStore";
+import { accentOn, pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import {
   usePlayerStore,
   type AudioMode,
@@ -66,6 +69,7 @@ import {
   visibleBandRange,
 } from "@/features/equalizer/utils/scrollIndicator";
 import {
+  useEqualizerStore,
   dbToGain,
   gainToDb,
   formatMasterGainDb,
@@ -147,70 +151,72 @@ interface MiniSwitchProps {
   hideLabel?: boolean;
 }
 
-const MiniSwitch = memo(({
-  value,
-  onValueChange,
-  disabled,
-  color,
-  label,
-  stacked,
-  hideLabel,
-}: MiniSwitchProps) => {
-  const { theme } = useTheme();
-  const colors = theme.colors;
-  const on = value && !disabled;
+const MiniSwitch = memo(
+  ({
+    value,
+    onValueChange,
+    disabled,
+    color,
+    label,
+    stacked,
+    hideLabel,
+  }: MiniSwitchProps) => {
+    const { theme } = useTheme();
+    const colors = theme.colors;
+    const on = value && !disabled;
 
-  return (
-    <View
-      style={[
-        styles.miniSwitchContainer,
-        stacked && styles.miniSwitchStacked,
-      ]}
-    >
-      {!hideLabel && (
-        <Text
-          style={[
-            styles.miniSwitchLabel,
-            { color: on ? color : colors.text.secondary },
-          ]}
-        >
-          {label}
-        </Text>
-      )}
-      {/* U-P2-01: Switch di-scale 0,8 lama → area sentuh ~41×25, di bawah
+    return (
+      <View
+        style={[
+          styles.miniSwitchContainer,
+          stacked && styles.miniSwitchStacked,
+        ]}
+      >
+        {!hideLabel && (
+          <Text
+            style={[
+              styles.miniSwitchLabel,
+              { color: on ? color : colors.text.secondary },
+            ]}
+          >
+            {label}
+          </Text>
+        )}
+        {/* U-P2-01: Switch di-scale 0,8 lama → area sentuh ~41×25, di bawah
           44dp. Switch sendiri tidak menerima hitSlop yang andal, jadi
           dibungkus Pressable 44×44 yang jadi penangkap sentuh (Switch di
           dalam pointerEvents="none", hanya visual; peran switch + label
           pindah ke pembungkus supaya screen reader tetap membaca satu
           kontrol). */}
-      <Pressable
-        onPress={() => {
-          if (!disabled) onValueChange(!value);
-        }}
-        disabled={disabled}
-        style={styles.miniSwitchHit}
-        accessibilityRole="switch"
-        accessibilityLabel={label}
-        accessibilityState={{ checked: value, disabled: !!disabled }}
-      >
-        <Switch
-          value={value}
-          onValueChange={onValueChange}
-          disabled={disabled}
-          // Track OFF dulu `#222` di atas kartu `#0A0A0A` - rasio 1.24, praktis
-          // tak terlihat. Sekarang dari token supaya terbaca di semua tema.
-          trackColor={{
-            false: colors.background.tertiary,
-            true: color + "55",
+        <Pressable
+          onPress={() => {
+            if (!disabled) onValueChange(!value);
           }}
-          thumbColor={on ? color : colors.text.tertiary}
-          style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
-          pointerEvents="none"
-        />
-      </Pressable>
-    </View>
-  );
-});
+          disabled={disabled}
+          style={styles.miniSwitchHit}
+          accessibilityRole="switch"
+          accessibilityLabel={label}
+          accessibilityState={{ checked: value, disabled: !!disabled }}
+        >
+          <Switch
+            value={value}
+            onValueChange={onValueChange}
+            disabled={disabled}
+            // Track OFF dulu `#222` di atas kartu `#0A0A0A` - rasio 1.24, praktis
+            // tak terlihat. Sekarang dari token supaya terbaca di semua tema.
+            trackColor={{
+              false: colors.background.tertiary,
+              true: color + "55",
+            }}
+            thumbColor={on ? color : colors.text.tertiary}
+            style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
+            pointerEvents="none"
+          />
+        </Pressable>
+      </View>
+    );
+  },
+);
 
 interface SectionToggleProps {
   label: string;
@@ -259,6 +265,1170 @@ const SectionToggle = ({
   );
 };
 
+// ─── SEKSI LAYAR EQ (opsi 2, log #16) ──────────────────────────────────────
+// Tiap seksi adalah komponen `memo` yang melanggan HANYA potongan store
+// yang dibutuhkannya (hook `useEq*State` di useEqualizer.ts). Induk
+// `EqualizerScreen` TIDAK lagi melanggan store EQ utuh, jadi tick drag
+// satu nilai tidak me-render ulang seluruh layar:
+// - tick widener -> hanya EqEffectsCard (yang melanggan virtualizerLevel)
+// - tick band/kurva -> hanya EqGraphCard + EqBandDetailCard (bands)
+// - tick bass/gain -> EqEffectsCard (+ EqGraphCard bila pill clip berubah)
+// - preset/gate -> hanya seksi yang melanggan nilai itu
+// Perilaku identik: guard DSP (bit-perfect/immersive = beku), master OFF =
+// tab read-only, dan semua nilai tetap update saat nilainya sendiri berubah.
+
+const EqResetButton = memo(({ onPress }: { onPress: () => void }) => {
+  const { theme } = useTheme();
+  const colors = theme.colors;
+  const spacing = theme.spacing;
+  const isEQEnabled = useEqualizerStore((s) => s.isEQEnabled);
+  const isDSPDisabled = useIsDSPDisabled();
+  const disabled = isDSPDisabled || !isEQEnabled;
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      disabled={disabled}
+      style={[
+        styles.resetBtn,
+        { padding: spacing.sm, minWidth: 44, minHeight: 44 },
+        disabled && { opacity: 0.4 },
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel="Reset DSP ke pengaturan netral"
+      accessibilityState={{ disabled }}
+    >
+      <RotateCcw size={18} color={colors.text.secondary} />
+    </TouchableOpacity>
+  );
+});
+
+const EqHeadphoneGate = memo(() => {
+  const isEQEnabled = useEqualizerStore((s) => s.isEQEnabled);
+  const isDSPDisabled = useIsDSPDisabled();
+  return <HeadphoneSection disabled={isDSPDisabled || !isEQEnabled} />;
+});
+
+const EqMasterCard = memo(() => {
+  const { theme } = useTheme();
+  const colors = theme.colors;
+  const spacing = theme.spacing;
+  const { isEQEnabled, isDSPDisabled, toggleEQ } = useEqMasterState();
+  const masterColor = accentOn(
+    [colors.accent.green],
+    colors.background.secondary,
+    [colors.text.primary, colors.text.secondary],
+  );
+  return (
+    <>
+      {/* 0a. SAKELAR UTAMA.
+        Dulu layar ini TIDAK punya sakelar master: `isEQEnabled` bernilai
+        false secara default dan hanya pernah dimatikan
+        (`setEQEnabled(false)`) dari _layout. Artinya seluruh kontrol di
+        layar ini tersambung ke engine yang tidak pernah menyala - orang
+        menggeser slider, tidak terjadi apa pun, tanpa penjelasan. */}
+      <View
+        style={[
+          styles.card,
+          {
+            backgroundColor: colors.background.secondary,
+            borderColor: colors.border.medium,
+            marginHorizontal: spacing.md,
+            padding: spacing.md,
+            marginBottom: spacing.md,
+          },
+        ]}
+      >
+        <View style={styles.rowBetween}>
+          <View style={{ flex: 1, marginRight: spacing.md }}>
+            <Text style={[styles.displayTitle, { color: colors.text.primary }]}>
+              Pemrosesan DSP
+            </Text>
+            <Text style={[styles.cardHint, { color: colors.text.secondary }]}>
+              EQ, bass boost, pelebar stereo, reverb, HRTF, koreksi headphone,
+              dan master gain hanya berlaku saat ini menyala.
+            </Text>
+          </View>
+          {/* D6: sakelar master dibungkus Pressable 44×44 seperti
+            MiniSwitch (U-P2-01) — Switch default tingginya di bawah
+            44dp. Switch di dalam pointerEvents="none", hanya visual;
+            peran switch + label pindah ke pembungkus. */}
+          <Pressable
+            onPress={() => {
+              if (!isDSPDisabled) void toggleEQ();
+            }}
+            disabled={isDSPDisabled}
+            style={styles.miniSwitchHit}
+            accessibilityRole="switch"
+            accessibilityLabel="Pemrosesan DSP"
+            accessibilityState={{
+              checked: isEQEnabled,
+              disabled: isDSPDisabled,
+            }}
+          >
+            <Switch
+              value={isEQEnabled}
+              onValueChange={toggleEQ}
+              disabled={isDSPDisabled}
+              trackColor={{
+                false: colors.background.tertiary,
+                true: masterColor,
+              }}
+              thumbColor={isEQEnabled ? masterColor : colors.text.tertiary}
+              pointerEvents="none"
+            />
+          </Pressable>
+        </View>
+      </View>
+    </>
+  );
+});
+
+const EqGraphCard = memo(({ width }: { width: number }) => {
+  const { theme } = useTheme();
+  const colors = theme.colors;
+  const spacing = theme.spacing;
+  const {
+    bands: currentBands,
+    isBassEnabled,
+    bassStrength,
+    masterGain,
+    isEQEnabled,
+    updateBandGain,
+    flushBandDrag,
+  } = useEqGraphState();
+  const audioMode = usePlayerStore((s) => s.audioMode);
+  // Mode apa pun selain `dsp` membekukan kontrol di layar ini.
+  const isDSPFrozen = audioMode !== "dsp";
+
+  // Koreksi headphone — dipasang di level seksi grafik (bukan induk)
+  // supaya sinkronisasi perangkat tetap jalan walau seksi lain yang
+  // me-render ulang, dan supaya layar ini bisa menggambar kurva
+  // gabungan (koreksi + EQ). Satu-satunya pemanggil hook ini di layar.
+  const { activeProfile, enabled: correctionEnabled } =
+    useHeadphoneCorrection();
+
+  // Kurva gabungan (koreksi + EQ) — dihitung dari teks preset profil
+  // aktif. `HeadphoneProfile.filters` selalu kosong (importPreset
+  // menyimpannya tanpa rincian), jadi parse dari presetText di sini;
+  // gagal parse -> null -> kurva gabungan disembunyikan, bukan ditebak.
+  // Profil yang filternya sudah terisi (di masa depan) dipakai langsung.
+  const correctionForCurve = useMemo(() => {
+    if (!activeProfile) return null;
+    if (activeProfile.filters.length > 0) {
+      return {
+        filters: activeProfile.filters,
+        preampDb: activeProfile.preampDb,
+      };
+    }
+    const parsed = parseCorrectionPresetText(activeProfile.presetText);
+    return parsed && parsed.filters.length > 0 ? parsed : null;
+  }, [activeProfile]);
+
+  // Koreksi benar-benar memproses hanya bila mode DSP + sakelar master
+  // menyala + koreksi aktif + ada profil. Di luar itu kurva gabungan
+  // disembunyikan (tidak menduplikasi kurva EQ).
+  const correctionProcessing =
+    audioMode === "dsp" &&
+    isEQEnabled &&
+    correctionEnabled &&
+    activeProfile !== null;
+  const showCombinedCurve = correctionProcessing && correctionForCurve !== null;
+  const combinedGains = useMemo(
+    () =>
+      showCombinedCurve && correctionForCurve
+        ? combinedCurveGains(currentBands, correctionForCurve)
+        : null,
+    [showCombinedCurve, correctionForCurve, currentBands],
+  );
+
+  // Keterangan di bawah grafik — menyebut apa yang ditampilkan, bukan
+  // menebak. Cabang tengah: koreksi aktif tapi teks presetnya tidak bisa
+  // di-parse (kurva gabungan tidak tersedia, bukan salah tampil).
+  const graphCaption =
+    showCombinedCurve && activeProfile
+      ? `Garis utuh: EQ manual · Garis putus-putus: koreksi ${activeProfile.name} + EQ (yang kamu dengar)`
+      : correctionProcessing && activeProfile
+        ? `Koreksi ${activeProfile.name} aktif — kurva gabungan tidak tersedia (profil tanpa rincian filter)`
+        : "Kurva EQ manual — koreksi headphone tidak aktif";
+
+  return (
+    <>
+      <View
+        style={[
+          styles.graphCard,
+          {
+            backgroundColor: colors.background.secondary,
+            borderColor: colors.border.medium,
+            marginHorizontal: spacing.md,
+            marginBottom: spacing.md,
+            padding: spacing.sm,
+          },
+        ]}
+      >
+        {/* GRAPH SECTION — B3: saat DSP bypass (mode non-DSP atau
+            sakelar master mati), graph meredup + label BYPASS supaya
+            kurva tidak terlihat seolah memproses. */}
+        <FrequencyGraph
+          bands={currentBands}
+          combinedGains={combinedGains}
+          width={width - spacing.md * 2 - spacing.sm * 2 - 2}
+          height={140}
+          disabled={isDSPFrozen || !isEQEnabled}
+          onBandChange={updateBandGain}
+          // (Item 7) Drag kurva dilepas: flush nilai akhir band
+          // SEKARANG (store + native), tanpa tunggu trailing ≤100 ms.
+          onDragEnd={flushBandDrag}
+          // Peringatan clip menghitung bass + gain juga (pill
+          // grafik): bass 0..+12 dB bila sakelarnya menyala,
+          // master gain −12..+12 dB.
+          bassBoostDb={isBassEnabled ? (bassStrength / 1000) * 12 : 0}
+          masterGainDb={gainToDb(masterGain)}
+        />
+        {(isDSPFrozen || !isEQEnabled) && (
+          <Text style={[styles.bypassLabel, { color: colors.text.tertiary }]}>
+            BYPASS — kurva tidak memproses
+          </Text>
+        )}
+        {/* Keterangan kurva (lihat graphCaption di atas). */}
+        <Text style={[styles.graphCaption, { color: colors.text.tertiary }]}>
+          {graphCaption}
+        </Text>
+      </View>
+    </>
+  );
+});
+
+interface EqPresetCardProps {
+  onRequestSave: () => void;
+  onRequestDelete: (id: string, name: string) => void;
+}
+
+const EqPresetCard = memo(
+  ({ onRequestSave, onRequestDelete }: EqPresetCardProps) => {
+    const { theme } = useTheme();
+    const colors = theme.colors;
+    const spacing = theme.spacing;
+    const {
+      allPresets,
+      activePresetId,
+      isEQEnabled,
+      isDSPDisabled,
+      applyPreset,
+    } = useEqPresetState();
+    const showToast = useToastStore((s) => s.showToast);
+
+    // FASE 4: terapkan preset + toast sukses. Toast hanya boleh muncul
+    // bila preset BENAR-BENAR diterapkan ke suara: saat sakelar master
+    // mati, chip sudah disabled (tidak bisa ditekan) — guard ini
+    // pertahanan kedua supaya tidak ada jalur yang men-toast bohong
+    // ("diterapkan" padahal rantai bypass).
+    const handleApplyPresetWithToast = useCallback(
+      (id: string, name: string) => {
+        if (isDSPDisabled || !isEQEnabled) return;
+        applyPreset(id);
+        showToast(`Preset "${name}" diterapkan.`, "success");
+      },
+      [isDSPDisabled, isEQEnabled, applyPreset, showToast],
+    );
+
+    // Preset custom bisa DISIMPAN tapi dulu tidak bisa DIHAPUS dari UI.
+    // Tekan lama untuk menghapus (dialog konfirmasi di induk).
+    const handlePresetLongPress = useCallback(
+      (id: string, name: string, isCustom?: boolean) => {
+        if (!isCustom) return;
+        onRequestDelete(id, name);
+      },
+      [onRequestDelete],
+    );
+
+    // Bagikan preset yang sedang AKTIF sebagai file JSON — yang dibagikan
+    // adalah bunyinya saat ini (kurva + bass/widener/reverb yang sedang
+    // berlaku), bukan salinan preset tersimpan. Nilai dibaca dari store
+    // saat tombol ditekan (getState, tanpa langganan) supaya seksi ini
+    // tidak ikut render ulang tiap tick drag. Berbagi tidak mengubah
+    // suara, jadi tombol ini tidak ikut dibekukan saat DSP mati.
+    const handleSharePreset = useCallback(async () => {
+      const st = useEqualizerStore.getState();
+      const presetName =
+        allPresets.find((p) => p.id === activePresetId)?.name ??
+        "Preset Kustom";
+      const result = await sharePresetFile({
+        name: presetName,
+        bands: st.bands,
+        bassBoost: st.bassStrength,
+        virtualizer: st.virtualizerLevel,
+        reverb: st.reverbPreset,
+      });
+      if (result.kind === "exported") {
+        showToast("Preset siap dibagikan.", "success");
+      } else {
+        showToast(result.error, "error");
+      }
+    }, [allPresets, activePresetId, showToast]);
+    const onSharePress = useCallback(() => {
+      void handleSharePreset();
+    }, [handleSharePreset]);
+
+    return (
+      <>
+        <View
+          style={[
+            styles.graphCard,
+            {
+              backgroundColor: colors.background.secondary,
+              borderColor: colors.border.medium,
+              marginHorizontal: spacing.md,
+              marginBottom: spacing.md,
+              padding: spacing.sm,
+            },
+          ]}
+        >
+          <View style={styles.graphPreset}>
+            <View style={[styles.sectionHeader, { marginBottom: spacing.sm }]}>
+              <Text
+                style={[styles.sectionTitle, { color: colors.text.secondary }]}
+              >
+                PROFIL SUARA
+              </Text>
+              {/* D5: tombol simpan berteks, bukan ikon saja. */}
+              <TouchableOpacity
+                onPress={onRequestSave}
+                disabled={isDSPDisabled}
+                accessibilityRole="button"
+                accessibilityLabel="Simpan profil saat ini"
+                style={[styles.iconBtn, isDSPDisabled && { opacity: 0.4 }]}
+              >
+                <Save size={18} color={colors.text.primary} />
+                <Text
+                  style={[styles.saveBtnText, { color: colors.text.primary }]}
+                >
+                  Simpan
+                </Text>
+              </TouchableOpacity>
+              {/* Bagikan preset aktif sebagai file (item 8
+                  deep-insight, 2026-11-20): tidak mengubah suara,
+                  jadi tetap aktif walau DSP mati. */}
+              <TouchableOpacity
+                onPress={onSharePress}
+                accessibilityRole="button"
+                accessibilityLabel="Bagikan profil aktif sebagai file"
+                style={styles.iconBtn}
+              >
+                <Share2 size={18} color={colors.text.primary} />
+                <Text
+                  style={[styles.saveBtnText, { color: colors.text.primary }]}
+                >
+                  Bagikan
+                </Text>
+              </TouchableOpacity>
+            </View>
+            {/* U-P2-45: hapus preset custom lewat long-press DULU
+                tanpa petunjuk apa pun — user tidak bisa tahu
+                aksinya ada. (Penghapusannya sendiri sudah benar:
+                Alert konfirmasi + hanya untuk preset custom.) */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator
+              style={styles.presetScroll}
+              contentContainerStyle={{ paddingRight: spacing.sm }}
+            >
+              {allPresets.map((p) => (
+                <PresetChip
+                  key={p.id}
+                  presetId={p.id}
+                  presetName={p.name}
+                  label={p.name}
+                  isActive={activePresetId === p.id}
+                  onPress={handleApplyPresetWithToast}
+                  onLongPress={handlePresetLongPress}
+                  isCustom={p.isCustom}
+                  accessibilityHint={
+                    p.isCustom ? "Tekan lama untuk menghapus" : undefined
+                  }
+                  disabled={isDSPDisabled || !isEQEnabled}
+                />
+              ))}
+            </ScrollView>
+            <Text
+              style={[
+                styles.presetHint,
+                {
+                  color: colors.text.tertiary,
+                  marginTop: spacing.xs,
+                },
+              ]}
+            >
+              Geser untuk profil lain · tekan lama untuk menghapus.
+            </Text>
+          </View>
+        </View>
+      </>
+    );
+  },
+);
+
+const EqBandDetailCard = memo(() => {
+  const { theme } = useTheme();
+  const colors = theme.colors;
+  const spacing = theme.spacing;
+  const {
+    bands: currentBands,
+    isEQEnabled,
+    isDSPDisabled,
+    updateBandGain,
+    flushBandDrag,
+  } = useEqBandListState();
+
+  // Metrik scroll strip DETAIL BAND untuk bar indikator geser horizontal
+  // (2026-11-20). State ini PINDAH ke seksi ini dari induk: scroll strip
+  // sebelumnya me-render ulang SELURUH layar tiap frame scroll.
+  const [bandScroll, setBandScroll] = useState({
+    offsetX: 0,
+    contentWidth: 0,
+    layoutWidth: 0,
+  });
+  const bandIndicator = computeScrollIndicator(bandScroll);
+  const firstBandFreq = currentBands[0]?.frequency;
+  const lastBandFreq = currentBands[currentBands.length - 1]?.frequency;
+
+  // Tombol geser ‹ › strip DETAIL BAND (2026-11-20): bar indikator saja
+  // tidak cukup — strip tetap dikira cuma 5 slider (screenshot HP 08:05).
+  // Ref ke FlatList lewat ScreenList.listRef; geser satu halaman
+  // (selebar area tampak), nonaktif di ujung.
+  const bandListRef = useRef<ScrollableListHandle | null>(null);
+  const canBandScrollLeft = canScrollLeft(bandScroll);
+  const canBandScrollRight = canScrollRight(bandScroll);
+  const scrollBandPage = useCallback(
+    (direction: -1 | 1) => {
+      const next = pageScrollOffset(bandScroll, direction);
+      bandListRef.current?.scrollToOffset({ offset: next, animated: true });
+    },
+    [bandScroll],
+  );
+
+  // Legenda hidup: band mana yang tampak sekarang ("Band 1–5 dari 10").
+  const bandRange = visibleBandRange({
+    ...bandScroll,
+    bandCount: currentBands.length,
+    bandWidth: BAND_WIDTH,
+    contentPadding: spacing.sm,
+  });
+  const visibleFirstBandFreq = currentBands[bandRange.firstIndex]?.frequency;
+  const visibleLastBandFreq = currentBands[bandRange.lastIndex]?.frequency;
+
+  return (
+    <>
+      <View
+        style={[
+          styles.graphCard,
+          {
+            backgroundColor: colors.background.secondary,
+            borderColor: colors.border.medium,
+            marginHorizontal: spacing.md,
+            marginBottom: spacing.md,
+            padding: spacing.sm,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.bandDetail,
+            {
+              borderTopWidth: 0,
+              marginTop: 0,
+              paddingTop: 0,
+            },
+          ]}
+        >
+          <Text
+            style={[styles.detailBandTitle, { color: colors.text.secondary }]}
+          >
+            DETAIL BAND
+          </Text>
+          {/* Legenda: apa strip ini — EQ parametrik 10 band,
+              tiap band ±10 dB, 0 dB = netral. Dulu hanya petunjuk
+              "10 band · geser untuk 1k–16k": cukup sebagai
+              petunjuk geser, tapi tidak menjelaskan apa yang
+              disetel (screenshot 2026-11-20 08:05). Rentang band
+              yang tampak ada di baris legenda hidup di bawah bar
+              indikator. */}
+          <Text style={[styles.bandHint, { color: colors.text.tertiary }]}>
+            EQ parametrik 10 band · tiap band ±10 dB · 0 dB = netral
+          </Text>
+          {/* Skala dB di kiri strip + daftar band. Skala satu kolom
+              untuk seluruh strip (semua fader ±10 dB, geometri
+              sama); daftar menyusut selebar kolom (~28dp) — harga
+              skala, band yang tampak jadi ~4,2 bukan 5. */}
+          <View style={styles.bandStripRow}>
+            <BandScale dimmed={!isEQEnabled || isDSPDisabled} />
+            <View style={styles.bandStripList}>
+              {/* U-P2-53: daftar band lewat pola daftar bersama.
+                  Jalur yang dipilih tetap FlatList (horizontal +
+                  bersarang di ScrollView — lihat chooseListKind);
+                  `directionalLockEnabled` dipertahankan supaya
+                  tidak bentrok dengan scroll utama. */}
+              <ScreenList
+                horizontal
+                nestedInScrollView
+                listRef={bandListRef}
+                // Indikator bawaan dimatikan: tipis + memudar di
+                // Android, itu sebabnya strip dikira cuma 5 slider
+                // — bar indikator permanen di bawah strip yang
+                // menggantikannya.
+                showsHorizontalScrollIndicator={false}
+                data={currentBands}
+                keyExtractor={(item) => item.frequency.toString()}
+                renderItem={({ item, index }) => (
+                  <EqualizerBand
+                    frequency={item.frequency}
+                    gain={item.gain}
+                    index={index}
+                    onValueChange={updateBandGain}
+                    // (Item 7) Drag fader dilepas: flush nilai akhir
+                    // band SEKARANG (store + native).
+                    onDragEnd={flushBandDrag}
+                    disabled={!isEQEnabled || isDSPDisabled}
+                  />
+                )}
+                contentContainerStyle={{ paddingHorizontal: spacing.sm }}
+                directionalLockEnabled={true}
+                scrollEventThrottle={16}
+                onScroll={(e) => {
+                  // Nilai event DITANGKAP dulu di sini: React Native
+                  // mendaur-ulang synthetic event — membaca
+                  // e.nativeEvent di dalam updater setState bisa
+                  // berjalan sesudah event dilepas (nativeEvent null)
+                  // dan melempar TypeError (Metro, sesi 80289).
+                  const offsetX = e.nativeEvent.contentOffset.x;
+                  setBandScroll((s) => ({
+                    ...s,
+                    offsetX,
+                  }));
+                }}
+                onContentSizeChange={(w) =>
+                  setBandScroll((s) => ({ ...s, contentWidth: w }))
+                }
+                onLayout={(e) => {
+                  // Sama seperti onScroll di atas: tangkap dulu
+                  // sebelum setState (synthetic event didaur ulang).
+                  const layoutWidth = e.nativeEvent.layout.width;
+                  setBandScroll((s) => ({
+                    ...s,
+                    layoutWidth,
+                  }));
+                }}
+              />
+            </View>
+          </View>
+          {/* Bar indikator geser horizontal + tombol geser ‹ ›:
+              label ujung = frekuensi band pertama/terakhir (format
+              sama dengan label di bawah fader), thumb = porsi
+              tampak + posisi scroll. Tombol menggeser satu halaman
+              dan nonaktif di ujung. Baris ini bukan lagi dekoratif
+              murni (tombolnya kontrol) — hanya track-nya yang
+              disembunyikan dari aksesibilitas. */}
+          <View style={styles.bandScrollIndicator}>
+            <TouchableOpacity
+              onPress={() => scrollBandPage(-1)}
+              disabled={!canBandScrollLeft}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Geser band ke kiri"
+              accessibilityState={{ disabled: !canBandScrollLeft }}
+              style={[
+                styles.bandScrollButton,
+                { borderColor: colors.border.medium },
+                !canBandScrollLeft && styles.bandScrollButtonDisabled,
+              ]}
+            >
+              <ChevronLeft size={18} color={colors.text.secondary} />
+            </TouchableOpacity>
+            <Text
+              style={[styles.bandScrollLabel, { color: colors.text.tertiary }]}
+            >
+              {firstBandFreq !== undefined
+                ? formatBandFrequency(firstBandFreq)
+                : ""}
+            </Text>
+            <View
+              style={[
+                styles.bandScrollTrack,
+                { backgroundColor: colors.border.medium },
+              ]}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+            >
+              <View
+                style={[
+                  styles.bandScrollThumb,
+                  {
+                    backgroundColor: colors.text.secondary,
+                    width: `${bandIndicator.thumbWidthPct}%`,
+                    left: `${bandIndicator.thumbLeftPct}%`,
+                  },
+                ]}
+              />
+            </View>
+            <Text
+              style={[styles.bandScrollLabel, { color: colors.text.tertiary }]}
+            >
+              {lastBandFreq !== undefined
+                ? formatBandFrequency(lastBandFreq)
+                : ""}
+            </Text>
+            <TouchableOpacity
+              onPress={() => scrollBandPage(1)}
+              disabled={!canBandScrollRight}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Geser band ke kanan"
+              accessibilityState={{ disabled: !canBandScrollRight }}
+              style={[
+                styles.bandScrollButton,
+                { borderColor: colors.border.medium },
+                !canBandScrollRight && styles.bandScrollButtonDisabled,
+              ]}
+            >
+              <ChevronRight size={18} color={colors.text.secondary} />
+            </TouchableOpacity>
+          </View>
+          {/* Legenda hidup: band mana yang tampak sekarang —
+              diperbarui mengikuti scroll ("Band 1–5 dari 10"). */}
+          {visibleFirstBandFreq !== undefined &&
+            visibleLastBandFreq !== undefined && (
+              <Text
+                style={[styles.bandLegend, { color: colors.text.tertiary }]}
+              >
+                Band {bandRange.firstIndex + 1}–{bandRange.lastIndex + 1} dari{" "}
+                {currentBands.length} ·{" "}
+                {formatBandFrequencyFull(visibleFirstBandFreq)}–
+                {formatBandFrequencyFull(visibleLastBandFreq)}
+              </Text>
+            )}
+        </View>
+      </View>
+    </>
+  );
+});
+
+const EqEffectsCard = memo(() => {
+  const { theme } = useTheme();
+  const colors = theme.colors;
+  const spacing = theme.spacing;
+  const {
+    bassStrength,
+    virtualizerLevel,
+    reverbPreset,
+    masterGain,
+    isBassEnabled,
+    isVirtualizerEnabled,
+    isReverbEnabled,
+    isEQEnabled,
+    isDSPDisabled,
+    setBassEnabled,
+    setVirtualizerEnabled,
+    setReverbEnabled,
+    setBassBoost,
+    setVirtualizer,
+    setReverb,
+    setMasterGain,
+    flushBassBoostDrag,
+    flushVirtualizerDrag,
+    flushMasterGainDrag,
+  } = useEqEffectsState();
+  const showToast = useToastStore((s) => s.showToast);
+
+  // Callback stabil untuk anak yang di-memo: meneruskan callback inline
+  // dari render akan membatalkan React.memo tiap render.
+  const handleMasterGainChange = useCallback(
+    (v: number) => setMasterGain(dbToGain(v + MASTER_GAIN_DB_MIN)),
+    [setMasterGain],
+  );
+
+  // HRTF — virtual speaker (langkah 7, 2026-11-19): toggle sendiri di
+  // luar preset; gate hook dipakai juga di sini supaya seksi ini tahu
+  // perangkat aktif headphone atau bukan. Gate utama hidup di
+  // ThemedStack (_layout.tsx).
+  const { hrtfAllowed } = useHrtfGate();
+  const hrtfEnabled = useHrtfStore((s) => s.isHrtfEnabled);
+  const setHrtfEnabled = useHrtfStore((s) => s.setHrtfEnabled);
+
+  // Convolver — impulse response (2026-11-20): toggle sendiri di luar
+  // preset (sama seperti HRTF). TANPA gate headphone: IR adalah ruang,
+  // bukan efek headphone-only — bekerja di speaker juga. Toggle menyala
+  // tanpa IR = passthrough (node inert, bukan bisu).
+  const convolverEnabled = useConvolverStore((s) => s.isConvolverEnabled);
+  const setConvolverEnabled = useConvolverStore((s) => s.setConvolverEnabled);
+  const convolverIr = useConvolverStore((s) => s.ir);
+  const loadConvolverIr = useConvolverStore((s) => s.loadIr);
+  const clearConvolverIr = useConvolverStore((s) => s.clearIr);
+
+  const handlePickIr = useCallback(async () => {
+    const result = await loadConvolverIr();
+    if (result.ok) {
+      showToast(
+        "IR dimuat — nyalakan convolver untuk mendengar ruangnya.",
+        "success",
+      );
+    } else if (!result.canceled && result.error) {
+      showToast(result.error, "error");
+    }
+  }, [loadConvolverIr, showToast]);
+
+  const handleClearIr = useCallback(async () => {
+    await clearConvolverIr();
+    showToast("IR dihapus.", "info");
+  }, [clearConvolverIr, showToast]);
+
+  // Warna aksen dipilih lewat pengukuran terhadap permukaan tempat ia dipakai.
+  const onCard = colors.background.secondary;
+  const accentTextFallback = [colors.text.primary, colors.text.secondary];
+  const bassColor = accentOn(
+    [colors.accent.orange],
+    onCard,
+    accentTextFallback,
+  );
+  const widthColor = accentOn([colors.accent.blue], onCard, accentTextFallback);
+  const reverbColor = accentOn(
+    [colors.accent.purple],
+    onCard,
+    accentTextFallback,
+  );
+  const masterColor = accentOn(
+    [colors.accent.green],
+    onCard,
+    accentTextFallback,
+  );
+  const hrtfColor = accentOn(
+    [colors.accent.primary],
+    onCard,
+    accentTextFallback,
+  );
+  // Convolver: satu keluarga aksen dengan HRTF (keduanya efek ruang /
+  // spasial, bukan nada).
+  const convolverColor = accentOn(
+    [colors.accent.primary],
+    onCard,
+    accentTextFallback,
+  );
+
+  return (
+    <>
+      <View
+        style={[
+          styles.effectsSection,
+          { paddingHorizontal: spacing.md, marginBottom: spacing.lg },
+        ]}
+      >
+        {/* F3: penjelasan di tempat kontrolnya, bukan cuma di banner
+            atas yang bisa ter-scroll menjauh. */}
+        {isDSPDisabled && (
+          <Text
+            style={[
+              styles.disabledCaption,
+              {
+                color: colors.text.tertiary,
+                paddingHorizontal: spacing.md,
+                marginBottom: spacing.sm,
+              },
+            ]}
+          >
+            Nonaktif di mode ini — pindah ke DSP untuk menyetel.
+          </Text>
+        )}
+        {/* Sakelar master mati (mode DSP): semua efek di bawah tidak
+            memproses — caption di tempatnya supaya tidak ada yang
+            mengira slider yang redup masih berpengaruh. */}
+        {!isEQEnabled && !isDSPDisabled && (
+          <Text
+            style={[
+              styles.disabledCaption,
+              {
+                color: colors.text.tertiary,
+                paddingHorizontal: spacing.md,
+                marginBottom: spacing.sm,
+              },
+            ]}
+          >
+            Sakelar master mati — semua efek di bawah tidak memproses.
+          </Text>
+        )}
+        {/* SLIDER VERTIKAL BASS + PELEBAR STEREO + MASTER GAIN —
+            opsi B Fase 3 (keputusan csheva 2026-11-18 08:08): dua knob
+            diganti fader vertikal ala slider GAIN kanan Neutron,
+            bahasa visual yang sama dengan fader band (track 160px,
+            tick, fill, thumb kotak). Rentang nilai 0..1000 sama persis
+            dengan knob lama dan dengan yang diterima Kotlin (bass
+            0..+12 dB, widener width 1.0..2.0), jadi tanpa konversi.
+            Tiap slider punya MiniSwitch enable sendiri di atasnya
+            (tanpa label teks — nama efek sudah di label slider).
+            Master gain MENYUSUL 2026-11-19: mesin native-nya sudah
+            lengkap (setMasterGain -> GainNode), hanya belum ada
+            kontrolnya. Slider ketiga, PREAMP skala dB −12..+12
+            simetris (0 dB = netral, tengah slider) sejak 2026-11-19
+            — konvensi preamp umum (Poweramp ±12 dB). VerticalSlider
+            hanya mendukung min 0, jadi domain slider 0..24 dipetakan
+            ke dB (nilai − 12); konversi dB↔linear (10^(dB/20)) hanya
+            di batas layar ini — store + native tetap linear.
+            Tanpa MiniSwitch — gain bukan efek yang bisa OFF; lantai
+            −12 dB = 0,25×, BUKAN senyap (mute lewat volume). */}
+        <View
+          style={[
+            styles.effectItem,
+            {
+              backgroundColor: colors.background.secondary,
+              borderColor: colors.border.medium,
+              paddingVertical: spacing.md,
+            },
+          ]}
+        >
+          <View style={styles.sliderRow}>
+            <View style={styles.sliderCol}>
+              <MiniSwitch
+                label="BASS BOOST"
+                value={isBassEnabled}
+                onValueChange={setBassEnabled}
+                disabled={isDSPDisabled || !isEQEnabled}
+                color={bassColor}
+                stacked
+                hideLabel
+              />
+              <VerticalSlider
+                label="BASS BOOST"
+                value={bassStrength}
+                onChange={setBassBoost}
+                // (Item 7) Drag dilepas: flush nilai akhir bass
+                // SEKARANG (pusher + store), tanpa tunggu trailing.
+                onDragEnd={flushBassBoostDrag}
+                color={bassColor}
+                disabled={!isBassEnabled || isDSPDisabled || !isEQEnabled}
+                // Tampil dB, bukan %: bass bersifat addition dalam dB
+                // (low-shelf 100 Hz, 0..+12 dB — cerminkan
+                // kMaxBassBoostDb di NativeDSPModule.kt). % menyesatkan
+                // karena menyiratkan skala linear.
+                formatValue={formatBassBoostDb}
+              />
+            </View>
+            <View style={styles.sliderCol}>
+              <MiniSwitch
+                label="PELEBAR STEREO"
+                value={isVirtualizerEnabled}
+                onValueChange={setVirtualizerEnabled}
+                disabled={isDSPDisabled || !isEQEnabled}
+                color={widthColor}
+                stacked
+                hideLabel
+              />
+              <VerticalSlider
+                label="PELEBAR STEREO"
+                value={virtualizerLevel}
+                onChange={setVirtualizer}
+                // (Item 7) Drag dilepas: flush nilai akhir widener
+                // SEKARANG (pusher + store), tanpa tunggu trailing.
+                onDragEnd={flushVirtualizerDrag}
+                color={widthColor}
+                disabled={
+                  !isVirtualizerEnabled || isDSPDisabled || !isEQEnabled
+                }
+                // Tampil pengali lebar, bukan %: width 1.0..2.0
+                // (side ×1.00 = stereo asli). % menyesatkan karena
+                // 0% terbaca "mati" padahal itu stereo asli.
+                formatValue={formatWidthMultiplier}
+              />
+            </View>
+            <View style={styles.sliderCol}>
+              {/* Spacer setinggi baris MiniSwitch (44) supaya
+                  label/track/nilai ketiga kolom sejajar. Kolom ini
+                  tanpa switch (gain bukan efek yang bisa OFF);
+                  tanpa spacer, "MASTER GAIN" naik ke baris switch
+                  dan seluruh kolomnya bergeser ke atas (screenshot
+                  2026-11-20 00:27: "−12 dB" melayang di tengah
+                  kartu, lebih tinggi dari "0 dB"/"×1.00"). */}
+              <View style={styles.miniSwitchHit} accessible={false} />
+              <VerticalSlider
+                label="MASTER GAIN"
+                value={gainToDb(masterGain) - MASTER_GAIN_DB_MIN}
+                onChange={handleMasterGainChange}
+                // (Item 7) Drag dilepas: flush nilai akhir gain
+                // SEKARANG (native + store), tanpa tunggu trailing.
+                onDragEnd={flushMasterGainDrag}
+                color={masterColor}
+                disabled={isDSPDisabled || !isEQEnabled}
+                maxValue={MASTER_GAIN_DB_RANGE}
+                formatValue={formatMasterGainSliderValue}
+              />
+            </View>
+          </View>
+        </View>
+
+        {/* HRTF — VIRTUAL SPEAKER (langkah 7, 2026-11-19).
+            BUKAN pelebar stereo: widener melebarkan sumbu L–R
+            (tetap "di dalam kepala"), HRTF menaruh suara di ruang
+            3D via HRIR — virtual speaker ±30° di depan. Toggle
+            sendiri, di luar preset; hanya di headphone (gate:
+            headset/usb/bluetooth — speaker/line_out dimatikan
+            otomatis, lihat useHrtfGate). */}
+        <View
+          style={[
+            styles.effectItem,
+            {
+              backgroundColor: colors.background.secondary,
+              borderColor: colors.border.medium,
+              paddingVertical: spacing.md,
+            },
+          ]}
+        >
+          <MiniSwitch
+            label="HRTF — VIRTUAL SPEAKER"
+            value={hrtfEnabled}
+            onValueChange={setHrtfEnabled}
+            disabled={isDSPDisabled || !isEQEnabled || !hrtfAllowed}
+            color={hrtfColor}
+          />
+          <Text
+            style={[
+              styles.disabledCaption,
+              {
+                color: colors.text.secondary,
+                paddingHorizontal: spacing.md,
+                marginTop: spacing.sm,
+              },
+            ]}
+          >
+            {hrtfAllowed
+              ? "Virtual speaker ±30° di depan — suara keluar dari kepala. Hanya di headphone; di speaker Bluetooth tidak terdengar."
+              : "Hanya di headphone — colok headphone / DAC / TWS untuk menyalakan HRTF."}
+          </Text>
+        </View>
+
+        {/* CONVOLVER — IMPULSE RESPONSE (2026-11-20).
+            File IR .wav pilihan user (concert hall, tube amp,
+            karakter headphone) ala convolver ViPER4Android —
+            "ruang" sebagai fitur, bukan sekadar efek. Toggle
+            sendiri, di luar preset; TANPA gate headphone (IR
+            bekerja di speaker juga). IR di-resample ke laju
+            stream; maks ~2 detik sesudah resample. Tanpa IR,
+            toggle menyala pun passthrough. */}
+        <View
+          style={[
+            styles.effectItem,
+            {
+              backgroundColor: colors.background.secondary,
+              borderColor: colors.border.medium,
+              paddingVertical: spacing.md,
+            },
+          ]}
+        >
+          <MiniSwitch
+            label="CONVOLVER — IMPULSE RESPONSE"
+            value={convolverEnabled}
+            onValueChange={setConvolverEnabled}
+            disabled={isDSPDisabled || !isEQEnabled}
+            color={convolverColor}
+          />
+          <Text
+            style={[
+              styles.disabledCaption,
+              {
+                color: colors.text.secondary,
+                paddingHorizontal: spacing.md,
+                marginTop: spacing.sm,
+              },
+            ]}
+          >
+            {convolverIr
+              ? `${convolverIr.name} · ${(convolverIr.sampleRateHz / 1000).toLocaleString("id-ID", { maximumFractionDigits: 1 })} kHz · ${convolverIr.taps.toLocaleString("id-ID")} tap · ${(convolverIr.durationMs / 1000).toLocaleString("id-ID", { maximumFractionDigits: 1 })} dtk`
+              : "Belum ada IR — pilih file .wav (ruang konser, ampli tabung, karakter headphone)."}
+          </Text>
+          <View
+            style={[
+              styles.reverbRow,
+              { marginHorizontal: spacing.md, marginTop: spacing.sm },
+            ]}
+          >
+            <TouchableOpacity
+              onPress={handlePickIr}
+              disabled={isDSPDisabled || !isEQEnabled}
+              style={[
+                styles.reverbBox,
+                {
+                  backgroundColor: colors.background.tertiary,
+                  borderColor: colors.border.medium,
+                  padding: spacing.md,
+                  minHeight: 44,
+                  flex: 1,
+                  alignItems: "center",
+                  justifyContent: "center",
+                },
+                (isDSPDisabled || !isEQEnabled) && {
+                  opacity: 0.4,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Pilih file IR (.wav)"
+            >
+              <Text
+                style={{
+                  fontFamily: FONT_FAMILY.medium,
+                  fontSize: 13,
+                  color: colors.text.primary,
+                }}
+              >
+                PILIH FILE IR (.WAV)
+              </Text>
+            </TouchableOpacity>
+            {convolverIr ? (
+              <TouchableOpacity
+                onPress={handleClearIr}
+                disabled={isDSPDisabled || !isEQEnabled}
+                style={[
+                  styles.reverbBox,
+                  {
+                    backgroundColor: colors.background.tertiary,
+                    borderColor: colors.border.medium,
+                    padding: spacing.md,
+                    minHeight: 44,
+                    flex: 1,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  },
+                  (isDSPDisabled || !isEQEnabled) && {
+                    opacity: 0.4,
+                  },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Hapus IR"
+              >
+                <Text
+                  style={{
+                    fontFamily: FONT_FAMILY.medium,
+                    fontSize: 13,
+                    color: colors.text.primary,
+                  }}
+                >
+                  HAPUS
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+          <Text
+            style={[
+              styles.disabledCaption,
+              {
+                color: colors.text.secondary,
+                paddingHorizontal: spacing.md,
+                marginTop: spacing.sm,
+              },
+            ]}
+          >
+            Convolver duduk sesudah reverb, sebelum HRTF — ekor IR ikut
+            ter-spatialisasi. Biasanya pakai salah satu: IR atau reverb, bukan
+            keduanya.
+          </Text>
+        </View>
+
+        {/* REVERB PRESET SELECTOR — DIPULIHKAN 2026-11-19.
+            Disembunyikan 2026-11-18 karena engine reverb masih STUB
+            (keputusan 2026-11-14); syarat "sampai engine C++ ada"
+            kini terpenuhi (ReverbNode Freeverb di DSPChain), jadi
+            kontrolnya kembali. Koreksi catatan: yang disembunyikan
+            dulu adalah stepper ini (REVERB_LABELS + tombol
+            mundur/maju, U-P2-40), BUKAN komponen ReverbDropdown —
+            komponen itu tidak pernah terpasang di layar ini dan
+            dihapus di ronde clean-cozy 2026-11-19 (0 pemakai).
+            Stepper dipulihkan verbatim. */}
+        <View
+          style={[
+            styles.effectItem,
+            {
+              backgroundColor: colors.background.secondary,
+              borderColor: colors.border.medium,
+              paddingVertical: spacing.md,
+            },
+          ]}
+        >
+          <MiniSwitch
+            label="REVERB LINGKUNGAN"
+            value={isReverbEnabled}
+            onValueChange={setReverbEnabled}
+            disabled={isDSPDisabled || !isEQEnabled}
+            color={reverbColor}
+          />
+          {/* U-P2-40: kontrol reverb DULU hanya bisa maju — satu tombol
+              dengan ChevronRight menyiratkan membuka daftar, padahal
+              ketukan hanya memajukan preset (sampai 6 ketukan untuk
+              kembali). Sekarang ada tombol mundur eksplisit di kiri;
+              ChevronRight di kanan jujur berarti "berikutnya". */}
+          <View
+            style={[
+              styles.reverbRow,
+              { marginHorizontal: spacing.md, marginTop: spacing.sm },
+            ]}
+          >
+            <TouchableOpacity
+              onPress={() => {
+                const prev =
+                  (reverbPreset - 1 + REVERB_LABELS.length) %
+                  REVERB_LABELS.length;
+                setReverb(prev);
+              }}
+              disabled={!isReverbEnabled || isDSPDisabled || !isEQEnabled}
+              style={[
+                styles.reverbStepBtn,
+                {
+                  backgroundColor: colors.background.tertiary,
+                  borderColor: colors.border.medium,
+                },
+                (!isReverbEnabled || isDSPDisabled || !isEQEnabled) && {
+                  opacity: 0.4,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={`Preset reverb sebelumnya: ${REVERB_LABELS[(reverbPreset - 1 + REVERB_LABELS.length) % REVERB_LABELS.length]}`}
+            >
+              <ChevronLeft size={16} color={colors.text.secondary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.reverbBox,
+                {
+                  backgroundColor: colors.background.tertiary,
+                  borderColor: colors.border.medium,
+                  padding: spacing.md,
+                  minHeight: 44,
+                  flex: 1,
+                },
+                (!isReverbEnabled || isDSPDisabled || !isEQEnabled) && {
+                  opacity: 0.4,
+                },
+              ]}
+              disabled={!isReverbEnabled || isDSPDisabled || !isEQEnabled}
+              onPress={() => {
+                const next = (reverbPreset + 1) % REVERB_LABELS.length;
+                setReverb(next);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Reverb: ${REVERB_LABELS[reverbPreset]}. Ketuk untuk preset berikutnya, tombol kiri untuk sebelumnya.`}
+            >
+              <Text
+                style={[styles.reverbLabel, { color: colors.text.secondary }]}
+              >
+                LINGKUNGAN
+              </Text>
+              <View style={styles.reverbValueRow}>
+                <Text style={[styles.reverbValue, { color: reverbColor }]}>
+                  {REVERB_LABELS[reverbPreset]}
+                </Text>
+                <ChevronRight size={16} color={colors.text.secondary} />
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </>
+  );
+});
+
 // ─── MAIN SCREEN ─────────────────────────────────────────────────────────
 
 // Bottom padding: ruang untuk tab bar + FloatingPlayer (FLOATING_PLAYER_CLEARANCE).
@@ -269,8 +1439,12 @@ export default function EqualizerScreen() {
   const colors = theme.colors;
   const spacing = theme.spacing;
 
-  const eq = useEqualizer();
-  const { audioMode, setAudioMode } = usePlayerStore();
+  // Opsi 2: induk TIDAK lagi melanggan store EQ utuh — hanya audioMode
+  // (pemilih mode + subtitle mesin) dan isEQEnabled (subtitle mesin).
+  // Semua nilai EQ dibaca seksi memo di bawah lewat hook per seksi.
+  const audioMode = usePlayerStore((s) => s.audioMode);
+  const setAudioMode = usePlayerStore((s) => s.setAudioMode);
+  const isEQEnabled = useEqualizerStore((s) => s.isEQEnabled);
   // FASE 4: umpan balik sukses preset ("Preset diterapkan" dst.) kini
   // memakai toast global — sebelumnya tap preset tanpa umpan balik apa
   // pun selain perubahan suara/kurva.
@@ -294,49 +1468,12 @@ export default function EqualizerScreen() {
     id: string;
     name: string;
   } | null>(null);
-  const [bitPerfectDialogVisible, setBitPerfectDialogVisible] =
-    useState(false);
+  const [bitPerfectDialogVisible, setBitPerfectDialogVisible] = useState(false);
 
-  const [visibleSections, setVisibleSections] =
-    useState<VisibleSections>(DEFAULT_VISIBLE_SECTIONS);
+  const [visibleSections, setVisibleSections] = useState<VisibleSections>(
+    DEFAULT_VISIBLE_SECTIONS,
+  );
   const [sectionsLoaded, setSectionsLoaded] = useState(false);
-
-  // Metrik scroll strip DETAIL BAND untuk bar indikator geser horizontal
-  // (2026-11-20): teks "10 band · geser untuk 1k–16k" saja tidak cukup —
-  // strip tetap dikira cuma 5 slider (screenshot HP 00:46). Bar permanen
-  // di bawah strip menunjukkan posisi scroll + rentang penuh 31–16k.
-  const [bandScroll, setBandScroll] = useState({
-    offsetX: 0,
-    contentWidth: 0,
-    layoutWidth: 0,
-  });
-  const bandIndicator = computeScrollIndicator(bandScroll);
-  const firstBandFreq = eq.currentBands[0]?.frequency;
-  const lastBandFreq = eq.currentBands[eq.currentBands.length - 1]?.frequency;
-
-  // Tombol geser ‹ › strip DETAIL BAND (2026-11-20): bar indikator saja
-  // tidak cukup — strip tetap dikira cuma 5 slider (screenshot HP 08:05).
-  // Ref ke FlatList lewat ScreenList.listRef; geser satu halaman
-  // (selebar area tampak), nonaktif di ujung.
-  const bandListRef = useRef<ScrollableListHandle | null>(null);
-  const canBandScrollLeft = canScrollLeft(bandScroll);
-  const canBandScrollRight = canScrollRight(bandScroll);
-  const scrollBandPage = (direction: -1 | 1) => {
-    const next = pageScrollOffset(bandScroll, direction);
-    bandListRef.current?.scrollToOffset({ offset: next, animated: true });
-  };
-
-  // Legenda hidup: band mana yang tampak sekarang ("Band 1–5 dari 10").
-  const bandRange = visibleBandRange({
-    ...bandScroll,
-    bandCount: eq.currentBands.length,
-    bandWidth: BAND_WIDTH,
-    contentPadding: spacing.sm,
-  });
-  const visibleFirstBandFreq =
-    eq.currentBands[bandRange.firstIndex]?.frequency;
-  const visibleLastBandFreq =
-    eq.currentBands[bandRange.lastIndex]?.frequency;
 
   // U-P2-44: pilihan tampil/sembunyi DULU reset tiap kali layar dibuka
   // ulang. Sekarang dimuat dari AsyncStorage saat mount dan disimpan tiap
@@ -370,67 +1507,16 @@ export default function EqualizerScreen() {
     setVisibleSections((prev) => ({ ...prev, [section]: !prev[section] }));
   };
 
+  // Callback stabil untuk EqPresetCard (memo): buka modal simpan +
+  // dialog hapus preset. Identitas stabil supaya memo tidak batal.
+  const openSaveModal = useCallback(() => setModalVisible(true), []);
+  const openDeletePresetDialog = useCallback(
+    (id: string, name: string) => setDeletePresetTarget({ id, name }),
+    [],
+  );
+
   const handleReset = () => {
     setResetDialogVisible(true);
-  };
-
-  // Callback stabil untuk anak yang di-memo: meneruskan callback inline
-  // dari render akan membatalkan React.memo tiap render. eq.setMasterGain
-  // / eq.updateBandGain sudah useCallback stabil di hook, jadi wrapper
-  // ini juga stabil.
-  const handleMasterGainChange = useCallback(
-    (v: number) => eq.setMasterGain(dbToGain(v + MASTER_GAIN_DB_MIN)),
-    [eq.setMasterGain],
-  );
-  const handleGraphBandChange = useCallback(
-    (index: number, gain: number) => eq.updateBandGain(index, gain),
-    [eq.updateBandGain],
-  );
-
-  // FASE 4: terapkan preset + toast sukses. Toast hanya boleh muncul
-  // bila preset BENAR-BENAR diterapkan ke suara: saat sakelar master
-  // mati, chip sudah disabled (tidak bisa ditekan) — guard ini
-  // pertahanan kedua supaya tidak ada jalur yang men-toast bohong
-  // ("diterapkan" padahal rantai bypass).
-  const handleApplyPresetWithToast = (id: string, name: string) => {
-    if (eq.isDSPDisabled || !eq.isEQEnabled) return;
-    eq.applyPreset(id);
-    showToast(`Preset "${name}" diterapkan.`, "success");
-  };
-
-  // Preset custom bisa DISIMPAN tapi dulu tidak bisa DIHAPUS dari UI - aksi
-  // `deletePreset` ada di store tapi nol pemanggil. Tekan lama untuk menghapus.
-  const handlePresetLongPress = (
-    id: string,
-    name: string,
-    isCustom?: boolean,
-  ) => {
-    if (!isCustom) return;
-
-    setDeletePresetTarget({ id, name });
-  };
-
-  // Bagikan preset yang sedang AKTIF sebagai file JSON — yang dibagikan
-  // adalah bunyinya saat ini (kurva + bass/widener/reverb yang sedang
-  // berlaku), bukan salinan preset tersimpan. Berbagi tidak mengubah
-  // suara, jadi tombol ini tidak ikut dibekukan saat DSP mati (berbeda
-  // dari Simpan/Terapkan yang mengubah state audio).
-  const handleSharePreset = async () => {
-    const presetName =
-      eq.allPresets.find((p) => p.id === eq.activePresetId)?.name ??
-      "Preset Kustom";
-    const result = await sharePresetFile({
-      name: presetName,
-      bands: eq.currentBands,
-      bassBoost: eq.bassStrength,
-      virtualizer: eq.virtualizerLevel,
-      reverb: eq.reverbPreset,
-    });
-    if (result.kind === "exported") {
-      showToast("Preset siap dibagikan.", "success");
-    } else {
-      showToast(result.error, "error");
-    }
   };
 
   const modeLabel =
@@ -447,7 +1533,7 @@ export default function EqualizerScreen() {
   const engineLabel =
     audioMode === "immersive"
       ? "MESIN DSP BYPASS · RESONANSI AKTIF"
-      : audioMode === "dsp" && eq.isEQEnabled
+      : audioMode === "dsp" && isEQEnabled
         ? "MESIN AKTIF"
         : "MESIN BYPASS";
 
@@ -477,100 +1563,6 @@ export default function EqualizerScreen() {
     void setAudioMode(mode);
   };
 
-  // Mode apa pun selain `dsp` membekukan kontrol di layar ini.
-  const isDSPFrozen = audioMode !== "dsp";
-
-  // Koreksi headphone — dipasang di level layar (bukan hanya di
-  // HeadphoneSection) supaya sinkronisasi perangkat tetap jalan walau
-  // seksi Headphone tertutup, dan supaya layar ini bisa menggambar kurva
-  // gabungan (koreksi + EQ). Dua pemakai hook yang sama tidak masalah:
-  // efeknya idempotent dan membaca store yang sama.
-  const { activeProfile, enabled: correctionEnabled } =
-    useHeadphoneCorrection();
-
-  // HRTF — virtual speaker (langkah 7, 2026-11-19): toggle sendiri di
-  // luar preset; gate hook dipakai juga di sini supaya layar ini tahu
-  // perangkat aktif headphone atau bukan. Pemakaian kedua tidak masalah:
-  // efeknya idempotent (preseden useHeadphoneCorrection di atas);
-  // gate utama hidup di ThemedStack (_layout.tsx).
-  const { hrtfAllowed } = useHrtfGate();
-  const hrtfEnabled = useHrtfStore((s) => s.isHrtfEnabled);
-  const setHrtfEnabled = useHrtfStore((s) => s.setHrtfEnabled);
-
-  // Convolver — impulse response (2026-11-20): toggle sendiri di luar
-  // preset (sama seperti HRTF). TANPA gate headphone: IR adalah ruang,
-  // bukan efek headphone-only — bekerja di speaker juga. Toggle menyala
-  // tanpa IR = passthrough (node inert, bukan bisu).
-  const convolverEnabled = useConvolverStore((s) => s.isConvolverEnabled);
-  const setConvolverEnabled = useConvolverStore(
-    (s) => s.setConvolverEnabled,
-  );
-  const convolverIr = useConvolverStore((s) => s.ir);
-  const loadConvolverIr = useConvolverStore((s) => s.loadIr);
-  const clearConvolverIr = useConvolverStore((s) => s.clearIr);
-
-  const handlePickIr = useCallback(async () => {
-    const result = await loadConvolverIr();
-    if (result.ok) {
-      showToast(
-        "IR dimuat — nyalakan convolver untuk mendengar ruangnya.",
-        "success",
-      );
-    } else if (!result.canceled && result.error) {
-      showToast(result.error, "error");
-    }
-  }, [loadConvolverIr, showToast]);
-
-  const handleClearIr = useCallback(async () => {
-    await clearConvolverIr();
-    showToast("IR dihapus.", "info");
-  }, [clearConvolverIr, showToast]);
-
-  // Kurva gabungan (koreksi + EQ) — dihitung dari teks preset profil
-  // aktif. `HeadphoneProfile.filters` selalu kosong (importPreset
-  // menyimpannya tanpa rincian), jadi parse dari presetText di sini;
-  // gagal parse -> null -> kurva gabungan disembunyikan, bukan ditebak.
-  // Profil yang filternya sudah terisi (di masa depan) dipakai langsung.
-  const correctionForCurve = useMemo(() => {
-    if (!activeProfile) return null;
-    if (activeProfile.filters.length > 0) {
-      return {
-        filters: activeProfile.filters,
-        preampDb: activeProfile.preampDb,
-      };
-    }
-    const parsed = parseCorrectionPresetText(activeProfile.presetText);
-    return parsed && parsed.filters.length > 0 ? parsed : null;
-  }, [activeProfile]);
-
-  // Koreksi benar-benar memproses hanya bila mode DSP + sakelar master
-  // menyala + koreksi aktif + ada profil. Di luar itu kurva gabungan
-  // disembunyikan (tidak menduplikasi kurva EQ).
-  const correctionProcessing =
-    audioMode === "dsp" &&
-    eq.isEQEnabled &&
-    correctionEnabled &&
-    activeProfile !== null;
-  const showCombinedCurve =
-    correctionProcessing && correctionForCurve !== null;
-  const combinedGains = useMemo(
-    () =>
-      showCombinedCurve && correctionForCurve
-        ? combinedCurveGains(eq.currentBands, correctionForCurve)
-        : null,
-    [showCombinedCurve, correctionForCurve, eq.currentBands],
-  );
-
-  // Keterangan di bawah grafik — menyebut apa yang ditampilkan, bukan
-  // menebak. Cabang tengah: koreksi aktif tapi teks presetnya tidak bisa
-  // di-parse (kurva gabungan tidak tersedia, bukan salah tampil).
-  const graphCaption =
-    showCombinedCurve && activeProfile
-      ? `Garis utuh: EQ manual · Garis putus-putus: koreksi ${activeProfile.name} + EQ (yang kamu dengar)`
-      : correctionProcessing && activeProfile
-        ? `Koreksi ${activeProfile.name} aktif — kurva gabungan tidak tersedia (profil tanpa rincian filter)`
-        : "Kurva EQ manual — koreksi headphone tidak aktif";
-
   // Warna aksen dipilih lewat pengukuran terhadap permukaan tempat ia dipakai.
   //
   // Rantai lama (`accent?.orange ?? status.warning ?? primary[500]`) gagal
@@ -579,38 +1571,9 @@ export default function EqualizerScreen() {
   // nyaris tak terlihat. `accentOn` mengembalikan aksen tema selama terbaca,
   // dan jatuh ke warna teks kalau tidak.
   const onCard = colors.background.secondary;
-
   const accentTextFallback = [colors.text.primary, colors.text.secondary];
-
-  const bassColor = accentOn(
-    [colors.accent.orange],
-    onCard,
-    accentTextFallback,
-  );
-  const widthColor = accentOn(
-    [colors.accent.blue],
-    onCard,
-    accentTextFallback,
-  );
-  const reverbColor = accentOn(
-    [colors.accent.purple],
-    onCard,
-    accentTextFallback,
-  );
   const masterColor = accentOn(
     [colors.accent.green],
-    onCard,
-    accentTextFallback,
-  );
-  const hrtfColor = accentOn(
-    [colors.accent.primary],
-    onCard,
-    accentTextFallback,
-  );
-  // Convolver: satu keluarga aksen dengan HRTF (keduanya efek ruang /
-  // spasial, bukan nada).
-  const convolverColor = accentOn(
-    [colors.accent.primary],
     onCard,
     accentTextFallback,
   );
@@ -632,24 +1595,7 @@ export default function EqualizerScreen() {
             title="Audio Mode"
             subtitle={`MODE ${modeLabel} · ${engineLabel}`}
             style={{ paddingHorizontal: spacing.md, paddingVertical: 16 }}
-            actions={
-              <TouchableOpacity
-                onPress={handleReset}
-                disabled={eq.isDSPDisabled || !eq.isEQEnabled}
-                style={[
-                  styles.resetBtn,
-                  { padding: spacing.sm, minWidth: 44, minHeight: 44 },
-                  (eq.isDSPDisabled || !eq.isEQEnabled) && { opacity: 0.4 },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Reset DSP ke pengaturan netral"
-                accessibilityState={{
-                  disabled: eq.isDSPDisabled || !eq.isEQEnabled,
-                }}
-              >
-                <RotateCcw size={18} color={colors.text.secondary} />
-              </TouchableOpacity>
-            }
+            actions={<EqResetButton onPress={handleReset} />}
           />
 
           {/* 0. PEMILIH MODE - tiga mode, tiga mesin.
@@ -670,7 +1616,9 @@ export default function EqualizerScreen() {
                     styles.modeBtn,
                     {
                       backgroundColor: bg,
-                      borderColor: isActive ? masterColor : colors.border.medium,
+                      borderColor: isActive
+                        ? masterColor
+                        : colors.border.medium,
                     },
                   ]}
                   accessibilityRole="button"
@@ -802,909 +1750,47 @@ export default function EqualizerScreen() {
               dibungkus kondisional per mode (Ide 1). */}
           {audioMode === "dsp" && (
             <>
-          {/* 0a. SAKELAR UTAMA.
-              Dulu layar ini TIDAK punya sakelar master: `isEQEnabled` bernilai
-              false secara default dan hanya pernah dimatikan
-              (`setEQEnabled(false)`) dari _layout. Artinya seluruh kontrol di
-              layar ini tersambung ke engine yang tidak pernah menyala - orang
-              menggeser slider, tidak terjadi apa pun, tanpa penjelasan. */}
-          <View
-            style={[
-              styles.card,
-              {
-                backgroundColor: colors.background.secondary,
-                borderColor: colors.border.medium,
-                marginHorizontal: spacing.md,
-                padding: spacing.md,
-                marginBottom: spacing.md,
-              },
-            ]}
-          >
-            <View style={styles.rowBetween}>
-              <View style={{ flex: 1, marginRight: spacing.md }}>
-                <Text style={[styles.displayTitle, { color: colors.text.primary }]}>
-                  Pemrosesan DSP
-                </Text>
-                <Text style={[styles.cardHint, { color: colors.text.secondary }]}>
-                  EQ, bass boost, pelebar stereo, reverb, HRTF, koreksi
-                  headphone, dan master gain hanya berlaku saat ini menyala.
-                </Text>
-              </View>
-              {/* D6: sakelar master dibungkus Pressable 44×44 seperti
-                  MiniSwitch (U-P2-01) — Switch default tingginya di bawah
-                  44dp. Switch di dalam pointerEvents="none", hanya visual;
-                  peran switch + label pindah ke pembungkus. */}
-              <Pressable
-                onPress={() => {
-                  if (!eq.isDSPDisabled) void eq.toggleEQ();
-                }}
-                disabled={eq.isDSPDisabled}
-                style={styles.miniSwitchHit}
-                accessibilityRole="switch"
-                accessibilityLabel="Pemrosesan DSP"
-                accessibilityState={{
-                  checked: eq.isEQEnabled,
-                  disabled: eq.isDSPDisabled,
-                }}
-              >
-                <Switch
-                  value={eq.isEQEnabled}
-                  onValueChange={eq.toggleEQ}
-                  disabled={eq.isDSPDisabled}
-                  trackColor={{
-                    false: colors.background.tertiary,
-                    true: masterColor,
-                  }}
-                  thumbColor={eq.isEQEnabled ? masterColor : colors.text.tertiary}
-                  pointerEvents="none"
-                />
-              </Pressable>
-            </View>
-          </View>
+              <EqMasterCard />
 
-          {/* 1. KOREKSI HEADPHONE — diletakkan PALING ATAS karena diproses
+              {/* 1. KOREKSI HEADPHONE — diletakkan PALING ATAS karena diproses
               paling awal di DSPChain (sebelum EQ). Koreksi menetralkan alat,
               EQ menyetel selera; menaruh kontrol EQ di atas akan menyesatkan
               tentang urutan yang sebenarnya. */}
-          {visibleSections.headphone && (
-            <HeadphoneSection
-              disabled={eq.isDSPDisabled || !eq.isEQEnabled}
-            />
-          )}
+              {visibleSections.headphone && <EqHeadphoneGate />}
 
-          {/* 2. KARTU GRAFIK — hanya grafik (clean-cozy 2026-11-19):
+              {/* 2. KARTU GRAFIK — hanya grafik (clean-cozy 2026-11-19):
               preset dan detail band keluar jadi seksi sendiri (3 dan 4
               di bawah) supaya kartu tidak bersarang dan toggle
               PRESET/MIXER tetap berfungsi walau GRAFIK disembunyikan.
               Grafik bisa diseret (edit utama). */}
-          {visibleSections.graph && (
-            <View
-              style={[
-                styles.graphCard,
-                {
-                  backgroundColor: colors.background.secondary,
-                  borderColor: colors.border.medium,
-                  marginHorizontal: spacing.md,
-                  marginBottom: spacing.md,
-                  padding: spacing.sm,
-                },
-              ]}
-            >
-              {/* GRAPH SECTION — B3: saat DSP bypass (mode non-DSP atau
-                  sakelar master mati), graph meredup + label BYPASS supaya
-                  kurva tidak terlihat seolah memproses. */}
-              <FrequencyGraph
-                bands={eq.currentBands}
-                combinedGains={combinedGains}
-                width={width - spacing.md * 2 - spacing.sm * 2 - 2}
-                height={140}
-                disabled={isDSPFrozen || !eq.isEQEnabled}
-                onBandChange={handleGraphBandChange}
-                // (Item 7) Drag kurva dilepas: flush nilai akhir band
-                // SEKARANG (store + native), tanpa tunggu trailing ≤100 ms.
-                onDragEnd={eq.flushBandDrag}
-                // Peringatan clip menghitung bass + gain juga (pill
-                // grafik): bass 0..+12 dB bila sakelarnya menyala,
-                // master gain −12..+12 dB.
-                bassBoostDb={
-                  eq.isBassEnabled ? (eq.bassStrength / 1000) * 12 : 0
-                }
-                masterGainDb={gainToDb(eq.masterGain)}
-              />
-              {(isDSPFrozen || !eq.isEQEnabled) && (
-                <Text
-                  style={[
-                    styles.bypassLabel,
-                    { color: colors.text.tertiary },
-                  ]}
-                >
-                  BYPASS — kurva tidak memproses
-                </Text>
+              {visibleSections.graph && (
+                <EqGraphCard
+                  width={width - spacing.md * 2 - spacing.sm * 2 - 2}
+                />
               )}
-              {/* Keterangan kurva (lihat graphCaption di atas). */}
-              <Text
-                style={[
-                  styles.graphCaption,
-                  { color: colors.text.tertiary },
-                ]}
-              >
-                {graphCaption}
-              </Text>
-            </View>
-          )}
 
-          {/* 3. PROFIL SUARA — seksi sendiri (clean-cozy 2026-11-19):
+              {/* 3. PROFIL SUARA — seksi sendiri (clean-cozy 2026-11-19):
               dulu bersarang di dalam kartu GRAFIK, jadi toggle PRESET
               tidak berfungsi bila GRAFIK disembunyikan. Chip menerapkan
               preset ke suara (disabled saat sakelar master mati); tombol
               Simpan hanya menyimpan racikan — tetap aktif. */}
-          {visibleSections.preset && (
-            <View
-              style={[
-                styles.graphCard,
-                {
-                  backgroundColor: colors.background.secondary,
-                  borderColor: colors.border.medium,
-                  marginHorizontal: spacing.md,
-                  marginBottom: spacing.md,
-                  padding: spacing.sm,
-                },
-              ]}
-            >
-              <View style={styles.graphPreset}>
-                <View
-                  style={[styles.sectionHeader, { marginBottom: spacing.sm }]}
-                >
-                  <Text
-                    style={[
-                      styles.sectionTitle,
-                      { color: colors.text.secondary },
-                    ]}
-                  >
-                    PROFIL SUARA
-                  </Text>
-                  {/* D5: tombol simpan berteks, bukan ikon saja. */}
-                  <TouchableOpacity
-                    onPress={() => setModalVisible(true)}
-                    disabled={eq.isDSPDisabled}
-                    accessibilityRole="button"
-                    accessibilityLabel="Simpan profil saat ini"
-                    style={[
-                      styles.iconBtn,
-                      eq.isDSPDisabled && { opacity: 0.4 },
-                    ]}
-                  >
-                    <Save size={18} color={colors.text.primary} />
-                    <Text
-                      style={[
-                        styles.saveBtnText,
-                        { color: colors.text.primary },
-                      ]}
-                    >
-                      Simpan
-                    </Text>
-                  </TouchableOpacity>
-                  {/* Bagikan preset aktif sebagai file (item 8
-                      deep-insight, 2026-11-20): tidak mengubah suara,
-                      jadi tetap aktif walau DSP mati. */}
-                  <TouchableOpacity
-                    onPress={() => void handleSharePreset()}
-                    accessibilityRole="button"
-                    accessibilityLabel="Bagikan profil aktif sebagai file"
-                    style={styles.iconBtn}
-                  >
-                    <Share2 size={18} color={colors.text.primary} />
-                    <Text
-                      style={[
-                        styles.saveBtnText,
-                        { color: colors.text.primary },
-                      ]}
-                    >
-                      Bagikan
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                {/* U-P2-45: hapus preset custom lewat long-press DULU
-                    tanpa petunjuk apa pun — user tidak bisa tahu
-                    aksinya ada. (Penghapusannya sendiri sudah benar:
-                    Alert konfirmasi + hanya untuk preset custom.) */}
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator
-                  style={styles.presetScroll}
-                  contentContainerStyle={{ paddingRight: spacing.sm }}
-                >
-                  {eq.allPresets.map((p) => (
-                    <PresetChip
-                      key={p.id}
-                      label={p.name}
-                      isActive={eq.activePresetId === p.id}
-                      onPress={() => handleApplyPresetWithToast(p.id, p.name)}
-                      onLongPress={() =>
-                        handlePresetLongPress(p.id, p.name, p.isCustom)
-                      }
-                      accessibilityHint={
-                        p.isCustom
-                          ? "Tekan lama untuk menghapus"
-                          : undefined
-                      }
-                      disabled={eq.isDSPDisabled || !eq.isEQEnabled}
-                    />
-                  ))}
-                </ScrollView>
-                <Text
-                  style={[
-                    styles.presetHint,
-                    {
-                      color: colors.text.tertiary,
-                      marginTop: spacing.xs,
-                    },
-                  ]}
-                >
-                  Geser untuk profil lain · tekan lama untuk menghapus.
-                </Text>
-              </View>
-            </View>
-          )}
+              {visibleSections.preset && (
+                <EqPresetCard
+                  onRequestSave={openSaveModal}
+                  onRequestDelete={openDeletePresetDialog}
+                />
+              )}
 
-          {/* 4. DETAIL BAND — seksi sendiri (clean-cozy 2026-11-19):
+              {/* 4. DETAIL BAND — seksi sendiri (clean-cozy 2026-11-19):
               dulu sub-bagian di dalam kartu GRAFIK; sekarang toggle
               MIXER berfungsi walau GRAFIK disembunyikan. Grafik drag
               tetap edit utama; slider untuk presisi per band. */}
-          {visibleSections.mixer && (
-            <View
-              style={[
-                styles.graphCard,
-                {
-                  backgroundColor: colors.background.secondary,
-                  borderColor: colors.border.medium,
-                  marginHorizontal: spacing.md,
-                  marginBottom: spacing.md,
-                  padding: spacing.sm,
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.bandDetail,
-                  {
-                    borderTopWidth: 0,
-                    marginTop: 0,
-                    paddingTop: 0,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.detailBandTitle,
-                    { color: colors.text.secondary },
-                  ]}
-                >
-                  DETAIL BAND
-                </Text>
-                {/* Legenda: apa strip ini — EQ parametrik 10 band,
-                    tiap band ±10 dB, 0 dB = netral. Dulu hanya petunjuk
-                    "10 band · geser untuk 1k–16k": cukup sebagai
-                    petunjuk geser, tapi tidak menjelaskan apa yang
-                    disetel (screenshot 2026-11-20 08:05). Rentang band
-                    yang tampak ada di baris legenda hidup di bawah bar
-                    indikator. */}
-                <Text
-                  style={[
-                    styles.bandHint,
-                    { color: colors.text.tertiary },
-                  ]}
-                >
-                  EQ parametrik 10 band · tiap band ±10 dB · 0 dB = netral
-                </Text>
-                {/* Skala dB di kiri strip + daftar band. Skala satu kolom
-                    untuk seluruh strip (semua fader ±10 dB, geometri
-                    sama); daftar menyusut selebar kolom (~28dp) — harga
-                    skala, band yang tampak jadi ~4,2 bukan 5. */}
-                <View style={styles.bandStripRow}>
-                  <BandScale
-                    dimmed={!eq.isEQEnabled || eq.isDSPDisabled}
-                  />
-                  <View style={styles.bandStripList}>
-                    {/* U-P2-53: daftar band lewat pola daftar bersama.
-                        Jalur yang dipilih tetap FlatList (horizontal +
-                        bersarang di ScrollView — lihat chooseListKind);
-                        `directionalLockEnabled` dipertahankan supaya
-                        tidak bentrok dengan scroll utama. */}
-                    <ScreenList
-                      horizontal
-                      nestedInScrollView
-                      listRef={bandListRef}
-                      // Indikator bawaan dimatikan: tipis + memudar di
-                      // Android, itu sebabnya strip dikira cuma 5 slider
-                      // — bar indikator permanen di bawah strip yang
-                      // menggantikannya.
-                      showsHorizontalScrollIndicator={false}
-                      data={eq.currentBands}
-                      keyExtractor={(item) => item.frequency.toString()}
-                      renderItem={({ item, index }) => (
-                        <EqualizerBand
-                          frequency={item.frequency}
-                          gain={item.gain}
-                          index={index}
-                          onValueChange={eq.updateBandGain}
-                          // (Item 7) Drag fader dilepas: flush nilai akhir
-                          // band SEKARANG (store + native).
-                          onDragEnd={eq.flushBandDrag}
-                          disabled={!eq.isEQEnabled || eq.isDSPDisabled}
-                        />
-                      )}
-                      contentContainerStyle={{ paddingHorizontal: spacing.sm }}
-                      directionalLockEnabled={true}
-                      scrollEventThrottle={16}
-                      onScroll={(e) => {
-                        // Nilai event DITANGKAP dulu di sini: React Native
-                        // mendaur-ulang synthetic event — membaca
-                        // e.nativeEvent di dalam updater setState bisa
-                        // berjalan sesudah event dilepas (nativeEvent null)
-                        // dan melempar TypeError (Metro, sesi 80289).
-                        const offsetX = e.nativeEvent.contentOffset.x;
-                        setBandScroll((s) => ({
-                          ...s,
-                          offsetX,
-                        }));
-                      }}
-                      onContentSizeChange={(w) =>
-                        setBandScroll((s) => ({ ...s, contentWidth: w }))
-                      }
-                      onLayout={(e) => {
-                        // Sama seperti onScroll di atas: tangkap dulu
-                        // sebelum setState (synthetic event didaur ulang).
-                        const layoutWidth = e.nativeEvent.layout.width;
-                        setBandScroll((s) => ({
-                          ...s,
-                          layoutWidth,
-                        }));
-                      }}
-                    />
-                  </View>
-                </View>
-                {/* Bar indikator geser horizontal + tombol geser ‹ ›:
-                    label ujung = frekuensi band pertama/terakhir (format
-                    sama dengan label di bawah fader), thumb = porsi
-                    tampak + posisi scroll. Tombol menggeser satu halaman
-                    dan nonaktif di ujung. Baris ini bukan lagi dekoratif
-                    murni (tombolnya kontrol) — hanya track-nya yang
-                    disembunyikan dari aksesibilitas. */}
-                <View style={styles.bandScrollIndicator}>
-                  <TouchableOpacity
-                    onPress={() => scrollBandPage(-1)}
-                    disabled={!canBandScrollLeft}
-                    hitSlop={6}
-                    accessibilityRole="button"
-                    accessibilityLabel="Geser band ke kiri"
-                    accessibilityState={{ disabled: !canBandScrollLeft }}
-                    style={[
-                      styles.bandScrollButton,
-                      { borderColor: colors.border.medium },
-                      !canBandScrollLeft &&
-                        styles.bandScrollButtonDisabled,
-                    ]}
-                  >
-                    <ChevronLeft size={18} color={colors.text.secondary} />
-                  </TouchableOpacity>
-                  <Text
-                    style={[
-                      styles.bandScrollLabel,
-                      { color: colors.text.tertiary },
-                    ]}
-                  >
-                    {firstBandFreq !== undefined
-                      ? formatBandFrequency(firstBandFreq)
-                      : ""}
-                  </Text>
-                  <View
-                    style={[
-                      styles.bandScrollTrack,
-                      { backgroundColor: colors.border.medium },
-                    ]}
-                    accessibilityElementsHidden
-                    importantForAccessibility="no-hide-descendants"
-                  >
-                    <View
-                      style={[
-                        styles.bandScrollThumb,
-                        {
-                          backgroundColor: colors.text.secondary,
-                          width: `${bandIndicator.thumbWidthPct}%`,
-                          left: `${bandIndicator.thumbLeftPct}%`,
-                        },
-                      ]}
-                    />
-                  </View>
-                  <Text
-                    style={[
-                      styles.bandScrollLabel,
-                      { color: colors.text.tertiary },
-                    ]}
-                  >
-                    {lastBandFreq !== undefined
-                      ? formatBandFrequency(lastBandFreq)
-                      : ""}
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => scrollBandPage(1)}
-                    disabled={!canBandScrollRight}
-                    hitSlop={6}
-                    accessibilityRole="button"
-                    accessibilityLabel="Geser band ke kanan"
-                    accessibilityState={{ disabled: !canBandScrollRight }}
-                    style={[
-                      styles.bandScrollButton,
-                      { borderColor: colors.border.medium },
-                      !canBandScrollRight &&
-                        styles.bandScrollButtonDisabled,
-                    ]}
-                  >
-                    <ChevronRight size={18} color={colors.text.secondary} />
-                  </TouchableOpacity>
-                </View>
-                {/* Legenda hidup: band mana yang tampak sekarang —
-                    diperbarui mengikuti scroll ("Band 1–5 dari 10"). */}
-                {visibleFirstBandFreq !== undefined &&
-                  visibleLastBandFreq !== undefined && (
-                    <Text
-                      style={[
-                        styles.bandLegend,
-                        { color: colors.text.tertiary },
-                      ]}
-                    >
-                      Band {bandRange.firstIndex + 1}–
-                      {bandRange.lastIndex + 1} dari{" "}
-                      {eq.currentBands.length} ·{" "}
-                      {formatBandFrequencyFull(visibleFirstBandFreq)}–
-                      {formatBandFrequencyFull(visibleLastBandFreq)}
-                    </Text>
-                  )}
-              </View>
-            </View>
-          )}
+              {visibleSections.mixer && <EqBandDetailCard />}
 
-          {/* 5. EFFECTS SECTION (SLIDERS & REVERB) */}
-          {visibleSections.effects && (
-            <View
-              style={[
-                styles.effectsSection,
-                { paddingHorizontal: spacing.md, marginBottom: spacing.lg },
-              ]}
-            >
-              {/* F3: penjelasan di tempat kontrolnya, bukan cuma di banner
-                  atas yang bisa ter-scroll menjauh. */}
-              {eq.isDSPDisabled && (
-                <Text
-                  style={[
-                    styles.disabledCaption,
-                    {
-                      color: colors.text.tertiary,
-                      paddingHorizontal: spacing.md,
-                      marginBottom: spacing.sm,
-                    },
-                  ]}
-                >
-                  Nonaktif di mode ini — pindah ke DSP untuk menyetel.
-                </Text>
-              )}
-              {/* Sakelar master mati (mode DSP): semua efek di bawah tidak
-                  memproses — caption di tempatnya supaya tidak ada yang
-                  mengira slider yang redup masih berpengaruh. */}
-              {!eq.isEQEnabled && !eq.isDSPDisabled && (
-                <Text
-                  style={[
-                    styles.disabledCaption,
-                    {
-                      color: colors.text.tertiary,
-                      paddingHorizontal: spacing.md,
-                      marginBottom: spacing.sm,
-                    },
-                  ]}
-                >
-                  Sakelar master mati — semua efek di bawah tidak memproses.
-                </Text>
-              )}
-              {/* SLIDER VERTIKAL BASS + PELEBAR STEREO + MASTER GAIN —
-                  opsi B Fase 3 (keputusan csheva 2026-11-18 08:08): dua knob
-                  diganti fader vertikal ala slider GAIN kanan Neutron,
-                  bahasa visual yang sama dengan fader band (track 160px,
-                  tick, fill, thumb kotak). Rentang nilai 0..1000 sama persis
-                  dengan knob lama dan dengan yang diterima Kotlin (bass
-                  0..+12 dB, widener width 1.0..2.0), jadi tanpa konversi.
-                  Tiap slider punya MiniSwitch enable sendiri di atasnya
-                  (tanpa label teks — nama efek sudah di label slider).
-                  Master gain MENYUSUL 2026-11-19: mesin native-nya sudah
-                  lengkap (setMasterGain -> GainNode), hanya belum ada
-                  kontrolnya. Slider ketiga, PREAMP skala dB −12..+12
-                  simetris (0 dB = netral, tengah slider) sejak 2026-11-19
-                  — konvensi preamp umum (Poweramp ±12 dB). VerticalSlider
-                  hanya mendukung min 0, jadi domain slider 0..24 dipetakan
-                  ke dB (nilai − 12); konversi dB↔linear (10^(dB/20)) hanya
-                  di batas layar ini — store + native tetap linear.
-                  Tanpa MiniSwitch — gain bukan efek yang bisa OFF; lantai
-                  −12 dB = 0,25×, BUKAN senyap (mute lewat volume). */}
-              <View
-                style={[
-                  styles.effectItem,
-                  {
-                    backgroundColor: colors.background.secondary,
-                    borderColor: colors.border.medium,
-                    paddingVertical: spacing.md,
-                  },
-                ]}
-              >
-                <View style={styles.sliderRow}>
-                  <View style={styles.sliderCol}>
-                    <MiniSwitch
-                      label="BASS BOOST"
-                      value={eq.isBassEnabled}
-                      onValueChange={eq.setBassEnabled}
-                      disabled={eq.isDSPDisabled || !eq.isEQEnabled}
-                      color={bassColor}
-                      stacked
-                      hideLabel
-                    />
-                    <VerticalSlider
-                      label="BASS BOOST"
-                      value={eq.bassStrength}
-                      onChange={eq.setBassBoost}
-                      // (Item 7) Drag dilepas: flush nilai akhir bass
-                      // SEKARANG (pusher + store), tanpa tunggu trailing.
-                      onDragEnd={eq.flushBassBoostDrag}
-                      color={bassColor}
-                      disabled={
-                        !eq.isBassEnabled ||
-                        eq.isDSPDisabled ||
-                        !eq.isEQEnabled
-                      }
-                      // Tampil dB, bukan %: bass bersifat addition dalam dB
-                      // (low-shelf 100 Hz, 0..+12 dB — cerminkan
-                      // kMaxBassBoostDb di NativeDSPModule.kt). % menyesatkan
-                      // karena menyiratkan skala linear.
-                      formatValue={formatBassBoostDb}
-                    />
-                  </View>
-                  <View style={styles.sliderCol}>
-                    <MiniSwitch
-                      label="PELEBAR STEREO"
-                      value={eq.isVirtualizerEnabled}
-                      onValueChange={eq.setVirtualizerEnabled}
-                      disabled={eq.isDSPDisabled || !eq.isEQEnabled}
-                      color={widthColor}
-                      stacked
-                      hideLabel
-                    />
-                    <VerticalSlider
-                      label="PELEBAR STEREO"
-                      value={eq.virtualizerLevel}
-                      onChange={eq.setVirtualizer}
-                      // (Item 7) Drag dilepas: flush nilai akhir widener
-                      // SEKARANG (pusher + store), tanpa tunggu trailing.
-                      onDragEnd={eq.flushVirtualizerDrag}
-                      color={widthColor}
-                      disabled={
-                        !eq.isVirtualizerEnabled ||
-                        eq.isDSPDisabled ||
-                        !eq.isEQEnabled
-                      }
-                      // Tampil pengali lebar, bukan %: width 1.0..2.0
-                      // (side ×1.00 = stereo asli). % menyesatkan karena
-                      // 0% terbaca "mati" padahal itu stereo asli.
-                      formatValue={formatWidthMultiplier}
-                    />
-                  </View>
-                  <View style={styles.sliderCol}>
-                    {/* Spacer setinggi baris MiniSwitch (44) supaya
-                        label/track/nilai ketiga kolom sejajar. Kolom ini
-                        tanpa switch (gain bukan efek yang bisa OFF);
-                        tanpa spacer, "MASTER GAIN" naik ke baris switch
-                        dan seluruh kolomnya bergeser ke atas (screenshot
-                        2026-11-20 00:27: "−12 dB" melayang di tengah
-                        kartu, lebih tinggi dari "0 dB"/"×1.00"). */}
-                    <View style={styles.miniSwitchHit} accessible={false} />
-                    <VerticalSlider
-                      label="MASTER GAIN"
-                      value={gainToDb(eq.masterGain) - MASTER_GAIN_DB_MIN}
-                      onChange={handleMasterGainChange}
-                      // (Item 7) Drag dilepas: flush nilai akhir gain
-                      // SEKARANG (native + store), tanpa tunggu trailing.
-                      onDragEnd={eq.flushMasterGainDrag}
-                      color={masterColor}
-                      disabled={eq.isDSPDisabled || !eq.isEQEnabled}
-                      maxValue={MASTER_GAIN_DB_RANGE}
-                      formatValue={formatMasterGainSliderValue}
-                    />
-                  </View>
-                </View>
-              </View>
+              {/* 5. EFFECTS SECTION (SLIDERS & REVERB) */}
+              {visibleSections.effects && <EqEffectsCard />}
 
-              {/* HRTF — VIRTUAL SPEAKER (langkah 7, 2026-11-19).
-                  BUKAN pelebar stereo: widener melebarkan sumbu L–R
-                  (tetap "di dalam kepala"), HRTF menaruh suara di ruang
-                  3D via HRIR — virtual speaker ±30° di depan. Toggle
-                  sendiri, di luar preset; hanya di headphone (gate:
-                  headset/usb/bluetooth — speaker/line_out dimatikan
-                  otomatis, lihat useHrtfGate). */}
-              <View
-                style={[
-                  styles.effectItem,
-                  {
-                    backgroundColor: colors.background.secondary,
-                    borderColor: colors.border.medium,
-                    paddingVertical: spacing.md,
-                  },
-                ]}
-              >
-                <MiniSwitch
-                  label="HRTF — VIRTUAL SPEAKER"
-                  value={hrtfEnabled}
-                  onValueChange={setHrtfEnabled}
-                  disabled={eq.isDSPDisabled || !eq.isEQEnabled || !hrtfAllowed}
-                  color={hrtfColor}
-                />
-                <Text
-                  style={[
-                    styles.disabledCaption,
-                    {
-                      color: colors.text.secondary,
-                      paddingHorizontal: spacing.md,
-                      marginTop: spacing.sm,
-                    },
-                  ]}
-                >
-                  {hrtfAllowed
-                    ? "Virtual speaker ±30° di depan — suara keluar dari kepala. Hanya di headphone; di speaker Bluetooth tidak terdengar."
-                    : "Hanya di headphone — colok headphone / DAC / TWS untuk menyalakan HRTF."}
-                </Text>
-              </View>
-
-              {/* CONVOLVER — IMPULSE RESPONSE (2026-11-20).
-                  File IR .wav pilihan user (concert hall, tube amp,
-                  karakter headphone) ala convolver ViPER4Android —
-                  "ruang" sebagai fitur, bukan sekadar efek. Toggle
-                  sendiri, di luar preset; TANPA gate headphone (IR
-                  bekerja di speaker juga). IR di-resample ke laju
-                  stream; maks ~2 detik sesudah resample. Tanpa IR,
-                  toggle menyala pun passthrough. */}
-              <View
-                style={[
-                  styles.effectItem,
-                  {
-                    backgroundColor: colors.background.secondary,
-                    borderColor: colors.border.medium,
-                    paddingVertical: spacing.md,
-                  },
-                ]}
-              >
-                <MiniSwitch
-                  label="CONVOLVER — IMPULSE RESPONSE"
-                  value={convolverEnabled}
-                  onValueChange={setConvolverEnabled}
-                  disabled={eq.isDSPDisabled || !eq.isEQEnabled}
-                  color={convolverColor}
-                />
-                <Text
-                  style={[
-                    styles.disabledCaption,
-                    {
-                      color: colors.text.secondary,
-                      paddingHorizontal: spacing.md,
-                      marginTop: spacing.sm,
-                    },
-                  ]}
-                >
-                  {convolverIr
-                    ? `${convolverIr.name} · ${(convolverIr.sampleRateHz / 1000).toLocaleString("id-ID", { maximumFractionDigits: 1 })} kHz · ${convolverIr.taps.toLocaleString("id-ID")} tap · ${(convolverIr.durationMs / 1000).toLocaleString("id-ID", { maximumFractionDigits: 1 })} dtk`
-                    : "Belum ada IR — pilih file .wav (ruang konser, ampli tabung, karakter headphone)."}
-                </Text>
-                <View
-                  style={[
-                    styles.reverbRow,
-                    { marginHorizontal: spacing.md, marginTop: spacing.sm },
-                  ]}
-                >
-                  <TouchableOpacity
-                    onPress={handlePickIr}
-                    disabled={eq.isDSPDisabled || !eq.isEQEnabled}
-                    style={[
-                      styles.reverbBox,
-                      {
-                        backgroundColor: colors.background.tertiary,
-                        borderColor: colors.border.medium,
-                        padding: spacing.md,
-                        minHeight: 44,
-                        flex: 1,
-                        alignItems: "center",
-                        justifyContent: "center",
-                      },
-                      (eq.isDSPDisabled || !eq.isEQEnabled) && {
-                        opacity: 0.4,
-                      },
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel="Pilih file IR (.wav)"
-                  >
-                    <Text
-                      style={{
-                        fontFamily: FONT_FAMILY.medium,
-                        fontSize: 13,
-                        color: colors.text.primary,
-                      }}
-                    >
-                      PILIH FILE IR (.WAV)
-                    </Text>
-                  </TouchableOpacity>
-                  {convolverIr ? (
-                    <TouchableOpacity
-                      onPress={handleClearIr}
-                      disabled={eq.isDSPDisabled || !eq.isEQEnabled}
-                      style={[
-                        styles.reverbBox,
-                        {
-                          backgroundColor: colors.background.tertiary,
-                          borderColor: colors.border.medium,
-                          padding: spacing.md,
-                          minHeight: 44,
-                          flex: 1,
-                          alignItems: "center",
-                          justifyContent: "center",
-                        },
-                        (eq.isDSPDisabled || !eq.isEQEnabled) && {
-                          opacity: 0.4,
-                        },
-                      ]}
-                      accessibilityRole="button"
-                      accessibilityLabel="Hapus IR"
-                    >
-                      <Text
-                        style={{
-                          fontFamily: FONT_FAMILY.medium,
-                          fontSize: 13,
-                          color: colors.text.primary,
-                        }}
-                      >
-                        HAPUS
-                      </Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
-                <Text
-                  style={[
-                    styles.disabledCaption,
-                    {
-                      color: colors.text.secondary,
-                      paddingHorizontal: spacing.md,
-                      marginTop: spacing.sm,
-                    },
-                  ]}
-                >
-                  Convolver duduk sesudah reverb, sebelum HRTF — ekor IR
-                  ikut ter-spatialisasi. Biasanya pakai salah satu: IR
-                  atau reverb, bukan keduanya.
-                </Text>
-              </View>
-
-              {/* REVERB PRESET SELECTOR — DIPULIHKAN 2026-11-19.
-                  Disembunyikan 2026-11-18 karena engine reverb masih STUB
-                  (keputusan 2026-11-14); syarat "sampai engine C++ ada"
-                  kini terpenuhi (ReverbNode Freeverb di DSPChain), jadi
-                  kontrolnya kembali. Koreksi catatan: yang disembunyikan
-                  dulu adalah stepper ini (REVERB_LABELS + tombol
-                  mundur/maju, U-P2-40), BUKAN komponen ReverbDropdown —
-                  komponen itu tidak pernah terpasang di layar ini dan
-                  dihapus di ronde clean-cozy 2026-11-19 (0 pemakai).
-                  Stepper dipulihkan verbatim. */}
-              <View
-                style={[
-                  styles.effectItem,
-                  {
-                    backgroundColor: colors.background.secondary,
-                    borderColor: colors.border.medium,
-                    paddingVertical: spacing.md,
-                  },
-                ]}
-              >
-                <MiniSwitch
-                  label="REVERB LINGKUNGAN"
-                  value={eq.isReverbEnabled}
-                  onValueChange={eq.setReverbEnabled}
-                  disabled={eq.isDSPDisabled || !eq.isEQEnabled}
-                  color={reverbColor}
-                />
-                {/* U-P2-40: kontrol reverb DULU hanya bisa maju — satu tombol
-                    dengan ChevronRight menyiratkan membuka daftar, padahal
-                    ketukan hanya memajukan preset (sampai 6 ketukan untuk
-                    kembali). Sekarang ada tombol mundur eksplisit di kiri;
-                    ChevronRight di kanan jujur berarti "berikutnya". */}
-                <View
-                  style={[
-                    styles.reverbRow,
-                    { marginHorizontal: spacing.md, marginTop: spacing.sm },
-                  ]}
-                >
-                  <TouchableOpacity
-                    onPress={() => {
-                      const prev =
-                        (eq.reverbPreset - 1 + REVERB_LABELS.length) %
-                        REVERB_LABELS.length;
-                      eq.setReverb(prev);
-                    }}
-                    disabled={
-                      !eq.isReverbEnabled ||
-                      eq.isDSPDisabled ||
-                      !eq.isEQEnabled
-                    }
-                    style={[
-                      styles.reverbStepBtn,
-                      {
-                        backgroundColor: colors.background.tertiary,
-                        borderColor: colors.border.medium,
-                      },
-                      (!eq.isReverbEnabled ||
-                        eq.isDSPDisabled ||
-                        !eq.isEQEnabled) && {
-                        opacity: 0.4,
-                      },
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Preset reverb sebelumnya: ${REVERB_LABELS[(eq.reverbPreset - 1 + REVERB_LABELS.length) % REVERB_LABELS.length]}`}
-                  >
-                    <ChevronLeft size={16} color={colors.text.secondary} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.reverbBox,
-                      {
-                        backgroundColor: colors.background.tertiary,
-                        borderColor: colors.border.medium,
-                        padding: spacing.md,
-                        minHeight: 44,
-                        flex: 1,
-                      },
-                      (!eq.isReverbEnabled ||
-                        eq.isDSPDisabled ||
-                        !eq.isEQEnabled) && {
-                        opacity: 0.4,
-                      },
-                    ]}
-                    disabled={
-                      !eq.isReverbEnabled ||
-                      eq.isDSPDisabled ||
-                      !eq.isEQEnabled
-                    }
-                    onPress={() => {
-                      const next =
-                        (eq.reverbPreset + 1) % REVERB_LABELS.length;
-                      eq.setReverb(next);
-                    }}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Reverb: ${REVERB_LABELS[eq.reverbPreset]}. Ketuk untuk preset berikutnya, tombol kiri untuk sebelumnya.`}
-                  >
-                    <Text
-                      style={[
-                        styles.reverbLabel,
-                        { color: colors.text.secondary },
-                      ]}
-                    >
-                      LINGKUNGAN
-                    </Text>
-                    <View style={styles.reverbValueRow}>
-                      <Text
-                        style={[styles.reverbValue, { color: reverbColor }]}
-                      >
-                        {REVERB_LABELS[eq.reverbPreset]}
-                      </Text>
-                      <ChevronRight size={16} color={colors.text.secondary} />
-                    </View>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          )}
-
-          {/* 6. TUNING (NADA DASAR) — kontrol yang sama dengan Solfeggio
+              {/* 6. TUNING (NADA DASAR) — kontrol yang sama dengan Solfeggio
               (TuningControl bersama, tanpa state baru): preset A=440 /
               A=432, stepper ±5 sen, rentang ±100 sen. Retune GLOBAL
               (playerStore.tuningCents): berlaku di DSP + Solfeggio dan
@@ -1714,34 +1800,35 @@ export default function EqualizerScreen() {
               master OFF. Bit-Perfect: tab DSP ini tidak tampil di sana
               (BitPerfectSubscreen yang tampil), dan TuningControl
               sendiri juga nonaktif bila audioMode bit-perfect. */}
-          <View
-            style={[
-              styles.card,
-              {
-                backgroundColor: colors.background.secondary,
-                borderColor: colors.border.medium,
-                marginHorizontal: spacing.md,
-                padding: spacing.md,
-                marginBottom: spacing.md,
-              },
-            ]}
-          >
-            <Text style={[styles.cardTitle, { color: colors.text.primary }]}>
-              Tuning (Nada Dasar)
-            </Text>
-            <Text
-              style={[
-                styles.cardHint,
-                { color: colors.text.tertiary, marginBottom: spacing.sm },
-              ]}
-            >
-              Tinggi nada lagu tanpa mengubah tempo (A=440 standar, A=432
-              Verdi). Berlaku di DSP dan Solfeggio — tidak ikut sakelar
-              master.
-            </Text>
-            <TuningControl />
-          </View>
-
+              <View
+                style={[
+                  styles.card,
+                  {
+                    backgroundColor: colors.background.secondary,
+                    borderColor: colors.border.medium,
+                    marginHorizontal: spacing.md,
+                    padding: spacing.md,
+                    marginBottom: spacing.md,
+                  },
+                ]}
+              >
+                <Text
+                  style={[styles.cardTitle, { color: colors.text.primary }]}
+                >
+                  Tuning (Nada Dasar)
+                </Text>
+                <Text
+                  style={[
+                    styles.cardHint,
+                    { color: colors.text.tertiary, marginBottom: spacing.sm },
+                  ]}
+                >
+                  Tinggi nada lagu tanpa mengubah tempo (A=440 standar, A=432
+                  Verdi). Berlaku di DSP dan Solfeggio — tidak ikut sakelar
+                  master.
+                </Text>
+                <TuningControl />
+              </View>
             </>
           )}
 
@@ -1754,7 +1841,7 @@ export default function EqualizerScreen() {
       <SavePresetModal
         visible={isModalVisible}
         onSave={(n) => {
-          eq.savePreset(n);
+          useEqualizerStore.getState().saveCustomPreset(n);
           setModalVisible(false);
           // FASE 4: simpan preset kini ber-toast (dulu diam).
           showToast(`Preset "${n}" disimpan.`, "success");
@@ -1769,11 +1856,11 @@ export default function EqualizerScreen() {
         confirmLabel="Reset"
         onConfirm={() => {
           setResetDialogVisible(false);
-          eq.resetToDefault();
+          useEqualizerStore.getState().resetToDefault();
           // FASE 4: reset tetap lewat ConfirmDialog — toast ini hanya
           // umpan balik SESUDAH konfirmasi. Guard: toast hanya bila EQ
           // menyala — saat sakelar mati tidak ada suara yang direset.
-          if (eq.isEQEnabled) {
+          if (useEqualizerStore.getState().isEQEnabled) {
             showToast("DSP direset ke pengaturan netral.", "info");
           }
         }}
@@ -1790,7 +1877,10 @@ export default function EqualizerScreen() {
           // FASE 4: hapus tetap lewat ConfirmDialog — toast ini hanya
           // umpan balik SESUDAH konfirmasi.
           const name = deletePresetTarget?.name;
-          if (deletePresetTarget) eq.deletePreset(deletePresetTarget.id);
+          if (deletePresetTarget)
+            useEqualizerStore
+              .getState()
+              .deleteCustomPreset(deletePresetTarget.id);
           setDeletePresetTarget(null);
           if (name) showToast(`Preset "${name}" dihapus.`, "info");
         }}
