@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { memo, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -214,6 +214,98 @@ const SettingRow: React.FC<SettingRowProps> = ({
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 
+// ─── CrossfadeSetting ─────────────────────────────────────────────────────
+// Baris + slider durasi crossfade, memo + state draft sendiri. Dulu draft
+// (`crossfadeDraft`) + `onValueChange={setCrossfadeDraft}` tinggal di
+// SettingsScreen — tiap tick drag slider me-render ulang SELURUH layar
+// Settings (2595 baris). Sekarang tick drag hanya me-render ulang node
+// ini; nilai commit ke store + native tetap saat jari dilepas
+// (onSlidingComplete), sama seperti sebelumnya. Induk hanya melanggan
+// nilai commit untuk gaplessDescription.
+const CrossfadeSetting = memo(function CrossfadeSetting({
+  colors,
+  spacing,
+}: {
+  colors: any;
+  spacing: any;
+}) {
+  // Slider menulis draft lokal saat digeser (tanpa spam JNI), dan baru
+  // commit ke store + native saat jari dilepas.
+  const crossfadeSeconds = useCrossfadeStore((s) => s.crossfadeSeconds);
+  const [crossfadeDraft, setCrossfadeDraft] = useState<number | null>(null);
+  const crossfadeShown = crossfadeDraft ?? crossfadeSeconds;
+  const handleCrossfadeComplete = async (value: number) => {
+    setCrossfadeDraft(null);
+    await useCrossfadeStore.getState().setCrossfadeSeconds(value);
+  };
+
+  return (
+    <>
+      {/* ── 1d. Crossfade — transisi antar lagu ───────────────────────
+          Durasi fade-out ekor lagu pada auto-advance (0..12 dtk,
+          default Mati). Berlaku di mode DSP & Solfeggio; TIDAK
+          berlaku di Bit-Perfect (fade tetap 10 ms anti-klik).
+          Next/prev manual, resume, dan seek tidak kena fade
+          panjang. JUJUR: ini fade berurutan, bukan overlap dua
+          lagu — satu decoder, jadi jeda muat antar file tetap ada,
+          hanya ekornya yang memudar dulu. */}
+      <SettingRow colors={colors} spacing={spacing}>
+        <View style={{ flex: 1, marginRight: spacing.md }}>
+          <Text style={{ color: colors.text.primary, fontFamily: FONT_FAMILY.semiBold }}>
+            Crossfade — Transisi Antar Lagu
+          </Text>
+          <Text
+            style={{
+              color: colors.text.secondary,
+              fontSize: 11,
+              marginTop: 2,
+              lineHeight: 15,
+            }}
+          >
+            {crossfadeShown === 0
+              ? "Mati — perilaku lama: ekor lagu memudar 0,5 dtk sebelum lagu berikutnya."
+              : `Aktif — ekor lagu memudar selama ${formatCrossfadeLabel(crossfadeShown)} sebelum lagu berikutnya mulai (auto-advance).`}
+          </Text>
+          <Text
+            style={{
+              color: colors.text.secondary,
+              fontSize: 10,
+              marginTop: 4,
+            }}
+          >
+            Tidak berlaku di mode Bit-Perfect. Bukan overlap dua lagu — jeda muat antar file tetap ada.
+          </Text>
+        </View>
+        <Text
+          style={{
+            color: colors.primary[500],
+            fontFamily: FONT_FAMILY.bold,
+            fontSize: 13,
+          }}
+        >
+          {formatCrossfadeLabel(crossfadeShown)}
+        </Text>
+      </SettingRow>
+      <View style={{ paddingHorizontal: spacing.md, paddingBottom: spacing.sm }}>
+        <Slider
+          style={{ width: "100%", height: 40 }}
+          minimumValue={CROSSFADE_MIN_SECONDS}
+          maximumValue={CROSSFADE_MAX_SECONDS}
+          step={CROSSFADE_STEP_SECONDS}
+          value={crossfadeShown}
+          onValueChange={setCrossfadeDraft}
+          onSlidingComplete={handleCrossfadeComplete}
+          minimumTrackTintColor={colors.primary[500]}
+          maximumTrackTintColor={colors.background.tertiary}
+          thumbTintColor={colors.primary[500]}
+          accessibilityLabel="Durasi crossfade antar lagu"
+          accessibilityRole="adjustable"
+        />
+      </View>
+    </>
+  );
+});
+
 export default function SettingsScreen() {
   const router = useRouter();
   const { theme, isDarkMode, toggleTheme, setTheme } = useTheme();
@@ -295,16 +387,24 @@ export default function SettingsScreen() {
 
   const showToast = useToastStore((s) => s.showToast);
 
-  const {
-    isAutoScanEnabled,
-    toggleAutoScanEnabled, // Gunakan action yang sesuai di store kamu
-    // Auto Enriching: gerbang start OTOMATIS worker enrichment.
-    isAutoEnrichingEnabled,
-    toggleAutoEnrichingEnabled,
-    // Rescan: kunci scan — tombol diganti spinner saat scan jalan.
-    isManualScanning,
-    isAutoScanning,
-  } = useLibraryStore();
+  // Per-node render (2026-11-22): dulu `useLibraryStore()` TANPA selector —
+  // SELURUH store dilanggan (tick progres scan/enrichment + perubahan
+  // tracks apa pun me-render ulang layar Settings 2595 baris). Sekarang
+  // hanya 4 boolean + 2 aksi yang dipakai layar ini.
+  const isAutoScanEnabled = useLibraryStore((s) => s.isAutoScanEnabled);
+  const toggleAutoScanEnabled = useLibraryStore(
+    (s) => s.toggleAutoScanEnabled,
+  );
+  // Auto Enriching: gerbang start OTOMATIS worker enrichment.
+  const isAutoEnrichingEnabled = useLibraryStore(
+    (s) => s.isAutoEnrichingEnabled,
+  );
+  const toggleAutoEnrichingEnabled = useLibraryStore(
+    (s) => s.toggleAutoEnrichingEnabled,
+  );
+  // Rescan: kunci scan — tombol diganti spinner saat scan jalan.
+  const isManualScanning = useLibraryStore((s) => s.isManualScanning);
+  const isAutoScanning = useLibraryStore((s) => s.isAutoScanning);
 
   // --- 2. EXISTING STATES ---
   const [showThemePicker, setShowThemePicker] = useState(false);
@@ -358,8 +458,12 @@ export default function SettingsScreen() {
   const outputProfilesEnabled = useOutputProfileStore((s) => s.enabled);
   const outputProfileMapping = useOutputProfileStore((s) => s.mapping);
 
-  const { activePresetId, applyPreset, setEQEnabled, resetToDefault } =
-    useEqualizerStore();
+  // Per-node render (2026-11-22): dulu `useEqualizerStore()` tanpa selector —
+  // tiap perubahan bands/gain saat EQ dipakai me-render ulang Settings.
+  const activePresetId = useEqualizerStore((s) => s.activePresetId);
+  const applyPreset = useEqualizerStore((s) => s.applyPreset);
+  const setEQEnabled = useEqualizerStore((s) => s.setEQEnabled);
+  const resetToDefault = useEqualizerStore((s) => s.resetToDefault);
 
   // N9: picker preset lewat guard DSP (useEqualizer), bukan store mentah:
   // di mode bit-perfect/immersive preset tidak boleh mengubah bands di
@@ -372,17 +476,22 @@ export default function SettingsScreen() {
     isDSPDisabled,
   } = useEqualizer();
 
-  const { resetAll: resetHeadphoneAll } = useHeadphoneStore();
+  // Per-node render (2026-11-22): dulu `useHeadphoneStore()` tanpa selector.
+  const resetHeadphoneAll = useHeadphoneStore((s) => s.resetAll);
 
   // ReplayGain (2026-11-20): samakan volume antar lagu dari tag file.
   // Default OFF — tidak mengubah loudness user lama secara diam-diam.
-  const {
-    isReplayGainEnabled,
-    replayGainMode,
-    currentTags: replayGainCurrentTags,
-    currentSongId: replayGainCurrentSongId,
-  } = useReplayGainStore();
-  const replayGainCurrentSong = usePlayerStore((s) => s.currentSong);
+  // Per-node render (2026-11-22): dulu `useReplayGainStore()` tanpa selector
+  // + objek currentSong utuh dari playerStore.
+  const isReplayGainEnabled = useReplayGainStore(
+    (s) => s.isReplayGainEnabled,
+  );
+  const replayGainMode = useReplayGainStore((s) => s.replayGainMode);
+  const replayGainCurrentTags = useReplayGainStore((s) => s.currentTags);
+  const replayGainCurrentSongId = useReplayGainStore((s) => s.currentSongId);
+  const replayGainPlayerSongId = usePlayerStore(
+    (s) => s.currentSong?.id,
+  );
   // Toggle / ganti mode langsung berlaku ke lagu yang sedang diputar
   // (tanpa restart): selesaikan tag lagu aktif; dorongan gain efektif
   // ke native diurus langganan RG di equalizerStore.
@@ -401,27 +510,23 @@ export default function SettingsScreen() {
   };
 
   // Crossfade (2026-11-20): durasi transisi antar lagu, 0..12 dtk.
-  // Slider menulis draft lokal saat digeser (tanpa spam JNI), dan
-  // baru commit ke store + native saat jari dilepas.
+  // Per-node render (2026-11-22): draft slider + Slider-nya tinggal di
+  // CrossfadeSetting (anak memo di bawah) — drag tidak lagi me-render
+  // ulang layar Settings; induk hanya melanggan nilai commit (dipakai
+  // gaplessDescription di bawah).
   const crossfadeSeconds = useCrossfadeStore((s) => s.crossfadeSeconds);
-  const [crossfadeDraft, setCrossfadeDraft] = useState<number | null>(null);
-  const crossfadeShown =
-    crossfadeDraft ?? crossfadeSeconds;
-  const handleCrossfadeComplete = async (value: number) => {
-    setCrossfadeDraft(null);
-    await useCrossfadeStore.getState().setCrossfadeSeconds(value);
-  };
 
   // Gapless (2026-11-20): lagu bersambung tanpa jeda — default ON.
   const gaplessEnabled = useGaplessStore((s) => s.gaplessEnabled);
 
-  const {
-    playbackSpeed,
-    setPlaybackSpeed,
-    setTuningCents,
-    audioMode, // <--- Add this
-    setAudioMode, // <--- Add this
-  } = usePlayerStore();
+  // Per-node render (2026-11-22): dulu `usePlayerStore()` TANPA selector —
+  // SELURUH store dilanggan, termasuk tick posisi (~2/dtk) saat lagu
+  // diputar: layar Settings render ulang terus selama playback.
+  const playbackSpeed = usePlayerStore((s) => s.playbackSpeed);
+  const setPlaybackSpeed = usePlayerStore((s) => s.setPlaybackSpeed);
+  const setTuningCents = usePlayerStore((s) => s.setTuningCents);
+  const audioMode = usePlayerStore((s) => s.audioMode);
+  const setAudioMode = usePlayerStore((s) => s.setAudioMode);
 
   // 🔥 Status JUJUR: audioMode hanya mencatat pilihan user. AAudio bisa
   // menolak exclusive → fallback shared diam-diam. Tanpa ini UI bilang
@@ -1441,14 +1546,14 @@ export default function SettingsScreen() {
                       replayGainCurrentTags,
                       replayGainMode,
                     );
-                    if (!replayGainCurrentSong) {
+                    if (!replayGainPlayerSongId) {
                       return "Belum ada lagu yang diputar.";
                     }
                     if (!resolved) {
                       return "Lagu ini tidak punya tag ReplayGain — volume tidak diubah.";
                     }
                     const sign = resolved.gainDb > 0 ? "+" : "";
-                    return `Diterapkan: ${sign}${resolved.gainDb.toFixed(1)} dB (${replayGainMode === "album" ? "per album" : "per track"})${replayGainCurrentSongId === replayGainCurrentSong.id ? "" : " — lagu baru, menunggu baca tag"}.`;
+                    return `Diterapkan: ${sign}${resolved.gainDb.toFixed(1)} dB (${replayGainMode === "album" ? "per album" : "per track"})${replayGainCurrentSongId === replayGainPlayerSongId ? "" : " — lagu baru, menunggu baca tag"}.`;
                   })()}
                 </Text>
               )}
@@ -1542,68 +1647,9 @@ export default function SettingsScreen() {
           )}
 
 
-          {/* ── 1d. Crossfade — transisi antar lagu ───────────────────────
-              Durasi fade-out ekor lagu pada auto-advance (0..12 dtk,
-              default Mati). Berlaku di mode DSP & Solfeggio; TIDAK
-              berlaku di Bit-Perfect (fade tetap 10 ms anti-klik).
-              Next/prev manual, resume, dan seek tidak kena fade
-              panjang. JUJUR: ini fade berurutan, bukan overlap dua
-              lagu — satu decoder, jadi jeda muat antar file tetap ada,
-              hanya ekornya yang memudar dulu. */}
-          <SettingRow colors={colors} spacing={spacing}>
-            <View style={{ flex: 1, marginRight: spacing.md }}>
-              <Text style={{ color: colors.text.primary, fontFamily: FONT_FAMILY.semiBold }}>
-                Crossfade — Transisi Antar Lagu
-              </Text>
-              <Text
-                style={{
-                  color: colors.text.secondary,
-                  fontSize: 11,
-                  marginTop: 2,
-                  lineHeight: 15,
-                }}
-              >
-                {crossfadeShown === 0
-                  ? "Mati — perilaku lama: ekor lagu memudar 0,5 dtk sebelum lagu berikutnya."
-                  : `Aktif — ekor lagu memudar selama ${formatCrossfadeLabel(crossfadeShown)} sebelum lagu berikutnya mulai (auto-advance).`}
-              </Text>
-              <Text
-                style={{
-                  color: colors.text.secondary,
-                  fontSize: 10,
-                  marginTop: 4,
-                }}
-              >
-                Tidak berlaku di mode Bit-Perfect. Bukan overlap dua lagu — jeda muat antar file tetap ada.
-              </Text>
-            </View>
-            <Text
-              style={{
-                color: colors.primary[500],
-                fontFamily: FONT_FAMILY.bold,
-                fontSize: 13,
-              }}
-            >
-              {formatCrossfadeLabel(crossfadeShown)}
-            </Text>
-          </SettingRow>
-          <View style={{ paddingHorizontal: spacing.md, paddingBottom: spacing.sm }}>
-            <Slider
-              style={{ width: "100%", height: 40 }}
-              minimumValue={CROSSFADE_MIN_SECONDS}
-              maximumValue={CROSSFADE_MAX_SECONDS}
-              step={CROSSFADE_STEP_SECONDS}
-              value={crossfadeShown}
-              onValueChange={setCrossfadeDraft}
-              onSlidingComplete={handleCrossfadeComplete}
-              minimumTrackTintColor={colors.primary[500]}
-              maximumTrackTintColor={colors.background.tertiary}
-              thumbTintColor={colors.primary[500]}
-              accessibilityLabel="Durasi crossfade antar lagu"
-              accessibilityRole="adjustable"
-            />
-          </View>
-
+          {/* Crossfade — baris + slider memo (CrossfadeSetting di bawah):
+              drag slider hanya me-render ulang node ini, bukan layar. */}
+          <CrossfadeSetting colors={colors} spacing={spacing} />
 
           {/* ── 1e. Gapless — lagu bersambung tanpa jeda ───────────────
               Default ON: pre-roll track berikutnya saat ekor tinggal
