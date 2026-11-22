@@ -1,17 +1,16 @@
-import React from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
-import * as Haptics from "expo-haptics";
+import React, { memo } from "react";
+import { View, Text, StyleSheet } from "react-native";
 import { useTheme } from "@/shared/context/ThemeContext";
 import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
 import { accentOn } from "@/shared/utils/contrast";
 import { MODE_INFO } from "@/features/equalizer/api/modeInfo";
 import { useBitPerfectStatus } from "@/features/player/hooks/useBitPerfectStatus";
 import { useAudioOutput } from "@/features/hardware/hooks/useAudioOutput";
-import { usePlayerStore } from "@/features/player/store/playerStore";
 import {
   describeBitPerfectPath,
   type BitPerfectPathTone,
 } from "@/features/player/api/bitPerfectPath";
+import { SwitchToDspButton } from "@/features/equalizer/components/SwitchToDspButton";
 
 /**
  * Subscreen Bit-Perfect: kartu jalur sinyal read-only + tombol pindah ke DSP.
@@ -25,6 +24,23 @@ import {
  *
  * Tidak ada indikator limiter di sini — Ide 3 butuh getter native baru,
  * di luar ronde ini.
+ *
+ * Per-node render (2026-11-22):
+ *  - Audit: guard `sameBitPerfectStatus` di hook (ronde Analyzer)
+ *    sudah membuat tick poll 2 dtk yang diam tidak setState — tapi itu
+ *    saja belum cukup. (a) Subscreen ini bukan memo, jadi tiap render
+ *    induk (equalizer.tsx) membangunkan seluruh kartu. (b) `useAudioOutput`
+ *    memanggil `setBluetoothCodec(objek baru)` TANPA guard tiap sync
+ *    3 dtk saat perangkat aktif Bluetooth — subscreen bangun tiap 3 dtk
+ *    walau codecnya sama (diperbaiki di hook: `sameBluetoothCodec`).
+ *    (c) Satu perubahan field status (mis. laju stream) me-render ulang
+ *    SEMUA baris, termasuk verdict dan perangkat yang tidak berubah.
+ *  - Sesudah: shell memo ini memiliki kedua hook SEKALI (satu instance
+ *    tiap hook — TIDAK digandakan ke leaf, supaya poller native tetap
+ *    satu), lalu meneruskan PRIMITIF (string/tone) ke leaf memo di
+ *    bawah. Verdict berubah → hanya VerdictRows yang render ulang;
+ *    laju berubah → hanya StreamRateRows; perangkat berganti → hanya
+ *    OutputDeviceRow. Tombol DSP memo tanpa prop (SwitchToDspButton).
  */
 // P2 audit BitPerfect/Solfeggio 2026-11-20: HRTF + master gain dulu hilang
 // dari daftar — keduanya dilewati di bit-perfect (HRTFNode dan GainNode
@@ -41,39 +57,15 @@ const BYPASSED = [
   "retune (tuning)",
 ];
 
-export function BitPerfectSubscreen() {
+export const BitPerfectSubscreen = memo(function BitPerfectSubscreen() {
   const { theme } = useTheme();
   const { colors, spacing } = theme;
   const status = useBitPerfectStatus();
   const { currentDevice } = useAudioOutput();
-  const setAudioMode = usePlayerStore((s) => s.setAudioMode);
+  // setAudioMode TIDAK lagi dilanggan di sini — tombol DSP (memo, tanpa
+  // prop) memiliki selector-nya sendiri di SwitchToDspButton.
 
   const verdict = describeBitPerfectPath(status);
-  // FASE 3 EQ: warna tone mentah (hijau/oranye aksen) gagal AA di tema
-  // terang (terukur 4,15–4,51). Pola Equalizer: aksen dipakai selama
-  // terbaca di atas permukaan kartu, jatuh ke teks bila tidak.
-  const toneColor = (tone: BitPerfectPathTone): string => {
-    switch (tone) {
-      case "active":
-        return accentOn(
-          [colors.accent.green],
-          colors.background.secondary,
-          [colors.text.primary, colors.text.secondary],
-        );
-      case "fallback":
-        return accentOn(
-          [colors.accent.orange],
-          colors.background.secondary,
-          [colors.text.primary, colors.text.secondary],
-        );
-      case "stale":
-      case "not-ready":
-      case "idle":
-      default:
-        return colors.text.tertiary;
-    }
-  };
-
   const info = MODE_INFO["bit-perfect"];
   const deviceName = currentDevice?.name ?? "Tidak diketahui";
   const deviceType = currentDevice?.type;
@@ -107,75 +99,15 @@ export function BitPerfectSubscreen() {
           Jalur sinyal
         </Text>
 
-        {/* Status stream */}
-        <View style={styles.row}>
-          <Text style={[styles.rowLabel, { color: colors.text.secondary }]}>
-            Status stream
-          </Text>
-          <Text
-            style={[
-              styles.rowValue,
-              { color: toneColor(verdict.tone), textAlign: "right" },
-            ]}
-          >
-            {verdict.label}
-          </Text>
-        </View>
-        <Text
-          style={[
-            styles.rowNote,
-            { color: colors.text.tertiary, marginBottom: spacing.sm },
-          ]}
-        >
-          {verdict.note}
-        </Text>
+        <VerdictRows
+          label={verdict.label}
+          note={verdict.note}
+          tone={verdict.tone}
+        />
+        <OutputDeviceRow deviceName={deviceName} deviceType={deviceType} />
+        <StreamRateRows sampleRate={sampleRate} hardwareRate={hardwareRate} />
 
-        {/* Perangkat output */}
-        <View style={styles.row}>
-          <Text style={[styles.rowLabel, { color: colors.text.secondary }]}>
-            Perangkat output
-          </Text>
-          <Text
-            style={[
-              styles.rowValue,
-              { color: colors.text.primary, textAlign: "right" },
-            ]}
-          >
-            {deviceType ? `${deviceName} · ${deviceType}` : deviceName}
-          </Text>
-        </View>
-
-        {/* Laju stream (sisi app) */}
-        <View style={styles.row}>
-          <Text style={[styles.rowLabel, { color: colors.text.secondary }]}>
-            Laju stream (app)
-          </Text>
-          <Text
-            style={[
-              styles.rowValue,
-              { color: colors.text.primary, textAlign: "right" },
-            ]}
-          >
-            {sampleRate}
-          </Text>
-        </View>
-
-        {/* Laju hardware — yang benar-benar jalan di DAC/mixer */}
-        <View style={styles.row}>
-          <Text style={[styles.rowLabel, { color: colors.text.secondary }]}>
-            Laju hardware
-          </Text>
-          <Text
-            style={[
-              styles.rowValue,
-              { color: colors.text.primary, textAlign: "right" },
-            ]}
-          >
-            {hardwareRate}
-          </Text>
-        </View>
-
-        {/* Yang dilewati */}
+        {/* Yang dilewati — statis, tinggal di shell memo. */}
         <View style={[styles.row, styles.rowTop]}>
           <Text style={[styles.rowLabel, { color: colors.text.secondary }]}>
             Dilewati
@@ -203,29 +135,163 @@ export function BitPerfectSubscreen() {
         </Text>
       </View>
 
-      {/* Pindah ke DSP — keluar dari bit-perfect tidak perlu konfirmasi.
-          P2 audit: dulu tanpa umpan balik tekan/haptic (TuningControl di
-          layar sebelah memberi haptic tiap ketukan). */}
-      <Pressable
-        style={({ pressed }) => [
-          styles.button,
-          { backgroundColor: colors.primary[500] },
-          pressed && styles.pressed,
-        ]}
-        onPress={() => {
-          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          void setAudioMode("dsp");
-        }}
-        accessibilityRole="button"
-        accessibilityLabel="Pindah ke mode DSP"
-      >
-        <Text style={[styles.buttonText, { color: colors.text.inverse }]}>
-          Pindah ke DSP
-        </Text>
-      </Pressable>
+      {/* Pindah ke DSP — keluar dari bit-perfect tidak perlu konfirmasi. */}
+      <SwitchToDspButton />
     </View>
   );
+});
+
+interface VerdictRowsProps {
+  label: string;
+  note: string;
+  tone: BitPerfectPathTone;
 }
+
+/**
+ * Baris verdict stream — hanya render ulang bila label/note/tone
+ * berubah. Perubahan laju atau perangkat tidak menyentuhnya.
+ */
+const VerdictRows = memo(function VerdictRows({
+  label,
+  note,
+  tone,
+}: VerdictRowsProps) {
+  const { theme } = useTheme();
+  const { colors, spacing } = theme;
+  // FASE 3 EQ: warna tone mentah (hijau/oranye aksen) gagal AA di tema
+  // terang (terukur 4,15–4,51). Pola Equalizer: aksen dipakai selama
+  // terbaca di atas permukaan kartu, jatuh ke teks bila tidak.
+  const toneColor = (t: BitPerfectPathTone): string => {
+    switch (t) {
+      case "active":
+        return accentOn(
+          [colors.accent.green],
+          colors.background.secondary,
+          [colors.text.primary, colors.text.secondary],
+        );
+      case "fallback":
+        return accentOn(
+          [colors.accent.orange],
+          colors.background.secondary,
+          [colors.text.primary, colors.text.secondary],
+        );
+      case "stale":
+      case "not-ready":
+      case "idle":
+      default:
+        return colors.text.tertiary;
+    }
+  };
+
+  return (
+    <View>
+      {/* Status stream */}
+      <View style={styles.row}>
+        <Text style={[styles.rowLabel, { color: colors.text.secondary }]}>
+          Status stream
+        </Text>
+        <Text
+          style={[
+            styles.rowValue,
+            { color: toneColor(tone), textAlign: "right" },
+          ]}
+        >
+          {label}
+        </Text>
+      </View>
+      <Text
+        style={[
+          styles.rowNote,
+          { color: colors.text.tertiary, marginBottom: spacing.sm },
+        ]}
+      >
+        {note}
+      </Text>
+    </View>
+  );
+});
+
+interface OutputDeviceRowProps {
+  deviceName: string;
+  deviceType: string | undefined;
+}
+
+/**
+ * Baris perangkat output — hanya render ulang bila nama/tipe perangkat
+ * berganti. Poll status bit-perfect tidak menyentuhnya.
+ */
+const OutputDeviceRow = memo(function OutputDeviceRow({
+  deviceName,
+  deviceType,
+}: OutputDeviceRowProps) {
+  const { theme } = useTheme();
+  const { colors } = theme;
+  return (
+    <View style={styles.row}>
+      <Text style={[styles.rowLabel, { color: colors.text.secondary }]}>
+        Perangkat output
+      </Text>
+      <Text
+        style={[
+          styles.rowValue,
+          { color: colors.text.primary, textAlign: "right" },
+        ]}
+      >
+        {deviceType ? `${deviceName} · ${deviceType}` : deviceName}
+      </Text>
+    </View>
+  );
+});
+
+interface StreamRateRowsProps {
+  sampleRate: string;
+  hardwareRate: string;
+}
+
+/**
+ * Baris laju stream (app + hardware) — hanya render ulang bila salah
+ * satu laju berubah. Perubahan verdict tidak menyentuhnya.
+ */
+const StreamRateRows = memo(function StreamRateRows({
+  sampleRate,
+  hardwareRate,
+}: StreamRateRowsProps) {
+  const { theme } = useTheme();
+  const { colors } = theme;
+  return (
+    <View>
+      {/* Laju stream (sisi app) */}
+      <View style={styles.row}>
+        <Text style={[styles.rowLabel, { color: colors.text.secondary }]}>
+          Laju stream (app)
+        </Text>
+        <Text
+          style={[
+            styles.rowValue,
+            { color: colors.text.primary, textAlign: "right" },
+          ]}
+        >
+          {sampleRate}
+        </Text>
+      </View>
+
+      {/* Laju hardware — yang benar-benar jalan di DAC/mixer */}
+      <View style={styles.row}>
+        <Text style={[styles.rowLabel, { color: colors.text.secondary }]}>
+          Laju hardware
+        </Text>
+        <Text
+          style={[
+            styles.rowValue,
+            { color: colors.text.primary, textAlign: "right" },
+          ]}
+        >
+          {hardwareRate}
+        </Text>
+      </View>
+    </View>
+  );
+});
 
 const styles = StyleSheet.create({
   wrap: {
@@ -281,19 +347,5 @@ const styles = StyleSheet.create({
     fontFamily: FONT_FAMILY.regular,
     lineHeight: 16,
     marginTop: 2,
-  },
-  button: {
-    borderRadius: BASE_RADIUS.md,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  buttonText: {
-    fontSize: 14,
-    fontFamily: FONT_FAMILY.bold,
-  },
-  // Umpan balik tekan (P2 audit): Pressable tanpa style pressed terasa
-  // mati — samakan dengan TuningControl (haptic) + opacity.
-  pressed: {
-    opacity: 0.7,
   },
 });

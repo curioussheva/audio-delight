@@ -82,6 +82,20 @@ const sameStatus = (
   );
 };
 
+// Per-node render (2026-11-22): syncStatus juga memanggil
+// setBluetoothCodec dengan objek BARU dari native tiap 3 detik saat
+// perangkat aktif Bluetooth — tanpa guard, pemakai (termasuk
+// BitPerfectSubscreen) render ulang tiap 3 detik walau codecnya sama.
+// Cabang non-Bluetooth sudah terjaga (kembalikan prev bila tidak
+// connected); cabang Bluetooth ini yang bocor.
+const sameBluetoothCodec = (
+  prev: BluetoothA2dpStatusInfo,
+  next: BluetoothA2dpStatusInfo,
+): boolean =>
+  prev.connected === next.connected &&
+  prev.deviceName === next.deviceName &&
+  prev.address === next.address;
+
 export const useAudioOutput = (): UseAudioOutputReturn => {
   const [devices, setDevices] = useState<AudioDeviceDescriptor[]>([]);
   const [currentDevice, setCurrentDevice] =
@@ -134,7 +148,10 @@ export const useAudioOutput = (): UseAudioOutputReturn => {
       // tidak ada alasan menempuhnya saat output ke speaker atau DAC.
       if (nextDevice?.type === "bluetooth") {
         const codec = await AudioOutputService.getBluetoothCodec();
-        if (mounted.current) setBluetoothCodec(codec);
+        if (mounted.current)
+          setBluetoothCodec((prev) =>
+            sameBluetoothCodec(prev, codec) ? prev : codec,
+          );
       } else if (mounted.current) {
         setBluetoothCodec((prev) =>
           prev.connected
