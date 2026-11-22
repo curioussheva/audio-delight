@@ -1,5 +1,5 @@
 // src/app/search.tsx
-import React, { useState, useMemo } from "react";
+import React, { memo, useState, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { EmptyState } from "@/shared/components/ui/EmptyState";
 import { useLibrary } from "@/features/library/hooks/useLibrary";
 import { usePlayerStore } from "@/features/player/store/playerStore";
 import { formatTime } from "@/shared/utils/time";
+import type { Song } from "@/shared/types/audio";
 import { safeGoBack } from "@/shared/utils/navigation";
 
 export default function SearchScreen() {
@@ -43,7 +44,11 @@ export default function SearchScreen() {
   // bookkeeping queue/index store, isPlaying store, dan play count.
   // (Koreksi 2026-11-19: `useAudioPlayer` + `loadSong` dihapus 2026-11-18 —
   // tidak ada lagi jalur hook lokal.)
-  const { playSong } = usePlayerStore();
+  // Per-node render (2026-11-22): dulu `usePlayerStore()` TANPA selector —
+  // SELURUH store dilanggan: tiap tick posisi (~2/dtk) me-render ulang
+  // layar Search + daftar hasilnya selama lagu diputar (termasuk saat
+  // user sedang mengetik query). Sekarang hanya aksi playSong.
+  const playSong = usePlayerStore((state) => state.playSong);
 
   const [query, setQuery] = useState("");
 
@@ -72,6 +77,19 @@ export default function SearchScreen() {
       }
     });
   }, [songs, query, filterBy]);
+
+  // Handler tekan hasil — identitas hanya berubah bila daftar hasil
+  // berubah (bukan tiap render induk); baris memo di bawah mengabaikan
+  // callback ini di komparatornya, jadi baris diam saat induk render
+  // ulang karena ketikan yang tidak mengubah hasil baris itu.
+  const handleResultPress = useCallback(
+    (song: Song) => {
+      // Antrean = hasil pencarian saat ini; playSong menaruh lagu
+      // yang di-tap di index 0 (reorder internal) seperti di Library.
+      playSong(song, results);
+    },
+    [playSong, results],
+  );
 
   return (
     <View
@@ -227,39 +245,12 @@ export default function SearchScreen() {
         data={results}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[
-              styles.resultItem,
-              {
-                padding: spacing.md,
-                borderBottomWidth: 1,
-                borderBottomColor: colors.background.tertiary,
-              },
-            ]}
-            onPress={() => {
-              // Antrean = hasil pencarian saat ini; playSong menaruh lagu
-              // yang di-tap di index 0 (reorder internal) seperti di Library.
-              playSong(item, results);
-            }}
-          >
-            <View style={{ flex: 1 }}>
-              <Text
-                style={[styles.resultTitle, { color: colors.text.primary }]}
-              >
-                {item.title}
-              </Text>
-              <Text
-                style={[styles.resultSub, { color: colors.text.secondary }]}
-              >
-                {item.artist} • {item.album}
-              </Text>
-            </View>
-            <Text
-              style={[styles.resultDuration, { color: colors.text.tertiary }]}
-            >
-              {formatTime(item.duration)}
-            </Text>
-          </TouchableOpacity>
+          <SearchResultRow
+            item={item}
+            colors={colors}
+            spacing={spacing}
+            onPress={handleResultPress}
+          />
         )}
         ListEmptyComponent={
           !query ? null : loading ? (
@@ -345,6 +336,67 @@ export default function SearchScreen() {
     </View>
   );
 }
+
+// ─── SearchResultRow ──────────────────────────────────────────────────────
+// Baris hasil pencarian, memo + komparator kustom ala GenreSongRow /
+// SongListItem: hanya field tampil + colors/spacing yang dibandingkan;
+// `onPress` diabaikan (identitasnya berubah tiap `results` berubah, tapi
+// perilakunya sama — tekan baris memutar lagu itu dengan antrean hasil).
+// Tanpa ini tiap ketikan query me-render ulang SEMUA baris hasil yang
+// terlihat, walau datanya tidak berubah.
+const SearchResultRow = memo(
+  function SearchResultRow({
+    item,
+    colors,
+    spacing,
+    onPress,
+  }: {
+    item: Song;
+    colors: any;
+    spacing: any;
+    onPress: (song: Song) => void;
+  }) {
+    return (
+      <TouchableOpacity
+        style={[
+          styles.resultItem,
+          {
+            padding: spacing.md,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.background.tertiary,
+          },
+        ]}
+        onPress={() => onPress(item)}
+      >
+        <View style={{ flex: 1 }}>
+          <Text
+            style={[styles.resultTitle, { color: colors.text.primary }]}
+          >
+            {item.title}
+          </Text>
+          <Text
+            style={[styles.resultSub, { color: colors.text.secondary }]}
+          >
+            {item.artist} • {item.album}
+          </Text>
+        </View>
+        <Text
+          style={[styles.resultDuration, { color: colors.text.tertiary }]}
+        >
+          {formatTime(item.duration)}
+        </Text>
+      </TouchableOpacity>
+    );
+  },
+  (prev, next) =>
+    prev.item.id === next.item.id &&
+    prev.item.title === next.item.title &&
+    prev.item.artist === next.item.artist &&
+    prev.item.album === next.item.album &&
+    prev.item.duration === next.item.duration &&
+    prev.colors === next.colors &&
+    prev.spacing === next.spacing,
+);
 
 const styles = StyleSheet.create({
   container: {
