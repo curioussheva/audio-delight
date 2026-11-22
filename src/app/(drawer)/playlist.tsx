@@ -56,7 +56,12 @@ export default function PlaylistsScreen() {
   // Alert.prompt (iOS-only, no-op di Android).
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  const { playSong, currentSong } = usePlayerStore();
+  // Per-node render (2026-11-22): dulu `usePlayerStore()` TANPA selector —
+  // SELURUH store dilanggan (tick posisi ~2/dtk me-render ulang layar
+  // playlist + daftarnya selama playback). Sekarang hanya aksi playSong
+  // + id lagu yang diputar (untuk isNowPlaying di baris detail).
+  const playSong = usePlayerStore((state) => state.playSong);
+  const currentSongId = usePlayerStore((state) => state.currentSong?.id);
   const showToast = useToastStore((s) => s.showToast);
 
   // Fase 2 redesign: hapus playlist lewat ConfirmDialog (satu-satunya
@@ -318,6 +323,19 @@ export default function PlaylistsScreen() {
     setSelectedPlaylist(playlist);
   }, []);
 
+  // Per-node render (2026-11-22): onClose/onCancel modal dulu arrow inline
+  // baru tiap render — memo AddSongsModal/CreatePlaylistModal/
+  // ConfirmDialog (di bawah) batal karenanya. Sekarang useCallback [].
+  const handleCloseAddModal = useCallback(() => setShowAddModal(false), []);
+  const handleCloseCreateModal = useCallback(
+    () => setShowCreateModal(false),
+    [],
+  );
+  const handleCancelDelete = useCallback(
+    () => setShowDeleteDialog(false),
+    [],
+  );
+
   // ── Render Detail View ────────────────────────────────────────────────────
   if (selectedPlaylist) {
     return (
@@ -406,7 +424,7 @@ export default function PlaylistsScreen() {
             renderItem={({ item }) => (
               <SongListItem
                 item={item}
-                isNowPlaying={currentSong?.id === item.id}
+                isNowPlaying={currentSongId === item.id}
                 isFavorite={isFavorite(item.id)}
                 colors={colors}
                 onPress={handleSongPress}
@@ -427,8 +445,8 @@ export default function PlaylistsScreen() {
           title="Hapus Playlist"
           message={`Hapus playlist "${selectedPlaylist.name}"?`}
           confirmLabel="Hapus"
-          onConfirm={() => void handleConfirmDeletePlaylist()}
-          onCancel={() => setShowDeleteDialog(false)}
+          onConfirm={handleConfirmDeletePlaylist}
+          onCancel={handleCancelDelete}
         />
 
         {/* Item CRUD playlist (entry B1): modal pilih lagu dari Library. */}
@@ -436,8 +454,8 @@ export default function PlaylistsScreen() {
           visible={showAddModal}
           playlistName={selectedPlaylist.name}
           existingSongIds={selectedFull?.songIds ?? []}
-          onAdd={(song) => void handleAddSong(song)}
-          onClose={() => setShowAddModal(false)}
+          onAdd={handleAddSong}
+          onClose={handleCloseAddModal}
         />
       </View>
     );
@@ -461,7 +479,7 @@ export default function PlaylistsScreen() {
       {/* B2 (ronde 9): dialog buat playlist lintas-platform. */}
       <CreatePlaylistModal
         visible={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
+        onClose={handleCloseCreateModal}
         onSubmit={handleCreatePlaylistSubmit}
       />
     </View>

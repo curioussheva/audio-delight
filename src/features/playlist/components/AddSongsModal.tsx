@@ -12,7 +12,7 @@
 // AsyncStorage, jadi tersedia walau tab Library belum dibuka sesi ini).
 // MediaTrack dipakai sebagai Song di sini: modal hanya membaca
 // id/title/artist/album/duration, semua ada di kedua tipe.
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Check, Music2, Plus } from "lucide-react-native";
 
@@ -88,7 +88,10 @@ function PickerSongRow({
   );
 }
 
-export const AddSongsModal: React.FC<AddSongsModalProps> = ({
+// Per-node render (2026-11-22): memo — pemanggil (playlist.tsx) sudah
+// menstabilkan onAdd/onClose, jadi modal tidak ikut render ulang layar.
+// (Tanpa memo + callback stabil, tiap render induk membangunkan modal.)
+export const AddSongsModal: React.FC<AddSongsModalProps> = memo(({
   visible,
   playlistName,
   existingSongIds,
@@ -180,7 +183,7 @@ export const AddSongsModal: React.FC<AddSongsModalProps> = ({
       </View>
     </Modal>
   );
-};
+});
 
 const styles = StyleSheet.create({
   // Daftar mengisi sisa kartu (min. 320 supaya ~6 lagu terlihat);

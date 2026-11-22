@@ -8,7 +8,7 @@
 // Keputusan: batal = tombol teks (tenang), konfirmasi = tombol primer;
 // destruktif (default) memakai isi status.error. Judul h4, pesan
 // body2, overlay dari token.
-import React, { useCallback } from "react";
+import React, { memo, useCallback } from "react";
 import { Modal, View, Text } from "react-native";
 
 import { useThemedStyles } from "@/shared/hooks/useThemedStyles";
@@ -29,7 +29,8 @@ export interface ConfirmDialogProps {
   onCancel: () => void;
 }
 
-export function ConfirmDialog({
+// Per-node render (2026-11-22): memo — onConfirm/onCancel pemanggil stabil.
+export const ConfirmDialog = memo(function ConfirmDialog({
   visible,
   title,
   message,
@@ -78,4 +79,4 @@ export function ConfirmDialog({
       </View>
     </Modal>
   );
-}
+})

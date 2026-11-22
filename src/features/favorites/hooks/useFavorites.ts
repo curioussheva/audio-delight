@@ -1,4 +1,5 @@
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
+import { shallow } from "zustand/shallow";
 import { useLibraryStore } from "@/features/library/store/libraryStore";
 import { selectFavorites } from "@/features/library/store/selectors";
 import { Song } from "@/shared/types/audio";
@@ -17,20 +18,25 @@ import { Song } from "@/shared/types/audio";
  * tab Songs, Song Detail, detail view, player — melihat nilai yang sama.
  */
 export const useFavorites = () => {
-  const tracks = useLibraryStore((state) => state.tracks);
+  // Per-node render (2026-11-22): dulu hook ini melanggan SELURUH array
+  // `tracks` + useMemo di atasnya — update track mana pun (enrichment,
+  // rescan, toggle favorit lagu lain) mengganti identitas array dan
+  // me-render ulang SEMUA pemakai hook ini (Player, Song Detail,
+  // Playlist, tab Library) walau daftar favoritnya tidak berubah.
+  // Sekarang selector turunan + `shallow`: array hasil filter hanya
+  // dianggap berubah bila ISI-nya berubah (perbandingan per elemen,
+  // referensi track dipertahankan updateTrack/toggleFavorite) — jadi
+  // pemakai hanya bangun bila favoritnya sendiri berubah.
+  const favoriteIds = useLibraryStore(
+    (state) => state.tracks.filter((t) => t.isFavorite).map((t) => t.id),
+    shallow,
+  );
+  const favoriteSongs = useLibraryStore(
+    (state) => selectFavorites(state.tracks) as Song[],
+    shallow,
+  );
   const toggleFavoriteStore = useLibraryStore(
     (state) => state.toggleFavorite,
-  );
-
-  // Daftar ID favorit — identitas stabil selama tracks tidak berubah.
-  const favoriteIds = useMemo(
-    () => tracks.filter((t) => t.isFavorite).map((t) => t.id),
-    [tracks],
-  );
-
-  const favoriteSongs: Song[] = useMemo(
-    () => selectFavorites(tracks) as Song[],
-    [tracks],
   );
 
   const toggleFavorite = useCallback(

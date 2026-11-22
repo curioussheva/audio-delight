@@ -11,7 +11,7 @@
 // ConfirmDialog), input = PristineTextInput, tombol = PristineButton
 // (batal = teks, buat = primer). Judul + aksi mengikuti gaya dialog
 // yang sama dengan ConfirmDialog.
-import React, { useCallback, useEffect, useState } from "react";
+import React, { memo, useCallback, useEffect, useState } from "react";
 import { Modal, View, Text } from "react-native";
 
 import { useTheme } from "@/shared/context/ThemeContext";
@@ -28,7 +28,8 @@ interface CreatePlaylistModalProps {
   onSubmit: (name: string) => void;
 }
 
-export const CreatePlaylistModal: React.FC<CreatePlaylistModalProps> = ({
+// Per-node render (2026-11-22): memo — onClose/onSubmit pemanggil stabil.
+export const CreatePlaylistModal: React.FC<CreatePlaylistModalProps> = memo(({
   visible,
   onClose,
   onSubmit,
@@ -100,4 +101,4 @@ export const CreatePlaylistModal: React.FC<CreatePlaylistModalProps> = ({
       </View>
     </Modal>
   );
-};
+});
