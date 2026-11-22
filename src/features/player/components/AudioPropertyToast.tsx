@@ -11,7 +11,12 @@ import { useTheme } from "@/shared/context/ThemeContext";
 import { accentOn } from "@/shared/utils/contrast";
 
 export const AudioPropertyToast = () => {
-  const { currentSong } = usePlayerStore();
+  // Per-node render (2026-11-22): dulu `usePlayerStore()` TANPA selector —
+  // komponen ini ter-mount GLOBAL di root layout, jadi SELURUH store
+  // dilanggan: tiap tick posisi (~2/dtk) selama playback me-render
+  // ulang toast ini walau sedang tidak tampil. Sekarang hanya currentSong
+  // (referensi objeknya hanya berganti saat lagu berganti).
+  const currentSong = usePlayerStore((state) => state.currentSong);
   const { theme } = useTheme();
   const { colors, isDark } = theme;
   const [visible, setVisible] = useState(false);

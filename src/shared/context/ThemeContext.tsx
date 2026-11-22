@@ -1,5 +1,12 @@
 // src/shared/contexts/ThemeContext.tsx
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useColorScheme } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -65,7 +72,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
     loadTheme();
   }, [systemColorScheme]);
 
-  const setTheme = async (newThemeId: ThemeId) => {
+  // Per-node render (2026-11-22): aksi dibungkus useCallback + value
+  // provider di-useMemo — dulu `value={{...}}` objek BARU tiap render
+  // ThemeProvider, jadi tiap render RootLayout (fase boot) membangunkan
+  // SEMUA pemakai useTheme di seluruh app walau temanya tidak berubah.
+  const setTheme = useCallback(async (newThemeId: ThemeId) => {
     const safeId =
       newThemeId in ALL_THEMES ? newThemeId : DEFAULT_THEME.id;
     setThemeId(safeId);
@@ -76,7 +87,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
     } catch (error) {
       console.error("Failed to save theme:", error);
     }
-  };
+  }, []);
 
   // Toggle terang <-> gelap untuk tema AKTIF, bukan lompat ke tema tetap.
   //
@@ -85,27 +96,30 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   // memakai toggle saat berada di "rose-gold" membuang pilihan user ke tema
   // yang sama sekali lain. Sekarang ia mencari kandidat dengan mode berlawanan
   // dengan jarak warna terdekat, supaya toggle terasa seperti membalik mode.
-  const toggleTheme = () => {
+  const toggleTheme = useCallback(() => {
     void setTheme(resolveToggleTarget(themeId));
-  };
+  }, [setTheme, themeId]);
 
-  const randomTheme = async () => {
+  const randomTheme = useCallback(async () => {
     // U-P2-35: tema aktif dikecualikan supaya acak selalu terasa berganti.
     const random = getRandomTheme(themeId);
     await setTheme(random.id as ThemeId);
-  };
+  }, [setTheme, themeId]);
+
+  const contextValue = useMemo(
+    () => ({
+      theme,
+      themeId,
+      isDarkMode: theme.isDark,
+      setTheme,
+      toggleTheme,
+      randomTheme,
+    }),
+    [theme, themeId, setTheme, toggleTheme, randomTheme],
+  );
 
   return (
-    <ThemeContext.Provider
-      value={{
-        theme,
-        themeId,
-        isDarkMode: theme.isDark,
-        setTheme,
-        toggleTheme,
-        randomTheme,
-      }}
-    >
+    <ThemeContext.Provider value={contextValue}>
       {children}
     </ThemeContext.Provider>
   );

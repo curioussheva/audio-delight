@@ -7,7 +7,7 @@ console.log("[BOOT] 0. _layout module loaded");
 startJsLagMonitor();
 configureReanimatedLogger({ level: ReanimatedLogLevel.warn, strict: false });
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { memo, useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Stack } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -100,7 +100,9 @@ let bootWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
 // ThemeContext mengembalikan DEFAULT_THEME = pristine-noir secara sinkron
 // sampai tema tersimpan selesai dibaca, jadi tidak ada tema lain yang
 // di-hardcode di sini).
-function ErrorScreen({
+// Per-node render (2026-11-22): memo — layar error hanya perlu bangun
+// bila errorMessage/onRetry berubah, bukan tiap render RootLayout.
+const ErrorScreen = memo(function ErrorScreen({
   errorMessage,
   onRetry,
 }: {
@@ -140,10 +142,31 @@ function ErrorScreen({
       </TouchableOpacity>
     </View>
   );
-}
+});
 
 function ThemedStack({ contentOpacity }: { contentOpacity: Animated.Value }) {
   const { colors } = useTheme().theme;
+
+  // Per-node render (2026-11-22): screenOptions dulu objek literal baru
+  // tiap render ThemedStack — Stack menerima identitas baru dan ikut
+  // me-render ulang rute. Sekarang useMemo (berubah hanya bila tema
+  // berganti); opsi layar player (modal) juga stabil di dalamnya.
+  const screenOptions = useMemo(
+    () => ({
+      headerShown: false,
+      contentStyle: { backgroundColor: colors.background.primary },
+    }),
+    [colors.background.primary],
+  );
+  const playerScreenOptions = useMemo(
+    () => ({
+      presentation: "modal" as const,
+      animation: "slide_from_bottom" as const,
+      gestureEnabled: true,
+      gestureDirection: "vertical" as const,
+    }),
+    [],
+  );
 
   // FASE 4: SATU pemicu refresh foreground (quickDiff + bump refreshKey)
   // — ter-mount sekali di sini, hidup selama app ready. Pengganti dua
@@ -181,24 +204,11 @@ function ThemedStack({ contentOpacity }: { contentOpacity: Animated.Value }) {
           { opacity: contentOpacity },
         ]}
       >
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: colors.background.primary },
-          }}
-        >
+        <Stack screenOptions={screenOptions}>
           <Stack.Screen name="index" />
           <Stack.Screen name="onboarding" />
           <Stack.Screen name="(drawer)" />
-          <Stack.Screen
-            name="player/index"
-            options={{
-              presentation: "modal",
-              animation: "slide_from_bottom",
-              gestureEnabled: true,
-              gestureDirection: "vertical",
-            }}
-          />
+          <Stack.Screen name="player/index" options={playerScreenOptions} />
         </Stack>
         <AudioPropertyToast />
         <GlobalToast />
@@ -641,6 +651,14 @@ const performInitialization = useCallback(async () => {
   // SPLASH_HOLD_MS dulu supaya gambarnya sempat terlihat, baru hilang
   // dan masuk fase "splash-image" (splash.png tampil lagi sebagai
   // interstitial in-app sebelum rute tampil).
+  // Per-node render (2026-11-22): retry stabil supaya memo ErrorScreen
+  // tidak batal oleh onRetry baru tiap render RootLayout.
+  const handleRetryInit = useCallback(() => {
+    setAppState("initializing");
+    hasInitializedModule = false;
+    performInitialization();
+  }, [performInitialization]);
+
   const handleLoadingComplete = useCallback(() => {
     splashHoldTimer.current = setTimeout(() => {
       SplashScreen.hideAsync().catch(() => {});
@@ -673,11 +691,7 @@ const performInitialization = useCallback(async () => {
         <ThemeProvider>
           <ErrorScreen
             errorMessage={errorMessage}
-            onRetry={() => {
-              setAppState("initializing");
-              hasInitializedModule = false;
-              performInitialization();
-            }}
+            onRetry={handleRetryInit}
           />
         </ThemeProvider>
       </GestureHandlerRootView>
