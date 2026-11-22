@@ -1060,3 +1060,204 @@ describe("logcat #9 — tiga setter drag: throttle + fire-and-forget", () => {
     expect(n.setReverbPreset).toHaveBeenLastCalledWith(6, 7);
   });
 });
+
+describe("Opsi 3 (log #15) — coalescing in-flight saat drag", () => {
+  const native = () =>
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("@/features/equalizer/api/nativeInterface").NativeDSPModule as {
+      setFullEqualizer: jest.Mock;
+      setVirtualizer: jest.Mock;
+      setMasterGain: jest.Mock;
+    };
+
+  // Modul di-require SESUDAH loadStore (jest.resetModules) supaya
+  // instansinya sama dengan yang dipakai store — import top-level di
+  // sini akan menunjuk instansi lama yang sudah di-reset.
+  const dragState = () =>
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("@/features/equalizer/api/dragState") as typeof import("@/features/equalizer/api/dragState");
+  const diagGate = () =>
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("@/shared/utils/diagGate") as typeof import("@/shared/utils/diagGate");
+  const dragDiag = () =>
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("@/features/equalizer/api/dragDiag") as typeof import("@/features/equalizer/api/dragDiag");
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  const enableEq = async (store: ReturnType<typeof loadStore>) => {
+    store.getState().setAudioSessionId(7);
+    await store.getState().setEQEnabled(true);
+    jest.clearAllMocks();
+  };
+
+  it("widener: drag aktif + native pending -> tick berikut tidak kirim, nilai terbaru terkirim saat resolve", async () => {
+    const store = loadStore();
+    await enableEq(store);
+    const n = native();
+    let resolveNative!: (v: boolean) => void;
+    n.setVirtualizer.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveNative = resolve;
+        }),
+    );
+    dragDiag().resetDragDiagState();
+    diagGate().setTempDiagEnabled(true);
+    dragState().setDragActive(true);
+    try {
+      await store.getState().setVirtualizer(100); // leading, in-flight
+      expect(n.setVirtualizer).toHaveBeenCalledTimes(1);
+      expect(n.setVirtualizer).toHaveBeenLastCalledWith(100, 7);
+      expect(dragDiag().getSetterState().inFlight.setVirtualizer).toBe(1);
+      await jest.advanceTimersByTimeAsync(100); // jendela habis
+      await store.getState().setVirtualizer(200); // ditahan
+      await store.getState().setVirtualizer(300); // ditahan, menimpa 200
+      expect(n.setVirtualizer).toHaveBeenCalledTimes(1); // tetap 1
+      expect(dragDiag().getSetterState().inFlight.setVirtualizer).toBe(1);
+
+      resolveNative(true);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(n.setVirtualizer).toHaveBeenCalledTimes(2);
+      expect(n.setVirtualizer).toHaveBeenLastCalledWith(300, 7);
+      // Kiriman kedua (300) kini in-flight sendirian — bukan dua.
+      expect(dragDiag().getSetterState().inFlight.setVirtualizer).toBe(1);
+      resolveNative(true); // kiriman kedua selesai
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(dragDiag().getSetterState().inFlight.setVirtualizer).toBe(0);
+    } finally {
+      dragState().setDragActive(false);
+      diagGate().setTempDiagEnabled(false);
+    }
+  });
+
+  it("widener: flush saat release (drag off dulu) -> nilai akhir mendarat sekali, tidak ganda sesudah resolve", async () => {
+    const store = loadStore();
+    await enableEq(store);
+    const n = native();
+    let resolveNative!: (v: boolean) => void;
+    n.setVirtualizer.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveNative = resolve;
+        }),
+    );
+    dragState().setDragActive(true);
+    try {
+      await store.getState().setVirtualizer(100); // leading, in-flight
+      await jest.advanceTimersByTimeAsync(100);
+      await store.getState().setVirtualizer(300); // ditahan
+      expect(n.setVirtualizer).toHaveBeenCalledTimes(1);
+      // Urutan onFinalize: drag off DULU, baru onDragEnd (flush).
+      dragState().setDragActive(false);
+      store.getState().flushVirtualizerDrag();
+      expect(n.setVirtualizer).toHaveBeenCalledTimes(1); // flush no-op
+      resolveNative(true);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(n.setVirtualizer).toHaveBeenCalledTimes(2);
+      expect(n.setVirtualizer).toHaveBeenLastCalledWith(300, 7);
+      await jest.advanceTimersByTimeAsync(500);
+      expect(n.setVirtualizer).toHaveBeenCalledTimes(2); // tidak ganda
+    } finally {
+      dragState().setDragActive(false);
+    }
+  });
+
+  it("widener: di luar drag, dua panggilan dengan native pending tetap terkirim dua-duanya", async () => {
+    const store = loadStore();
+    await enableEq(store);
+    const n = native();
+    n.setVirtualizer.mockImplementation(() => new Promise(() => {}));
+    dragDiag().resetDragDiagState();
+    diagGate().setTempDiagEnabled(true);
+    try {
+      // Drag TIDAK aktif — gating tidak berlaku (perilaku lama).
+      await store.getState().setVirtualizer(100);
+      await jest.advanceTimersByTimeAsync(100);
+      await store.getState().setVirtualizer(200);
+      expect(n.setVirtualizer).toHaveBeenCalledTimes(2);
+      expect(dragDiag().getSetterState().inFlight.setVirtualizer).toBe(2);
+    } finally {
+      diagGate().setTempDiagEnabled(false);
+    }
+  });
+
+  it("master gain ikut coalescing selama drag: nilai terbaru terkirim saat resolve", async () => {
+    const store = loadStore();
+    store.getState().setAudioSessionId(7);
+    await store.getState().setEQEnabled(true);
+    const n = native();
+    jest.clearAllMocks();
+    let resolveNative!: (v: boolean) => void;
+    n.setMasterGain.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveNative = resolve;
+        }),
+    );
+    dragState().setDragActive(true);
+    try {
+      await store.getState().setMasterGain(1.0); // leading, in-flight
+      expect(n.setMasterGain).toHaveBeenCalledTimes(1);
+      expect(n.setMasterGain).toHaveBeenLastCalledWith(1.0);
+      await jest.advanceTimersByTimeAsync(100);
+      await store.getState().setMasterGain(1.5); // ditahan
+      await store.getState().setMasterGain(2.0); // ditahan, menimpa 1.5
+      expect(n.setMasterGain).toHaveBeenCalledTimes(1);
+      resolveNative(true);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(n.setMasterGain).toHaveBeenCalledTimes(2);
+      expect(n.setMasterGain).toHaveBeenLastCalledWith(2.0);
+    } finally {
+      dragState().setDragActive(false);
+    }
+  });
+
+  it("band gain ikut coalescing selama drag: snapshot terbaru terkirim saat resolve", async () => {
+    const store = loadStore();
+    await enableEq(store);
+    const n = native();
+    jest.clearAllMocks();
+    let resolveNative!: (v: boolean) => void;
+    n.setFullEqualizer.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveNative = resolve;
+        }),
+    );
+    dragState().setDragActive(true);
+    try {
+      store.getState().setBandGain(0, 5); // leading, in-flight
+      expect(n.setFullEqualizer).toHaveBeenCalledTimes(1);
+      expect(n.setFullEqualizer).toHaveBeenLastCalledWith(
+        [5, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        7,
+      );
+      await jest.advanceTimersByTimeAsync(100);
+      store.getState().setBandGain(0, 8); // ditahan
+      store.getState().setBandGain(0, 9); // ditahan, snapshot terbaru
+      expect(n.setFullEqualizer).toHaveBeenCalledTimes(1);
+      resolveNative(true);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(n.setFullEqualizer).toHaveBeenCalledTimes(2);
+      expect(n.setFullEqualizer).toHaveBeenLastCalledWith(
+        [9, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        7,
+      );
+    } finally {
+      dragState().setDragActive(false);
+    }
+  });
+});

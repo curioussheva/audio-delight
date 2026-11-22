@@ -24,6 +24,8 @@ import {
 // (logcat #9) throttle + fire-and-forget untuk tiga setter drag —
 // lihat effectPusher.ts.
 import { createEffectPusher } from "@/features/equalizer/api/effectPusher";
+// Opsi 3 (log #15): gate in-flight master gain + band apply selama drag.
+import { isDragActive } from "@/features/equalizer/api/dragState";
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -391,6 +393,13 @@ const EQ_APPLY_THROTTLE_MS = 100;
 let _eqApplyLastAt = 0;
 let _eqApplyTimer: ReturnType<typeof setTimeout> | null = null;
 
+// Opsi 3 (log #15): gate in-flight untuk setFullEqualizer —
+// maks 1 panggilan native in-flight + 1 snapshot tertahan (flag; isi
+// snapshot dibaca ulang saat fire, jadi selalu yang terbaru), hanya
+// selama drag. Di luar drag: tanpa gating (perilaku lama, void).
+let _eqApplyInFlight = false;
+let _eqApplyHeld = false;
+
 // (Item 7) Kirim bands TERKINI ke native sekali — dipakai leading /
 // trailing timer applyEqThrottled di bawah DAN flush saat drag dilepas.
 // Membaca snapshot PENDING store bila ada (N24), bukan hanya get().bands.
@@ -401,6 +410,15 @@ const fireEqApply = (
     audioSessionId: number;
   },
 ) => {
+  // Opsi 3: selama drag, JANGAN kirim selagi ada setFullEqualizer yang
+  // belum resolve — cukup tandai tertahan. lastAt TIDAK dimajukan:
+  // tick berikut tetap lewat cabang leading applyEqThrottled dan
+  // menandai tertahan lagi (snapshot terbaru yang dibaca saat settle).
+  if (isDragActive() && _eqApplyInFlight) {
+    _eqApplyHeld = true;
+    _eqApplyTimer = null;
+    return;
+  }
   _eqApplyLastAt = Date.now();
   _eqApplyTimer = null;
   // N24: apply membaca snapshot PENDING store bila ada, bukan hanya
@@ -424,7 +442,36 @@ const fireEqApply = (
     return;
   }
   const gains = bands.map((b) => Math.min(10, Math.max(-10, b.gain)));
-  void NativeDSPModule.setFullEqualizer(gains, audioSessionId);
+  // Opsi 3: lacak janji ini sebagai in-flight — settle-nya yang
+  // mengirim snapshot tertahan (bila ada). Dulu `void` tanpa jejak:
+  // tiap fire memulai janji yang tak terlacak, dan janji-janji itu
+  // yang menumpuk saat thread JS kelaparan (log #15).
+  const result: unknown = NativeDSPModule.setFullEqualizer(
+    gains,
+    audioSessionId,
+  );
+  if (
+    result !== null &&
+    typeof result === "object" &&
+    typeof (result as { then?: unknown }).then === "function"
+  ) {
+    _eqApplyInFlight = true;
+    const settleEqApply = () => {
+      _eqApplyInFlight = false;
+      if (_eqApplyHeld) {
+        _eqApplyHeld = false;
+        // Snapshot bands terbaru dibaca ulang di dalam fireEqApply.
+        try {
+          fireEqApply(get);
+        } catch {
+          // fireEqApply tidak melempar dalam praktik; jaring pengaman
+          // supaya settle async tidak jadi unhandled rejection.
+        }
+      }
+    };
+    (result as Promise<unknown>).then(settleEqApply, settleEqApply);
+    (result as Promise<unknown>).catch(() => {});
+  }
 };
 
 /**
@@ -604,27 +651,50 @@ const MASTER_GAIN_NATIVE_THROTTLE_MS = 100;
 let _masterGainLastAt = 0;
 let _masterGainTimer: ReturnType<typeof setTimeout> | null = null;
 let _masterGainPending: number | null = null;
+// Opsi 3 (log #15): satu dorongan master gain in-flight + satu nilai
+// tertahan (yang terbaru) — hanya selama drag (lihat fireMasterGain).
+let _masterGainInFlight = false;
+let _masterGainHeld: number | null = null;
 
 const fireMasterGain = async (gain: number) => {
-  _masterGainLastAt = Date.now();
-  _masterGainTimer = null;
-  const value = _masterGainPending ?? gain;
-  _masterGainPending = null;
-  // ReplayGain (2026-11-20): `value` di sini masih gain USER (slider);
-  // yang dikirim ke native adalah gain EFEKTIF (user × faktor RG lagu
-  // aktif). Konversi di sini (bukan di pemanggil) supaya SEMUA pemanggil
-  // — slider, restore, toggle RG — otomatis konsisten, dan nilai
-  // terakhir selalu terkirim (trailing) dengan faktor RG terbaru.
-  const effective = getEffectiveMasterGain(value);
-  // setMasterGain kini Promise<boolean> (P1-9): false = native menolak.
-  // fire-and-forget (N23) tapi rejection dicatat — jangan jadi unhandled.
+  // Opsi 3 (log #15): selama drag, maks 1 in-flight. Bila ada dorongan
+  // master gain yang belum resolve, tahan nilai terbaru — kirim begitu
+  // yang lama selesai. Pending throttle (`_masterGainPending ?? gain`)
+  // ikut dikonsumsi ke nilai tertahan supaya yang terbaru yang menang.
+  // Di luar drag: tanpa gating (perilaku lama).
+  if (isDragActive() && _masterGainInFlight) {
+    _masterGainHeld = _masterGainPending ?? gain;
+    _masterGainPending = null;
+    _masterGainTimer = null;
+    return;
+  }
+  _masterGainInFlight = true;
   try {
-    const ok = await NativeDSPModule?.setMasterGain?.(effective);
-    if (ok === false) {
-      console.warn("[EQ Store] setMasterGain ditolak native");
+    _masterGainLastAt = Date.now();
+    _masterGainTimer = null;
+    const value = _masterGainPending ?? gain;
+    _masterGainPending = null;
+    // ReplayGain (2026-11-20): `value` di sini masih gain USER (slider);
+    // yang dikirim ke native adalah gain EFEKTIF (user × faktor RG lagu
+    // aktif). Konversi di sini (bukan di pemanggil) supaya SEMUA pemanggil
+    // — slider, restore, toggle RG — otomatis konsisten, dan nilai
+    // terakhir selalu terkirim (trailing) dengan faktor RG terbaru.
+    const effective = getEffectiveMasterGain(value);
+    // setMasterGain kini Promise<boolean> (P1-9): false = native menolak.
+    // fire-and-forget (N23) tapi rejection dicatat — jangan jadi unhandled.
+    try {
+      const ok = await NativeDSPModule?.setMasterGain?.(effective);
+      if (ok === false) {
+        console.warn("[EQ Store] setMasterGain ditolak native");
+      }
+    } catch (e) {
+      console.error("[EQ Store] setMasterGain gagal:", e);
     }
-  } catch (e) {
-    console.error("[EQ Store] setMasterGain gagal:", e);
+  } finally {
+    _masterGainInFlight = false;
+    const held = _masterGainHeld;
+    _masterGainHeld = null;
+    if (held !== null) void fireMasterGain(held);
   }
 };
 
@@ -695,7 +765,12 @@ const pushBassBoostThrottled = createEffectPusher({
   throttleName: "bass",
   throttleMs: EFFECT_PUSH_THROTTLE_MS,
   send: (value, sessionId) => {
-    void (async () => {
+    // Opsi 3 (log #15): KEMBALIKAN janji IIFE ini (dulu `void`) supaya
+    // pusher bisa melacak in-flight dan menahan nilai tengah selama
+    // drag. IIFE menelan error di dalam, jadi janji selalu resolve —
+    // pusher tetap fire-and-forget, hanya kini ia tahu kapan satu
+    // panggilan selesai.
+    return (async () => {
       const h = noteSetterStart("setBassBoost");
       try {
         await NativeDSPModule.setBassBoost(value, sessionId);
@@ -712,7 +787,8 @@ const pushVirtualizerThrottled = createEffectPusher({
   throttleName: "widener",
   throttleMs: EFFECT_PUSH_THROTTLE_MS,
   send: (value, sessionId) => {
-    void (async () => {
+    // Opsi 3 (log #15): kembalikan janji — lihat pushBassBoostThrottled.
+    return (async () => {
       const h = noteSetterStart("setVirtualizer");
       try {
         // DIAGNOSTIK SEMENTARA — bisa dicabut (audit setVirtualizer 2026-11-19, opsi B).
@@ -731,7 +807,8 @@ const pushReverbThrottled = createEffectPusher({
   throttleName: "reverb",
   throttleMs: EFFECT_PUSH_THROTTLE_MS,
   send: (value, sessionId) => {
-    void (async () => {
+    // Opsi 3 (log #15): kembalikan janji — lihat pushBassBoostThrottled.
+    return (async () => {
       const h = noteSetterStart("setReverb");
       try {
         await NativeDSPModule.setReverbPreset(value, sessionId);

@@ -16,6 +16,23 @@
 // Nilai TERAKHIR selalu terkirim (trailing), jadi drag cepat tidak
 // meninggalkan nilai basi sesudah drag selesai.
 //
+// OPSI 3 (logcat #15, 2026-11-22): throttle di atas ternyata BUKAN
+// titik tumpuknya — tick drag datang lambat (~1,8/dtk, runOnJS ikut
+// antre di thread JS yang kelaparan), jadi tiap tick lolos jendela
+// 100 ms dan langsung leading-fire. Yang menumpuk adalah JANJI native
+// in-flight: tiap fire memulai satu `await NativeDSPModule.*` yang
+// resolve-nya menunggu giliran thread JS — 203 janji menggantung
+// sekaligus (overlap maks 199), native 0 ms di semuanya. Karena itu
+// `fire()` kini di-gate SELAMA DRAG SAJA (lihat `isDragActive`):
+// bila sudah ada panggilan native in-flight untuk pusher ini, nilai
+// terbaru DITAHAN (bukan dikirim) dan dikirim begitu yang lama selesai
+// — maks 1 in-flight + 1 tertahan per pusher. Di luar drag perilaku
+// lama (tanpa gating). Flush saat release tetap mendarat tepat sekali:
+// onFinalize memanggil setDragActive(false) SEBELUM onDragEnd, jadi
+// flush tidak ter-gate; bila nilai sempat tertahan, ia terkirim saat
+// janji in-flight selesai (settle), bukan lewat flush — keduanya tidak
+// pernah dobel karena timer trailing sudah habis saat nilai ditahan.
+//
 // POLA: sama seperti `pushMasterGainThrottled` (leading + trailing,
 // 100 ms) dan throttle store Fix G di `setBandGain` — bedanya pusher ini
 // generik (satu nilai skalar) dan `commit` opsional (bagian 3: store
@@ -30,6 +47,7 @@ import {
   noteThrottleTick,
   type ThrottleName,
 } from "@/features/equalizer/api/dragDiag";
+import { isDragActive } from "@/features/equalizer/api/dragState";
 
 /** Satu panggilan drag yang tertunda (nilai terbaru yang menang). */
 interface PendingPush {
@@ -85,8 +103,47 @@ export function createEffectPusher(
   let lastAt = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let pending: PendingPush | null = null;
+  // Opsi 3 (log #15): satu panggilan native in-flight per pusher, dan
+  // paling satu nilai tertahan (yang terbaru) — hanya selama drag.
+  let inFlight = false;
+  let held: PendingPush | null = null;
 
-  const fire = (value: number, sessionId: number, commit?: () => void) => {
+  // Dipanggil saat janji native in-flight selesai (resolve ATAU reject —
+  // `send` menelan error di dalam, jadi janji selalu resolve dalam
+  // praktik). Kirim nilai tertahan bila ada, tepat sekali.
+  const settleFlight = () => {
+    inFlight = false;
+    const h = held;
+    held = null;
+    if (h) {
+      // fire() menelan error send, tapi commit yang melempar akan lolos —
+      // di konteks async ini itu jadi unhandled rejection, jadi telan.
+      try {
+        fire(h.value, h.sessionId, h.commit);
+      } catch {
+        // Nilai tertahan sudah dibuang; tidak ada retry.
+      }
+    }
+  };
+
+  // Kembalikan true bila nilai benar-benar dikirim, false bila ditahan
+  // (drag aktif + ada in-flight) — pemanggil mencatat "dropped" untuk
+  // yang ditahan, supaya hitungan [DRAG-DIAG] jujur.
+  const fire = (
+    value: number,
+    sessionId: number,
+    commit?: () => void,
+  ): boolean => {
+    // Opsi 3: selama drag, JANGAN kirim selagi ada in-flight — tahan
+    // nilai terbaru. lastAt TIDAK dimajukan: tick berikut tetap lewat
+    // cabang leading dan menimpa `held` dengan nilai yang lebih baru.
+    // Di luar drag: tanpa gating (perilaku lama).
+    if (isDragActive() && inFlight) {
+      held = { value, sessionId, commit };
+      timer = null;
+      pending = null;
+      return false;
+    }
     lastAt = Date.now();
     timer = null;
     pending = null;
@@ -102,13 +159,20 @@ export function createEffectPusher(
       if (
         result !== null &&
         typeof result === "object" &&
-        typeof (result as { catch?: unknown }).catch === "function"
+        typeof (result as { then?: unknown }).then === "function"
       ) {
+        // Opsi 3: lacak janji ini sebagai in-flight — settle-nya yang
+        // melepas nilai tertahan. Janji yang tidak pernah settle
+        // (thread JS kelaparan) menahan `held` sampai drag selesai
+        // dan thread bebas — nilai akhir tetap mendarat, sekali.
+        inFlight = true;
+        (result as Promise<unknown>).then(settleFlight, settleFlight);
         (result as Promise<unknown>).catch(() => {});
       }
     } catch {
       // send yang melempar sinkron: telan — pusher tidak pernah melempar.
     }
+    return true;
   };
 
   return {
@@ -120,9 +184,12 @@ export function createEffectPusher(
           timer = null;
         }
         pending = null;
-        fire(value, sessionId, commit);
-        // [DRAG-DIAG] tick yang langsung fire (leading).
-        noteThrottleTick(options.throttleName, "fired");
+        // [DRAG-DIAG] tick yang langsung fire (leading) — atau ditahan
+        // (opsi 3) bila ada in-flight selama drag.
+        noteThrottleTick(
+          options.throttleName,
+          fire(value, sessionId, commit) ? "fired" : "dropped",
+        );
       } else if (!timer) {
         pending = { value, sessionId, commit };
         // [DRAG-DIAG] tick yang dijadwalkan sebagai trailing fire.
@@ -150,6 +217,9 @@ export function createEffectPusher(
         timer = null;
       }
       pending = null;
+      // Opsi 3: nilai tertahan ikut dibuang — aksi wholesale (reset)
+      // tidak boleh membiarkan nilai drag basi terkirim sesudahnya.
+      held = null;
     },
 
     flush() {
@@ -163,6 +233,8 @@ export function createEffectPusher(
       // fire() membersihkan state + memajukan lastAt seperti trailing
       // fire biasa — push berikutnya dalam jendela jadi trailing, dan
       // timer yang sudah dibersihkan tidak mengirim ulang nilai ini.
+      // Bila fire menahan nilai (drag aktif + in-flight), nilai itu
+      // terkirim saat settle — flush tetap tepat sekali, tidak dobel.
       if (p) fire(p.value, p.sessionId, p.commit);
     },
   };

@@ -12,6 +12,7 @@ import {
   type EffectPusher,
 } from "@/features/equalizer/api/effectPusher";
 import { getThrottleCounts, resetDragDiagState } from "@/features/equalizer/api/dragDiag";
+import { setDragActive } from "@/features/equalizer/api/dragState";
 import { setTempDiagEnabled } from "@/shared/utils/diagGate";
 
 const THROTTLE_MS = 100;
@@ -35,6 +36,7 @@ describe("createEffectPusher", () => {
   afterEach(() => {
     jest.useRealTimers();
     setTempDiagEnabled(false);
+    setDragActive(false);
     resetDragDiagState();
   });
 
@@ -140,6 +142,131 @@ describe("createEffectPusher", () => {
     } finally {
       logSpy.mockRestore();
     }
+  });
+
+  describe("coalescing in-flight (opsi 3, log #15) — maks 1 in-flight + 1 tertahan, selama drag", () => {
+    // Janji send yang bisa di-resolve / di-reject manual, untuk
+    // mensimulasikan native yang resolve-nya tertahan (thread JS
+    // kelaparan) atau gagal.
+    let resolveSend!: (v: boolean) => void;
+    let rejectSend!: (e: unknown) => void;
+    const pendingSend = () =>
+      new Promise<boolean>((resolve, reject) => {
+        resolveSend = resolve;
+        rejectSend = reject;
+      });
+
+    it("drag aktif + send belum resolve: tick berikut tidak kirim, nilai terbaru yang menang saat resolve", async () => {
+      send.mockImplementation(pendingSend);
+      setDragActive(true);
+      const commits: number[] = [];
+      pusher.push(100, 7, () => commits.push(100)); // leading, in-flight
+      expect(send).toHaveBeenCalledTimes(1);
+      jest.advanceTimersByTime(100); // jendela habis
+      pusher.push(200, 7, () => commits.push(200)); // ditahan
+      pusher.push(300, 7, () => commits.push(300)); // ditahan, menimpa 200
+      expect(send).toHaveBeenCalledTimes(1); // tetap 1 — tidak ada yang dikirim
+      expect(commits).toEqual([100]); // commit nilai tertahan belum jalan
+      expect(getThrottleCounts().widener.dropped).toBe(2);
+
+      resolveSend(true); // janji pertama selesai
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(send).toHaveBeenLastCalledWith(300, 7); // nilai terbaru
+      expect(commits).toEqual([100, 300]); // commit 200 tidak jalan
+    });
+
+    it("nilai tertahan dari trailing timer ikut terkirim saat resolve", async () => {
+      send.mockImplementation(pendingSend);
+      setDragActive(true);
+      pusher.push(100, 7); // leading, in-flight
+      pusher.push(200, 7); // trailing terjadwal
+      jest.advanceTimersByTime(100); // trailing fire -> ditahan (in-flight)
+      expect(send).toHaveBeenCalledTimes(1);
+      resolveSend(true);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(send).toHaveBeenLastCalledWith(200, 7);
+    });
+
+    it("flush saat drag masih aktif + ada nilai tertahan: no-op, nilai akhir mendarat sekali saat resolve", async () => {
+      send.mockImplementation(pendingSend);
+      setDragActive(true);
+      pusher.push(100, 7); // leading, in-flight
+      jest.advanceTimersByTime(100);
+      pusher.push(300, 7); // ditahan
+      pusher.flush(); // timer sudah habis -> no-op
+      expect(send).toHaveBeenCalledTimes(1);
+      resolveSend(true);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(send).toHaveBeenLastCalledWith(300, 7);
+      jest.advanceTimersByTime(500);
+      expect(send).toHaveBeenCalledTimes(2); // tidak ada kiriman ganda
+    });
+
+    it("flush sesudah drag selesai (urutan onFinalize): nilai akhir langsung terkirim walau ada in-flight", async () => {
+      send.mockImplementation(pendingSend);
+      setDragActive(true);
+      pusher.push(100, 7); // leading, in-flight
+      pusher.push(200, 7); // trailing terjadwal
+      // onFinalize: drag off DULU, baru onDragEnd (flush).
+      setDragActive(false);
+      pusher.flush();
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(send).toHaveBeenLastCalledWith(200, 7);
+      // Janji pertama selesai belakangan — tidak ada kiriman susulan.
+      resolveSend(true);
+      await Promise.resolve();
+      await Promise.resolve();
+      jest.advanceTimersByTime(500);
+      expect(send).toHaveBeenCalledTimes(2);
+    });
+
+    it("di luar drag: push kembali sebelum send selesai tetap kirim (perilaku lama)", async () => {
+      // Drag TIDAK aktif — gating tidak berlaku.
+      send.mockImplementation(pendingSend);
+      pusher.push(100, 7);
+      expect(send).toHaveBeenCalledTimes(1);
+      jest.advanceTimersByTime(100);
+      pusher.push(200, 7);
+      expect(send).toHaveBeenCalledTimes(2); // langsung kirim, tidak ditahan
+      expect(send).toHaveBeenLastCalledWith(200, 7);
+      resolveSend(true);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    it("cancelPending membuang nilai tertahan juga", async () => {
+      send.mockImplementation(pendingSend);
+      setDragActive(true);
+      pusher.push(100, 7); // leading, in-flight
+      jest.advanceTimersByTime(100);
+      pusher.push(300, 7); // ditahan
+      pusher.cancelPending();
+      resolveSend(true);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(send).toHaveBeenCalledTimes(1); // 300 tidak pernah terkirim
+      expect(send).toHaveBeenLastCalledWith(100, 7);
+    });
+
+    it("send pertama reject: nilai tertahan tetap terkirim sesudahnya", async () => {
+      send.mockImplementation(pendingSend);
+      setDragActive(true);
+      pusher.push(100, 7); // leading, in-flight
+      jest.advanceTimersByTime(100);
+      pusher.push(300, 7); // ditahan
+      // Janji pertama reject — settle jalan di cabang rejection juga.
+      rejectSend(new Error("bridge down"));
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(send).toHaveBeenLastCalledWith(300, 7);
+    });
   });
 
   describe("flush() (Item 7) — nilai akhir drag terkirim saat release", () => {
