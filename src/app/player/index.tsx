@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { memo, useCallback, useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -84,6 +84,184 @@ const hexToRGBA = (hex: string, opacity: number): string => {
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity})`;
 };
 
+// ─── PlayerSeekBar ────────────────────────────────────────────────────────
+// Slider + waktu putar, memo + langganan posisi sendiri. Dulu
+// `useAudioProgress()` + `dragPosition` tinggal di PlayerScreen — tiap
+// tick posisi (~2/dtk) DAN tiap tick drag slider me-render ulang SELURUH
+// layar (sampul, visualizer, kontrol, utilitas). Sekarang tick itu hanya
+// me-render ulang node ini; induk diam. Props semuanya primitif / aksi
+// store stabil, jadi memo() efektif. U-P2-11 dipertahankan: selama drag,
+// slider menampilkan nilai lokal dan baru commit seek saat dilepas;
+// lagu berganti di tengah drag membatalkan drag (songId).
+const PlayerSeekBar = memo(function PlayerSeekBar({
+  songId,
+  seek,
+  primaryColor,
+  borderColor,
+  textTertiary,
+}: {
+  songId: string;
+  seek: (pos: number) => Promise<void>;
+  primaryColor: string;
+  borderColor: string;
+  textTertiary: string;
+}) {
+  const { position, duration } = useAudioProgress();
+  const [dragPosition, setDragPosition] = useState<number | null>(null);
+
+  // U-P2-11: lagu berganti di tengah drag — batalkan drag supaya seek
+  // saat jari dilepas tidak jatuh ke lagu yang baru.
+  useEffect(() => {
+    setDragPosition(null);
+  }, [songId]);
+
+  // LAYOUT-V2 (3): slider + waktu — pindah dari panel progres terpisah
+  // ke dalam panel kontrol. Selama drag, slider menampilkan nilai lokal
+  // (onValueChange) dan baru commit seek saat dilepas
+  // (onSlidingComplete); watcher posisi native tidak boleh menarik balik
+  // nilai selama drag. Saat durasi 0, slider tidak dirender sama sekali
+  // (max=0 tidak berguna) — diganti trek statis supaya layout tidak
+  // lompat.
+  return (
+    <>
+      {duration > 0 ? (
+        <Slider
+          style={styles.slider}
+          minimumValue={0}
+          maximumValue={duration}
+          value={dragPosition ?? position}
+          accessibilityRole="adjustable"
+          accessibilityLabel="Posisi pemutaran"
+          accessibilityValue={{
+            min: 0,
+            max: Math.round(duration),
+            now: Math.round(dragPosition ?? position),
+          }}
+          onSlidingStart={(value) => setDragPosition(value)}
+          onValueChange={(value) => setDragPosition(value)}
+          onSlidingComplete={(value) => {
+            setDragPosition(null);
+            void seek(value);
+          }}
+          minimumTrackTintColor={primaryColor}
+          maximumTrackTintColor={borderColor}
+          thumbTintColor={primaryColor}
+        />
+      ) : (
+        <View
+          style={styles.slider}
+          accessibilityRole="progressbar"
+          accessibilityLabel="Posisi pemutaran belum tersedia"
+        >
+          <View
+            style={[
+              styles.sliderDisabledTrack,
+              { backgroundColor: borderColor },
+            ]}
+          />
+        </View>
+      )}
+      <View style={styles.timeRow}>
+        <Text style={[styles.timeText, { color: textTertiary }]}>
+          {formatTime(dragPosition ?? position)}
+        </Text>
+        <Text style={[styles.timeText, { color: textTertiary }]}>
+          {formatTime(duration)}
+        </Text>
+      </View>
+    </>
+  );
+});
+
+// ─── SleepTimerButton ─────────────────────────────────────────────────────
+// Tombol timer tidur di bar utilitas, memo + jam detik sendiri. Dulu
+// `sleepNow` + interval 1 detik tinggal di PlayerScreen — selama timer
+// aktif, SELURUH layar render ulang tiap detik. Sekarang detak itu hanya
+// me-render ulang tombol ini; induk diam. Langganan sleepTimerEnd per
+// nilai (bukan seluruh store).
+const SleepTimerButton = memo(function SleepTimerButton({
+  onPress,
+  primaryColor,
+  iconColorDefault,
+  textSecondary,
+  playIconColor,
+}: {
+  onPress: () => void;
+  primaryColor: string;
+  iconColorDefault: string;
+  textSecondary: string;
+  playIconColor: string;
+}) {
+  const sleepTimerEnd = usePlayerStore((state) => state.sleepTimerEnd);
+  // A4: jam untuk indikator sleep timer — detak tiap detik hanya saat
+  // timer aktif, supaya sisa menit tidak basi (pola SleepTimerModal).
+  const [sleepNow, setSleepNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (sleepTimerEnd === null) return;
+    const id = setInterval(() => setSleepNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [sleepTimerEnd]);
+
+  // A4: indikator sleep timer — null bila timer mati, 0 saat baru habis.
+  const sleepRemainingMin = sleepRemainingMinutes(sleepTimerEnd, sleepNow);
+  const sleepActive = sleepRemainingMin !== null && sleepRemainingMin > 0;
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={[styles.utilityBtn, styles.sleepBtn]}
+      accessibilityRole="button"
+      accessibilityLabel={
+        sleepActive
+          ? `Timer tidur aktif, sisa ${sleepRemainingMin} menit`
+          : "Timer tidur"
+      }
+      accessibilityState={{ selected: sleepActive }}
+    >
+      <Clock
+        size={20}
+        color={sleepActive ? primaryColor : iconColorDefault}
+      />
+      {sleepActive && (
+        <>
+          <View
+            style={[
+              styles.repeatOneDot,
+              { backgroundColor: primaryColor },
+            ]}
+          />
+          <View
+            style={[
+              styles.sleepBadge,
+              { backgroundColor: primaryColor },
+            ]}
+          >
+            <Text
+              style={[
+                styles.sleepBadgeText,
+                { color: playIconColor },
+              ]}
+            >
+              {`${sleepRemainingMin} mnt`}
+            </Text>
+          </View>
+        </>
+      )}
+      {/* LAYOUT-V2 (2): label teks supaya fungsi tombol jelas —
+          kata sama dengan accessibilityLabel ("Timer Tidur"). */}
+      <Text
+        style={[
+          styles.utilityLabel,
+          { color: sleepActive ? primaryColor : textSecondary },
+        ]}
+        numberOfLines={1}
+      >
+        Timer Tidur
+      </Text>
+    </TouchableOpacity>
+  );
+});
+
 export default function PlayerScreen() {
   const { theme } = useTheme();
   const { colors, isDark } = theme;
@@ -126,33 +304,29 @@ export default function PlayerScreen() {
   const [isTimerVisible, setIsTimerVisible] = useState(false);
   const [isQueueVisible, setIsQueueVisible] = useState(false);
 
-  // U-P2-11: posisi lokal selama jari menggeser slider. Nilai slider
-  // terikat ke store yang di-overwrite tiap 500ms oleh watcher posisi
-  // native — tanpa state lokal, nilai bisa ditarik balik sebelum dilepas.
-  const [dragPosition, setDragPosition] = useState<number | null>(null);
-
-  const { position, duration } = useAudioProgress();
-
-  const {
-    currentSong,
-    isPlaying,
-    playError,
-    clearPlayError,
-    playSong,
-    togglePlay,
-    seek,
-    playNext,
-    playPrevious,
-    shuffle,
-    repeat,
-    toggleShuffle,
-    toggleRepeat,
-    audioMode,
-    audioSessionId, // ✅ Diperlukan untuk SpectogramView
-    sleepTimerEnd,
-    playbackSpeed,
-    tuningCents,
-  } = usePlayerStore();
+  // Per-node render (2026-11-22): dulu `usePlayerStore()` TANPA selector —
+  // SELURUH store dilanggan, jadi tiap tick posisi (~2/dtk), tiap
+  // perubahan antrean/lirik/mode, dan tiap set() apa pun me-render ulang
+  // layar 1495 baris ini. Sekarang selector per nilai; posisi/durasi
+  // bahkan tidak dilanggan induk sama sekali (lihat PlayerSeekBar di
+  // bawah — tick posisi hanya me-render ulang seek bar-nya).
+  const currentSong = usePlayerStore((state) => state.currentSong);
+  const isPlaying = usePlayerStore((state) => state.isPlaying);
+  const playError = usePlayerStore((state) => state.playError);
+  const clearPlayError = usePlayerStore((state) => state.clearPlayError);
+  const playSong = usePlayerStore((state) => state.playSong);
+  const togglePlay = usePlayerStore((state) => state.togglePlay);
+  const seek = usePlayerStore((state) => state.seek);
+  const playNext = usePlayerStore((state) => state.playNext);
+  const playPrevious = usePlayerStore((state) => state.playPrevious);
+  const shuffle = usePlayerStore((state) => state.shuffle);
+  const repeat = usePlayerStore((state) => state.repeat);
+  const toggleShuffle = usePlayerStore((state) => state.toggleShuffle);
+  const toggleRepeat = usePlayerStore((state) => state.toggleRepeat);
+  const audioMode = usePlayerStore((state) => state.audioMode);
+  const audioSessionId = usePlayerStore((state) => state.audioSessionId);
+  const playbackSpeed = usePlayerStore((state) => state.playbackSpeed);
+  const tuningCents = usePlayerStore((state) => state.tuningCents);
 
   // U-P1-19: hati memakai state favorit asli (libraryStore, dicerminkan
   // dari kolom songs.isFavorite) — hook HARUS di atas return kondisional,
@@ -188,20 +362,7 @@ export default function PlayerScreen() {
     return () => usePlayerStore.getState().setMainPlayerOpen(false);
   }, []);
 
-  // U-P2-11: lagu berganti di tengah drag — batalkan drag supaya seek
-  // saat jari dilepas tidak jatuh ke lagu yang baru.
-  useEffect(() => {
-    setDragPosition(null);
-  }, [currentSong?.id]);
-
-  // A4: jam untuk indikator sleep timer — detak tiap detik hanya saat
-  // timer aktif, supaya sisa menit tidak basi (pola SleepTimerModal).
-  const [sleepNow, setSleepNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (sleepTimerEnd === null) return;
-    const id = setInterval(() => setSleepNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [sleepTimerEnd]);
+  const handleOpenTimer = useCallback(() => setIsTimerVisible(true), []);
 
   const handlePlayPause = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -369,10 +530,6 @@ export default function PlayerScreen() {
   ];
 
   const iconColorDefault = isDark ? textTertiary : textSecondary;
-
-  // A4: indikator sleep timer — null bila timer mati, 0 saat baru habis.
-  const sleepRemainingMin = sleepRemainingMinutes(sleepTimerEnd, sleepNow);
-  const sleepActive = sleepRemainingMin !== null && sleepRemainingMin > 0;
 
   // P2: chip status speed/tuning — hanya tampil bila bukan default
   // (tampilan saja, tidak mengubah perilaku).
@@ -862,58 +1019,15 @@ export default function PlayerScreen() {
           </TouchableOpacity>
           </View>
 
-          {/* LAYOUT-V2 (3): slider + waktu — pindah dari panel progres
-              terpisah ke dalam panel kontrol. U-P2-11: selama drag, slider
-              menampilkan nilai lokal (onValueChange) dan baru commit seek
-              saat dilepas (onSlidingComplete); watcher posisi native tidak
-              boleh menarik balik nilai selama drag. Saat durasi 0, slider
-              tidak dirender sama sekali (max=0 tidak berguna) — diganti
-              trek statis supaya layout tidak lompat. */}
-          {duration > 0 ? (
-            <Slider
-              style={styles.slider}
-              minimumValue={0}
-              maximumValue={duration}
-              value={dragPosition ?? position}
-              accessibilityRole="adjustable"
-              accessibilityLabel="Posisi pemutaran"
-              accessibilityValue={{
-                min: 0,
-                max: Math.round(duration),
-                now: Math.round(dragPosition ?? position),
-              }}
-              onSlidingStart={(value) => setDragPosition(value)}
-              onValueChange={(value) => setDragPosition(value)}
-              onSlidingComplete={(value) => {
-                setDragPosition(null);
-                void seek(value);
-              }}
-              minimumTrackTintColor={primaryColor}
-              maximumTrackTintColor={borderColor}
-              thumbTintColor={primaryColor}
-            />
-          ) : (
-            <View
-              style={styles.slider}
-              accessibilityRole="progressbar"
-              accessibilityLabel="Posisi pemutaran belum tersedia"
-            >
-              <View
-                style={[
-                  styles.sliderDisabledTrack,
-                  { backgroundColor: borderColor },
-                ]}
-              />
-            </View>
-          )}
-          <View style={styles.timeRow}>
-            <Text style={[styles.timeText, { color: textTertiary }]}>
-              {formatTime(dragPosition ?? position)}
-            </Text>
-            <Text style={[styles.timeText, { color: textTertiary }]}>
-              {formatTime(duration)}
-            </Text>
-          </View>
+          {/* Seek bar memo (PlayerSeekBar di bawah): tick posisi +
+              drag slider hanya me-render ulang node ini, bukan layar. */}
+          <PlayerSeekBar
+            songId={currentSong.id}
+            seek={seek}
+            primaryColor={primaryColor}
+            borderColor={borderColor}
+            textTertiary={textTertiary}
+          />
         </View>
 
         {/* LAYOUT-V3: panel info audio DIHAPUS — isinya pindah menyatu ke
@@ -968,58 +1082,13 @@ export default function PlayerScreen() {
             { backgroundColor: backgroundSecondary },
           ]}
         >
-          <TouchableOpacity
-            onPress={() => setIsTimerVisible(true)}
-            style={[styles.utilityBtn, styles.sleepBtn]}
-            accessibilityRole="button"
-            accessibilityLabel={
-              sleepActive
-                ? `Timer tidur aktif, sisa ${sleepRemainingMin} menit`
-                : "Timer tidur"
-            }
-            accessibilityState={{ selected: sleepActive }}
-          >
-            <Clock
-              size={20}
-              color={sleepActive ? primaryColor : iconColorDefault}
-            />
-            {sleepActive && (
-              <>
-                <View
-                  style={[
-                    styles.repeatOneDot,
-                    { backgroundColor: primaryColor },
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.sleepBadge,
-                    { backgroundColor: primaryColor },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.sleepBadgeText,
-                      { color: playIconColor },
-                    ]}
-                  >
-                    {`${sleepRemainingMin} mnt`}
-                  </Text>
-                </View>
-              </>
-            )}
-            {/* LAYOUT-V2 (2): label teks supaya fungsi tombol jelas —
-                kata sama dengan accessibilityLabel ("Timer Tidur"). */}
-            <Text
-              style={[
-                styles.utilityLabel,
-                { color: sleepActive ? primaryColor : textSecondary },
-              ]}
-              numberOfLines={1}
-            >
-              Timer Tidur
-            </Text>
-          </TouchableOpacity>
+          <SleepTimerButton
+            onPress={handleOpenTimer}
+            primaryColor={primaryColor}
+            iconColorDefault={iconColorDefault}
+            textSecondary={textSecondary}
+            playIconColor={playIconColor}
+          />
 
           <TouchableOpacity
             onPress={() => setShowLyrics(!showLyrics)}

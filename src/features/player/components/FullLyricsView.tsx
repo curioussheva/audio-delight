@@ -13,7 +13,12 @@ import { findActiveLyricIndex } from "@/shared/utils/LrcParser";
 import { lyricsVerticalPadding } from "@/features/player/utils/playerLayout";
 
 export const FullLyricsView = () => {
-  const { lyrics, position: progress } = usePlayerStore();
+  // Per-node render (2026-11-22): dulu `usePlayerStore()` tanpa selector —
+  // seluruh store dilanggan (tiap set() apa pun me-render ulang daftar
+  // lirik). Sekarang hanya lyrics + position yang memang dipakai
+  // (position = garis aktif + auto-scroll).
+  const lyrics = usePlayerStore((state) => state.lyrics);
+  const progress = usePlayerStore((state) => state.position);
   const { colors } = useTheme().theme;
   // P2-7: tinggi layar REAKTIF terhadap rotasi (dulu `Dimensions.get(
   // "window")` di level modul — dibekukan saat import, padding tengah

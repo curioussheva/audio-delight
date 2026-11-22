@@ -20,7 +20,10 @@ export const SleepTimerModal = ({
   visible: boolean;
   onClose: () => void;
 }) => {
-  const { setSleepTimer, sleepTimerEnd } = usePlayerStore();
+  // Per-node render (2026-11-22): dulu `usePlayerStore()` tanpa selector —
+  // seluruh store dilanggan. Sekarang per nilai.
+  const setSleepTimer = usePlayerStore((state) => state.setSleepTimer);
+  const sleepTimerEnd = usePlayerStore((state) => state.sleepTimerEnd);
   const { theme } = useTheme();
   const { colors, isDark } = theme;
   const [now, setNow] = useState(() => Date.now());

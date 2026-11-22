@@ -37,7 +37,12 @@ export const QueueManager: React.FC<QueueManagerProps> = ({
 }) => {
   const { theme } = useTheme();
   const { colors, spacing } = theme;
-  const { queue, currentSong, playSong } = usePlayerStore();
+  // Per-node render (2026-11-22): dulu `usePlayerStore()` tanpa selector —
+  // seluruh store dilanggan (tick posisi ikut me-render ulang modal
+  // antrean yang bahkan sedang tersembunyi). Sekarang per nilai.
+  const queue = usePlayerStore((state) => state.queue);
+  const currentSong = usePlayerStore((state) => state.currentSong);
+  const playSong = usePlayerStore((state) => state.playSong);
 
   if (!visible) return null;
 
