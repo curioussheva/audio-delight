@@ -1,6 +1,6 @@
 import { Tabs } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
-import { memo, useMemo } from "react";
+import { useMemo } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePlayerStore } from "@/features/player/store/playerStore";
@@ -16,33 +16,21 @@ import { pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 // Per-node render (2026-11-22): ikon tab di level modul — dulu arrow
 // inline baru tiap render TabsLayout, jadi navigator menerima `options`
 // baru + me-render ulang tab bar tiap ganti lagu / tick status scan.
-const LibraryTabIcon = memo(function LibraryTabIcon({
-  color,
-  size,
-}: {
-  color: string;
-  size: number;
-}) {
+// PENTING: harus FUNGSI biasa, BUKAN memo() — React Navigation memanggil
+// `tabBarIcon` sebagai fungsi (renderIcon({ color, size, focused })), dan
+// hasil memo() adalah object, bukan function (regresi 2026-11-23: fresh
+// install crash `TypeError: renderIcon is not a function (it is Object)`).
+// Fungsi level modul identitasnya stabil antar render, jadi tujuan perf
+// tetap tercapai tanpa memo().
+function LibraryTabIcon({ color, size }: { color: string; size: number }) {
   return <MaterialIcons name="library-music" size={size} color={color} />;
-});
-const EqualizerTabIcon = memo(function EqualizerTabIcon({
-  color,
-  size,
-}: {
-  color: string;
-  size: number;
-}) {
+}
+function EqualizerTabIcon({ color, size }: { color: string; size: number }) {
   return <MaterialIcons name="equalizer" size={size} color={color} />;
-});
-const AnalyzerTabIcon = memo(function AnalyzerTabIcon({
-  color,
-  size,
-}: {
-  color: string;
-  size: number;
-}) {
+}
+function AnalyzerTabIcon({ color, size }: { color: string; size: number }) {
   return <MaterialIcons name="graphic-eq" size={size} color={color} />;
-});
+}
 
 export default function TabsLayout() {
   const { theme } = useTheme();

@@ -14,13 +14,21 @@ const stripComments = (s: string) =>
   s.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
 
 describe("tabs layout node render", () => {
-  test("screenOptions useMemo + ikon tab level modul", () => {
+  test("screenOptions useMemo + ikon tab level modul (fungsi biasa)", () => {
     const src = read("../../../app/(drawer)/(tabs)/_layout.tsx");
     expect(src).toContain("const screenOptions = useMemo(");
     expect(src).toContain("<Tabs screenOptions={screenOptions}>");
-    expect(src).toContain("const LibraryTabIcon = memo(");
-    expect(src).toContain("const EqualizerTabIcon = memo(");
-    expect(src).toContain("const AnalyzerTabIcon = memo(");
+    // Regresi 2026-11-23: ikon sempat memo() — React Navigation memanggil
+    // tabBarIcon sebagai FUNGSI (renderIcon({ color, size, focused })), dan
+    // hasil memo() adalah object, bukan function → fresh install crash
+    // `TypeError: renderIcon is not a function (it is Object)`. Ikon harus
+    // fungsi level modul (identitas stabil antar render, tanpa memo()).
+    expect(src).toContain("function LibraryTabIcon(");
+    expect(src).toContain("function EqualizerTabIcon(");
+    expect(src).toContain("function AnalyzerTabIcon(");
+    expect(src).not.toContain("const LibraryTabIcon = memo(");
+    expect(src).not.toContain("const EqualizerTabIcon = memo(");
+    expect(src).not.toContain("const AnalyzerTabIcon = memo(");
     expect(src).toContain("tabBarIcon: LibraryTabIcon,");
     expect(src).toContain("tabBarIcon: EqualizerTabIcon,");
     expect(src).toContain("tabBarIcon: AnalyzerTabIcon,");
