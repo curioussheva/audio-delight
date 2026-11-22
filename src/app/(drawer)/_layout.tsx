@@ -16,7 +16,7 @@
 // manual setiap rilis - dan tidak akan pernah menyimpang dari APK yang
 // benar-benar terpasang.
 
-import React, { useState, useCallback } from "react";
+import React, { memo, useState, useCallback, useMemo } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Modal } from "react-native";
 import { Image } from "expo-image";
 import Constants from "expo-constants";
@@ -28,6 +28,7 @@ import {
   DrawerContentScrollView,
   DrawerItemList,
   type DrawerContentComponentProps,
+  type DrawerNavigationOptions,
 } from "@react-navigation/drawer";
 
 import { useTheme } from "@/shared/context/ThemeContext";
@@ -60,7 +61,12 @@ function readAppVersion(): string {
   return "-";
 }
 
-const DrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
+// Per-node render (2026-11-22): konten drawer statis — memo supaya
+// render ulang layout yang tidak mengubah props navigator tidak ikut
+// membangunkan daftar item + modal dev. Navigasi tetap membangunkan:
+// `state`/`descriptors` di props berganti referensi tiap navigasi, jadi
+// highlight item aktif tetap update.
+const DrawerContent: React.FC<DrawerContentComponentProps> = memo((props) => {
   const { theme } = useTheme();
   const { colors, spacing } = theme;
 
@@ -186,7 +192,7 @@ const DrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
       )}
     </>
   );
-};
+});
 
 export default function DrawerLayout() {
   const { theme } = useTheme();
@@ -209,30 +215,43 @@ export default function DrawerLayout() {
     AA_NORMAL,
   );
 
+  // Per-node render (2026-11-22): drawerContent + screenOptions dulu
+  // objek/arrow baru tiap render DrawerLayout — navigator menerima
+  // identitas baru dan ikut me-render ulang konten + screen. Sekarang
+  // stabil selama tema tidak berganti (colors referensi statis tema).
+  const renderDrawerContent = useCallback(
+    (props: DrawerContentComponentProps) => <DrawerContent {...props} />,
+    [],
+  );
+  const screenOptions = useMemo(
+    (): DrawerNavigationOptions => ({
+      headerShown: false,
+
+      // Warna dari tema aktif. Drawer yang selalu hitam akan terlihat
+      // sebagai panel asing bagi pengguna tema terang.
+      drawerStyle: {
+        backgroundColor: theme.colors.background.secondary,
+        width: 280,
+      },
+
+      drawerActiveTintColor: activeTint,
+      drawerInactiveTintColor: colors.text.secondary,
+      drawerActiveBackgroundColor: colors.background.tertiary,
+
+      drawerLabelStyle: {
+        fontSize: 14,
+        fontWeight: "600",
+        letterSpacing: 0.3,
+      },
+    }),
+    [activeTint, colors, theme.colors.background.secondary],
+  );
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <Drawer
-        drawerContent={(props) => <DrawerContent {...props} />}
-        screenOptions={{
-          headerShown: false,
-
-          // Warna dari tema aktif. Drawer yang selalu hitam akan terlihat
-          // sebagai panel asing bagi pengguna tema terang.
-          drawerStyle: {
-            backgroundColor: theme.colors.background.secondary,
-            width: 280,
-          },
-
-          drawerActiveTintColor: activeTint,
-          drawerInactiveTintColor: colors.text.secondary,
-          drawerActiveBackgroundColor: colors.background.tertiary,
-
-          drawerLabelStyle: {
-            fontSize: 14,
-            fontWeight: "600",
-            letterSpacing: 0.3,
-          },
-        }}
+        drawerContent={renderDrawerContent}
+        screenOptions={screenOptions}
       >
         <Drawer.Screen
           name="(tabs)"
