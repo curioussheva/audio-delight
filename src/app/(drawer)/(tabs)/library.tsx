@@ -1249,10 +1249,18 @@ export default function LibraryScreen() {
         onToggleFavorite={toggleFavorite}
         // Item CRUD playlist: tombol × hanya untuk playlist DB —
         // "Lagu Disukai" + smart playlist bukan playlist, jadi tidak
-        // ada hapus item.
+        // ada hapus item. `handleRemoveSong` (useCallback) diteruskan
+        // LANGSUNG, bukan arrow inline: identitasnya stabil selama
+        // playlist tidak berganti, jadi komparator kustom SongListItem
+        // tidak batal — dulu `() => void handleRemoveSong(item)` baru
+        // tiap render dan selalu menggagalkan komparator. Pola yang
+        // sama sudah dipakai layar drawer Playlist. (Alternatif yang
+        // TIDAK dipakai: mengeluarkan onRemove dari komparator —
+        // closure lama akan tertinggal saat ganti playlist dengan lagu
+        // yang sama, tombol × menghapus dari playlist yang salah.)
         onRemove={
           selectedPlaylist && !isReadOnlyPlaylistId(selectedPlaylist.id)
-            ? () => void handleRemoveSong(item)
+            ? handleRemoveSong
             : undefined
         }
       />

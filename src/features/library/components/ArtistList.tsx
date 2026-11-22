@@ -161,6 +161,20 @@ const ArtistSongRow = memo(
       </TouchableOpacity>
     );
   },
+  // Komparator kustom ala GenreSongRow/SongListItem: callback diabaikan
+  // (dulu onPress + onToggleFavorite keduanya arrow inline di renderItem
+  // detail view, membatalkan memo default). Field tampil ikut
+  // dibandingkan supaya update metadata/enrichment tetap tampil.
+  (prev, next) =>
+    prev.track.id === next.track.id &&
+    prev.track.title === next.track.title &&
+    prev.track.artist === next.track.artist &&
+    prev.track.album === next.track.album &&
+    prev.track.duration === next.track.duration &&
+    prev.track.codec === next.track.codec &&
+    prev.isNowPlaying === next.isNowPlaying &&
+    prev.isFavorite === next.isFavorite &&
+    prev.colors === next.colors,
 );
 
 // ── Main ArtistList ──────────────────────────────────────────────────────────

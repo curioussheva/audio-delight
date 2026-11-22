@@ -167,6 +167,20 @@ const FolderSongRow = memo(
     </TouchableOpacity>
     );
   },
+  // Komparator kustom ala GenreSongRow/SongListItem: callback diabaikan
+  // (dulu onPress + onToggleFavorite keduanya arrow inline di renderItem
+  // detail view, membatalkan memo default). Field tampil ikut
+  // dibandingkan supaya update metadata/enrichment tetap tampil.
+  (prev, next) =>
+    prev.track.id === next.track.id &&
+    prev.track.title === next.track.title &&
+    prev.track.artist === next.track.artist &&
+    prev.track.album === next.track.album &&
+    prev.track.duration === next.track.duration &&
+    prev.track.codec === next.track.codec &&
+    prev.isNowPlaying === next.isNowPlaying &&
+    prev.isFavorite === next.isFavorite &&
+    prev.colors === next.colors,
 );
 
 // memo (audit Library 2026-11-22): komparator default cukup — props
@@ -197,6 +211,13 @@ export const FolderList = memo(function FolderList({
     if (!selectedFolder) return [];
     return (tracks ?? []).filter((t) => t.folder === selectedFolder.path);
   }, [tracks, selectedFolder]);
+
+  // Handler stabil per lagu (pola GenreList): identitas hanya berubah
+  // bila antrean/detail berubah.
+  const handleSongPress = useCallback(
+    (track: any) => onSongPress(track, filteredSongs),
+    [onSongPress, filteredSongs],
+  );
 
   if (!selectedFolder) {
     return (
@@ -296,7 +317,7 @@ export const FolderList = memo(function FolderList({
             track={item}
             isNowPlaying={item.id === currentTrackId}
             isFavorite={favoriteIds.has(item.id)}
-            onPress={() => onSongPress(item, filteredSongs)}
+            onPress={() => handleSongPress(item)}
             onToggleFavorite={() => onToggleFavorite?.(item.id)}
             colors={colors}
           />

@@ -308,6 +308,22 @@ const AlbumSongRow = memo(
       </TouchableOpacity>
     );
   },
+  // Komparator kustom ala GenreSongRow/SongListItem: callback diabaikan
+  // (identitasnya baru tiap render induk — dulu onPress arrow inline di
+  // renderItem detail view membatalkan memo default). Baris hanya
+  // bangun bila datanya berubah. Field tampil ikut dibandingkan (bukan
+  // hanya id) supaya update metadata/enrichment — judul/artis/album
+  // berubah dengan id sama — tetap tampil, bukan basi.
+  (prev, next) =>
+    prev.track.id === next.track.id &&
+    prev.track.title === next.track.title &&
+    prev.track.artist === next.track.artist &&
+    prev.track.album === next.track.album &&
+    prev.track.duration === next.track.duration &&
+    prev.track.codec === next.track.codec &&
+    prev.isNowPlaying === next.isNowPlaying &&
+    prev.isFavorite === next.isFavorite &&
+    prev.colors === next.colors,
 );
 
 // ─── AlbumGrid ────────────────────────────────────────────────────────────────
@@ -368,6 +384,14 @@ export const AlbumGrid = memo(function AlbumGrid({
     const shuffled = shuffleArray(filteredSongs);
     if (shuffled.length > 0) onSongPress(shuffled[0], shuffled);
   }, [onSongPress, filteredSongs]);
+
+  // Handler stabil per lagu (pola GenreList): identitas hanya berubah
+  // bila antrean/detail berubah — baris yang sudah ter-memo tidak
+  // menerima callback baru tiap render induk.
+  const handleSongPress = useCallback(
+    (track: MediaTrack) => onSongPress(track, filteredSongs),
+    [onSongPress, filteredSongs],
+  );
 
   // ── Grid View ──
   if (!selectedAlbum) {
@@ -504,7 +528,7 @@ export const AlbumGrid = memo(function AlbumGrid({
             track={item}
             isNowPlaying={item.id === currentTrackId}
             isFavorite={isFavorite(item.id)}
-            onPress={() => onSongPress(item, filteredSongs)}
+            onPress={() => handleSongPress(item)}
             onToggleFavorite={onToggleFavorite}
             colors={colors}
           />
