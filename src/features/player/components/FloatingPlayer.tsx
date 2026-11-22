@@ -1,5 +1,5 @@
 // src/features/player/components/FloatingPlayer.tsx
-import React, { useEffect, useState } from "react";
+import React, { memo, useEffect, useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
@@ -23,7 +23,7 @@ import {
   Shuffle,
 } from "lucide-react-native";
 
-import { usePlayerStore } from "@/features/player/store/playerStore";
+import { usePlayerStore, type PlayerState } from "@/features/player/store/playerStore";
 import { progressPercent } from "@/shared/utils/queueNavigation";
 import { isHiRes } from "@/shared/utils/audioQuality";
 import { pickReadable, parseHex, AA_NORMAL } from "@/shared/utils/contrast";
@@ -46,7 +46,11 @@ const hexToRGBA = (hex: string, opacity: number): string => {
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity})`;
 };
 
-export default function FloatingPlayer() {
+// memo: tanpa prop, tapi anak langsung TabsLayout — dulu tiap tick
+// progres scan me-render ulang TabsLayout (via useScanStatusVisible)
+// dan FloatingPlayer ikut bangun; memo memblokir render ulang induk
+// itu. Render ulang sendiri hanya dari langganan di bawah + tema.
+function FloatingPlayer() {
   const { theme } = useTheme();
   const { colors, shadows } = theme;
   const router = useRouter();
@@ -63,8 +67,10 @@ export default function FloatingPlayer() {
   }, [currentSong?.id]);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const togglePlay = usePlayerStore((s) => s.togglePlay);
-  const position = usePlayerStore((s) => s.position);
-  const duration = usePlayerStore((s) => s.duration);
+  // `position`/`duration` TIDAK dilanggan di sini: keduanya hanya
+  // dipakai untuk menggerakkan shared value progres (lihat efek di
+  // bawah), bukan di JSX — langganan selector akan me-render ulang
+  // komponen tiap tick posisi (~2/dtk) secara sia-sia.
   const playNext = usePlayerStore((s) => s.playNext);
   const playPrevious = usePlayerStore((s) => s.playPrevious);
   const shuffle = usePlayerStore((s) => s.shuffle);
@@ -81,15 +87,40 @@ export default function FloatingPlayer() {
   // saat state berubah, jadi lebarnya bisa beku walau posisi audio jalan.
   //
   // Perbaikannya: nilai progress disimpan di shared value sendiri, dan
-  // di-update lewat useEffect setiap kali state benar-benar berubah. Worklet
-  // hanya membaca shared value - itu reaktif dengan benar.
+  // di-update lewat langganan store (useEffect + subscribe, bukan
+  // selector `position`) setiap kali posisi/durasi benar-benar
+  // berubah. Worklet hanya membaca shared value - itu reaktif dengan
+  // benar, tanpa render React tiap tick posisi.
   const progress = useSharedValue(0);
 
+  // Progress bar dibaca dari store DI LUAR render React: `subscribe`
+  // zustand (tanpa selector — v4 tanpa subscribeWithSelector) memanggil
+  // listener tiap set() store, dan listener hanya menggerakkan shared
+  // value Reanimated bila position/duration berubah. Tick posisi
+  // ~2/dtk selama playback jadi tidak lagi me-render ulang komponen
+  // (dulu: `useEffect [position, duration]` + selector `position` =
+  // render React tiap tick). Nilai awal di-sync saat mount supaya bar
+  // tidak diam di 0 sampai tick pertama (mis. posisi resume).
+  // `duration` ikut dibandingkan: ganti lagu mengubah durasi (+ posisi
+  // reset), jadi bar ikut reset walau tick posisi belum datang.
   useEffect(() => {
-    progress.value = withTiming(progressPercent(position, duration) / 100, {
-      duration: 200,
+    const sync = (state: Pick<PlayerState, "position" | "duration">) => {
+      progress.value = withTiming(
+        progressPercent(state.position, state.duration) / 100,
+        { duration: 200 },
+      );
+    };
+    sync(usePlayerStore.getState());
+    const unsubscribe = usePlayerStore.subscribe((state, prevState) => {
+      if (
+        state.position !== prevState.position ||
+        state.duration !== prevState.duration
+      ) {
+        sync(state);
+      }
     });
-  }, [position, duration, progress]);
+    return unsubscribe;
+  }, [progress]);
 
   const swipeGesture = Gesture.Pan()
     .activeOffsetX([-15, 15])
@@ -474,3 +505,5 @@ const s = StyleSheet.create({
     textAlign: "center",
   },
 });
+
+export default memo(FloatingPlayer);
