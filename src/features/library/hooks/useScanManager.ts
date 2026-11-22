@@ -1,8 +1,29 @@
 /**
  * useScanManager Hook
+ *
+ * Per-node render Library (2026-11-22, prinsip csheva — hanya node yang
+ * bersangkutan yang render ulang): hook ini dulu `const store =
+ * useLibraryStore()` TANPA selector — satu langganan ke seluruh store —
+ * sehingga tiap tick progres scan/enrichment (tiap `set()` store)
+ * me-render ulang SEMUA pemakainya, termasuk LibraryScreen utuh.
+ *
+ * Sekarang dipisah dua hook, masing-masing selector per nilai:
+ * - `useScanManager` — flag boolean (isManual/isAuto/isEnriching,
+ *   isLocked) + aksi (manualRescan/enrichMetadata/cancelScan). Dipakai
+ *   LibraryScreen: layar hanya bangun saat scan mulai/selesai, TIDAK
+ *   tiap tick progres.
+ * - `useScanProgress` — objek progres (manual/auto/enrichment) +
+ *   hitungan (unenrichedCount, enrichmentQueueSize) + turunannya.
+ *   Dipakai HANYA node yang menampilkan angka itu: LibraryTabBar
+ *   (bar + pill progres), ScanStatusBar (chip), EnrichMetadataModal,
+ *   LibraryHeader (badge pending). Tick progres hanya membangunkan
+ *   node-node itu.
+ *
+ * Kembalian tiap hook di-`useMemo` (pola useEqualizer.ts opsi 2) supaya
+ * identitas objeknya stabil selama potongannya tidak berubah.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   UnifiedScanService,
   ScanAlreadyRunningError,
@@ -13,7 +34,11 @@ import { ScanProgress } from "../types/scan";
 import { shouldRunInitialScan } from "../services/initialScanGuard";
 
 export function useScanManager() {
-  const store = useLibraryStore();
+  // Selector per flag — boolean hanya berubah saat scan/enrichment
+  // mulai/selesai, bukan tiap tick progres.
+  const isManualScanning = useLibraryStore((s) => s.isManualScanning);
+  const isAutoScanning = useLibraryStore((s) => s.isAutoScanning);
+  const isEnriching = useLibraryStore((s) => s.isEnriching);
   const hasInitialized = useRef(false);
   const [isLocked, setIsLocked] = useState(false);
 
@@ -34,7 +59,9 @@ export function useScanManager() {
   // performInitialization, supaya tracks.length tidak dibaca saat store
   // masih kosong padahal library sebenarnya sudah ada.
   // startAutoScan/finishAutoScan: menyalakan status scan yang sudah ada
-  // supaya EmptyLibrary menampilkan "Memindai..." selama quickDiff jalan
+  // supaya EmptyLibrary menampilkan status "Memindai library…" (statis —
+  // tanpa spinner/angka; angka progres hidup di bar LibraryTabBar, lihat
+  // batas maks 2 animasi notif 2026-11-22) selama quickDiff jalan
   // (quickDiff sendiri tidak melaporkan progres — lihat S4) dan supaya
   // resume quickDiff lain tidak tumpang tindih selama scan perdana jalan.
   // Rantai lengkapnya ada di services/initialScan.ts (runInitialScan):
@@ -85,8 +112,19 @@ export function useScanManager() {
     async (onProgress?: (progress: ScanProgress) => void) => {
       console.log("[useScanManager] manualRescan called");
       console.log("[useScanManager] - isLocked:", isLocked);
-      console.log("[useScanManager] - isManualScanning:", store.isManualScanning);
-      console.log("[useScanManager] - isAutoScanning:", store.isAutoScanning);
+      // Per-node render: hook ini TIDAK lagi melanggan store utuh —
+      // flag dibaca segar dari getState() (pola yang sama dengan guard
+      // di bawah), bukan dari closure `store` yang dulu ikut membangunkan
+      // pemakai hook tiap set() store.
+      const liveForLog = useLibraryStore.getState();
+      console.log(
+        "[useScanManager] - isManualScanning:",
+        liveForLog.isManualScanning,
+      );
+      console.log(
+        "[useScanManager] - isAutoScanning:",
+        liveForLog.isAutoScanning,
+      );
 
       // N27: baca flag scan dari getState() (segar), bukan hanya closure
       // hook — dua tap cepat sebelum re-render dulu sama-sama lolos cek
@@ -114,7 +152,10 @@ export function useScanManager() {
         setIsLocked(false);
       }
     },
-    [isLocked, store.isManualScanning, store.isAutoScanning],
+    // Flag scan dibaca segar via getState() di dalam — callback hanya
+    // bergantung pada kunci lokal, jadi identitasnya stabil selama tidak
+    // ada operasi yang dikunci (pemakai memo tidak batal tiap tick).
+    [isLocked],
   );
 
   // ── Enrich Metadata ─────────────────────────────────────────────────────────
@@ -150,36 +191,86 @@ export function useScanManager() {
     // guard UnifiedScanService.isRunning.
   }, []);
 
-  // ── Derived values ──────────────────────────────────────────────────────────
-  const isManualScanning = store.isManualScanning;
-  const isAutoScanning = store.isAutoScanning;
-  const isEnriching = store.isEnriching;
-  const manualScanProgress = store.manualScanProgress;
-  const enrichmentProgress = store.enrichmentProgress;
-  const enrichmentQueueSize = store.enrichmentQueueSize;
-  const unenrichedCount = store.unenrichedCount;
-  const lastScanAt = store.lastScanAt;
-  const hasPendingEnrichment = unenrichedCount > 0 || enrichmentQueueSize > 0;
   const canScan = !isLocked && !isManualScanning && !isAutoScanning;
 
-  return {
-    isAutoScanning,
-    isManualScanning,
-    isEnriching,
-    isLocked,
-    manualScanProgress,
-    enrichmentProgress,
-    enrichmentQueueSize,
-    unenrichedCount,
-    lastScanAt,
-    hasPendingEnrichment,
-    canScan,
-    isBackgroundEnriching: enrichmentQueueSize > 0 && !isEnriching,
-    manualRescan,
-    enrichMetadata,
-    cancelScan,
-    autoScanProgress: store.autoScanProgress,
-    lastEnrichmentAt: store.lastEnrichmentAt,
-  };
+  // Hanya flag + aksi — TIDAK ada objek progres/hitungan di sini:
+  // pemakai hook ini (LibraryScreen) tidak boleh bangun tiap tick.
+  // Yang butuh angka progres memakai useScanProgress di bawah.
+  return useMemo(
+    () => ({
+      isAutoScanning,
+      isManualScanning,
+      isEnriching,
+      isLocked,
+      canScan,
+      manualRescan,
+      enrichMetadata,
+      cancelScan,
+    }),
+    [
+      isAutoScanning,
+      isManualScanning,
+      isEnriching,
+      isLocked,
+      canScan,
+      manualRescan,
+      enrichMetadata,
+      cancelScan,
+    ],
+  );
 }
- 
+
+/**
+ * useScanProgress — potongan progres scan/enrichment, untuk node yang
+ * MENAMPILKAN angka itu saja (LibraryTabBar, ScanStatusBar,
+ * EnrichMetadataModal, LibraryHeader/badge pending). Tiap tick
+ * `update*Progress` hanya membangunkan pemakai hook ini — LibraryScreen
+ * tidak memakainya, jadi layar utuh + FlashList diam selama progres
+ * berjalan. Selector per nilai: tick manual tidak membangunkan
+ * subscriber enrichment, dan sebaliknya.
+ */
+export function useScanProgress() {
+  const isManualScanning = useLibraryStore((s) => s.isManualScanning);
+  const isAutoScanning = useLibraryStore((s) => s.isAutoScanning);
+  const isEnriching = useLibraryStore((s) => s.isEnriching);
+  const manualScanProgress = useLibraryStore((s) => s.manualScanProgress);
+  const enrichmentProgress = useLibraryStore((s) => s.enrichmentProgress);
+  const autoScanProgress = useLibraryStore((s) => s.autoScanProgress);
+  const enrichmentQueueSize = useLibraryStore((s) => s.enrichmentQueueSize);
+  const unenrichedCount = useLibraryStore((s) => s.unenrichedCount);
+  const lastScanAt = useLibraryStore((s) => s.lastScanAt);
+  const lastEnrichmentAt = useLibraryStore((s) => s.lastEnrichmentAt);
+  const hasPendingEnrichment = unenrichedCount > 0 || enrichmentQueueSize > 0;
+  const isBackgroundEnriching = enrichmentQueueSize > 0 && !isEnriching;
+
+  return useMemo(
+    () => ({
+      isAutoScanning,
+      isManualScanning,
+      isEnriching,
+      manualScanProgress,
+      enrichmentProgress,
+      autoScanProgress,
+      enrichmentQueueSize,
+      unenrichedCount,
+      lastScanAt,
+      lastEnrichmentAt,
+      hasPendingEnrichment,
+      isBackgroundEnriching,
+    }),
+    [
+      isAutoScanning,
+      isManualScanning,
+      isEnriching,
+      manualScanProgress,
+      enrichmentProgress,
+      autoScanProgress,
+      enrichmentQueueSize,
+      unenrichedCount,
+      lastScanAt,
+      lastEnrichmentAt,
+      hasPendingEnrichment,
+      isBackgroundEnriching,
+    ],
+  );
+}

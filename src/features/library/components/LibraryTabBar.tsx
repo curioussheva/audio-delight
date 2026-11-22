@@ -1,4 +1,4 @@
-import React, { useRef, useCallback } from "react";
+import React, { useRef, useCallback, memo } from "react";
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import {
 
 import { useTheme } from "@/shared/context/ThemeContext";
 import type { LibraryTab } from "../types/scan";
+import { useScanProgress } from "../hooks/useScanManager";
 import { accentOn, pickReadable, AA_NORMAL } from "@/shared/utils/contrast";
 import { FONT_FAMILY, BASE_RADIUS } from "@/shared/constants/themes/base";
 
@@ -39,33 +40,44 @@ export const TABS: { id: LibraryTab; label: string; icon: any }[] = [
 interface Props {
   activeTab: LibraryTab;
   onTabChange: (tab: LibraryTab) => void;
-  scanProgress: number;
-  scanTotal: number;
-  isScanning: boolean;
-  isEnriching?: boolean;
-  enrichProgress?: number;
-  enrichTotal?: number;
-  trackCount: number;
   // U-P2-06: boleh mengembalikan Promise<boolean> — false = refresh
   // gagal, supaya LibraryTabBar tidak menembak haptic sukses palsu.
   onRefresh?: () => void | Promise<boolean>;
 }
 
-export const LibraryTabBar = ({
+// Per-node render Library (2026-11-22, prinsip csheva — hanya node yang
+// bersangkutan yang render ulang): bar + pill progres scan/enrichment
+// adalah SATU node. Dulu angka progres (scanProgress/scanTotal/
+// enrichProgress/...) dioper sebagai prop dari LibraryScreen — tiap tick
+// progres me-render ulang layar utuh (~1500 baris + FlashList) hanya
+// untuk memperbarui angka di bar ini. Sekarang TabBar melanggan
+// potongan progresnya SENDIRI lewat useScanProgress: tick hanya
+// membangunkan komponen ini. Prop yang tersisa (tab aktif, ganti tab,
+// refresh) berubah jarang, dan komponen di-memo supaya ketikan di
+// pencarian / render ulang induk tidak ikut membangunkan TabBar.
+// `trackCount` lama dihapus: tidak pernah dipakai (dulu `_trackCount`).
+export const LibraryTabBar = memo(function LibraryTabBar({
   activeTab,
   onTabChange,
-  scanProgress,
-  scanTotal,
-  isScanning,
-  isEnriching = false,
-  enrichProgress = 0,
-  enrichTotal = 0,
-  trackCount: _trackCount,
   onRefresh,
-}: Props) => {
+}: Props) {
   const { theme } = useTheme();
   const { colors } = theme;
   const scrollRef = useRef<ScrollView>(null);
+
+  // Langganan node ini sendiri — primitif + objek progres saja.
+  const {
+    isManualScanning,
+    isAutoScanning,
+    isEnriching,
+    manualScanProgress,
+    enrichmentProgress,
+  } = useScanProgress();
+  const isScanning = isManualScanning || isAutoScanning;
+  const scanProgress = manualScanProgress?.current ?? 0;
+  const scanTotal = manualScanProgress?.total ?? 0;
+  const enrichProgress = enrichmentProgress?.current ?? 0;
+  const enrichTotal = enrichmentProgress?.total ?? 0;
 
   // Teks/ikon pill tab aktif di atas primary[500] — dipilih dari luminansi
   // primary (putih 2,24:1 di Noir, hitam 9,37:1), bukan hardcoded "#fff".
@@ -275,7 +287,7 @@ export const LibraryTabBar = ({
       </ScrollView>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

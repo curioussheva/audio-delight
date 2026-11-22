@@ -1,6 +1,6 @@
 // components/library/EmptyLibrary.tsx
-import React from "react";
-import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
+import React, { memo } from "react";
+import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { PristineButton } from "@/shared/components/ui/PristineButton";
 import { FONT_FAMILY } from "@/shared/constants/themes/base";
@@ -9,88 +9,56 @@ interface EmptyLibraryProps {
   colors: any;
   onScan: () => void;
   isScanning?: boolean;
-  scanProgress?: number;
-  scanTotal?: number;
 }
 
-export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({
-  colors,
-  onScan,
-  isScanning = false,
-  scanProgress = 0,
-  scanTotal = 0,
-}) => {
-  const percent =
-    scanTotal > 0 ? Math.floor((scanProgress / scanTotal) * 100) : 0;
+// Batas maks 2 animasi notif saat scanning (2026-11-22): saat library
+// kosong dan scan berjalan, dulu ada TIGA animasi sekaligus yang
+// menyampaikan status yang sama — (a) bar "Discovering files…" di
+// LibraryTabBar, (b) spinner "Menemukan file…" + bar progres + % di
+// sini, (c) chip "Scanning library… 0/0" di atas FloatingPlayer.
+// Yang dipertahankan: (a) + (c) — (a) satu-satunya penampil progres
+// rescan manual + enrichment, (c) satu-satunya yang terlihat di semua
+// tab + satu-satunya penampil background enrichment. Yang dihilangkan:
+// animasi (b) — komponen ini hanya menampilkan teks STATIS
+// "Memindai library…" (tanpa spinner, tanpa bar, tanpa %) selama scan
+// berjalan; angka progres hidup tetap ada di (a). Prop scanProgress /
+// scanTotal dihapus — tidak ada lagi yang membacanya di sini.
+export const EmptyLibrary: React.FC<EmptyLibraryProps> = memo(
+  ({ colors, onScan, isScanning = false }) => {
+    return (
+      <View style={styles.container}>
+        <Ionicons
+          name="musical-notes-outline"
+          size={80}
+          color={colors.text.tertiary}
+        />
+        <Text style={[styles.title, { color: colors.text.secondary }]}>
+          Library Anda masih kosong
+        </Text>
 
-  return (
-    <View style={styles.container}>
-      <Ionicons
-        name="musical-notes-outline"
-        size={80}
-        color={colors.text.tertiary}
-      />
-      <Text style={[styles.title, { color: colors.text.secondary }]}>
-        Library Anda masih kosong
-      </Text>
-
-      {isScanning ? (
-        <View style={styles.scanStatus}>
-          <View style={styles.progressRow}>
-            <ActivityIndicator
-              size="small"
-              color={colors.primary[500]}
-              style={{ transform: [{ scale: 0.85 }] }}
-            />
-            <Text style={[styles.scanText, { color: colors.text.secondary }]}>
-              {scanTotal > 0
-                ? `Memindai ${scanProgress} / ${scanTotal} lagu`
-                : "Menemukan file..."}
-            </Text>
-          </View>
-
-          {scanTotal > 0 && (
-            <>
-              <View
-                style={[
-                  styles.progressTrack,
-                  { backgroundColor: colors.background.tertiary },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.progressFill,
-                    {
-                      backgroundColor: colors.primary[500],
-                      width: `${percent}%`,
-                    },
-                  ]}
-                />
-              </View>
-              <Text style={[styles.pctText, { color: colors.primary[500] }]}>
-                {percent}%
-              </Text>
-            </>
-          )}
-        </View>
-      ) : (
-        <>
-          <Text style={[styles.subtitle, { color: colors.text.tertiary }]}>
-            Pindai folder musik untuk menemukan lagu-lagu Anda
+        {isScanning ? (
+          <Text style={[styles.scanText, { color: colors.text.secondary }]}>
+            Memindai library…
           </Text>
-          {/* Fase 3 Library: tombol bersama (sekunder) — dulu
-              TouchableOpacity + gaya lokal. */}
-          <PristineButton
-            label="SCAN PERANGKAT"
-            onPress={onScan}
-            variant="secondary"
-            style={{ marginTop: 24 }}
-          />
-        </>
-      )}
-    </View>
-  );
-};
+        ) : (
+          <>
+            <Text style={[styles.subtitle, { color: colors.text.tertiary }]}>
+              Pindai folder musik untuk menemukan lagu-lagu Anda
+            </Text>
+            {/* Fase 3 Library: tombol bersama (sekunder) — dulu
+                TouchableOpacity + gaya lokal. */}
+            <PristineButton
+              label="SCAN PERANGKAT"
+              onPress={onScan}
+              variant="secondary"
+              style={{ marginTop: 24 }}
+            />
+          </>
+        )}
+      </View>
+    );
+  },
+);
 
 const styles = StyleSheet.create({
   container: {
@@ -114,34 +82,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
   },
-  scanStatus: {
-    marginTop: 24,
-    width: "100%",
-    alignItems: "center",
-  },
-  progressRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 12,
-  },
+  // Teks status scan — STATIS, tanpa spinner (lihat komentar di atas).
   scanText: {
     fontSize: 13,
     fontFamily: FONT_FAMILY.semiBold,
+    marginTop: 24,
+    textAlign: "center",
   },
-  progressTrack: {
-    height: 6,
-    width: "100%",
-    borderRadius: 3,
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    borderRadius: 3,
-  },
-  pctText: {
-    fontSize: 12,
-    fontFamily: FONT_FAMILY.bold,
-    marginTop: 6,
-  },
-}); 
+});

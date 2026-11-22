@@ -4,6 +4,7 @@ import React, {
   useRef,
   useEffect,
   useMemo,
+  memo,
 } from "react";
 import {
   View,
@@ -54,7 +55,10 @@ import {
 } from "@/features/library/store/selectors";
 
 // Scan System
-import { useScanManager } from "@/features/library/hooks/useScanManager";
+import {
+  useScanManager,
+  useScanProgress,
+} from "@/features/library/hooks/useScanManager";
 import { ScanAlreadyRunningError } from "@/features/library/services/UnifiedScanService";
 import { createRefreshCoalescer } from "@/features/library/services/refreshCoalescer";
 import {
@@ -160,26 +164,223 @@ const songKeyExtractor = (item: Song) => item.id;
 // → 500 (≈20 baris) → 350.
 const LIBRARY_DRAW_DISTANCE_DP = 3570;
 
+// ── LibraryHeader (per-node render, 2026-11-22 — pola opsi 2 EQ) ───────────
+// Dulu `renderHeader()` adalah fungsi polos DI DALAM LibraryScreen: tiap
+// render layar (termasuk tiap tick progres scan) membangun ulang header.
+// Sekarang komponen `memo` sendiri yang melanggan potongannya sendiri:
+// - `tracks` → hitungan "N tracks • N artists" (selectLibraryStats);
+// - `unenrichedCount` + `enrichmentQueueSize` (via useScanProgress) → "N
+//   pending" + badge Enhance — berubah saat enrichment maju, dan HANYA
+//   header yang bangun karenanya;
+// - flag scan (via useScanProgress) → tombol scan AUTO/SCAN, badge
+//   disembunyikan + filter dimatikan saat scan jalan.
+// Prop dari layar hanya state lokal pencarian/filter (berubah saat user
+// mengetik/mengganti filter — saat itulah header memang harus bangun) +
+// handler yang stabil (useCallback). JSX dipindah verbatim dari
+// renderHeader lama; perilaku identik.
+interface LibraryHeaderProps {
+  showSearch: boolean;
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
+  onToggleSearch: () => void;
+  filterType: "all" | "lossless" | "hi-res";
+  setFilterType: React.Dispatch<
+    React.SetStateAction<"all" | "lossless" | "hi-res">
+  >;
+  onEnhanceMetadata: () => void;
+  onManualRescan: () => void;
+  onCancelScan: () => void;
+}
+
+const LibraryHeader = memo(function LibraryHeader({
+  showSearch,
+  searchQuery,
+  setSearchQuery,
+  onToggleSearch,
+  filterType,
+  setFilterType,
+  onEnhanceMetadata,
+  onManualRescan,
+  onCancelScan,
+}: LibraryHeaderProps) {
+  const { theme } = useTheme();
+  const { colors } = theme;
+  const s = useMemo(() => createStyles(colors), [colors]);
+
+  const tracks = useLibraryStore((st) => st.tracks);
+  const stats = useMemo(() => selectLibraryStats(tracks), [tracks]);
+  const {
+    isManualScanning,
+    isAutoScanning,
+    unenrichedCount,
+    hasPendingEnrichment,
+  } = useScanProgress();
+  const isScanning = isManualScanning || isAutoScanning;
+  const { totalTracks = 0, artistsCount = 0 } = stats || {};
+
+  if (showSearch) {
+    return (
+      <View style={s.searchRow}>
+        <TouchableOpacity
+          onPress={onToggleSearch}
+          hitSlop={12}
+          style={s.headerIconBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Tutup pencarian"
+        >
+          <ArrowLeft size={24} color={colors.text.primary} />
+        </TouchableOpacity>
+        {/* Fase 3 Library: bar pencarian bersama (SearchInput) —
+            ikon search + tombol hapus sudah di dalamnya. */}
+        <View style={{ flex: 1 }}>
+          <SearchInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search Artist, Album, Format..."
+            autoFocus
+          />
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <>
+      {/* U-P2-49: tombol drawer sekarang komponen bersama
+          DrawerMenuButton — perilaku sama (Menu 26, buka drawer), hanya
+          target sentuh + label aksesibilitas yang diseragamkan. */}
+      <DrawerMenuButton />
+
+      <View style={s.headerCenter}>
+        <Text style={[s.headerTitle, { color: colors.text.primary }]}>
+          LIBRARY
+        </Text>
+        <Text style={[s.headerStats, { color: colors.text.tertiary }]}>
+          {totalTracks} tracks • {artistsCount} artists
+          {unenrichedCount > 0 && ` • ${unenrichedCount} pending`}
+        </Text>
+      </View>
+
+      <View style={s.headerActions}>
+        <TouchableOpacity
+          onPress={onToggleSearch}
+          hitSlop={12}
+          style={s.headerIconBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Cari"
+        >
+          <Search size={22} color={colors.text.primary} strokeWidth={2} />
+        </TouchableOpacity>
+
+        {!isScanning && hasPendingEnrichment && unenrichedCount > 0 && (
+          <TouchableOpacity
+            onPress={onEnhanceMetadata}
+            hitSlop={12}
+            style={s.headerIconBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Enhance metadata"
+          >
+            <View style={s.enhanceBadge}>
+              <Sparkles size={18} color={colors.status.success} />
+              <Text style={s.enhanceBadgeText}>{unenrichedCount}</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {/* Fase 3 Library: tombol filter memakai mekanisme ON/OFF
+            yang sama dengan shuffle/repeat Player (d0ddf23d) — ON =
+            disc tint primary 15% + stroke 2.5, OFF = polos. Dulu
+            bedanya hanya warna ikon. */}
+        <TouchableOpacity
+          onPress={() =>
+            setFilterType((f) =>
+              f === "all" ? "lossless" : f === "lossless" ? "hi-res" : "all",
+            )
+          }
+          hitSlop={12}
+          style={[
+            s.headerIconBtn,
+            filterType !== "all" && {
+              backgroundColor: hexToRGBA(colors.primary[500], 0.15),
+              borderRadius: 22,
+            },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Filter lagu"
+          accessibilityState={{ selected: filterType !== "all" }}
+          disabled={isScanning}
+        >
+          <Filter
+            size={20}
+            color={
+              filterType !== "all"
+                ? colors.primary[500]
+                : colors.text.secondary
+            }
+            strokeWidth={filterType !== "all" ? 2.5 : 2}
+          />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={isScanning ? onCancelScan : onManualRescan}
+          hitSlop={12}
+          style={[
+            s.headerIconBtn,
+            s.scanButton,
+            isScanning && s.scanButtonActive,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={
+            isScanning ? "Batalkan pemindaian" : "Pindai ulang library"
+          }
+        >
+          {isScanning ? (
+            <View style={s.scanningIndicator}>
+              <ActivityIndicator size="small" color={colors.primary[500]} />
+              <Text style={s.scanningText}>
+                {isAutoScanning ? "AUTO" : "SCAN"}
+              </Text>
+            </View>
+          ) : (
+            <ScanText size={22} color={colors.text.primary} strokeWidth={2} />
+          )}
+        </TouchableOpacity>
+      </View>
+    </>
+  );
+});
+
 export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { colors } = theme;
   const router = useRouter();
 
-  // ── Store States ───────────────────────────────────────────────────────────
-  const { activeTab, setActiveTab, tracks, setTracks } = useLibraryStore();
+  // ── Store States (per-node render, 2026-11-22 — pola opsi 2 EQ) ────────
+  // Dulu: `const { activeTab, setActiveTab, tracks, setTracks } =
+  // useLibraryStore()` TANPA selector — satu langganan ke seluruh store —
+  // plus `useScanManager()` yang juga melanggan store utuh. Tiap tick
+  // progres scan/enrichment (tiap `set()` store) mengeksekusi ulang
+  // fungsi layar ~1500 baris + membangun ulang semua JSX (termasuk
+  // FlashList) hanya untuk memperbarui satu angka.
+  //
+  // Sekarang layar hanya melanggan potongan yang mengubah STRUKTUR-nya:
+  // tab aktif, daftar lagu, dan flag boolean scan (berubah hanya saat
+  // scan mulai/selesai — bukan tiap tick). Angka progres TIDAK ada di
+  // sini: bar/pill progres dilanggan LibraryTabBar sendiri, badge
+  // pending + hitungan header dilanggan LibraryHeader sendiri, chip
+  // status dilanggan ScanStatusBar sendiri. Tick progres tidak lagi
+  // menyentuh layar ini.
+  const activeTab = useLibraryStore((s) => s.activeTab);
+  const setActiveTab = useLibraryStore((s) => s.setActiveTab);
+  const tracks = useLibraryStore((s) => s.tracks);
+  const setTracks = useLibraryStore((s) => s.setTracks);
 
-  const {
-    isAutoScanning,
-    isManualScanning,
-    isEnriching,
-    manualScanProgress,
-    enrichmentProgress,
-    unenrichedCount,
-    hasPendingEnrichment,
-    manualRescan,
-    cancelScan,
-  } = useScanManager();
+  // Hanya flag + aksi (useScanManager tidak lagi mengembalikan objek
+  // progres — lihat useScanManager.ts). `isEnriching` tidak dipakai
+  // layar ini lagi (dulu hanya diteruskan ke LibraryTabBar).
+  const { isAutoScanning, isManualScanning, manualRescan, cancelScan } =
+    useScanManager();
 
   // ── UI States ──────────────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState("");
@@ -273,7 +474,10 @@ export default function LibraryScreen() {
   );
 
   // ── Library Stats ──────────────────────────────────────────────────────────
-  const stats = useMemo(() => selectLibraryStats(tracks), [tracks]);
+  // Hitungan header ("N tracks • N artists") DULU dihitung di sini dari
+  // `tracks` — pindah ke LibraryHeader (komponen memo di bawah), yang
+  // melanggan `tracks` sendiri. Layar tidak lagi membangun ulang stats
+  // tiap render.
 
   // ── CORE LOGIC: Reactive Filtering ─────────────────────────────────────────
   const filteredSource = useMemo(() => {
@@ -490,7 +694,11 @@ export default function LibraryScreen() {
   }, [activeTab]);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
-  const handleManualRescan = async () => {
+  // useCallback (bukan fungsi polos): diteruskan ke LibraryHeader +
+  // EmptyLibrary yang di-memo — identitas stabil supaya memo tidak
+  // batal tiap render layar. Guard baca flag dari closure (boolean,
+  // berubah jarang); progres diteruskan ke store lewat getState().
+  const handleManualRescan = useCallback(async () => {
     if (isManualScanning || isAutoScanning) return;
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -521,13 +729,16 @@ export default function LibraryScreen() {
       // di subscriber tidak akan melewatkan bump ini.
       useRefreshStore.getState().bumpRefreshKey("manual-scan", "library");
     }
-  }; 
+  }, [isManualScanning, isAutoScanning, manualRescan, showToast]);
 
-  const handleEnhanceMetadata = () => {
-    if (unenrichedCount === 0) return;
+  // Guard baca hitungan lewat getState() (bukan langganan): layar tidak
+  // boleh bangun tiap unenrichedCount berubah — badge-nya hidup di
+  // LibraryHeader, yang melanggan hitungan itu sendiri.
+  const handleEnhanceMetadata = useCallback(() => {
+    if (useLibraryStore.getState().unenrichedCount === 0) return;
     setShowEnrichModal(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
+  }, []);
 
   // ── Playlist handlers (F) ────────────────────────────────────────────────
   // Pola yang sama dengan layar drawer Playlist
@@ -683,7 +894,10 @@ export default function LibraryScreen() {
     [selectedPlaylist, addToPlaylist, showToast],
   );
 
-  const toggleSearch = () => {
+  // useCallback: diteruskan ke LibraryHeader (memo) — identitas hanya
+  // berubah saat showSearch berubah (saat itulah header memang harus
+  // ganti mode pencarian/tidak).
+  const toggleSearch = useCallback(() => {
     if (showSearch) {
       setSearchQuery("");
       setShowSearch(false);
@@ -694,149 +908,15 @@ export default function LibraryScreen() {
       setShowSearch(true);
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
+  }, [showSearch]);
 
   const onRefresh = useCallback(() => {
     return refreshLibrary(true);
   }, [refreshLibrary]);
 
-  const isScanning = isManualScanning || isAutoScanning;
-
   // ── Render Helpers ─────────────────────────────────────────────────────────
-  const renderHeader = () => {
-    const { totalTracks = 0, artistsCount = 0 } = stats || {};
-
-    if (showSearch) {
-      return (
-        <View style={s.searchRow}>
-          <TouchableOpacity
-            onPress={toggleSearch}
-            hitSlop={12}
-            style={s.headerIconBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Tutup pencarian"
-          >
-            <ArrowLeft size={24} color={colors.text.primary} />
-          </TouchableOpacity>
-          {/* Fase 3 Library: bar pencarian bersama (SearchInput) —
-              ikon search + tombol hapus sudah di dalamnya. */}
-          <View style={{ flex: 1 }}>
-            <SearchInput
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Search Artist, Album, Format..."
-              autoFocus
-            />
-          </View>
-        </View>
-      );
-    }
-
-    return (
-      <>
-        {/* U-P2-49: tombol drawer sekarang komponen bersama
-            DrawerMenuButton — perilaku sama (Menu 26, buka drawer), hanya
-            target sentuh + label aksesibilitas yang diseragamkan. */}
-        <DrawerMenuButton />
-
-        <View style={s.headerCenter}>
-          <Text style={[s.headerTitle, { color: colors.text.primary }]}>
-            LIBRARY
-          </Text>
-          <Text style={[s.headerStats, { color: colors.text.tertiary }]}>
-            {totalTracks} tracks • {artistsCount} artists
-            {unenrichedCount > 0 && ` • ${unenrichedCount} pending`}
-          </Text>
-        </View>
-
-        <View style={s.headerActions}>
-          <TouchableOpacity
-            onPress={toggleSearch}
-            hitSlop={12}
-            style={s.headerIconBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Cari"
-          >
-            <Search size={22} color={colors.text.primary} strokeWidth={2} />
-          </TouchableOpacity>
-
-          {!isScanning && hasPendingEnrichment && unenrichedCount > 0 && (
-            <TouchableOpacity
-              onPress={handleEnhanceMetadata}
-              hitSlop={12}
-              style={s.headerIconBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Enhance metadata"
-            >
-              <View style={s.enhanceBadge}>
-                <Sparkles size={18} color={colors.status.success} />
-                <Text style={s.enhanceBadgeText}>{unenrichedCount}</Text>
-              </View>
-            </TouchableOpacity>
-          )}
-
-          {/* Fase 3 Library: tombol filter memakai mekanisme ON/OFF
-              yang sama dengan shuffle/repeat Player (d0ddf23d) — ON =
-              disc tint primary 15% + stroke 2.5, OFF = polos. Dulu
-              bedanya hanya warna ikon. */}
-          <TouchableOpacity
-            onPress={() =>
-              setFilterType((f) =>
-                f === "all" ? "lossless" : f === "lossless" ? "hi-res" : "all",
-              )
-            }
-            hitSlop={12}
-            style={[
-              s.headerIconBtn,
-              filterType !== "all" && {
-                backgroundColor: hexToRGBA(colors.primary[500], 0.15),
-                borderRadius: 22,
-              },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Filter lagu"
-            accessibilityState={{ selected: filterType !== "all" }}
-            disabled={isScanning}
-          >
-            <Filter
-              size={20}
-              color={
-                filterType !== "all"
-                  ? colors.primary[500]
-                  : colors.text.secondary
-              }
-              strokeWidth={filterType !== "all" ? 2.5 : 2}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={isScanning ? cancelScan : handleManualRescan}
-            hitSlop={12}
-            style={[
-              s.headerIconBtn,
-              s.scanButton,
-              isScanning && s.scanButtonActive,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel={
-              isScanning ? "Batalkan pemindaian" : "Pindai ulang library"
-            }
-          >
-            {isScanning ? (
-              <View style={s.scanningIndicator}>
-                <ActivityIndicator size="small" color={colors.primary[500]} />
-                <Text style={s.scanningText}>
-                  {isAutoScanning ? "AUTO" : "SCAN"}
-                </Text>
-              </View>
-            ) : (
-              <ScanText size={22} color={colors.text.primary} strokeWidth={2} />
-            )}
-          </TouchableOpacity>
-        </View>
-      </>
-    );
-  };
+  // Header DULU fungsi polos di sini (renderHeader) — pindah ke
+  // LibraryHeader (memo, di atas) yang melanggan potongannya sendiri.
 
   const renderContent = () => {
     // F: detail playlist — tap row playlist di tab playlist membuka
@@ -991,12 +1071,13 @@ export default function LibraryScreen() {
 
     if (tracks.length === 0) {
       return (
+        // Batas 2 animasi notif: EmptyLibrary hanya terima flag scan —
+        // statusnya statis ("Memindai library…"); angka progres hidup
+        // di bar LibraryTabBar.
         <EmptyLibrary
           colors={colors}
           onScan={handleManualRescan}
           isScanning={isManualScanning || isAutoScanning}
-          scanProgress={manualScanProgress?.current ?? 0}
-          scanTotal={manualScanProgress?.total ?? 0}
         />
       );
     }
@@ -1210,7 +1291,17 @@ export default function LibraryScreen() {
           { paddingTop: insets.top + 8, paddingHorizontal: 20 },
         ]}
       >
-        {renderHeader()}
+        <LibraryHeader
+          showSearch={showSearch}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          onToggleSearch={toggleSearch}
+          filterType={filterType}
+          setFilterType={setFilterType}
+          onEnhanceMetadata={handleEnhanceMetadata}
+          onManualRescan={handleManualRescan}
+          onCancelScan={cancelScan}
+        />
       </View>
 
       {/* Active Filter Indicator */}
@@ -1227,17 +1318,11 @@ export default function LibraryScreen() {
         </View>
       )}
 
-      {/* Tab Bar */}
+      {/* Tab Bar — per-node render: angka progres dilanggan TabBar
+          sendiri (useScanProgress), bukan dioper dari layar. */}
       <LibraryTabBar
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        scanProgress={manualScanProgress?.current || 0}
-        scanTotal={manualScanProgress?.total || 0}
-        isScanning={isScanning}
-        isEnriching={isEnriching}
-        enrichProgress={enrichmentProgress?.current || 0}
-        enrichTotal={enrichmentProgress?.total || 0}
-        trackCount={filteredSource.length}
         onRefresh={onRefresh}
       />
 
