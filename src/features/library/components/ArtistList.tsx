@@ -1,4 +1,4 @@
-import React, { memo, useState, useMemo } from "react";
+import React, { memo, useState, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -258,9 +258,15 @@ export const ArtistList = memo(function ArtistList({
       .sort(unknownLast);
   }, [artists, tracks]);
 
-  // Render detail view (jika artis dipilih)
-  if (selectedArtist) {
-    const filteredSongs = tracks
+  // Detail view: lagu artis terpilih — dulu dihitung INLINE di dalam
+  // cabang `if (selectedArtist)` di bawah (filter + sort seluruh
+  // `tracks` tiap render, termasuk saat ganti lagu). Sekarang useMemo
+  // di level atas (input hanya `tracks` + `selectedArtist`) + handler
+  // tekan stabil ala GenreList — komparator ArtistSongRow (P2) + ini
+  // melengkapi stabilisasi baris detail ArtistList.
+  const filteredSongs = useMemo(() => {
+    if (!selectedArtist) return [];
+    return tracks
       .filter(
         (t: MediaTrack) =>
           (t.artist || "Unknown Artist") === selectedArtist.name,
@@ -270,7 +276,15 @@ export const ArtistList = memo(function ArtistList({
           ? (a.trackNumber || 0) - (b.trackNumber || 0)
           : (a.album || "").localeCompare(b.album || ""),
       );
+  }, [tracks, selectedArtist]);
 
+  const handleSongPress = useCallback(
+    (track: MediaTrack) => onSongPress(track, filteredSongs),
+    [onSongPress, filteredSongs],
+  );
+
+  // Render detail view (jika artis dipilih)
+  if (selectedArtist) {
     const heroImage = selectedArtist.resolvedArtwork || selectedArtist.artwork;
 
     return (
@@ -353,7 +367,7 @@ export const ArtistList = memo(function ArtistList({
               track={item}
               isNowPlaying={item.id === currentTrackId}
               isFavorite={favoriteIds.has(item.id)}
-              onPress={() => onSongPress(item, filteredSongs)}
+              onPress={() => handleSongPress(item)}
               onToggleFavorite={() => onToggleFavorite?.(item.id)}
               colors={colors}
             />

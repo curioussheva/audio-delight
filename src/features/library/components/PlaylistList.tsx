@@ -115,6 +115,136 @@ const PlaylistRow = memo(
 
 PlaylistRow.displayName = "PlaylistRow";
 
+// ── PlaylistListHeader (memo) ───────────────────────────────────────────────
+// Header daftar (Favorit + Playlist Otomatis + kepala "Playlist Saya")
+// dulu JSX inline di dalam PlaylistList — objek/arrow baru tiap render
+// induk, jadi ScreenList/FlatList membangun ulang header tiap kali.
+// Sekarang komponen memo sendiri: props-nya stabil (angka + array
+// useMemo + useCallback + colors tema statis), jadi header hanya bangun
+// bila isinya berubah (mis. favoriteCount / smartPlaylists berganti).
+// Arrow `onPress` Favorit + objek item-nya dibuat di DALAM komponen ini
+// — hanya saat header memang render ulang — bukan tiap render induk.
+const PlaylistListHeader = memo(function PlaylistListHeader({
+  favoriteCount,
+  smartPlaylists,
+  onPlaylistPress,
+  onCreate,
+  onImport,
+  hasImport,
+  colors,
+}: {
+  favoriteCount: number;
+  smartPlaylists: PlaylistItem[];
+  onPlaylistPress?: (playlist: PlaylistItem) => void;
+  onCreate: () => void;
+  onImport: () => void;
+  hasImport: boolean;
+  colors: any;
+}) {
+  return (
+    <View style={styles.headerContainer}>
+      {/* Section 1: System Playlists (Favorites) */}
+      <PlaylistRow
+        isFavorite
+        item={{
+          name: "Lagu Disukai",
+          count: favoriteCount,
+          id: "favorites",
+        }}
+        onPress={() =>
+          onPlaylistPress?.({ id: "favorites", name: "Lagu Disukai" })
+        }
+        colors={colors}
+      />
+
+      <View
+        style={[
+          styles.sectionDivider,
+          { backgroundColor: colors.background.tertiary },
+        ]}
+      />
+
+      {/* Section 1b: Smart Playlists (virtual — dihitung live dari
+          library; bukan playlist DB, jadi tidak bisa diedit/dihapus).
+          Hanya tampil bila ada ringkasannya (hook gagal muat = hilang
+          diam-diam, playlist manual tetap tampil). */}
+      {smartPlaylists.length > 0 && (
+        <>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionTitleRow}>
+              <Wand2 size={16} color={colors.primary[500]} />
+              <Text
+                style={[styles.sectionTitle, { color: colors.text.primary }]}
+              >
+                Playlist Otomatis
+              </Text>
+            </View>
+          </View>
+
+          {smartPlaylists.map((item) => (
+            <PlaylistRow
+              key={item.id}
+              item={item}
+              isSmart
+              onPress={onPlaylistPress}
+              colors={colors}
+            />
+          ))}
+
+          <View
+            style={[
+              styles.sectionDivider,
+              { backgroundColor: colors.background.tertiary },
+            ]}
+          />
+        </>
+      )}
+
+      {/* Section 2: User Playlists Header */}
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionTitleRow}>
+          <Sparkles size={16} color={colors.primary[500]} />
+          <Text
+            style={[styles.sectionTitle, { color: colors.text.primary }]}
+          >
+            Playlist Saya
+          </Text>
+        </View>
+
+        <View style={styles.actionHeaderGroup}>
+          {hasImport && (
+            <TouchableOpacity
+              onPress={onImport}
+              style={[
+                styles.smallAddBtn,
+                { backgroundColor: `${colors.primary[500]}15` },
+              ]}
+              accessibilityLabel="Import M3U Playlist"
+            >
+              <FileDown
+                size={18}
+                color={colors.primary[500]}
+                strokeWidth={2.5}
+              />
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            onPress={onCreate}
+            style={[
+              styles.smallAddBtn,
+              { backgroundColor: `${colors.primary[500]}15` },
+            ]}
+            accessibilityLabel="Buat Playlist Baru"
+          >
+            <Plus size={20} color={colors.primary[500]} strokeWidth={2.5} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+});
+
 // memo (audit Library 2026-11-22): komparator default cukup — props
 // dari library.tsx stabil (array useMemo + primitif + useCallback),
 // `colors` dari useTheme() internal (objek tema statis ALL_THEMES).
@@ -154,7 +284,13 @@ export const PlaylistList = memo(function PlaylistList({
     onImportM3U?.();
   }, [onImportM3U]);
 
-  // Solusi Performa: Jangan masukkan `colors` ke dependency useCallback renderItem
+  // `colors` MEMANG ada di dep — komentar lama ("Jangan masukkan
+  // `colors` ke dependency") SALAH dan menyesatkan: renderItem
+  // meneruskan `colors` ke PlaylistRow, jadi dep wajib menyebutkannya
+  // (mengeluarkannya = stale closure + pelanggaran exhaustive-deps).
+  // Identitas `colors` stabil (objek tema statis ALL_THEMES, lihat
+  // libraryTabMemo.test.ts), jadi renderItem tetap stabil selama tema
+  // tidak berganti.
   const renderItem: ListRenderItem<PlaylistItem> = useCallback(
     ({ item }) => (
       <PlaylistRow item={item} onPress={onPlaylistPress} colors={colors} />
@@ -238,106 +374,15 @@ export const PlaylistList = memo(function PlaylistList({
       extraData={colors} // Memastikan render ulang jika tema berubah
       contentContainerStyle={styles.listContent}
       ListHeaderComponent={
-        <View style={styles.headerContainer}>
-          {/* Section 1: System Playlists (Favorites) */}
-          <PlaylistRow
-            isFavorite
-            item={{
-              name: "Lagu Disukai",
-              count: favoriteCount,
-              id: "favorites",
-            }}
-            onPress={() =>
-              onPlaylistPress?.({ id: "favorites", name: "Lagu Disukai" })
-            }
-            colors={colors}
-          />
-
-          <View
-            style={[
-              styles.sectionDivider,
-              { backgroundColor: colors.background.tertiary },
-            ]}
-          />
-
-          {/* Section 1b: Smart Playlists (virtual — dihitung live dari
-              library; bukan playlist DB, jadi tidak bisa diedit/dihapus).
-              Hanya tampil bila ada ringkasannya (hook gagal muat = hilang
-              diam-diam, playlist manual tetap tampil). */}
-          {smartPlaylists.length > 0 && (
-            <>
-              <View style={styles.sectionHeader}>
-                <View style={styles.sectionTitleRow}>
-                  <Wand2 size={16} color={colors.primary[500]} />
-                  <Text
-                    style={[styles.sectionTitle, { color: colors.text.primary }]}
-                  >
-                    Playlist Otomatis
-                  </Text>
-                </View>
-              </View>
-
-              {smartPlaylists.map((item) => (
-                <PlaylistRow
-                  key={item.id}
-                  item={item}
-                  isSmart
-                  onPress={onPlaylistPress}
-                  colors={colors}
-                />
-              ))}
-
-              <View
-                style={[
-                  styles.sectionDivider,
-                  { backgroundColor: colors.background.tertiary },
-                ]}
-              />
-            </>
-          )}
-
-          {/* Section 2: User Playlists Header */}
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionTitleRow}>
-              <Sparkles size={16} color={colors.primary[500]} />
-              <Text
-                style={[styles.sectionTitle, { color: colors.text.primary }]}
-              >
-                Playlist Saya
-              </Text>
-            </View>
-
-            <View style={styles.actionHeaderGroup}>
-              {onImportM3U && (
-                <TouchableOpacity
-                  onPress={handleImport}
-                  style={[
-                    styles.smallAddBtn,
-                    { backgroundColor: `${colors.primary[500]}15` },
-                  ]}
-                  accessibilityLabel="Import M3U Playlist"
-                >
-                  <FileDown
-                    size={18}
-                    color={colors.primary[500]}
-                    strokeWidth={2.5}
-                  />
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity
-                onPress={handleCreate}
-                style={[
-                  styles.smallAddBtn,
-                  { backgroundColor: `${colors.primary[500]}15` },
-                ]}
-                accessibilityLabel="Buat Playlist Baru"
-              >
-                <Plus size={20} color={colors.primary[500]} strokeWidth={2.5} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+        <PlaylistListHeader
+          favoriteCount={favoriteCount}
+          smartPlaylists={smartPlaylists}
+          onPlaylistPress={onPlaylistPress}
+          onCreate={handleCreate}
+          onImport={handleImport}
+          hasImport={!!onImportM3U}
+          colors={colors}
+        />
       }
       // Penanganan jika ada Favorit tetapi Playlist Kustom masih 0
       ListEmptyComponent={

@@ -75,10 +75,12 @@ describe("baris detail — handler tekan lagu stabil (pola GenreList)", () => {
     },
   );
 
-  it("ArtistList: komparator sudah melindungi baris; handler stabil menyusul P3 (filteredSongs masih inline)", () => {
+  it("ArtistList: komparator + handler stabil (filteredSongs di-useMemo di P3)", () => {
     const src = readSource("../../../features/library/components/ArtistList.tsx");
     expect(src).toContain("(prev, next) =>");
     expect(src).toContain("prev.track.id === next.track.id");
+    expect(src).toContain("const handleSongPress = useCallback(");
+    expect(src).toContain("onPress={() => handleSongPress(item)}");
   });
 });
 
