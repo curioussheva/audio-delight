@@ -201,7 +201,18 @@ export default function SongDetailScreen() {
     safeGoBack(router);
   }, [router]);
 
-  const tracks = useLibraryStore((state) => state.tracks);
+  // Per-node render (2026-11-22): dulu `tracks` SELURUH array dilanggan —
+  // update track mana pun (toggle favorit lagu lain, enrichment,
+  // refresh) mengganti identitas array dan me-render ulang layar detail
+  // ini walau lagu yang dibuka tidak berubah. Sekarang selector
+  // mengembalikan SATU objek track-nya saja; updateTrack/toggleFavorite
+  // mempertahankan referensi track lain (map: hanya track yang diubah
+  // yang jadi objek baru), jadi layar ini hanya bangun bila track ini
+  // sendiri berubah. Antrean untuk playSong dibaca via getState() saat
+  // tombol ditekan, bukan lewat langganan.
+  const song: Song | undefined = useLibraryStore((state) =>
+    state.tracks?.find((t) => t.id.toString() === id),
+  );
   const setTracks = useLibraryStore((state) => state.setTracks);
   // U-P1-21: sinyal "library belum termuat" — tracks ter-persist di
   // AsyncStorage, tapi sebelum rehydrate / sebelum scan perdana selesai,
@@ -220,7 +231,10 @@ export default function SongDetailScreen() {
   const playSong = usePlayerStore((state) => state.playSong);
   // L2: bila lagu yang diedit liriknya sedang diputar, player store ikut
   // di-update supaya FullLyricsView langsung menampilkan lirik baru.
-  const currentSong = usePlayerStore((state) => state.currentSong);
+  // Per-node: hanya id lagu yang diputar yang dilanggan (bukan objek
+  // currentSong utuh — ganti metadata lagu yang diputar tidak perlu
+  // membangunkan layar ini).
+  const currentSongId = usePlayerStore((state) => state.currentSong?.id);
   const setPlayerLyrics = usePlayerStore((state) => state.setLyrics);
   // FASE 3 additional: umpan balik gagal/validasi lewat toast error
   // (Fase 2) — menggantikan Alert.alert di layar ini.
@@ -238,11 +252,6 @@ export default function SongDetailScreen() {
   // U-P1-21: retry memuat ulang library dari SQLite saat lagu tidak
   // ketemu / store belum termuat.
   const [isRetrying, setIsRetrying] = useState(false);
-
-  const song: Song | undefined = useMemo(
-    () => tracks?.find((t) => t.id.toString() === id),
-    [tracks, id],
-  );
 
   // U1: field mana yang masih kosong — penanda "data belum lengkap",
   // badge tombol sync, dan pratinjau modal. Placeholder "Unknown
@@ -325,7 +334,7 @@ export default function SongDetailScreen() {
     // U-P2-05: jangan navigasi ke Player bila playSong gagal — user
     // dilempar ke layar Player padahal lagu tidak jalan. playSong
     // mengembalikan false + mengisi playError saat native menolak.
-    const ok = await playSong(song, tracks);
+    const ok = await playSong(song, useLibraryStore.getState().tracks);
     if (!ok) {
       showToast("Lagu ini tidak bisa diputar. Coba lagu lain.", "error");
       return;
@@ -545,7 +554,7 @@ export default function SongDetailScreen() {
           "lyricsSynced",
         ),
       });
-      if (currentSong?.id === song.id) setPlayerLyrics(lines);
+      if (currentSongId === song.id) setPlayerLyrics(lines);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       return true;
     } catch (error) {
