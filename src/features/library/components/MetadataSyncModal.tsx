@@ -1,5 +1,5 @@
 // src/features/library/components/MetadataSyncModal.tsx
-import React, { useEffect, useState } from "react";
+import React, { memo, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -19,7 +19,12 @@ import {
   type FillableField,
 } from "../utils/metadataCompleteness";
 
-export const MetadataSyncModal = ({
+// memo (audit Library 2026-11-22, P4): komparator default cukup —
+// props dari [id].tsx stabil (boolean + string + missingFields
+// useMemo + onSelect/onClose useCallback + colors tema statis). Tanpa
+// memo, tiap render layar Song Detail (tracks/flag scan/lagu berubah)
+// ikut membangunkan modal + FlatList hasilnya.
+export const MetadataSyncModal = memo(({
   visible,
   onClose,
   initialTitle,
@@ -339,7 +344,7 @@ export const MetadataSyncModal = ({
       </View>
     </Modal>
   );
-};
+});
 
 const styles = StyleSheet.create({
   modalOverlay: { flex: 1, justifyContent: "flex-end" },

@@ -354,61 +354,70 @@ export default function SongDetailScreen() {
     }
   };
 
-  const handleApplyMetadata = async (newMeta: AppliedMeta) => {
-    if (!song) return;
-    setIsUpdating(true);
+  // onClose modal stabil (useCallback) — tanpa ini memo
+  // MetadataSyncModal batal tiap render layar (onClose baru).
+  const handleCloseSyncModal = useCallback(() => setSyncModalVisible(false), []);
 
-    try {
-      const artistName = newMeta.artist?.trim() || song.artist;
-      const enrichment =
-        await OnlineMetadataService.getArtistEnrichment(artistName);
+  const handleApplyMetadata = useCallback(
+    async (newMeta: AppliedMeta) => {
+      if (!song) return;
+      setIsUpdating(true);
 
-      // U1: MusicBrainz = "sapu bersih" — isi YANG KOSONG saja. Online
-      // hanya mengisi field lokal yang kosong (placeholder "Unknown
-      // Artist/Album" dihitung kosong); field lokal yang sudah terisi
-      // tidak pernah ada di payload, jadi tidak tertimpa. Cover diisi
-      // hanya bila artwork lokal kosong; foto/bio artis juga begitu.
-      // Tahun non-numerik dari online diabaikan (lihat fillEmptyFields).
-      const filled = fillEmptyFields(song, {
-        title: newMeta.title,
-        artist: newMeta.artist,
-        album: newMeta.album,
-        year: newMeta.year,
-        label: newMeta.label,
-        artwork: newMeta.releaseId
-          ? OnlineMetadataService.getCoverArtUrl(newMeta.releaseId)
-          : undefined,
-        artistImageUrl: enrichment.imageUrl,
-        artistBio: enrichment.bio,
-      });
+      try {
+        const artistName = newMeta.artist?.trim() || song.artist;
+        const enrichment =
+          await OnlineMetadataService.getArtistEnrichment(artistName);
 
-      const updatedData: Partial<Song> = {
-        ...filled,
-        isEnriched: true,
-        lastEnrichedAt: enrichment.lastUpdated || Date.now(),
-      };
+        // U1: MusicBrainz = "sapu bersih" — isi YANG KOSONG saja. Online
+        // hanya mengisi field lokal yang kosong (placeholder "Unknown
+        // Artist/Album" dihitung kosong); field lokal yang sudah terisi
+        // tidak pernah ada di payload, jadi tidak tertimpa. Cover diisi
+        // hanya bila artwork lokal kosong; foto/bio artis juga begitu.
+        // Tahun non-numerik dari online diabaikan (lihat fillEmptyFields).
+        const filled = fillEmptyFields(song, {
+          title: newMeta.title,
+          artist: newMeta.artist,
+          album: newMeta.album,
+          year: newMeta.year,
+          label: newMeta.label,
+          artwork: newMeta.releaseId
+            ? OnlineMetadataService.getCoverArtUrl(newMeta.releaseId)
+            : undefined,
+          artistImageUrl: enrichment.imageUrl,
+          artistBio: enrichment.bio,
+        });
 
-      await LibraryScanner.updateMetadata(song.id, updatedData, {
-        // I3 (G2): tandai field yang diterapkan dari MusicBrainz —
-        // rescan tidak boleh menimpanya. updateMetadata hanya menandai
-        // field yang ada di payload, dan payload U1 hanya berisi field
-        // yang benar-benar diisi — jadi yang ditandai = yang diisi.
-        markEdited: true,
-      });
-      updateTrackInStore(song.id, updatedData);
+        const updatedData: Partial<Song> = {
+          ...filled,
+          isEnriched: true,
+          lastEnrichedAt: enrichment.lastUpdated || Date.now(),
+        };
 
-      setSyncModalVisible(false);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // FASE 4: lengkapi dari MusicBrainz kini ber-toast sukses (dulu
-      // hanya haptic + modal tertutup).
-      showToast("Metadata dilengkapi dari MusicBrainz.", "success");
-    } catch (error) {
-      console.error("[SongDetail] Failed to apply metadata:", error);
-      showToast("Terjadi kesalahan saat menyimpan metadata.", "error");
-    } finally {
-      setIsUpdating(false);
-    }
-  };
+        await LibraryScanner.updateMetadata(song.id, updatedData, {
+          // I3 (G2): tandai field yang diterapkan dari MusicBrainz —
+          // rescan tidak boleh menimpanya. updateMetadata hanya menandai
+          // field yang ada di payload, dan payload U1 hanya berisi field
+          // yang benar-benar diisi — jadi yang ditandai = yang diisi.
+          markEdited: true,
+        });
+        updateTrackInStore(song.id, updatedData);
+
+        setSyncModalVisible(false);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        // FASE 4: lengkapi dari MusicBrainz kini ber-toast sukses (dulu
+        // hanya haptic + modal tertutup).
+        showToast("Metadata dilengkapi dari MusicBrainz.", "success");
+      } catch (error) {
+        console.error("[SongDetail] Failed to apply metadata:", error);
+        showToast("Terjadi kesalahan saat menyimpan metadata.", "error");
+      } finally {
+        setIsUpdating(false);
+      }
+    },
+    // `song` useMemo + aksi store stabil: identitas hanya berubah
+    // bila lagu yang dibuka berganti / track-nya di-update.
+    [song, updateTrackInStore, showToast],
+  );
 
   const handleSaveEdit = async () => {
     if (!song) return;
@@ -1350,7 +1359,7 @@ export default function SongDetailScreen() {
 
       <MetadataSyncModal
         visible={syncModalVisible}
-        onClose={() => setSyncModalVisible(false)}
+        onClose={handleCloseSyncModal}
         initialTitle={song.title}
         initialArtist={song.artist}
         missingFields={missingFields}

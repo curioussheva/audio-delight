@@ -1,7 +1,7 @@
 // src/features/library/components/DevDBManager.tsx
 // DEV TOOL ONLY — jangan diinclude di production build
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { memo, useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -35,7 +35,10 @@ interface RowData {
   [key: string]: any;
 }
 
-export default function DevDBManager({ onClose }: { onClose: () => void }) {
+// memo (audit Library 2026-11-22, P4): satu-satunya prop onClose
+// distabilkan pemakai (drawer _layout, useCallback) — tanpa memo,
+// tiap render drawer ikut me-render ulang manager + FlatList-nya.
+function DevDBManager({ onClose }: { onClose: () => void }) {
   const { theme } = useTheme();
   const { colors, spacing } = theme;
 
@@ -118,6 +121,18 @@ export default function DevDBManager({ onClose }: { onClose: () => void }) {
       }
     },
     [selectedTable, offset, hasMore, loadingMore],
+  );
+
+  // keyExtractor berbasis id (bukan indeks): baris yang sama tetap
+  // teridentifikasi saat data berubah (edit/hapus/sisip) — dengan
+  // indeks, FlatList mengira baris bergeser = baris lain dan me-mount
+  // ulang state barisnya. Fallback ke indeks untuk tabel tanpa kolom
+  // id (update/delete di komponen ini sudah mengasumsikan `row.id`,
+  // jadi id ada di tabel yang dipakai).
+  const rowKeyExtractor = useCallback(
+    (item: RowData, index: number) =>
+      item.id != null ? `row-${item.id}` : `row-idx-${index}`,
+    [],
   );
 
   useEffect(() => {
@@ -422,7 +437,7 @@ export default function DevDBManager({ onClose }: { onClose: () => void }) {
               {/* Rows */}
               <FlatList
                 data={data}
-                keyExtractor={(_, i) => i.toString()}
+                keyExtractor={rowKeyExtractor}
                 onEndReached={() => loadData(false)}
                 onEndReachedThreshold={0.5}
                 ListFooterComponent={
@@ -699,3 +714,5 @@ const s = StyleSheet.create({
     zIndex: 9999,
   },
 });
+
+export default memo(DevDBManager);

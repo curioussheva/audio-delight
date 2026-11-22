@@ -16,7 +16,7 @@
 // manual setiap rilis - dan tidak akan pernah menyimpang dari APK yang
 // benar-benar terpasang.
 
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Modal } from "react-native";
 import { Image } from "expo-image";
 import Constants from "expo-constants";
@@ -68,6 +68,10 @@ const DrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
 
   // DEV TOOLS: buka DB Manager sebagai modal.
   const [showDB, setShowDB] = useState(false);
+
+  // onClose stabil (useCallback) supaya memo DevDBManager tidak batal
+  // tiap render drawer — dulu arrow inline di Modal di bawah.
+  const handleCloseDB = useCallback(() => setShowDB(false), []);
 
   return (
     <>
@@ -175,9 +179,9 @@ const DrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
         <Modal
           visible={showDB}
           animationType="slide"
-          onRequestClose={() => setShowDB(false)}
+          onRequestClose={handleCloseDB}
         >
-          <DevDBManager onClose={() => setShowDB(false)} />
+          <DevDBManager onClose={handleCloseDB} />
         </Modal>
       )}
     </>
