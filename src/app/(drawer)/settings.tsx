@@ -72,7 +72,7 @@ import OnlineMetadataService from "@/features/library/services/OnlineMetadataSer
 
 import { Zap, ShieldCheck } from "lucide-react-native";
 import { useEqualizerStore } from "@/features/equalizer/store/equalizerStore";
-import { useEqualizer } from "@/features/equalizer/hooks/useEqualizer";
+import { useEqPresetState } from "@/features/equalizer/hooks/useEqualizer";
 import { useHeadphoneStore } from "@/features/headphone/store/headphoneStore";
 import Constants from "expo-constants";
 import {
@@ -465,16 +465,21 @@ export default function SettingsScreen() {
   const setEQEnabled = useEqualizerStore((s) => s.setEQEnabled);
   const resetToDefault = useEqualizerStore((s) => s.resetToDefault);
 
-  // N9: picker preset lewat guard DSP (useEqualizer), bukan store mentah:
-  // di mode bit-perfect/immersive preset tidak boleh mengubah bands di
-  // store, dan daftar memakai allPresets (bawaan + custom user).
+  // N9: picker preset lewat guard DSP (useEqPresetState), bukan store
+  // mentah: di mode bit-perfect/immersive preset tidak boleh mengubah
+  // bands di store, dan daftar memakai allPresets (bawaan + custom user).
   // applyPreset mentah di atas tetap dipakai doResetAll (reset ke netral,
   // bukan pilihan preset user).
+  // Per-node render (AUD-SET-1): dulu `useEqualizer()` penuh — hook itu
+  // melanggan 11 field store + audioMode, jadi tiap perubahan EQ (mis.
+  // tick drag di layar EQ) ikut me-render ulang Settings. Hook seksi
+  // preset ini hanya melanggan customPresets + activePresetId +
+  // isEQEnabled + audioMode (gate); guard DSP-nya identik.
   const {
     applyPreset: applyPresetGuarded,
     allPresets,
     isDSPDisabled,
-  } = useEqualizer();
+  } = useEqPresetState();
 
   // Per-node render (2026-11-22): dulu `useHeadphoneStore()` tanpa selector.
   const resetHeadphoneAll = useHeadphoneStore((s) => s.resetAll);
