@@ -441,7 +441,7 @@ const fireEqApply = (
     noteThrottleTick("bands", "skipped");
     return;
   }
-  const gains = bands.map((b) => Math.min(10, Math.max(-10, b.gain)));
+  const gains = bands.map((b) => clampBandGain(b.gain));
   // Opsi 3: lacak janji ini sebagai in-flight — settle-nya yang
   // mengirim snapshot tertahan (bila ada). Dulu `void` tanpa jejak:
   // tiap fire memulai janji yang tak terlacak, dan janji-janji itu
@@ -1072,7 +1072,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
       },
 
       setBandGain: (index: number, gain: number) => {
-  const clampedGain = Math.min(10, Math.max(-10, gain));
+  const clampedGain = clampBandGain(gain);
   // Fix G: jangan set() tiap tick drag — throttle store (leading +
   // trailing, 100 ms). Snapshot dihitung dari pending bila ada, supaya
   // perubahan band lain dalam jendela yang sama tidak tertimpa.
@@ -1157,7 +1157,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
         cancelPendingStoreUpdate();
         // Clamp dipakai untuk state DAN yang dikirim ke native (dulu
         // native menerima gains mentah tanpa clamp).
-        const clampedGains = gains.map((g) => Math.min(10, Math.max(-10, g)));
+        const clampedGains = gains.map((g) => clampBandGain(g));
         const newBands = get().bands.map((b, i) => ({
           ...b,
           gain: clampedGains[i] ?? b.gain,
