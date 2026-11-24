@@ -1465,8 +1465,10 @@ export default function SettingsScreen() {
           </View>
 
 
-          {/* ── 1b. Diagnostik: pemrosesan DSP di jalur produksi ────────────────── */}
-          {!dspGate.unavailable && (
+          {/* ── 1b. Diagnostik: pemrosesan DSP di jalur produksi ──────────────────
+              Hanya di build dev (__DEV__): pengguna rilis tidak boleh mematikan
+              pemrosesan DSP lewat Settings. */}
+          {__DEV__ && !dspGate.unavailable && (
             <SettingRow colors={colors} spacing={spacing}>
               <View style={{ flex: 1, marginRight: spacing.md }}>
                 <Text style={{ color: colors.text.primary, fontFamily: FONT_FAMILY.semiBold }}>
