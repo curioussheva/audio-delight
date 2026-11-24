@@ -373,7 +373,10 @@ export class LibraryScanner {
         // di audioQuality.ts, karena SQLite tidak bisa memanggil helper.
         conditions.push(`codec IN (${LOSSLESS_CODECS_SQL_LIST})`);
       } else if (filterBy === "lossy") {
-        conditions.push("codec IN ('MP3', 'AAC', 'OGG', 'MP4', 'M4A')");
+        // LIB-36: lossy = komplemen lossless, bukan daftar sendiri —
+        // codec lain (mis. OPUS) dulu tidak muncul di filter lossy
+        // MAUPUN lossless.
+        conditions.push(`codec NOT IN (${LOSSLESS_CODECS_SQL_LIST})`);
       } else if (filterBy === "hi-res") {
         // HI-RES = lossless DAN (rate > 48 kHz ATAU depth > 16).
         // Dulu tanpa gate codec: AAC 96 kHz ikut terfilter sebagai Hi-Res.
@@ -388,22 +391,23 @@ export class LibraryScanner {
 
       switch (sortBy) {
         case "title-asc":
-          query += " ORDER BY title ASC";
+          query += " ORDER BY title COLLATE NOCASE ASC, id ASC";
           break;
         case "title-desc":
-          query += " ORDER BY title DESC";
+          query += " ORDER BY title COLLATE NOCASE DESC, id ASC";
           break;
         case "artist-asc":
-          query += " ORDER BY artist ASC";
+          query +=
+            " ORDER BY artist COLLATE NOCASE ASC, title COLLATE NOCASE ASC, id ASC";
           break;
         case "date-added":
-          query += " ORDER BY dateAdded DESC";
+          query += " ORDER BY dateAdded DESC, id ASC";
           break;
         case "play-count":
-          query += " ORDER BY playCount DESC";
+          query += " ORDER BY playCount DESC, id ASC";
           break;
         default:
-          query += " ORDER BY title ASC";
+          query += " ORDER BY title COLLATE NOCASE ASC, id ASC";
       }
 
       query += " LIMIT ? OFFSET ?";
