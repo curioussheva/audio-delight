@@ -192,8 +192,6 @@ export class UnifiedScanService {
         this.abortController.signal,
       );
 
-      store.finishEnrichment();
-
       const remaining = store.getUnenrichedSongs?.() || [];
       store.setUnenrichedCount(remaining.length);
 
@@ -208,6 +206,10 @@ export class UnifiedScanService {
         failed: result.failed || 0,
       };
     } finally {
+      // 🔥 FIX (LIB-12): SELALU reset store state (anti stuck) — bila
+      // enrichBatch melempar, finishEnrichment tetap jalan supaya
+      // isEnriching tidak menempel true selamanya.
+      store.finishEnrichment();
       this.cleanup();
     }
   }
