@@ -254,6 +254,7 @@ export function startBridgeProbe(options: BridgeProbeOptions): {
       }
       if (sessionId !== null) {
         const t0 = now();
+        const firedWall = Date.now();
         const result = await callNative(getCrossfadeSeconds(), sessionId);
         const ms = now() - t0;
         if (result === false) {
@@ -263,7 +264,7 @@ export function startBridgeProbe(options: BridgeProbeOptions): {
           pushSample({ ms, context, at: now() });
           if (ms >= slowThresholdMs) {
             console.log(
-              `[BRIDGE-PROBE] SLOW round-trip=${Math.round(ms)}ms context=${context}`,
+              `[BRIDGE-PROBE] SLOW round-trip=${Math.round(ms)}ms context=${context} fireWall=${firedWall}`,
             );
           }
         }

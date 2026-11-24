@@ -205,7 +205,7 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
         // setFullEqualizer.
         val t0 = System.nanoTime()
         if (!engineAvailable) {
-            Log.i(TAG, "[DSP-TIMING] setVirtualizer strength=$strength native=${(System.nanoTime() - t0) / 1_000_000}ms (engine unavailable)")
+            Log.i(TAG, "[DSP-TIMING] setVirtualizer strength=$strength native=${(System.nanoTime() - t0) / 1_000_000}ms wall=${System.currentTimeMillis()} (engine unavailable)")
             promise.resolve(false); return
         }
         try {
@@ -230,7 +230,7 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
             // EQ. Melebar tidak boleh menghilangkan stereo.
             val width = 1.0f + strength / 1000.0f
             setNativeStereoWide(width)
-            Log.i(TAG, "[DSP-TIMING] setVirtualizer strength=$strength width=$width native=${(System.nanoTime() - t0) / 1_000_000}ms")
+            Log.i(TAG, "[DSP-TIMING] setVirtualizer strength=$strength width=$width native=${(System.nanoTime() - t0) / 1_000_000}ms wall=${System.currentTimeMillis()}")
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("DSP_ERROR", e.message)
@@ -292,12 +292,12 @@ class NativeDSPModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
         // satu stream global), sama seperti setHrtfEnabled di atas.
         val t0 = System.nanoTime()
         if (!engineAvailable) {
-            Log.i(TAG, "[DSP-TIMING] setCrossfadeSeconds seconds=$seconds native=${(System.nanoTime() - t0) / 1_000_000}ms (engine unavailable)")
+            Log.i(TAG, "[DSP-TIMING] setCrossfadeSeconds seconds=$seconds native=${(System.nanoTime() - t0) / 1_000_000}ms wall=${System.currentTimeMillis()} (engine unavailable)")
             promise.resolve(false); return
         }
         try {
             setNativeCrossfadeSeconds(seconds)
-            Log.i(TAG, "[DSP-TIMING] setCrossfadeSeconds seconds=$seconds native=${(System.nanoTime() - t0) / 1_000_000}ms")
+            Log.i(TAG, "[DSP-TIMING] setCrossfadeSeconds seconds=$seconds native=${(System.nanoTime() - t0) / 1_000_000}ms wall=${System.currentTimeMillis()}")
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("DSP_ERROR", e.message)

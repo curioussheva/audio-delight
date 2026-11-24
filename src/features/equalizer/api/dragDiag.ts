@@ -163,6 +163,7 @@ export function noteSetterStart(
 ): SetterHandle {
   if (!isTempDiagEnabled()) return { name, t0: nowMs, active: false };
   setterInFlight[name] += 1;
+  console.log(`[DRAG-DIAG] setter=${name} fire wall=${Date.now()}`);
   if (setterInFlight[name] > 1) {
     setterOverlaps[name] += 1;
     if (nowMs - setterLastOverlapLogAt[name] >= OVERLAP_LOG_MIN_GAP_MS) {
