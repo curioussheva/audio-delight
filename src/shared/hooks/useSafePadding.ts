@@ -4,9 +4,7 @@ import { usePlayerStore } from "@/features/player/store/playerStore";
 
 export const useSafePadding = () => {
   const insets = useSafeAreaInsets();
-  const { currentSong } = usePlayerStore();
-
-  const hasFloatingPlayer = !!currentSong;
+  const hasFloatingPlayer = usePlayerStore((s) => !!s.currentSong);
 
   return {
     paddingTop: insets.top,
