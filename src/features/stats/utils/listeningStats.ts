@@ -23,9 +23,11 @@
 // - Satu "hari aktif" = satu hari kalender lokal dengan ≥1 baris
 //   recent_plays. Streak = hari aktif berturut-turut; bila hari ini
 //   belum ada putaran, streak dihitung dari kemarin (belum putus).
-// - Satu detik didengarkan = satu detik posisi playback yang benar-benar
-//   dilewati (lihat notePlaybackPosition di statsService) — seek/skip
-//   tidak dihitung. Batas aman: 1 detik yang sama tidak dihitung ganda.
+// - Satu detik didengarkan = satu detik WAKTU NYATA yang dilewati
+//   selagi posisi playback berjalan maju (lihat notePlaybackPosition
+//   di statsService; AUD-ST-1: wall-clock, bukan delta posisi —
+//   kecepatan putar 1,5x tidak menambah jam) — seek/skip tidak
+//   dihitung. Batas aman: 1 detik yang sama tidak dihitung ganda.
 
 /** Rentang utama layar statistik. "30d" = tampilan utama (default). */
 export type StatsRange = "30d" | "year" | "all";

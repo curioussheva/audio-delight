@@ -15,13 +15,17 @@
 //
 // ── Aturan akumulasi detik (notePlaybackPosition) ──
 // Dipanggil tiap tick watcher posisi (500 ms) dengan posisi playback
-// saat ini. Hanya delta KECIL yang dihitung (0 < delta ≤ 2 dtk):
-// lompat maju (seek/skip) dan lompat mundur (seek/ulang) bukan detik
-// yang didengarkan. Ganti lagu / jeda lama / seek tidak membuat
-// detik ganda: delta negatif/tinggi diabaikan, posisi terakhir
-// dicatat ulang. Bucket ditulis ke DB tiap ≥30 dtk terkumpul, saat
-// pause (flushListenedSeconds), dan saat ganti trek — jadi kalau app
-// dimatikan paksa, paling banyak ~30 dtk yang hilang.
+// saat ini. Yang diakumulasi adalah WALL-CLOCK antar tick (AUD-ST-1):
+// delta posisi hanya dipakai sebagai GATE — 0 < delta ≤ 2 dtk berarti
+// lagu memang sedang berjalan maju (bukan seek/skip/jeda). Menghitung
+// dari delta posisi akan salah sebanding kecepatan putar (1,5x → +50%),
+// karena di 1,5x posisi maju 0,75 dtk tiap tick 0,5 dtk, padahal hanya
+// 0,5 dtk waktu nyata yang dilewati. Lompat maju (seek/skip) dan lompat
+// mundur (seek/ulang) bukan detik yang didengarkan. Ganti lagu / jeda
+// lama / seek tidak membuat detik ganda: delta negatif/tinggi diabaikan,
+// posisi terakhir dicatat ulang. Bucket ditulis ke DB tiap ≥30 dtk
+// terkumpul, saat pause (flushListenedSeconds), dan saat ganti trek —
+// jadi kalau app dimatikan paksa, paling banyak ~30 dtk yang hilang.
 
 import { db } from "@/shared/lib/sqlite";
 import {
@@ -45,10 +49,18 @@ let _bucketSeconds = 0;
 // Posisi terakhir yang diamati watcher — untuk menghitung delta.
 let _lastSongId: string | null = null;
 let _lastPosition = 0;
+// Wall-clock (epoch-ms) tick terakhir yang diamati — untuk menghitung
+// detik nyata yang dilewati (AUD-ST-1). Diperbarui tiap tick dengan
+// posisi valid, termasuk saat pause (posisi diam → delta 0 → tidak
+// diakumulasi, dan jeda tidak ikut terhitung saat resume).
+let _lastTickMs = 0;
 
 const FLUSH_THRESHOLD_SECONDS = 30;
-// Tick watcher 500 ms → delta normal ≤ ~1 dtk (kecepatan 1,5x ≈ 0,75
-// dtk); 2 dtk memberi toleransi jeda tick tanpa memberi ruang seek.
+// Tick watcher 500 ms → delta posisi normal ≤ ~1 dtk (kecepatan 1,5x ≈
+// 0,75 dtk; kecepatan 2x ≈ 1 dtk); 2 dtk memberi toleransi jeda tick
+// tanpa memberi ruang seek. Batas yang sama dipakai untuk selisih
+// wall-clock antar tick: tick yang tertunda karena JS kelaparan
+// (gap > 2 dtk) tidak ikut dihitung penuh.
 const MAX_COUNTED_DELTA_SECONDS = 2;
 
 /** Tulis N detik (bulat ke bawah) ke hari yang bersangkutan. */
@@ -73,6 +85,11 @@ function addListenedSeconds(day: string, seconds: number): void {
  * Catat posisi playback saat ini (dipanggil watcher 500 ms di
  * playerStore). Tidak pernah melempar — statistik tidak boleh
  * mengganggu playback.
+ *
+ * Akumulasi memakai WALL-CLOCK antar tick (AUD-ST-1), bukan delta
+ * posisi — jadi kecepatan putar 1,5x/2x tetap tercatat sebagai waktu
+ * nyata yang dilewati. Delta posisi hanya gate: 0 < delta ≤ 2 dtk
+ * berarti lagu sedang berjalan maju.
  */
 export function notePlaybackPosition(
   songId: string | null,
@@ -82,9 +99,11 @@ export function notePlaybackPosition(
     if (!songId || !(positionSeconds > 0)) {
       _lastSongId = songId;
       _lastPosition = 0;
+      _lastTickMs = 0;
       return;
     }
-    const today = dayKeyFromMs(Date.now());
+    const nowMs = Date.now();
+    const today = dayKeyFromMs(nowMs);
     if (_bucketDay !== null && _bucketDay !== today) {
       // Lewat tengah malam di tengah pemutaran: tutup hari lama dulu.
       flushListenedSeconds();
@@ -98,16 +117,25 @@ export function notePlaybackPosition(
       // dari lagu lama sebagai detik didengarkan.
       _lastSongId = songId;
       _lastPosition = positionSeconds;
+      _lastTickMs = nowMs;
       return;
     }
     const delta = positionSeconds - _lastPosition;
     _lastPosition = positionSeconds;
     if (delta > 0 && delta <= MAX_COUNTED_DELTA_SECONDS) {
-      _bucketSeconds += delta;
-      if (_bucketSeconds >= FLUSH_THRESHOLD_SECONDS) {
-        flushListenedSeconds();
+      // Posisi maju wajar → lagu sedang diputar: hitung waktu nyata
+      // sejak tick sebelumnya (bukan delta posisi — lihat AUD-ST-1).
+      const wallDelta = _lastTickMs > 0 ? (nowMs - _lastTickMs) / 1000 : 0;
+      if (wallDelta > 0 && wallDelta <= MAX_COUNTED_DELTA_SECONDS) {
+        _bucketSeconds += wallDelta;
+        if (_bucketSeconds >= FLUSH_THRESHOLD_SECONDS) {
+          flushListenedSeconds();
+        }
       }
     }
+    // Jangkar wall-clock diperbarui tiap tick valid — termasuk saat
+    // pause (delta 0): jeda tidak ikut terhitung saat resume.
+    _lastTickMs = nowMs;
   } catch (e) {
     console.warn("[Stats] notePlaybackPosition gagal:", e);
   }
