@@ -5,6 +5,23 @@ console.log("[BOOT] 0. _layout module loaded");
 // state timer-nya hidup di `global` supaya Fast Refresh tidak menumpuk
 // interval + listener (lihat jsLagMonitor.ts).
 startJsLagMonitor();
+// JL-1 (Fase 0): sampler lag 100 ms + p50/p95/p99 per skenario — matikan
+// flag setelah pengukuran selesai.
+const LAG_STATS = true; // matikan setelah pengukuran
+if (LAG_STATS) {
+  startJsLagStats(() => {
+    const p = usePlayerStore.getState();
+    const l = useLibraryStore.getState();
+    return [
+      p.isPlaying ? "play" : "idle",
+      isDragActive() ? "drag" : "",
+      l.isManualScanning || l.isAutoScanning ? "scan" : "",
+      l.enrichmentQueueSize > 0 ? "enrich" : "",
+    ]
+      .filter(Boolean)
+      .join("+");
+  });
+}
 configureReanimatedLogger({ level: ReanimatedLogLevel.warn, strict: false });
 
 import React, { memo, useState, useEffect, useRef, useCallback, useMemo } from "react";
@@ -44,6 +61,8 @@ import { useHeadphoneCorrection } from "@/features/headphone/hooks/useHeadphoneC
 import { useOutputProfiles } from "@/features/outputprofile/hooks/useOutputProfiles";
 import { requestAudioPermissions } from "@/shared/utils/permissions";
 import { startJsLagMonitor } from "@/shared/utils/jsLagMonitor";
+import { startJsLagStats } from "@/shared/utils/jsLagStats";
+import { isDragActive } from "@/features/equalizer/api/dragState";
 
 // 🔥 DIAGNOSTICS
 import {
