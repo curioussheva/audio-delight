@@ -86,6 +86,7 @@ const KEYS = {
 } as const;
 
 let _positionSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let _latestPos = 0;
 
 // 🔥 FIX Bug #1: dedupe concurrent playSong (crash saat tap cepat)
 const _playInFlightSongIds = new Set<string>();
@@ -105,9 +106,10 @@ let _lastPlayRequest: { songId: string; ts: number } | null = null;
 let _trackChangedSyncInFlight = false;
 let _trackChangedSyncPending: string | null = null;
 const savePositionThrottled = (position: number) => {
+  _latestPos = position; // simpan nilai TERBARU, bukan yang pertama
   if (_positionSaveTimer) return;
   _positionSaveTimer = setTimeout(() => {
-    AsyncStorage.setItem(KEYS.LAST_POSITION, position.toString()).catch(
+    AsyncStorage.setItem(KEYS.LAST_POSITION, _latestPos.toString()).catch(
       () => {},
     );
     _positionSaveTimer = null;
@@ -678,6 +680,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           // Sync posisi ke Zustand (throttle: hanya update kalau berubah >0.1s)
           if (Math.abs(newPos - get().position) > 0.1) {
             set({ position: newPos });
+            savePositionThrottled(newPos);
           }
 
           // 🔥 FIX #2: sync posisi ke MediaSession supaya slider lock screen
@@ -1404,7 +1407,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       // Statistik (item 10): pause → tulis detik yang sudah didengarkan
       // (kalau tidak, detik sejak flush terakhir hilang saat app
       // dimatikan sebelum lagu berganti).
-      if (!isPlaying) flushListenedSeconds();
+      if (!isPlaying) {
+        flushListenedSeconds();
+        // PS-3: simpan posisi saat pause supaya resume pasca-restart
+        // tidak kembali ke 0 / posisi basi.
+        AsyncStorage.setItem(KEYS.LAST_POSITION, String(get().position)).catch(
+          () => {},
+        );
+      }
 
       // 🔥 FIX: sync playback state ke MediaSession (safe)
       const pos = get().position;
