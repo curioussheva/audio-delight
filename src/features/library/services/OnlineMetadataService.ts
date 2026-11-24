@@ -20,10 +20,11 @@ import { useLibraryStore } from "../store/libraryStore";
 const MUSICBRAINZ_BASE = "https://musicbrainz.org/ws/2";
 
 /**
- * PENTING: MusicBrainz mewajibkan User-Agent yang jelas.
- * Ganti email dengan kontak yang valid sebelum publish ke store.
+ * MusicBrainz mewajibkan User-Agent yang jelas. Kontak di sini adalah
+ * URL repo publik — tanpa email pribadi.
  */
-const USER_AGENT = "PristineAudio/1.0.0 ( curioussheva@gmail.com )";
+const USER_AGENT =
+  "PristineAudio/1.0.0 ( https://github.com/curioussheva/audio-delight )";
 
 /** Rate limit MusicBrainz: maks 1 req/detik. Kita pakai 1100ms untuk margin. */
 const MB_RATE_LIMIT_MS = 1100;
