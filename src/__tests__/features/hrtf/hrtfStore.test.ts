@@ -30,11 +30,18 @@ jest.mock("@/specs/NativeDSPModule", () => ({
 }));
 
 // Muat ulang modul store per test supaya state persist selalu segar.
-const loadStore = () => {
+const loadStore = (publishSession = true) => {
   jest.resetModules();
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return require("@/features/hrtf/store/hrtfStore")
+  const store = require("@/features/hrtf/store/hrtfStore")
     .useHrtfStore as typeof import("@/features/hrtf/store/hrtfStore").useHrtfStore;
+  if (publishSession) {
+    // EQ-17: pushDsp menunggu token sesi — terbitkan 7 untuk modul
+    // dspSession yang segar (require sesudah resetModules).
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("@/features/equalizer/api/dspSession").setDspSessionId(7);
+  }
+  return store;
 };
 
 describe("hrtfStore", () => {
@@ -51,7 +58,9 @@ describe("hrtfStore", () => {
     const store = loadStore();
     await store.getState().setHrtfEnabled(true);
     expect(store.getState().isHrtfEnabled).toBe(true);
-    expect(mockCreateAudioSession).toHaveBeenCalled();
+    // EQ-17: tanpa createAudioSession per push — token sesi dipakai
+    // ulang, setter tetap menerima sessionId yang sama.
+    expect(mockCreateAudioSession).not.toHaveBeenCalled();
     expect(mockSetHrtfEnabled).toHaveBeenCalledWith(true, 7);
   });
 
@@ -63,15 +72,20 @@ describe("hrtfStore", () => {
     expect(mockSetHrtfEnabled).toHaveBeenLastCalledWith(false, 7);
   });
 
-  it("sessionId -1 -> native tidak dipanggil, state tetap tersimpan", async () => {
-    mockCreateAudioSession.mockResolvedValueOnce({
-      sessionId: -1,
-      isNew: false,
-    });
-    const store = loadStore();
-    await store.getState().setHrtfEnabled(true);
-    expect(store.getState().isHrtfEnabled).toBe(true);
-    expect(mockSetHrtfEnabled).not.toHaveBeenCalled();
+  it("engine belum siap (tanpa token sesi) -> native tidak dipanggil, state tetap tersimpan", async () => {
+    // EQ-17: push menunggu token sesi (maks 10 detik) lalu melewati
+    // dorongan bila engine tak kunjung siap.
+    jest.useFakeTimers();
+    try {
+      const store = loadStore(false);
+      const done = store.getState().setHrtfEnabled(true);
+      await jest.advanceTimersByTimeAsync(10_000);
+      await expect(done).resolves.toBeUndefined();
+      expect(store.getState().isHrtfEnabled).toBe(true);
+      expect(mockSetHrtfEnabled).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it("native menolak -> state tetap tersimpan (niat user), tidak throw", async () => {

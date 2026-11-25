@@ -72,11 +72,18 @@ jest.mock("expo-file-system/legacy", () => ({
 }));
 
 // Muat ulang modul store per test supaya state persist selalu segar.
-const loadStore = () => {
+const loadStore = (publishSession = true) => {
   jest.resetModules();
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return require("@/features/convolver/store/convolverStore")
+  const store = require("@/features/convolver/store/convolverStore")
     .useConvolverStore as typeof import("@/features/convolver/store/convolverStore").useConvolverStore;
+  if (publishSession) {
+    // EQ-17: pushDsp menunggu token sesi — terbitkan 7 untuk modul
+    // dspSession yang segar (require sesudah resetModules).
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("@/features/equalizer/api/dspSession").setDspSessionId(7);
+  }
+  return store;
 };
 
 const pickedFile = {
@@ -110,7 +117,8 @@ describe("convolverStore", () => {
     const store = loadStore();
     await store.getState().setConvolverEnabled(true);
     expect(store.getState().isConvolverEnabled).toBe(true);
-    expect(mockCreateAudioSession).toHaveBeenCalled();
+    // EQ-17: tanpa createAudioSession per push — token sesi dipakai ulang.
+    expect(mockCreateAudioSession).not.toHaveBeenCalled();
     expect(mockSetConvolverEnabled).toHaveBeenCalledWith(true, 7);
   });
 

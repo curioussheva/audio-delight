@@ -18,6 +18,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import NativeDSPModule from "@/specs/NativeDSPModule";
+import { pushDsp } from "@/features/equalizer/api/pushDsp";
 import {
   pruneDeviceProfiles,
   resolveProfileForDevice,
@@ -85,45 +86,54 @@ export const useHeadphoneStore = create<HeadphoneCorrectionStore>()(
           return false;
         }
 
-        try {
-          // Native mem-parse ulang `presetText` di sini. Kalau ia menolak,
-          // kita TIDAK menandai profil sebagai aktif - state tidak boleh
-          // mengklaim sesuatu yang native tidak terapkan.
-          const ok = await NativeDSPModule.loadHeadphonePreset(
+        // EQ-17: dorong lewat pushDsp — satu helper untuk semua store
+        // DSP kecil (tunggu engine siap, tanpa createAudioSession
+        // sendiri). Setter headphone tidak butuh sessionId, jadi
+        // argumennya diabaikan; hasil boolean diteruskan supaya
+        // penolakan native tetap terdeteksi.
+        const ok = await pushDsp("Headphone", async () => {
+          // Native mem-parse ulang `presetText` di sini. Kalau ia
+          // menolak, kita TIDAK menandai profil sebagai aktif - state
+          // tidak boleh mengklaim sesuatu yang native tidak terapkan.
+          const loaded = await NativeDSPModule.loadHeadphonePreset(
             profile.presetText,
           );
-
-          if (ok !== true) {
-            console.warn(
-              "[Headphone] native menolak preset:",
-              profile.name,
-            );
-            return false;
-          }
-
+          if (loaded !== true) return false;
           NativeDSPModule.setHeadphoneCorrectionEnabled(true);
-
-          set({
-            activeProfileId: profileId,
-            enabled: true,
-            loadedProfileId: profileId,
-          });
           return true;
-        } catch (e) {
-          console.warn("[Headphone] activateProfile gagal:", e);
+        });
+
+        if (ok !== true) {
+          console.warn("[Headphone] native menolak preset:", profile.name);
           return false;
         }
+
+        set({
+          activeProfileId: profileId,
+          enabled: true,
+          loadedProfileId: profileId,
+        });
+        return true;
       },
 
       deactivate: async () => {
-        try {
+        // EQ-17: lewat pushDsp seperti activate (tunggu engine siap).
+        // Hanya tandai mati bila dorongan benar sampai — bila engine
+        // belum siap / gagal, sakelar tetap menyala (jujur: native
+        // masih menerapkan koreksi).
+        const ok = await pushDsp("Headphone", async () => {
           NativeDSPModule.setHeadphoneCorrectionEnabled(false);
-          // Preset sengaja TIDAK dihapus di native: mematikannya harus bisa
-          // dibalik tanpa memuat ulang profil.
-          set({ enabled: false });
-        } catch (e) {
-          console.warn("[Headphone] deactivate gagal:", e);
+          return true;
+        });
+        if (ok !== true) {
+          console.warn(
+            "[Headphone] deactivate gagal: dorongan tidak sampai ke native.",
+          );
+          return;
         }
+        // Preset sengaja TIDAK dihapus di native: mematikannya harus bisa
+        // dibalik tanpa memuat ulang profil.
+        set({ enabled: false });
       },
 
       addProfile: (name, presetText, parsed) => {

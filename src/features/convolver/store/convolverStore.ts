@@ -23,6 +23,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import NativeDSPModule, {
   ConvolverIrStatus,
 } from "@/specs/NativeDSPModule";
+import { pushDsp } from "@/features/equalizer/api/pushDsp";
 import {
   pickIrFile,
   saveIrFile,
@@ -100,14 +101,11 @@ export const useConvolverStore = create<ConvolverStore>()(
 
       setConvolverEnabled: async (enabled: boolean) => {
         set({ isConvolverEnabled: enabled });
-        try {
-          const { sessionId } = await NativeDSPModule.createAudioSession();
-          if (sessionId !== -1) {
-            await NativeDSPModule.setConvolverEnabled(enabled, sessionId);
-          }
-        } catch (e) {
-          console.error("[Convolver Store] setConvolverEnabled gagal:", e);
-        }
+        // EQ-17: satu helper pushDsp — tanpa createAudioSession
+        // sendiri per perubahan (dulu 2 janji async: sesi + setter).
+        await pushDsp("Convolver", (sessionId) =>
+          NativeDSPModule.setConvolverEnabled(enabled, sessionId),
+        );
       },
 
       loadIr: async () => {
@@ -231,17 +229,14 @@ export const useConvolverStore = create<ConvolverStore>()(
       restoreToNative: async () => {
         const { isConvolverEnabled } = get();
         await get().preloadConvolverIr();
-        try {
-          const { sessionId } = await NativeDSPModule.createAudioSession();
-          if (sessionId !== -1) {
-            await NativeDSPModule.setConvolverEnabled(
-              isConvolverEnabled,
-              sessionId,
-            );
-          }
-        } catch (e) {
-          console.error("[Convolver Store] restore toggle gagal:", e);
-        }
+        // EQ-17: toggle lewat pushDsp (tanpa createAudioSession
+        // sendiri — dulu duplikat helper yang sama).
+        await pushDsp("Convolver", (sessionId) =>
+          NativeDSPModule.setConvolverEnabled(
+            isConvolverEnabled,
+            sessionId,
+          ),
+        );
       },
     }),
     {

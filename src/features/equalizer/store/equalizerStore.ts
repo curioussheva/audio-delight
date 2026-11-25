@@ -27,6 +27,7 @@ import {
 // (logcat #9) throttle + fire-and-forget untuk tiga setter drag —
 // lihat effectPusher.ts.
 import { createEffectPusher } from "@/features/equalizer/api/effectPusher";
+import { setDspSessionId } from "@/features/equalizer/api/dspSession";
 // Opsi 3 (log #15): gate in-flight master gain + band apply selama drag.
 import { isDragActive } from "@/features/equalizer/api/dragState";
 
@@ -889,6 +890,8 @@ export const useEqualizerStore = create<EqualizerStore>()(
         try {
           const sessionId = await getCurrentSessionId();
           set({ audioSessionId: sessionId, isInitialized: true });
+          // EQ-17: terbitkan token sesi untuk pushDsp.
+          setDspSessionId(sessionId);
 
           // P0: samakan flag native dengan isEQEnabled yang dipersist —
           // native default eqEnabled=true, jadi boot dengan EQ mati harus
@@ -951,6 +954,8 @@ export const useEqualizerStore = create<EqualizerStore>()(
         if (id !== get().audioSessionId) {
           resetConvolverIrLoaded();
         }
+        // EQ-17: terbitkan token sesi untuk pushDsp.
+        setDspSessionId(id);
         set({ audioSessionId: id });
         if (get().isEQEnabled && id !== -1) {
           applyAllEffectsToNative(get(), "setAudioSessionId");

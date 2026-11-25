@@ -2,6 +2,7 @@ import NativeDSPModule from "@/features/equalizer/api/nativeInterface";
 import { stopVisualizer } from "@/features/visualizer/native/VisualizerBridge";
 import NativePlaybackService from "@/specs/NativePlaybackService";
 import { ProcessingModeValue as NativeDSPModuleValue } from "@/specs/NativeDSPModule";
+import { setDspSessionId } from "@/features/equalizer/api/dspSession";
 
 interface AudioEngineConfig {
   minBufferMs?: number;
@@ -166,6 +167,9 @@ export class AudioEngine {
       const id = result?.sessionId ?? null;
       if (id && id > 0) {
         this.sessionId = id;
+        // EQ-17: terbitkan token sesi untuk pushDsp — push efek kecil
+        // tidak lagi mengalokasikan sesi sendiri per perubahan.
+        setDspSessionId(id);
         return id;
       }
       return null;

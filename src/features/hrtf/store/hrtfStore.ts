@@ -18,6 +18,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import NativeDSPModule from "@/specs/NativeDSPModule";
+import { pushDsp } from "@/features/equalizer/api/pushDsp";
 
 export interface HrtfStore {
   /** HRTF menyala (virtual speaker ±30°). Default OFF. */
@@ -33,14 +34,11 @@ export const useHrtfStore = create<HrtfStore>()(
 
       setHrtfEnabled: async (enabled: boolean) => {
         set({ isHrtfEnabled: enabled });
-        try {
-          const { sessionId } = await NativeDSPModule.createAudioSession();
-          if (sessionId !== -1) {
-            await NativeDSPModule.setHrtfEnabled(enabled, sessionId);
-          }
-        } catch (e) {
-          console.error("[HRTF Store] setHrtfEnabled gagal:", e);
-        }
+        // EQ-17: satu helper pushDsp — tanpa createAudioSession
+        // sendiri per perubahan (dulu 2 janji async: sesi + setter).
+        await pushDsp("HRTF", (sessionId) =>
+          NativeDSPModule.setHrtfEnabled(enabled, sessionId),
+        );
       },
     }),
     {

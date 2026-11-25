@@ -14,6 +14,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import NativeDSPModule from "@/specs/NativeDSPModule";
+import { pushDsp } from "@/features/equalizer/api/pushDsp";
 import {
   clampCrossfadeSeconds,
   CROSSFADE_MIN_SECONDS,
@@ -28,17 +29,6 @@ export interface CrossfadeStore {
   restoreToNative: () => Promise<void>;
 }
 
-async function pushToNative(seconds: number): Promise<void> {
-  try {
-    const { sessionId } = await NativeDSPModule.createAudioSession();
-    if (sessionId !== -1) {
-      await NativeDSPModule.setCrossfadeSeconds(seconds, sessionId);
-    }
-  } catch (e) {
-    console.error("[Crossfade Store] setCrossfadeSeconds gagal:", e);
-  }
-}
-
 export const useCrossfadeStore = create<CrossfadeStore>()(
   persist(
     (set, get) => ({
@@ -47,11 +37,20 @@ export const useCrossfadeStore = create<CrossfadeStore>()(
       setCrossfadeSeconds: async (seconds: number) => {
         const clamped = clampCrossfadeSeconds(seconds);
         set({ crossfadeSeconds: clamped });
-        await pushToNative(clamped);
+        // EQ-17: satu helper pushDsp — tanpa createAudioSession
+        // sendiri per perubahan (dulu 2 janji async: sesi + setter).
+        await pushDsp("Crossfade", (sessionId) =>
+          NativeDSPModule.setCrossfadeSeconds(clamped, sessionId),
+        );
       },
 
       restoreToNative: async () => {
-        await pushToNative(get().crossfadeSeconds);
+        await pushDsp("Crossfade", (sessionId) =>
+          NativeDSPModule.setCrossfadeSeconds(
+            get().crossfadeSeconds,
+            sessionId,
+          ),
+        );
       },
     }),
     {
