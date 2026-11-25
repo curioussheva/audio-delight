@@ -1,5 +1,12 @@
 // src/app/(drawer)/song/[id].tsx
-import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
+import React, {
+  memo,
+  useMemo,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
 import {
   View,
   Text,
@@ -8,6 +15,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   TextInput,
+  StyleProp,
+  ViewStyle,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,6 +29,7 @@ import { SectionCard } from "@/shared/components/ui/SectionCard";
 import { PristineTextInput } from "@/shared/components/ui/PristineTextInput";
 import { useToastStore } from "@/shared/store/toastStore";
 import { FONT_FAMILY } from "@/shared/constants/themes/base";
+import type { ThemeColors } from "@/shared/constants/themes/types";
 import { safeGoBack } from "@/shared/utils/navigation";
 import {
   ArrowLeft,
@@ -93,10 +103,12 @@ interface EditFormData {
 interface DetailRowProps {
   label: string;
   value: string | undefined;
-  colors: any;
+  colors: ThemeColors;
 }
 
-const DetailRow = ({ label, value, colors }: DetailRowProps) => (
+// AUD2-5: memo — baris detail hanya me-render ulang bila label/nilai/
+// warna berubah, bukan tiap render layar (mis. saat overlay lirik sibuk).
+const DetailRow = memo(({ label, value, colors }: DetailRowProps) => (
   <View style={[styles.detailRow, { borderBottomColor: colors.border.light }]}>
     <Text style={[styles.detailLabel, { color: colors.text.secondary }]}>
       {label}
@@ -109,14 +121,19 @@ const DetailRow = ({ label, value, colors }: DetailRowProps) => (
       {value ?? "-"}
     </Text>
   </View>
-);
+));
 
 interface EditFieldProps {
   label: string;
   value: string;
-  onChangeText: (text: string) => void;
+  // AUD2-5: field + handler bersama (bukan onChangeText inline) —
+  // closure inline di pemanggil berganti identitas tiap render dan
+  // membatalkan memo; dengan `field` + `onFieldChange` yang stabil,
+  // hanya field yang nilainya berubah yang me-render ulang.
+  field: keyof EditFormData;
+  onFieldChange: (field: keyof EditFormData, text: string) => void;
   keyboardType?: "default" | "numeric";
-  style?: any;
+  style?: StyleProp<ViewStyle>;
   // U-P2-05: placeholder wajib diisi pemanggil — dulu placeholderTextColor
   // disetel tapi tidak pernah ada placeholder, jadi field kosong tidak
   // memberi petunjuk format yang diharapkan.
@@ -127,22 +144,156 @@ interface EditFieldProps {
 // + input + fokus/error dari token yang sama dengan form lain. Warna label
 // mengikuti builder (text.secondary); tinggi 48 + radius md sama seperti
 // sebelumnya, latar container secondary (dulu tertiary) + border medium.
-const EditField = ({
-  label,
-  value,
-  onChangeText,
-  keyboardType = "default",
-  style,
-  placeholder,
-}: EditFieldProps) => (
-  <PristineTextInput
-    label={label}
-    value={value}
-    onChangeText={onChangeText}
-    keyboardType={keyboardType}
-    placeholder={placeholder}
-    style={[styles.editFieldContainer, style]}
-  />
+const EditField = memo(
+  ({
+    label,
+    value,
+    field,
+    onFieldChange,
+    keyboardType = "default",
+    style,
+    placeholder,
+  }: EditFieldProps) => (
+    <PristineTextInput
+      label={label}
+      value={value}
+      onChangeText={(text) => onFieldChange(field, text)}
+      keyboardType={keyboardType}
+      placeholder={placeholder}
+      style={[styles.editFieldContainer, style]}
+    />
+  ),
+);
+
+interface EditFormProps {
+  editForm: EditFormData;
+  colors: ThemeColors;
+  accentOnElevated: string;
+  onFieldChange: (field: keyof EditFormData, text: string) => void;
+  onCancel: () => void;
+  onSave: () => void;
+}
+
+// AUD2-5: dulu render-fn inline `renderEditForm()` di dalam komponen —
+// tiap render induk membuat ulang seluruh subtree form (React tidak
+// bisa memo). Sekarang komponen level-modul + memo: form hanya
+// me-render ulang bila editForm / callback-nya berubah, bukan saat
+// layar me-render ulang karena alasan lain (lirik, overlay, dsb.).
+const EditForm = memo(
+  ({
+    editForm,
+    colors,
+    accentOnElevated,
+    onFieldChange,
+    onCancel,
+    onSave,
+  }: EditFormProps) => (
+    <SectionCard style={sectionCardStyle}>
+      <View style={styles.sectionHeader}>
+        <Edit3 size={16} color={accentOnElevated} />
+        <Text style={[styles.sectionTitle, { color: accentOnElevated }]}>
+          EDIT METADATA
+        </Text>
+        <View style={{ flex: 1 }} />
+        <TouchableOpacity
+          onPress={onCancel}
+          style={styles.iconBtnSmall}
+          accessibilityRole="button"
+          accessibilityLabel="Batalkan edit"
+        >
+          <X size={20} color={colors.text.tertiary} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={onSave}
+          style={styles.iconBtnSmall}
+          accessibilityRole="button"
+          accessibilityLabel="Simpan metadata"
+        >
+          <Check size={20} color={colors.status.success} />
+        </TouchableOpacity>
+      </View>
+
+      <EditField
+        label="Judul"
+        value={editForm.title}
+        field="title"
+        onFieldChange={onFieldChange}
+        placeholder="Judul lagu"
+      />
+      <EditField
+        label="Artis"
+        value={editForm.artist}
+        field="artist"
+        onFieldChange={onFieldChange}
+        placeholder="Nama artis"
+      />
+      <EditField
+        label="Album"
+        value={editForm.album}
+        field="album"
+        onFieldChange={onFieldChange}
+        placeholder="Nama album"
+      />
+      <EditField
+        label="Genre"
+        value={editForm.genre}
+        field="genre"
+        onFieldChange={onFieldChange}
+        placeholder="Genre"
+      />
+      <View style={styles.rowFields}>
+        <EditField
+          label="Tahun"
+          value={editForm.year}
+          field="year"
+          onFieldChange={onFieldChange}
+          keyboardType="numeric"
+          style={{ flex: 1, marginRight: 8 }}
+          placeholder="2024"
+        />
+        <EditField
+          label="Track No."
+          value={editForm.trackNumber}
+          field="trackNumber"
+          onFieldChange={onFieldChange}
+          keyboardType="numeric"
+          style={{ flex: 1 }}
+          placeholder="1"
+        />
+      </View>
+      {/* U-P2-05: discNumber ada di EditFormData dan ikut tersimpan, tapi
+          tidak pernah bisa diubah dari UI — tambahkan field-nya. */}
+      <EditField
+        label="Disc No."
+        value={editForm.discNumber}
+        field="discNumber"
+        onFieldChange={onFieldChange}
+        keyboardType="numeric"
+        placeholder="1"
+      />
+      <EditField
+        label="Label"
+        value={editForm.label}
+        field="label"
+        onFieldChange={onFieldChange}
+        placeholder="Label rekaman"
+      />
+      <EditField
+        label="Publisher"
+        value={editForm.publisher}
+        field="publisher"
+        onFieldChange={onFieldChange}
+        placeholder="Publisher"
+      />
+      <EditField
+        label="Komposer"
+        value={editForm.composer}
+        field="composer"
+        onFieldChange={onFieldChange}
+        placeholder="Nama komposer"
+      />
+    </SectionCard>
+  ),
 );
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
@@ -495,7 +646,10 @@ export default function SongDetailScreen() {
     enrichAbortRef.current?.abort();
   }, []);
 
-  const handleSaveEdit = async () => {
+  // AUD2-5: useCallback — identitas stabil supaya memo EditForm tidak
+  // batal tiap render layar. Deps = semua yang dibaca (editForm berubah
+  // tiap ketikan → form memang harus me-render ulang saat itu).
+  const handleSaveEdit = useCallback(async () => {
     if (!song) return;
     // U-P2-05: guard double-tap — tanpa ini dua ketukan Check mengirim
     // dua updateMetadata bersamaan.
@@ -573,9 +727,11 @@ export default function SongDetailScreen() {
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [song, editForm, isSaving, updateTrackInStore, showToast]);
 
-  const handleCancelEdit = () => {
+  // AUD2-5: useCallback (deps [song]) + handler field stabil (deps [],
+  // setState fungsional) — keduanya props EditForm yang di-memo.
+  const handleCancelEdit = useCallback(() => {
     if (song) {
       setEditForm({
         title: song.title || "",
@@ -591,7 +747,14 @@ export default function SongDetailScreen() {
       });
     }
     setIsEditMode(false);
-  };
+  }, [song]);
+
+  const handleEditFieldChange = useCallback(
+    (field: keyof EditFormData, text: string) => {
+      setEditForm((prev) => ({ ...prev, [field]: text }));
+    },
+    [],
+  );
 
   // ─── L2: menu Lirik (manual, lokal saja) ─────────────────────────────
   //
@@ -825,106 +988,6 @@ export default function SongDetailScreen() {
     );
   }
 
-  const renderEditForm = () => (
-    <SectionCard style={sectionCardStyle}>
-      <View style={styles.sectionHeader}>
-        <Edit3 size={16} color={accentOnElevated} />
-        <Text style={[styles.sectionTitle, { color: accentOnElevated }]}>
-          EDIT METADATA
-        </Text>
-        <View style={{ flex: 1 }} />
-        <TouchableOpacity
-          onPress={handleCancelEdit}
-          style={styles.iconBtnSmall}
-          accessibilityRole="button"
-          accessibilityLabel="Batalkan edit"
-        >
-          <X size={20} color={colors.text.tertiary} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={handleSaveEdit}
-          style={styles.iconBtnSmall}
-          accessibilityRole="button"
-          accessibilityLabel="Simpan metadata"
-        >
-          <Check size={20} color={colors.status.success} />
-        </TouchableOpacity>
-      </View>
-
-      <EditField
-        label="Judul"
-        value={editForm.title}
-        onChangeText={(text) => setEditForm({ ...editForm, title: text })}
-        placeholder="Judul lagu"
-      />
-      <EditField
-        label="Artis"
-        value={editForm.artist}
-        onChangeText={(text) => setEditForm({ ...editForm, artist: text })}
-        placeholder="Nama artis"
-      />
-      <EditField
-        label="Album"
-        value={editForm.album}
-        onChangeText={(text) => setEditForm({ ...editForm, album: text })}
-        placeholder="Nama album"
-      />
-      <EditField
-        label="Genre"
-        value={editForm.genre}
-        onChangeText={(text) => setEditForm({ ...editForm, genre: text })}
-        placeholder="Genre"
-      />
-      <View style={styles.rowFields}>
-        <EditField
-          label="Tahun"
-          value={editForm.year}
-          onChangeText={(text) => setEditForm({ ...editForm, year: text })}
-          keyboardType="numeric"
-          style={{ flex: 1, marginRight: 8 }}
-          placeholder="2024"
-        />
-        <EditField
-          label="Track No."
-          value={editForm.trackNumber}
-          onChangeText={(text) =>
-            setEditForm({ ...editForm, trackNumber: text })
-          }
-          keyboardType="numeric"
-          style={{ flex: 1 }}
-          placeholder="1"
-        />
-      </View>
-      {/* U-P2-05: discNumber ada di EditFormData dan ikut tersimpan, tapi
-          tidak pernah bisa diubah dari UI — tambahkan field-nya. */}
-      <EditField
-        label="Disc No."
-        value={editForm.discNumber}
-        onChangeText={(text) => setEditForm({ ...editForm, discNumber: text })}
-        keyboardType="numeric"
-        placeholder="1"
-      />
-      <EditField
-        label="Label"
-        value={editForm.label}
-        onChangeText={(text) => setEditForm({ ...editForm, label: text })}
-        placeholder="Label rekaman"
-      />
-      <EditField
-        label="Publisher"
-        value={editForm.publisher}
-        onChangeText={(text) => setEditForm({ ...editForm, publisher: text })}
-        placeholder="Publisher"
-      />
-      <EditField
-        label="Komposer"
-        value={editForm.composer}
-        onChangeText={(text) => setEditForm({ ...editForm, composer: text })}
-        placeholder="Nama komposer"
-      />
-    </SectionCard>
-  );
-
   return (
     <View style={{ flex: 1, backgroundColor: colors.background.primary }}>
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -1047,7 +1110,14 @@ export default function SongDetailScreen() {
         </TouchableOpacity>
 
         {isEditMode ? (
-          renderEditForm()
+          <EditForm
+            editForm={editForm}
+            colors={colors}
+            accentOnElevated={accentOnElevated}
+            onFieldChange={handleEditFieldChange}
+            onCancel={handleCancelEdit}
+            onSave={handleSaveEdit}
+          />
         ) : (
           <>
             {/* U1: penanda "data belum lengkap" + tombol sync. Bila ada
