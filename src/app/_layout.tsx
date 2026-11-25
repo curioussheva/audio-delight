@@ -347,12 +347,17 @@ export default function RootLayout() {
   // DSP Guard (diperbaiki 2026-11-19, ronde clean-cozy): saat masuk
   // bit-perfect, sakelar master EQ dimatikan — TAPI preferensi dicatat
   // dulu di penanda eqEnabledBeforeBitPerfect (dipersist, tahan
-  // restart). Saat kembali ke mode DSP, preferensi dipulihkan: EQ
-  // menyala lagi persis seperti sebelum masuk bit-perfect. Perilaku
-  // lama mematikan isEQEnabled persisten tanpa jejak, jadi pengguna
-  // yang kembali ke DSP mendapati EQ-nya mati tanpa pernah mematikannya.
+  // restart). Saat kembali ke mode DSP ATAU immersive, preferensi
+  // dipulihkan: EQ menyala lagi persis seperti sebelum masuk
+  // bit-perfect. Perilaku lama mematikan isEQEnabled persisten tanpa
+  // jejak, jadi pengguna yang kembali ke DSP mendapati EQ-nya mati
+  // tanpa pernah mematikannya.
   useEffect(() => {
     const unsub = usePlayerStore.subscribe((state, prevState) => {
+      // LY-3: hanya bereaksi saat mode BERGANTI — tanpa ini guard
+      // jalan di tiap set() playerStore (termasuk tick posisi),
+      // memeriksa + menulis store EQ berulang kali.
+      if (state.audioMode === prevState.audioMode) return;
       const eqStore = useEqualizerStore.getState();
       if (state.audioMode === "bit-perfect") {
         if (eqStore.isEQEnabled) {
@@ -361,14 +366,15 @@ export default function RootLayout() {
           void eqStore.setEQEnabled(false);
         }
       } else if (
-        state.audioMode === "dsp" &&
-        prevState.audioMode !== "dsp" &&
+        (state.audioMode === "dsp" || state.audioMode === "immersive") &&
         eqStore.eqEnabledBeforeBitPerfect === true
       ) {
-        // Kembali ke DSP (dari bit-perfect ATAU dari Solfeggio sesudah
-        // bit-perfect): pulihkan preferensi, lalu bersihkan penanda.
+        // Kembali ke DSP / immersive (dari bit-perfect): pulihkan
+        // preferensi, lalu bersihkan penanda. LY-3: dulu hanya "dsp"
+        // yang memulihkan — kembali ke immersive (label lama
+        // "Solfeggio") membiarkan EQ mati tanpa pernah dimatikan user.
         console.log(
-          "🛡️ [System] Kembali ke DSP, memulihkan sakelar EQ.",
+          "🛡️ [System] Kembali ke DSP/immersive, memulihkan sakelar EQ.",
         );
         eqStore.setEqEnabledBeforeBitPerfect(null);
         if (!eqStore.isEQEnabled) {
