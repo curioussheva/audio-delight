@@ -475,6 +475,28 @@ async function applyPlayer(
   report.applied.push("Pemutar");
 }
 
+/**
+ * BK-4: pembungkus per seksi — SATU seksi yang melempar tidak boleh
+ * menggugurkan seksi-seksi sesudahnya (dan laporan `applied` yang
+ * sudah jalan). Jalur abort nyata sebelum ini: `applyConvolver` →
+ * `preloadConvolverIr` di luar try/catch — sekali melempar,
+ * `applyBackup` berhenti dan seksi Library/Tema/dst tidak pernah
+ * diterapkan, tanpa jejak di laporan. `applyEqualizer` melindungi
+ * push native-nya sendiri secara internal dan `activateProfile`
+ * tidak pernah melempar, tapi jaring ini menutup semuanya seragam.
+ */
+async function runSection(
+  label: string,
+  report: ApplyReport,
+  fn: () => Promise<void> | void,
+): Promise<void> {
+  try {
+    await fn();
+  } catch (e) {
+    report.warnings.push(`${label} gagal dipulihkan: ${errorMessage(e)}`);
+  }
+}
+
 /** Terapkan cadangan yang sudah tervalidasi. Seksi yang tidak ada = dibiarkan. */
 export async function applyBackup(
   backup: SettingsBackup,
@@ -483,105 +505,155 @@ export async function applyBackup(
   const report: ApplyReport = { applied: [], warnings: [] };
   const s = backup.settings;
 
-  if (s.equalizer) await applyEqualizer(s.equalizer, report);
-  if (s.headphone) await applyHeadphone(s.headphone, report);
-  if (s.hrtf) {
-    try {
-      await useHrtfStore.getState().setHrtfEnabled(s.hrtf.isHrtfEnabled);
+  const eqSection = s.equalizer;
+  if (eqSection) {
+    await runSection("Equalizer", report, () =>
+      applyEqualizer(eqSection, report),
+    );
+  }
+  const hpSection = s.headphone;
+  if (hpSection) {
+    await runSection("Koreksi headphone", report, () =>
+      applyHeadphone(hpSection, report),
+    );
+  }
+  const hrtfSection = s.hrtf;
+  if (hrtfSection) {
+    await runSection("HRTF", report, async () => {
+      await useHrtfStore.getState().setHrtfEnabled(hrtfSection.isHrtfEnabled);
       report.applied.push("HRTF");
-    } catch (e) {
-      report.warnings.push(`HRTF gagal dipulihkan: ${errorMessage(e)}`);
-    }
+    });
   }
-  if (s.replayGain) {
-    const rg = useReplayGainStore.getState();
-    rg.setReplayGainEnabled(s.replayGain.isReplayGainEnabled);
-    rg.setReplayGainMode(s.replayGain.replayGainMode);
-    report.applied.push("ReplayGain");
+  const rgSection = s.replayGain;
+  if (rgSection) {
+    await runSection("ReplayGain", report, () => {
+      const rg = useReplayGainStore.getState();
+      rg.setReplayGainEnabled(rgSection.isReplayGainEnabled);
+      rg.setReplayGainMode(rgSection.replayGainMode);
+      report.applied.push("ReplayGain");
+    });
   }
-  if (s.crossfade) {
-    try {
+  const xfSection = s.crossfade;
+  if (xfSection) {
+    await runSection("Crossfade", report, async () => {
       await useCrossfadeStore
         .getState()
-        .setCrossfadeSeconds(s.crossfade.crossfadeSeconds);
+        .setCrossfadeSeconds(xfSection.crossfadeSeconds);
       report.applied.push("Crossfade");
-    } catch (e) {
-      report.warnings.push(`Crossfade gagal dipulihkan: ${errorMessage(e)}`);
-    }
+    });
   }
-  if (s.convolver) await applyConvolver(s.convolver, report);
-  if (s.outputProfile) {
-    const out = useOutputProfileStore.getState();
-    if (s.outputProfile.enabled !== undefined) {
-      out.setEnabled(s.outputProfile.enabled);
-    }
-    if (s.outputProfile.mapping) {
-      // Gabung per kategori (bukan timpa buta): kategori yang tidak
-      // disebut di file mempertahankan pemetaan lokal.
-      const next = { ...out.mapping, ...s.outputProfile.mapping };
-      useOutputProfileStore.setState({ mapping: next });
-    }
-    report.applied.push("Profil per output");
-  }
-  if (s.player) await applyPlayer(s.player, report);
-  if (s.library) {
-    // Toggle store adalah flip polos (tanpa efek samping — registrasi
-    // tugas background diurus Settings, di bawah ini): bandingkan dulu
-    // supaya impor menjadi SET, bukan toggle buta.
-    const lib = useLibraryStore.getState();
-    if (
-      s.library.isAutoScanEnabled !== undefined &&
-      s.library.isAutoScanEnabled !== lib.isAutoScanEnabled
-    ) {
-      lib.toggleAutoScanEnabled();
-    }
-    if (
-      s.library.isAutoEnrichingEnabled !== undefined &&
-      s.library.isAutoEnrichingEnabled !== lib.isAutoEnrichingEnabled
-    ) {
-      lib.toggleAutoEnrichingEnabled();
-    }
-    // Auto Discovery: tugas background mengikuti flag — sama seperti
-    // handler toggle di Settings (register 240 menit / unregister).
-    // Auto Enriching: worker mengikuti flag saat resume (lihat
-    // resumeEnrichment), jadi tidak perlu di-start di sini.
-    if (s.library.isAutoScanEnabled === true) {
-      await BackgroundScanTask.register(240).catch((e) =>
-        report.warnings.push(
-          `Auto Discovery diaktifkan, tapi tugas background gagal didaftarkan: ${errorMessage(e)}`,
-        ),
-      );
-    } else if (s.library.isAutoScanEnabled === false) {
-      await BackgroundScanTask.unregister().catch((e) =>
-        report.warnings.push(
-          `Auto Discovery dimatikan, tapi tugas background gagal dibatalkan: ${errorMessage(e)}`,
-        ),
-      );
-    }
-    report.applied.push("Library");
-  }
-  if (s.artwork) {
-    useArtworkDisplayStore.getState().setArtworkFit(s.artwork.artworkFit);
-    report.applied.push("Tampilan sampul");
-  }
-  if (s.theme && hooks.applyThemeId) {
-    try {
-      await hooks.applyThemeId(s.theme.themeId);
-      report.applied.push("Tema");
-    } catch (e) {
-      report.warnings.push(`Tema gagal dipulihkan: ${errorMessage(e)}`);
-    }
-  }
-  if (s.equalizerSections) {
-    await AsyncStorage.setItem(
-      VISIBLE_SECTIONS_KEY,
-      serializeVisibleSections(s.equalizerSections),
-    ).catch((e) =>
-      report.warnings.push(
-        `Tampilan seksi Equalizer gagal dipulihkan: ${errorMessage(e)}`,
-      ),
+  const convSection = s.convolver;
+  if (convSection) {
+    await runSection("Convolver", report, () =>
+      applyConvolver(convSection, report),
     );
-    report.applied.push("Tampilan seksi Equalizer");
+  }
+  const outSection = s.outputProfile;
+  if (outSection) {
+    await runSection("Profil per output", report, () => {
+      const out = useOutputProfileStore.getState();
+      if (outSection.enabled !== undefined) {
+        out.setEnabled(outSection.enabled);
+      }
+      if (outSection.mapping) {
+        // Gabung per kategori (bukan timpa buta): kategori yang tidak
+        // disebut di file mempertahankan pemetaan lokal.
+        const next = { ...out.mapping, ...outSection.mapping };
+        useOutputProfileStore.setState({ mapping: next });
+      }
+      report.applied.push("Profil per output");
+    });
+  }
+  const playerSection = s.player;
+  if (playerSection) {
+    await runSection("Pemutar", report, () =>
+      applyPlayer(playerSection, report),
+    );
+  }
+  const librarySection = s.library;
+  if (librarySection) {
+    await runSection("Library", report, async () => {
+      // Toggle store adalah flip polos (tanpa efek samping — registrasi
+      // tugas background diurus di bawah ini): bandingkan dulu supaya
+      // impor menjadi SET, bukan toggle buta.
+      const lib = useLibraryStore.getState();
+      let didEnableAutoScan = false;
+      if (
+        librarySection.isAutoScanEnabled !== undefined &&
+        librarySection.isAutoScanEnabled !== lib.isAutoScanEnabled
+      ) {
+        lib.toggleAutoScanEnabled();
+        didEnableAutoScan = librarySection.isAutoScanEnabled === true;
+      }
+      if (
+        librarySection.isAutoEnrichingEnabled !== undefined &&
+        librarySection.isAutoEnrichingEnabled !== lib.isAutoEnrichingEnabled
+      ) {
+        lib.toggleAutoEnrichingEnabled();
+      }
+      // Auto Discovery: tugas background mengikuti flag — sama seperti
+      // handler toggle di Settings (register 240 menit / unregister).
+      // Auto Enriching: worker mengikuti flag saat resume (lihat
+      // resumeEnrichment), jadi tidak perlu di-start di sini.
+      if (librarySection.isAutoScanEnabled === true) {
+        // BK-3: `register(240)` mengembalikan false bila izin
+        // media/notifikasi ditolak — hasil itu dulu diabaikan (hanya
+        // `.catch`), sementara flag sudah ON. Cek hasilnya: gagal =
+        // kembalikan flag yang baru dibalik restore ini (rollback
+        // seperti handler toggle di Settings) + peringatan.
+        let ok = false;
+        try {
+          ok = await BackgroundScanTask.register(240);
+        } catch (e) {
+          report.warnings.push(
+            `Auto Discovery diaktifkan, tapi tugas background gagal didaftarkan: ${errorMessage(e)}`,
+          );
+        }
+        if (!ok) {
+          if (didEnableAutoScan) lib.toggleAutoScanEnabled();
+          report.warnings.push(
+            "Auto Discovery gagal diaktifkan — tugas background tidak berjalan (periksa izin media & notifikasi); flag dikembalikan ke OFF.",
+          );
+        }
+      } else if (librarySection.isAutoScanEnabled === false) {
+        await BackgroundScanTask.unregister().catch((e) =>
+          report.warnings.push(
+            `Auto Discovery dimatikan, tapi tugas background gagal dibatalkan: ${errorMessage(e)}`,
+          ),
+        );
+      }
+      report.applied.push("Library");
+    });
+  }
+  const artworkSection = s.artwork;
+  if (artworkSection) {
+    await runSection("Tampilan sampul", report, () => {
+      useArtworkDisplayStore
+        .getState()
+        .setArtworkFit(artworkSection.artworkFit);
+      report.applied.push("Tampilan sampul");
+    });
+  }
+  const themeSection = s.theme;
+  if (themeSection && hooks.applyThemeId) {
+    await runSection("Tema", report, async () => {
+      await hooks.applyThemeId!(themeSection.themeId);
+      report.applied.push("Tema");
+    });
+  }
+  const eqSectionsSection = s.equalizerSections;
+  if (eqSectionsSection) {
+    await runSection("Tampilan seksi Equalizer", report, async () => {
+      await AsyncStorage.setItem(
+        VISIBLE_SECTIONS_KEY,
+        serializeVisibleSections(eqSectionsSection),
+      ).catch((e) =>
+        report.warnings.push(
+          `Tampilan seksi Equalizer gagal dipulihkan: ${errorMessage(e)}`,
+        ),
+      );
+      report.applied.push("Tampilan seksi Equalizer");
+    });
   }
   return report;
 }
