@@ -339,6 +339,11 @@ export class LibraryScanner {
   static async getLibrarySongs(
     options: {
       searchQuery?: string;
+      // LIB-37: kolom yang dicari — chip filter di layar Search
+      // ("title"/"artist"/"album") harus diterjemahkan ke SQL, bukan
+      // disaring di klien di atas hasil 3-kolom (cap 200 bisa
+      // mengusir kecocokan kolom yang dipilih). Default "all".
+      searchField?: "all" | "title" | "artist" | "album";
       filterBy?: "all" | "lossless" | "lossy" | "hi-res";
       sortBy?:
         | "title-asc"
@@ -353,6 +358,7 @@ export class LibraryScanner {
     try {
       const {
         searchQuery = "",
+        searchField = "all",
         filterBy = "all",
         sortBy = "title-asc",
         limit = 1000,
@@ -364,8 +370,19 @@ export class LibraryScanner {
       const params: any[] = [];
 
       if (searchQuery) {
-        conditions.push("(title LIKE ? OR artist LIKE ? OR album LIKE ?)");
-        params.push(`%${searchQuery}%`, `%${searchQuery}%`, `%${searchQuery}%`);
+        if (searchField === "title") {
+          conditions.push("title LIKE ?");
+          params.push(`%${searchQuery}%`);
+        } else if (searchField === "artist") {
+          conditions.push("artist LIKE ?");
+          params.push(`%${searchQuery}%`);
+        } else if (searchField === "album") {
+          conditions.push("album LIKE ?");
+          params.push(`%${searchQuery}%`);
+        } else {
+          conditions.push("(title LIKE ? OR artist LIKE ? OR album LIKE ?)");
+          params.push(`%${searchQuery}%`, `%${searchQuery}%`, `%${searchQuery}%`);
+        }
       }
 
       if (filterBy === "lossless") {

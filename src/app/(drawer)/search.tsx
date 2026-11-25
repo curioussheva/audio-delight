@@ -1,5 +1,5 @@
 // src/app/search.tsx
-import React, { memo, useState, useMemo, useCallback } from "react";
+import React, { memo, useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -14,8 +14,8 @@ import { useTheme } from "@/shared/context/ThemeContext";
 import { ScreenList } from "@/shared/components/ui/ScreenList";
 import { ScreenLoading } from "@/shared/components/ui/ScreenLoading";
 import { EmptyState } from "@/shared/components/ui/EmptyState";
-import { useLibrary } from "@/features/library/hooks/useLibrary";
 import { usePlayerStore } from "@/features/player/store/playerStore";
+import { LibraryScanner } from "@/features/library/api/scanner";
 import { formatTime } from "@/shared/utils/time";
 import type { Song } from "@/shared/types/audio";
 import { safeGoBack } from "@/shared/utils/navigation";
@@ -36,9 +36,6 @@ export default function SearchScreen() {
     safeGoBack(router);
   };
 
-  // U-P1-40: loading/error dibaca — dulu "Tidak ada hasil" tampil padahal
-  // library masih memuat, dan gagal muat sunyi total.
-  const { songs, loading, error, reload } = useLibrary();
   // U-P1-16: putar lewat playerStore.playSong — sama seperti Library —
   // bukan setQueue langsung. playSong memberi dedupe tap-cepat,
   // bookkeeping queue/index store, isPlaying store, dan play count.
@@ -50,33 +47,64 @@ export default function SearchScreen() {
   // user sedang mengetik query). Sekarang hanya aksi playSong.
   const playSong = usePlayerStore((state) => state.playSong);
 
+  // LIB-37: pencarian lewat SQL, BUKAN filter klien. Dulu layar ini
+  // memakai useLibrary() (halaman pertama 1000 lagu, urut judul) lalu
+  // menyaring `songs` di klien — lagu di luar 1000 pertama tidak akan
+  // pernah ditemukan. Sekarang query SQL langsung ke
+  // LibraryScanner.getLibrarySongs({ searchQuery, searchField, limit:
+  // 200 }) — seluruh library bisa dicari, cap 200 hasil saja.
+  // Sengaja TIDAK lewat useLibrary: hook itu menulis hasilnya ke
+  // store.tracks (dan cache global) — hasil pencarian akan menimpa
+  // daftar Library di tab sebelah. Panggilan langsung ke scanner
+  // tidak menyentuh store sama sekali.
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [results, setResults] = useState<Song[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  // Dipakai tombol "Coba lagi": menaikkan nonce menjalankan ulang
+  // efek pencarian tanpa mengubah query.
+  const [searchNonce, setSearchNonce] = useState(0);
 
   const [filterBy, setFilterBy] = useState<
     "all" | "title" | "artist" | "album"
   >("all");
 
-  const results = useMemo(() => {
-    if (!query) return [];
+  // Debounce 250 ms — tiap ketikan tidak memicu query SQL.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 250);
+    return () => clearTimeout(t);
+  }, [query]);
 
-    const q = query.toLowerCase();
-    return songs.filter((song) => {
-      switch (filterBy) {
-        case "title":
-          return song.title.toLowerCase().includes(q);
-        case "artist":
-          return song.artist.toLowerCase().includes(q);
-        case "album":
-          return song.album?.toLowerCase().includes(q);
-        default:
-          return (
-            song.title.toLowerCase().includes(q) ||
-            song.artist.toLowerCase().includes(q) ||
-            song.album?.toLowerCase().includes(q)
-          );
-      }
-    });
-  }, [songs, query, filterBy]);
+  useEffect(() => {
+    if (!debouncedQuery) {
+      setResults([]);
+      setSearchError(null);
+      setSearching(false);
+      return;
+    }
+    let cancelled = false;
+    setSearching(true);
+    setSearchError(null);
+    LibraryScanner.getLibrarySongs({
+      searchQuery: debouncedQuery,
+      searchField: filterBy,
+      limit: 200,
+    })
+      .then((rows) => {
+        if (cancelled) return;
+        setResults(rows);
+        setSearching(false);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setSearchError(e?.message ?? "Gagal mencari");
+        setSearching(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedQuery, filterBy, searchNonce]);
 
   // Handler tekan hasil — identitas hanya berubah bila daftar hasil
   // berubah (bukan tiap render induk); baris memo di bawah mengabaikan
@@ -253,7 +281,7 @@ export default function SearchScreen() {
           />
         )}
         ListEmptyComponent={
-          !query ? null : loading ? (
+          !query ? null : searching ? (
             <View
               style={[
                 styles.emptyContainer,
@@ -265,9 +293,9 @@ export default function SearchScreen() {
             >
               {/* U-P2-53: pola loading bersama. Cabang error di bawah
                   sengaja tidak dimigrasikan (state error + retry). */}
-              <ScreenLoading message="Memuat library…" />
+              <ScreenLoading message="Mencari…" />
             </View>
-          ) : error ? (
+          ) : searchError ? (
             <View
               style={[
                 styles.emptyContainer,
@@ -285,21 +313,21 @@ export default function SearchScreen() {
               <Text
                 style={[styles.emptyText, { color: colors.text.secondary }]}
               >
-                Gagal memuat library
+                Gagal mencari
               </Text>
               <Text
                 style={[styles.emptySub, { color: colors.text.tertiary }]}
               >
-                {error}
+                {searchError}
               </Text>
               <TouchableOpacity
-                onPress={() => void reload()}
+                onPress={() => setSearchNonce((n) => n + 1)}
                 style={[
                   styles.retryBtn,
                   { borderColor: colors.primary[500] },
                 ]}
                 accessibilityRole="button"
-                accessibilityLabel="Coba lagi memuat library"
+                accessibilityLabel="Coba lagi mencari"
               >
                 <Text
                   style={[styles.retryBtnText, { color: colors.primary[500] }]}

@@ -70,3 +70,56 @@ describe("N3 — getLibrarySongs membedakan galat dari kosong", () => {
     });
   });
 });
+
+describe("LIB-37 — searchField diterjemahkan ke SQL (chip filter Search)", () => {
+  beforeEach(() => {
+    executeMock.mockClear();
+    executeMock.mockImplementation(() => ({ rows: { _array: [] } }));
+  });
+
+  const lastCall = () => {
+    const [sql, params] = executeMock.mock.calls[0] as [string, any[]];
+    return { sql, params };
+  };
+
+  it("searchField title -> hanya title LIKE ?", async () => {
+    await LibraryScanner.getLibrarySongs({
+      searchQuery: "beat",
+      searchField: "title",
+    });
+    const { sql, params } = lastCall();
+    expect(sql).toContain("title LIKE ?");
+    expect(sql).not.toContain("artist LIKE ?");
+    expect(sql).not.toContain("album LIKE ?");
+    expect(params).toContain("%beat%");
+  });
+
+  it("searchField artist -> hanya artist LIKE ?", async () => {
+    await LibraryScanner.getLibrarySongs({
+      searchQuery: "beat",
+      searchField: "artist",
+    });
+    const { sql } = lastCall();
+    expect(sql).toContain("artist LIKE ?");
+    expect(sql).not.toContain("title LIKE ?");
+    expect(sql).not.toContain("album LIKE ?");
+  });
+
+  it("searchField album -> hanya album LIKE ?", async () => {
+    await LibraryScanner.getLibrarySongs({
+      searchQuery: "beat",
+      searchField: "album",
+    });
+    const { sql } = lastCall();
+    expect(sql).toContain("album LIKE ?");
+    expect(sql).not.toContain("title LIKE ?");
+    expect(sql).not.toContain("artist LIKE ?");
+  });
+
+  it("default (all) -> title OR artist OR album, 3 param", async () => {
+    await LibraryScanner.getLibrarySongs({ searchQuery: "beat" });
+    const { sql, params } = lastCall();
+    expect(sql).toContain("(title LIKE ? OR artist LIKE ? OR album LIKE ?)");
+    expect(params.filter((p) => p === "%beat%")).toHaveLength(3);
+  });
+});
