@@ -95,9 +95,39 @@ const DIAGNOSTIC_INTERVAL_MS = 5000;
 // dua kali melawan engine/store yang sudah initialized. Teramati 2026-11-10:
 // "[BOOT] 1" muncul 2x di logcat, run kedua macet sebelum
 // "Engine & Store initialization success" dan splash tidak pernah hilang.
-// Proses baru me-reload modul ini, jadi guard reset tepat saat re-init yang
-// sesungguhnya dibutuhkan. Tombol Retry tetap bisa reset guard ini.
+//
+// KOREKSI H1 (2026-11-26, splash-stuck terkonfirmasi via force-stop):
+// komentar lama di sini mengklaim "proses baru me-reload modul ini, jadi
+// guard reset tepat saat re-init yang sesungguhnya dibutuhkan" — klaim itu
+// SALAH. Swipe dari recents tidak mematikan PlaybackService (onTaskRemoved
+// sengaja menahan wake lock), jadi proses tetap hidup; tap ikon membuat
+// MainActivity baru di PROSES YANG SAMA, runtime JS dipakai ulang, modul
+// tidak di-reload, tapi RootLayout remount dengan state segar
+// ("initializing"). Guard `hasInitializedModule` saja membuat boot effect
+// return tanpa init → splash stuck selamanya tanpa jalan keluar.
+//
+// Karena itu init dibedakan tiga keadaan (bukan satu flag "sudah dimulai"):
+//   (a) boot segar — init belum pernah dimulai → init penuh;
+//   (b) remount saat init sudah SELESAI → langsung "loading" tanpa init ulang;
+//   (c) remount saat init masih in-flight → tunggu init yang sedang jalan
+//       (penyelesaiannya ada di instance lama yang sudah unmount —
+//       setAppState-nya mati — jadi instance baru didaftarkan sebagai
+//       waiter dan diberitahu saat init selesai/gagal).
+// Melepas guard begitu saja dilarang: menghidupkan lagi stall double-init
+// 2026-11-10. Tombol Retry tetap bisa reset guard ini.
 let hasInitializedModule = false;
+// Init pernah SELESAI sukses (engine + store siap). Beda dari
+// hasInitializedModule ("init pernah DIMULAI") — inilah pembeda (b) vs (a).
+let hasCompletedInitialization = false;
+// Pesan error init terakhir (null bila belum pernah gagal / sudah di-retry).
+let initErrorMessage: string | null = null;
+// Waiter remount (kasus c): dipanggil sekali saat init in-flight selesai.
+let initWaiters: Array<() => void> = [];
+function notifyInitWaiters(): void {
+  const waiters = initWaiters;
+  initWaiters = [];
+  for (const fn of waiters) fn();
+}
 
 // J3-3: penjaga in-flight performInitialization — tap Retry dua kali cepat
 // (atau boot effect + Retry bersamaan) tidak boleh menjalankan dua init.
@@ -358,6 +388,8 @@ const performInitialization = useCallback(async () => {
     return;
   }
   initInFlight = true;
+  // Retry / boot baru: hasil gagal sebelumnya tidak lagi berlaku.
+  initErrorMessage = null;
 
   // J3-2: watchdog boot — cap timestamp + durasi tiap langkah. bootMark
   // dipanggil di AWAL tiap langkah, jadi log-nya menunjukkan durasi langkah
@@ -549,13 +581,21 @@ const performInitialization = useCallback(async () => {
 
     bootMark("selesai");
     console.log("[BOOT] Engine & Store initialization success.");
+    // H1: tandai selesai SEBELUM setAppState — remount yang menunggu
+    // (waiter) memakai flag ini, dan setAppState instance lama mati bila
+    // instance itu sudah unmount.
+    hasCompletedInitialization = true;
+    notifyInitWaiters();
     setAppState("loading");
   } catch (error) {
     console.error(
       `[BOOT] Initialization Fatal Error (langkah "${bootCurrentStep}", ${Date.now() - bootT0}ms):`,
       error,
     );
-    setErrorMessage(error instanceof Error ? error.message : "Engine Failure");
+    initErrorMessage =
+      error instanceof Error ? error.message : "Engine Failure";
+    notifyInitWaiters();
+    setErrorMessage(initErrorMessage);
     setAppState("error");
   } finally {
     if (bootWatchdogTimer) {
@@ -587,8 +627,53 @@ const performInitialization = useCallback(async () => {
   // remount). Ref gagal di sini: remount me-reset ref, dan pada 2026-11-10
   // init jalan 2x lalu run kedua macet sebelum "Engine & Store
   // initialization success" (splash tidak pernah hilang).
+  //
+  // H1 (2026-11-26): guard "sudah dimulai" SAJA tidak cukup — remount di
+  // proses yang sama (swipe recents → tap ikon, service menahan proses
+  // tetap hidup) membuat effect return tanpa init dan splash stuck
+  // selamanya. Effect ini membedakan tiga keadaan, lihat penjaga level
+  // modul di atas: (a) boot segar → init penuh; (b) remount + init sudah
+  // selesai → langsung "loading" tanpa init ulang; (c) remount + init
+  // masih in-flight → daftar sebagai waiter, diberitahu saat init
+  // selesai/gagal. Remount sesudah init GAGAL → tampilkan layar error
+  // (bukan diam di "initializing").
   useEffect(() => {
-    if (hasInitializedModule) return;
+    if (hasCompletedInitialization) {
+      // (b) Remount, init sudah selesai: engine/store siap, langsung
+      // lanjut ke fase loading (LoadingScreen finishing → splash-image).
+      setAppState("loading");
+      return;
+    }
+    if (initInFlight) {
+      // (c) Remount saat init masih jalan di instance lama: tunggu
+      // hasilnya. setAppState instance lama sudah mati (unmount), jadi
+      // waiter ini yang memindahkan instance BARU ke loading/error.
+      let cancelled = false;
+      initWaiters.push(() => {
+        if (cancelled) return;
+        if (hasCompletedInitialization) {
+          setAppState("loading");
+        } else {
+          setErrorMessage(initErrorMessage ?? "Engine Failure");
+          setAppState("error");
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (hasInitializedModule) {
+      // Init pernah dimulai tapi tidak in-flight dan tidak selesai:
+      // satu-satunya sisa keadaan adalah init pernah GAGAL (catch sudah
+      // memberitahu waiter; bila tidak ada waiter, tampilkan error di
+      // sini supaya tidak diam di "initializing" selamanya).
+      if (initErrorMessage !== null) {
+        setErrorMessage(initErrorMessage);
+        setAppState("error");
+      }
+      return;
+    }
+    // (a) Boot segar.
     hasInitializedModule = true;
     performInitialization();
   }, [performInitialization]);
@@ -675,6 +760,8 @@ const performInitialization = useCallback(async () => {
   const handleRetryInit = useCallback(() => {
     setAppState("initializing");
     hasInitializedModule = false;
+    hasCompletedInitialization = false;
+    initErrorMessage = null;
     performInitialization();
   }, [performInitialization]);
 
