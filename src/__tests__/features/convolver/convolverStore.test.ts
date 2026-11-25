@@ -195,12 +195,34 @@ describe("convolverStore", () => {
     expect(store.getState().isConvolverEnabled).toBe(true);
   });
 
-  it("restoreToNative dengan IR -> load ulang dari path + dorong toggle", async () => {
+  it("restoreToNative dengan IR sudah dimuat -> TIDAK load ulang, hanya toggle (EQ-20)", async () => {
     const store = loadStore();
     mockGetDocumentAsync.mockResolvedValue(pickedFile as any);
     await store.getState().loadIr();
     await store.getState().setConvolverEnabled(true);
     jest.clearAllMocks();
+
+    await store.getState().restoreToNative();
+
+    // IR yang sama sudah ada di engine (baru dimuat loadIr) — reload
+    // tiap apply hanya membuang decode + upload. Toggle tetap didorong.
+    expect(mockLoadConvolverIr).not.toHaveBeenCalled();
+    expect(mockSetConvolverEnabled).toHaveBeenCalledWith(true, 7);
+  });
+
+  it("restoreToNative sesudah engine restart -> load ulang dari path (EQ-20)", async () => {
+    const store = loadStore();
+    // require SESUDAH loadStore: modul yang sama (segar) — require
+    // sebelum resetModules akan menunjuk modul lama yang sudah dibuang.
+    const { resetConvolverIrLoaded } = require(
+      "@/features/convolver/store/convolverStore",
+    ) as typeof import("@/features/convolver/store/convolverStore");
+    mockGetDocumentAsync.mockResolvedValue(pickedFile as any);
+    await store.getState().loadIr();
+    await store.getState().setConvolverEnabled(true);
+    jest.clearAllMocks();
+    // Simulasi engine restart: native lupa IR-nya.
+    resetConvolverIrLoaded();
 
     await store.getState().restoreToNative();
 
@@ -219,8 +241,16 @@ describe("convolverStore", () => {
 
   it("restoreToNative load gagal (file hilang) -> IR dibersihkan dari state", async () => {
     const store = loadStore();
+    const { resetConvolverIrLoaded } = require(
+      "@/features/convolver/store/convolverStore",
+    ) as typeof import("@/features/convolver/store/convolverStore");
     mockGetDocumentAsync.mockResolvedValue(pickedFile as any);
     await store.getState().loadIr();
+    // EQ-20: load gagal hanya terdeteksi bila load benar jalan — IR
+    // yang sudah dimuat di engine di-skip (native masih memegangnya,
+    // file hilang di disk tidak masalah). Simulasikan engine restart
+    // supaya preload benar memuat ulang dan gagal.
+    resetConvolverIrLoaded();
     mockLoadConvolverIr.mockResolvedValue(1);
     jest.clearAllMocks();
 
@@ -229,7 +259,7 @@ describe("convolverStore", () => {
     expect(store.getState().ir).toBeNull();
   });
 
-  it("preloadConvolverIr dengan IR -> load ulang dari path TANPA menyentuh toggle", async () => {
+  it("preloadConvolverIr dengan IR sudah dimuat -> skip, TANPA menyentuh toggle (EQ-20)", async () => {
     const store = loadStore();
     mockGetDocumentAsync.mockResolvedValue(pickedFile as any);
     await store.getState().loadIr();
@@ -238,10 +268,52 @@ describe("convolverStore", () => {
 
     await store.getState().preloadConvolverIr();
 
+    expect(mockLoadConvolverIr).not.toHaveBeenCalled();
+    expect(mockSetConvolverEnabled).not.toHaveBeenCalled();
+  });
+
+  it("preloadConvolverIr sesudah engine restart -> load ulang dari path (EQ-20)", async () => {
+    const store = loadStore();
+    const { resetConvolverIrLoaded } = require(
+      "@/features/convolver/store/convolverStore",
+    ) as typeof import("@/features/convolver/store/convolverStore");
+    mockGetDocumentAsync.mockResolvedValue(pickedFile as any);
+    await store.getState().loadIr();
+    await store.getState().setConvolverEnabled(true);
+    jest.clearAllMocks();
+    resetConvolverIrLoaded();
+
+    await store.getState().preloadConvolverIr();
+
     expect(mockLoadConvolverIr).toHaveBeenCalledWith(
       "file:///doc/convolver/Hall Besar.wav",
     );
     expect(mockSetConvolverEnabled).not.toHaveBeenCalled();
+  });
+
+  it("clearIr me-reset penanda muat (EQ-20): IR yang dipasang lagi tetap dimuat", async () => {
+    const store = loadStore();
+    mockGetDocumentAsync.mockResolvedValue(pickedFile as any);
+    await store.getState().loadIr();
+    await store.getState().clearIr();
+    // IR dipasang lagi (mis. restore dari backup): path sama, tapi
+    // native sudah di-clear — preload wajib memuat ulang, bukan skip.
+    store.setState({
+      ir: {
+        name: "Hall Besar.wav",
+        path: "file:///doc/convolver/Hall Besar.wav",
+        sampleRateHz: 48000,
+        taps: 48000,
+        durationMs: 1000,
+      },
+    });
+    jest.clearAllMocks();
+
+    await store.getState().preloadConvolverIr();
+
+    expect(mockLoadConvolverIr).toHaveBeenCalledWith(
+      "file:///doc/convolver/Hall Besar.wav",
+    );
   });
 
   it("preloadConvolverIr tanpa IR -> no-op", async () => {

@@ -8,7 +8,10 @@ import { EqualizerStore, Preset } from "@/features/equalizer/types";
 import { ALL_PRESETS, makeBands } from "../constants/presets";
 import { NativeDSPModule } from "@/features/equalizer/api/nativeInterface";
 import { useHrtfStore } from "@/features/hrtf/store/hrtfStore";
-import { useConvolverStore } from "@/features/convolver/store/convolverStore";
+import {
+  useConvolverStore,
+  resetConvolverIrLoaded,
+} from "@/features/convolver/store/convolverStore";
 import { useCrossfadeStore } from "@/features/crossfade/store/crossfadeStore";
 import { useGaplessStore } from "@/features/gapless/store/gaplessStore";
 import { useHeadphoneStore } from "@/features/headphone/store/headphoneStore";
@@ -942,6 +945,12 @@ export const useEqualizerStore = create<EqualizerStore>()(
       },
 
       setAudioSessionId: (id: number) => {
+        // EQ-20: sesi baru = engine/session dibuat ulang = native lupa
+        // IR-nya. Reset penanda supaya apply berikut memuat ulang IR
+        // (bukan skip karena mengira IR lama masih ada).
+        if (id !== get().audioSessionId) {
+          resetConvolverIrLoaded();
+        }
         set({ audioSessionId: id });
         if (get().isEQEnabled && id !== -1) {
           applyAllEffectsToNative(get(), "setAudioSessionId");

@@ -82,6 +82,8 @@ jest.mock("@/features/convolver/store/convolverStore", () => ({
   useConvolverStore: {
     getState: () => mockConvolverState,
   },
+  // EQ-20: dipanggil setAudioSessionId saat sesi berganti.
+  resetConvolverIrLoaded: jest.fn(),
 }));
 
 // Crossfade di-mock dengan alasan yang sama: crossfadeStore mengimpor

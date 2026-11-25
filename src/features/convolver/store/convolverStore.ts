@@ -31,6 +31,25 @@ import {
 } from "../api/irFile";
 import type { ConvolverIrMeta } from "../api/irFile";
 
+// EQ-20: path IR yang SUDAH dimuat di engine saat ini (level modul,
+// bukan state — ini fakta tentang native, bukan niat user; tidak
+// dipersist dan tidak memicu render). Tanpa ini tiap apply memanggil
+// `loadConvolverIr` ulang (decode + upload file IR) walau IR-nya sama.
+// Native melupakan IR saat engine/session dibuat ulang, jadi penanda
+// ini HARUS di-reset di titik itu (lihat `resetConvolverIrLoaded` —
+// dipanggil dari `setAudioSessionId` equalizerStore). Reset berlebih
+// hanya berarti satu reload ekstra (aman); skip yang salah berarti
+// convolver menyala tanpa IR (diam-diam mati). TIDAK di-reset saat
+// reopen stream (toggleExclusiveMode): IR master copy tinggal di
+// DSPChain dan selamat dari prepare()/buildGraph (DSPChain.h:54-58),
+// jadi reopen tidak menghilangkan IR.
+let irLoadedPath: string | null = null;
+
+/** Engine/session dibuat ulang — native sudah lupa IR-nya. */
+export function resetConvolverIrLoaded(): void {
+  irLoadedPath = null;
+}
+
 export interface ConvolverStore {
   /** Convolver menyala. Default OFF. */
   isConvolverEnabled: boolean;
@@ -160,6 +179,8 @@ export const useConvolverStore = create<ConvolverStore>()(
           },
           lastError: null,
         });
+        // Baru saja dimuat ke native lewat loadConvolverIr di atas.
+        irLoadedPath = destPath;
         return { ok: true };
       },
 
@@ -173,12 +194,18 @@ export const useConvolverStore = create<ConvolverStore>()(
         if (oldPath) {
           await deleteIrFile(oldPath);
         }
+        irLoadedPath = null;
         set({ ir: null, lastError: null });
       },
 
       preloadConvolverIr: async () => {
         const { ir } = get();
         if (ir?.path) {
+          // EQ-20: IR yang sama sudah dimuat di engine ini — jangan
+          // decode + upload ulang tiap apply (5 trigger applyAll).
+          if (ir.path === irLoadedPath) {
+            return;
+          }
           try {
             const status = await NativeDSPModule.loadConvolverIr(ir.path);
             if (status !== ConvolverIrStatus.Ok) {
@@ -188,10 +215,14 @@ export const useConvolverStore = create<ConvolverStore>()(
                 "[Convolver Store] restore load gagal, status=",
                 status,
               );
+              irLoadedPath = null;
               set({ ir: null });
+            } else {
+              irLoadedPath = ir.path;
             }
           } catch (e) {
             console.error("[Convolver Store] restore load gagal:", e);
+            irLoadedPath = null;
             set({ ir: null });
           }
         }
