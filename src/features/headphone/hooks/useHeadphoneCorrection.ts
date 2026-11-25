@@ -96,8 +96,12 @@ export const useHeadphoneCorrection =
     // value-nya.
     const prevDeviceTypeRef = useRef<string | null>(null);
     useEffect(() => {
-      const prevType = prevDeviceTypeRef.current;
       const nextType = currentDevice ? currentDevice.type : null;
+      // EQ-25: null = stream belum dibuka / sedang dibuka ulang / poll
+      // gagal — BUKAN dicabut. Jangan picu auto-off dan jangan simpan
+      // ke prevTypeRef (tipe terakhir yang DIKETAHUI tetap berlaku).
+      if (nextType === null) return;
+      const prevType = prevDeviceTypeRef.current;
       prevDeviceTypeRef.current = nextType;
       if (
         shouldAutoDisableCorrection(prevType, nextType, enabled) &&

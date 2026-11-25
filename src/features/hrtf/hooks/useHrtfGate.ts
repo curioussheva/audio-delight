@@ -35,6 +35,10 @@ export const useHrtfGate = (): UseHrtfGateReturn => {
   const prevTypeRef = useRef<string | null>(null);
 
   useEffect(() => {
+    // EQ-25: null = perangkat belum diketahui (stream memilih sendiri /
+    // belum dibuka) — BUKAN bukan-headphone. Jangan picu auto-off dan
+    // jangan simpan ke prevTypeRef.
+    if (currentDeviceType === null) return;
     const prev = prevTypeRef.current;
     if (shouldAutoDisableHrtf(prev, currentDeviceType, isHrtfEnabled)) {
       console.log(
