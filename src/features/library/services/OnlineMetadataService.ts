@@ -103,6 +103,10 @@ async function fetchWithRetry(
 
     return response;
   } catch (error) {
+    // AUD2-4: request yang dibatalkan JANGAN di-retry — abort berarti
+    // pemanggil sudah tidak menunggu lagi; retry hanya memperpanjang
+    // pekerjaan yang sudah dibatalkan.
+    if (options?.signal?.aborted) throw error;
     if (retryCount < MAX_RETRIES) {
       const delayMs = INITIAL_RETRY_DELAY_MS * Math.pow(2, retryCount);
       console.warn(
@@ -226,6 +230,13 @@ class OnlineMetadataService {
    */
   static async getArtistEnrichment(
     artistName: string,
+    // AUD2-4: sinyal abort opsional — diteruskan ke _enrichArtist supaya
+    // fetch jaringan benar berhenti (bukan cuma race di UI). Tanpa
+    // sinyal, perilaku lama: selalu resolve (fallback bila gagal).
+    // Catatan: dedupe per artis tetap berbagi satu promise — bila
+    // pemanggil pertama meng-abort, pemanggil kedua dengan artis yang
+    // sama ikut menerima AbortError dan bisa mencoba lagi.
+    signal?: AbortSignal,
   ): Promise<ArtistEnrichment> {
     if (!artistName || artistName.toLowerCase() === "unknown artist") {
       return { imageUrl: null, bio: null, source: "fallback", lastUpdated: 0 };
@@ -238,7 +249,7 @@ class OnlineMetadataService {
     const inFlight = this._enrichmentInFlight.get(key);
     if (inFlight) return inFlight;
 
-    const promise = this._enrichArtist(artistName).finally(() => {
+    const promise = this._enrichArtist(artistName, signal).finally(() => {
       if (this._enrichmentInFlight.get(key) === promise) {
         this._enrichmentInFlight.delete(key);
       }
@@ -250,10 +261,14 @@ class OnlineMetadataService {
   /**
    * Pekerja enrichment yang sebenarnya (cache SQLite → MusicBrainz +
    * Wikipedia). Selalu resolve — gagal jaringan / tidak ditemukan
-   * mengembalikan fallback, bukan throw.
+   * mengembalikan fallback, bukan throw. PENGECUALIAN (AUD2-4): bila
+   * `signal` di-abort, error dilempar lagi — abort bukan "tidak
+   * ditemukan", dan pemanggil harus tahu operasinya dibatalkan supaya
+   * tidak melanjutkan apply metadata dengan enrichment kosong.
    */
   private static async _enrichArtist(
     artistName: string,
+    signal?: AbortSignal,
   ): Promise<ArtistEnrichment> {
     try {
       // 1. Cek cache SQLite
@@ -263,7 +278,7 @@ class OnlineMetadataService {
       }
 
       // 2. Cari MBID artist
-      const mbid = await this._searchArtistMBID(artistName);
+      const mbid = await this._searchArtistMBID(artistName, signal);
       if (!mbid) {
         console.warn(
           `[OnlineMetadata] Artist "${artistName}" not found on MusicBrainz`,
@@ -281,8 +296,8 @@ class OnlineMetadataService {
 
       // 4. Fetch image & bio secara paralel
       const [imageUrl, bio] = await Promise.all([
-        this._getArtistImageFromRelease(mbid),
-        this._fetchWikipediaBio(mbid),
+        this._getArtistImageFromRelease(mbid, signal),
+        this._fetchWikipediaBio(mbid, signal),
       ]);
 
       const result: ArtistEnrichment = {
@@ -300,6 +315,10 @@ class OnlineMetadataService {
 
       return result;
     } catch (error) {
+      // AUD2-4: abort dilempar lagi (lihat doc di atas) — jangan
+      // diubah jadi fallback, supaya pemanggil tidak mengira artis
+      // tidak ditemukan lalu tetap menyimpan metadata setengah jalan.
+      if (signal?.aborted) throw error;
       console.warn(`[OnlineMetadata] Failed to enrich "${artistName}":`, error);
       return { imageUrl: null, bio: null, source: "fallback", lastUpdated: 0 };
     }
@@ -318,11 +337,15 @@ class OnlineMetadataService {
 
   // ── Private: MusicBrainz ───────────────────────────────────────────────────
 
-  private static async _searchArtistMBID(name: string): Promise<string | null> {
+  private static async _searchArtistMBID(
+    name: string,
+    signal?: AbortSignal,
+  ): Promise<string | null> {
     try {
       const query = encodeURIComponent(`artist:${name}`);
       const response = await fetchWithRetry(
         `${MUSICBRAINZ_BASE}/artist/?query=${query}&fmt=json`,
+        { signal },
       );
 
       if (!response || !response.ok) return null;
@@ -330,6 +353,7 @@ class OnlineMetadataService {
       const data = await safeJsonParse<any>(response);
       return data?.artists?.[0]?.id ?? null;
     } catch (e) {
+      if (signal?.aborted) throw e;
       console.warn(
         `[OnlineMetadata] _searchArtistMBID error for "${name}":`,
         e,
@@ -340,10 +364,12 @@ class OnlineMetadataService {
 
   private static async _getArtistImageFromRelease(
     mbid: string,
+    signal?: AbortSignal,
   ): Promise<string | null> {
     try {
       const response = await fetchWithRetry(
         `${MUSICBRAINZ_BASE}/release-group?artist=${mbid}&type=album&fmt=json`,
+        { signal },
       );
 
       if (!response || !response.ok) return null;
@@ -355,6 +381,7 @@ class OnlineMetadataService {
         ? `https://coverartarchive.org/release-group/${firstReleaseGroupId}/front-500`
         : null;
     } catch (error) {
+      if (signal?.aborted) throw error;
       console.warn(
         `[OnlineMetadata] _getArtistImageFromRelease error for MBID ${mbid}:`,
         error,
@@ -367,11 +394,13 @@ class OnlineMetadataService {
 
   private static async _fetchWikipediaBio(
     mbid: string,
+    signal?: AbortSignal,
   ): Promise<string | null> {
     try {
       // A: Ambil relasi URL dari profil MusicBrainz
       const mbRes = await fetchWithRetry(
         `${MUSICBRAINZ_BASE}/artist/${mbid}?inc=url-rels&fmt=json`,
+        { signal },
       );
 
       if (!mbRes || !mbRes.ok) return null;
@@ -393,6 +422,7 @@ class OnlineMetadataService {
       // B: Resolve judul artikel Wikipedia dari Wikidata
       const wdRes = await fetchWithRetry(
         `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${wikidataId}&props=sitelinks&sitefilter=enwiki&format=json&origin=*`,
+        { signal },
       );
 
       if (!wdRes || !wdRes.ok) return null;
@@ -408,6 +438,7 @@ class OnlineMetadataService {
         `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=1&explaintext=1&titles=${encodeURIComponent(
           wikiTitle,
         )}&format=json&origin=*`,
+        { signal },
       );
 
       if (!wikiRes || !wikiRes.ok) return null;
@@ -434,6 +465,7 @@ class OnlineMetadataService {
 
       return pages[pageId]?.extract ?? null;
     } catch (e) {
+      if (signal?.aborted) throw e;
       console.warn("[OnlineMetadata] _fetchWikipediaBio error:", e);
       return null;
     }

@@ -68,7 +68,11 @@ describe("MetadataSyncModal — memo + onSelect/onClose stabil", () => {
       "const handleApplyMetadata = useCallback(",
     );
     expect(songDetail).toContain("async (newMeta: AppliedMeta) => {");
-    expect(songDetail).toContain("[song, updateTrackInStore, showToast]");
+    // AUD2-1: `isUpdating` ikut deps — guard in-flight di dalam
+    // callback harus membaca nilai terbaru, bukan closure basi.
+    expect(songDetail).toContain(
+      "[song, updateTrackInStore, showToast, isUpdating]",
+    );
     expect(songDetail).not.toContain(
       "const handleApplyMetadata = async (newMeta: AppliedMeta) => {",
     );

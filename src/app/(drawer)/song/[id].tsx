@@ -305,6 +305,10 @@ export default function SongDetailScreen() {
   // refresh) membuat objek `song` baru dan efek di bawah me-reset
   // ketikan user yang belum disimpan.
   const editFormSongIdRef = useRef<string | undefined>(undefined);
+  // AUD2-4: token pembatal enrichment — tombol Batal di overlay
+  // meng-abort controller ini; timeout 10 detik meng-abort controller
+  // yang sama (lihat handleApplyMetadata).
+  const enrichAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!song) return;
@@ -379,10 +383,34 @@ export default function SongDetailScreen() {
       if (isUpdating) return;
       setIsUpdating(true);
 
+      // AUD2-4: enrichment bisa dibatalkan + batas 10 detik. Sinyal
+      // timeout (AbortSignal.timeout) dan tombol Batal sama-sama
+      // meng-abort controller ini; sinyalnya diteruskan ke service
+      // supaya fetch jaringan benar berhenti — bukan cuma race di UI
+      // (fetch yang jalan terus tetap menulis cache/DB di belakang).
+      // Fallback setTimeout bila runtime belum menyediakan
+      // AbortSignal.timeout. Catatan: delay rate-limit ~1 detik di
+      // dalam service tidak abortable — abort yang mendarat di situ
+      // menunggu delay habis, lalu fetch menolak langsung.
+      const controller = new AbortController();
+      enrichAbortRef.current = controller;
+      if (typeof AbortSignal.timeout === "function") {
+        AbortSignal.timeout(10_000).addEventListener(
+          "abort",
+          () => controller.abort(),
+          { once: true },
+        );
+      } else {
+        setTimeout(() => controller.abort(), 10_000);
+      }
+
       try {
         const artistName = newMeta.artist?.trim() || song.artist;
         const enrichment =
-          await OnlineMetadataService.getArtistEnrichment(artistName);
+          await OnlineMetadataService.getArtistEnrichment(
+            artistName,
+            controller.signal,
+          );
 
         // U1: MusicBrainz = "sapu bersih" — isi YANG KOSONG saja. Online
         // hanya mengisi field lokal yang kosong (placeholder "Unknown
@@ -438,9 +466,18 @@ export default function SongDetailScreen() {
         // hanya haptic + modal tertutup).
         showToast("Metadata dilengkapi dari MusicBrainz.", "success");
       } catch (error) {
+        // AUD2-4: abort (tombol Batal / timeout 10 detik) bukan error —
+        // modal tetap terbuka supaya user bisa coba lagi atau menutup.
+        // Cek lewat ref (controller dideklarasi di dalam try, tidak
+        // terlihat di catch; ref dinol-kan di finally, sesudah catch).
+        if (enrichAbortRef.current?.signal.aborted) {
+          showToast("Pelengkapan metadata dibatalkan.", "info");
+          return;
+        }
         console.error("[SongDetail] Failed to apply metadata:", error);
         showToast("Terjadi kesalahan saat menyimpan metadata.", "error");
       } finally {
+        enrichAbortRef.current = null;
         setIsUpdating(false);
       }
     },
@@ -450,6 +487,13 @@ export default function SongDetailScreen() {
     // nilai terbaru (tanpa ini closure basi selalu melihat false).
     [song, updateTrackInStore, showToast, isUpdating],
   );
+
+  // AUD2-4: tombol Batal di overlay enrichment — meng-abort controller
+  // di enrichAbortRef; handleApplyMetadata menangkapnya sebagai batal
+  // (bukan error) dan membuka kunci isUpdating.
+  const handleCancelEnrichment = useCallback(() => {
+    enrichAbortRef.current?.abort();
+  }, []);
 
   const handleSaveEdit = async () => {
     if (!song) return;
@@ -1375,6 +1419,20 @@ export default function SongDetailScreen() {
       {(isUpdating || isSaving || isLyricsBusy) && (
         <View style={styles.overlay}>
           <ActivityIndicator size="large" color={colors.primary[500]} />
+          {/* AUD2-4: overlay menutup SELURUH layar — tanpa tombol ini
+              user terkunci bila jaringan macet (timeout 10 detik tetap
+              ada sebagai jaring kedua). Hanya saat enrichment: simpan
+              edit / lirik adalah tulis DB lokal yang cepat. */}
+          {isUpdating && (
+            <TouchableOpacity
+              onPress={handleCancelEnrichment}
+              style={styles.overlayCancelButton}
+              accessibilityRole="button"
+              accessibilityLabel="Batalkan pelengkapan metadata"
+            >
+              <Text style={styles.overlayCancelText}>Batal</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -1560,6 +1618,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     zIndex: 100,
+  },
+  // AUD2-4: tombol Batal di atas overlay gelap — teks putih polos
+  // (bukan warna tema) supaya terbaca di kedua tema.
+  overlayCancelButton: {
+    marginTop: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 28,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.15)",
+  },
+  overlayCancelText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
   },
   editFieldContainer: { marginBottom: 16 },
   rowFields: { flexDirection: "row", gap: 8 },
