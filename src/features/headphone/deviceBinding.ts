@@ -15,10 +15,31 @@ import type { DeviceProfileMap, HeadphoneProfile } from "./types";
  * Native memakai `AudioDeviceInfo.getId()` (int). Kunci disimpan sebagai
  * string supaya JSON AsyncStorage tetap stabil - `Record<number, string>`
  * tidak bertahan melewati serialisasi.
+ *
+ * DIPERTAHANKAN untuk kompatibilitas baca (ikatan lama + prune manual),
+ * tapi BUKAN lagi kunci ikatan baru — lihat `stableDeviceKey`.
  */
 export const deviceKey = (id: string | number | null | undefined): string => {
   if (id === null || id === undefined) return "";
   return String(id);
+};
+
+/**
+ * EQ-23: kunci perangkat STABIL untuk ikatan profil.
+ *
+ * `type:name` (mis. `headset:GK-Kunten`, `bluetooth:WF-1000XM5`) —
+ * bertahan antar colok-cabut, tidak seperti id int native yang berubah
+ * tiap colok ulang. Alamat BT / vendor-product USB belum dibawa
+ * deskriptor perangkat (`AudioDeviceDescriptor` hanya punya id/name/
+ * type), jadi `type:name` adalah kunci stabil terbaik dari data yang
+ * ada. Nama BT bisa berubah bila kodek berganti suffix — ikatan itu
+ * tetap lebih awet daripada ikatan id yang mati di setiap cabut.
+ */
+export const stableDeviceKey = (
+  device: { type: string; name: string } | null | undefined,
+): string => {
+  if (!device) return "";
+  return `${device.type}:${device.name}`;
 };
 
 /**
@@ -72,7 +93,13 @@ export const resolveProfileForDevice = (
  * `syncForDevice` TIDAK boleh menyentuh koreksi kalau:
  *  - tidak ada id perangkat, atau
  *  - perangkat tidak punya ikatan, atau
- *  - profil itu sudah aktif.
+ *  - profil itu sudah dimuat ke native di sesi ini.
+ *
+ * EQ-21: pembandingnya `loadedProfileId` (runtime — apa yang native
+ * benar-benar sudah muat di sesi ini), BUKAN `activeProfileId` yang
+ * dipersist. Setelah restart, `activeProfileId` masih terisi sementara
+ * native sudah lupa presetnya; membandingkan dengan itu membuat
+ * `syncForDevice` diam dan koreksi tidak pernah pulih.
  *
  * Perangkat tanpa ikatan sengaja tidak melepas koreksi yang sedang aktif:
  * mematikannya otomatis akan membatalkan pilihan manual user.
@@ -81,9 +108,9 @@ export const shouldAutoActivate = (
   map: DeviceProfileMap,
   deviceId: string | number | null | undefined,
   profiles: HeadphoneProfile[],
-  activeProfileId: string | null,
+  loadedProfileId: string | null,
 ): boolean => {
   const target = resolveProfileForDevice(map, deviceId, profiles);
   if (!target) return false;
-  return target !== activeProfileId;
+  return target !== loadedProfileId;
 };

@@ -42,13 +42,20 @@ export interface HeadphoneProfile {
 /**
  * Pemetaan perangkat output -> profil.
  *
- * Kunci memakai `AudioDeviceInfo.getId()` (int) yang dikonversi ke string,
- * BUKAN nama perangkat. Nama bisa berubah (Bluetooth menambahkan suffix
- * kodek), sedangkan id stabil selama perangkat terpasang.
+ * EQ-23: kunci STABIL `type:name` (mis. `headset:GK-Kunten`), BUKAN id
+ * native `AudioDeviceInfo.getId()` (int). Id itu tidak stabil antar
+ * colok-cabut — cabut lalu colok ulang bisa memberi id berbeda — jadi
+ * ikatan berkunci id mati saat perangkat dicabut lalu tidak pernah
+ * cocok lagi. Nama bisa berubah untuk Bluetooth (suffix kodek), tapi
+ * `type:name` tetap jauh lebih stabil daripada id int; alamat BT /
+ * vendor-product USB tidak dibawa deskriptor perangkat, jadi belum
+ * bisa dipakai sebagai kunci.
  *
- * Batasan yang perlu diketahui: id bersifat sementara - cabut lalu colok
- * ulang bisa memberi id berbeda. Karena itu peta ini dibersihkan saat app
- * dibuka kalau id-nya sudah tidak ada di daftar perangkat.
+ * Ikatan LAMA berkunci id int (mis. `"7"`) yang tersimpan di
+ * AsyncStorage menjadi yatim: tidak pernah cocok dengan kunci baru,
+ * tapi SENGAJA tidak dihapus diam-diam — user bisa mengikat ulang
+ * perangkatnya; prune otomatis yang dulu membuangnya juga dihentikan
+ * (lihat useHeadphoneCorrection).
  */
 export type DeviceProfileMap = Record<string, string>;
 
@@ -59,6 +66,16 @@ export interface HeadphoneCorrectionStore {
   /** Profil yang sedang terpasang di native. null = tidak ada koreksi. */
   activeProfileId: string | null;
   enabled: boolean;
+  /**
+   * EQ-21: profil yang BENAR-BENAR sudah dimuat ke native di sesi ini.
+   * Runtime saja — TIDAK dipersist (tidak masuk `partialize`).
+   * `activeProfileId` yang dipersist mengklaim "aktif" walau native
+   * sudah lupa presetnya setelah restart; `loadedProfileId` hanya
+   * terisi bila `activateProfile` berhasil di sesi ini, jadi
+   * `syncForDevice` bisa membedakan "sudah dimuat" dari "hanya
+   * tercatat aktif".
+   */
+  loadedProfileId: string | null;
 
   // --- Actions ---
 
@@ -85,6 +102,16 @@ export interface HeadphoneCorrectionStore {
    * Dipanggil saat perangkat aktif berubah.
    */
   syncForDevice: (deviceId: string | null) => Promise<void>;
+
+  /**
+   * EQ-21: pulihkan koreksi ke native saat boot. Bila `enabled` dan ada
+   * `activeProfileId` tersimpan, muat ulang profil itu — native
+   * melupakan preset saat proses mati, sementara state persisten tetap
+   * mengklaim aktif. Tanpa ini koreksi "aktif" di UI tapi tidak
+   * terdengar sampai user men-tap ulang. Dipanggil dari
+   * `equalizerStore.initialize()` (hub restore DSP saat boot).
+   */
+  restoreToNative: () => Promise<void>;
 
   /** Buang ikatan ke perangkat yang sudah tidak ada. */
   pruneDevices: (availableIds: string[]) => void;

@@ -11,6 +11,7 @@ import {
   pruneDeviceProfiles,
   resolveProfileForDevice,
   shouldAutoActivate,
+  stableDeviceKey,
 } from "@/features/headphone/deviceBinding";
 import type { HeadphoneProfile } from "@/features/headphone/types";
 
@@ -98,15 +99,35 @@ describe("resolveProfileForDevice", () => {
   });
 });
 
+describe("stableDeviceKey (EQ-23)", () => {
+  it("type:name bertahan antar colok-cabut (bukan id int)", () => {
+    expect(stableDeviceKey({ type: "headset", name: "GK-Kunten" })).toBe(
+      "headset:GK-Kunten",
+    );
+    expect(
+      stableDeviceKey({ type: "bluetooth", name: "WF-1000XM5" }),
+    ).toBe("bluetooth:WF-1000XM5");
+  });
+
+  it("null/undefined -> string kosong", () => {
+    expect(stableDeviceKey(null)).toBe("");
+    expect(stableDeviceKey(undefined)).toBe("");
+  });
+});
+
 describe("shouldAutoActivate", () => {
   it("true saat perangkat terikat ke profil yang belum aktif", () => {
     expect(shouldAutoActivate({ "7": "chu" }, 7, profiles, null)).toBe(true);
     expect(shouldAutoActivate({ "7": "chu" }, 7, profiles, "aria")).toBe(true);
   });
 
-  it("false kalau profil itu sudah aktif", () => {
-    // Tanpa ini, setiap polling 3 detik akan memuat ulang preset yang sama -
-    // memicu perhitungan koefisien biquad berulang tanpa manfaat.
+  it("false kalau profil itu sudah dimuat di native (loadedProfileId)", () => {
+    // EQ-21: pembandingnya loadedProfileId (runtime), bukan
+    // activeProfileId yang dipersist. Tanpa ini, setiap polling 3 detik
+    // akan memuat ulang preset yang sama - memicu perhitungan koefisien
+    // biquad berulang tanpa manfaat. Dan sebaliknya: setelah restart,
+    // loadedProfileId null sementara activeProfileId masih terisi, jadi
+    // sync tetap jalan dan koreksi pulih.
     expect(shouldAutoActivate({ "7": "chu" }, 7, profiles, "chu")).toBe(false);
   });
 

@@ -72,6 +72,8 @@ export const useHeadphoneStore = create<HeadphoneCorrectionStore>()(
       deviceProfiles: {},
       activeProfileId: null,
       enabled: false,
+      // EQ-21: runtime saja — tidak masuk `partialize` di bawah.
+      loadedProfileId: null,
 
       // --- Actions ---
 
@@ -101,7 +103,11 @@ export const useHeadphoneStore = create<HeadphoneCorrectionStore>()(
 
           NativeDSPModule.setHeadphoneCorrectionEnabled(true);
 
-          set({ activeProfileId: profileId, enabled: true });
+          set({
+            activeProfileId: profileId,
+            enabled: true,
+            loadedProfileId: profileId,
+          });
           return true;
         } catch (e) {
           console.warn("[Headphone] activateProfile gagal:", e);
@@ -153,6 +159,7 @@ export const useHeadphoneStore = create<HeadphoneCorrectionStore>()(
           profiles: get().profiles.filter((p) => p.id !== profileId),
           deviceProfiles,
           activeProfileId: wasActive ? null : get().activeProfileId,
+          loadedProfileId: wasActive ? null : get().loadedProfileId,
         });
 
         if (wasActive) {
@@ -174,13 +181,16 @@ export const useHeadphoneStore = create<HeadphoneCorrectionStore>()(
 
       syncForDevice: async (deviceId: string | null) => {
         // Keputusan "boleh dipasang otomatis?" ada di deviceBinding.ts (murni,
-        // teruji). Di sini hanya efek sampingnya.
+        // teruji). Di sini hanya efek sampingnya. EQ-21: pembandingnya
+        // `loadedProfileId` (apa yang native sudah muat di sesi ini),
+        // bukan `activeProfileId` yang dipersist — setelah restart yang
+        // kedua masih terisi sementara native sudah lupa presetnya.
         if (
           !shouldAutoActivate(
             get().deviceProfiles,
             deviceId,
             get().profiles,
-            get().activeProfileId,
+            get().loadedProfileId,
           )
         ) {
           return;
@@ -195,6 +205,17 @@ export const useHeadphoneStore = create<HeadphoneCorrectionStore>()(
         if (!target) return;
 
         await get().activateProfile(target);
+      },
+
+      // EQ-21: pulihkan koreksi ke native saat boot. Dipanggil dari
+      // `equalizerStore.initialize()` — native melupakan preset saat
+      // proses mati, jadi `enabled && activeProfileId` saja tidak cukup
+      // sebagai bukti koreksi hidup. Tanpa ikatan perangkat pun profil
+      // yang diaktifkan manual tetap dipulihkan di sini.
+      restoreToNative: async () => {
+        const { enabled, activeProfileId } = get();
+        if (!enabled || !activeProfileId) return;
+        await get().activateProfile(activeProfileId);
       },
 
       pruneDevices: (availableIds: string[]) => {
@@ -218,6 +239,7 @@ export const useHeadphoneStore = create<HeadphoneCorrectionStore>()(
           deviceProfiles: {},
           activeProfileId: null,
           enabled: false,
+          loadedProfileId: null,
         });
       },
     }),

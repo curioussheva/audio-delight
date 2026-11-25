@@ -925,6 +925,17 @@ export const useEqualizerStore = create<EqualizerStore>()(
           } catch (e) {
             console.error("[EQ Store] restore gapless gagal:", e);
           }
+
+          // Koreksi headphone (EQ-21, 2026-11-26): restore DI LUAR
+          // gate EQ — koreksi hidup di luar rantai EQ 10-band dan
+          // harus pulih walau EQ master mati. Native melupakan preset
+          // saat proses mati; tanpa ini UI mengklaim "aktif" tapi
+          // tidak ada koreksi sampai user men-tap ulang profilnya.
+          try {
+            await useHeadphoneStore.getState().restoreToNative();
+          } catch (e) {
+            console.error("[EQ Store] restore headphone gagal:", e);
+          }
         } catch {
           set({ isInitialized: true });
         }

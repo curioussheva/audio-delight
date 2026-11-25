@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useAudioOutput } from "@/features/hardware/hooks/useAudioOutput";
 import { useHeadphoneStore, validatePreset } from "../store/headphoneStore";
 import { shouldAutoDisableCorrection } from "../autoDisableCorrection";
+import { stableDeviceKey } from "../deviceBinding";
 import type { HeadphoneProfile } from "../types";
 
 export interface UseHeadphoneCorrectionReturn {
@@ -55,11 +56,13 @@ export const useHeadphoneCorrection =
     const deleteProfile = useHeadphoneStore((s) => s.deleteProfile);
     const bindDevice = useHeadphoneStore((s) => s.bindDevice);
     const syncForDevice = useHeadphoneStore((s) => s.syncForDevice);
-    const pruneDevices = useHeadphoneStore((s) => s.pruneDevices);
 
-    const { currentDevice, devices } = useAudioOutput();
+    const { currentDevice } = useAudioOutput();
 
-    const deviceId = currentDevice ? String(currentDevice.id) : null;
+    // EQ-23: kunci ikatan STABIL `type:name` — id int native berubah
+    // tiap colok-cabut, jadi ikatan berkunci id mati saat perangkat
+    // dicabut lalu tidak pernah cocok lagi.
+    const deviceKey = currentDevice ? stableDeviceKey(currentDevice) : null;
 
     // Cegah setState setelah unmount; sync dipicu polling 3 detik.
     const mounted = useRef(true);
@@ -70,18 +73,21 @@ export const useHeadphoneCorrection =
       };
     }, []);
 
-    // Buang ikatan ke perangkat yang sudah tidak terpasang. Id perangkat tidak
-    // stabil antar colok-cabut, jadi entri basi adalah hal normal.
-    useEffect(() => {
-      if (devices.length === 0) return;
-      pruneDevices(devices.map((d) => String(d.id)));
-    }, [devices, pruneDevices]);
+    // EQ-23: prune otomatis DIHENTIKAN. Dulu tiap perubahan daftar
+    // perangkat membuang ikatan ke perangkat yang sedang tidak
+    // terpasang — dengan id yang tak stabil, cabut-colok saja sudah
+    // cukup untuk menghapus ikatan yang user mau. Dengan kunci stabil
+    // `type:name`, ikatan ke perangkat yang dicabut tetap valid saat
+    // perangkat itu dicolok lagi, jadi tidak ada yang perlu dibuang
+    // otomatis. `pruneDevices` tetap ada sebagai aksi manual di store.
+    // Ikatan lama berkunci id int menjadi yatim (tidak cocok dengan
+    // kunci baru) tapi sengaja tidak dihapus diam-diam.
 
     // Perangkat aktif berubah -> pasang profil yang terikat padanya.
     useEffect(() => {
-      if (!deviceId) return;
-      void syncForDevice(deviceId);
-    }, [deviceId, syncForDevice]);
+      if (!deviceKey) return;
+      void syncForDevice(deviceKey);
+    }, [deviceKey, syncForDevice]);
 
     // Auto-OFF koreksi saat perangkat kabel dicabut (keputusan
     // 2026-11-18): rute berpindah dari kabel (jack/DAC) ke bukan kabel
@@ -116,7 +122,7 @@ export const useHeadphoneCorrection =
       [profiles, activeProfileId],
     );
 
-    const boundProfileId = deviceId ? deviceProfiles[deviceId] ?? null : null;
+    const boundProfileId = deviceKey ? deviceProfiles[deviceKey] ?? null : null;
 
     const importPreset = useCallback(
       async (name: string, presetText: string) => {
@@ -171,10 +177,10 @@ export const useHeadphoneCorrection =
 
     const bindCurrentDevice = useCallback(
       (profileId: string | null) => {
-        if (!deviceId) return;
-        bindDevice(deviceId, profileId);
+        if (!deviceKey) return;
+        bindDevice(deviceKey, profileId);
       },
-      [deviceId, bindDevice],
+      [deviceKey, bindDevice],
     );
 
     return {
