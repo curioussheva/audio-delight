@@ -370,6 +370,13 @@ export default function SongDetailScreen() {
   const handleApplyMetadata = useCallback(
     async (newMeta: AppliedMeta) => {
       if (!song) return;
+      // AUD2-1: guard in-flight — tanpa ini double-tap hasil di modal
+      // (modal tidak menutup sendiri saat pilih) menjalankan dua
+      // handleApplyMetadata bersamaan → dua updateMetadata + dua toast.
+      // `isUpdating` masuk deps supaya guard membaca nilai terbaru,
+      // bukan closure basi. Pola yang sama dengan `isSaving` di
+      // handleSaveEdit dan `isLyricsBusy` di applyLyricsChange.
+      if (isUpdating) return;
       setIsUpdating(true);
 
       try {
@@ -439,7 +446,9 @@ export default function SongDetailScreen() {
     },
     // `song` useMemo + aksi store stabil: identitas hanya berubah
     // bila lagu yang dibuka berganti / track-nya di-update.
-    [song, updateTrackInStore, showToast],
+    // `isUpdating` ikut deps — guard AUD2-1 di atas harus membaca
+    // nilai terbaru (tanpa ini closure basi selalu melihat false).
+    [song, updateTrackInStore, showToast, isUpdating],
   );
 
   const handleSaveEdit = async () => {
@@ -1388,6 +1397,10 @@ export default function SongDetailScreen() {
         missingFields={missingFields}
         onSelect={handleApplyMetadata}
         colors={colors}
+        // AUD2-1: matikan pilihan selama apply berjalan — modal tidak
+        // menutup sendiri saat pilih, jadi tanpa ini tap kedua tetap
+        // bisa masuk (guard di handleApplyMetadata adalah lapis kedua).
+        disabled={isUpdating}
       />
     </View>
   );

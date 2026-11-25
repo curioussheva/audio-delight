@@ -34,6 +34,9 @@ export const MetadataSyncModal = memo(({
   missingFields = [],
   onSelect,
   colors,
+  // AUD2-1: true selama apply metadata berjalan — pilihan hasil
+  // dimatikan supaya double-tap tidak mengirim dua apply bersamaan.
+  disabled = false,
 }: any) => {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -246,6 +249,7 @@ export const MetadataSyncModal = memo(({
                       { borderColor: colors.border.light },
                     ]}
                     onPress={() => onSelect(item)}
+                    disabled={disabled}
                   >
                     <Image
                       source={{
