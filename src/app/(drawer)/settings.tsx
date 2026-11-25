@@ -491,6 +491,10 @@ export default function SettingsScreen() {
   const isReplayGainEnabled = useReplayGainStore(
     (s) => s.isReplayGainEnabled,
   );
+  // EQ-19: dorongan gain RG di-gate sakelar master DSP (langganan RG di
+  // equalizerStore return bila !isEQEnabled) — baris ini harus jujur
+  // bila master mati, bukan mengklaim "Diterapkan".
+  const isEQEnabled = useEqualizerStore((s) => s.isEQEnabled);
   const replayGainMode = useReplayGainStore((s) => s.replayGainMode);
   const replayGainCurrentTags = useReplayGainStore((s) => s.currentTags);
   const replayGainCurrentSongId = useReplayGainStore((s) => s.currentSongId);
@@ -1536,10 +1540,12 @@ export default function SettingsScreen() {
                 }}
               >
                 {isReplayGainEnabled
-                  ? "Aktif — album dari era/mastering berbeda diputar dengan volume yang sama, mengikuti tag di file."
+                  ? !isEQEnabled
+                    ? "Aktif, tapi sakelar master DSP mati — gain belum diterapkan. Nyalakan master di tab Equalizer."
+                    : "Aktif — album dari era/mastering berbeda diputar dengan volume yang sama, mengikuti tag di file."
                   : "Mati — perilaku lama. Nyalakan supaya lagu keras dan lagu pelan tidak lompat volume."}
               </Text>
-              {isReplayGainEnabled && (
+              {isReplayGainEnabled && isEQEnabled && (
                 <Text
                   style={{
                     color: colors.text.secondary,
@@ -1571,7 +1577,7 @@ export default function SettingsScreen() {
                   marginTop: 4,
                 }}
               >
-                Tidak berlaku di mode Bit-Perfect. Tag dibaca sekali per lagu, lalu disimpan.
+                Tidak berlaku di mode Bit-Perfect dan saat sakelar master DSP mati. Tag dibaca sekali per lagu, lalu disimpan.
               </Text>
             </View>
             <Switch

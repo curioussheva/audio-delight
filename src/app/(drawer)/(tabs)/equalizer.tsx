@@ -163,13 +163,24 @@ const MiniSwitch = memo(
   }: MiniSwitchProps) => {
     const { theme } = useTheme();
     const colors = theme.colors;
-    const on = value && !disabled;
+    // EQ-19: tampilkan nilai TERSIMPAN, bukan nilai efektif. Dulu
+    // `on = value && !disabled` — saat sakelar master mati, thumb +
+    // label semua switch efek jadi abu-abu (terbaca OFF) walau
+    // flag-nya ON; begitu master dinyalakan switch "ajaib" kembali
+    // menyala. Yang benar: switch menunjukkan flag-nya (sama seperti
+    // `accessibilityState.checked: value` yang sudah jujur selama
+    // ini), sementara `disabled` hanya meredupkan wadahnya (opacity)
+    // + menonaktifkan sentuhan. Keadaan "master mati" dijelaskan
+    // caption kartu ("Sakelar master mati — semua efek di bawah tidak
+    // memproses"), bukan dengan memalsukan tampilan switch.
+    const on = value;
 
     return (
       <View
         style={[
           styles.miniSwitchContainer,
           stacked && styles.miniSwitchStacked,
+          disabled && { opacity: 0.5 },
         ]}
       >
         {!hideLabel && (
