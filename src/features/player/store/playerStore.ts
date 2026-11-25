@@ -1732,14 +1732,29 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 const getSongsByIds = (ids: string[]): Song[] => {
   if (!ids.length) return [];
   try {
-    const placeholders = ids.map(() => "?").join(", ");
-    const result = db.execute(
-      `SELECT * FROM songs WHERE id IN (${placeholders})`,
-      ids,
+    // PS-4: SQLite tidak menjamin urutan baris `WHERE id IN (...)` sama
+    // dengan urutan `ids` — antrean restore jadi acak setelah restart.
+    // Kembalikan urutan `ids` via Map, dan chunk 500 id per query supaya
+    // antrean besar tidak meledakkan jumlah placeholder sekali jalan.
+    const CHUNK_SIZE = 500;
+    const rows: any[] = [];
+    for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+      const part = ids.slice(i, i + CHUNK_SIZE);
+      const placeholders = part.map(() => "?").join(", ");
+      const result = db.execute(
+        `SELECT * FROM songs WHERE id IN (${placeholders})`,
+        part,
+      );
+      rows.push(...(result.rows?._array ?? []));
+    }
+    const byId = new Map<string, any>(
+      rows.map((row: any) => [String(row.id), row]),
     );
-    const rows = result.rows?._array ?? [];
+    const orderedRows = ids
+      .map((id) => byId.get(id))
+      .filter((row): row is any => row !== undefined);
 
-    return rows.map(
+    return orderedRows.map(
       (row: any) =>
         ({
           id: String(row.id || ""),
