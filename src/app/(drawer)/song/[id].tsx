@@ -396,10 +396,24 @@ export default function SongDetailScreen() {
           artistBio: enrichment.bio,
         });
 
+        // AUD2-2: `isEnriched` HANYA bila enrichment benar terisi.
+        // Dulu ditulis tanpa syarat — termasuk saat enrichment kosong
+        // ("Unknown Artist" mengembalikan {imageUrl: null, bio: null}),
+        // sehingga worker lokal yang hanya menarget `isEnriched=0`
+        // tidak pernah menyentuh lagu ini lagi. Metadata dari modal
+        // (newMeta) tetap tersimpan apa pun hasilnya; yang digate
+        // hanya penanda enrichment-nya.
+        const hasEnrichment = Boolean(
+          enrichment.bio || enrichment.imageUrl,
+        );
         const updatedData: Partial<Song> = {
           ...filled,
-          isEnriched: true,
-          lastEnrichedAt: enrichment.lastUpdated || Date.now(),
+          ...(hasEnrichment
+            ? {
+                isEnriched: true,
+                lastEnrichedAt: enrichment.lastUpdated || Date.now(),
+              }
+            : {}),
         };
 
         await LibraryScanner.updateMetadata(song.id, updatedData, {
