@@ -1,5 +1,5 @@
 // src/features/player/components/FloatingPlayer.tsx
-import React, { memo, useEffect, useState } from "react";
+import React, { memo, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
@@ -122,23 +122,35 @@ function FloatingPlayer() {
     return unsubscribe;
   }, [progress]);
 
-  const swipeGesture = Gesture.Pan()
-    .activeOffsetX([-15, 15])
-    .onUpdate((e) => {
-      translateX.value = e.translationX;
-    })
-    .onEnd((e) => {
-      if (e.translationX > 80) runOnJS(playPrevious)();
-      else if (e.translationX < -80) runOnJS(playNext)();
-      translateX.value = withSpring(0);
-    });
+  // FP-1: Gesture.Pan() di-memo — dulu dibuat ulang tiap render (inline),
+  // memaksa GestureDetector mendaftarkan ulang gesture. Aksi store +
+  // shared value stabil, jadi deps-nya tidak pernah berubah sesudah mount.
+  const swipeGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([-15, 15])
+        .onUpdate((e) => {
+          translateX.value = e.translationX;
+        })
+        .onEnd((e) => {
+          if (e.translationX > 80) runOnJS(playPrevious)();
+          else if (e.translationX < -80) runOnJS(playNext)();
+          translateX.value = withSpring(0);
+        }),
+    [playNext, playPrevious, translateX],
+  );
 
   const animatedProgress = useAnimatedStyle(() => {
     return { width: `${progress.value * 100}%` };
   });
 
+  // FP-1: `withSpring` HANYA di `onEnd` gesture (di atas). Dulu
+  // `withSpring(translateX.value)` ada di dalam useAnimatedStyle —
+  // tiap frame style dihitung ulang, spring baru dibuat + animasi
+  // di-restart terus. Di sini cukup baca nilai mentahnya; pegasnya
+  // sudah diterapkan saat gesture berakhir.
   const animatedContainer = useAnimatedStyle(() => ({
-    transform: [{ translateX: withSpring(translateX.value, { damping: 20 }) }],
+    transform: [{ translateX: translateX.value }],
     opacity: withTiming(Math.abs(translateX.value) > 20 ? 0.75 : 1),
   }));
 

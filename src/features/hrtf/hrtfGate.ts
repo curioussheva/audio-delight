@@ -27,9 +27,10 @@
 // murni "perangkat sekarang harus headphone").
 //
 // Aturan yang sama dengan koreksi: TIDAK auto-ON saat headphone kembali
-// (user yang menyalakan lagi), dan observasi pertama (prev null) tidak
-// memicu — perangkat belum diketahui, jangan matikan HRTF yang
-// dipersist ON hanya karena poll pertama belum kembali.
+// (user yang menyalakan lagi). Observasi pertama yang SUDAH berisi tipe
+// non-headphone tetap diperiksa (EQ-24); yang dilewati hanya bila
+// perangkat belum diketahui (next null, EQ-25) — jangan matikan HRTF
+// yang dipersist ON hanya karena poll pertama belum kembali.
 
 export type AudioDeviceTypeName =
   | "usb"
@@ -64,7 +65,9 @@ export function isHrtfAllowedDevice(
 /**
  * Haruskah HRTF dimatikan otomatis saat rute berpindah?
  * @param prevDeviceType tipe sebelumnya; null = observasi pertama
- * @param nextDeviceType tipe sekarang; null = perangkat hilang
+ *   (dipertahankan di signature untuk kompatibilitas — tidak lagi
+ *   memengaruhi keputusan sejak EQ-24)
+ * @param nextDeviceType tipe sekarang; null = perangkat belum diketahui
  * @param hrtfEnabled HRTF sedang menyala
  */
 export function shouldAutoDisableHrtf(
@@ -72,10 +75,12 @@ export function shouldAutoDisableHrtf(
   nextDeviceType: string | null,
   hrtfEnabled: boolean,
 ): boolean {
+  void prevDeviceType;
   if (!hrtfEnabled) return false;
-  // Observasi pertama: perangkat belum diketahui — jangan matikan.
-  if (prevDeviceType === null) return false;
-  // Perangkat hilang setelah ada -> fail closed.
-  if (nextDeviceType === null) return true;
+  // EQ-24: observasi pertama yang SUDAH berisi tipe non-headphone
+  // (mis. speaker) tetap diperiksa — dulu `prev === null` membuat
+  // observasi itu lolos dan HRTF ON bertahan di speaker.
+  // EQ-25: lewati HANYA bila perangkat belum diketahui (next null).
+  if (nextDeviceType === null) return false;
   return !HRTF_DEVICE_TYPES.has(nextDeviceType);
 }

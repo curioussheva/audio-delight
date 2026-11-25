@@ -21,13 +21,19 @@ export const AudioPropertyToast = () => {
   const { colors, isDark } = theme;
   const [visible, setVisible] = useState(false);
 
+  // TOAST-1: efek bergantung `currentSong?.id`, BUKAN objeknya.
+  // `playSong` menyalin lagu (`{...song}`) dan `syncFromNative`
+  // menggantinya dengan objek dari queue — identitas objek berganti
+  // walau lagunya sama, jadi efek fire 2× (toast tampil lebih lama).
+  // id stabil antar salinan itu.
   useEffect(() => {
     if (currentSong) {
       setVisible(true);
       const timer = setTimeout(() => setVisible(false), 3500); // Muncul selama 3.5 detik
       return () => clearTimeout(timer);
     }
-  }, [currentSong]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSong?.id]);
 
   if (!visible || !currentSong) return null;
 

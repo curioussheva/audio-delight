@@ -25,9 +25,10 @@ describe("shouldAutoDisableHrtf", () => {
     expect(shouldAutoDisableHrtf("usb", "unknown", true)).toBe(true);
   });
 
-  it("headphone -> hilang (null) saat aktif -> mati (fail closed)", () => {
-    expect(shouldAutoDisableHrtf("headset", null, true)).toBe(true);
-    expect(shouldAutoDisableHrtf("bluetooth", null, true)).toBe(true);
+  it("perangkat belum diketahui (next null) -> tidak memicu (EQ-25: null = tak diketahui, bukan dicabut)", () => {
+    expect(shouldAutoDisableHrtf("headset", null, true)).toBe(false);
+    expect(shouldAutoDisableHrtf("bluetooth", null, true)).toBe(false);
+    expect(shouldAutoDisableHrtf(null, null, true)).toBe(false);
   });
 
   it("Bluetooth -> speaker JUGA mati (beda dari koreksi: HRTF tidak punya lingkup kabel)", () => {
@@ -58,9 +59,11 @@ describe("shouldAutoDisableHrtf", () => {
     expect(shouldAutoDisableHrtf("usb", null, false)).toBe(false);
   });
 
-  it("tipe sebelumnya null (mount pertama) -> tidak memicu", () => {
-    expect(shouldAutoDisableHrtf(null, "speaker", true)).toBe(false);
-    expect(shouldAutoDisableHrtf(null, null, true)).toBe(false);
+  it("observasi pertama yang sudah berisi tipe non-headphone TETAP diperiksa (EQ-24)", () => {
+    // Dulu `prev === null` membuat observasi pertama apa pun lolos —
+    // HRTF ON bertahan di speaker bila poll pertama langsung speaker.
+    expect(shouldAutoDisableHrtf(null, "speaker", true)).toBe(true);
+    expect(shouldAutoDisableHrtf(null, "earpiece", true)).toBe(true);
     expect(shouldAutoDisableHrtf(null, "headset", true)).toBe(false);
   });
 });
