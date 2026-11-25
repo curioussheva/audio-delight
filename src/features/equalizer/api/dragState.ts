@@ -16,6 +16,12 @@
 // mengimpor modul ini, modul ini tidak mengimpor apa pun.
 
 let dragActive = false;
+let _dragTimer: ReturnType<typeof setTimeout> | null = null;
+// DS-1: jaring pengaman — bila onFinalize tak pernah sampai (gesture
+// dibatalkan sistem / crash handler), flag drag tidak boleh menempel
+// selamanya (poll visualizer tetap 10 Hz + throttle drag tetap
+// menahan nilai). 30 detik jauh di atas drag terlama yang wajar.
+const DRAG_MAX_MS = 30_000;
 
 /**
  * Dipanggil dari onBegin/onStart (true) dan onFinalize (false) gesture
@@ -24,6 +30,16 @@ let dragActive = false;
  */
 export function setDragActive(active: boolean): void {
   dragActive = active;
+  if (_dragTimer) {
+    clearTimeout(_dragTimer);
+    _dragTimer = null;
+  }
+  if (active) {
+    _dragTimer = setTimeout(() => {
+      dragActive = false;
+      _dragTimer = null;
+    }, DRAG_MAX_MS);
+  }
 }
 
 /** Dibaca tick poll VisualizerService tiap 50 ms. */
