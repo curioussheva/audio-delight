@@ -3,6 +3,17 @@ import { open } from "react-native-quick-sqlite";
 
 export const db = open({ name: "pristine_audio.db" });
 
+// LIB-41: WAL + synchronous NORMAL — tulis DB tidak lagi memblokir pembaca
+// selama scan/enrichment, dan crash tidak meninggalkan journal korup.
+// Prasyarat terpenuhi: backupIO hanya baca/tulis JSON (nol copy .db mentah
+// di src), jadi file -wal/-shm pendamping tidak pernah ikut ter-backup.
+try {
+  db.execute("PRAGMA journal_mode = WAL");
+  db.execute("PRAGMA synchronous = NORMAL");
+} catch (e) {
+  console.warn("[SQLite] PRAGMA WAL gagal, lanjut mode default:", e);
+}
+
 const SQLiteService = {
   db,
 
@@ -187,6 +198,11 @@ const SQLiteService = {
         `CREATE INDEX IF NOT EXISTS idx_songs_favorite     ON songs(isFavorite);`,
         `CREATE INDEX IF NOT EXISTS idx_songs_rating       ON songs(rating);`,
         `CREATE INDEX IF NOT EXISTS idx_songs_lastPlayed   ON songs(lastPlayedAt);`,
+        // LIB-41: sort/search paling sering — title (NOCASE, dipakai
+        // ORDER BY title COLLATE NOCASE), dateAdded, playCount.
+        `CREATE INDEX IF NOT EXISTS idx_songs_title        ON songs(title COLLATE NOCASE);`,
+        `CREATE INDEX IF NOT EXISTS idx_songs_dateAdded    ON songs(dateAdded);`,
+        `CREATE INDEX IF NOT EXISTS idx_songs_playCount    ON songs(playCount);`,
         `CREATE INDEX IF NOT EXISTS idx_recent_plays_date  ON recent_plays(played_at);`,
         `CREATE INDEX IF NOT EXISTS idx_artist_cache_name  ON artist_cache(artist_name);`,
         `CREATE INDEX IF NOT EXISTS idx_artist_cache_mbid  ON artist_cache(mb_artist_id);`,
