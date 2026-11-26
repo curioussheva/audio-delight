@@ -83,6 +83,7 @@ describe("I2-revisi (a) — enrichment lokal saja", () => {
     (useLibraryStore.getState as jest.Mock).mockReturnValue({
       tracks: [{ id: "1", uri: "content://media/external/audio/media/1" }],
       markAsEnriched: jest.fn(),
+      markTracksEnriched: jest.fn(),
       setEnrichmentQueueSize: jest.fn(),
       finishEnrichment: jest.fn(),
     });
@@ -114,6 +115,31 @@ describe("I2-revisi (a) — enrichment lokal saja", () => {
 
     expect(updateMetadataMock).toHaveBeenCalled();
     expect(getArtistEnrichmentMock).not.toHaveBeenCalled();
+  });
+
+  it("LIB-49/SCR-3: commit store di-batch — 1 lagu = 1 flush di akhir worker", async () => {
+    const markAsEnriched = jest.fn();
+    const markTracksEnriched = jest.fn();
+    (useLibraryStore.getState as jest.Mock).mockReturnValue({
+      tracks: [{ id: "1", uri: "content://media/external/audio/media/1" }],
+      markAsEnriched,
+      markTracksEnriched,
+      setEnrichmentQueueSize: jest.fn(),
+      finishEnrichment: jest.fn(),
+    });
+
+    await MetadataEnricher.startBackgroundWorker();
+
+    // Per-lagu (markAsEnriched) tidak lagi dipanggil dari processItem;
+    // satu flush batch di finally menutup worker.
+    expect(markAsEnriched).not.toHaveBeenCalled();
+    expect(markTracksEnriched).toHaveBeenCalledTimes(1);
+    expect(markTracksEnriched).toHaveBeenCalledWith([
+      expect.objectContaining({
+        trackId: "1",
+        metadata: expect.objectContaining({ isEnriched: true }),
+      }),
+    ]);
   });
 
   it("J2-1 (sisa): cache miss -> refresh DB sekali, tanpa query MediaStore per lagu", async () => {
@@ -183,6 +209,7 @@ describe("I2-revisi (a) — enrichment lokal saja", () => {
         },
       ],
       markAsEnriched: jest.fn(),
+      markTracksEnriched: jest.fn(),
       setEnrichmentQueueSize: jest.fn(),
       finishEnrichment: jest.fn(),
     });

@@ -101,6 +101,10 @@ type LibraryState = ScanStoreState &
 
     clearLibrary: () => void;
     markAsEnriched: (trackId: string, metadata?: Partial<MediaTrack>) => void;
+    // LIB-49/SCR-3: batch — satu set() untuk N lagu (lihat implementasi).
+    markTracksEnriched: (
+      updates: Array<{ trackId: string; metadata?: Partial<MediaTrack> }>,
+    ) => void;
     getUnenrichedSongs: () => MediaTrack[];
 
     // Compatibility Layer
@@ -280,6 +284,41 @@ export const useLibraryStore = create<LibraryState>()(
                 }
               : track,
           );
+          return {
+            tracks: updated,
+            unenrichedCount: updated.filter((t) => !t.isEnriched).length,
+          };
+        }),
+
+      // LIB-49/SCR-3: batch — satu set() untuk N lagu. markAsEnriched
+      // per lagu mengganti identitas array `tracks` tiap item → layar
+      // Library re-render penuh + 4 memo turunan O(n) dihitung ulang
+      // per lagu (worker: tiap 1000 ms; batch manual: tanpa jeda —
+      // 200 lagu = 200 set()). MetadataEnricher menampung update lalu
+      // flush per 5 + di akhir/stop. Bar progres TIDAK membaca tracks
+      // (updateEnrichmentProgress terpisah, tetap per item), jadi
+      // batching tidak menunda progres.
+      markTracksEnriched: (updates) =>
+        set((state) => {
+          const byId = new Map(
+            updates.map((u) => [u.trackId, u.metadata ?? {}]),
+          );
+          let changed = false;
+          const updated = state.tracks.map((track) => {
+            const meta = byId.get(track.id);
+            if (!meta) return track;
+            changed = true;
+            return {
+              ...track,
+              ...meta,
+              isEnriched: true,
+              enrichedAt: Date.now(),
+            };
+          });
+          // Batch berisi lagu yang sudah tak ada di tracks (dihapus
+          // selagi enrichment jalan) = tidak ada yang berubah — jangan
+          // set() supaya subscriber tidak diberitahu sia-sia.
+          if (!changed) return state;
           return {
             tracks: updated,
             unenrichedCount: updated.filter((t) => !t.isEnriched).length,

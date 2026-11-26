@@ -10,7 +10,7 @@ import {
   NativeSong,
 } from "../native/MediaStoreModule";
 import { LibraryScanner } from "../api/scanner";
-import { useLibraryStore } from "../store/libraryStore";
+import { useLibraryStore, type MediaTrack } from "../store/libraryStore";
 import { analyzeBitDepth } from "../../audio/api/BitDepthVerifier";
 import { readSidecarLrc } from "./lyricsSource";
 // L2: jangan hidupkan lagi lirik yang diatur manual user (penanda I3).
@@ -29,6 +29,20 @@ export class MetadataEnricher {
   private static isRunning = false;
   private static abortController: AbortController | null = null;
   private static processedCount = 0;
+
+  // LIB-49/SCR-3: buffer commit store — processItem hanya menampung,
+  // flush per 5 item + di akhir/stop (satu set() per batch, bukan per
+  // lagu). SQLite sudah benar per item; yang di-batch hanya cerminan
+  // Zustand supaya layar Library tidak re-render penuh per lagu.
+  private static pendingEnrichments: Array<{
+    trackId: string;
+    metadata: Partial<MediaTrack>;
+  }> = [];
+  private static flushEnrichments(): void {
+    if (this.pendingEnrichments.length === 0) return;
+    useLibraryStore.getState().markTracksEnriched(this.pendingEnrichments);
+    this.pendingEnrichments = [];
+  }
 
   // N11: generasi worker-run. `stop()` menaikkan generasi — start yang
   // sedang menunggu kunci (N5) atau pemanasan cache saat stop datang
@@ -254,6 +268,9 @@ export class MetadataEnricher {
           await this.processItem(item);
           this.processedCount++;
 
+          // LIB-49/SCR-3: flush commit store tiap 5 item.
+          if (this.pendingEnrichments.length >= 5) this.flushEnrichments();
+
           const remaining = await ScanQueue.getSize();
           onProgress?.(this.processedCount, remaining, item.songId);
 
@@ -276,6 +293,10 @@ export class MetadataEnricher {
       this.isRunning = false;
       this.abortController = null;
 
+      // LIB-49/SCR-3: jangan tinggalkan batch terakhir di buffer —
+      // flush SEBELUM finishEnrichment supaya UI sudah benar saat
+      // enrichment dinyatakan selesai.
+      this.flushEnrichments();
       // Memberitahu store bahwa proses enrichment selesai
       store.finishEnrichment({ success: this.processedCount, failed: 0 });
       console.log("[MetadataEnricher] Background worker finished");
@@ -294,6 +315,10 @@ export class MetadataEnricher {
     this.runGeneration++;
     this.abortController?.abort();
     this.isRunning = false;
+    // LIB-49/SCR-3: jangan tinggalkan batch terakhir di buffer
+    // (finally loop juga flush — pemanggilan ganda aman, flush kedua
+    // no-op karena buffer sudah kosong).
+    this.flushEnrichments();
   }
 
   /**
@@ -366,10 +391,15 @@ export class MetadataEnricher {
         });
 
         // 2. Update Zustand Store (Gunakan boolean true untuk React UI)
-        store.markAsEnriched(item.songId, {
-          ...metadata,
-          isEnriched: true,
-          last_enriched_at: Date.now(),
+        // LIB-49/SCR-3: jangan commit per lagu — tampung, flush per 5
+        // + di akhir/stop (lihat flushEnrichments).
+        this.pendingEnrichments.push({
+          trackId: item.songId,
+          metadata: {
+            ...metadata,
+            isEnriched: true,
+            last_enriched_at: Date.now(),
+          },
         });
 
         // I2-revisi: TIDAK ada Level 4 online di sini lagi — enrichment
@@ -460,6 +490,8 @@ export class MetadataEnricher {
           });
 
           success++;
+          // LIB-49/SCR-3: flush commit store tiap 5 item.
+          if (this.pendingEnrichments.length >= 5) this.flushEnrichments();
           onProgress?.(i + 1, songIds.length, {
             title: song.title,
             artist: song.artist,
@@ -474,6 +506,10 @@ export class MetadataEnricher {
       }
 
       this.nativeSongCache = null;
+      // LIB-49/SCR-3: flush SEBELUM finishEnrichment — pemanggil
+      // (UnifiedScanService) membaca store.getUnenrichedSongs() sesudah
+      // ini, dan angka itu harus sudah mencerminkan batch terakhir.
+      this.flushEnrichments();
       store.finishEnrichment({ success, failed });
       return { success, failed, skipped };
     } finally {
