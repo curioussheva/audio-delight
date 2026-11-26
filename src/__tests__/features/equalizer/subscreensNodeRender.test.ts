@@ -69,9 +69,13 @@ describe("bitperfect subscreen node render", () => {
   });
 
   test("useAudioOutput: codec Bluetooth hanya setState bila berubah", () => {
-    const src = read("../../../features/hardware/hooks/useAudioOutput.ts");
+    // POLL-1: guard pindah dari hook ke audioOutputStore (satu poller
+    // bersama); hook kini selector tipis.
+    const src = read("../../../features/hardware/store/audioOutputStore.ts");
     expect(src).toContain("sameBluetoothCodec");
-    expect(src).toContain("sameBluetoothCodec(prev, codec) ? prev : codec");
+    expect(src).toContain(
+      "sameBluetoothCodec(prev.bluetoothCodec, codec) ? prev.bluetoothCodec : codec",
+    );
     expect(src).toContain("prev.deviceName === next.deviceName");
     expect(src).toContain("prev.address === next.address");
   });

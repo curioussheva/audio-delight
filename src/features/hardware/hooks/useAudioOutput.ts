@@ -3,13 +3,22 @@
 // Hook jalur output audio: daftar perangkat, perangkat aktif, pemilihan, dan
 // status jujur bit-perfect per jalur.
 //
+// POLL-1: hook ini kini selector tipis di atas audioOutputStore — SATU
+// poller 3 detik + SATU langganan PristineDeviceChange bersama untuk
+// seluruh app (ref-count: mulai saat subscriber pertama, berhenti saat
+// subscriber terakhir pergi). Dulu tiap instance hook punya interval +
+// subscription sendiri (sampai 8 simultan: DSP 8, immersive 6,
+// bit-perfect 6). Return type TIDAK berubah — semua pemakai (Analyzer,
+// Settings, BitPerfectSubscreen, useHeadphoneCorrection, useHrtfGate,
+// useOutputProfiles) tidak disentuh.
+//
 // Pengganti useUSBDAC untuk pemilihan perangkat. useUSBDAC hanya melihat
 // perangkat USB, sehingga pemilihan speaker/jack/Bluetooth/HDMI mustahil dan
 // jalur yang benar-benar dipakai tidak pernah terlihat.
 // Lihat docs/AUDIO_OUTPUT_PATHS.md.
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import AudioOutputService, {
+import { useEffect } from "react";
+import {
   canBeBitPerfect,
   pathKindOf,
   type ActiveDeviceStatus,
@@ -17,6 +26,7 @@ import AudioOutputService, {
   type BluetoothA2dpStatusInfo,
   type OutputPathKind,
 } from "../api/audioOutput";
+import { useAudioOutputStore } from "../store/audioOutputStore";
 
 export interface UseAudioOutputReturn {
   /** Semua perangkat output yang terdeteksi Android. */
@@ -46,215 +56,21 @@ export interface UseAudioOutputReturn {
   clearSelection: () => Promise<boolean>;
 }
 
-// Per-node render (2026-11-22): syncStatus jalan tiap 3 detik dan
-// memanggil setStatus/setCurrentDevice dengan objek BARU dari native
-// walau nilainya sama — pemakai (Analyzer, Settings, dst.) render ulang
-// tiap 3 detik tanpa alasan. Bandingkan dulu; referensi lama dipertahankan
-// bila tidak ada yang berubah. Nilai yang berubah tetap diteruskan.
-const sameDevice = (
-  prev: AudioDeviceDescriptor | null,
-  next: AudioDeviceDescriptor | null,
-): boolean => {
-  if (prev === next) return true;
-  if (!prev || !next) return false;
-  return (
-    prev.id === next.id &&
-    prev.name === next.name &&
-    prev.type === next.type &&
-    prev.sampleRate === next.sampleRate &&
-    prev.exclusive === next.exclusive &&
-    prev.isUsb === next.isUsb
-  );
-};
-
-const sameStatus = (
-  prev: ActiveDeviceStatus | null,
-  next: ActiveDeviceStatus | null,
-): boolean => {
-  if (prev === next) return true;
-  if (!prev || !next) return false;
-  return (
-    prev.requested === next.requested &&
-    prev.actual === next.actual &&
-    prev.honored === next.honored &&
-    prev.pathLossy === next.pathLossy &&
-    prev.rateHonored === next.rateHonored
-  );
-};
-
-// Per-node render (2026-11-22): syncStatus juga memanggil
-// setBluetoothCodec dengan objek BARU dari native tiap 3 detik saat
-// perangkat aktif Bluetooth — tanpa guard, pemakai (termasuk
-// BitPerfectSubscreen) render ulang tiap 3 detik walau codecnya sama.
-// Cabang non-Bluetooth sudah terjaga (kembalikan prev bila tidak
-// connected); cabang Bluetooth ini yang bocor.
-const sameBluetoothCodec = (
-  prev: BluetoothA2dpStatusInfo,
-  next: BluetoothA2dpStatusInfo,
-): boolean =>
-  prev.connected === next.connected &&
-  prev.deviceName === next.deviceName &&
-  prev.address === next.address;
-
 export const useAudioOutput = (): UseAudioOutputReturn => {
-  const [devices, setDevices] = useState<AudioDeviceDescriptor[]>([]);
-  const [currentDevice, setCurrentDevice] =
-    useState<AudioDeviceDescriptor | null>(null);
-  const [status, setStatus] = useState<ActiveDeviceStatus | null>(null);
-  const [bluetoothCodec, setBluetoothCodec] = useState<BluetoothA2dpStatusInfo>({
-    connected: false,
-    deviceName: "",
-    address: "",
-  });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const devices = useAudioOutputStore((s) => s.devices);
+  const currentDevice = useAudioOutputStore((s) => s.currentDevice);
+  const status = useAudioOutputStore((s) => s.status);
+  const bluetoothCodec = useAudioOutputStore((s) => s.bluetoothCodec);
+  const loading = useAudioOutputStore((s) => s.loading);
+  const error = useAudioOutputStore((s) => s.error);
+  const refresh = useAudioOutputStore((s) => s.refresh);
+  const selectDevice = useAudioOutputStore((s) => s.selectDevice);
+  const clearSelection = useAudioOutputStore((s) => s.clearSelection);
 
-  // Cegah setState setelah unmount: refresh dipicu dari beberapa jalur.
-  const mounted = useRef(true);
-
-  // N19: guard in-flight untuk syncStatus — tick interval 3 dtk tidak
-  // boleh jalan selagi sync sebelumnya belum selesai (dua bridge call +
-  // kadang getBluetoothCodec); dua sync konkuren bisa menulis
-  // currentDevice/bluetoothCodec dengan urutan terbalik. Pola yang sama
-  // dengan J1-1/J1-4. Satu poller per instance layar tetap ada
-  // (Settings + Analyzer + EQ mount bersamaan) — dedupe antar-instance
-  // butuh poller bersama di level modul, dicatat sebagai tindak lanjut,
-  // bukan di ronde ini.
-  const syncInFlightRef = useRef(false);
-
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-
-  const syncStatus = useCallback(async () => {
-    if (syncInFlightRef.current) return;
-    syncInFlightRef.current = true;
-    try {
-      const [nextStatus, nextDevice] = await Promise.all([
-        AudioOutputService.getStatus(),
-        AudioOutputService.getCurrentDevice(),
-      ]);
-      if (!mounted.current) return;
-      setStatus((prev) => (sameStatus(prev, nextStatus) ? prev : nextStatus));
-      setCurrentDevice((prev) =>
-        sameDevice(prev, nextDevice) ? prev : nextDevice,
-      );
-
-      // Codec hanya relevan kalau perangkat aktifnya Bluetooth. Membacanya
-      // memanggil BluetoothA2dp lewat profile proxy, dan itu tidak gratis -
-      // tidak ada alasan menempuhnya saat output ke speaker atau DAC.
-      if (nextDevice?.type === "bluetooth") {
-        const codec = await AudioOutputService.getBluetoothCodec();
-        if (mounted.current)
-          setBluetoothCodec((prev) =>
-            sameBluetoothCodec(prev, codec) ? prev : codec,
-          );
-      } else if (mounted.current) {
-        setBluetoothCodec((prev) =>
-          prev.connected
-            ? {
-                connected: false,
-                deviceName: "",
-                address: "",
-              }
-            : prev,
-        );
-      }
-    } finally {
-      syncInFlightRef.current = false;
-    }
-  }, []);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const list = await AudioOutputService.listDevices();
-      if (!mounted.current) return;
-      setDevices(list);
-      await syncStatus();
-    } catch (e) {
-      if (mounted.current) {
-        setError(e instanceof Error ? e.message : "Gagal membaca perangkat");
-      }
-    } finally {
-      if (mounted.current) setLoading(false);
-    }
-  }, [syncStatus]);
-
-  const selectDevice = useCallback(
-    async (deviceId: string): Promise<boolean> => {
-      setLoading(true);
-      setError(null);
-      try {
-        // native menutup & membuka ulang stream di perangkat ini, lalu
-        // menghitung laju dari kapabilitas perangkat BARU. Jadi status harus
-        // dibaca ulang setelah panggilan selesai, bukan sebelum.
-        const ok = await AudioOutputService.selectDevice(deviceId);
-        if (!mounted.current) return ok;
-
-        if (!ok) {
-          setError(`Perangkat ${deviceId} tidak ada di daftar`);
-          return false;
-        }
-
-        await syncStatus();
-        return true;
-      } catch (e) {
-        if (mounted.current) {
-          setError(e instanceof Error ? e.message : "Gagal memilih perangkat");
-        }
-        return false;
-      } finally {
-        if (mounted.current) setLoading(false);
-      }
-    },
-    [syncStatus],
-  );
-
-  const clearSelection = useCallback(async (): Promise<boolean> => {
-    setLoading(true);
-    setError(null);
-    try {
-      const ok = await AudioOutputService.clearSelection();
-      if (!mounted.current) return ok;
-      await syncStatus();
-      return ok;
-    } catch (e) {
-      if (mounted.current) {
-        setError(e instanceof Error ? e.message : "Gagal melepas pilihan");
-      }
-      return false;
-    } finally {
-      if (mounted.current) setLoading(false);
-    }
-  }, [syncStatus]);
-
-  useEffect(() => {
-    refresh();
-
-    // F4: daftar perangkat disegarkan saat native mengabarkan perubahan
-    // (DAC dicolok/dicabut) — sebelumnya `devices` hanya dibaca sekali
-    // saat mount dan basi sampai refresh manual.
-    const unsubscribeDeviceChanges =
-      AudioOutputService.subscribeDeviceChanges(() => {
-        refresh();
-      });
-
-    // Device bisa dicolok/dicabut saat app berjalan. Statusnya dipoll pelan
-    // karena endpoint-nya murah (baca state native, tanpa JNI ke AudioManager)
-    // dan pemilihan perangkat dari luar app (mis. Android memindahkan rute)
-    // tidak mengirim event apa pun ke kita.
-    const interval = setInterval(syncStatus, 3000);
-    return () => {
-      unsubscribeDeviceChanges();
-      clearInterval(interval);
-    };
-    // refresh stabil (useCallback tanpa dependensi yang berubah).
-  }, [refresh, syncStatus]);
+  // POLL-1: satu subscriber = satu hitung ref-count di store. Unmount
+  // melepas hitungan; interval + langganan event berhenti saat hitungan
+  // kembali 0.
+  useEffect(() => useAudioOutputStore.getState().subscribe(), []);
 
   const pathKind = pathKindOf(currentDevice);
 

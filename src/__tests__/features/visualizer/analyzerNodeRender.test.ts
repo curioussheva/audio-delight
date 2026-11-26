@@ -20,13 +20,19 @@ describe("analyzer node render", () => {
   });
 
   test("useAudioOutput: sync 3 detik hanya setState bila perangkat/status berubah", () => {
+    // POLL-1: guard pindah dari hook ke audioOutputStore (satu poller
+    // bersama); hook kini selector tipis.
     const src = read(
-      "../../../features/hardware/hooks/useAudioOutput.ts",
+      "../../../features/hardware/store/audioOutputStore.ts",
     );
     expect(src).toContain("sameDevice");
     expect(src).toContain("sameStatus");
-    expect(src).toContain("sameStatus(prev, nextStatus) ? prev : nextStatus");
-    expect(src).toContain("sameDevice(prev, nextDevice) ? prev : nextDevice");
+    expect(src).toContain(
+      "sameStatus(prev.status, nextStatus) ? prev.status : nextStatus",
+    );
+    expect(src).toContain(
+      "sameDevice(prev.currentDevice, nextDevice) ? prev.currentDevice : nextDevice",
+    );
     // guard membandingkan semua field tampilan perangkat + status jalur
     expect(src).toContain("prev.sampleRate === next.sampleRate");
     expect(src).toContain("prev.rateHonored === next.rateHonored");
