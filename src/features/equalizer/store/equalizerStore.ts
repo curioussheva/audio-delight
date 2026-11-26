@@ -184,9 +184,16 @@ const applyAllEffectsToNative = async (state: any, trigger = "unknown") => {
   let finalSessionId = audioSessionId;
 
   if (finalSessionId <= 0) {
-    // Fallback terakhir: minta ke NativeModule kita untuk cari ID yang aktif
-    const sessionResult = await NativeDSPModule.createAudioSession();
-finalSessionId = sessionResult?.sessionId ?? 0;
+    // Fallback terakhir: minta ke NativeModule kita untuk cari ID yang aktif.
+    // EQ-8 langkah 1: guard sesi di pemanggil sudah dihapus, jadi jalur
+    // ini kini bisa ditempuh dari apply fire-and-forget — rejection di
+    // sini harus ditangkap di tempat, bukan jadi unhandled rejection.
+    try {
+      const sessionResult = await NativeDSPModule.createAudioSession();
+      finalSessionId = sessionResult?.sessionId ?? 0;
+    } catch {
+      finalSessionId = 0;
+    }
   }
 
   if (finalSessionId <= 0) return false;
@@ -436,11 +443,11 @@ const fireEqApply = (
   // yang sama persis, jadi tidak ada apply yang hilang.)
   const { bands: storedBands, isEQEnabled, audioSessionId } = get();
   const bands = _eqStorePendingBands ?? storedBands;
-  if (
-    !isEQEnabled ||
-    audioSessionId === -1 ||
-    !NativeDSPModule?.setFullEqualizer
-  ) {
+  // EQ-8 langkah 1: guard sesi dihapus — sessionId DIABAIKAN native
+  // (F7: satu stream global; setter Kotlin hanya cek engineAvailable),
+  // jadi -1 hanya berarti "belum ada sesi", bukan alasan menahan apply.
+  // applyAllEffectsToNative punya fallback createAudioSession sendiri.
+  if (!isEQEnabled || !NativeDSPModule?.setFullEqualizer) {
     // [DRAG-DIAG] fire yang tidak mengirim apa-apa (guard di atas).
     noteThrottleTick("bands", "skipped");
     return;
@@ -906,7 +913,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
             console.error("[EQ Store] setEqEnabled gagal:", e);
           }
 
-          if (get().isEQEnabled && sessionId !== -1) {
+          if (get().isEQEnabled) {
             await applyAllEffectsToNative(get(), "initialize");
           }
 
@@ -957,7 +964,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
         // EQ-17: terbitkan token sesi untuk pushDsp.
         setDspSessionId(id);
         set({ audioSessionId: id });
-        if (get().isEQEnabled && id !== -1) {
+        if (get().isEQEnabled) {
           applyAllEffectsToNative(get(), "setAudioSessionId");
         }
       },
@@ -980,7 +987,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
         } catch (e) {
           console.error("[EQ Store] setEqEnabled gagal:", e);
         }
-        if (enabled && sessionId !== -1) {
+        if (enabled) {
           await applyAllEffectsToNative(get(), "setEQEnabled");
         }
       },
@@ -995,7 +1002,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
       setBassEnabled: async (enabled: boolean) => {
         set({ isBassEnabled: enabled });
         const { isEQEnabled, audioSessionId, bassStrength } = get();
-        if (isEQEnabled && audioSessionId !== -1) {
+        if (isEQEnabled) {
           try {
             await NativeDSPModule.setBassBoost(
               enabled ? bassStrength : 0,
@@ -1010,7 +1017,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
       setVirtualizerEnabled: async (enabled: boolean) => {
         set({ isVirtualizerEnabled: enabled });
         const { isEQEnabled, audioSessionId, virtualizerLevel } = get();
-        if (isEQEnabled && audioSessionId !== -1) {
+        if (isEQEnabled) {
           try {
             // DIAGNOSTIK SEMENTARA — bisa dicabut (audit setVirtualizer 2026-11-19, opsi B).
             console.log(`[EQ-DIAG] setVirtualizer via setVirtualizerEnabled strength=${enabled ? virtualizerLevel : 0}`);
@@ -1027,7 +1034,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
       setReverbEnabled: async (enabled: boolean) => {
         set({ isReverbEnabled: enabled });
         const { isEQEnabled, audioSessionId, reverbPreset } = get();
-        if (isEQEnabled && audioSessionId !== -1) {
+        if (isEQEnabled) {
           try {
             await NativeDSPModule.setReverbPreset(
               enabled ? reverbPreset : 0,
@@ -1048,7 +1055,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
         // dorongan native di bawah tetap tiap tick via pusher.
         throttledScalarSet(set, { bassStrength: clamped });
         const { isEQEnabled, isBassEnabled, audioSessionId } = get();
-        if (isEQEnabled && isBassEnabled && audioSessionId !== -1) {
+        if (isEQEnabled && isBassEnabled) {
           // (logcat #9) throttle + fire-and-forget — JANGAN await native
           // per tick (dulu: 41 janji tak ter-resolve). Aksi kembali
           // segera; nilai terakhir dijamin trailing (lihat effectPusher).
@@ -1061,7 +1068,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
         // (logcat #9, bagian 3) store set() di-throttle — lihat setBassBoost.
         throttledScalarSet(set, { virtualizerLevel: clamped });
         const { isEQEnabled, isVirtualizerEnabled, audioSessionId } = get();
-        if (isEQEnabled && isVirtualizerEnabled && audioSessionId !== -1) {
+        if (isEQEnabled && isVirtualizerEnabled) {
           // (logcat #9) throttle + fire-and-forget — lihat setBassBoost.
           pushVirtualizerThrottled.push(clamped, audioSessionId);
         }
@@ -1090,7 +1097,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
         // (logcat #9, bagian 3) store set() di-throttle — lihat setBassBoost.
         throttledScalarSet(set, { reverbPreset: clamped });
         const { isEQEnabled, isReverbEnabled, audioSessionId } = get();
-        if (isEQEnabled && isReverbEnabled && audioSessionId !== -1) {
+        if (isEQEnabled && isReverbEnabled) {
           // (logcat #9) throttle + fire-and-forget — lihat setBassBoost.
           pushReverbThrottled.push(clamped, audioSessionId);
         }
@@ -1189,11 +1196,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
         }));
         set({ bands: newBands, activePresetId: "custom" });
 
-        if (
-          get().isEQEnabled &&
-          get().audioSessionId !== -1 &&
-          NativeDSPModule?.setFullEqualizer
-        ) {
+        if (get().isEQEnabled && NativeDSPModule?.setFullEqualizer) {
           await NativeDSPModule.setFullEqualizer(clampedGains, get().audioSessionId);
         }
       },
@@ -1227,7 +1230,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
           // flush jalan). Apply di bawah membaca state segar karenanya
           // (jaring pengaman N24 skalar tetap ada untuk jalur lain).
           flushPendingScalarSet(set);
-          if (get().isEQEnabled && get().audioSessionId !== -1) {
+          if (get().isEQEnabled) {
             applyAllEffectsToNative(get(), "applyPreset");
           }
         }
@@ -1291,7 +1294,7 @@ export const useEqualizerStore = create<EqualizerStore>()(
           reverbPreset: 0,
           masterGain: MASTER_GAIN_DEFAULT,
         });
-        if (get().isEQEnabled && get().audioSessionId !== -1) {
+        if (get().isEQEnabled) {
           await applyAllEffectsToNative(get(), "resetToDefault");
         }
       },
