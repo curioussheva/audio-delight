@@ -404,6 +404,15 @@ export default function SongDetailScreen() {
   // ketemu / store belum termuat.
   const [isRetrying, setIsRetrying] = useState(false);
 
+  // AUD2-3: dipakai efek fallback getSongById juga — harus di badan
+  // komponen (hooks tidak boleh di cabang render), bukan di cabang
+  // `if (!song)` seperti dulu.
+  const isLoadingLibrary =
+    isRetrying ||
+    !hasCompletedInitialScan ||
+    isAutoScanning ||
+    isManualScanning;
+
   // U1: field mana yang masih kosong — penanda "data belum lengkap",
   // badge tombol sync, dan pratinjau modal. Placeholder "Unknown
   // Artist/Album" dihitung kosong (lihat metadataCompleteness.ts).
@@ -517,6 +526,29 @@ export default function SongDetailScreen() {
       setIsRetrying(false);
     }
   };
+
+  // AUD2-3: lagu di luar 1000 pertama (getLibrarySongs default limit
+  // 1000) tampil "Lagu tidak ditemukan" PERMANEN walau ada di DB.
+  // Sesudah scan selesai dan lagu tetap tidak ketemu di `tracks`, coba
+  // SELECT langsung ke DB sekali per id, lalu APPEND ke store (bukan
+  // ganti) supaya jalur downstream ikut melihatnya: handlePlay (antrean),
+  // updateTrack (edit), toggleFavorite (hati). `setTracks` memakai
+  // mergeTrackList — track lain mempertahankan referensi; reload penuh
+  // berikutnya membuang append ini lagi (self-healing: effect jalan
+  // ulang saat layar dibuka lagi).
+  const fallbackTriedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (song || isLoadingLibrary || !id || fallbackTriedRef.current === id)
+      return;
+    fallbackTriedRef.current = id;
+    const found = LibraryScanner.getSongById(id);
+    if (found) {
+      const current = useLibraryStore.getState().tracks ?? [];
+      if (!current.some((t) => t.id.toString() === id)) {
+        setTracks([...current, found] as any);
+      }
+    }
+  }, [song, isLoadingLibrary, id, setTracks]);
 
   // onClose modal stabil (useCallback) — tanpa ini memo
   // MetadataSyncModal batal tiap render layar (onClose baru).
@@ -903,9 +935,6 @@ export default function SongDetailScreen() {
   // ada. Cabang loading tampil selama scan perdana belum selesai atau
   // library masih dipindai; "tidak ditemukan" hanya setelah termuat.
   if (!song) {
-    const isLoadingLibrary =
-      isRetrying || !hasCompletedInitialScan || isAutoScanning || isManualScanning;
-
     if (isLoadingLibrary) {
       return (
         <View

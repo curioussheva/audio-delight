@@ -41,4 +41,19 @@ describe("song detail node render", () => {
     const store = read("../../../features/library/store/libraryStore.ts");
     expect(store).toContain("t.id === trackId ? { ...t,");
   });
+
+  test("AUD2-3: lagu di luar 1000 pertama dicoba via getSongById dulu", () => {
+    const src = stripComments(read("../../../app/(drawer)/song/[id].tsx"));
+    // Fallback SELECT langsung ke DB, sekali per id, hanya sesudah
+    // library termuat (bukan saat loading) — lalu append ke store.
+    expect(src).toContain("LibraryScanner.getSongById(id)");
+    expect(src).toContain("fallbackTriedRef.current === id");
+    expect(src).toContain("setTracks([...current, found]");
+    // isLoadingLibrary di-hoist ke badan komponen (dipakai efek) —
+    // bukan dideklarasi di dalam cabang `if (!song)`.
+    expect(src).toContain("const isLoadingLibrary =\n    isRetrying ||");
+    expect(src).not.toContain(
+      "if (!song) {\n    const isLoadingLibrary =",
+    );
+  });
 });
