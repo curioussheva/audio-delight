@@ -662,6 +662,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         const s = get();
         if (!s.currentSong) return;
 
+        // PS-6: watcher hanya bekerja saat bermain. Saat pause, lewati
+        // getPosition/MediaSession/posisi — TAPI tetap perbarui jangkar
+        // wall-clock statistik (delta 0 → tidak terakumulasi). Guard
+        // mentah `if (!isPlaying) return;` sebelum notePlaybackPosition
+        // akan membekukan jangkar: tick pertama pasca-resume melihat
+        // wallDelta sebesar durasi pause, dan pause pendek (<2 dtk)
+        // bocor over-count sampai ~2 dtk per siklus pause-resume.
+        // (Save posisi + flush statistik + sync MediaSession saat pause
+        // sudah ditangani setIsPlaying(false) — bukan tugas tick ini.)
+        if (!s.isPlaying) {
+          notePlaybackPosition(s.currentSong.id, get().position);
+          return;
+        }
+
         _posInFlight = true;
         // -1 = getPosition gagal (catch diam-diam di bawah) — tetap dicatat.
         let awaitMs = -1;

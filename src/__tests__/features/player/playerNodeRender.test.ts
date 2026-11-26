@@ -62,6 +62,32 @@ describe("player node render", () => {
     expect(src).toContain("handleOpenTimer = useCallback");
   });
 
+  test("PS-6: position watcher hanya bekerja saat bermain, interval tetap 500 ms", () => {
+    const src = stripComments(
+      read("../../../features/player/store/playerStore.ts"),
+    );
+    const watcher = src.slice(src.indexOf("__positionWatcher = setInterval"));
+    // Interval tetap satu dan tetap 500 ms — tidak dimatikan, tidak
+    // dibuat ulang mengikuti isPlaying (singleton di initStore).
+    expect(src).toContain("Position watcher started (500ms)");
+    expect(watcher).toContain("}, 500);");
+    // Cabang pause: lewati getPosition/MediaSession, TAPI perbarui
+    // jangkar statistik — dan cabang ini harus datang SEBELUM
+    // getPosition dipanggil.
+    expect(watcher).toContain(
+      "if (!s.isPlaying) {\n          notePlaybackPosition(s.currentSong.id, get().position);",
+    );
+    expect(
+      watcher.indexOf("if (!s.isPlaying)"),
+    ).toBeLessThan(watcher.indexOf("NativePlaybackService.getPosition()"));
+    // STAT-3: interval tetap 500 ms → gate ±2 dtk tetap cukup (delta
+    // nominal ~1 dtk di 2x); jangan naikkan MAX tanpa mengubah interval.
+    const stats = stripComments(
+      read("../../../features/stats/api/statsService.ts"),
+    );
+    expect(stats).toContain("const MAX_COUNTED_DELTA_SECONDS = 2;");
+  });
+
   test("FullLyricsView / QueueManager / SleepTimerModal: selector per nilai", () => {
     const lyrics = read(
       "../../../features/player/components/FullLyricsView.tsx",
