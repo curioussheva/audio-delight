@@ -46,6 +46,7 @@ import {
 } from "react-native-reanimated";
 
 import { visualizerService } from "@/features/visualizer/services/VisualizerService";
+import { useIsFocused } from "@react-navigation/native";
 import {
   PARAMETRIC_GRADIENT_STOPS,
   PEAK_HOLD_FLOOR,
@@ -159,6 +160,11 @@ export const ParametricSpectrumView: React.FC<
   const isStarted = useRef(false);
   const lastSessionId = useRef<number | null>(null);
 
+  // VS-12: `useIsFocused` aman di sini — komponen ini hanya dirender
+  // di player/index.tsx (route screen expo-router), jadi selalu di
+  // dalam navigator.
+  const isFocused = useIsFocused();
+
   // Sync isPlaying prop → SharedValue
   useEffect(() => {
     isPlayingSV.value = isPlaying;
@@ -240,14 +246,17 @@ export const ParametricSpectrumView: React.FC<
     },
   );
 
-  // Start/Stop berdasarkan isPlaying dan audioSessionId.
+  // Start/Stop berdasarkan isPlaying, audioSessionId, dan isFocused
+  // (VS-12: layar tidak fokus = unsubscribe; polling native 20 Hz
+  // tidak perlu jalan untuk layar yang tidak kelihatan).
   //
   // MULTI-SUBSCRIBER (2026-11-10): layar ini subscribe saat butuh data dan
   // unsubscribe saat tidak — JANGAN panggil visualizerService.stop(), itu
   // kill-switch global yang mematikan polling untuk layar lain juga
   // (tab Analyzer, SpectogramView).
   useEffect(() => {
-    const shouldStart = isPlaying && audioSessionId && audioSessionId > 0;
+    const shouldStart =
+      isPlaying && audioSessionId && audioSessionId > 0 && isFocused;
 
     if (shouldStart) {
       if (!isStarted.current || lastSessionId.current !== audioSessionId) {
@@ -287,7 +296,7 @@ export const ParametricSpectrumView: React.FC<
         setHasRealDataState(false);
       }
     }
-  }, [isPlaying, audioSessionId, barCount]);
+  }, [isPlaying, audioSessionId, barCount, isFocused]);
 
   // Cleanup saat unmount: lepas subscription (bukan stop() global).
   useEffect(() => {

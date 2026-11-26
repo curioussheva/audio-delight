@@ -407,13 +407,18 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
     },
   );
 
-  // Start/Stop berdasarkan isPlaying dan audioSessionId.
+  // Start/Stop berdasarkan isPlaying, audioSessionId, dan isFocused.
+  // VS-12: `isFocused` sebelumnya hanya dipakai untuk suspend render
+  // (isSuspendedSV) — polling native tetap jalan saat tab tidak fokus.
+  // Sekarang langganan ikut berhenti saat tidak fokus; kembali fokus
+  // = re-subscribe lewat cabang else (isStarted sudah di-reset).
   //
   // MULTI-SUBSCRIBER (2026-11-10): layar ini subscribe saat butuh data dan
   // unsubscribe saat tidak — JANGAN panggil visualizerService.stop(), itu
   // kill-switch global yang mematikan polling untuk layar lain juga.
   useEffect(() => {
-    const shouldStart = isPlaying && audioSessionId && audioSessionId > 0;
+    const shouldStart =
+      isPlaying && audioSessionId && audioSessionId > 0 && isFocused;
 
     if (shouldStart) {
       if (!isStarted.current || lastSessionId.current !== audioSessionId) {
@@ -462,7 +467,7 @@ export const AnalyzerSpectrum: React.FC<AnalyzerSpectrumProps> = ({
         setClipLatched(false);
       }
     }
-  }, [isPlaying, audioSessionId, barCount]);
+  }, [isPlaying, audioSessionId, barCount, isFocused]);
 
   // Cleanup saat unmount: lepas subscription (bukan stop() global).
   useEffect(() => {

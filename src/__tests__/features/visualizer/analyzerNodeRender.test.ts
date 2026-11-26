@@ -72,4 +72,31 @@ describe("analyzer node render", () => {
     expect(src).not.toMatch(/usePlayerStore\(\);/);
     expect(src).not.toMatch(/const \{[^}]*\} = usePlayerStore\(\);/);
   });
+
+  test("VS-12: langganan visualizer ikut isFocused (kedua komponen)", () => {
+    // Bukan freezeOnBlur: hanya unsubscribe langganan FFT saat layar
+    // tidak fokus; playback tidak disentuh; kembali fokus = re-subscribe.
+    const analyzer = read(
+      "../../../features/visualizer/components/AnalyzerSpectrum.tsx",
+    );
+    expect(analyzer).toContain(
+      "isPlaying && audioSessionId && audioSessionId > 0 && isFocused;",
+    );
+    expect(analyzer).toContain(
+      "}, [isPlaying, audioSessionId, barCount, isFocused]);",
+    );
+    const parametric = read(
+      "../../../features/visualizer/components/ParametricSpectrumView.tsx",
+    );
+    expect(parametric).toContain(
+      'import { useIsFocused } from "@react-navigation/native";',
+    );
+    expect(parametric).toContain("const isFocused = useIsFocused();");
+    expect(parametric).toContain(
+      "isPlaying && audioSessionId && audioSessionId > 0 && isFocused;",
+    );
+    expect(parametric).toContain(
+      "}, [isPlaying, audioSessionId, barCount, isFocused]);",
+    );
+  });
 });
